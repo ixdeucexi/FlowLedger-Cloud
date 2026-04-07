@@ -2,71 +2,51 @@ const colors = {
   light: {
     text: "#1a1a2e",
     tint: "#0f9b8e",
-
-    background: "#f5f7fa",
+    background: "#f0f4f8",
     foreground: "#1a1a2e",
-
     card: "#ffffff",
     cardForeground: "#1a1a2e",
-
     primary: "#0f9b8e",
     primaryForeground: "#ffffff",
-
-    secondary: "#e8f4f2",
+    secondary: "#e0f2f0",
     secondaryForeground: "#0f9b8e",
-
-    muted: "#e9ecef",
-    mutedForeground: "#6c757d",
-
+    muted: "#e2e8f0",
+    mutedForeground: "#64748b",
     accent: "#f0b429",
     accentForeground: "#1a1a2e",
-
     destructive: "#e63946",
     destructiveForeground: "#ffffff",
-
-    border: "#dee2e6",
-    input: "#dee2e6",
-
-    success: "#2ecc71",
+    border: "#cbd5e1",
+    input: "#cbd5e1",
+    success: "#10b981",
     successForeground: "#ffffff",
-
-    warning: "#f0b429",
+    warning: "#f59e0b",
     warningForeground: "#1a1a2e",
   },
 
   dark: {
-    text: "#e8e8f0",
+    text: "#e2e8f0",
     tint: "#2dd4bf",
-
-    background: "#0f172a",
-    foreground: "#e8e8f0",
-
-    card: "#1e293b",
-    cardForeground: "#e8e8f0",
-
+    background: "#0d1117",
+    foreground: "#e2e8f0",
+    card: "#161b22",
+    cardForeground: "#e2e8f0",
     primary: "#2dd4bf",
-    primaryForeground: "#0f172a",
-
-    secondary: "#1e3a3a",
+    primaryForeground: "#0d1117",
+    secondary: "#1a3a38",
     secondaryForeground: "#2dd4bf",
-
-    muted: "#334155",
-    mutedForeground: "#94a3b8",
-
+    muted: "#1e2736",
+    mutedForeground: "#8b949e",
     accent: "#fbbf24",
-    accentForeground: "#0f172a",
-
-    destructive: "#ef4444",
-    destructiveForeground: "#ffffff",
-
-    border: "#334155",
-    input: "#334155",
-
+    accentForeground: "#0d1117",
+    destructive: "#f87171",
+    destructiveForeground: "#0d1117",
+    border: "#30363d",
+    input: "#30363d",
     success: "#34d399",
-    successForeground: "#0f172a",
-
+    successForeground: "#0d1117",
     warning: "#fbbf24",
-    warningForeground: "#0f172a",
+    warningForeground: "#0d1117",
   },
 
   radius: 12,

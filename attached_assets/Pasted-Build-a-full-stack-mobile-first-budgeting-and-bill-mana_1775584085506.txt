@@ -1,0 +1,260 @@
+Build a full-stack mobile-first budgeting and bill management app inspired by Monarch and EveryDollar, but centered around a bill-first system with debt snowball automation and daily expense tracking.
+
+TECH STACK:
+- Frontend: React (Vite), mobile-first UI
+- Backend: Python (FastAPI)
+- Database: SQLite (use SQLAlchemy ORM)
+- Charts: Recharts
+- State: React Context or Zustand
+- Styling: TailwindCSS (dark mode default like UI mockups)
+
+--------------------------------------------------
+CORE SYSTEM ARCHITECTURE
+--------------------------------------------------
+
+The system must follow this structure:
+
+1. Bills (MASTER DATA)
+2. Monthly Instances (GENERATED DATA)
+3. Payments + Snowball Engine (LOGIC LAYER)
+4. Daily Transactions (FLEXIBLE TRACKING)
+5. Dashboard (AGGREGATION LAYER)
+
+DO NOT duplicate data unnecessarily. Normalize properly.
+
+--------------------------------------------------
+1. BILLS TABLE (MASTER SOURCE)
+--------------------------------------------------
+
+Fields:
+- id
+- name
+- amount
+- category (Housing, Utilities, Debt, etc.)
+- priority (1 = highest)
+- is_debt (boolean)
+- balance (for debts)
+- interest_rate (optional)
+- due_day (1–31)
+- is_recurring (default true)
+- created_at
+
+Features:
+- Full CRUD (add, edit, delete)
+- Inline editing in UI
+- Category tagging
+- Priority sorting
+
+--------------------------------------------------
+2. MONTHLY ENGINE (AUTO-GENERATED)
+--------------------------------------------------
+
+DO NOT store static monthly copies unless needed.
+
+Generate monthly data dynamically:
+- When user selects a month:
+  - Pull all recurring bills
+  - Create virtual instances
+
+Optional table (if persistence needed):
+MonthlyBill:
+- id
+- bill_id
+- month
+- year
+- paid_amount
+- remaining_amount
+- status
+
+--------------------------------------------------
+3. PAYMENT + SNOWBALL ENGINE (CRITICAL)
+--------------------------------------------------
+
+Implement full debt snowball logic:
+
+INPUT:
+- Extra payment amount
+
+PROCESS:
+1. Sort debts by:
+   - balance (ascending) → PRIMARY (snowball)
+   - priority → SECONDARY
+
+2. Apply minimum payments to all debts
+
+3. Apply extra funds to smallest balance debt
+
+4. When a debt is paid off:
+   - Rollover its payment into next smallest debt
+   - Continue until funds exhausted
+
+OUTPUT:
+- Updated balances
+- Updated paid/remaining values
+- Snowball progression visualization
+
+Must support:
+- Toggle between:
+  - Snowball (smallest first)
+  - Avalanche (highest interest first)
+
+--------------------------------------------------
+4. DAILY TRANSACTION TRACKING (NEW FEATURE)
+--------------------------------------------------
+
+Add a calendar-based system for real-life spending:
+
+Transaction table:
+- id
+- date
+- amount (+ income / - expense)
+- category
+- note
+- linked_bill_id (optional)
+
+Features:
+- Calendar view (monthly grid)
+- Click a day → add/edit transactions
+- Running daily balance
+- These affect:
+  → Monthly totals
+  → Dashboard
+
+--------------------------------------------------
+5. DASHBOARD (ANALYTICS)
+--------------------------------------------------
+
+Display:
+
+- Total Bills
+- Total Paid
+- Remaining Balance
+- Progress %
+
+Charts:
+- Monthly expenses (bar chart)
+- Category breakdown (pie chart)
+- Debt payoff timeline (line chart)
+
+--------------------------------------------------
+6. MONTHLY VIEW (ENHANCED)
+--------------------------------------------------
+
+For selected month:
+- Show:
+  - Due
+  - Paid
+  - Remaining
+
+- List all bills with:
+  - Due date
+  - Paid toggle / input
+  - Remaining per bill
+
+- Include:
+  - Extra payment button
+  - Snowball execution button
+
+--------------------------------------------------
+7. IMPORT / EXPORT
+--------------------------------------------------
+
+Support:
+- CSV + Excel (.xlsx)
+
+Import maps to Bills table:
+Columns:
+Name, Amount, Category, Priority, Balance, Interest Rate
+
+Export:
+- Bills
+- Transactions
+- Monthly summary
+
+--------------------------------------------------
+8. UX / UI REQUIREMENTS
+--------------------------------------------------
+
+Match provided screenshots:
+
+Navigation (bottom bar):
+- Dashboard
+- Bills
+- Monthly
+- More
+
+Design:
+- Dark theme default
+- Card-based layout
+- Smooth animations
+- Floating action buttons (+ Add Bill, + Extra)
+
+--------------------------------------------------
+9. SETTINGS / CUSTOMIZATION (IMPORTANT)
+--------------------------------------------------
+
+Allow user to:
+- Choose:
+  - Snowball vs Avalanche
+- Toggle:
+  - Show recurring vs one-time bills
+- Set:
+  - Starting balance
+  - Monthly income
+- Enable:
+  - Carryover balances
+
+--------------------------------------------------
+10. DATA PERSISTENCE
+--------------------------------------------------
+
+- All data saved in SQLite
+- API handles all logic (no heavy frontend logic)
+- Ensure reload-safe state
+
+--------------------------------------------------
+11. FILE STRUCTURE
+--------------------------------------------------
+
+/backend
+  main.py
+  models.py
+  routes/
+  services/
+    snowball.py
+    transactions.py
+
+/frontend
+  /components
+  /pages
+  /context
+  /services (API calls)
+
+--------------------------------------------------
+12. BONUS FEATURES (IMPLEMENT IF POSSIBLE)
+--------------------------------------------------
+
+- Authentication (simple login)
+- Multiple budgets/profiles
+- Notifications (upcoming bills)
+- Offline support (local cache)
+- Dark/light toggle
+
+--------------------------------------------------
+DELIVERABLE
+--------------------------------------------------
+
+- Fully working app inside Replit
+- Seed data included
+- Clear "Run App" instructions
+- Clean, readable code (modular)
+
+--------------------------------------------------
+IMPORTANT RULES
+--------------------------------------------------
+
+- DO NOT hardcode months
+- DO NOT duplicate bill data per month unnecessarily
+- ALWAYS compute from master data
+- Keep logic modular (especially snowball engine)
+- Focus on performance and clarity
