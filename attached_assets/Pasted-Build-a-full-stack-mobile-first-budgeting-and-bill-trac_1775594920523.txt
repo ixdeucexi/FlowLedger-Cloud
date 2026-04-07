@@ -1,0 +1,279 @@
+Build a full-stack mobile-first budgeting and bill tracking app based on the provided UI screenshots.
+
+The app must function like a hybrid of Monarch and EveryDollar but centered around a bill-first system with debt snowball automation and flexible monthly adjustments.
+
+--------------------------------------------------
+TECH STACK
+--------------------------------------------------
+Frontend: React (Vite)
+Backend: Python (FastAPI)
+Database: SQLite (SQLAlchemy ORM)
+Charts: Recharts
+Styling: TailwindCSS (dark theme default)
+
+--------------------------------------------------
+CORE PRINCIPLE
+--------------------------------------------------
+Bills are the source of truth.
+Months are dynamic but allow overrides.
+No duplicated static monthly datasets.
+
+--------------------------------------------------
+1. BILLS TABLE (MASTER DATA)
+--------------------------------------------------
+
+Fields:
+- id
+- name
+- default_amount
+- category
+- priority
+- is_debt (boolean)
+- balance (nullable)
+- interest_rate (nullable)
+- due_day
+- is_recurring (default true)
+
+Features:
+- Full CRUD
+- Edit modal exactly like UI
+- Toggle:
+  - Debt
+  - Recurring
+
+--------------------------------------------------
+2. MONTHLY OVERRIDES (CRITICAL FEATURE)
+--------------------------------------------------
+
+Create a table to allow real-world variation:
+
+MonthlyOverride:
+- id
+- bill_id
+- month
+- year
+- custom_amount (nullable)
+- paid_amount (default 0)
+
+RULES:
+- If override exists → use custom_amount
+- Else → use default_amount
+
+This allows:
+✔ Bills that change month-to-month
+✔ Partial payments
+✔ Real-life flexibility
+
+--------------------------------------------------
+3. DASHBOARD INTERACTIONS (NEW REQUIREMENT)
+--------------------------------------------------
+
+Make dashboard cards clickable:
+
+- TOTAL BILLS → navigate to Bills page (show all)
+- PAID → navigate to Monthly view filtered to paid bills
+- REMAINING → show unpaid bills
+- TOTAL DEBT → filter Bills page to debts only
+
+Implement filtering state globally.
+
+--------------------------------------------------
+4. MONTHLY VIEW (ENHANCED)
+--------------------------------------------------
+
+For selected month:
+
+Show:
+- Due
+- Paid
+- Remaining
+
+Bill list must include:
+- Name
+- Due date
+- Amount (override or default)
+- Paid input field
+- Remaining per bill
+
+Features:
+- Edit amount for THIS MONTH ONLY (writes to MonthlyOverride)
+- Mark as paid or partial
+- Visual indicators:
+  - Paid (green)
+  - Partial (yellow)
+  - Unpaid (red)
+
+Buttons:
+- + Extra (snowball input)
+- Apply Snowball
+
+--------------------------------------------------
+5. SNOWBALL ENGINE (ADVANCED)
+--------------------------------------------------
+
+Only applies to bills where is_debt = true
+
+Process:
+1. Sort debts:
+   - Snowball → lowest balance first
+   - Avalanche → highest interest first
+
+2. Apply minimum payments
+
+3. Apply extra funds:
+   - Fully pay smallest debt
+   - Roll freed payment into next debt
+   - Continue cascade
+
+Update:
+- balances
+- paid amounts
+- monthly state
+
+--------------------------------------------------
+6. PAYMENT TRACKING LOGIC
+--------------------------------------------------
+
+For each month:
+
+Paid = SUM(paid_amount)
+Remaining = SUM(amount - paid_amount)
+
+Persist payments in MonthlyOverride
+
+--------------------------------------------------
+7. DAILY TRANSACTIONS (CALENDAR FEATURE)
+--------------------------------------------------
+
+Transaction table:
+- id
+- date
+- amount (+/-)
+- category
+- note
+
+Features:
+- Calendar UI
+- Click day → add/edit transactions
+- Affect:
+  - Monthly totals
+  - Dashboard
+
+--------------------------------------------------
+8. REMOVE STARTING BALANCE (IMPORTANT)
+--------------------------------------------------
+
+DO NOT include starting balance anywhere.
+
+Instead:
+- Base everything on:
+  - Income (optional)
+  - Bills
+  - Transactions
+
+--------------------------------------------------
+9. SETTINGS PAGE (UPDATED)
+--------------------------------------------------
+
+Include:
+
+- Snowball vs Avalanche toggle
+- Monthly income
+- Carryover balances toggle
+
+REMOVE:
+- Starting balance (DO NOT IMPLEMENT)
+
+--------------------------------------------------
+10. BILLS PAGE (ENHANCED)
+--------------------------------------------------
+
+Add filters:
+- All
+- Debts
+- Recurring
+
+Each bill card shows:
+- Name
+- Amount
+- Due date
+- Category
+- If debt:
+  - Balance
+  - Interest rate
+
+Allow:
+- Tap → open edit modal
+- Delete
+
+--------------------------------------------------
+11. IMPORT / EXPORT
+--------------------------------------------------
+
+CSV + Excel support
+
+Import fields:
+Name, Amount, Category, Priority, Balance, Interest Rate
+
+Export:
+- Bills
+- Transactions
+- Monthly data
+
+--------------------------------------------------
+12. UI REQUIREMENTS
+--------------------------------------------------
+
+Match screenshots exactly:
+
+- Dark theme
+- Bottom nav:
+  - Dashboard
+  - Bills
+  - Monthly
+  - More
+
+- Cards:
+  - Rounded
+  - Clean spacing
+  - Color-coded categories
+
+- Floating + button for adding bills
+
+--------------------------------------------------
+13. DATA FLOW RULES
+--------------------------------------------------
+
+- NEVER duplicate bill data unnecessarily
+- MonthlyOverride is the ONLY place for variation
+- Dashboard pulls from computed data
+- Keep backend responsible for calculations
+
+--------------------------------------------------
+14. FILE STRUCTURE
+--------------------------------------------------
+
+/backend
+  main.py
+  models.py
+  routes/
+  services/
+    snowball.py
+    calculations.py
+
+/frontend
+  /pages
+  /components
+  /context
+  /services
+
+--------------------------------------------------
+DELIVERABLE
+--------------------------------------------------
+
+- Fully working app
+- Seed data included
+- Runs inside Replit
+- Clean, modular code
+
+--------------------------------------------------

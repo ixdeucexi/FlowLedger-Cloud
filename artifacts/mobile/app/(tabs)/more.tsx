@@ -3,18 +3,8 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import * as Sharing from "expo-sharing";
-import React, { useCallback } from "react";
-import {
-  Alert,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import React from "react";
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import colors from "@/constants/colors";
@@ -24,19 +14,27 @@ import { useColors } from "@/hooks/useColors";
 export default function MoreScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const { bills, transactions, monthlyEntries, importBills, settings, updateSettings } = useBudget();
+  const { bills, transactions, overrides, importBills, settings, updateSettings } = useBudget();
 
-  const handleExport = useCallback(async () => {
-    if (bills.length === 0) { Alert.alert("No Data", "Add some bills first."); return; }
+  const handleExport = async () => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      const header = "Name,Amount,Category,Priority,IsDebt,Balance,InterestRate,DueDay,IsRecurring\n";
-      const rows = bills.map(b =>
+      const billHeader = "Name,Amount,Category,Priority,IsDebt,Balance,InterestRate,DueDay,IsRecurring";
+      const billRows = bills.map(b =>
         `"${b.name}",${b.amount},"${b.category}",${b.priority},${b.is_debt},${b.balance},${b.interest_rate},${b.due_day},${b.is_recurring}`
       ).join("\n");
-      const txHeader = "\n\nDate,Amount,Category,Note\n";
+
+      const txHeader = "Date,Amount,Category,Note";
       const txRows = transactions.map(t => `"${t.date}",${t.amount},"${t.category}","${t.note}"`).join("\n");
-      const csv = header + rows + txHeader + txRows;
+
+      const ovrHeader = "BillId,Month,Year,CustomAmount,PaidAmount";
+      const ovrRows = overrides.map(o => `"${o.bill_id}",${o.month},${o.year},${o.custom_amount ?? ""},${o.paid_amount}`).join("\n");
+
+      const csv = [
+        "=== BILLS ===", billHeader, billRows,
+        "", "=== TRANSACTIONS ===", txHeader, txRows,
+        "", "=== MONTHLY OVERRIDES ===", ovrHeader, ovrRows,
+      ].join("\n");
 
       if (Platform.OS === "web") {
         const blob = new Blob([csv], { type: "text/csv" });
@@ -51,46 +49,47 @@ export default function MoreScreen() {
         await Sharing.shareAsync(uri, { mimeType: "text/csv" });
       }
     } catch { Alert.alert("Error", "Export failed."); }
-  }, [bills, transactions]);
+  };
 
-  const handleImport = useCallback(async () => {
+  const handleImport = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({ type: ["text/csv", "text/comma-separated-values"] });
+      const result = await DocumentPicker.getDocumentAsync({ type: ["text/csv", "text/comma-separated-values", "*/*"] });
       if (result.canceled || !result.assets?.length) return;
       const file = result.assets[0];
       let content: string;
       if (Platform.OS === "web") { const r = await fetch(file.uri); content = await r.text(); }
       else { content = await FileSystem.readAsStringAsync(file.uri); }
 
-      const lines = content.split("\n").filter(l => l.trim() && !l.startsWith("Date"));
-      const header = lines[0]?.toLowerCase();
-      if (!header?.includes("name")) { Alert.alert("Invalid CSV", "Expected Name,Amount,Category,..."); return; }
+      const lines = content.split("\n").filter(l => l.trim() && !l.startsWith("="));
+      const headerIdx = lines.findIndex(l => l.toLowerCase().includes("name") && l.toLowerCase().includes("amount"));
+      if (headerIdx === -1) { Alert.alert("Invalid CSV", "Could not find Name,Amount header row."); return; }
 
       const imported: Parameters<typeof importBills>[0] = [];
-      for (let i = 1; i < lines.length; i++) {
-        const parts = lines[i].split(",").map(p => p.replace(/"/g, "").trim());
+      for (let i = headerIdx + 1; i < lines.length; i++) {
+        const line = lines[i];
+        if (!line.trim() || line.startsWith("=")) break;
+        const parts = line.split(",").map(p => p.replace(/"/g, "").trim());
         const amount = parseFloat(parts[1]);
-        if (!isNaN(amount) && parts[0]) {
-          imported.push({
-            name: parts[0],
-            amount,
-            category: parts[2] || "Other",
-            priority: parseInt(parts[3]) || i,
-            is_debt: parts[4]?.toLowerCase() === "true",
-            balance: parseFloat(parts[5]) || 0,
-            interest_rate: parseFloat(parts[6]) || 0,
-            due_day: parseInt(parts[7]) || 1,
-            is_recurring: parts[8]?.toLowerCase() !== "false",
-          });
-        }
+        if (!parts[0] || isNaN(amount)) continue;
+        imported.push({
+          name: parts[0],
+          amount,
+          category: parts[2] || "Other",
+          priority: parseInt(parts[3]) || imported.length + 1,
+          is_debt: parts[4]?.toLowerCase() === "true",
+          balance: parseFloat(parts[5]) || 0,
+          interest_rate: parseFloat(parts[6]) || 0,
+          due_day: parseInt(parts[7]) || 1,
+          is_recurring: parts[8]?.toLowerCase() !== "false",
+        });
       }
 
-      if (imported.length === 0) { Alert.alert("No Data", "No valid bills found."); return; }
+      if (!imported.length) { Alert.alert("No Data", "No valid bill rows found in CSV."); return; }
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       importBills(imported);
-      Alert.alert("Imported", `${imported.length} bills imported successfully.`);
+      Alert.alert("Imported", `${imported.length} bills added.`);
     } catch { Alert.alert("Error", "Import failed."); }
-  }, [importBills]);
+  };
 
   const webTopPad = Platform.OS === "web" ? 67 : 0;
 
@@ -99,56 +98,54 @@ export default function MoreScreen() {
       style={[styles.screen, { backgroundColor: c.background }]}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 + webTopPad, paddingBottom: insets.bottom + 100 }]}
     >
-      <Text style={[styles.title, { color: c.foreground }]}>More</Text>
+      <Text style={[styles.pageTitle, { color: c.foreground }]}>Settings</Text>
 
-      <Text style={[styles.sectionTitle, { color: c.mutedForeground }]}>Payment Engine</Text>
-      <View style={[styles.settingsCard, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        <View style={[styles.methodToggle, { backgroundColor: c.muted, borderRadius: 10 }]}>
-          <Pressable
-            onPress={() => updateSettings({ paymentMethod: "snowball" })}
-            style={[styles.methodBtn, { backgroundColor: settings.paymentMethod === "snowball" ? c.primary : "transparent", borderRadius: 8 }]}
-          >
-            <Feather name="trending-down" size={14} color={settings.paymentMethod === "snowball" ? c.primaryForeground : c.mutedForeground} />
-            <Text style={[styles.methodText, { color: settings.paymentMethod === "snowball" ? c.primaryForeground : c.mutedForeground }]}>Snowball</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => updateSettings({ paymentMethod: "avalanche" })}
-            style={[styles.methodBtn, { backgroundColor: settings.paymentMethod === "avalanche" ? c.primary : "transparent", borderRadius: 8 }]}
-          >
-            <Feather name="percent" size={14} color={settings.paymentMethod === "avalanche" ? c.primaryForeground : c.mutedForeground} />
-            <Text style={[styles.methodText, { color: settings.paymentMethod === "avalanche" ? c.primaryForeground : c.mutedForeground }]}>Avalanche</Text>
-          </Pressable>
+      <SectionTitle c={c} label="Debt Payoff Strategy" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <View style={[styles.methodRow, { backgroundColor: c.muted, borderRadius: 10 }]}>
+          {(["snowball", "avalanche"] as const).map(m => (
+            <Pressable
+              key={m}
+              onPress={() => updateSettings({ paymentMethod: m })}
+              style={[styles.methodBtn, { backgroundColor: settings.paymentMethod === m ? c.primary : "transparent", borderRadius: 8 }]}
+            >
+              <Feather name={m === "snowball" ? "trending-down" : "percent"} size={14} color={settings.paymentMethod === m ? c.primaryForeground : c.mutedForeground} />
+              <Text style={[styles.methodText, { color: settings.paymentMethod === m ? c.primaryForeground : c.mutedForeground }]}>
+                {m === "snowball" ? "Snowball" : "Avalanche"}
+              </Text>
+            </Pressable>
+          ))}
         </View>
         <Text style={[styles.methodDesc, { color: c.mutedForeground }]}>
           {settings.paymentMethod === "snowball"
-            ? "Snowball: Pay smallest balances first for quick wins."
-            : "Avalanche: Pay highest interest first to save the most money."}
+            ? "Snowball: Pay off smallest debts first for quick psychological wins, then roll payments into next debt."
+            : "Avalanche: Target highest-interest debt first to minimize total interest paid over time."}
         </Text>
       </View>
 
-      <Text style={[styles.sectionTitle, { color: c.mutedForeground }]}>Budget Settings</Text>
-      <View style={[styles.settingsCard, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        <Text style={[styles.inputLabel, { color: c.mutedForeground }]}>Monthly Income ($)</Text>
+      <SectionTitle c={c} label="Income" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <Label c={c} text="Monthly Income ($)" />
         <TextInput
-          style={[styles.settingsInput, { backgroundColor: c.muted, color: c.foreground, borderRadius: 8 }]}
+          style={[styles.input, { backgroundColor: c.muted, color: c.foreground }]}
           value={settings.monthly_income > 0 ? settings.monthly_income.toString() : ""}
           onChangeText={v => updateSettings({ monthly_income: parseFloat(v) || 0 })}
-          placeholder="0.00"
+          placeholder="Enter monthly income"
           placeholderTextColor={c.mutedForeground}
           keyboardType="decimal-pad"
         />
-        <Text style={[styles.inputLabel, { color: c.mutedForeground, marginTop: 12 }]}>Starting Balance ($)</Text>
-        <TextInput
-          style={[styles.settingsInput, { backgroundColor: c.muted, color: c.foreground, borderRadius: 8 }]}
-          value={settings.starting_balance > 0 ? settings.starting_balance.toString() : ""}
-          onChangeText={v => updateSettings({ starting_balance: parseFloat(v) || 0 })}
-          placeholder="0.00"
-          placeholderTextColor={c.mutedForeground}
-          keyboardType="decimal-pad"
-        />
+        <Text style={[styles.inputHint, { color: c.mutedForeground }]}>
+          Used to calculate disposable income on the Dashboard.
+        </Text>
+      </View>
 
-        <View style={[styles.toggleRow, { marginTop: 12 }]}>
-          <Text style={[styles.toggleLabel, { color: c.foreground }]}>Carryover Balances</Text>
+      <SectionTitle c={c} label="Behavior" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <View style={styles.switchRow}>
+          <View style={styles.switchInfo}>
+            <Text style={[styles.switchLabel, { color: c.foreground }]}>Carryover Balances</Text>
+            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Unpaid amounts roll to the next month</Text>
+          </View>
           <Switch
             value={settings.carryover_balances}
             onValueChange={v => updateSettings({ carryover_balances: v })}
@@ -158,21 +155,21 @@ export default function MoreScreen() {
         </View>
       </View>
 
-      <Text style={[styles.sectionTitle, { color: c.mutedForeground }]}>Data</Text>
-      <View style={[styles.settingsCard, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+      <SectionTitle c={c} label="Data" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         {[
-          { icon: "upload" as const, label: "Import Bills from CSV", desc: "Name, Amount, Category, Priority...", onPress: handleImport, color: c.primary },
-          { icon: "download" as const, label: "Export All Data", desc: "Bills + Transactions to CSV", onPress: handleExport, color: "#6366f1" },
+          { icon: "upload" as const, label: "Import Bills from CSV", desc: "Name, Amount, Category, Priority, Balance, Interest Rate", onPress: handleImport, color: c.primary },
+          { icon: "download" as const, label: "Export All Data", desc: "Bills, Transactions, and Monthly Overrides", onPress: handleExport, color: "#6366f1" },
         ].map((item, i) => (
           <Pressable
-            key={i}
+            key={item.label}
             onPress={item.onPress}
             style={({ pressed }) => [styles.dataRow, { borderTopWidth: i > 0 ? 1 : 0, borderTopColor: c.border, opacity: pressed ? 0.7 : 1 }]}
           >
-            <View style={[styles.dataIcon, { backgroundColor: item.color + "15" }]}>
+            <View style={[styles.dataIcon, { backgroundColor: item.color + "18" }]}>
               <Feather name={item.icon} size={18} color={item.color} />
             </View>
-            <View style={styles.dataInfo}>
+            <View style={styles.dataBody}>
               <Text style={[styles.dataLabel, { color: c.foreground }]}>{item.label}</Text>
               <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{item.desc}</Text>
             </View>
@@ -181,49 +178,54 @@ export default function MoreScreen() {
         ))}
       </View>
 
-      <View style={[styles.statsCard, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        <Text style={[styles.statsTitle, { color: c.mutedForeground }]}>Overview</Text>
-        <View style={styles.statsGrid}>
-          {[
-            { label: "Bills", value: bills.length.toString() },
-            { label: "Debts", value: bills.filter(b => b.is_debt).length.toString() },
-            { label: "Transactions", value: transactions.length.toString() },
-            { label: "Months", value: new Set(monthlyEntries.map(e => `${e.month}-${e.year}`)).size.toString() },
-          ].map(s => (
-            <View key={s.label} style={styles.statItem}>
-              <Text style={[styles.statValue, { color: c.foreground }]}>{s.value}</Text>
-              <Text style={[styles.statLabel, { color: c.mutedForeground }]}>{s.label}</Text>
-            </View>
-          ))}
-        </View>
+      <SectionTitle c={c} label="Summary" />
+      <View style={[styles.summaryCard, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        {[
+          { label: "Bills", val: bills.length },
+          { label: "Debts", val: bills.filter(b => b.is_debt).length },
+          { label: "Transactions", val: transactions.length },
+          { label: "Overrides", val: overrides.length },
+        ].map(s => (
+          <View key={s.label} style={styles.summaryItem}>
+            <Text style={[styles.summaryNum, { color: c.foreground }]}>{s.val}</Text>
+            <Text style={[styles.summaryLabel, { color: c.mutedForeground }]}>{s.label}</Text>
+          </View>
+        ))}
       </View>
     </ScrollView>
   );
 }
 
+function SectionTitle({ c, label }: { c: any; label: string }) {
+  return <Text style={[{ color: c.mutedForeground, fontSize: 11, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8, marginTop: 4 }]}>{label}</Text>;
+}
+
+function Label({ c, text }: { c: any; text: string }) {
+  return <Text style={[{ color: c.mutedForeground, fontSize: 12, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }]}>{text}</Text>;
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   content: { paddingHorizontal: 16 },
-  title: { fontSize: 28, fontFamily: "Inter_700Bold", marginBottom: 20 },
-  sectionTitle: { fontSize: 12, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10, marginTop: 4 },
-  settingsCard: { padding: 16, marginBottom: 20, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
-  methodToggle: { flexDirection: "row", padding: 4, gap: 4 },
+  pageTitle: { fontSize: 28, fontFamily: "Inter_700Bold", marginBottom: 20 },
+  card: { padding: 16, marginBottom: 20, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
+  methodRow: { flexDirection: "row", padding: 4, gap: 4 },
   methodBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10 },
   methodText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  methodDesc: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 18, marginTop: 10 },
-  inputLabel: { fontSize: 12, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 },
-  settingsInput: { height: 44, paddingHorizontal: 12, fontSize: 16, fontFamily: "Inter_400Regular" },
-  toggleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  toggleLabel: { fontSize: 15, fontFamily: "Inter_500Medium" },
-  dataRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12 },
+  methodDesc: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 19, marginTop: 10 },
+  input: { height: 44, borderRadius: 8, paddingHorizontal: 12, fontSize: 16, fontFamily: "Inter_400Regular" },
+  inputHint: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 8, lineHeight: 17 },
+  switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  switchInfo: { flex: 1, marginRight: 12 },
+  switchLabel: { fontSize: 15, fontFamily: "Inter_500Medium" },
+  switchDesc: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  dataRow: { flexDirection: "row", alignItems: "center", paddingVertical: 13 },
   dataIcon: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center", marginRight: 12 },
-  dataInfo: { flex: 1 },
-  dataLabel: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  dataBody: { flex: 1 },
+  dataLabel: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   dataDesc: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
-  statsCard: { padding: 16, marginBottom: 8 },
-  statsTitle: { fontSize: 12, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 12 },
-  statsGrid: { flexDirection: "row", justifyContent: "space-around" },
-  statItem: { alignItems: "center" },
-  statValue: { fontSize: 22, fontFamily: "Inter_700Bold" },
-  statLabel: { fontSize: 12, fontFamily: "Inter_500Medium", marginTop: 2 },
+  summaryCard: { flexDirection: "row", justifyContent: "space-around", padding: 16, marginBottom: 8 },
+  summaryItem: { alignItems: "center" },
+  summaryNum: { fontSize: 24, fontFamily: "Inter_700Bold" },
+  summaryLabel: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
 });
