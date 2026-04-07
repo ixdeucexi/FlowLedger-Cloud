@@ -1,0 +1,89 @@
+Build a full-stack web app that replicates and improves a Google Sheets budgeting/payment tracker system.
+
+TECH STACK:
+- Frontend: React (with clean UI, responsive design)
+- Backend: Python (Flask or FastAPI)
+- Database: SQLite (simple, local persistence)
+- State management: simple React state or context
+- Styling: modern dashboard look (cards, tables, clean spacing)
+
+CORE FUNCTIONALITY:
+
+1. MASTER PAYMENT SCHEDULE
+- A central table called "PaymentSchedule"
+- Columns:
+  - Month
+  - Bill Name
+  - Amount
+- This acts as the source of truth
+
+2. MONTHLY VIEWS (Dynamic)
+- Each month (Jan–Dec) should be selectable from a dropdown
+- When a month is selected:
+  - Show all bills scheduled for that month
+  - Display:
+    - Bill Name
+    - Due Day (editable)
+    - Amount (auto-pulled from PaymentSchedule)
+- No hardcoding months — generate dynamically
+
+3. DYNAMIC DATA LINKING
+- Monthly view should automatically pull amounts from PaymentSchedule
+- If PaymentSchedule is updated, monthly data updates automatically
+
+4. EXTRA PAYMENT FEATURE
+- Allow user to input "extra money"
+- Apply extra funds toward bills (snowball method):
+  - Smallest balance first OR user-defined priority
+- Show updated remaining balances
+
+5. DASHBOARD SUMMARY
+- Total monthly expenses
+- Remaining balance after payments
+- Total paid vs remaining
+- Simple chart (bar or pie)
+
+6. CRUD OPERATIONS
+- Add / edit / delete:
+  - Bills
+  - Amounts
+  - Due dates
+- Persist all data in SQLite
+
+7. IMPORT FEATURE
+- Allow user to upload an Excel file (.xlsx)
+- Parse it and populate PaymentSchedule
+- Use Python (pandas + openpyxl)
+
+8. EXPORT FEATURE
+- Export current data back to Excel
+
+9. UI REQUIREMENTS
+- Clean dashboard layout
+- Sidebar navigation:
+  - Dashboard
+  - Payment Schedule
+  - Monthly View
+- Tables should be editable inline
+- Mobile responsive
+
+10. LOGIC RULES
+- Do NOT use named ranges
+- Do NOT duplicate data unnecessarily
+- Always reference master schedule
+- Keep logic modular and scalable
+
+11. FILE STRUCTURE
+- /frontend (React app)
+- /backend (API + database)
+- Clear separation of concerns
+
+12. BONUS (if possible)
+- Authentication (simple login)
+- Save multiple budgets
+- Dark mode toggle
+
+DELIVERABLE:
+- Fully working Replit app
+- Clear instructions to run
+- Seed data example
