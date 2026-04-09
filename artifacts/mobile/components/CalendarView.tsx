@@ -16,9 +16,9 @@ interface CalendarViewProps {
 }
 
 function fmt(n: number, compact = true) {
-  if (!compact) return n.toFixed(2);
-  if (Math.abs(n) >= 1000) return `${(n / 1000).toFixed(2)}k`;
-  return Math.abs(n).toFixed(2);
+  const abs = Math.abs(n);
+  if (!compact) return abs.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return abs.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export function CalendarView({ month, year, transactions, selectedDate, onDayPress, dailyBalances }: CalendarViewProps) {
