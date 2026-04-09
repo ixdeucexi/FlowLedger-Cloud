@@ -178,6 +178,57 @@ function isBillActiveForMonth(bill: Bill, month: number, year: number): boolean 
 }
 
 /**
+ * Returns 1-indexed days within the given month when this income source pays out.
+ * - monthly  → single occurrence (on the start_date's day-of-month if in the start month, otherwise day 1)
+ * - biweekly → every 14 days anchored to start_date
+ * - weekly   → every 7 days anchored to start_date
+ */
+function getIncomeOccurrenceDays(income: IncomeItem, month: number, year: number): number[] {
+  if (!isIncomeActiveForMonth(income, month, year)) return [];
+
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  if (income.frequency === "monthly") {
+    // If this is the exact start month, use the start_date's day; otherwise day 1
+    if (income.start_date) {
+      const [sy, sm, sd] = income.start_date.split("-").map(Number);
+      if (sy === year && sm === month + 1) return [Math.min(sd, daysInMonth)];
+    }
+    return [1];
+  }
+
+  // Weekly / biweekly: anchor to start_date (or day 1 if unset) and step forward
+  const intervalDays = income.frequency === "biweekly" ? 14 : 7;
+  let anchor: Date;
+  if (income.start_date) {
+    anchor = new Date(income.start_date + "T00:00:00");
+  } else {
+    anchor = new Date(year, month, 1);
+  }
+
+  const monthStart = new Date(year, month, 1);
+  const monthEnd   = new Date(year, month + 1, 0);
+
+  // Fast-forward anchor to first occurrence on or after the month's start
+  let current = new Date(anchor);
+  if (current < monthStart) {
+    const msPerInterval = intervalDays * 86400000;
+    const diff = monthStart.getTime() - current.getTime();
+    const steps = Math.floor(diff / msPerInterval);
+    current = new Date(current.getTime() + steps * msPerInterval);
+    // Advance one more step if still before monthStart
+    if (current < monthStart) current = new Date(current.getTime() + msPerInterval);
+  }
+
+  const days: number[] = [];
+  while (current <= monthEnd) {
+    days.push(current.getDate());
+    current = new Date(current.getTime() + intervalDays * 86400000);
+  }
+  return days;
+}
+
+/**
  * Returns the 1-indexed day numbers within the given month when the bill is due.
  * For monthly bills → [due_day].
  * For weekly bills → all weekdays matching day_of_week within the month.
@@ -690,13 +741,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       // Very first month tracked → use the user-configured starting balance
       carryover = settings.starting_balance;
     } else {
-      // Compute previous month's ending balance (income − bills + transactions)
+      // Compute previous month's ending balance using exact occurrence-based income
       const prevMonth = month === 0 ? 11 : month - 1;
       const prevYear  = month === 0 ? year - 1 : year;
 
-      const prevIncome = incomes
-        .filter(i => isIncomeActiveForMonth(i, prevMonth, prevYear))
-        .reduce((s, i) => s + incomeToMonthly(i.amount, i.frequency), 0);
+      const prevIncome = incomes.reduce((s, i) => {
+        const occ = getIncomeOccurrenceDays(i, prevMonth, prevYear);
+        return s + occ.length * i.amount;
+      }, 0);
 
       const prevBillsTotal = bills.filter(b => b.is_recurring).reduce((s, b) => {
         const occ = getBillOccurrenceDays(b, prevMonth, prevYear);
@@ -713,10 +765,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       carryover = prevIncome + prevNetTx - prevBillsTotal;
     }
 
-    // Current month scheduled income (lump at start of month)
-    const monthlyIncome = incomes
-      .filter(i => isIncomeActiveForMonth(i, month, year))
-      .reduce((s, i) => s + incomeToMonthly(i.amount, i.frequency), 0);
+    // Build income-by-day map using actual occurrence dates (respects start_date)
+    const incomeByDay: Record<number, number> = {};
+    incomes.forEach(i => {
+      const occ = getIncomeOccurrenceDays(i, month, year);
+      occ.forEach(d => { incomeByDay[d] = (incomeByDay[d] ?? 0) + i.amount; });
+    });
 
     // Transactions for this month indexed by day
     const monthTxs = transactions.filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === year && tm === month + 1; });
@@ -731,12 +785,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       occ.forEach(d => { billsByDay[d] = (billsByDay[d] ?? 0) + amt; });
     });
 
-    let runningBalance = carryover + monthlyIncome;
+    // Start from carryover — income is added on its actual days, not day 1
+    let runningBalance = carryover;
     const result: DailyBalance[] = [];
 
     for (let day = 1; day <= daysInMonth; day++) {
       const dayTxs = monthTxs.filter(t => { const [, , td] = t.date.split("-").map(Number); return td === day; });
-      const incomeToday  = dayTxs.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+      const scheduledIncome = incomeByDay[day] ?? 0;
+      const txIncome  = dayTxs.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+      const incomeToday  = scheduledIncome + txIncome;
       const expenseToday = dayTxs.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
       const billsToday   = billsByDay[day] ?? 0;
       const net = incomeToday - expenseToday - billsToday;
