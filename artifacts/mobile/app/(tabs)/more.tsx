@@ -35,10 +35,24 @@ export default function MoreScreen() {
   const [startingBalanceText, setStartingBalanceText] = useState(
     settings.starting_balance > 0 ? settings.starting_balance.toString() : ""
   );
+  const [startingBalanceDateText, setStartingBalanceDateText] = useState(
+    settings.starting_balance_date ?? ""
+  );
 
   useEffect(() => {
     setStartingBalanceText(settings.starting_balance > 0 ? settings.starting_balance.toString() : "");
-  }, [settings.starting_balance]);
+    setStartingBalanceDateText(settings.starting_balance_date ?? "");
+  }, [settings.starting_balance, settings.starting_balance_date]);
+
+  const saveStartingBalance = () => {
+    const parsed = parseFloat(startingBalanceText);
+    const dateVal = startingBalanceDateText.trim() || undefined;
+    updateSettings({
+      starting_balance: isNaN(parsed) ? 0 : parsed,
+      starting_balance_date: dateVal,
+    });
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
 
   const totalMonthlyIncome = getMonthlyIncome();
 
@@ -327,43 +341,58 @@ export default function MoreScreen() {
         </View>
 
         <View style={[styles.balanceDivider, { borderTopColor: c.border }]}>
-          <View style={styles.balanceHeader}>
-            <View>
-              <Text style={[styles.switchLabel, { color: c.foreground }]}>Starting Balance ($)</Text>
-              <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Your account balance when you first started tracking</Text>
-            </View>
-          </View>
+          <Text style={[styles.switchLabel, { color: c.foreground, marginBottom: 2 }]}>Starting Balance</Text>
+          <Text style={[styles.switchDesc, { color: c.mutedForeground, marginBottom: 10 }]}>
+            Your account balance on a specific date — used to seed the running balance for that month.
+          </Text>
+
+          <Text style={[styles.balanceFieldLabel, { color: c.mutedForeground }]}>Amount ($)</Text>
+          <TextInput
+            style={[styles.balanceFullInput, { backgroundColor: c.muted, color: c.foreground }]}
+            value={startingBalanceText}
+            onChangeText={setStartingBalanceText}
+            placeholder="0.00"
+            placeholderTextColor={c.mutedForeground}
+            keyboardType="decimal-pad"
+            returnKeyType="next"
+          />
+
+          <Text style={[styles.balanceFieldLabel, { color: c.mutedForeground, marginTop: 10 }]}>As of Date (YYYY-MM-DD)</Text>
           <View style={styles.balanceInputRow}>
             <TextInput
               style={[styles.balanceInput, { backgroundColor: c.muted, color: c.foreground }]}
-              value={startingBalanceText}
-              onChangeText={setStartingBalanceText}
-              placeholder="0.00"
+              value={startingBalanceDateText}
+              onChangeText={setStartingBalanceDateText}
+              placeholder="e.g. 2026-04-01"
               placeholderTextColor={c.mutedForeground}
-              keyboardType="decimal-pad"
               returnKeyType="done"
-              onBlur={() => {
-                const parsed = parseFloat(startingBalanceText);
-                updateSettings({ starting_balance: isNaN(parsed) ? 0 : parsed });
-              }}
+              onSubmitEditing={saveStartingBalance}
             />
             <Pressable
-              onPress={() => {
-                const parsed = parseFloat(startingBalanceText);
-                updateSettings({ starting_balance: isNaN(parsed) ? 0 : parsed });
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
+              onPress={saveStartingBalance}
               style={({ pressed }) => [styles.balanceSaveBtn, { backgroundColor: c.primary, opacity: pressed ? 0.8 : 1 }]}
             >
               <Feather name="check" size={15} color={c.primaryForeground} />
             </Pressable>
           </View>
-          <View style={[styles.balanceNote, { backgroundColor: c.primary + "12" }]}>
-            <Feather name="info" size={11} color={c.primary} />
-            <Text style={[styles.switchDesc, { color: c.mutedForeground, flex: 1 }]}>
-              Only applies to the first month tracked. Future months use automatic carryover.
-            </Text>
-          </View>
+
+          {settings.starting_balance_date ? (
+            <View style={[styles.balanceNote, { backgroundColor: c.success + "12" }]}>
+              <Feather name="check-circle" size={11} color={c.success} />
+              <Text style={[styles.switchDesc, { color: c.mutedForeground, flex: 1 }]}>
+                Balance of ${settings.starting_balance.toFixed(2)} applied to{" "}
+                {new Date(settings.starting_balance_date + "T00:00:00").toLocaleDateString("en-US", { month: "long", year: "numeric" })}.
+                Subsequent months carry over automatically.
+              </Text>
+            </View>
+          ) : (
+            <View style={[styles.balanceNote, { backgroundColor: c.primary + "12" }]}>
+              <Feather name="info" size={11} color={c.primary} />
+              <Text style={[styles.switchDesc, { color: c.mutedForeground, flex: 1 }]}>
+                Set a date so the app knows exactly which month to apply your starting balance to.
+              </Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -475,6 +504,8 @@ const styles = StyleSheet.create({
   switchDesc: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   balanceDivider: { borderTopWidth: 1, marginTop: 14, paddingTop: 14 },
   balanceHeader: { marginBottom: 10 },
+  balanceFieldLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 6 },
+  balanceFullInput: { height: 44, borderRadius: 10, paddingHorizontal: 14, fontSize: 16, fontFamily: "Inter_400Regular" },
   balanceInputRow: { flexDirection: "row", gap: 10, alignItems: "center" },
   balanceInput: { flex: 1, height: 44, borderRadius: 10, paddingHorizontal: 14, fontSize: 16, fontFamily: "Inter_400Regular" },
   balanceSaveBtn: { width: 44, height: 44, borderRadius: 10, alignItems: "center", justifyContent: "center" },

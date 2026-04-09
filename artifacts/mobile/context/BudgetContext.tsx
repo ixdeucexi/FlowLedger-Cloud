@@ -83,7 +83,8 @@ export interface ExtraPayment {
 export interface Settings {
   paymentMethod: "snowball" | "avalanche";
   carryover_balances: boolean;
-  starting_balance: number;   // user's real account balance when they first started tracking
+  starting_balance: number;        // user's real account balance on starting_balance_date
+  starting_balance_date?: string;  // YYYY-MM-DD — the date the starting balance applies to
 }
 
 export interface CashFlow {
@@ -730,39 +731,59 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const getDailyBalances = useCallback((month: number, year: number): DailyBalance[] => {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-    // Determine if there is any recorded activity before this month
-    const currentMonthStart = new Date(year, month, 1);
-    const prevHasActivity =
-      transactions.some(t => { const [ty, tm] = t.date.split("-").map(Number); return new Date(ty, tm - 1, 1) < currentMonthStart; }) ||
-      overrides.some(o => new Date(o.year, o.month, 1) < currentMonthStart);
-
-    let carryover: number;
-    if (!prevHasActivity) {
-      // Very first month tracked → use the user-configured starting balance
-      carryover = settings.starting_balance;
-    } else {
-      // Compute previous month's ending balance using exact occurrence-based income
-      const prevMonth = month === 0 ? 11 : month - 1;
-      const prevYear  = month === 0 ? year - 1 : year;
-
-      const prevIncome = incomes.reduce((s, i) => {
-        const occ = getIncomeOccurrenceDays(i, prevMonth, prevYear);
+    // Helper: compute a month's ending balance (income − bills + transactions)
+    const computeMonthNet = (m: number, y: number): number => {
+      const inc = incomes.reduce((s, i) => {
+        const occ = getIncomeOccurrenceDays(i, m, y);
         return s + occ.length * i.amount;
       }, 0);
-
-      const prevBillsTotal = bills.filter(b => b.is_recurring).reduce((s, b) => {
-        const occ = getBillOccurrenceDays(b, prevMonth, prevYear);
+      const bil = bills.filter(b => b.is_recurring).reduce((s, b) => {
+        const occ = getBillOccurrenceDays(b, m, y);
         if (occ.length === 0) return s;
-        const o = overrides.find(o => o.bill_id === b.id && o.month === prevMonth && o.year === prevYear);
+        const o = overrides.find(o => o.bill_id === b.id && o.month === m && o.year === y);
         const amt = o?.custom_amount !== undefined ? o.custom_amount : b.amount;
         return s + amt * occ.length;
       }, 0);
-
-      const prevNetTx = transactions
-        .filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === prevYear && tm === prevMonth + 1; })
+      const tx = transactions
+        .filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === y && tm === m + 1; })
         .reduce((s, t) => s + t.amount, 0);
+      return inc + tx - bil;
+    };
 
-      carryover = prevIncome + prevNetTx - prevBillsTotal;
+    let carryover: number;
+
+    if (settings.starting_balance_date) {
+      // Anchor to the user-specified date
+      const [sbY, sbM] = settings.starting_balance_date.split("-").map(Number);
+      const sbYear  = sbY;
+      const sbMonth = sbM - 1; // 0-indexed
+
+      if (year === sbYear && month === sbMonth) {
+        // This is the starting balance month — seed with the user's balance
+        carryover = settings.starting_balance;
+      } else if (year < sbYear || (year === sbYear && month < sbMonth)) {
+        // Before the tracking start — treat as zero
+        carryover = 0;
+      } else {
+        // After the starting balance month — roll forward month by month
+        const prevMonth = month === 0 ? 11 : month - 1;
+        const prevYear  = month === 0 ? year - 1 : year;
+        carryover = computeMonthNet(prevMonth, prevYear);
+      }
+    } else {
+      // No date set — use prevHasActivity heuristic
+      const currentMonthStart = new Date(year, month, 1);
+      const prevHasActivity =
+        transactions.some(t => { const [ty, tm] = t.date.split("-").map(Number); return new Date(ty, tm - 1, 1) < currentMonthStart; }) ||
+        overrides.some(o => new Date(o.year, o.month, 1) < currentMonthStart);
+
+      if (!prevHasActivity) {
+        carryover = settings.starting_balance;
+      } else {
+        const prevMonth = month === 0 ? 11 : month - 1;
+        const prevYear  = month === 0 ? year - 1 : year;
+        carryover = computeMonthNet(prevMonth, prevYear);
+      }
     }
 
     // Build income-by-day map using actual occurrence dates (respects start_date)
