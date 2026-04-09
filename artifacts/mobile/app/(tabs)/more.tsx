@@ -4,7 +4,10 @@ import * as FileSystem from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import * as Sharing from "expo-sharing";
 import React, { useState } from "react";
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import {
+  Alert, Platform, Pressable, ScrollView, StyleSheet,
+  Switch, Text, TextInput, View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { IncomeModal } from "@/components/IncomeModal";
@@ -18,31 +21,42 @@ const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biw
 export default function MoreScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const { bills, transactions, overrides, incomes, goals, importBills, settings, updateSettings,
-    addIncome, updateIncome, deleteIncome, getMonthlyIncome } = useBudget();
+  const {
+    bills, transactions, overrides, incomes, goals, importBills, settings, updateSettings,
+    addIncome, updateIncome, deleteIncome, getMonthlyIncome,
+    categories, addCategory, updateCategory, deleteCategory,
+  } = useBudget();
 
   const [incomeModalVisible, setIncomeModalVisible] = useState(false);
   const [editIncome, setEditIncome] = useState<IncomeItem | null>(null);
+  const [newCategory, setNewCategory] = useState("");
+  const [renamingCategory, setRenamingCategory] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   const totalMonthlyIncome = getMonthlyIncome();
 
   const handleExport = async () => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      const billHeader = "Name,Amount,Category,Priority,IsDebt,Balance,InterestRate,DueDay,IsRecurring";
-      const billRows = bills.map(b => `"${b.name}",${b.amount},"${b.category}",${b.priority},${b.is_debt},${b.balance},${b.interest_rate},${b.due_day},${b.is_recurring}`).join("\n");
+      const billHeader = "Name,Amount,Category,Priority,IsDebt,Balance,InterestRate,DueDay,IsRecurring,Frequency";
+      const billRows = bills.map(b =>
+        `"${b.name}",${b.amount},"${b.category}",${b.priority},${b.is_debt},${b.balance},${b.interest_rate},${b.due_day},${b.is_recurring},${b.frequency ?? "monthly"}`
+      ).join("\n");
       const txHeader = "Date,Amount,Category,Note";
       const txRows = transactions.map(t => `"${t.date}",${t.amount},"${t.category}","${t.note}"`).join("\n");
       const ovrHeader = "BillId,Month,Year,CustomAmount,PaidAmount";
       const ovrRows = overrides.map(o => `"${o.bill_id}",${o.month},${o.year},${o.custom_amount ?? ""},${o.paid_amount}`).join("\n");
-      const csv = ["=== BILLS ===", billHeader, billRows, "", "=== TRANSACTIONS ===", txHeader, txRows, "", "=== MONTHLY OVERRIDES ===", ovrHeader, ovrRows].join("\n");
+      const csv = [
+        "=== BILLS ===", billHeader, billRows,
+        "", "=== TRANSACTIONS ===", txHeader, txRows,
+        "", "=== MONTHLY OVERRIDES ===", ovrHeader, ovrRows,
+      ].join("\n");
 
       if (Platform.OS === "web") {
         const blob = new Blob([csv], { type: "text/csv" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a"); a.href = url; a.download = "budget_export.csv"; a.click();
         URL.revokeObjectURL(url);
-        Alert.alert("Exported", "Budget data downloaded.");
       } else {
         const uri = FileSystem.documentDirectory + "budget_export.csv";
         await FileSystem.writeAsStringAsync(uri, csv);
@@ -69,7 +83,13 @@ export default function MoreScreen() {
         const parts = lines[i].split(",").map(p => p.replace(/"/g, "").trim());
         const amount = parseFloat(parts[1]);
         if (!parts[0] || isNaN(amount)) continue;
-        imported.push({ name: parts[0], amount, category: parts[2] || "Other", priority: parseInt(parts[3]) || i, is_debt: parts[4]?.toLowerCase() === "true", balance: parseFloat(parts[5]) || 0, interest_rate: parseFloat(parts[6]) || 0, due_day: parseInt(parts[7]) || 1, is_recurring: parts[8]?.toLowerCase() !== "false" });
+        imported.push({
+          name: parts[0], amount, category: parts[2] || "Other",
+          priority: parseInt(parts[3]) || i, is_debt: parts[4]?.toLowerCase() === "true",
+          balance: parseFloat(parts[5]) || 0, interest_rate: parseFloat(parts[6]) || 0,
+          due_day: parseInt(parts[7]) || 1, is_recurring: parts[8]?.toLowerCase() !== "false",
+          frequency: (parts[9] === "weekly" ? "weekly" : "monthly"),
+        });
       }
       if (!imported.length) { Alert.alert("No Data", "No valid bill rows found."); return; }
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -87,6 +107,38 @@ export default function MoreScreen() {
     ]);
   };
 
+  const handleAddCategory = () => {
+    const trimmed = newCategory.trim();
+    if (!trimmed) return;
+    addCategory(trimmed);
+    setNewCategory("");
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handleRenameCategory = (oldName: string) => {
+    const trimmed = renameValue.trim();
+    if (!trimmed || trimmed === oldName) { setRenamingCategory(null); return; }
+    updateCategory(oldName, trimmed);
+    setRenamingCategory(null);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handleDeleteCategory = (name: string) => {
+    const inUse = bills.filter(b => b.category === name).length + transactions.filter(t => t.category === name).length;
+    const doDelete = () => {
+      deleteCategory(name);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    };
+    if (Platform.OS === "web") { doDelete(); return; }
+    const msg = inUse > 0
+      ? `"${name}" is used by ${inUse} item(s). They will be reassigned to "Other".`
+      : `Delete category "${name}"?`;
+    Alert.alert("Delete Category", msg, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: doDelete },
+    ]);
+  };
+
   const webTopPad = Platform.OS === "web" ? 67 : 0;
 
   return (
@@ -96,6 +148,7 @@ export default function MoreScreen() {
     >
       <Text style={[styles.pageTitle, { color: c.foreground }]}>Settings</Text>
 
+      {/* ── Income Sources ── */}
       <SLabel c={c} text="Income Sources" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         {incomes.length === 0 ? (
@@ -113,10 +166,14 @@ export default function MoreScreen() {
                   <Text style={[styles.incomeName, { color: c.foreground }]}>{item.name}</Text>
                   <Text style={[styles.incomeFreq, { color: c.mutedForeground }]}>
                     ${item.amount.toLocaleString()} · {FREQ_LABELS[item.frequency]}
+                    {item.start_date ? ` · from ${item.start_date}` : ""}
                   </Text>
                 </Pressable>
                 <View style={styles.incomeRight}>
-                  <Text style={[styles.incomeMonthly, { color: c.success }]}>${monthly.toFixed(0)}<Text style={[styles.incomeMonthlyUnit, { color: c.mutedForeground }]}>/mo</Text></Text>
+                  <Text style={[styles.incomeMonthly, { color: c.success }]}>
+                    ${monthly.toFixed(0)}
+                    <Text style={[styles.incomeMonthlyUnit, { color: c.mutedForeground }]}>/mo</Text>
+                  </Text>
                   <Pressable onPress={() => handleDeleteIncome(item)} hitSlop={12} style={styles.deleteIcon}>
                     <Feather name="trash-2" size={15} color={c.destructive} />
                   </Pressable>
@@ -133,20 +190,103 @@ export default function MoreScreen() {
         )}
         <Pressable
           onPress={() => { setEditIncome(null); setIncomeModalVisible(true); }}
-          style={({ pressed }) => [styles.addIncomeBtn, { backgroundColor: c.primary + "18", borderRadius: 10, opacity: pressed ? 0.7 : 1 }]}
+          style={({ pressed }) => [styles.addBtn, { backgroundColor: c.primary + "18", borderRadius: 10, opacity: pressed ? 0.7 : 1 }]}
         >
           <Feather name="plus" size={16} color={c.primary} />
-          <Text style={[styles.addIncomeBtnText, { color: c.primary }]}>Add Income Source</Text>
+          <Text style={[styles.addBtnText, { color: c.primary }]}>Add Income Source</Text>
         </Pressable>
       </View>
 
+      {/* ── Categories ── */}
+      <SLabel c={c} text="Categories" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        {categories.map((cat, i) => (
+          <View
+            key={cat}
+            style={[styles.categoryRow, { borderTopWidth: i > 0 ? 1 : 0, borderTopColor: c.border }]}
+          >
+            {renamingCategory === cat ? (
+              <View style={styles.renameRow}>
+                <TextInput
+                  style={[styles.renameInput, { backgroundColor: c.muted, color: c.foreground }]}
+                  value={renameValue}
+                  onChangeText={setRenameValue}
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={() => handleRenameCategory(cat)}
+                  onBlur={() => handleRenameCategory(cat)}
+                />
+                <Pressable
+                  onPress={() => handleRenameCategory(cat)}
+                  style={[styles.renameConfirm, { backgroundColor: c.primary }]}
+                >
+                  <Feather name="check" size={14} color={c.primaryForeground} />
+                </Pressable>
+                <Pressable
+                  onPress={() => setRenamingCategory(null)}
+                  hitSlop={8}
+                >
+                  <Feather name="x" size={16} color={c.mutedForeground} />
+                </Pressable>
+              </View>
+            ) : (
+              <>
+                <View style={[styles.catDot, { backgroundColor: c.primary + "60" }]} />
+                <Text style={[styles.catName, { color: c.foreground }]}>{cat}</Text>
+                <View style={styles.catActions}>
+                  <Pressable
+                    onPress={() => { setRenamingCategory(cat); setRenameValue(cat); }}
+                    hitSlop={8}
+                    style={styles.catActionBtn}
+                  >
+                    <Feather name="edit-2" size={14} color={c.mutedForeground} />
+                  </Pressable>
+                  <Pressable
+                    onPress={() => handleDeleteCategory(cat)}
+                    hitSlop={8}
+                    style={styles.catActionBtn}
+                  >
+                    <Feather name="trash-2" size={14} color={c.destructive} />
+                  </Pressable>
+                </View>
+              </>
+            )}
+          </View>
+        ))}
+
+        <View style={[styles.addCatRow, { borderTopWidth: categories.length > 0 ? 1 : 0, borderTopColor: c.border }]}>
+          <TextInput
+            style={[styles.addCatInput, { backgroundColor: c.muted, color: c.foreground }]}
+            value={newCategory}
+            onChangeText={setNewCategory}
+            placeholder="New category name..."
+            placeholderTextColor={c.mutedForeground}
+            returnKeyType="done"
+            onSubmitEditing={handleAddCategory}
+          />
+          <Pressable
+            onPress={handleAddCategory}
+            style={({ pressed }) => [styles.addCatBtn, { backgroundColor: c.primary, opacity: pressed ? 0.75 : 1 }]}
+          >
+            <Feather name="plus" size={16} color={c.primaryForeground} />
+          </Pressable>
+        </View>
+      </View>
+
+      {/* ── Debt Payoff Strategy ── */}
       <SLabel c={c} text="Debt Payoff Strategy" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View style={[styles.methodRow, { backgroundColor: c.muted, borderRadius: 10 }]}>
           {(["snowball", "avalanche"] as const).map(m => (
-            <Pressable key={m} onPress={() => updateSettings({ paymentMethod: m })} style={[styles.methodBtn, { backgroundColor: settings.paymentMethod === m ? c.primary : "transparent", borderRadius: 8 }]}>
+            <Pressable
+              key={m}
+              onPress={() => updateSettings({ paymentMethod: m })}
+              style={[styles.methodBtn, { backgroundColor: settings.paymentMethod === m ? c.primary : "transparent", borderRadius: 8 }]}
+            >
               <Feather name={m === "snowball" ? "trending-down" : "percent"} size={13} color={settings.paymentMethod === m ? c.primaryForeground : c.mutedForeground} />
-              <Text style={[styles.methodText, { color: settings.paymentMethod === m ? c.primaryForeground : c.mutedForeground }]}>{m === "snowball" ? "Snowball" : "Avalanche"}</Text>
+              <Text style={[styles.methodText, { color: settings.paymentMethod === m ? c.primaryForeground : c.mutedForeground }]}>
+                {m === "snowball" ? "Snowball" : "Avalanche"}
+              </Text>
             </Pressable>
           ))}
         </View>
@@ -163,6 +303,7 @@ export default function MoreScreen() {
         </View>
       </View>
 
+      {/* ── Behavior ── */}
       <SLabel c={c} text="Behavior" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View style={styles.switchRow}>
@@ -170,24 +311,40 @@ export default function MoreScreen() {
             <Text style={[styles.switchLabel, { color: c.foreground }]}>Carryover Balances</Text>
             <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Unpaid amounts roll forward monthly</Text>
           </View>
-          <Switch value={settings.carryover_balances} onValueChange={v => updateSettings({ carryover_balances: v })} trackColor={{ false: c.muted, true: c.primary }} thumbColor="#fff" />
+          <Switch
+            value={settings.carryover_balances}
+            onValueChange={v => updateSettings({ carryover_balances: v })}
+            trackColor={{ false: c.muted, true: c.primary }}
+            thumbColor="#fff"
+          />
         </View>
       </View>
 
+      {/* ── Data ── */}
       <SLabel c={c} text="Data" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         {[
-          { icon: "upload" as const, label: "Import Bills from CSV", desc: "Name, Amount, Category, Balance, Interest Rate...", onPress: handleImport, color: c.primary },
+          { icon: "upload" as const, label: "Import Bills from CSV", desc: "Name, Amount, Category, Balance, Interest Rate…", onPress: handleImport, color: c.primary },
           { icon: "download" as const, label: "Export All Data", desc: "Bills, transactions, monthly overrides", onPress: handleExport, color: "#6366f1" },
         ].map((item, i) => (
-          <Pressable key={item.label} onPress={item.onPress} style={({ pressed }) => [styles.dataRow, { borderTopWidth: i > 0 ? 1 : 0, borderTopColor: c.border, opacity: pressed ? 0.7 : 1 }]}>
-            <View style={[styles.dataIcon, { backgroundColor: item.color + "18" }]}><Feather name={item.icon} size={17} color={item.color} /></View>
-            <View style={styles.dataBody}><Text style={[styles.dataLabel, { color: c.foreground }]}>{item.label}</Text><Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{item.desc}</Text></View>
+          <Pressable
+            key={item.label}
+            onPress={item.onPress}
+            style={({ pressed }) => [styles.dataRow, { borderTopWidth: i > 0 ? 1 : 0, borderTopColor: c.border, opacity: pressed ? 0.7 : 1 }]}
+          >
+            <View style={[styles.dataIcon, { backgroundColor: item.color + "18" }]}>
+              <Feather name={item.icon} size={17} color={item.color} />
+            </View>
+            <View style={styles.dataBody}>
+              <Text style={[styles.dataLabel, { color: c.foreground }]}>{item.label}</Text>
+              <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{item.desc}</Text>
+            </View>
             <Feather name="chevron-right" size={15} color={c.mutedForeground} />
           </Pressable>
         ))}
       </View>
 
+      {/* ── Summary ── */}
       <SLabel c={c} text="Summary" />
       <View style={[styles.summaryCard, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         {[
@@ -217,7 +374,11 @@ export default function MoreScreen() {
 }
 
 function SLabel({ c, text }: { c: any; text: string }) {
-  return <Text style={{ color: c.mutedForeground, fontSize: 11, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8, marginTop: 4 }}>{text}</Text>;
+  return (
+    <Text style={{ color: c.mutedForeground, fontSize: 11, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8, marginTop: 4 }}>
+      {text}
+    </Text>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -226,6 +387,7 @@ const styles = StyleSheet.create({
   pageTitle: { fontSize: 28, fontFamily: "Inter_700Bold", marginBottom: 20 },
   card: { padding: 16, marginBottom: 20, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
   emptyText: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", paddingVertical: 8 },
+
   incomeRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, gap: 10 },
   incomeIcon: { width: 36, height: 36, borderRadius: 9, alignItems: "center", justifyContent: "center" },
   incomeInfo: { flex: 1 },
@@ -238,23 +400,39 @@ const styles = StyleSheet.create({
   incomeTotal: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 10, borderTopWidth: 1, marginTop: 4 },
   incomeTotalLabel: { fontSize: 12, fontFamily: "Inter_500Medium" },
   incomeTotalValue: { fontSize: 15, fontFamily: "Inter_700Bold" },
-  addIncomeBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 11, marginTop: 10 },
-  addIncomeBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  addBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 11, marginTop: 10 },
+  addBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+
+  categoryRow: { flexDirection: "row", alignItems: "center", paddingVertical: 11 },
+  catDot: { width: 8, height: 8, borderRadius: 4, marginRight: 10 },
+  catName: { flex: 1, fontSize: 14, fontFamily: "Inter_500Medium" },
+  catActions: { flexDirection: "row", gap: 14 },
+  catActionBtn: { padding: 2 },
+  renameRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
+  renameInput: { flex: 1, height: 36, borderRadius: 8, paddingHorizontal: 10, fontSize: 14, fontFamily: "Inter_400Regular" },
+  renameConfirm: { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  addCatRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10, paddingTop: 10 },
+  addCatInput: { flex: 1, height: 40, borderRadius: 10, paddingHorizontal: 12, fontSize: 14, fontFamily: "Inter_400Regular" },
+  addCatBtn: { width: 40, height: 40, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+
   methodRow: { flexDirection: "row", padding: 4, gap: 4 },
   methodBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10 },
   methodText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   methodDesc: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 19, marginTop: 10 },
   priorityNote: { flexDirection: "row", alignItems: "center", gap: 8, padding: 10, marginTop: 10 },
   priorityNoteText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
+
   switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   switchInfo: { flex: 1, marginRight: 12 },
   switchLabel: { fontSize: 15, fontFamily: "Inter_500Medium" },
   switchDesc: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+
   dataRow: { flexDirection: "row", alignItems: "center", paddingVertical: 13 },
   dataIcon: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center", marginRight: 12 },
   dataBody: { flex: 1 },
   dataLabel: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   dataDesc: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+
   summaryCard: { flexDirection: "row", justifyContent: "space-around", padding: 16, marginBottom: 8 },
   summaryItem: { alignItems: "center" },
   summaryNum: { fontSize: 24, fontFamily: "Inter_700Bold" },

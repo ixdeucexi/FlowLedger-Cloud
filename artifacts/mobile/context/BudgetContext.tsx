@@ -12,6 +12,7 @@ export interface Bill {
   interest_rate: number;
   due_day: number;
   is_recurring: boolean;
+  frequency: "monthly" | "weekly";
   created_at: string;
 }
 
@@ -38,6 +39,7 @@ export interface IncomeItem {
   name: string;
   amount: number;
   frequency: "monthly" | "biweekly" | "weekly";
+  start_date?: string;
   next_payment_date?: string;
 }
 
@@ -65,6 +67,14 @@ export interface SnowballAllocation {
   paidOff: boolean;
 }
 
+export interface ExtraPayment {
+  id: string;
+  month: number;
+  year: number;
+  amount: number;
+  allocations: SnowballAllocation[];
+}
+
 export interface Settings {
   paymentMethod: "snowball" | "avalanche";
   carryover_balances: boolean;
@@ -79,7 +89,22 @@ export interface CashFlow {
   remaining: number;
 }
 
+export interface DailyBalance {
+  day: number;
+  income: number;
+  expense: number;
+  bills: number;
+  net: number;
+  balance: number;
+}
+
 export type DashboardFilter = null | "paid" | "unpaid" | "debts";
+
+const DEFAULT_CATEGORIES = [
+  "Housing", "Utilities", "Insurance", "Transportation",
+  "Food", "Entertainment", "Health", "Education",
+  "Savings", "Debt", "Shopping", "Rent", "Other",
+];
 
 interface BudgetContextType {
   bills: Bill[];
@@ -87,6 +112,8 @@ interface BudgetContextType {
   transactions: Transaction[];
   incomes: IncomeItem[];
   goals: Goal[];
+  extraPayments: ExtraPayment[];
+  categories: string[];
   settings: Settings;
   loading: boolean;
   dashboardFilter: DashboardFilter;
@@ -104,7 +131,12 @@ interface BudgetContextType {
   setCustomAmount: (billId: string, month: number, year: number, amount: number | undefined) => void;
 
   getMonthlyBills: (month: number, year: number) => Bill[];
+  getWeeklyBillDays: (bill: Bill, month: number, year: number) => number[];
+  getBillMonthlyTotal: (bill: Bill, month: number, year: number) => number;
   runSnowball: (month: number, year: number, extraAmount: number) => SnowballAllocation[];
+  saveExtraPayment: (month: number, year: number, amount: number, allocations: SnowballAllocation[]) => void;
+  getExtraPayment: (month: number, year: number) => ExtraPayment | undefined;
+  deleteExtraPayment: (id: string) => void;
 
   addTransaction: (tx: Omit<Transaction, "id">) => void;
   updateTransaction: (tx: Transaction) => void;
@@ -114,7 +146,7 @@ interface BudgetContextType {
   addIncome: (item: Omit<IncomeItem, "id">) => void;
   updateIncome: (item: IncomeItem) => void;
   deleteIncome: (id: string) => void;
-  getMonthlyIncome: () => number;
+  getMonthlyIncome: (month?: number, year?: number) => number;
 
   addGoal: (goal: Omit<Goal, "id" | "created_at">) => void;
   updateGoal: (goal: Goal) => void;
@@ -122,6 +154,11 @@ interface BudgetContextType {
   checkGoalAffordability: (goal: Goal, month: number, year: number) => GoalAffordability;
 
   getCashFlow: (month: number, year: number) => CashFlow;
+  getDailyBalances: (month: number, year: number) => DailyBalance[];
+
+  addCategory: (name: string) => void;
+  updateCategory: (oldName: string, newName: string) => void;
+  deleteCategory: (name: string) => void;
 
   updateSettings: (s: Partial<Settings>) => void;
   importBills: (bills: Omit<Bill, "id" | "created_at">[]) => void;
@@ -138,6 +175,8 @@ const TRANSACTIONS_KEY = "@budget_transactions_v2";
 const INCOMES_KEY = "@budget_incomes_v1";
 const GOALS_KEY = "@budget_goals_v1";
 const SETTINGS_KEY = "@budget_settings_v4";
+const CATEGORIES_KEY = "@budget_categories_v1";
+const EXTRA_PAYMENTS_KEY = "@budget_extra_payments_v1";
 
 const DEFAULT_SETTINGS: Settings = {
   paymentMethod: "snowball",
@@ -154,6 +193,12 @@ function incomeToMonthly(amount: number, frequency: IncomeItem["frequency"]): nu
   return amount;
 }
 
+function isIncomeActiveForMonth(income: IncomeItem, month: number, year: number): boolean {
+  if (!income.start_date) return true;
+  const [sy, sm] = income.start_date.split("-").map(Number);
+  return year > sy || (year === sy && month >= sm - 1);
+}
+
 function reorderDebtPriorities(allBills: Bill[]): Bill[] {
   const nonDebts = allBills.filter(b => !b.is_debt);
   const debts = allBills
@@ -164,14 +209,14 @@ function reorderDebtPriorities(allBills: Bill[]): Bill[] {
 }
 
 const SEED_BILLS: Bill[] = [
-  { id: "s1", name: "Rent", amount: 1200, category: "Housing", priority: 99, is_debt: false, balance: 0, interest_rate: 0, due_day: 1, is_recurring: true, created_at: new Date().toISOString() },
-  { id: "s2", name: "Electric", amount: 95, category: "Utilities", priority: 99, is_debt: false, balance: 0, interest_rate: 0, due_day: 10, is_recurring: true, created_at: new Date().toISOString() },
-  { id: "s3", name: "Internet", amount: 60, category: "Utilities", priority: 99, is_debt: false, balance: 0, interest_rate: 0, due_day: 15, is_recurring: true, created_at: new Date().toISOString() },
-  { id: "s4", name: "Car Loan", amount: 350, category: "Debt", priority: 2, is_debt: true, balance: 4200, interest_rate: 6.5, due_day: 20, is_recurring: true, created_at: new Date().toISOString() },
-  { id: "s5", name: "Credit Card", amount: 120, category: "Debt", priority: 3, is_debt: true, balance: 1850, interest_rate: 22.9, due_day: 25, is_recurring: true, created_at: new Date().toISOString() },
-  { id: "s6", name: "Medical Bill", amount: 75, category: "Debt", priority: 1, is_debt: true, balance: 650, interest_rate: 0, due_day: 5, is_recurring: true, created_at: new Date().toISOString() },
-  { id: "s7", name: "Groceries", amount: 400, category: "Food", priority: 99, is_debt: false, balance: 0, interest_rate: 0, due_day: 1, is_recurring: true, created_at: new Date().toISOString() },
-  { id: "s8", name: "Insurance", amount: 180, category: "Insurance", priority: 99, is_debt: false, balance: 0, interest_rate: 0, due_day: 8, is_recurring: true, created_at: new Date().toISOString() },
+  { id: "s1", name: "Rent", amount: 1200, category: "Housing", priority: 99, is_debt: false, balance: 0, interest_rate: 0, due_day: 1, is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
+  { id: "s2", name: "Electric", amount: 95, category: "Utilities", priority: 99, is_debt: false, balance: 0, interest_rate: 0, due_day: 10, is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
+  { id: "s3", name: "Internet", amount: 60, category: "Utilities", priority: 99, is_debt: false, balance: 0, interest_rate: 0, due_day: 15, is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
+  { id: "s4", name: "Car Loan", amount: 350, category: "Debt", priority: 2, is_debt: true, balance: 4200, interest_rate: 6.5, due_day: 20, is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
+  { id: "s5", name: "Credit Card", amount: 120, category: "Debt", priority: 3, is_debt: true, balance: 1850, interest_rate: 22.9, due_day: 25, is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
+  { id: "s6", name: "Medical Bill", amount: 75, category: "Debt", priority: 1, is_debt: true, balance: 650, interest_rate: 0, due_day: 5, is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
+  { id: "s7", name: "Groceries", amount: 400, category: "Food", priority: 99, is_debt: false, balance: 0, interest_rate: 0, due_day: 1, is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
+  { id: "s8", name: "Insurance", amount: 180, category: "Insurance", priority: 99, is_debt: false, balance: 0, interest_rate: 0, due_day: 8, is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
 ];
 
 const SEED_INCOMES: IncomeItem[] = [
@@ -184,6 +229,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [incomes, setIncomes] = useState<IncomeItem[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [extraPayments, setExtraPayments] = useState<ExtraPayment[]>([]);
+  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -192,24 +239,33 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const [bd, od, td, ind, gd, sd] = await Promise.all([
+        const [bd, od, td, ind, gd, sd, cd, epd] = await Promise.all([
           AsyncStorage.getItem(BILLS_KEY),
           AsyncStorage.getItem(OVERRIDES_KEY),
           AsyncStorage.getItem(TRANSACTIONS_KEY),
           AsyncStorage.getItem(INCOMES_KEY),
           AsyncStorage.getItem(GOALS_KEY),
           AsyncStorage.getItem(SETTINGS_KEY),
+          AsyncStorage.getItem(CATEGORIES_KEY),
+          AsyncStorage.getItem(EXTRA_PAYMENTS_KEY),
         ]);
-        const loadedBills: Bill[] = bd ? JSON.parse(bd) : reorderDebtPriorities(SEED_BILLS);
+
+        let loadedBills: Bill[] = bd ? JSON.parse(bd) : reorderDebtPriorities(SEED_BILLS);
+        // migrate missing frequency field
+        loadedBills = loadedBills.map(b => ({ frequency: "monthly", ...b }));
         if (!bd) await AsyncStorage.setItem(BILLS_KEY, JSON.stringify(reorderDebtPriorities(SEED_BILLS)));
+
         const loadedIncomes: IncomeItem[] = ind ? JSON.parse(ind) : SEED_INCOMES;
         if (!ind) await AsyncStorage.setItem(INCOMES_KEY, JSON.stringify(SEED_INCOMES));
+
         setBills(loadedBills);
         if (od) setOverrides(JSON.parse(od));
         if (td) setTransactions(JSON.parse(td));
         setIncomes(loadedIncomes);
         if (gd) setGoals(JSON.parse(gd));
         if (sd) setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(sd) });
+        if (cd) setCategories(JSON.parse(cd));
+        if (epd) setExtraPayments(JSON.parse(epd));
       } catch (e) {
         console.error("[BudgetContext] load error:", e);
       } finally {
@@ -225,7 +281,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setBills(prev => {
       const withNew = [...prev, nb];
       const reordered = reorderDebtPriorities(withNew);
-      console.log("[addBill]", nb.name, "| total:", reordered.length);
       AsyncStorage.setItem(BILLS_KEY, JSON.stringify(reordered));
       return reordered;
     });
@@ -235,7 +290,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setBills(prev => {
       const replaced = prev.map(b => b.id === bill.id ? bill : b);
       const reordered = reorderDebtPriorities(replaced);
-      console.log("[updateBill]", bill.name);
       AsyncStorage.setItem(BILLS_KEY, JSON.stringify(reordered));
       return reordered;
     });
@@ -245,7 +299,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setBills(prev => {
       const filtered = prev.filter(b => b.id !== id);
       const reordered = reorderDebtPriorities(filtered);
-      console.log("[deleteBill]", id, "| remaining:", reordered.length);
       AsyncStorage.setItem(BILLS_KEY, JSON.stringify(reordered));
       return reordered;
     });
@@ -322,6 +375,28 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     [upsertOverride]
   );
 
+  // ─── Weekly Bill Helpers ───────────────────────────────────────────────────────
+
+  const getWeeklyBillDays = useCallback((bill: Bill, month: number, year: number): number[] => {
+    if (bill.frequency !== "weekly") return [bill.due_day];
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const days: number[] = [];
+    let d = bill.due_day;
+    while (d <= daysInMonth) {
+      if (d >= 1) days.push(d);
+      d += 7;
+    }
+    return days;
+  }, []);
+
+  const getBillMonthlyTotal = useCallback((bill: Bill, month: number, year: number): number => {
+    const perOccurrence = getAmount(bill, month, year);
+    if (bill.frequency === "weekly") {
+      return perOccurrence * getWeeklyBillDays(bill, month, year).length;
+    }
+    return perOccurrence;
+  }, [getAmount, getWeeklyBillDays]);
+
   const getMonthlyBills = useCallback(
     (_month: number, _year: number): Bill[] => bills.filter(b => b.is_recurring),
     [bills]
@@ -381,13 +456,39 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     [bills, settings.paymentMethod, overrides, upsertOverride]
   );
 
+  const saveExtraPayment = useCallback((month: number, year: number, amount: number, allocations: SnowballAllocation[]) => {
+    setExtraPayments(prev => {
+      const existing = prev.findIndex(ep => ep.month === month && ep.year === year);
+      let updated: ExtraPayment[];
+      if (existing !== -1) {
+        updated = prev.map((ep, i) => i === existing ? { ...ep, amount, allocations } : ep);
+      } else {
+        updated = [...prev, { id: genId(), month, year, amount, allocations }];
+      }
+      AsyncStorage.setItem(EXTRA_PAYMENTS_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
+  const getExtraPayment = useCallback((month: number, year: number) =>
+    extraPayments.find(ep => ep.month === month && ep.year === year),
+    [extraPayments]
+  );
+
+  const deleteExtraPayment = useCallback((id: string) => {
+    setExtraPayments(prev => {
+      const u = prev.filter(ep => ep.id !== id);
+      AsyncStorage.setItem(EXTRA_PAYMENTS_KEY, JSON.stringify(u));
+      return u;
+    });
+  }, []);
+
   // ─── Transactions ─────────────────────────────────────────────────────────────
 
   const addTransaction = useCallback((tx: Omit<Transaction, "id">) => {
     const nt: Transaction = { ...tx, id: genId() };
     setTransactions(prev => {
       const u = [...prev, nt];
-      console.log("[addTransaction]", nt.date, nt.amount, "| total:", u.length);
       AsyncStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(u));
       return u;
     });
@@ -396,7 +497,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const updateTransaction = useCallback((tx: Transaction) => {
     setTransactions(prev => {
       const u = prev.map(t => t.id === tx.id ? tx : t);
-      console.log("[updateTransaction]", tx.id, tx.date, tx.amount);
       AsyncStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(u));
       return u;
     });
@@ -405,7 +505,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const deleteTransaction = useCallback((id: string) => {
     setTransactions(prev => {
       const u = prev.filter(t => t.id !== id);
-      console.log("[deleteTransaction]", id, "| remaining:", u.length);
       AsyncStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(u));
       return u;
     });
@@ -414,8 +513,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const getTransactionsForMonth = useCallback(
     (month: number, year: number) =>
       transactions.filter(t => {
-        const d = new Date(t.date + "T12:00:00");
-        return d.getMonth() === month && d.getFullYear() === year;
+        const [ty, tm] = t.date.split("-").map(Number);
+        return ty === year && tm === month + 1;
       }),
     [transactions]
   );
@@ -426,7 +525,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const ni: IncomeItem = { ...item, id: genId() };
     setIncomes(prev => {
       const u = [...prev, ni];
-      console.log("[addIncome]", ni.name);
       AsyncStorage.setItem(INCOMES_KEY, JSON.stringify(u));
       return u;
     });
@@ -435,7 +533,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const updateIncome = useCallback((item: IncomeItem) => {
     setIncomes(prev => {
       const u = prev.map(i => i.id === item.id ? item : i);
-      console.log("[updateIncome]", item.name);
       AsyncStorage.setItem(INCOMES_KEY, JSON.stringify(u));
       return u;
     });
@@ -444,14 +541,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const deleteIncome = useCallback((id: string) => {
     setIncomes(prev => {
       const u = prev.filter(i => i.id !== id);
-      console.log("[deleteIncome]", id, "| remaining:", u.length);
       AsyncStorage.setItem(INCOMES_KEY, JSON.stringify(u));
       return u;
     });
   }, []);
 
   const getMonthlyIncome = useCallback(
-    () => incomes.reduce((s, i) => s + incomeToMonthly(i.amount, i.frequency), 0),
+    (month?: number, year?: number) =>
+      incomes
+        .filter(i => month !== undefined && year !== undefined ? isIncomeActiveForMonth(i, month, year) : true)
+        .reduce((s, i) => s + incomeToMonthly(i.amount, i.frequency), 0),
     [incomes]
   );
 
@@ -461,7 +560,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const ng: Goal = { ...goal, id: genId(), created_at: new Date().toISOString() };
     setGoals(prev => {
       const u = [...prev, ng];
-      console.log("[addGoal]", ng.name);
       AsyncStorage.setItem(GOALS_KEY, JSON.stringify(u));
       return u;
     });
@@ -478,7 +576,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const deleteGoal = useCallback((id: string) => {
     setGoals(prev => {
       const u = prev.filter(g => g.id !== id);
-      console.log("[deleteGoal]", id);
       AsyncStorage.setItem(GOALS_KEY, JSON.stringify(u));
       return u;
     });
@@ -486,14 +583,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const checkGoalAffordability = useCallback(
     (goal: Goal, month: number, year: number): GoalAffordability => {
-      const monthlyIncome = incomes.reduce((s, i) => s + incomeToMonthly(i.amount, i.frequency), 0);
+      const monthlyIncome = incomes
+        .filter(i => isIncomeActiveForMonth(i, month, year))
+        .reduce((s, i) => s + incomeToMonthly(i.amount, i.frequency), 0);
       const totalBillsDue = bills.filter(b => b.is_recurring).reduce((s, b) => {
         const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
         return s + (o?.custom_amount !== undefined ? o.custom_amount : b.amount);
       }, 0);
       const txThisMonth = transactions.filter(t => {
-        const d = new Date(t.date + "T12:00:00");
-        return d.getMonth() === month && d.getFullYear() === year;
+        const [ty, tm] = t.date.split("-").map(Number);
+        return ty === year && tm === month + 1;
       });
       const netTx = txThisMonth.reduce((s, t) => s + t.amount, 0);
       const projectedBalance = monthlyIncome - totalBillsDue + netTx;
@@ -507,7 +606,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   // ─── Cash Flow ────────────────────────────────────────────────────────────────
 
   const getCashFlow = useCallback((month: number, year: number): CashFlow => {
-    const monthlyIncome = incomes.reduce((s, i) => s + incomeToMonthly(i.amount, i.frequency), 0);
+    const monthlyIncome = incomes
+      .filter(i => isIncomeActiveForMonth(i, month, year))
+      .reduce((s, i) => s + incomeToMonthly(i.amount, i.frequency), 0);
     const monthBills = bills.filter(b => b.is_recurring);
     const totalBillsDue = monthBills.reduce((s, b) => {
       const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
@@ -518,14 +619,137 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       return s + (o?.paid_amount ?? 0);
     }, 0);
     const txThisMonth = transactions.filter(t => {
-      const d = new Date(t.date + "T12:00:00");
-      return d.getMonth() === month && d.getFullYear() === year;
+      const [ty, tm] = t.date.split("-").map(Number);
+      return ty === year && tm === month + 1;
     });
     const netTransactions = txThisMonth.reduce((s, t) => s + t.amount, 0);
-    const goalAllocations = 0;
-    const remaining = monthlyIncome - totalBillsDue + netTransactions - goalAllocations;
-    return { monthlyIncome, totalBillsDue, totalPaid, netTransactions, goalAllocations, remaining };
+    const remaining = monthlyIncome - totalBillsDue + netTransactions;
+    return { monthlyIncome, totalBillsDue, totalPaid, netTransactions, goalAllocations: 0, remaining };
   }, [bills, incomes, transactions, overrides]);
+
+  // ─── Daily Balances ───────────────────────────────────────────────────────────
+
+  const getDailyBalances = useCallback((month: number, year: number): DailyBalance[] => {
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    // Carryover: previous month's net (income - bills + transactions)
+    const prevMonth = month === 0 ? 11 : month - 1;
+    const prevYear = month === 0 ? year - 1 : year;
+    const prevMonthlyIncome = incomes
+      .filter(i => isIncomeActiveForMonth(i, prevMonth, prevYear))
+      .reduce((s, i) => s + incomeToMonthly(i.amount, i.frequency), 0);
+    const prevBills = bills.filter(b => b.is_recurring);
+    const prevTotalBills = prevBills.reduce((s, b) => {
+      const o = overrides.find(o => o.bill_id === b.id && o.month === prevMonth && o.year === prevYear);
+      return s + (o?.custom_amount !== undefined ? o.custom_amount : b.amount);
+    }, 0);
+    const prevTxs = transactions.filter(t => {
+      const [ty, tm] = t.date.split("-").map(Number);
+      return ty === prevYear && tm === prevMonth + 1;
+    });
+    const prevNetTx = prevTxs.reduce((s, t) => s + t.amount, 0);
+    const carryover = prevMonthlyIncome + prevNetTx - prevTotalBills;
+
+    // Current month income available from day 1
+    const monthlyIncome = incomes
+      .filter(i => isIncomeActiveForMonth(i, month, year))
+      .reduce((s, i) => s + incomeToMonthly(i.amount, i.frequency), 0);
+
+    // Transactions for this month
+    const monthTxs = transactions.filter(t => {
+      const [ty, tm] = t.date.split("-").map(Number);
+      return ty === year && tm === month + 1;
+    });
+
+    const recurringBills = bills.filter(b => b.is_recurring);
+    let runningBalance = carryover + monthlyIncome;
+    const result: DailyBalance[] = [];
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dayTxs = monthTxs.filter(t => {
+        const [, , td] = t.date.split("-").map(Number);
+        return td === day;
+      });
+
+      const incomeToday = dayTxs.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+      const expenseToday = dayTxs.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+
+      // Bills due this day (any occurrence — supports weekly)
+      const billsToday = recurringBills.reduce((s, b) => {
+        const dueDays = b.frequency === "weekly"
+          ? (() => {
+              const days: number[] = [];
+              let d = b.due_day;
+              while (d <= daysInMonth) { if (d >= 1) days.push(d); d += 7; }
+              return days;
+            })()
+          : [b.due_day];
+        if (!dueDays.includes(day)) return s;
+        const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
+        return s + (o?.custom_amount !== undefined ? o.custom_amount : b.amount);
+      }, 0);
+
+      const net = incomeToday - expenseToday - billsToday;
+      runningBalance += net;
+
+      result.push({ day, income: incomeToday, expense: expenseToday, bills: billsToday, net, balance: runningBalance });
+    }
+
+    return result;
+  }, [bills, transactions, incomes, overrides]);
+
+  // ─── Categories ───────────────────────────────────────────────────────────────
+
+  const addCategory = useCallback((name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setCategories(prev => {
+      if (prev.includes(trimmed)) return prev;
+      const u = [...prev, trimmed];
+      AsyncStorage.setItem(CATEGORIES_KEY, JSON.stringify(u));
+      return u;
+    });
+  }, []);
+
+  const updateCategory = useCallback((oldName: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === oldName) return;
+    setCategories(prev => {
+      const u = prev.map(c => c === oldName ? trimmed : c);
+      AsyncStorage.setItem(CATEGORIES_KEY, JSON.stringify(u));
+      return u;
+    });
+    // Update bills and transactions using this category
+    setBills(prev => {
+      const u = prev.map(b => b.category === oldName ? { ...b, category: trimmed } : b);
+      AsyncStorage.setItem(BILLS_KEY, JSON.stringify(u));
+      return u;
+    });
+    setTransactions(prev => {
+      const u = prev.map(t => t.category === oldName ? { ...t, category: trimmed } : t);
+      AsyncStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(u));
+      return u;
+    });
+  }, []);
+
+  const deleteCategory = useCallback((name: string) => {
+    setCategories(prev => {
+      const u = prev.filter(c => c !== name);
+      AsyncStorage.setItem(CATEGORIES_KEY, JSON.stringify(u));
+      return u;
+    });
+    // Reassign bills and transactions to "Other"
+    setBills(prev => {
+      const u = prev.map(b => b.category === name ? { ...b, category: "Other" } : b);
+      AsyncStorage.setItem(BILLS_KEY, JSON.stringify(u));
+      return u;
+    });
+    setTransactions(prev => {
+      const u = prev.map(t => t.category === name ? { ...t, category: "Other" } : t);
+      AsyncStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(u));
+      return u;
+    });
+  }, []);
 
   // ─── Settings ─────────────────────────────────────────────────────────────────
 
@@ -539,7 +763,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const importBills = useCallback((imported: Omit<Bill, "id" | "created_at">[]) => {
     setBills(prev => {
-      const nb = imported.map(b => ({ ...b, id: genId(), created_at: new Date().toISOString() }));
+      const nb = imported.map(b => ({ frequency: "monthly" as const, ...b, id: genId(), created_at: new Date().toISOString() }));
       const withNew = [...prev, ...nb];
       const reordered = reorderDebtPriorities(withNew);
       AsyncStorage.setItem(BILLS_KEY, JSON.stringify(reordered));
@@ -549,15 +773,17 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <BudgetContext.Provider value={{
-      bills, overrides, transactions, incomes, goals, settings, loading,
+      bills, overrides, transactions, incomes, goals, extraPayments, categories, settings, loading,
       dashboardFilter, setDashboardFilter,
       addBill, updateBill, deleteBill, getBillById,
       getOverride, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
-      getMonthlyBills, runSnowball,
+      getMonthlyBills, getWeeklyBillDays, getBillMonthlyTotal, runSnowball,
+      saveExtraPayment, getExtraPayment, deleteExtraPayment,
       addTransaction, updateTransaction, deleteTransaction, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome,
       addGoal, updateGoal, deleteGoal, checkGoalAffordability,
-      getCashFlow,
+      getCashFlow, getDailyBalances,
+      addCategory, updateCategory, deleteCategory,
       updateSettings, importBills,
       selectedYear, setSelectedYear,
     }}>

@@ -15,12 +15,8 @@ import {
 
 import colors from "@/constants/colors";
 import type { Transaction } from "@/context/BudgetContext";
+import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
-
-const TX_CATEGORIES = [
-  "Food", "Transport", "Shopping", "Health", "Entertainment",
-  "Income", "Utilities", "Rent", "Debt Payment", "Other",
-];
 
 interface Props {
   visible: boolean;
@@ -32,6 +28,7 @@ interface Props {
 
 export function AddTransactionModal({ visible, onClose, onSave, editTx, defaultDate }: Props) {
   const c = useColors();
+  const { categories } = useBudget();
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Other");
   const [note, setNote] = useState("");
@@ -108,7 +105,7 @@ export function AddTransactionModal({ visible, onClose, onSave, editTx, defaultD
 
             <Text style={labelStyle}>Category</Text>
             <View style={styles.categoryGrid}>
-              {TX_CATEGORIES.map(cat => (
+              {categories.map(cat => (
                 <Pressable
                   key={cat}
                   onPress={() => setCategory(cat)}

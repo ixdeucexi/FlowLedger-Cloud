@@ -21,11 +21,17 @@ A mobile budgeting and payment tracker app built with Expo (React Native). Repli
 ## Features
 
 - **Dashboard**: Summary stats (total bills, paid, remaining, progress), monthly expense bar chart, category donut chart
-- **Payment Schedule (Bills tab)**: Master bill list with CRUD operations, categories, priorities
-- **Monthly View**: Month/year selector, view bills per month, editable due dates, mark bills as paid, progress tracking
-- **Extra Payments**: Snowball method (smallest balance first) or priority-based extra payment allocation
+- **Bills tab**: Non-debt recurring/one-time bills, filter by All/Recurring/One-Time, CRUD, weekly frequency support
+- **Debt tab**: Dedicated debt tracking with balance, APR, progress bars, snowball/avalanche hints, sort by priority/balance/interest
+- **Monthly View**: Month/year selector, all bills per month, editable amounts, mark paid, partial payment tracking
+- **Calendar view**: Running daily balance per cell, income/expense/bill-due indicators, carryover from previous month
+- **Extra Payments**: Snowball (smallest balance first) or Avalanche (highest interest), allocation breakdown persisted to AsyncStorage
+- **Income Sources**: Add/edit/delete income with weekly/biweekly/monthly frequency; optional start_date — income only counts for months on or after the start date
+- **Financial Goals**: Target amount, target date, affordability check against projected monthly balance
+- **Category Management**: Full CRUD for categories in Settings; bills and transactions automatically cascade-renamed or reassigned to Other on delete
+- **Bill frequency**: Monthly (default) or Weekly — weekly bills repeat every 7 days from due_day in both daily balance and monthly totals
 - **Import/Export**: CSV import via document picker, CSV export via sharing
-- **Dark mode**: Automatic based on system theme
+- **Dark mode**: Default dark theme (deep navy palette)
 
 ## Key Commands
 

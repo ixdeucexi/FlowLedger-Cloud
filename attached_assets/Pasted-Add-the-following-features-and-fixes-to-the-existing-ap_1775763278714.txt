@@ -1,0 +1,146 @@
+Add the following features and fixes to the existing app. Do NOT rebuild or modify unrelated systems.
+
+--------------------------------------------------
+1. CATEGORY MANAGEMENT (SETTINGS)
+--------------------------------------------------
+
+Add ability to:
+- Rename categories
+- Add new categories
+- Delete categories
+
+Requirements:
+- Store categories in database (Category table)
+- Bills and Transactions must reference category by ID (not text)
+- When deleting category:
+  → require reassignment OR prevent deletion if in use
+
+--------------------------------------------------
+2. WEEKLY BILLS SUPPORT
+--------------------------------------------------
+
+Update Bills:
+
+Add field:
+- frequency: monthly (default), weekly
+
+Logic:
+- Weekly bills should appear 4–5 times per month in Monthly view
+- Calculate based on due_day or start date
+
+--------------------------------------------------
+3. UI LABEL FIX
+--------------------------------------------------
+
+In Debt section:
+- Change button text:
+  "Add Bill" → "Add Debt"
+
+--------------------------------------------------
+4. EXTRA PAYMENT TRACKING (IMPORTANT)
+--------------------------------------------------
+
+Enhance snowball system:
+
+- Show breakdown of where extra payment is applied:
+  Example:
+    Debt A: +$200
+    Debt B: +$50
+
+- Store extra payments in DB:
+
+ExtraPayment:
+- id
+- month
+- year
+- amount
+- allocation_json (which debts received what)
+
+- Allow user to:
+  → Edit extra payment
+  → Recalculate allocation
+
+--------------------------------------------------
+5. RUNNING DAILY BALANCE (CRITICAL FEATURE)
+--------------------------------------------------
+
+Calendar must show:
+
+For EACH day:
+Balance =
+Previous Day Balance
++ Income
+- Expenses
+- Bills (if due that day)
+
+Requirements:
+- First day of month:
+  → use carryover balance from previous month
+
+- Show:
+  → daily balance on each calendar cell
+
+--------------------------------------------------
+6. AUTOMATIC BALANCE CARRYOVER
+--------------------------------------------------
+
+At month change:
+
+Ending Balance (Month A)
+→ becomes Starting Balance (Month B)
+
+Do NOT require user input
+
+--------------------------------------------------
+7. INCOME START DATE
+--------------------------------------------------
+
+Update Income model:
+
+Add:
+- start_date
+
+Logic:
+- Income should only apply AFTER start_date
+- Respect frequency:
+  - weekly
+  - biweekly
+  - monthly
+
+--------------------------------------------------
+8. CALENDAR VIEW IMPROVEMENTS
+--------------------------------------------------
+
+A. Each day cell shows:
+- Daily net (+ / -)
+- Running balance
+
+B. Bottom panel (when day selected):
+- Show ALL transactions for that day
+- Include:
+  - Income
+  - Expenses
+  - Bills paid
+
+C. Must NOT overwrite entries
+
+--------------------------------------------------
+RULES
+--------------------------------------------------
+
+- Do NOT break existing logic
+- Do NOT duplicate bill records
+- Keep calculations in backend
+- Update only necessary components
+
+--------------------------------------------------
+EXPECTED RESULT
+--------------------------------------------------
+
+- Categories fully manageable
+- Weekly bills work correctly
+- Extra payments visible + editable
+- Calendar shows daily balance progression
+- Balance carries over automatically
+- Income respects start date
+- Calendar shows all transactions clearly

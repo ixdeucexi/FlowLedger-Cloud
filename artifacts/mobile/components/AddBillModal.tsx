@@ -2,28 +2,15 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useEffect, useState } from "react";
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
+  Alert, KeyboardAvoidingView, Modal, Platform,
+  Pressable, ScrollView, StyleSheet, Switch,
+  Text, TextInput, View,
 } from "react-native";
 
 import colors from "@/constants/colors";
 import type { Bill } from "@/context/BudgetContext";
+import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
-
-const CATEGORIES = [
-  "Housing", "Utilities", "Insurance", "Transportation",
-  "Food", "Entertainment", "Health", "Education",
-  "Savings", "Other",
-];
 
 interface AddBillModalProps {
   visible: boolean;
@@ -36,6 +23,7 @@ interface AddBillModalProps {
 
 export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, forceDebt }: AddBillModalProps) {
   const c = useColors();
+  const { categories } = useBudget();
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Other");
@@ -44,6 +32,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
   const [interestRate, setInterestRate] = useState("");
   const [dueDay, setDueDay] = useState("1");
   const [isRecurring, setIsRecurring] = useState(true);
+  const [frequency, setFrequency] = useState<Bill["frequency"]>("monthly");
 
   useEffect(() => {
     if (editBill) {
@@ -55,12 +44,17 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
       setInterestRate(editBill.interest_rate > 0 ? editBill.interest_rate.toString() : "");
       setDueDay(editBill.due_day.toString());
       setIsRecurring(editBill.is_recurring);
+      setFrequency(editBill.frequency ?? "monthly");
     } else {
       setName(""); setAmount(""); setCategory("Other");
       setIsDebt(forceDebt ?? false); setBalance("");
       setInterestRate(""); setDueDay("1"); setIsRecurring(true);
+      setFrequency("monthly");
     }
   }, [editBill, visible, forceDebt]);
+
+  const isDebtMode = forceDebt || isDebt;
+  const noun = isDebtMode ? "Debt" : "Bill";
 
   const handleSave = () => {
     const parsedAmount = parseFloat(amount);
@@ -76,6 +70,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
       interest_rate: isDebt ? (parseFloat(interestRate) || 0) : 0,
       due_day: parseInt(dueDay) || 1,
       is_recurring: isRecurring,
+      frequency,
     };
     if (editBill) onSave({ ...data, id: editBill.id, created_at: editBill.created_at });
     else onSave(data);
@@ -89,13 +84,10 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
       onDelete(editBill.id);
       onClose();
     };
-    if (Platform.OS === "web") {
-      doDelete();
-      return;
-    }
+    if (Platform.OS === "web") { doDelete(); return; }
     Alert.alert(
-      "Delete Bill",
-      `Are you sure you want to delete "${editBill.name}"? This will also remove all monthly data for this bill.`,
+      `Delete ${noun}`,
+      `Are you sure you want to delete "${editBill.name}"? This will also remove all monthly data.`,
       [
         { text: "Cancel", style: "cancel" },
         { text: "Delete", style: "destructive", onPress: doDelete },
@@ -103,6 +95,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
     );
   };
 
+  const nonDebtCategories = categories.filter(c => c !== "Debt");
   const inputStyle = [styles.input, { backgroundColor: c.muted, color: c.foreground }];
   const labelStyle = [styles.label, { color: c.mutedForeground }];
 
@@ -112,29 +105,57 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
         <View style={[styles.container, { backgroundColor: c.background }]}>
           <View style={styles.handle} />
           <View style={styles.header}>
-            <Text style={[styles.title, { color: c.foreground }]}>{editBill ? "Edit Bill" : "Add Bill"}</Text>
+            <Text style={[styles.title, { color: c.foreground }]}>
+              {editBill ? `Edit ${noun}` : `Add ${noun}`}
+            </Text>
             <Pressable onPress={onClose} hitSlop={8}>
               <Feather name="x" size={22} color={c.mutedForeground} />
             </Pressable>
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-            <Text style={labelStyle}>Bill Name</Text>
-            <TextInput style={inputStyle} value={name} onChangeText={setName} placeholder="e.g. Electric Bill" placeholderTextColor={c.mutedForeground} returnKeyType="next" />
+            <Text style={labelStyle}>{noun} Name</Text>
+            <TextInput style={inputStyle} value={name} onChangeText={setName} placeholder={`e.g. ${isDebtMode ? "Car Loan" : "Electric Bill"}`} placeholderTextColor={c.mutedForeground} returnKeyType="next" />
 
-            <Text style={labelStyle}>Monthly Payment ($)</Text>
+            <Text style={labelStyle}>Payment Amount ($)</Text>
             <TextInput style={inputStyle} value={amount} onChangeText={setAmount} placeholder="0.00" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
 
             <Text style={labelStyle}>Due Day of Month</Text>
             <TextInput style={inputStyle} value={dueDay} onChangeText={setDueDay} placeholder="1–31" placeholderTextColor={c.mutedForeground} keyboardType="number-pad" maxLength={2} />
 
-            <View style={[styles.toggleCard, { backgroundColor: c.card }]}>
-              <View>
-                <Text style={[styles.toggleLabel, { color: c.foreground }]}>This is a Debt</Text>
-                <Text style={[styles.toggleSub, { color: c.mutedForeground }]}>Tracks balance, interest &amp; payoff</Text>
-              </View>
-              <Switch value={isDebt} onValueChange={setIsDebt} trackColor={{ false: c.muted, true: c.primary }} thumbColor="#fff" />
+            <Text style={labelStyle}>Frequency</Text>
+            <View style={[styles.freqRow, { backgroundColor: c.muted, borderRadius: 10 }]}>
+              {(["monthly", "weekly"] as Bill["frequency"][]).map(f => (
+                <Pressable
+                  key={f}
+                  onPress={() => setFrequency(f)}
+                  style={[styles.freqBtn, { backgroundColor: frequency === f ? c.primary : "transparent", borderRadius: 8 }]}
+                >
+                  <Feather name={f === "monthly" ? "calendar" : "repeat"} size={13} color={frequency === f ? c.primaryForeground : c.mutedForeground} />
+                  <Text style={[styles.freqLabel, { color: frequency === f ? c.primaryForeground : c.mutedForeground }]}>
+                    {f === "monthly" ? "Monthly" : "Weekly"}
+                  </Text>
+                </Pressable>
+              ))}
             </View>
+            {frequency === "weekly" && (
+              <View style={[styles.freqNote, { backgroundColor: c.primary + "12" }]}>
+                <Feather name="info" size={12} color={c.primary} />
+                <Text style={[styles.freqNoteText, { color: c.mutedForeground }]}>
+                  Weekly bills repeat every 7 days starting on the due day. Monthly balance = {"\u00d7"}4 occurrences.
+                </Text>
+              </View>
+            )}
+
+            {!forceDebt && (
+              <View style={[styles.toggleCard, { backgroundColor: c.card }]}>
+                <View>
+                  <Text style={[styles.toggleLabel, { color: c.foreground }]}>This is a Debt</Text>
+                  <Text style={[styles.toggleSub, { color: c.mutedForeground }]}>Tracks balance, interest &amp; payoff</Text>
+                </View>
+                <Switch value={isDebt} onValueChange={setIsDebt} trackColor={{ false: c.muted, true: c.primary }} thumbColor="#fff" />
+              </View>
+            )}
 
             {isDebt ? (
               <>
@@ -155,7 +176,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
               <>
                 <Text style={labelStyle}>Category</Text>
                 <View style={styles.categoryGrid}>
-                  {CATEGORIES.map(cat => (
+                  {nonDebtCategories.map(cat => (
                     <Pressable
                       key={cat}
                       onPress={() => setCategory(cat)}
@@ -170,7 +191,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
 
             <View style={[styles.toggleCard, { backgroundColor: c.card, marginTop: 14 }]}>
               <View>
-                <Text style={[styles.toggleLabel, { color: c.foreground }]}>Recurring Monthly</Text>
+                <Text style={[styles.toggleLabel, { color: c.foreground }]}>Recurring</Text>
                 <Text style={[styles.toggleSub, { color: c.mutedForeground }]}>Appears automatically each month</Text>
               </View>
               <Switch value={isRecurring} onValueChange={setIsRecurring} trackColor={{ false: c.muted, true: c.primary }} thumbColor="#fff" />
@@ -181,7 +202,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
               style={({ pressed }) => [styles.saveBtn, { backgroundColor: c.primary, borderRadius: colors.radius, opacity: pressed ? 0.85 : 1 }]}
             >
               <Text style={[styles.saveBtnText, { color: c.primaryForeground }]}>
-                {editBill ? "Update Bill" : "Add Bill"}
+                {editBill ? `Update ${noun}` : `Add ${noun}`}
               </Text>
             </Pressable>
 
@@ -191,7 +212,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
                 style={({ pressed }) => [styles.deleteBtn, { borderColor: c.destructive, opacity: pressed ? 0.7 : 1 }]}
               >
                 <Feather name="trash-2" size={16} color={c.destructive} />
-                <Text style={[styles.deleteBtnText, { color: c.destructive }]}>Delete Bill</Text>
+                <Text style={[styles.deleteBtnText, { color: c.destructive }]}>Delete {noun}</Text>
               </Pressable>
             )}
           </ScrollView>
@@ -209,6 +230,11 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontFamily: "Inter_700Bold" },
   label: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginBottom: 6, marginTop: 14, textTransform: "uppercase", letterSpacing: 0.7 },
   input: { height: 48, borderRadius: 10, paddingHorizontal: 14, fontSize: 16, fontFamily: "Inter_400Regular" },
+  freqRow: { flexDirection: "row", padding: 4, gap: 4 },
+  freqBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10 },
+  freqLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  freqNote: { flexDirection: "row", alignItems: "flex-start", gap: 7, padding: 10, borderRadius: 8, marginTop: 8 },
+  freqNoteText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
   toggleCard: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 14, borderRadius: 12, marginTop: 14 },
   toggleLabel: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
   toggleSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },

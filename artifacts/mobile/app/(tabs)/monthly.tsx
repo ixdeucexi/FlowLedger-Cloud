@@ -40,7 +40,8 @@ export default function MonthlyScreen() {
     getMonthlyBills, runSnowball, settings,
     selectedYear, setSelectedYear, dashboardFilter, setDashboardFilter,
     getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction,
-    getCashFlow, getMonthlyIncome,
+    getCashFlow, getMonthlyIncome, getDailyBalances,
+    saveExtraPayment, getExtraPayment,
   } = useBudget();
 
   const [month, setMonth] = useState(new Date().getMonth());
@@ -82,6 +83,7 @@ export default function MonthlyScreen() {
   const totalPaid = useMemo(() => monthBills.reduce((s, b) => s + Math.min(getPaidAmount(b.id, month, selectedYear), getAmount(b, month, selectedYear)), 0), [monthBills, getPaidAmount, getAmount, month, selectedYear]);
 
   const txList = useMemo(() => getTransactionsForMonth(month, selectedYear), [getTransactionsForMonth, month, selectedYear]);
+  const dailyBalances = useMemo(() => getDailyBalances(month, selectedYear), [getDailyBalances, month, selectedYear]);
   const txIncome = txList.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
   const txExpense = txList.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
 
@@ -122,6 +124,7 @@ export default function MonthlyScreen() {
     if (debtCount === 0) { Alert.alert("No Debts", "You have no active debts to apply extra payments to."); return; }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const results = runSnowball(month, selectedYear, amt);
+    saveExtraPayment(month, selectedYear, amt, results);
     setSnowballResults(results.map(r => ({ name: r.billName, payment: r.payment, paidOff: r.paidOff })));
     setShowSnowballResults(true);
     setExtraPayment("");
@@ -372,6 +375,7 @@ export default function MonthlyScreen() {
               transactions={txList}
               selectedDate={selectedDate}
               onDayPress={(date) => setSelectedDate(prev => prev === date ? null : date)}
+              dailyBalances={dailyBalances}
             />
 
             <View style={styles.txListHeader}>

@@ -1,7 +1,7 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import type { Transaction } from "@/context/BudgetContext";
+import type { DailyBalance, Transaction } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 
 const DAY_NAMES = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
@@ -12,15 +12,16 @@ interface CalendarViewProps {
   transactions: Transaction[];
   selectedDate: string | null;
   onDayPress: (date: string) => void;
+  dailyBalances?: DailyBalance[];
 }
 
-function fmt(n: number) {
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-  if (n >= 100) return n.toFixed(0);
-  return n.toFixed(0);
+function fmt(n: number, compact = true) {
+  if (!compact) return n.toFixed(2);
+  if (Math.abs(n) >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return Math.abs(n).toFixed(0);
 }
 
-export function CalendarView({ month, year, transactions, selectedDate, onDayPress }: CalendarViewProps) {
+export function CalendarView({ month, year, transactions, selectedDate, onDayPress, dailyBalances }: CalendarViewProps) {
   const c = useColors();
 
   const firstDay = new Date(year, month, 1).getDay();
@@ -39,6 +40,11 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
       txByDay[day].count++;
     }
   });
+
+  const balanceByDay: Record<number, DailyBalance> = {};
+  if (dailyBalances) {
+    dailyBalances.forEach(db => { balanceByDay[db.day] = db; });
+  }
 
   const cells: (number | null)[] = [];
   for (let i = 0; i < firstDay; i++) cells.push(null);
@@ -62,7 +68,10 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
           const isToday = ds === todayStr;
           const isSelected = ds === selectedDate;
           const dayData = txByDay[day];
-          const net = dayData ? dayData.income - dayData.expense : 0;
+          const db = balanceByDay[day];
+
+          const net = (dayData ? dayData.income - dayData.expense : 0) - (db ? db.bills : 0);
+          const hasActivity = dayData || (db && db.bills > 0);
 
           return (
             <Pressable
@@ -91,23 +100,57 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
                   {day}
                 </Text>
               </View>
-              {dayData ? (
+
+              {hasActivity ? (
                 <View style={styles.amountsCol}>
-                  {dayData.income > 0 && (
+                  {dayData && dayData.income > 0 && (
                     <Text style={[styles.amtText, { color: c.success }]} numberOfLines={1}>
                       +{fmt(dayData.income)}
                     </Text>
                   )}
-                  {dayData.expense > 0 && (
+                  {dayData && dayData.expense > 0 && (
                     <Text style={[styles.amtText, { color: c.destructive }]} numberOfLines={1}>
                       -{fmt(dayData.expense)}
                     </Text>
                   )}
+                  {db && db.bills > 0 && (
+                    <Text style={[styles.amtText, { color: c.warning }]} numberOfLines={1}>
+                      ↓{fmt(db.bills)}
+                    </Text>
+                  )}
                 </View>
               ) : null}
+
+              {db && (
+                <Text
+                  style={[styles.balanceText, { color: db.balance >= 0 ? c.success + "cc" : c.destructive + "cc" }]}
+                  numberOfLines={1}
+                >
+                  ${fmt(db.balance)}
+                </Text>
+              )}
             </Pressable>
           );
         })}
+      </View>
+
+      <View style={[styles.legend, { borderTopColor: c.border }]}>
+        {[
+          { color: c.success, label: "+ income" },
+          { color: c.destructive, label: "- expense" },
+          { color: c.warning, label: "↓ bill due" },
+        ].map(l => (
+          <View key={l.label} style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: l.color }]} />
+            <Text style={[styles.legendText, { color: c.mutedForeground }]}>{l.label}</Text>
+          </View>
+        ))}
+        {dailyBalances && (
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: c.success }]} />
+            <Text style={[styles.legendText, { color: c.mutedForeground }]}>balance</Text>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -118,9 +161,14 @@ const styles = StyleSheet.create({
   dayNames: { flexDirection: "row", marginBottom: 2 },
   dayName: { flex: 1, textAlign: "center", fontSize: 10, fontFamily: "Inter_500Medium" },
   grid: { flexDirection: "row", flexWrap: "wrap" },
-  cell: { width: "14.285714%", minHeight: 54, alignItems: "center", paddingTop: 4, paddingBottom: 4 },
+  cell: { width: "14.285714%", minHeight: 72, alignItems: "center", paddingTop: 4, paddingBottom: 4 },
   todayCircle: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   dayNum: { fontSize: 13 },
   amountsCol: { alignItems: "center", marginTop: 1 },
-  amtText: { fontSize: 9, fontFamily: "Inter_600SemiBold" },
+  amtText: { fontSize: 8, fontFamily: "Inter_600SemiBold" },
+  balanceText: { fontSize: 7, fontFamily: "Inter_700Bold", marginTop: 1 },
+  legend: { flexDirection: "row", justifyContent: "center", gap: 12, paddingTop: 8, marginTop: 4, borderTopWidth: 1, flexWrap: "wrap" },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+  legendDot: { width: 6, height: 6, borderRadius: 3 },
+  legendText: { fontSize: 10, fontFamily: "Inter_400Regular" },
 });
