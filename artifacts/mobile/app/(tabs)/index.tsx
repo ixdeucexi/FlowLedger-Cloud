@@ -61,6 +61,11 @@ export default function DashboardScreen() {
       .slice(0, 5);
   }, [bills, today]);
 
+  const handleUpcomingBillPress = (billId: string) => {
+    setDashboardFilter("unpaid");
+    router.push("/(tabs)/monthly" as any);
+  };
+
   const monthlyBarData = useMemo(() =>
     MONTH_NAMES.map((label, i) => ({ label, value: bills.filter(b => b.is_recurring).reduce((s, b) => s + getAmount(b, i, selectedYear), 0) })),
     [bills, getAmount, selectedYear]);
@@ -170,7 +175,7 @@ export default function DashboardScreen() {
               const catColor = CAT_COLORS[bill.category] ?? c.primary;
               const daysLeft = bill.due_day - today;
               return (
-                <View key={bill.id} style={[styles.upcomingRow, { borderTopWidth: i > 0 ? 1 : 0, borderTopColor: c.border }]}>
+                <Pressable key={bill.id} onPress={() => handleUpcomingBillPress(bill.id)} style={({ pressed }) => [styles.upcomingRow, { borderTopWidth: i > 0 ? 1 : 0, borderTopColor: c.border, opacity: pressed ? 0.75 : 1 }]}>
                   <View style={[styles.upcomingDot, { backgroundColor: catColor + "20" }]}>
                     <Feather name="calendar" size={13} color={catColor} />
                   </View>
@@ -181,7 +186,8 @@ export default function DashboardScreen() {
                     </Text>
                   </View>
                   <Text style={[styles.upcomingAmt, { color: c.foreground }]}>${bill.amount.toFixed(0)}</Text>
-                </View>
+                  <Feather name="chevron-right" size={13} color={c.mutedForeground} style={{ marginLeft: 4 }} />
+                </Pressable>
               );
             })}
           </View>

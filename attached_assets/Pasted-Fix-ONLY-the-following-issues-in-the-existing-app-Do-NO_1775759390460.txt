@@ -1,0 +1,86 @@
+Fix ONLY the following issues in the existing app. Do NOT rebuild or modify unrelated features.
+
+--------------------------------------------------
+1. DELETE NOT WORKING (ALL AREAS)
+--------------------------------------------------
+
+Fix delete functionality for:
+- Bills
+- Transactions
+- Income
+
+Requirements:
+- Ensure DELETE endpoints exist and are correct:
+  DELETE /bills/{id}
+  DELETE /transactions/{id}
+  DELETE /income/{id}
+
+- Backend:
+  - Properly delete records from database
+  - Cascade delete related MonthlyOverride if bill is deleted
+
+- Frontend:
+  - Call correct DELETE endpoint
+  - Remove item from local state immediately (no full reload required)
+  - Then refetch to confirm sync
+
+--------------------------------------------------
+2. UPCOMING BILLS SELECTABLE
+--------------------------------------------------
+
+Fix Upcoming Bills section:
+
+- Each bill should be clickable/selectable
+- On click:
+  → Navigate to Monthly view OR open bill detail modal
+- Ensure correct bill ID is passed
+
+--------------------------------------------------
+3. CALENDAR DAILY TOTALS (ALL DAYS)
+--------------------------------------------------
+
+Fix calendar aggregation:
+
+- For EACH day:
+  - Sum ALL transactions for that date
+  - Include:
+    - Income (+)
+    - Expenses (-)
+
+- Display on calendar cell:
+  - Net OR both (+ / -)
+
+- Must NOT overwrite when multiple transactions exist
+
+--------------------------------------------------
+4. INCOME ADDING TO WRONG DAY
+--------------------------------------------------
+
+Fix income date handling:
+
+- When adding income:
+  - Use selected date (NOT current date unless chosen)
+
+- Ensure:
+  - date is correctly saved in database
+  - calendar reflects correct day
+
+- Fix any timezone/date parsing issues
+
+--------------------------------------------------
+RULES
+--------------------------------------------------
+
+- Do NOT change app structure
+- Do NOT rebuild components
+- Only fix logic and state updates
+- Keep UI unchanged unless required for functionality
+
+--------------------------------------------------
+EXPECTED RESULT
+--------------------------------------------------
+
+- Delete works everywhere
+- Upcoming bills clickable
+- Calendar shows correct totals every day
+- Income appears on correct selected date

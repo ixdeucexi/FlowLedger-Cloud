@@ -30,9 +30,9 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
 
   const txByDay: Record<number, { income: number; expense: number; count: number }> = {};
   transactions.forEach(tx => {
-    const d = new Date(tx.date);
-    if (d.getMonth() === month && d.getFullYear() === year) {
-      const day = d.getDate();
+    const [txYear, txMonth, txDay] = tx.date.split("-").map(Number);
+    if (txMonth - 1 === month && txYear === year) {
+      const day = txDay;
       if (!txByDay[day]) txByDay[day] = { income: 0, expense: 0, count: 0 };
       if (tx.amount > 0) txByDay[day].income += tx.amount;
       else txByDay[day].expense += Math.abs(tx.amount);

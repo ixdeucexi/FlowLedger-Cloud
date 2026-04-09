@@ -424,9 +424,7 @@ export default function MonthlyScreen() {
           if (editTx && "id" in data) {
             updateTransaction(data as Transaction);
           } else {
-            const newTx = { ...data } as Omit<Transaction, "id">;
-            if (selectedDate && !editTx) newTx.date = selectedDate;
-            addTransaction(newTx);
+            addTransaction(data as Omit<Transaction, "id">);
           }
         }}
         editTx={editTx}
