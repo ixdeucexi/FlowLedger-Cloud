@@ -52,12 +52,15 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Prop
 
   const handleDelete = () => {
     if (!editGoal || !onDelete) return;
+    const doDelete = () => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      onDelete(editGoal.id);
+      onClose();
+    };
+    if (Platform.OS === "web") { doDelete(); return; }
     Alert.alert("Delete Goal", `Remove "${editGoal.name}"?`, [
       { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete", style: "destructive",
-        onPress: () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); onDelete(editGoal.id); onClose(); },
-      },
+      { text: "Delete", style: "destructive", onPress: doDelete },
     ]);
   };
 

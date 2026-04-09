@@ -79,9 +79,11 @@ export default function MoreScreen() {
   };
 
   const handleDeleteIncome = (item: IncomeItem) => {
+    const doDelete = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); deleteIncome(item.id); };
+    if (Platform.OS === "web") { doDelete(); return; }
     Alert.alert("Delete Income", `Remove "${item.name}"?`, [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); deleteIncome(item.id); } },
+      { text: "Delete", style: "destructive", onPress: doDelete },
     ]);
   };
 

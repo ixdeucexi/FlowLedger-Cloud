@@ -83,20 +83,21 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill }: A
 
   const handleDelete = () => {
     if (!editBill || !onDelete) return;
+    const doDelete = () => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      onDelete(editBill.id);
+      onClose();
+    };
+    if (Platform.OS === "web") {
+      doDelete();
+      return;
+    }
     Alert.alert(
       "Delete Bill",
       `Are you sure you want to delete "${editBill.name}"? This will also remove all monthly data for this bill.`,
       [
         { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            onDelete(editBill.id);
-            onClose();
-          },
-        },
+        { text: "Delete", style: "destructive", onPress: doDelete },
       ]
     );
   };

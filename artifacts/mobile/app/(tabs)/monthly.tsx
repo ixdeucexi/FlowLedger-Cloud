@@ -129,9 +129,11 @@ export default function MonthlyScreen() {
   };
 
   const handleDeleteTx = (id: string) => {
+    const doDelete = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); deleteTransaction(id); };
+    if (Platform.OS === "web") { doDelete(); return; }
     Alert.alert("Delete Transaction", "Remove this transaction?", [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); deleteTransaction(id); } },
+      { text: "Delete", style: "destructive", onPress: doDelete },
     ]);
   };
 
