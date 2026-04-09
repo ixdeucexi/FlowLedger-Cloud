@@ -1,0 +1,132 @@
+Enhance existing features only. Do NOT rebuild or modify unrelated systems. Keep implementation minimal and optimized.
+
+--------------------------------------------------
+1. WEEKLY / MONTHLY BILL SCHEDULING (UPGRADE)
+--------------------------------------------------
+
+Update Bills model:
+
+Add fields:
+- frequency: weekly | monthly
+- day_of_week (0–6, for weekly)
+- due_day (1–31, for monthly)
+- start_date
+- end_date (nullable)
+
+UI Requirements:
+- If weekly:
+  → user selects day (e.g., Wednesday)
+- If monthly:
+  → user selects day (1–31)
+
+- Add optional duration:
+  → start_date (required)
+  → end_date (optional via date picker)
+
+Logic:
+- Only generate bills within start_date → end_date
+- Weekly bills appear only on selected weekday
+- Monthly bills appear on due_day
+
+Allow:
+- Full delete of any bill (respect new fields)
+
+--------------------------------------------------
+2. EXTRA PAYMENT → UPDATE MINIMUM (DEBT LOGIC)
+--------------------------------------------------
+
+When extra payment is applied:
+
+- If a debt receives extra:
+  → increase its effective monthly payment
+
+- Store updated minimum:
+
+DebtPayment:
+- bill_id
+- base_amount
+- extra_amount
+- new_effective_payment
+
+- On next calculation:
+  → use new_effective_payment
+
+--------------------------------------------------
+3. STARTING BALANCE (SETTINGS)
+--------------------------------------------------
+
+Add in Settings:
+
+- starting_balance (number)
+
+Logic:
+- First day of first month:
+  → use starting_balance
+
+- Then:
+  → all future balances come from carryover
+
+Do NOT require re-entry after first use
+
+--------------------------------------------------
+4. FUTURE TRANSACTIONS IN CALENDAR
+--------------------------------------------------
+
+Update calendar system:
+
+- Show ALL transactions (past + future)
+
+- Include:
+  - scheduled bills
+  - income (based on frequency + start_date)
+  - manual transactions
+
+- Bottom panel:
+  → list ALL transactions for selected day
+  → include future scheduled ones
+
+--------------------------------------------------
+5. DELETE SUPPORT FOR NEW FIELDS
+--------------------------------------------------
+
+Ensure delete works for:
+- Bills (with schedule fields)
+- Extra payments
+- Transactions
+
+No orphaned data
+
+--------------------------------------------------
+6. PERFORMANCE OPTIMIZATION (IMPORTANT)
+--------------------------------------------------
+
+- Perform ALL calculations in backend
+- Pre-calculate:
+  → daily balances
+  → scheduled transactions
+
+- Avoid:
+  ❌ recalculating entire month on every render
+
+- Use:
+  → memoization or cached results where possible
+
+--------------------------------------------------
+RULES
+--------------------------------------------------
+
+- Do NOT rewrite app
+- Do NOT duplicate bill data
+- Only extend existing logic
+- Keep code minimal and efficient
+
+--------------------------------------------------
+EXPECTED RESULT
+--------------------------------------------------
+
+- Weekly bills occur on correct weekday
+- Bills respect start/end duration
+- Extra payments increase effective debt payment
+- Starting balance initializes system correctly
+- Calendar shows ALL future + past transactions
+- System remains fast and stable

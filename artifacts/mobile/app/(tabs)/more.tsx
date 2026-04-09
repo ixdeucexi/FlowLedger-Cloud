@@ -3,7 +3,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import * as Sharing from "expo-sharing";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert, Platform, Pressable, ScrollView, StyleSheet,
   Switch, Text, TextInput, View,
@@ -32,6 +32,13 @@ export default function MoreScreen() {
   const [newCategory, setNewCategory] = useState("");
   const [renamingCategory, setRenamingCategory] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [startingBalanceText, setStartingBalanceText] = useState(
+    settings.starting_balance > 0 ? settings.starting_balance.toString() : ""
+  );
+
+  useEffect(() => {
+    setStartingBalanceText(settings.starting_balance > 0 ? settings.starting_balance.toString() : "");
+  }, [settings.starting_balance]);
 
   const totalMonthlyIncome = getMonthlyIncome();
 
@@ -318,6 +325,46 @@ export default function MoreScreen() {
             thumbColor="#fff"
           />
         </View>
+
+        <View style={[styles.balanceDivider, { borderTopColor: c.border }]}>
+          <View style={styles.balanceHeader}>
+            <View>
+              <Text style={[styles.switchLabel, { color: c.foreground }]}>Starting Balance ($)</Text>
+              <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Your account balance when you first started tracking</Text>
+            </View>
+          </View>
+          <View style={styles.balanceInputRow}>
+            <TextInput
+              style={[styles.balanceInput, { backgroundColor: c.muted, color: c.foreground }]}
+              value={startingBalanceText}
+              onChangeText={setStartingBalanceText}
+              placeholder="0.00"
+              placeholderTextColor={c.mutedForeground}
+              keyboardType="decimal-pad"
+              returnKeyType="done"
+              onBlur={() => {
+                const parsed = parseFloat(startingBalanceText);
+                updateSettings({ starting_balance: isNaN(parsed) ? 0 : parsed });
+              }}
+            />
+            <Pressable
+              onPress={() => {
+                const parsed = parseFloat(startingBalanceText);
+                updateSettings({ starting_balance: isNaN(parsed) ? 0 : parsed });
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              style={({ pressed }) => [styles.balanceSaveBtn, { backgroundColor: c.primary, opacity: pressed ? 0.8 : 1 }]}
+            >
+              <Feather name="check" size={15} color={c.primaryForeground} />
+            </Pressable>
+          </View>
+          <View style={[styles.balanceNote, { backgroundColor: c.primary + "12" }]}>
+            <Feather name="info" size={11} color={c.primary} />
+            <Text style={[styles.switchDesc, { color: c.mutedForeground, flex: 1 }]}>
+              Only applies to the first month tracked. Future months use automatic carryover.
+            </Text>
+          </View>
+        </View>
       </View>
 
       {/* ── Data ── */}
@@ -426,6 +473,12 @@ const styles = StyleSheet.create({
   switchInfo: { flex: 1, marginRight: 12 },
   switchLabel: { fontSize: 15, fontFamily: "Inter_500Medium" },
   switchDesc: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  balanceDivider: { borderTopWidth: 1, marginTop: 14, paddingTop: 14 },
+  balanceHeader: { marginBottom: 10 },
+  balanceInputRow: { flexDirection: "row", gap: 10, alignItems: "center" },
+  balanceInput: { flex: 1, height: 44, borderRadius: 10, paddingHorizontal: 14, fontSize: 16, fontFamily: "Inter_400Regular" },
+  balanceSaveBtn: { width: 44, height: 44, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  balanceNote: { flexDirection: "row", alignItems: "flex-start", gap: 6, padding: 9, borderRadius: 8, marginTop: 10 },
 
   dataRow: { flexDirection: "row", alignItems: "center", paddingVertical: 13 },
   dataIcon: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center", marginRight: 12 },

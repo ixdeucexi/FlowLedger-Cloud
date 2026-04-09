@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 
+// ─── Types ─────────────────────────────────────────────────────────────────────
+
 export interface Bill {
   id: string;
   name: string;
@@ -10,7 +12,10 @@ export interface Bill {
   is_debt: boolean;
   balance: number;
   interest_rate: number;
-  due_day: number;
+  due_day: number;            // 1–31, used for monthly bills
+  day_of_week?: number;       // 0=Sun … 6=Sat, used for weekly bills
+  start_date?: string;        // YYYY-MM-DD, when scheduling begins (inclusive)
+  end_date?: string;          // YYYY-MM-DD, when scheduling ends (inclusive); null = indefinite
   is_recurring: boolean;
   frequency: "monthly" | "weekly";
   created_at: string;
@@ -78,6 +83,7 @@ export interface ExtraPayment {
 export interface Settings {
   paymentMethod: "snowball" | "avalanche";
   carryover_balances: boolean;
+  starting_balance: number;   // user's real account balance when they first started tracking
 }
 
 export interface CashFlow {
@@ -100,11 +106,110 @@ export interface DailyBalance {
 
 export type DashboardFilter = null | "paid" | "unpaid" | "debts";
 
+// ─── Constants ─────────────────────────────────────────────────────────────────
+
 const DEFAULT_CATEGORIES = [
   "Housing", "Utilities", "Insurance", "Transportation",
   "Food", "Entertainment", "Health", "Education",
   "Savings", "Debt", "Shopping", "Rent", "Other",
 ];
+
+const DEFAULT_SETTINGS: Settings = {
+  paymentMethod: "snowball",
+  carryover_balances: false,
+  starting_balance: 0,
+};
+
+const BILLS_KEY = "@budget_bills_v3";
+const OVERRIDES_KEY = "@budget_overrides_v1";
+const TRANSACTIONS_KEY = "@budget_transactions_v2";
+const INCOMES_KEY = "@budget_incomes_v1";
+const GOALS_KEY = "@budget_goals_v1";
+const SETTINGS_KEY = "@budget_settings_v4";
+const CATEGORIES_KEY = "@budget_categories_v1";
+const EXTRA_PAYMENTS_KEY = "@budget_extra_payments_v1";
+
+const SEED_BILLS: Bill[] = [
+  { id: "s1", name: "Rent",        amount: 1200, category: "Housing",   priority: 99, is_debt: false, balance: 0,    interest_rate: 0,    due_day: 1,  is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
+  { id: "s2", name: "Electric",    amount:   95, category: "Utilities",  priority: 99, is_debt: false, balance: 0,    interest_rate: 0,    due_day: 10, is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
+  { id: "s3", name: "Internet",    amount:   60, category: "Utilities",  priority: 99, is_debt: false, balance: 0,    interest_rate: 0,    due_day: 15, is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
+  { id: "s4", name: "Car Loan",    amount:  350, category: "Debt",       priority: 2,  is_debt: true,  balance: 4200, interest_rate: 6.5,  due_day: 20, is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
+  { id: "s5", name: "Credit Card", amount:  120, category: "Debt",       priority: 3,  is_debt: true,  balance: 1850, interest_rate: 22.9, due_day: 25, is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
+  { id: "s6", name: "Medical Bill",amount:   75, category: "Debt",       priority: 1,  is_debt: true,  balance: 650,  interest_rate: 0,    due_day: 5,  is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
+  { id: "s7", name: "Groceries",   amount:  400, category: "Food",       priority: 99, is_debt: false, balance: 0,    interest_rate: 0,    due_day: 1,  is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
+  { id: "s8", name: "Insurance",   amount:  180, category: "Insurance",  priority: 99, is_debt: false, balance: 0,    interest_rate: 0,    due_day: 8,  is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
+];
+
+const SEED_INCOMES: IncomeItem[] = [
+  { id: "i1", name: "Primary Job", amount: 4500, frequency: "monthly" },
+];
+
+// ─── Pure helpers (outside hooks, no closure overhead) ─────────────────────────
+
+function genId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+}
+
+function incomeToMonthly(amount: number, frequency: IncomeItem["frequency"]): number {
+  if (frequency === "weekly")   return amount * 4.33;
+  if (frequency === "biweekly") return amount * 2.17;
+  return amount;
+}
+
+function isIncomeActiveForMonth(income: IncomeItem, month: number, year: number): boolean {
+  if (!income.start_date) return true;
+  const [sy, sm] = income.start_date.split("-").map(Number);
+  return year > sy || (year === sy && month >= sm - 1);
+}
+
+/** Returns true when the bill schedule covers any day of the given month. */
+function isBillActiveForMonth(bill: Bill, month: number, year: number): boolean {
+  const monthStart = new Date(year, month, 1);
+  const monthEnd   = new Date(year, month + 1, 0);   // last day
+  if (bill.start_date) {
+    const sd = new Date(bill.start_date + "T00:00:00");
+    if (sd > monthEnd) return false;
+  }
+  if (bill.end_date) {
+    const ed = new Date(bill.end_date + "T00:00:00");
+    if (ed < monthStart) return false;
+  }
+  return true;
+}
+
+/**
+ * Returns the 1-indexed day numbers within the given month when the bill is due.
+ * For monthly bills → [due_day].
+ * For weekly bills → all weekdays matching day_of_week within the month.
+ * Returns [] if bill is not active for that month.
+ */
+function getBillOccurrenceDays(bill: Bill, month: number, year: number): number[] {
+  if (!bill.is_recurring || !isBillActiveForMonth(bill, month, year)) return [];
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  if (bill.frequency === "weekly") {
+    const dow = bill.day_of_week ?? 0;
+    const firstDayOfMonth = new Date(year, month, 1).getDay(); // 0=Sun
+    const firstOcc = (dow - firstDayOfMonth + 7) % 7 + 1;     // 1-indexed
+    const days: number[] = [];
+    for (let d = firstOcc; d <= daysInMonth; d += 7) days.push(d);
+    return days;
+  } else {
+    const d = Math.min(bill.due_day, daysInMonth);
+    return d >= 1 ? [d] : [];
+  }
+}
+
+function reorderDebtPriorities(allBills: Bill[]): Bill[] {
+  const nonDebts = allBills.filter(b => !b.is_debt);
+  const debts = allBills
+    .filter(b => b.is_debt)
+    .sort((a, b) => a.balance - b.balance)
+    .map((b, i) => ({ ...b, priority: i + 1 }));
+  return [...nonDebts, ...debts];
+}
+
+// ─── Context type ──────────────────────────────────────────────────────────────
 
 interface BudgetContextType {
   bills: Bill[];
@@ -131,8 +236,9 @@ interface BudgetContextType {
   setCustomAmount: (billId: string, month: number, year: number, amount: number | undefined) => void;
 
   getMonthlyBills: (month: number, year: number) => Bill[];
-  getWeeklyBillDays: (bill: Bill, month: number, year: number) => number[];
+  getBillOccurrencesInMonth: (bill: Bill, month: number, year: number) => number[];
   getBillMonthlyTotal: (bill: Bill, month: number, year: number) => number;
+
   runSnowball: (month: number, year: number, extraAmount: number) => SnowballAllocation[];
   saveExtraPayment: (month: number, year: number, amount: number, allocations: SnowballAllocation[]) => void;
   getExtraPayment: (month: number, year: number) => ExtraPayment | undefined;
@@ -169,73 +275,22 @@ interface BudgetContextType {
 
 const BudgetContext = createContext<BudgetContextType | undefined>(undefined);
 
-const BILLS_KEY = "@budget_bills_v3";
-const OVERRIDES_KEY = "@budget_overrides_v1";
-const TRANSACTIONS_KEY = "@budget_transactions_v2";
-const INCOMES_KEY = "@budget_incomes_v1";
-const GOALS_KEY = "@budget_goals_v1";
-const SETTINGS_KEY = "@budget_settings_v4";
-const CATEGORIES_KEY = "@budget_categories_v1";
-const EXTRA_PAYMENTS_KEY = "@budget_extra_payments_v1";
-
-const DEFAULT_SETTINGS: Settings = {
-  paymentMethod: "snowball",
-  carryover_balances: false,
-};
-
-function genId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
-}
-
-function incomeToMonthly(amount: number, frequency: IncomeItem["frequency"]): number {
-  if (frequency === "weekly") return amount * 4.33;
-  if (frequency === "biweekly") return amount * 2.17;
-  return amount;
-}
-
-function isIncomeActiveForMonth(income: IncomeItem, month: number, year: number): boolean {
-  if (!income.start_date) return true;
-  const [sy, sm] = income.start_date.split("-").map(Number);
-  return year > sy || (year === sy && month >= sm - 1);
-}
-
-function reorderDebtPriorities(allBills: Bill[]): Bill[] {
-  const nonDebts = allBills.filter(b => !b.is_debt);
-  const debts = allBills
-    .filter(b => b.is_debt)
-    .sort((a, b) => a.balance - b.balance)
-    .map((b, i) => ({ ...b, priority: i + 1 }));
-  return [...nonDebts, ...debts];
-}
-
-const SEED_BILLS: Bill[] = [
-  { id: "s1", name: "Rent", amount: 1200, category: "Housing", priority: 99, is_debt: false, balance: 0, interest_rate: 0, due_day: 1, is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
-  { id: "s2", name: "Electric", amount: 95, category: "Utilities", priority: 99, is_debt: false, balance: 0, interest_rate: 0, due_day: 10, is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
-  { id: "s3", name: "Internet", amount: 60, category: "Utilities", priority: 99, is_debt: false, balance: 0, interest_rate: 0, due_day: 15, is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
-  { id: "s4", name: "Car Loan", amount: 350, category: "Debt", priority: 2, is_debt: true, balance: 4200, interest_rate: 6.5, due_day: 20, is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
-  { id: "s5", name: "Credit Card", amount: 120, category: "Debt", priority: 3, is_debt: true, balance: 1850, interest_rate: 22.9, due_day: 25, is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
-  { id: "s6", name: "Medical Bill", amount: 75, category: "Debt", priority: 1, is_debt: true, balance: 650, interest_rate: 0, due_day: 5, is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
-  { id: "s7", name: "Groceries", amount: 400, category: "Food", priority: 99, is_debt: false, balance: 0, interest_rate: 0, due_day: 1, is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
-  { id: "s8", name: "Insurance", amount: 180, category: "Insurance", priority: 99, is_debt: false, balance: 0, interest_rate: 0, due_day: 8, is_recurring: true, frequency: "monthly", created_at: new Date().toISOString() },
-];
-
-const SEED_INCOMES: IncomeItem[] = [
-  { id: "i1", name: "Primary Job", amount: 4500, frequency: "monthly" },
-];
+// ─── Provider ──────────────────────────────────────────────────────────────────
 
 export function BudgetProvider({ children }: { children: React.ReactNode }) {
-  const [bills, setBills] = useState<Bill[]>([]);
-  const [overrides, setOverrides] = useState<MonthlyOverride[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [incomes, setIncomes] = useState<IncomeItem[]>([]);
-  const [goals, setGoals] = useState<Goal[]>([]);
+  const [bills,         setBills]         = useState<Bill[]>([]);
+  const [overrides,     setOverrides]     = useState<MonthlyOverride[]>([]);
+  const [transactions,  setTransactions]  = useState<Transaction[]>([]);
+  const [incomes,       setIncomes]       = useState<IncomeItem[]>([]);
+  const [goals,         setGoals]         = useState<Goal[]>([]);
   const [extraPayments, setExtraPayments] = useState<ExtraPayment[]>([]);
-  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [loading, setLoading] = useState(true);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [categories,    setCategories]    = useState<string[]>(DEFAULT_CATEGORIES);
+  const [settings,      setSettings]      = useState<Settings>(DEFAULT_SETTINGS);
+  const [loading,       setLoading]       = useState(true);
+  const [selectedYear,  setSelectedYear]  = useState(new Date().getFullYear());
   const [dashboardFilter, setDashboardFilter] = useState<DashboardFilter>(null);
 
+  // ── Load from AsyncStorage ────────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       try {
@@ -250,9 +305,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           AsyncStorage.getItem(EXTRA_PAYMENTS_KEY),
         ]);
 
-        let loadedBills: Bill[] = bd ? JSON.parse(bd) : reorderDebtPriorities(SEED_BILLS);
-        // migrate missing frequency field
-        loadedBills = loadedBills.map(b => ({ frequency: "monthly", ...b }));
+        let loadedBills: Bill[] = bd
+          ? JSON.parse(bd)
+          : reorderDebtPriorities(SEED_BILLS);
+        // Migrate: fill in any missing fields with defaults
+        loadedBills = loadedBills.map(b => ({ frequency: "monthly", day_of_week: 0, ...b }));
         if (!bd) await AsyncStorage.setItem(BILLS_KEY, JSON.stringify(reorderDebtPriorities(SEED_BILLS)));
 
         const loadedIncomes: IncomeItem[] = ind ? JSON.parse(ind) : SEED_INCOMES;
@@ -279,8 +336,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const addBill = useCallback((bill: Omit<Bill, "id" | "created_at">) => {
     const nb: Bill = { ...bill, id: genId(), created_at: new Date().toISOString() };
     setBills(prev => {
-      const withNew = [...prev, nb];
-      const reordered = reorderDebtPriorities(withNew);
+      const reordered = reorderDebtPriorities([...prev, nb]);
       AsyncStorage.setItem(BILLS_KEY, JSON.stringify(reordered));
       return reordered;
     });
@@ -288,8 +344,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const updateBill = useCallback((bill: Bill) => {
     setBills(prev => {
-      const replaced = prev.map(b => b.id === bill.id ? bill : b);
-      const reordered = reorderDebtPriorities(replaced);
+      const reordered = reorderDebtPriorities(prev.map(b => b.id === bill.id ? bill : b));
       AsyncStorage.setItem(BILLS_KEY, JSON.stringify(reordered));
       return reordered;
     });
@@ -297,8 +352,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const deleteBill = useCallback((id: string) => {
     setBills(prev => {
-      const filtered = prev.filter(b => b.id !== id);
-      const reordered = reorderDebtPriorities(filtered);
+      const reordered = reorderDebtPriorities(prev.filter(b => b.id !== id));
       AsyncStorage.setItem(BILLS_KEY, JSON.stringify(reordered));
       return reordered;
     });
@@ -337,12 +391,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     (billId: string, month: number, year: number, patch: Partial<Omit<MonthlyOverride, "id" | "bill_id" | "month" | "year">>) => {
       setOverrides(prev => {
         const idx = prev.findIndex(o => o.bill_id === billId && o.month === month && o.year === year);
-        let updated: MonthlyOverride[];
-        if (idx !== -1) {
-          updated = prev.map((o, i) => i === idx ? { ...o, ...patch } : o);
-        } else {
-          updated = [...prev, { id: genId(), bill_id: billId, month, year, paid_amount: 0, ...patch }];
-        }
+        const updated = idx !== -1
+          ? prev.map((o, i) => i === idx ? { ...o, ...patch } : o)
+          : [...prev, { id: genId(), bill_id: billId, month, year, paid_amount: 0, ...patch }];
         AsyncStorage.setItem(OVERRIDES_KEY, JSON.stringify(updated));
         return updated;
       });
@@ -359,8 +410,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         setBills(prev => {
           const bill = prev.find(b => b.id === billId);
           if (!bill?.is_debt) return prev;
-          const updated = prev.map(b => b.id === billId ? { ...b, balance: Math.max(0, b.balance - delta) } : b);
-          const reordered = reorderDebtPriorities(updated);
+          const reordered = reorderDebtPriorities(
+            prev.map(b => b.id === billId ? { ...b, balance: Math.max(0, b.balance - delta) } : b)
+          );
           AsyncStorage.setItem(BILLS_KEY, JSON.stringify(reordered));
           return reordered;
         });
@@ -375,44 +427,42 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     [upsertOverride]
   );
 
-  // ─── Weekly Bill Helpers ───────────────────────────────────────────────────────
+  // ─── Bill scheduling helpers ──────────────────────────────────────────────────
 
-  const getWeeklyBillDays = useCallback((bill: Bill, month: number, year: number): number[] => {
-    if (bill.frequency !== "weekly") return [bill.due_day];
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const days: number[] = [];
-    let d = bill.due_day;
-    while (d <= daysInMonth) {
-      if (d >= 1) days.push(d);
-      d += 7;
-    }
-    return days;
-  }, []);
+  /** Returns 1-indexed days in `month`/`year` when `bill` is due.
+   *  Respects bill.start_date, bill.end_date, and bill.day_of_week for weekly bills. */
+  const getBillOccurrencesInMonth = useCallback(
+    (bill: Bill, month: number, year: number) => getBillOccurrenceDays(bill, month, year),
+    []
+  );
 
+  /** Total amount billed for the given month (per-occurrence amount × number of occurrences). */
   const getBillMonthlyTotal = useCallback((bill: Bill, month: number, year: number): number => {
+    const occurrences = getBillOccurrenceDays(bill, month, year);
+    if (occurrences.length === 0) return 0;
     const perOccurrence = getAmount(bill, month, year);
-    if (bill.frequency === "weekly") {
-      return perOccurrence * getWeeklyBillDays(bill, month, year).length;
-    }
-    return perOccurrence;
-  }, [getAmount, getWeeklyBillDays]);
+    return perOccurrence * occurrences.length;
+  }, [getAmount]);
 
+  /** All recurring bills that are active for the given month/year. */
   const getMonthlyBills = useCallback(
-    (_month: number, _year: number): Bill[] => bills.filter(b => b.is_recurring),
+    (month: number, year: number): Bill[] =>
+      bills.filter(b => b.is_recurring && isBillActiveForMonth(b, month, year)),
     [bills]
   );
 
-  // ─── Snowball ─────────────────────────────────────────────────────────────────
+  // ─── Snowball / Avalanche ─────────────────────────────────────────────────────
 
   const runSnowball = useCallback(
     (month: number, year: number, extraAmount: number): SnowballAllocation[] => {
-      const debtBills = bills.filter(b => b.is_debt && b.balance > 0).map(b => ({ ...b }));
+      const debtBills = bills
+        .filter(b => b.is_debt && b.balance > 0)
+        .map(b => ({ ...b }));
 
-      if (settings.paymentMethod === "snowball") {
-        debtBills.sort((a, b) => a.balance - b.balance);
-      } else {
-        debtBills.sort((a, b) => b.interest_rate - a.interest_rate);
-      }
+      debtBills.sort(settings.paymentMethod === "snowball"
+        ? (a, b) => a.balance - b.balance
+        : (a, b) => b.interest_rate - a.interest_rate
+      );
 
       const allocations: SnowballAllocation[] = [];
       let pool = extraAmount;
@@ -430,8 +480,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         if (payment <= 0) continue;
 
         const balanceBefore = debt.balance;
-        const balanceAfter = Math.max(0, balanceBefore - payment);
-        const paidOff = balanceAfter === 0;
+        const balanceAfter  = Math.max(0, balanceBefore - payment);
+        const paidOff       = balanceAfter === 0;
 
         allocations.push({ billId: debt.id, billName: debt.name, payment, balanceBefore, balanceAfter, paidOff });
 
@@ -440,7 +490,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         upsertOverride(debt.id, month, year, { paid_amount: alreadyPaid + payment });
 
         if (paidOff) {
-          cascadePool = Math.max(0, available - payment) + debt.amount;
+          // Cascade: freed minimum rolls permanently into next debt's effective minimum
+          const nextDebt = debtBills.slice(i + 1).find(d => d.balance > payment);
+          if (nextDebt) {
+            const nidx = updatedBills.findIndex(b => b.id === nextDebt.id);
+            if (nidx !== -1) {
+              updatedBills[nidx] = { ...updatedBills[nidx], amount: updatedBills[nidx].amount + debt.amount };
+            }
+          }
+          cascadePool = Math.max(0, available - payment);
           pool = 0;
         } else {
           pool = 0;
@@ -459,19 +517,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const saveExtraPayment = useCallback((month: number, year: number, amount: number, allocations: SnowballAllocation[]) => {
     setExtraPayments(prev => {
       const existing = prev.findIndex(ep => ep.month === month && ep.year === year);
-      let updated: ExtraPayment[];
-      if (existing !== -1) {
-        updated = prev.map((ep, i) => i === existing ? { ...ep, amount, allocations } : ep);
-      } else {
-        updated = [...prev, { id: genId(), month, year, amount, allocations }];
-      }
+      const updated = existing !== -1
+        ? prev.map((ep, i) => i === existing ? { ...ep, amount, allocations } : ep)
+        : [...prev, { id: genId(), month, year, amount, allocations }];
       AsyncStorage.setItem(EXTRA_PAYMENTS_KEY, JSON.stringify(updated));
       return updated;
     });
   }, []);
 
-  const getExtraPayment = useCallback((month: number, year: number) =>
-    extraPayments.find(ep => ep.month === month && ep.year === year),
+  const getExtraPayment = useCallback(
+    (month: number, year: number) => extraPayments.find(ep => ep.month === month && ep.year === year),
     [extraPayments]
   );
 
@@ -486,9 +541,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   // ─── Transactions ─────────────────────────────────────────────────────────────
 
   const addTransaction = useCallback((tx: Omit<Transaction, "id">) => {
-    const nt: Transaction = { ...tx, id: genId() };
     setTransactions(prev => {
-      const u = [...prev, nt];
+      const u = [...prev, { ...tx, id: genId() }];
       AsyncStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(u));
       return u;
     });
@@ -522,9 +576,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   // ─── Income ───────────────────────────────────────────────────────────────────
 
   const addIncome = useCallback((item: Omit<IncomeItem, "id">) => {
-    const ni: IncomeItem = { ...item, id: genId() };
     setIncomes(prev => {
-      const u = [...prev, ni];
+      const u = [...prev, { ...item, id: genId() }];
       AsyncStorage.setItem(INCOMES_KEY, JSON.stringify(u));
       return u;
     });
@@ -557,9 +610,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   // ─── Goals ────────────────────────────────────────────────────────────────────
 
   const addGoal = useCallback((goal: Omit<Goal, "id" | "created_at">) => {
-    const ng: Goal = { ...goal, id: genId(), created_at: new Date().toISOString() };
     setGoals(prev => {
-      const u = [...prev, ng];
+      const u = [...prev, { ...goal, id: genId(), created_at: new Date().toISOString() }];
       AsyncStorage.setItem(GOALS_KEY, JSON.stringify(u));
       return u;
     });
@@ -586,15 +638,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const monthlyIncome = incomes
         .filter(i => isIncomeActiveForMonth(i, month, year))
         .reduce((s, i) => s + incomeToMonthly(i.amount, i.frequency), 0);
-      const totalBillsDue = bills.filter(b => b.is_recurring).reduce((s, b) => {
-        const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
-        return s + (o?.custom_amount !== undefined ? o.custom_amount : b.amount);
-      }, 0);
-      const txThisMonth = transactions.filter(t => {
-        const [ty, tm] = t.date.split("-").map(Number);
-        return ty === year && tm === month + 1;
-      });
-      const netTx = txThisMonth.reduce((s, t) => s + t.amount, 0);
+      const totalBillsDue = bills
+        .filter(b => b.is_recurring && isBillActiveForMonth(b, month, year))
+        .reduce((s, b) => {
+          const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
+          const amt = o?.custom_amount !== undefined ? o.custom_amount : b.amount;
+          return s + amt * getBillOccurrenceDays(b, month, year).length;
+        }, 0);
+      const netTx = transactions
+        .filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === year && tm === month + 1; })
+        .reduce((s, t) => s + t.amount, 0);
       const projectedBalance = monthlyIncome - totalBillsDue + netTx;
       const needed = Math.max(0, goal.target_amount - goal.current_amount);
       const canAfford = projectedBalance >= needed;
@@ -609,22 +662,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const monthlyIncome = incomes
       .filter(i => isIncomeActiveForMonth(i, month, year))
       .reduce((s, i) => s + incomeToMonthly(i.amount, i.frequency), 0);
-    const monthBills = bills.filter(b => b.is_recurring);
-    const totalBillsDue = monthBills.reduce((s, b) => {
+    const activeBills = bills.filter(b => b.is_recurring && isBillActiveForMonth(b, month, year));
+    const totalBillsDue = activeBills.reduce((s, b) => {
       const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
-      return s + (o?.custom_amount !== undefined ? o.custom_amount : b.amount);
+      const amt = o?.custom_amount !== undefined ? o.custom_amount : b.amount;
+      return s + amt * getBillOccurrenceDays(b, month, year).length;
     }, 0);
-    const totalPaid = monthBills.reduce((s, b) => {
-      const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
-      return s + (o?.paid_amount ?? 0);
-    }, 0);
-    const txThisMonth = transactions.filter(t => {
-      const [ty, tm] = t.date.split("-").map(Number);
-      return ty === year && tm === month + 1;
-    });
-    const netTransactions = txThisMonth.reduce((s, t) => s + t.amount, 0);
-    const remaining = monthlyIncome - totalBillsDue + netTransactions;
-    return { monthlyIncome, totalBillsDue, totalPaid, netTransactions, goalAllocations: 0, remaining };
+    const totalPaid = activeBills.reduce((s, b) => s + (overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year)?.paid_amount ?? 0), 0);
+    const monthTxs = transactions.filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === year && tm === month + 1; });
+    const netTransactions = monthTxs.reduce((s, t) => s + t.amount, 0);
+    return { monthlyIncome, totalBillsDue, totalPaid, netTransactions, goalAllocations: 0, remaining: monthlyIncome - totalBillsDue + netTransactions };
   }, [bills, incomes, transactions, overrides]);
 
   // ─── Daily Balances ───────────────────────────────────────────────────────────
@@ -632,71 +679,73 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const getDailyBalances = useCallback((month: number, year: number): DailyBalance[] => {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-    // Carryover: previous month's net (income - bills + transactions)
-    const prevMonth = month === 0 ? 11 : month - 1;
-    const prevYear = month === 0 ? year - 1 : year;
-    const prevMonthlyIncome = incomes
-      .filter(i => isIncomeActiveForMonth(i, prevMonth, prevYear))
-      .reduce((s, i) => s + incomeToMonthly(i.amount, i.frequency), 0);
-    const prevBills = bills.filter(b => b.is_recurring);
-    const prevTotalBills = prevBills.reduce((s, b) => {
-      const o = overrides.find(o => o.bill_id === b.id && o.month === prevMonth && o.year === prevYear);
-      return s + (o?.custom_amount !== undefined ? o.custom_amount : b.amount);
-    }, 0);
-    const prevTxs = transactions.filter(t => {
-      const [ty, tm] = t.date.split("-").map(Number);
-      return ty === prevYear && tm === prevMonth + 1;
-    });
-    const prevNetTx = prevTxs.reduce((s, t) => s + t.amount, 0);
-    const carryover = prevMonthlyIncome + prevNetTx - prevTotalBills;
+    // Determine if there is any recorded activity before this month
+    const currentMonthStart = new Date(year, month, 1);
+    const prevHasActivity =
+      transactions.some(t => { const [ty, tm] = t.date.split("-").map(Number); return new Date(ty, tm - 1, 1) < currentMonthStart; }) ||
+      overrides.some(o => new Date(o.year, o.month, 1) < currentMonthStart);
 
-    // Current month income available from day 1
+    let carryover: number;
+    if (!prevHasActivity) {
+      // Very first month tracked → use the user-configured starting balance
+      carryover = settings.starting_balance;
+    } else {
+      // Compute previous month's ending balance (income − bills + transactions)
+      const prevMonth = month === 0 ? 11 : month - 1;
+      const prevYear  = month === 0 ? year - 1 : year;
+
+      const prevIncome = incomes
+        .filter(i => isIncomeActiveForMonth(i, prevMonth, prevYear))
+        .reduce((s, i) => s + incomeToMonthly(i.amount, i.frequency), 0);
+
+      const prevBillsTotal = bills.filter(b => b.is_recurring).reduce((s, b) => {
+        const occ = getBillOccurrenceDays(b, prevMonth, prevYear);
+        if (occ.length === 0) return s;
+        const o = overrides.find(o => o.bill_id === b.id && o.month === prevMonth && o.year === prevYear);
+        const amt = o?.custom_amount !== undefined ? o.custom_amount : b.amount;
+        return s + amt * occ.length;
+      }, 0);
+
+      const prevNetTx = transactions
+        .filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === prevYear && tm === prevMonth + 1; })
+        .reduce((s, t) => s + t.amount, 0);
+
+      carryover = prevIncome + prevNetTx - prevBillsTotal;
+    }
+
+    // Current month scheduled income (lump at start of month)
     const monthlyIncome = incomes
       .filter(i => isIncomeActiveForMonth(i, month, year))
       .reduce((s, i) => s + incomeToMonthly(i.amount, i.frequency), 0);
 
-    // Transactions for this month
-    const monthTxs = transactions.filter(t => {
-      const [ty, tm] = t.date.split("-").map(Number);
-      return ty === year && tm === month + 1;
+    // Transactions for this month indexed by day
+    const monthTxs = transactions.filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === year && tm === month + 1; });
+
+    // Pre-compute bill occurrence map: { day → total bill amount }
+    const billsByDay: Record<number, number> = {};
+    bills.filter(b => b.is_recurring).forEach(b => {
+      const occ = getBillOccurrenceDays(b, month, year);
+      if (occ.length === 0) return;
+      const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
+      const amt = o?.custom_amount !== undefined ? o.custom_amount : b.amount;
+      occ.forEach(d => { billsByDay[d] = (billsByDay[d] ?? 0) + amt; });
     });
 
-    const recurringBills = bills.filter(b => b.is_recurring);
     let runningBalance = carryover + monthlyIncome;
     const result: DailyBalance[] = [];
 
     for (let day = 1; day <= daysInMonth; day++) {
-      const dayTxs = monthTxs.filter(t => {
-        const [, , td] = t.date.split("-").map(Number);
-        return td === day;
-      });
-
-      const incomeToday = dayTxs.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+      const dayTxs = monthTxs.filter(t => { const [, , td] = t.date.split("-").map(Number); return td === day; });
+      const incomeToday  = dayTxs.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
       const expenseToday = dayTxs.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
-
-      // Bills due this day (any occurrence — supports weekly)
-      const billsToday = recurringBills.reduce((s, b) => {
-        const dueDays = b.frequency === "weekly"
-          ? (() => {
-              const days: number[] = [];
-              let d = b.due_day;
-              while (d <= daysInMonth) { if (d >= 1) days.push(d); d += 7; }
-              return days;
-            })()
-          : [b.due_day];
-        if (!dueDays.includes(day)) return s;
-        const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
-        return s + (o?.custom_amount !== undefined ? o.custom_amount : b.amount);
-      }, 0);
-
+      const billsToday   = billsByDay[day] ?? 0;
       const net = incomeToday - expenseToday - billsToday;
       runningBalance += net;
-
       result.push({ day, income: incomeToday, expense: expenseToday, bills: billsToday, net, balance: runningBalance });
     }
 
     return result;
-  }, [bills, transactions, incomes, overrides]);
+  }, [bills, transactions, incomes, overrides, settings.starting_balance]);
 
   // ─── Categories ───────────────────────────────────────────────────────────────
 
@@ -719,7 +768,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       AsyncStorage.setItem(CATEGORIES_KEY, JSON.stringify(u));
       return u;
     });
-    // Update bills and transactions using this category
     setBills(prev => {
       const u = prev.map(b => b.category === oldName ? { ...b, category: trimmed } : b);
       AsyncStorage.setItem(BILLS_KEY, JSON.stringify(u));
@@ -738,7 +786,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       AsyncStorage.setItem(CATEGORIES_KEY, JSON.stringify(u));
       return u;
     });
-    // Reassign bills and transactions to "Other"
     setBills(prev => {
       const u = prev.map(b => b.category === name ? { ...b, category: "Other" } : b);
       AsyncStorage.setItem(BILLS_KEY, JSON.stringify(u));
@@ -763,13 +810,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const importBills = useCallback((imported: Omit<Bill, "id" | "created_at">[]) => {
     setBills(prev => {
-      const nb = imported.map(b => ({ frequency: "monthly" as const, ...b, id: genId(), created_at: new Date().toISOString() }));
-      const withNew = [...prev, ...nb];
-      const reordered = reorderDebtPriorities(withNew);
+      const nb = imported.map(b => ({ frequency: "monthly" as const, day_of_week: 0, ...b, id: genId(), created_at: new Date().toISOString() }));
+      const reordered = reorderDebtPriorities([...prev, ...nb]);
       AsyncStorage.setItem(BILLS_KEY, JSON.stringify(reordered));
       return reordered;
     });
   }, []);
+
+  // ─── Provider value ───────────────────────────────────────────────────────────
 
   return (
     <BudgetContext.Provider value={{
@@ -777,8 +825,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       dashboardFilter, setDashboardFilter,
       addBill, updateBill, deleteBill, getBillById,
       getOverride, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
-      getMonthlyBills, getWeeklyBillDays, getBillMonthlyTotal, runSnowball,
-      saveExtraPayment, getExtraPayment, deleteExtraPayment,
+      getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal,
+      runSnowball, saveExtraPayment, getExtraPayment, deleteExtraPayment,
       addTransaction, updateTransaction, deleteTransaction, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome,
       addGoal, updateGoal, deleteGoal, checkGoalAffordability,
