@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert, FlatList, Keyboard, Platform,
   Pressable, ScrollView, StyleSheet, Text,
@@ -12,7 +12,6 @@ import { AddTransactionModal } from "@/components/AddTransactionModal";
 import { CalendarView } from "@/components/CalendarView";
 import { EmptyState } from "@/components/EmptyState";
 import { MonthPicker } from "@/components/MonthPicker";
-import { SnowballModal } from "@/components/SnowballModal";
 import colors from "@/constants/colors";
 import type { Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
@@ -46,13 +45,15 @@ export default function MonthlyScreen() {
 
   const [month, setMonth] = useState(new Date().getMonth());
   const [activeTab, setActiveTab] = useState<TabView>("bills");
-  const [snowballVisible, setSnowballVisible] = useState(false);
   const [txModalVisible, setTxModalVisible] = useState(false);
   const [editTx, setEditTx] = useState<Transaction | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [editingAmounts, setEditingAmounts] = useState<Record<string, string>>({});
   const [editingPaid, setEditingPaid] = useState<Record<string, string>>({});
   const [billFilter, setBillFilter] = useState<"all" | "paid" | "unpaid">("all");
+  const [extraPayment, setExtraPayment] = useState("");
+  const [snowballResults, setSnowballResults] = useState<{ name: string; payment: number; paidOff: boolean }[]>([]);
+  const [showSnowballResults, setShowSnowballResults] = useState(false);
 
   useEffect(() => {
     if (dashboardFilter === "paid") { setBillFilter("paid"); setActiveTab("bills"); setDashboardFilter(null); }
@@ -109,6 +110,24 @@ export default function MonthlyScreen() {
     setEditingAmounts(p => { const n = { ...p }; delete n[key]; return n; });
   }, [editingAmounts, setCustomAmount, month, selectedYear]);
 
+  const handleQuickPaid = useCallback((billId: string, amount: number, isPaid: boolean) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setPaidAmount(billId, month, selectedYear, isPaid ? 0 : amount);
+  }, [setPaidAmount, month, selectedYear]);
+
+  const handleApplyExtra = () => {
+    const amt = parseFloat(extraPayment);
+    if (isNaN(amt) || amt <= 0) return;
+    const debtCount = bills.filter(b => b.is_debt && b.balance > 0).length;
+    if (debtCount === 0) { Alert.alert("No Debts", "You have no active debts to apply extra payments to."); return; }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const results = runSnowball(month, selectedYear, amt);
+    setSnowballResults(results.map(r => ({ name: r.billName, payment: r.payment, paidOff: r.paidOff })));
+    setShowSnowballResults(true);
+    setExtraPayment("");
+    Keyboard.dismiss();
+  };
+
   const handleDeleteTx = (id: string) => {
     Alert.alert("Delete Transaction", "Remove this transaction?", [
       { text: "Cancel", style: "cancel" },
@@ -129,24 +148,14 @@ export default function MonthlyScreen() {
           <Text style={[styles.title, { color: c.foreground }]}>{MONTH_FULL[month]} {selectedYear}</Text>
           {isFuture && <Text style={[styles.forecastTag, { color: c.primary }]}>Forecast Mode</Text>}
         </View>
-        <View style={styles.headerBtns}>
-          {activeTab === "bills" ? (
-            <Pressable
-              onPress={() => setSnowballVisible(true)}
-              style={({ pressed }) => [styles.zapBtn, { backgroundColor: c.primary + "20", opacity: pressed ? 0.7 : 1 }]}
-            >
-              <Feather name="zap" size={14} color={c.primary} />
-              <Text style={[styles.zapBtnText, { color: c.primary }]}>{settings.paymentMethod === "snowball" ? "Snowball" : "Avalanche"}</Text>
-            </Pressable>
-          ) : (
-            <Pressable
-              onPress={() => { setEditTx(null); setTxModalVisible(true); }}
-              style={({ pressed }) => [styles.iconBtn, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
-            >
-              <Feather name="plus" size={18} color={c.primaryForeground} />
-            </Pressable>
-          )}
-        </View>
+        {activeTab === "calendar" && (
+          <Pressable
+            onPress={() => { setEditTx(null); setTxModalVisible(true); }}
+            style={({ pressed }) => [styles.iconBtn, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
+          >
+            <Feather name="plus" size={18} color={c.primaryForeground} />
+          </Pressable>
+        )}
       </View>
 
       <MonthPicker selectedMonth={month} onSelect={m => { setMonth(m); setSelectedDate(null); }} year={selectedYear} onYearChange={setSelectedYear} />
@@ -172,7 +181,7 @@ export default function MonthlyScreen() {
             {[
               { label: "Due", value: `$${totalDue.toFixed(0)}`, color: c.foreground },
               { label: "Paid", value: `$${totalPaid.toFixed(0)}`, color: c.success },
-              { label: "Remaining", value: `$${Math.max(0, totalDue - totalPaid).toFixed(0)}`, color: c.destructive },
+              { label: "Left", value: `$${Math.max(0, totalDue - totalPaid).toFixed(0)}`, color: c.destructive },
             ].map((s, i) => (
               <React.Fragment key={s.label}>
                 {i > 0 && <View style={[styles.sep, { backgroundColor: c.border }]} />}
@@ -186,14 +195,59 @@ export default function MonthlyScreen() {
 
           {monthlyIncome > 0 && (
             <View style={[styles.cfBar, { backgroundColor: c.card, marginHorizontal: 16, borderRadius: 10, marginTop: 8 }]}>
-              <Text style={[styles.cfLabel, { color: c.mutedForeground }]}>
-                {isFuture ? "Forecast" : "Available"} Cash
-              </Text>
-              <Text style={[styles.cfValue, { color: cashFlow.remaining >= 0 ? c.success : c.destructive }]}>
-                {cashFlow.remaining >= 0 ? "+" : ""}${cashFlow.remaining.toFixed(0)}
-              </Text>
+              <View style={styles.cfBarInner}>
+                <Text style={[styles.cfLabel, { color: c.mutedForeground }]}>
+                  {isFuture ? "Forecast" : "Available"} Cash
+                </Text>
+                <Text style={[styles.cfValue, { color: cashFlow.remaining >= 0 ? c.success : c.destructive }]}>
+                  {cashFlow.remaining >= 0 ? "+" : ""}${cashFlow.remaining.toFixed(0)}
+                </Text>
+              </View>
             </View>
           )}
+
+          <View style={[styles.extraCard, { backgroundColor: c.card, marginHorizontal: 16, borderRadius: colors.radius, marginTop: 8 }]}>
+            <View style={styles.extraHeader}>
+              <Feather name="zap" size={14} color={c.primary} />
+              <Text style={[styles.extraTitle, { color: c.foreground }]}>
+                Extra Debt Payment ({settings.paymentMethod === "snowball" ? "Snowball" : "Avalanche"})
+              </Text>
+            </View>
+            <View style={styles.extraRow}>
+              <TextInput
+                style={[styles.extraInput, { backgroundColor: c.muted, color: c.foreground }]}
+                value={extraPayment}
+                onChangeText={setExtraPayment}
+                placeholder="$ amount"
+                placeholderTextColor={c.mutedForeground}
+                keyboardType="decimal-pad"
+                returnKeyType="done"
+                onSubmitEditing={handleApplyExtra}
+              />
+              <Pressable
+                onPress={handleApplyExtra}
+                style={({ pressed }) => [styles.applyBtn, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
+              >
+                <Text style={[styles.applyBtnText, { color: c.primaryForeground }]}>Apply Extra</Text>
+              </Pressable>
+            </View>
+            {showSnowballResults && snowballResults.length > 0 && (
+              <View style={[styles.resultsBox, { backgroundColor: c.muted, borderRadius: 8 }]}>
+                {snowballResults.map((r, i) => (
+                  <View key={i} style={styles.resultRow}>
+                    <Feather name={r.paidOff ? "check-circle" : "arrow-right"} size={13} color={r.paidOff ? c.success : c.primary} />
+                    <Text style={[styles.resultText, { color: r.paidOff ? c.success : c.foreground }]}>
+                      {r.name}: <Text style={{ fontFamily: "Inter_700Bold" }}>${r.payment.toFixed(2)}</Text>
+                      {r.paidOff ? " — PAID OFF! 🎉" : ""}
+                    </Text>
+                  </View>
+                ))}
+                <Pressable onPress={() => setShowSnowballResults(false)} style={styles.dismissBtn}>
+                  <Text style={[styles.dismissText, { color: c.mutedForeground }]}>Dismiss</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
 
           <View style={[styles.billFilterRow, { paddingHorizontal: 16, marginTop: 8, marginBottom: 4 }]}>
             {(["all", "paid", "unpaid"] as const).map(f => (
@@ -226,7 +280,18 @@ export default function MonthlyScreen() {
                       <Text style={[styles.entryName, { color: c.foreground }]}>{bill.name}</Text>
                       <Text style={[styles.entryMeta, { color: c.mutedForeground }]}>Due day {bill.due_day} · {bill.category}</Text>
                     </View>
-                    <PayStatus paid={isPaid} partial={isPartial} />
+                    <View style={styles.entryRight}>
+                      <PayStatus paid={isPaid} partial={isPartial} />
+                      <Pressable
+                        onPress={() => handleQuickPaid(bill.id, amount, isPaid)}
+                        style={({ pressed }) => [styles.quickPaidBtn, { backgroundColor: isPaid ? c.muted : c.success + "20", opacity: pressed ? 0.7 : 1, borderRadius: 8, marginTop: 6 }]}
+                      >
+                        <Feather name={isPaid ? "x" : "check"} size={12} color={isPaid ? c.mutedForeground : c.success} />
+                        <Text style={[styles.quickPaidText, { color: isPaid ? c.mutedForeground : c.success }]}>
+                          {isPaid ? "Unpay" : "Mark Paid"}
+                        </Text>
+                      </Pressable>
+                    </View>
                   </View>
 
                   <View style={styles.amtRow}>
@@ -271,6 +336,7 @@ export default function MonthlyScreen() {
                       <Text style={[styles.debtNoteText, { color: c.mutedForeground }]}>
                         Debt balance: <Text style={{ color: c.destructive, fontFamily: "Inter_600SemiBold" }}>${bill.balance.toFixed(2)}</Text>
                         {bill.interest_rate > 0 ? ` · ${bill.interest_rate}% APR` : ""}
+                        {` · Payoff priority #${bill.priority}`}
                       </Text>
                     </View>
                   )}
@@ -307,63 +373,61 @@ export default function MonthlyScreen() {
             />
 
             <View style={styles.txListHeader}>
-              {selectedDate ? (
-                <>
-                  <Text style={[styles.txListTitle, { color: c.foreground }]}>{selectedDate}</Text>
-                  <Pressable
-                    onPress={() => { setEditTx(null); setTxModalVisible(true); }}
-                    style={({ pressed }) => [styles.iconBtn, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
-                  >
-                    <Feather name="plus" size={16} color={c.primaryForeground} />
-                  </Pressable>
-                </>
-              ) : (
-                <>
-                  <Text style={[styles.txListTitle, { color: c.foreground }]}>All Transactions</Text>
-                  <Pressable
-                    onPress={() => { setEditTx(null); setSelectedDate(null); setTxModalVisible(true); }}
-                    style={({ pressed }) => [styles.iconBtn, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
-                  >
-                    <Feather name="plus" size={16} color={c.primaryForeground} />
-                  </Pressable>
-                </>
-              )}
+              <Text style={[styles.txListTitle, { color: c.foreground }]}>
+                {selectedDate ? selectedDate : `All Transactions (${txList.length})`}
+              </Text>
+              <Pressable
+                onPress={() => { setEditTx(null); setTxModalVisible(true); }}
+                style={({ pressed }) => [styles.iconBtn, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
+              >
+                <Feather name="plus" size={16} color={c.primaryForeground} />
+              </Pressable>
             </View>
 
             {displayedTxs.length === 0 ? (
               <EmptyState icon="credit-card" title="No Transactions" message={selectedDate ? "Tap + to log a transaction for this day." : "Tap a day or use + to add transactions."} />
             ) : (
               displayedTxs.map(tx => (
-                <Pressable
+                <View
                   key={tx.id}
-                  onPress={() => { setEditTx(tx); setTxModalVisible(true); }}
-                  onLongPress={() => handleDeleteTx(tx.id)}
                   style={[styles.txRow, { backgroundColor: c.card, borderRadius: colors.radius }]}
                 >
-                  <View style={[styles.txIcon, { backgroundColor: tx.amount > 0 ? c.success + "20" : c.destructive + "20" }]}>
-                    <Feather name={tx.amount > 0 ? "arrow-down-left" : "arrow-up-right"} size={15} color={tx.amount > 0 ? c.success : c.destructive} />
-                  </View>
-                  <View style={styles.txBody}>
-                    <Text style={[styles.txNote, { color: c.foreground }]}>{tx.note || tx.category}</Text>
-                    <Text style={[styles.txDate, { color: c.mutedForeground }]}>{tx.date} · {tx.category}</Text>
-                  </View>
-                  <Text style={[styles.txAmt, { color: tx.amount > 0 ? c.success : c.destructive }]}>
-                    {tx.amount > 0 ? "+" : ""}{tx.amount.toFixed(2)}
-                  </Text>
-                </Pressable>
+                  <Pressable
+                    onPress={() => { setEditTx(tx); setTxModalVisible(true); }}
+                    style={styles.txMain}
+                  >
+                    <View style={[styles.txIcon, { backgroundColor: tx.amount > 0 ? c.success + "20" : c.destructive + "20" }]}>
+                      <Feather name={tx.amount > 0 ? "arrow-down-left" : "arrow-up-right"} size={15} color={tx.amount > 0 ? c.success : c.destructive} />
+                    </View>
+                    <View style={styles.txBody}>
+                      <Text style={[styles.txNote, { color: c.foreground }]}>{tx.note || tx.category}</Text>
+                      <Text style={[styles.txDate, { color: c.mutedForeground }]}>{tx.date} · {tx.category}</Text>
+                    </View>
+                    <Text style={[styles.txAmt, { color: tx.amount > 0 ? c.success : c.destructive }]}>
+                      {tx.amount > 0 ? "+" : ""}{tx.amount.toFixed(2)}
+                    </Text>
+                  </Pressable>
+                  <Pressable onPress={() => handleDeleteTx(tx.id)} hitSlop={8} style={styles.txDelete}>
+                    <Feather name="trash-2" size={14} color={c.destructive} />
+                  </Pressable>
+                </View>
               ))
             )}
           </View>
         </ScrollView>
       )}
 
-      <SnowballModal visible={snowballVisible} onClose={() => setSnowballVisible(false)} method={settings.paymentMethod} onRun={amount => runSnowball(month, selectedYear, amount)} />
       <AddTransactionModal
         visible={txModalVisible}
         onClose={() => { setTxModalVisible(false); setEditTx(null); }}
         onSave={(data) => {
-          if ("id" in data) updateTransaction(data as Transaction);
-          else addTransaction({ ...data, date: selectedDate ?? (data as any).date ?? new Date().toISOString().split("T")[0] });
+          if (editTx && "id" in data) {
+            updateTransaction(data as Transaction);
+          } else {
+            const newTx = { ...data } as Omit<Transaction, "id">;
+            if (selectedDate && !editTx) newTx.date = selectedDate;
+            addTransaction(newTx);
+          }
         }}
         editTx={editTx}
         defaultDate={selectedDate ?? undefined}
@@ -377,9 +441,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingBottom: 8 },
   title: { fontSize: 22, fontFamily: "Inter_700Bold" },
   forecastTag: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginTop: 1 },
-  headerBtns: { flexDirection: "row", gap: 8, alignItems: "center" },
-  zapBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 20 },
-  zapBtnText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   iconBtn: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
   tabBar: { flexDirection: "row", padding: 4, gap: 4 },
   tabBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 9 },
@@ -389,9 +450,22 @@ const styles = StyleSheet.create({
   summaryLabel: { fontSize: 10, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 },
   summaryValue: { fontSize: 16, fontFamily: "Inter_700Bold" },
   sep: { width: 1 },
-  cfBar: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 14, paddingVertical: 10 },
+  cfBar: { paddingHorizontal: 14, paddingVertical: 10 },
+  cfBarInner: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   cfLabel: { fontSize: 12, fontFamily: "Inter_500Medium" },
-  cfValue: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  cfValue: { fontSize: 16, fontFamily: "Inter_700Bold" },
+  extraCard: { padding: 12 },
+  extraHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
+  extraTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  extraRow: { flexDirection: "row", gap: 8, alignItems: "center" },
+  extraInput: { flex: 1, height: 40, borderRadius: 8, paddingHorizontal: 12, fontSize: 15, fontFamily: "Inter_400Regular" },
+  applyBtn: { paddingHorizontal: 16, height: 40, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  applyBtnText: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  resultsBox: { marginTop: 10, padding: 10 },
+  resultRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 4 },
+  resultText: { fontSize: 13, fontFamily: "Inter_400Regular", flex: 1 },
+  dismissBtn: { marginTop: 8, alignItems: "center" },
+  dismissText: { fontSize: 12, fontFamily: "Inter_500Medium" },
   billFilterRow: { flexDirection: "row", gap: 6 },
   pill: { paddingHorizontal: 12, paddingVertical: 5 },
   pillText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
@@ -401,6 +475,9 @@ const styles = StyleSheet.create({
   entryLeft: { flex: 1 },
   entryName: { fontSize: 15, fontFamily: "Inter_600SemiBold", marginBottom: 2 },
   entryMeta: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  entryRight: { alignItems: "flex-end" },
+  quickPaidBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4 },
+  quickPaidText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   amtRow: { flexDirection: "row", gap: 8, paddingHorizontal: 12, paddingBottom: 12 },
   amtField: { flex: 1 },
   fieldLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 },
@@ -416,10 +493,12 @@ const styles = StyleSheet.create({
   txSumValue: { fontSize: 15, fontFamily: "Inter_700Bold" },
   txListHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8, marginTop: 4 },
   txListTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-  txRow: { flexDirection: "row", alignItems: "center", padding: 11, marginBottom: 7, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 },
+  txRow: { flexDirection: "row", alignItems: "center", marginBottom: 7, overflow: "hidden" },
+  txMain: { flex: 1, flexDirection: "row", alignItems: "center", padding: 11 },
   txIcon: { width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", marginRight: 10 },
   txBody: { flex: 1 },
   txNote: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   txDate: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
   txAmt: { fontSize: 14, fontFamily: "Inter_700Bold", marginLeft: 8 },
+  txDelete: { paddingHorizontal: 14, paddingVertical: 11 },
 });

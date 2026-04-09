@@ -1,0 +1,197 @@
+Fix bugs and improve UX in the existing budgeting app. Do NOT rebuild. Patch the current system.
+
+--------------------------------------------------
+1. DELETE BUTTON NOT WORKING (HARD FIX)
+--------------------------------------------------
+
+Fix deletion across ALL entities:
+
+Bills:
+- Move delete into Edit Bill modal (as user requested)
+- Add "Delete Bill" button at bottom
+- On click:
+  → Show confirmation modal
+  → Call DELETE /bills/{id}
+  → Cascade delete MonthlyOverride records
+  → Refresh UI
+
+Transactions:
+- Add delete button per transaction in day modal
+- Ensure DELETE /transactions/{id} works
+
+Income:
+- Fix delete endpoint
+- Ensure DELETE /income/{id} removes item and refreshes UI
+
+IMPORTANT:
+- After delete → refetch data OR update local state correctly
+
+--------------------------------------------------
+2. TRANSACTIONS BUGS (CRITICAL)
+--------------------------------------------------
+
+Fix issues:
+
+A. Multiple transactions not adding:
+- Ensure POST /transactions correctly appends, not overwrites
+- Fix frontend state update (must push to array, not replace)
+
+B. Changing date makes transaction disappear:
+- Fix update endpoint:
+  PUT /transactions/{id}
+- Ensure:
+  → New date persists in DB
+  → UI refresh reflects new date
+
+C. Add delete option:
+- Each transaction must have delete icon
+
+--------------------------------------------------
+3. CALENDAR DAILY TOTALS (FIX + IMPROVE)
+--------------------------------------------------
+
+Fix aggregation:
+
+Each day should:
+- SUM all income
+- SUM all expenses
+- Display:
+  +$X (green)
+  -$X (red)
+  OR net
+
+Ensure:
+- Multiple transactions are included (not overwritten)
+
+--------------------------------------------------
+4. INCOME SYSTEM FIXES
+--------------------------------------------------
+
+Remove confusing UI:
+
+❌ REMOVE:
+- "x2.17/mo"
+- Any conversion text shown to user
+
+✔ KEEP:
+- Conversion logic in backend ONLY
+
+UI should show:
+- Income amount
+- Frequency (weekly, biweekly, monthly)
+
+Fix:
+- Multiple incomes should sum correctly
+- Delete must work
+
+--------------------------------------------------
+5. GOAL SYSTEM CHANGE (IMPORTANT)
+--------------------------------------------------
+
+REMOVE:
+- monthly_savings_required logic
+
+REPLACE WITH:
+
+Affordability check only:
+
+For target month:
+
+Projected Balance =
+Income
+- Bills
+- Transactions
+
+Then:
+
+If Projected Balance >= Goal Amount:
+  → "You can afford this" (green)
+
+Else:
+  → "You cannot afford this" (red)
+
+No forced saving calculation.
+
+--------------------------------------------------
+6. PRIORITY AUTO-ASSIGN (DEBT ONLY)
+--------------------------------------------------
+
+When is_debt = true:
+- Automatically assign priority based on:
+  → current lowest balance = highest priority (1)
+
+Recalculate priorities when:
+- New debt added
+- Debt removed
+
+Remove manual priority input for user
+
+--------------------------------------------------
+7. ADDITIONAL PAYMENT (CLEAR UX)
+--------------------------------------------------
+
+Add clear section in Monthly View:
+
+"Extra Payment"
+
+- Input field: $ amount
+- Button: "Apply Extra"
+
+Behavior:
+- Applies ONLY to debts
+- Uses snowball logic
+- Updates:
+  - balances
+  - paid amounts
+
+Make this visible at top of Monthly screen
+
+--------------------------------------------------
+8. FIX DATA CONSISTENCY ISSUES
+--------------------------------------------------
+
+Ensure:
+
+- No overwriting arrays in frontend state
+- Always merge data correctly
+- Use unique IDs for updates
+- After every write:
+  → sync UI with backend
+
+--------------------------------------------------
+9. ADD HELPFUL IMPROVEMENTS
+--------------------------------------------------
+
+A. Quick Add Transaction button on calendar
+
+B. Show "Available Cash" prominently:
+  Income - Bills - Transactions
+
+C. Add "Upcoming Bills" (next 7 days) widget
+
+D. Add "Paid" toggle directly on bill in Monthly view
+
+--------------------------------------------------
+10. DEBUGGING SAFETY
+--------------------------------------------------
+
+Add logging:
+- When creating, updating, deleting:
+  → console log payloads
+  → log API responses
+
+This helps trace issues
+
+--------------------------------------------------
+DELIVERABLE
+--------------------------------------------------
+
+- All delete functions working
+- Transactions fully functional
+- Calendar totals accurate
+- Income clean + working
+- Goal system simplified to affordability
+- Snowball + extra payment clear
+- Stable UI with no disappearing data
+
+--------------------------------------------------

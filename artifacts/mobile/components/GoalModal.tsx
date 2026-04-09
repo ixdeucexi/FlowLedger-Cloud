@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useEffect, useState } from "react";
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import colors from "@/constants/colors";
 import type { Goal } from "@/context/BudgetContext";
@@ -11,10 +11,11 @@ interface Props {
   visible: boolean;
   onClose: () => void;
   onSave: (goal: Omit<Goal, "id" | "created_at"> | Goal) => void;
+  onDelete?: (id: string) => void;
   editGoal?: Goal | null;
 }
 
-export function GoalModal({ visible, onClose, onSave, editGoal }: Props) {
+export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Props) {
   const c = useColors();
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
@@ -49,6 +50,17 @@ export function GoalModal({ visible, onClose, onSave, editGoal }: Props) {
     onClose();
   };
 
+  const handleDelete = () => {
+    if (!editGoal || !onDelete) return;
+    Alert.alert("Delete Goal", `Remove "${editGoal.name}"?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete", style: "destructive",
+        onPress: () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); onDelete(editGoal.id); onClose(); },
+      },
+    ]);
+  };
+
   const input = [styles.input, { backgroundColor: c.muted, color: c.foreground }];
   const label = [styles.label, { color: c.mutedForeground }];
 
@@ -74,12 +86,29 @@ export function GoalModal({ visible, onClose, onSave, editGoal }: Props) {
             <Text style={label}>Target Date (YYYY-MM-DD)</Text>
             <TextInput style={input} value={targetDate} onChangeText={setTargetDate} placeholder='2025-12-25' placeholderTextColor={c.mutedForeground} />
 
+            <View style={[styles.hint, { backgroundColor: c.primary + "15", borderRadius: 8 }]}>
+              <Feather name="info" size={13} color={c.primary} />
+              <Text style={[styles.hintText, { color: c.mutedForeground }]}>
+                The app will check if your projected balance (income − bills) covers this goal amount.
+              </Text>
+            </View>
+
             <Pressable
               onPress={handleSave}
               style={({ pressed }) => [styles.saveBtn, { backgroundColor: c.primary, borderRadius: colors.radius, opacity: pressed ? 0.85 : 1 }]}
             >
               <Text style={[styles.saveBtnText, { color: c.primaryForeground }]}>{editGoal ? "Update Goal" : "Create Goal"}</Text>
             </Pressable>
+
+            {editGoal && onDelete && (
+              <Pressable
+                onPress={handleDelete}
+                style={({ pressed }) => [styles.deleteBtn, { borderColor: c.destructive, opacity: pressed ? 0.7 : 1 }]}
+              >
+                <Feather name="trash-2" size={16} color={c.destructive} />
+                <Text style={[styles.deleteBtnText, { color: c.destructive }]}>Delete Goal</Text>
+              </Pressable>
+            )}
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
@@ -89,12 +118,16 @@ export function GoalModal({ visible, onClose, onSave, editGoal }: Props) {
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.65)" },
-  container: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingTop: 12, maxHeight: "80%" },
+  container: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingTop: 12, maxHeight: "85%" },
   handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#444", alignSelf: "center", marginBottom: 16 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
   title: { fontSize: 20, fontFamily: "Inter_700Bold" },
   label: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginBottom: 6, marginTop: 14, textTransform: "uppercase", letterSpacing: 0.7 },
   input: { height: 48, borderRadius: 10, paddingHorizontal: 14, fontSize: 16, fontFamily: "Inter_400Regular" },
-  saveBtn: { height: 52, alignItems: "center", justifyContent: "center", marginTop: 24, marginBottom: 32 },
+  hint: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 10, marginTop: 14 },
+  hintText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
+  saveBtn: { height: 52, alignItems: "center", justifyContent: "center", marginTop: 20 },
   saveBtnText: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  deleteBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 48, borderWidth: 1.5, borderRadius: 12, marginTop: 12, marginBottom: 32 },
+  deleteBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
 });

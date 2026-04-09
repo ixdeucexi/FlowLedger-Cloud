@@ -50,6 +50,12 @@ export interface Goal {
   created_at: string;
 }
 
+export interface GoalAffordability {
+  projectedBalance: number;
+  canAfford: boolean;
+  shortfall: number;
+}
+
 export interface SnowballAllocation {
   billId: string;
   billName: string;
@@ -113,8 +119,7 @@ interface BudgetContextType {
   addGoal: (goal: Omit<Goal, "id" | "created_at">) => void;
   updateGoal: (goal: Goal) => void;
   deleteGoal: (id: string) => void;
-  getGoalMonthlyRequired: (goal: Goal) => number;
-  getGoalMonthsRemaining: (goal: Goal) => number;
+  checkGoalAffordability: (goal: Goal, month: number, year: number) => GoalAffordability;
 
   getCashFlow: (month: number, year: number) => CashFlow;
 
@@ -149,15 +154,24 @@ function incomeToMonthly(amount: number, frequency: IncomeItem["frequency"]): nu
   return amount;
 }
 
+function reorderDebtPriorities(allBills: Bill[]): Bill[] {
+  const nonDebts = allBills.filter(b => !b.is_debt);
+  const debts = allBills
+    .filter(b => b.is_debt)
+    .sort((a, b) => a.balance - b.balance)
+    .map((b, i) => ({ ...b, priority: i + 1 }));
+  return [...nonDebts, ...debts];
+}
+
 const SEED_BILLS: Bill[] = [
-  { id: "s1", name: "Rent", amount: 1200, category: "Housing", priority: 1, is_debt: false, balance: 0, interest_rate: 0, due_day: 1, is_recurring: true, created_at: new Date().toISOString() },
-  { id: "s2", name: "Electric", amount: 95, category: "Utilities", priority: 3, is_debt: false, balance: 0, interest_rate: 0, due_day: 10, is_recurring: true, created_at: new Date().toISOString() },
-  { id: "s3", name: "Internet", amount: 60, category: "Utilities", priority: 4, is_debt: false, balance: 0, interest_rate: 0, due_day: 15, is_recurring: true, created_at: new Date().toISOString() },
+  { id: "s1", name: "Rent", amount: 1200, category: "Housing", priority: 99, is_debt: false, balance: 0, interest_rate: 0, due_day: 1, is_recurring: true, created_at: new Date().toISOString() },
+  { id: "s2", name: "Electric", amount: 95, category: "Utilities", priority: 99, is_debt: false, balance: 0, interest_rate: 0, due_day: 10, is_recurring: true, created_at: new Date().toISOString() },
+  { id: "s3", name: "Internet", amount: 60, category: "Utilities", priority: 99, is_debt: false, balance: 0, interest_rate: 0, due_day: 15, is_recurring: true, created_at: new Date().toISOString() },
   { id: "s4", name: "Car Loan", amount: 350, category: "Debt", priority: 2, is_debt: true, balance: 4200, interest_rate: 6.5, due_day: 20, is_recurring: true, created_at: new Date().toISOString() },
   { id: "s5", name: "Credit Card", amount: 120, category: "Debt", priority: 3, is_debt: true, balance: 1850, interest_rate: 22.9, due_day: 25, is_recurring: true, created_at: new Date().toISOString() },
-  { id: "s6", name: "Medical Bill", amount: 75, category: "Debt", priority: 4, is_debt: true, balance: 650, interest_rate: 0, due_day: 5, is_recurring: true, created_at: new Date().toISOString() },
-  { id: "s7", name: "Groceries", amount: 400, category: "Food", priority: 5, is_debt: false, balance: 0, interest_rate: 0, due_day: 1, is_recurring: true, created_at: new Date().toISOString() },
-  { id: "s8", name: "Insurance", amount: 180, category: "Insurance", priority: 2, is_debt: false, balance: 0, interest_rate: 0, due_day: 8, is_recurring: true, created_at: new Date().toISOString() },
+  { id: "s6", name: "Medical Bill", amount: 75, category: "Debt", priority: 1, is_debt: true, balance: 650, interest_rate: 0, due_day: 5, is_recurring: true, created_at: new Date().toISOString() },
+  { id: "s7", name: "Groceries", amount: 400, category: "Food", priority: 99, is_debt: false, balance: 0, interest_rate: 0, due_day: 1, is_recurring: true, created_at: new Date().toISOString() },
+  { id: "s8", name: "Insurance", amount: 180, category: "Insurance", priority: 99, is_debt: false, balance: 0, interest_rate: 0, due_day: 8, is_recurring: true, created_at: new Date().toISOString() },
 ];
 
 const SEED_INCOMES: IncomeItem[] = [
@@ -186,8 +200,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           AsyncStorage.getItem(GOALS_KEY),
           AsyncStorage.getItem(SETTINGS_KEY),
         ]);
-        const loadedBills: Bill[] = bd ? JSON.parse(bd) : SEED_BILLS;
-        if (!bd) await AsyncStorage.setItem(BILLS_KEY, JSON.stringify(SEED_BILLS));
+        const loadedBills: Bill[] = bd ? JSON.parse(bd) : reorderDebtPriorities(SEED_BILLS);
+        if (!bd) await AsyncStorage.setItem(BILLS_KEY, JSON.stringify(reorderDebtPriorities(SEED_BILLS)));
         const loadedIncomes: IncomeItem[] = ind ? JSON.parse(ind) : SEED_INCOMES;
         if (!ind) await AsyncStorage.setItem(INCOMES_KEY, JSON.stringify(SEED_INCOMES));
         setBills(loadedBills);
@@ -196,6 +210,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         setIncomes(loadedIncomes);
         if (gd) setGoals(JSON.parse(gd));
         if (sd) setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(sd) });
+      } catch (e) {
+        console.error("[BudgetContext] load error:", e);
       } finally {
         setLoading(false);
       }
@@ -206,16 +222,38 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const addBill = useCallback((bill: Omit<Bill, "id" | "created_at">) => {
     const nb: Bill = { ...bill, id: genId(), created_at: new Date().toISOString() };
-    setBills(prev => { const u = [...prev, nb]; AsyncStorage.setItem(BILLS_KEY, JSON.stringify(u)); return u; });
+    setBills(prev => {
+      const withNew = [...prev, nb];
+      const reordered = reorderDebtPriorities(withNew);
+      console.log("[addBill]", nb.name, "| total:", reordered.length);
+      AsyncStorage.setItem(BILLS_KEY, JSON.stringify(reordered));
+      return reordered;
+    });
   }, []);
 
   const updateBill = useCallback((bill: Bill) => {
-    setBills(prev => { const u = prev.map(b => b.id === bill.id ? bill : b); AsyncStorage.setItem(BILLS_KEY, JSON.stringify(u)); return u; });
+    setBills(prev => {
+      const replaced = prev.map(b => b.id === bill.id ? bill : b);
+      const reordered = reorderDebtPriorities(replaced);
+      console.log("[updateBill]", bill.name);
+      AsyncStorage.setItem(BILLS_KEY, JSON.stringify(reordered));
+      return reordered;
+    });
   }, []);
 
   const deleteBill = useCallback((id: string) => {
-    setBills(prev => { const u = prev.filter(b => b.id !== id); AsyncStorage.setItem(BILLS_KEY, JSON.stringify(u)); return u; });
-    setOverrides(prev => { const u = prev.filter(o => o.bill_id !== id); AsyncStorage.setItem(OVERRIDES_KEY, JSON.stringify(u)); return u; });
+    setBills(prev => {
+      const filtered = prev.filter(b => b.id !== id);
+      const reordered = reorderDebtPriorities(filtered);
+      console.log("[deleteBill]", id, "| remaining:", reordered.length);
+      AsyncStorage.setItem(BILLS_KEY, JSON.stringify(reordered));
+      return reordered;
+    });
+    setOverrides(prev => {
+      const u = prev.filter(o => o.bill_id !== id);
+      AsyncStorage.setItem(OVERRIDES_KEY, JSON.stringify(u));
+      return u;
+    });
   }, []);
 
   const getBillById = useCallback((id: string) => bills.find(b => b.id === id), [bills]);
@@ -269,8 +307,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           const bill = prev.find(b => b.id === billId);
           if (!bill?.is_debt) return prev;
           const updated = prev.map(b => b.id === billId ? { ...b, balance: Math.max(0, b.balance - delta) } : b);
-          AsyncStorage.setItem(BILLS_KEY, JSON.stringify(updated));
-          return updated;
+          const reordered = reorderDebtPriorities(updated);
+          AsyncStorage.setItem(BILLS_KEY, JSON.stringify(reordered));
+          return reordered;
         });
       }
     },
@@ -334,8 +373,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      setBills(updatedBills);
-      AsyncStorage.setItem(BILLS_KEY, JSON.stringify(updatedBills));
+      const reordered = reorderDebtPriorities(updatedBills);
+      setBills(reordered);
+      AsyncStorage.setItem(BILLS_KEY, JSON.stringify(reordered));
       return allocations;
     },
     [bills, settings.paymentMethod, overrides, upsertOverride]
@@ -345,20 +385,38 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const addTransaction = useCallback((tx: Omit<Transaction, "id">) => {
     const nt: Transaction = { ...tx, id: genId() };
-    setTransactions(prev => { const u = [...prev, nt]; AsyncStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(u)); return u; });
+    setTransactions(prev => {
+      const u = [...prev, nt];
+      console.log("[addTransaction]", nt.date, nt.amount, "| total:", u.length);
+      AsyncStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(u));
+      return u;
+    });
   }, []);
 
   const updateTransaction = useCallback((tx: Transaction) => {
-    setTransactions(prev => { const u = prev.map(t => t.id === tx.id ? tx : t); AsyncStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(u)); return u; });
+    setTransactions(prev => {
+      const u = prev.map(t => t.id === tx.id ? tx : t);
+      console.log("[updateTransaction]", tx.id, tx.date, tx.amount);
+      AsyncStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(u));
+      return u;
+    });
   }, []);
 
   const deleteTransaction = useCallback((id: string) => {
-    setTransactions(prev => { const u = prev.filter(t => t.id !== id); AsyncStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(u)); return u; });
+    setTransactions(prev => {
+      const u = prev.filter(t => t.id !== id);
+      console.log("[deleteTransaction]", id, "| remaining:", u.length);
+      AsyncStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(u));
+      return u;
+    });
   }, []);
 
   const getTransactionsForMonth = useCallback(
     (month: number, year: number) =>
-      transactions.filter(t => { const d = new Date(t.date); return d.getMonth() === month && d.getFullYear() === year; }),
+      transactions.filter(t => {
+        const d = new Date(t.date + "T12:00:00");
+        return d.getMonth() === month && d.getFullYear() === year;
+      }),
     [transactions]
   );
 
@@ -366,15 +424,30 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const addIncome = useCallback((item: Omit<IncomeItem, "id">) => {
     const ni: IncomeItem = { ...item, id: genId() };
-    setIncomes(prev => { const u = [...prev, ni]; AsyncStorage.setItem(INCOMES_KEY, JSON.stringify(u)); return u; });
+    setIncomes(prev => {
+      const u = [...prev, ni];
+      console.log("[addIncome]", ni.name);
+      AsyncStorage.setItem(INCOMES_KEY, JSON.stringify(u));
+      return u;
+    });
   }, []);
 
   const updateIncome = useCallback((item: IncomeItem) => {
-    setIncomes(prev => { const u = prev.map(i => i.id === item.id ? item : i); AsyncStorage.setItem(INCOMES_KEY, JSON.stringify(u)); return u; });
+    setIncomes(prev => {
+      const u = prev.map(i => i.id === item.id ? item : i);
+      console.log("[updateIncome]", item.name);
+      AsyncStorage.setItem(INCOMES_KEY, JSON.stringify(u));
+      return u;
+    });
   }, []);
 
   const deleteIncome = useCallback((id: string) => {
-    setIncomes(prev => { const u = prev.filter(i => i.id !== id); AsyncStorage.setItem(INCOMES_KEY, JSON.stringify(u)); return u; });
+    setIncomes(prev => {
+      const u = prev.filter(i => i.id !== id);
+      console.log("[deleteIncome]", id, "| remaining:", u.length);
+      AsyncStorage.setItem(INCOMES_KEY, JSON.stringify(u));
+      return u;
+    });
   }, []);
 
   const getMonthlyIncome = useCallback(
@@ -386,67 +459,91 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const addGoal = useCallback((goal: Omit<Goal, "id" | "created_at">) => {
     const ng: Goal = { ...goal, id: genId(), created_at: new Date().toISOString() };
-    setGoals(prev => { const u = [...prev, ng]; AsyncStorage.setItem(GOALS_KEY, JSON.stringify(u)); return u; });
+    setGoals(prev => {
+      const u = [...prev, ng];
+      console.log("[addGoal]", ng.name);
+      AsyncStorage.setItem(GOALS_KEY, JSON.stringify(u));
+      return u;
+    });
   }, []);
 
   const updateGoal = useCallback((goal: Goal) => {
-    setGoals(prev => { const u = prev.map(g => g.id === goal.id ? goal : g); AsyncStorage.setItem(GOALS_KEY, JSON.stringify(u)); return u; });
+    setGoals(prev => {
+      const u = prev.map(g => g.id === goal.id ? goal : g);
+      AsyncStorage.setItem(GOALS_KEY, JSON.stringify(u));
+      return u;
+    });
   }, []);
 
   const deleteGoal = useCallback((id: string) => {
-    setGoals(prev => { const u = prev.filter(g => g.id !== id); AsyncStorage.setItem(GOALS_KEY, JSON.stringify(u)); return u; });
+    setGoals(prev => {
+      const u = prev.filter(g => g.id !== id);
+      console.log("[deleteGoal]", id);
+      AsyncStorage.setItem(GOALS_KEY, JSON.stringify(u));
+      return u;
+    });
   }, []);
 
-  const getGoalMonthsRemaining = useCallback((goal: Goal): number => {
-    const now = new Date();
-    const target = new Date(goal.target_date);
-    const months = (target.getFullYear() - now.getFullYear()) * 12 + (target.getMonth() - now.getMonth());
-    return Math.max(1, months);
-  }, []);
-
-  const getGoalMonthlyRequired = useCallback((goal: Goal): number => {
-    const remaining = Math.max(0, goal.target_amount - goal.current_amount);
-    const months = getGoalMonthsRemaining(goal);
-    return remaining / months;
-  }, [getGoalMonthsRemaining]);
+  const checkGoalAffordability = useCallback(
+    (goal: Goal, month: number, year: number): GoalAffordability => {
+      const monthlyIncome = incomes.reduce((s, i) => s + incomeToMonthly(i.amount, i.frequency), 0);
+      const totalBillsDue = bills.filter(b => b.is_recurring).reduce((s, b) => {
+        const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
+        return s + (o?.custom_amount !== undefined ? o.custom_amount : b.amount);
+      }, 0);
+      const txThisMonth = transactions.filter(t => {
+        const d = new Date(t.date + "T12:00:00");
+        return d.getMonth() === month && d.getFullYear() === year;
+      });
+      const netTx = txThisMonth.reduce((s, t) => s + t.amount, 0);
+      const projectedBalance = monthlyIncome - totalBillsDue + netTx;
+      const needed = Math.max(0, goal.target_amount - goal.current_amount);
+      const canAfford = projectedBalance >= needed;
+      return { projectedBalance, canAfford, shortfall: canAfford ? 0 : needed - projectedBalance };
+    },
+    [bills, incomes, transactions, overrides]
+  );
 
   // ─── Cash Flow ────────────────────────────────────────────────────────────────
 
   const getCashFlow = useCallback((month: number, year: number): CashFlow => {
     const monthlyIncome = incomes.reduce((s, i) => s + incomeToMonthly(i.amount, i.frequency), 0);
     const monthBills = bills.filter(b => b.is_recurring);
-    const totalBillsDue = monthBills.reduce((s, b) => s + getAmount(b, month, year), 0);
-    const totalPaid = monthBills.reduce((s, b) => s + getPaidAmount(b.id, month, year), 0);
-
+    const totalBillsDue = monthBills.reduce((s, b) => {
+      const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
+      return s + (o?.custom_amount !== undefined ? o.custom_amount : b.amount);
+    }, 0);
+    const totalPaid = monthBills.reduce((s, b) => {
+      const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
+      return s + (o?.paid_amount ?? 0);
+    }, 0);
     const txThisMonth = transactions.filter(t => {
-      const d = new Date(t.date);
+      const d = new Date(t.date + "T12:00:00");
       return d.getMonth() === month && d.getFullYear() === year;
     });
     const netTransactions = txThisMonth.reduce((s, t) => s + t.amount, 0);
-
-    const goalAllocations = goals.reduce((s, g) => {
-      const months = getGoalMonthsRemaining(g);
-      const remaining = Math.max(0, g.target_amount - g.current_amount);
-      return s + (remaining / months);
-    }, 0);
-
+    const goalAllocations = 0;
     const remaining = monthlyIncome - totalBillsDue + netTransactions - goalAllocations;
-
     return { monthlyIncome, totalBillsDue, totalPaid, netTransactions, goalAllocations, remaining };
-  }, [bills, incomes, transactions, goals, getAmount, getPaidAmount, getGoalMonthsRemaining]);
+  }, [bills, incomes, transactions, overrides]);
 
   // ─── Settings ─────────────────────────────────────────────────────────────────
 
   const updateSettings = useCallback((s: Partial<Settings>) => {
-    setSettings(prev => { const u = { ...prev, ...s }; AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(u)); return u; });
+    setSettings(prev => {
+      const u = { ...prev, ...s };
+      AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(u));
+      return u;
+    });
   }, []);
 
   const importBills = useCallback((imported: Omit<Bill, "id" | "created_at">[]) => {
     setBills(prev => {
       const nb = imported.map(b => ({ ...b, id: genId(), created_at: new Date().toISOString() }));
-      const u = [...prev, ...nb];
-      AsyncStorage.setItem(BILLS_KEY, JSON.stringify(u));
-      return u;
+      const withNew = [...prev, ...nb];
+      const reordered = reorderDebtPriorities(withNew);
+      AsyncStorage.setItem(BILLS_KEY, JSON.stringify(reordered));
+      return reordered;
     });
   }, []);
 
@@ -459,7 +556,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       getMonthlyBills, runSnowball,
       addTransaction, updateTransaction, deleteTransaction, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome,
-      addGoal, updateGoal, deleteGoal, getGoalMonthlyRequired, getGoalMonthsRemaining,
+      addGoal, updateGoal, deleteGoal, checkGoalAffordability,
       getCashFlow,
       updateSettings, importBills,
       selectedYear, setSelectedYear,

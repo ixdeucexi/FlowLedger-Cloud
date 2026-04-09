@@ -7,10 +7,10 @@ import colors from "@/constants/colors";
 import type { IncomeItem } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 
-const FREQUENCIES: { key: IncomeItem["frequency"]; label: string; desc: string }[] = [
-  { key: "monthly", label: "Monthly", desc: "×1/mo" },
-  { key: "biweekly", label: "Biweekly", desc: "×2.17/mo" },
-  { key: "weekly", label: "Weekly", desc: "×4.33/mo" },
+const FREQUENCIES: { key: IncomeItem["frequency"]; label: string }[] = [
+  { key: "monthly", label: "Monthly" },
+  { key: "biweekly", label: "Biweekly" },
+  { key: "weekly", label: "Weekly" },
 ];
 
 interface Props {
@@ -74,7 +74,6 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
                   style={[styles.freqBtn, { backgroundColor: frequency === f.key ? c.primary : c.muted, borderRadius: 10 }]}
                 >
                   <Text style={[styles.freqLabel, { color: frequency === f.key ? c.primaryForeground : c.foreground }]}>{f.label}</Text>
-                  <Text style={[styles.freqDesc, { color: frequency === f.key ? c.primaryForeground + "cc" : c.mutedForeground }]}>{f.desc}</Text>
                 </Pressable>
               ))}
             </View>
@@ -94,16 +93,15 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.65)" },
-  container: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingTop: 12, maxHeight: "80%" },
+  container: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingTop: 12, maxHeight: "75%" },
   handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#444", alignSelf: "center", marginBottom: 16 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
   title: { fontSize: 20, fontFamily: "Inter_700Bold" },
   label: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginBottom: 6, marginTop: 14, textTransform: "uppercase", letterSpacing: 0.7 },
   input: { height: 48, borderRadius: 10, paddingHorizontal: 14, fontSize: 16, fontFamily: "Inter_400Regular" },
   freqRow: { flexDirection: "row", gap: 8 },
-  freqBtn: { flex: 1, padding: 12, alignItems: "center" },
-  freqLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  freqDesc: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
+  freqBtn: { flex: 1, padding: 14, alignItems: "center" },
+  freqLabel: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   saveBtn: { height: 52, alignItems: "center", justifyContent: "center", marginTop: 24, marginBottom: 32 },
   saveBtnText: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
 });

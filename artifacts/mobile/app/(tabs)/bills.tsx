@@ -1,7 +1,6 @@
 import { Feather } from "@expo/vector-icons";
-import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddBillModal } from "@/components/AddBillModal";
@@ -29,7 +28,6 @@ export default function BillsScreen() {
 
   useEffect(() => {
     if (dashboardFilter === "debts") { setFilter("debts"); setDashboardFilter(null); }
-    else if (dashboardFilter === null && filter !== "all") { }
   }, [dashboardFilter]);
 
   const filteredBills = bills
@@ -38,17 +36,15 @@ export default function BillsScreen() {
       if (filter === "recurring") return b.is_recurring;
       return true;
     })
-    .sort((a, b) => a.priority - b.priority);
+    .sort((a, b) => {
+      if (a.is_debt && !b.is_debt) return -1;
+      if (!a.is_debt && b.is_debt) return 1;
+      if (a.is_debt && b.is_debt) return a.priority - b.priority;
+      return a.due_day - b.due_day;
+    });
 
-  const totalAmount = bills.reduce((s, b) => s + b.amount, 0);
+  const totalAmount = bills.filter(b => b.is_recurring).reduce((s, b) => s + b.amount, 0);
   const totalDebt = bills.filter(b => b.is_debt).reduce((s, b) => s + b.balance, 0);
-
-  const handleDelete = useCallback((id: string, name: string) => {
-    Alert.alert("Delete Bill", `Remove "${name}"?`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); deleteBill(id); } },
-    ]);
-  }, [deleteBill]);
 
   const handleSave = useCallback((data: Omit<Bill, "id" | "created_at"> | Bill) => {
     if ("id" in data) updateBill(data as Bill);
@@ -63,7 +59,7 @@ export default function BillsScreen() {
         <View>
           <Text style={[styles.title, { color: c.foreground }]}>Payment Schedule</Text>
           <Text style={[styles.subtitle, { color: c.mutedForeground }]}>
-            ${totalAmount.toFixed(0)}/mo · ${totalDebt.toFixed(0)} total debt
+            ${totalAmount.toFixed(0)}/mo · ${totalDebt.toFixed(0)} debt
           </Text>
         </View>
         <Pressable
@@ -97,8 +93,8 @@ export default function BillsScreen() {
         }
         renderItem={({ item }) => {
           const catColor = CAT_COLORS[item.category] ?? c.primary;
-          const debtProgress = item.is_debt && item.balance > 0
-            ? Math.round(((item.balance) / (item.balance + item.amount)) * 100)
+          const debtPayoffPct = item.is_debt && item.balance > 0
+            ? Math.min(((item.amount * 12) / (item.balance + item.amount * 12)) * 100, 100)
             : 0;
 
           return (
@@ -115,7 +111,7 @@ export default function BillsScreen() {
                       {item.is_debt && (
                         <View style={[styles.debtBadge, { backgroundColor: c.destructive + "20" }]}>
                           <Feather name="credit-card" size={10} color={c.destructive} />
-                          <Text style={[styles.debtBadgeText, { color: c.destructive }]}>DEBT</Text>
+                          <Text style={[styles.debtBadgeText, { color: c.destructive }]}>DEBT #{item.priority}</Text>
                         </View>
                       )}
                     </View>
@@ -146,14 +142,14 @@ export default function BillsScreen() {
                       )}
                     </View>
                     <View style={[styles.progressBg, { backgroundColor: c.muted }]}>
-                      <View style={[styles.progressFill, { width: `${100 - debtProgress}%` as any, backgroundColor: c.destructive + "60" }]} />
+                      <View style={[styles.progressFill, { width: `${debtPayoffPct}%` as any, backgroundColor: c.primary }]} />
                     </View>
                   </View>
                 )}
               </View>
-              <Pressable onPress={() => handleDelete(item.id, item.name)} hitSlop={8} style={styles.deleteBtn}>
-                <Feather name="trash-2" size={15} color={c.destructive} />
-              </Pressable>
+              <View style={styles.editHint}>
+                <Feather name="edit-2" size={13} color={c.mutedForeground} />
+              </View>
             </Pressable>
           );
         }}
@@ -163,6 +159,7 @@ export default function BillsScreen() {
         visible={modalVisible}
         onClose={() => { setModalVisible(false); setEditBill(null); }}
         onSave={handleSave}
+        onDelete={deleteBill}
         editBill={editBill}
       />
     </View>
@@ -176,7 +173,7 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
   addBtn: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
   filterRow: { flexDirection: "row", gap: 8, paddingHorizontal: 16, marginBottom: 12 },
-  filterChip: { paddingHorizontal: 14, paddingVertical: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 },
+  filterChip: { paddingHorizontal: 14, paddingVertical: 8 },
   filterText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   list: { paddingHorizontal: 16 },
   card: { flexDirection: "row", marginBottom: 10, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2, overflow: "hidden" },
@@ -185,7 +182,7 @@ const styles = StyleSheet.create({
   cardTop: { flexDirection: "row", alignItems: "flex-start" },
   cardLeft: { flex: 1 },
   cardRight: { alignItems: "flex-end", marginLeft: 8 },
-  nameRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" },
   billName: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
   debtBadge: { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
   debtBadgeText: { fontSize: 9, fontFamily: "Inter_700Bold", letterSpacing: 0.4 },
@@ -201,5 +198,5 @@ const styles = StyleSheet.create({
   debtBalance: { fontFamily: "Inter_600SemiBold" },
   progressBg: { height: 3, borderRadius: 2, overflow: "hidden" },
   progressFill: { height: 3, borderRadius: 2 },
-  deleteBtn: { padding: 14, justifyContent: "center" },
+  editHint: { padding: 14, justifyContent: "center" },
 });

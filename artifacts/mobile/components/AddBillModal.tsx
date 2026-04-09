@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -28,15 +29,15 @@ interface AddBillModalProps {
   visible: boolean;
   onClose: () => void;
   onSave: (bill: Omit<Bill, "id" | "created_at"> | Bill) => void;
+  onDelete?: (id: string) => void;
   editBill?: Bill | null;
 }
 
-export function AddBillModal({ visible, onClose, onSave, editBill }: AddBillModalProps) {
+export function AddBillModal({ visible, onClose, onSave, onDelete, editBill }: AddBillModalProps) {
   const c = useColors();
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Other");
-  const [priority, setPriority] = useState("1");
   const [isDebt, setIsDebt] = useState(false);
   const [balance, setBalance] = useState("");
   const [interestRate, setInterestRate] = useState("");
@@ -48,7 +49,6 @@ export function AddBillModal({ visible, onClose, onSave, editBill }: AddBillModa
       setName(editBill.name);
       setAmount(editBill.amount.toString());
       setCategory(editBill.category === "Debt" ? "Other" : editBill.category);
-      setPriority(editBill.priority.toString());
       setIsDebt(editBill.is_debt);
       setBalance(editBill.balance > 0 ? editBill.balance.toString() : "");
       setInterestRate(editBill.interest_rate > 0 ? editBill.interest_rate.toString() : "");
@@ -56,7 +56,7 @@ export function AddBillModal({ visible, onClose, onSave, editBill }: AddBillModa
       setIsRecurring(editBill.is_recurring);
     } else {
       setName(""); setAmount(""); setCategory("Other");
-      setPriority("1"); setIsDebt(false); setBalance("");
+      setIsDebt(false); setBalance("");
       setInterestRate(""); setDueDay("1"); setIsRecurring(true);
     }
   }, [editBill, visible]);
@@ -69,7 +69,7 @@ export function AddBillModal({ visible, onClose, onSave, editBill }: AddBillModa
       name: name.trim(),
       amount: parsedAmount,
       category: isDebt ? "Debt" : category,
-      priority: isDebt ? (parseInt(priority) || 1) : 1,
+      priority: isDebt ? 0 : 99,
       is_debt: isDebt,
       balance: isDebt ? (parseFloat(balance) || 0) : 0,
       interest_rate: isDebt ? (parseFloat(interestRate) || 0) : 0,
@@ -79,6 +79,26 @@ export function AddBillModal({ visible, onClose, onSave, editBill }: AddBillModa
     if (editBill) onSave({ ...data, id: editBill.id, created_at: editBill.created_at });
     else onSave(data);
     onClose();
+  };
+
+  const handleDelete = () => {
+    if (!editBill || !onDelete) return;
+    Alert.alert(
+      "Delete Bill",
+      `Are you sure you want to delete "${editBill.name}"? This will also remove all monthly data for this bill.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            onDelete(editBill.id);
+            onClose();
+          },
+        },
+      ]
+    );
   };
 
   const inputStyle = [styles.input, { backgroundColor: c.muted, color: c.foreground }];
@@ -122,8 +142,12 @@ export function AddBillModal({ visible, onClose, onSave, editBill }: AddBillModa
                 <Text style={labelStyle}>Interest Rate (% APR)</Text>
                 <TextInput style={inputStyle} value={interestRate} onChangeText={setInterestRate} placeholder="0.0" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
 
-                <Text style={labelStyle}>Payoff Priority (1 = highest)</Text>
-                <TextInput style={inputStyle} value={priority} onChangeText={setPriority} placeholder="1" placeholderTextColor={c.mutedForeground} keyboardType="number-pad" maxLength={2} />
+                <View style={[styles.debtNote, { backgroundColor: c.primary + "15", borderRadius: 8 }]}>
+                  <Feather name="info" size={13} color={c.primary} />
+                  <Text style={[styles.debtNoteText, { color: c.primary }]}>
+                    Payoff priority is auto-assigned based on balance (lowest = first).
+                  </Text>
+                </View>
               </>
             ) : (
               <>
@@ -158,6 +182,16 @@ export function AddBillModal({ visible, onClose, onSave, editBill }: AddBillModa
                 {editBill ? "Update Bill" : "Add Bill"}
               </Text>
             </Pressable>
+
+            {editBill && onDelete && (
+              <Pressable
+                onPress={handleDelete}
+                style={({ pressed }) => [styles.deleteBtn, { borderColor: c.destructive, opacity: pressed ? 0.7 : 1 }]}
+              >
+                <Feather name="trash-2" size={16} color={c.destructive} />
+                <Text style={[styles.deleteBtnText, { color: c.destructive }]}>Delete Bill</Text>
+              </Pressable>
+            )}
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
@@ -176,9 +210,13 @@ const styles = StyleSheet.create({
   toggleCard: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 14, borderRadius: 12, marginTop: 14 },
   toggleLabel: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
   toggleSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  debtNote: { flexDirection: "row", alignItems: "center", gap: 8, padding: 10, marginTop: 12 },
+  debtNoteText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
   categoryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
   chip: { paddingHorizontal: 12, paddingVertical: 8 },
   chipText: { fontSize: 13, fontFamily: "Inter_500Medium" },
-  saveBtn: { height: 52, alignItems: "center", justifyContent: "center", marginTop: 24, marginBottom: 32 },
+  saveBtn: { height: 52, alignItems: "center", justifyContent: "center", marginTop: 24 },
   saveBtnText: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  deleteBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 48, borderWidth: 1.5, borderRadius: 12, marginTop: 12, marginBottom: 32 },
+  deleteBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
 });

@@ -13,7 +13,7 @@ import type { IncomeItem } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 
-const FREQ_LABELS: Record<string, string> = { monthly: "/mo", biweekly: "/2wk", weekly: "/wk" };
+const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
 
 export default function MoreScreen() {
   const c = useColors();
@@ -100,7 +100,8 @@ export default function MoreScreen() {
           <Text style={[styles.emptyText, { color: c.mutedForeground }]}>No income sources added yet.</Text>
         ) : (
           incomes.map((item, i) => {
-            const monthly = item.frequency === "weekly" ? item.amount * 4.33 : item.frequency === "biweekly" ? item.amount * 2.17 : item.amount;
+            const monthly = item.frequency === "weekly" ? item.amount * 4.33
+              : item.frequency === "biweekly" ? item.amount * 2.17 : item.amount;
             return (
               <View key={item.id} style={[styles.incomeRow, { borderTopWidth: i > 0 ? 1 : 0, borderTopColor: c.border }]}>
                 <View style={[styles.incomeIcon, { backgroundColor: c.success + "20" }]}>
@@ -109,12 +110,15 @@ export default function MoreScreen() {
                 <Pressable onPress={() => { setEditIncome(item); setIncomeModalVisible(true); }} style={styles.incomeInfo}>
                   <Text style={[styles.incomeName, { color: c.foreground }]}>{item.name}</Text>
                   <Text style={[styles.incomeFreq, { color: c.mutedForeground }]}>
-                    ${item.amount.toFixed(0)}{FREQ_LABELS[item.frequency]} → ${monthly.toFixed(0)}/mo
+                    ${item.amount.toLocaleString()} · {FREQ_LABELS[item.frequency]}
                   </Text>
                 </Pressable>
-                <Pressable onPress={() => handleDeleteIncome(item)} hitSlop={8}>
-                  <Feather name="trash-2" size={15} color={c.destructive} />
-                </Pressable>
+                <View style={styles.incomeRight}>
+                  <Text style={[styles.incomeMonthly, { color: c.success }]}>${monthly.toFixed(0)}<Text style={[styles.incomeMonthlyUnit, { color: c.mutedForeground }]}>/mo</Text></Text>
+                  <Pressable onPress={() => handleDeleteIncome(item)} hitSlop={12} style={styles.deleteIcon}>
+                    <Feather name="trash-2" size={15} color={c.destructive} />
+                  </Pressable>
+                </View>
               </View>
             );
           })
@@ -146,9 +150,15 @@ export default function MoreScreen() {
         </View>
         <Text style={[styles.methodDesc, { color: c.mutedForeground }]}>
           {settings.paymentMethod === "snowball"
-            ? "Pay smallest balances first for quick wins. Freed-up minimums roll into the next debt (cascade)."
-            : "Pay highest-interest debts first to minimize total interest paid over time."}
+            ? "Pay smallest balances first. Freed-up minimums roll into the next debt (cascade effect)."
+            : "Pay highest-interest debts first to minimize total interest paid."}
         </Text>
+        <View style={[styles.priorityNote, { backgroundColor: c.primary + "12", borderRadius: 8 }]}>
+          <Feather name="info" size={12} color={c.primary} />
+          <Text style={[styles.priorityNoteText, { color: c.mutedForeground }]}>
+            Debt priorities are auto-assigned by balance (lowest balance = priority #1).
+          </Text>
+        </View>
       </View>
 
       <SLabel c={c} text="Behavior" />
@@ -214,11 +224,15 @@ const styles = StyleSheet.create({
   pageTitle: { fontSize: 28, fontFamily: "Inter_700Bold", marginBottom: 20 },
   card: { padding: 16, marginBottom: 20, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
   emptyText: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", paddingVertical: 8 },
-  incomeRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, gap: 12 },
+  incomeRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, gap: 10 },
   incomeIcon: { width: 36, height: 36, borderRadius: 9, alignItems: "center", justifyContent: "center" },
   incomeInfo: { flex: 1 },
   incomeName: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   incomeFreq: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  incomeRight: { alignItems: "flex-end", gap: 4 },
+  incomeMonthly: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  incomeMonthlyUnit: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  deleteIcon: { padding: 4 },
   incomeTotal: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingTop: 10, borderTopWidth: 1, marginTop: 4 },
   incomeTotalLabel: { fontSize: 12, fontFamily: "Inter_500Medium" },
   incomeTotalValue: { fontSize: 15, fontFamily: "Inter_700Bold" },
@@ -228,6 +242,8 @@ const styles = StyleSheet.create({
   methodBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10 },
   methodText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   methodDesc: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 19, marginTop: 10 },
+  priorityNote: { flexDirection: "row", alignItems: "center", gap: 8, padding: 10, marginTop: 10 },
+  priorityNoteText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
   switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   switchInfo: { flex: 1, marginRight: 12 },
   switchLabel: { fontSize: 15, fontFamily: "Inter_500Medium" },
