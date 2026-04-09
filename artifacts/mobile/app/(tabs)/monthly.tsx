@@ -37,7 +37,7 @@ export default function MonthlyScreen() {
   const insets = useSafeAreaInsets();
   const {
     bills, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
-    getMonthlyBills, runSnowball, settings,
+    getMonthlyBills, getBillOccurrencesInMonth, runSnowball, settings,
     selectedYear, setSelectedYear, dashboardFilter, setDashboardFilter,
     getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction,
     getCashFlow, getMonthlyIncome, getDailyBalances,
@@ -86,6 +86,12 @@ export default function MonthlyScreen() {
   const dailyBalances = useMemo(() => getDailyBalances(month, selectedYear), [getDailyBalances, month, selectedYear]);
   const txIncome = txList.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
   const txExpense = txList.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+
+  const selectedDay = selectedDate ? parseInt(selectedDate.split("-")[2]) : null;
+  const scheduledBillsForDay = useMemo(() => {
+    if (selectedDay === null) return [];
+    return monthBills.filter(b => getBillOccurrencesInMonth(b, month, selectedYear).includes(selectedDay));
+  }, [monthBills, getBillOccurrencesInMonth, selectedDay, month, selectedYear]);
 
   const isFuture = useMemo(() => {
     const now = new Date();
@@ -380,7 +386,9 @@ export default function MonthlyScreen() {
 
             <View style={styles.txListHeader}>
               <Text style={[styles.txListTitle, { color: c.foreground }]}>
-                {selectedDate ? selectedDate : `All Transactions (${txList.length})`}
+                {selectedDate
+                  ? `${selectedDate}${scheduledBillsForDay.length + displayedTxs.length > 0 ? ` · ${scheduledBillsForDay.length + displayedTxs.length} item${scheduledBillsForDay.length + displayedTxs.length !== 1 ? "s" : ""}` : ""}`
+                  : `All Transactions (${txList.length})`}
               </Text>
               <Pressable
                 onPress={() => { setEditTx(null); setTxModalVisible(true); }}
@@ -390,35 +398,76 @@ export default function MonthlyScreen() {
               </Pressable>
             </View>
 
-            {displayedTxs.length === 0 ? (
-              <EmptyState icon="credit-card" title="No Transactions" message={selectedDate ? "Tap + to log a transaction for this day." : "Tap a day or use + to add transactions."} />
-            ) : (
-              displayedTxs.map(tx => (
-                <View
-                  key={tx.id}
-                  style={[styles.txRow, { backgroundColor: c.card, borderRadius: colors.radius }]}
-                >
-                  <Pressable
-                    onPress={() => { setEditTx(tx); setTxModalVisible(true); }}
-                    style={styles.txMain}
-                  >
-                    <View style={[styles.txIcon, { backgroundColor: tx.amount > 0 ? c.success + "20" : c.destructive + "20" }]}>
-                      <Feather name={tx.amount > 0 ? "arrow-down-left" : "arrow-up-right"} size={15} color={tx.amount > 0 ? c.success : c.destructive} />
+            {/* Scheduled bills & debts for the selected day */}
+            {scheduledBillsForDay.length > 0 && (
+              <>
+                <Text style={[styles.sectionLabel, { color: c.mutedForeground }]}>Scheduled</Text>
+                {scheduledBillsForDay.map(b => {
+                  const amt = getAmount(b, month, selectedYear);
+                  const paid = getPaidAmount(b.id, month, selectedYear);
+                  const isPaid = amt > 0 && paid >= amt;
+                  const isDebt = b.is_debt;
+                  const iconColor = isPaid ? c.success : isDebt ? c.destructive : c.warning;
+                  const iconName = isDebt ? "credit-card" : "file-text";
+                  return (
+                    <View key={`sched-${b.id}`} style={[styles.txRow, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+                      <View style={styles.txMain}>
+                        <View style={[styles.txIcon, { backgroundColor: iconColor + "20" }]}>
+                          <Feather name={iconName} size={15} color={iconColor} />
+                        </View>
+                        <View style={styles.txBody}>
+                          <Text style={[styles.txNote, { color: c.foreground }]}>{b.name}</Text>
+                          <Text style={[styles.txDate, { color: c.mutedForeground }]}>
+                            {isDebt ? "Debt" : "Bill"} · {b.category}
+                            {b.frequency === "weekly" ? " · weekly" : ""}
+                            {isPaid ? " · paid" : paid > 0 ? ` · $${paid.toFixed(2)} paid` : ""}
+                          </Text>
+                        </View>
+                        <Text style={[styles.txAmt, { color: iconColor }]}>
+                          -${amt.toFixed(2)}
+                        </Text>
+                      </View>
                     </View>
-                    <View style={styles.txBody}>
-                      <Text style={[styles.txNote, { color: c.foreground }]}>{tx.note || tx.category}</Text>
-                      <Text style={[styles.txDate, { color: c.mutedForeground }]}>{tx.date} · {tx.category}</Text>
-                    </View>
-                    <Text style={[styles.txAmt, { color: tx.amount > 0 ? c.success : c.destructive }]}>
-                      {tx.amount > 0 ? "+" : ""}{tx.amount.toFixed(2)}
-                    </Text>
-                  </Pressable>
-                  <Pressable onPress={() => handleDeleteTx(tx.id)} hitSlop={8} style={styles.txDelete}>
-                    <Feather name="trash-2" size={14} color={c.destructive} />
-                  </Pressable>
-                </View>
-              ))
+                  );
+                })}
+              </>
             )}
+
+            {/* Manual transactions */}
+            {displayedTxs.length === 0 && scheduledBillsForDay.length === 0 ? (
+              <EmptyState icon="credit-card" title="No Activity" message={selectedDate ? "Tap + to log a transaction for this day." : "Tap a day or use + to add transactions."} />
+            ) : displayedTxs.length > 0 ? (
+              <>
+                {scheduledBillsForDay.length > 0 && (
+                  <Text style={[styles.sectionLabel, { color: c.mutedForeground }]}>Transactions</Text>
+                )}
+                {displayedTxs.map(tx => (
+                  <View
+                    key={tx.id}
+                    style={[styles.txRow, { backgroundColor: c.card, borderRadius: colors.radius }]}
+                  >
+                    <Pressable
+                      onPress={() => { setEditTx(tx); setTxModalVisible(true); }}
+                      style={styles.txMain}
+                    >
+                      <View style={[styles.txIcon, { backgroundColor: tx.amount > 0 ? c.success + "20" : c.destructive + "20" }]}>
+                        <Feather name={tx.amount > 0 ? "arrow-down-left" : "arrow-up-right"} size={15} color={tx.amount > 0 ? c.success : c.destructive} />
+                      </View>
+                      <View style={styles.txBody}>
+                        <Text style={[styles.txNote, { color: c.foreground }]}>{tx.note || tx.category}</Text>
+                        <Text style={[styles.txDate, { color: c.mutedForeground }]}>{tx.date} · {tx.category}</Text>
+                      </View>
+                      <Text style={[styles.txAmt, { color: tx.amount > 0 ? c.success : c.destructive }]}>
+                        {tx.amount > 0 ? "+" : ""}{tx.amount.toFixed(2)}
+                      </Text>
+                    </Pressable>
+                    <Pressable onPress={() => handleDeleteTx(tx.id)} hitSlop={8} style={styles.txDelete}>
+                      <Feather name="trash-2" size={14} color={c.destructive} />
+                    </Pressable>
+                  </View>
+                ))}
+              </>
+            ) : null}
           </View>
         </ScrollView>
       )}
@@ -497,6 +546,7 @@ const styles = StyleSheet.create({
   txSumValue: { fontSize: 15, fontFamily: "Inter_700Bold" },
   txListHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8, marginTop: 4 },
   txListTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  sectionLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.8, marginHorizontal: 16, marginTop: 10, marginBottom: 4 },
   txRow: { flexDirection: "row", alignItems: "center", marginBottom: 7, overflow: "hidden" },
   txMain: { flex: 1, flexDirection: "row", alignItems: "center", padding: 11 },
   txIcon: { width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", marginRight: 10 },
