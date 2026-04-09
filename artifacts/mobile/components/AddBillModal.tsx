@@ -21,7 +21,7 @@ import { useColors } from "@/hooks/useColors";
 const CATEGORIES = [
   "Housing", "Utilities", "Insurance", "Transportation",
   "Food", "Entertainment", "Health", "Education",
-  "Savings", "Debt", "Other",
+  "Savings", "Other",
 ];
 
 interface AddBillModalProps {
@@ -47,7 +47,7 @@ export function AddBillModal({ visible, onClose, onSave, editBill }: AddBillModa
     if (editBill) {
       setName(editBill.name);
       setAmount(editBill.amount.toString());
-      setCategory(editBill.category);
+      setCategory(editBill.category === "Debt" ? "Other" : editBill.category);
       setPriority(editBill.priority.toString());
       setIsDebt(editBill.is_debt);
       setBalance(editBill.balance > 0 ? editBill.balance.toString() : "");
@@ -55,9 +55,9 @@ export function AddBillModal({ visible, onClose, onSave, editBill }: AddBillModa
       setDueDay(editBill.due_day.toString());
       setIsRecurring(editBill.is_recurring);
     } else {
-      setName(""); setAmount(""); setCategory("Other"); setPriority("1");
-      setIsDebt(false); setBalance(""); setInterestRate("");
-      setDueDay("1"); setIsRecurring(true);
+      setName(""); setAmount(""); setCategory("Other");
+      setPriority("1"); setIsDebt(false); setBalance("");
+      setInterestRate(""); setDueDay("1"); setIsRecurring(true);
     }
   }, [editBill, visible]);
 
@@ -69,7 +69,7 @@ export function AddBillModal({ visible, onClose, onSave, editBill }: AddBillModa
       name: name.trim(),
       amount: parsedAmount,
       category: isDebt ? "Debt" : category,
-      priority: parseInt(priority) || 1,
+      priority: isDebt ? (parseInt(priority) || 1) : 1,
       is_debt: isDebt,
       balance: isDebt ? (parseFloat(balance) || 0) : 0,
       interest_rate: isDebt ? (parseFloat(interestRate) || 0) : 0,
@@ -81,13 +81,14 @@ export function AddBillModal({ visible, onClose, onSave, editBill }: AddBillModa
     onClose();
   };
 
-  const inputStyle = [styles.input, { backgroundColor: c.card, color: c.foreground, borderColor: c.border }];
+  const inputStyle = [styles.input, { backgroundColor: c.muted, color: c.foreground }];
   const labelStyle = [styles.label, { color: c.mutedForeground }];
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
         <View style={[styles.container, { backgroundColor: c.background }]}>
+          <View style={styles.handle} />
           <View style={styles.header}>
             <Text style={[styles.title, { color: c.foreground }]}>{editBill ? "Edit Bill" : "Add Bill"}</Text>
             <Pressable onPress={onClose} hitSlop={8}>
@@ -97,79 +98,57 @@ export function AddBillModal({ visible, onClose, onSave, editBill }: AddBillModa
 
           <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <Text style={labelStyle}>Bill Name</Text>
-            <TextInput style={inputStyle} value={name} onChangeText={setName} placeholder="e.g. Electric Bill" placeholderTextColor={c.mutedForeground} />
+            <TextInput style={inputStyle} value={name} onChangeText={setName} placeholder="e.g. Electric Bill" placeholderTextColor={c.mutedForeground} returnKeyType="next" />
 
-            <Text style={labelStyle}>Monthly Payment Amount ($)</Text>
+            <Text style={labelStyle}>Monthly Payment ($)</Text>
             <TextInput style={inputStyle} value={amount} onChangeText={setAmount} placeholder="0.00" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
 
-            <View style={styles.row}>
-              <View style={{ flex: 1 }}>
-                <Text style={labelStyle}>Due Day</Text>
-                <TextInput style={inputStyle} value={dueDay} onChangeText={setDueDay} placeholder="1" placeholderTextColor={c.mutedForeground} keyboardType="number-pad" maxLength={2} />
-              </View>
-              <View style={{ width: 12 }} />
-              <View style={{ flex: 1 }}>
-                <Text style={labelStyle}>Priority</Text>
-                <TextInput style={inputStyle} value={priority} onChangeText={setPriority} placeholder="1" placeholderTextColor={c.mutedForeground} keyboardType="number-pad" maxLength={2} />
-              </View>
-            </View>
+            <Text style={labelStyle}>Due Day of Month</Text>
+            <TextInput style={inputStyle} value={dueDay} onChangeText={setDueDay} placeholder="1–31" placeholderTextColor={c.mutedForeground} keyboardType="number-pad" maxLength={2} />
 
-            <View style={[styles.toggleRow, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+            <View style={[styles.toggleCard, { backgroundColor: c.card }]}>
               <View>
-                <Text style={[styles.toggleLabel, { color: c.foreground }]}>Is a Debt</Text>
-                <Text style={[styles.toggleSub, { color: c.mutedForeground }]}>Tracks balance + interest</Text>
+                <Text style={[styles.toggleLabel, { color: c.foreground }]}>This is a Debt</Text>
+                <Text style={[styles.toggleSub, { color: c.mutedForeground }]}>Tracks balance, interest &amp; payoff</Text>
               </View>
-              <Switch
-                value={isDebt}
-                onValueChange={setIsDebt}
-                trackColor={{ false: c.muted, true: c.primary }}
-                thumbColor="#fff"
-              />
+              <Switch value={isDebt} onValueChange={setIsDebt} trackColor={{ false: c.muted, true: c.primary }} thumbColor="#fff" />
             </View>
 
-            {isDebt && (
+            {isDebt ? (
               <>
                 <Text style={labelStyle}>Current Balance ($)</Text>
                 <TextInput style={inputStyle} value={balance} onChangeText={setBalance} placeholder="0.00" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
-                <Text style={labelStyle}>Interest Rate (%)</Text>
+
+                <Text style={labelStyle}>Interest Rate (% APR)</Text>
                 <TextInput style={inputStyle} value={interestRate} onChangeText={setInterestRate} placeholder="0.0" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
+
+                <Text style={labelStyle}>Payoff Priority (1 = highest)</Text>
+                <TextInput style={inputStyle} value={priority} onChangeText={setPriority} placeholder="1" placeholderTextColor={c.mutedForeground} keyboardType="number-pad" maxLength={2} />
               </>
-            )}
-
-            <View style={[styles.toggleRow, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-              <View>
-                <Text style={[styles.toggleLabel, { color: c.foreground }]}>Recurring Monthly</Text>
-                <Text style={[styles.toggleSub, { color: c.mutedForeground }]}>Shows up every month</Text>
-              </View>
-              <Switch
-                value={isRecurring}
-                onValueChange={setIsRecurring}
-                trackColor={{ false: c.muted, true: c.primary }}
-                thumbColor="#fff"
-              />
-            </View>
-
-            {!isDebt && (
+            ) : (
               <>
                 <Text style={labelStyle}>Category</Text>
                 <View style={styles.categoryGrid}>
-                  {CATEGORIES.filter(c => c !== "Debt").map(cat => (
+                  {CATEGORIES.map(cat => (
                     <Pressable
                       key={cat}
                       onPress={() => setCategory(cat)}
-                      style={[
-                        styles.chip,
-                        { backgroundColor: category === cat ? c.primary : c.muted, borderRadius: colors.radius },
-                      ]}
+                      style={[styles.chip, { backgroundColor: category === cat ? c.primary : c.muted, borderRadius: 8 }]}
                     >
-                      <Text style={[styles.chipText, { color: category === cat ? c.primaryForeground : c.mutedForeground }]}>
-                        {cat}
-                      </Text>
+                      <Text style={[styles.chipText, { color: category === cat ? c.primaryForeground : c.mutedForeground }]}>{cat}</Text>
                     </Pressable>
                   ))}
                 </View>
               </>
             )}
+
+            <View style={[styles.toggleCard, { backgroundColor: c.card, marginTop: 14 }]}>
+              <View>
+                <Text style={[styles.toggleLabel, { color: c.foreground }]}>Recurring Monthly</Text>
+                <Text style={[styles.toggleSub, { color: c.mutedForeground }]}>Appears automatically each month</Text>
+              </View>
+              <Switch value={isRecurring} onValueChange={setIsRecurring} trackColor={{ false: c.muted, true: c.primary }} thumbColor="#fff" />
+            </View>
 
             <Pressable
               onPress={handleSave}
@@ -187,19 +166,19 @@ export function AddBillModal({ visible, onClose, onSave, editBill }: AddBillModa
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.6)" },
-  container: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: "90%" },
+  overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.65)" },
+  container: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingTop: 12, maxHeight: "92%" },
+  handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#444", alignSelf: "center", marginBottom: 16 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
   title: { fontSize: 20, fontFamily: "Inter_700Bold" },
-  label: { fontSize: 12, fontFamily: "Inter_500Medium", marginBottom: 6, marginTop: 14, textTransform: "uppercase", letterSpacing: 0.5 },
-  input: { height: 48, borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, fontSize: 16, fontFamily: "Inter_400Regular" },
-  row: { flexDirection: "row" },
-  toggleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 14, marginTop: 14 },
+  label: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginBottom: 6, marginTop: 14, textTransform: "uppercase", letterSpacing: 0.7 },
+  input: { height: 48, borderRadius: 10, paddingHorizontal: 14, fontSize: 16, fontFamily: "Inter_400Regular" },
+  toggleCard: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 14, borderRadius: 12, marginTop: 14 },
   toggleLabel: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
   toggleSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   categoryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
   chip: { paddingHorizontal: 12, paddingVertical: 8 },
   chipText: { fontSize: 13, fontFamily: "Inter_500Medium" },
-  saveBtn: { height: 52, alignItems: "center", justifyContent: "center", marginTop: 24, marginBottom: 24 },
+  saveBtn: { height: 52, alignItems: "center", justifyContent: "center", marginTop: 24, marginBottom: 32 },
   saveBtnText: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
 });

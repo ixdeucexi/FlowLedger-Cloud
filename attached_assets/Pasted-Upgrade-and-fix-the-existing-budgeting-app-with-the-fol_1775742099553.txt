@@ -1,0 +1,241 @@
+Upgrade and fix the existing budgeting app with the following improvements and bug fixes.
+
+DO NOT rebuild from scratch — MODIFY the current app.
+
+--------------------------------------------------
+1. FIX DELETE BUTTON (CRITICAL BUG)
+--------------------------------------------------
+
+Problem:
+- Delete button does not remove bills
+
+Fix:
+- Ensure DELETE API endpoint exists:
+  DELETE /bills/{id}
+
+- Backend:
+  - Remove bill from database
+  - Also remove related MonthlyOverride records
+
+- Frontend:
+  - Call DELETE endpoint
+  - Optimistically update UI (remove from state immediately)
+  - Refresh list after deletion
+
+- Add confirmation modal:
+  "Are you sure you want to delete this bill?"
+
+--------------------------------------------------
+2. CALENDAR VIEW – DAILY AMOUNTS (MAJOR FEATURE)
+--------------------------------------------------
+
+Enhance calendar system:
+
+Each day should display:
+- Total spent (expenses)
+- Total income
+- Net value (color coded)
+
+Update Transaction model:
+- id
+- date
+- amount (+income / -expense)
+- category
+- note
+
+Calendar UI:
+- Month grid view
+- Each day cell shows:
+  - Small text: +$X / -$X or total
+- Click day:
+  → opens modal with:
+     - list of transactions
+     - add/edit/delete transactions
+
+Add:
+- Running daily balance (optional toggle)
+
+--------------------------------------------------
+3. FUTURE PLANNING / GOAL SYSTEM (HIGH VALUE FEATURE)
+--------------------------------------------------
+
+Add ability to plan future expenses like:
+
+Example:
+"I want $2000 for Christmas"
+
+Create new table:
+
+FinancialGoal:
+- id
+- name
+- target_amount
+- target_date
+- monthly_savings_required (calculated)
+
+Logic:
+- Calculate:
+  required_monthly = target_amount / months_remaining
+
+- Show:
+  - If user can afford it based on:
+    income - bills - transactions
+
+UI:
+- Add "Goals" section (in Dashboard or More tab)
+- Show:
+  - Goal progress
+  - Monthly required contribution
+  - Status:
+    - On track (green)
+    - Behind (red)
+
+Also:
+- Option to "apply goal to monthly budget"
+  → reserves money each month
+
+--------------------------------------------------
+4. REMOVE PRIORITY FROM NON-DEBT BILLS
+--------------------------------------------------
+
+Update logic:
+
+- If is_debt = false:
+  → priority field should be:
+     - hidden in UI
+     - ignored in backend
+
+- If is_debt = true:
+  → priority is REQUIRED
+
+--------------------------------------------------
+5. INCOME SYSTEM (CRITICAL FOR REAL BUDGETING)
+--------------------------------------------------
+
+Add income tracking:
+
+Create table:
+
+Income:
+- id
+- amount
+- frequency (monthly, biweekly, weekly)
+- next_payment_date
+
+Settings:
+- User can:
+  - Add/edit income
+  - Adjust anytime
+
+Logic:
+- Monthly income calculation:
+  - Convert all income to monthly equivalent
+
+Examples:
+- Weekly → amount * 4.33
+- Biweekly → amount * 2.17
+
+--------------------------------------------------
+6. CASH FLOW ENGINE (NEW CORE FEATURE)
+--------------------------------------------------
+
+This powers your "can I afford this?" system.
+
+For selected month:
+
+Cash Flow =
+Income
+- Bills (monthly amounts or overrides)
+- Transactions
+- Goal allocations
+
+Display:
+- Remaining available cash
+
+--------------------------------------------------
+7. FUTURE FORECAST VIEW (IMPORTANT)
+--------------------------------------------------
+
+Add ability to look ahead:
+
+User selects future month:
+- Show:
+  - Expected bills
+  - Expected income
+  - Goal contributions
+  - Projected remaining balance
+
+This answers:
+👉 “Can I afford this in December?”
+
+--------------------------------------------------
+8. MONTHLY VIEW IMPROVEMENTS
+--------------------------------------------------
+
+Add:
+
+- Edit payment for THIS MONTH only
+- Override bill amount per month
+- Show:
+  - Paid
+  - Remaining
+  - Status color
+
+--------------------------------------------------
+9. DASHBOARD IMPROVEMENTS
+--------------------------------------------------
+
+Make cards interactive:
+
+- TOTAL BILLS → Bills page
+- PAID → filter paid bills
+- REMAINING → unpaid bills
+- TOTAL DEBT → debt-only view
+
+--------------------------------------------------
+10. DATA RELATIONSHIPS (IMPORTANT)
+--------------------------------------------------
+
+Bills
+→ MonthlyOverride
+→ Transactions
+→ Goals (indirect via budget)
+
+Ensure:
+- No duplicated bill records
+- All calculations derived dynamically
+
+--------------------------------------------------
+11. UI ADDITIONS
+--------------------------------------------------
+
+Add:
+
+- Calendar tab OR integrate into Monthly
+- Goals section
+- Income settings card
+
+Keep:
+- Dark theme
+- Mobile-first layout
+
+--------------------------------------------------
+12. PERFORMANCE + LOGIC RULES
+--------------------------------------------------
+
+- All financial calculations handled in backend
+- Avoid recalculating entire dataset unnecessarily
+- Use efficient queries
+
+--------------------------------------------------
+DELIVERABLE
+--------------------------------------------------
+
+- Fully working upgraded app
+- Bug-free delete function
+- Calendar with daily totals
+- Goal planning system
+- Income + forecasting system
+- Clean UI + smooth UX
+
+--------------------------------------------------
