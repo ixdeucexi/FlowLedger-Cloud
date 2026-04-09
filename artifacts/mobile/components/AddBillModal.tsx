@@ -31,9 +31,10 @@ interface AddBillModalProps {
   onSave: (bill: Omit<Bill, "id" | "created_at"> | Bill) => void;
   onDelete?: (id: string) => void;
   editBill?: Bill | null;
+  forceDebt?: boolean;
 }
 
-export function AddBillModal({ visible, onClose, onSave, onDelete, editBill }: AddBillModalProps) {
+export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, forceDebt }: AddBillModalProps) {
   const c = useColors();
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
@@ -56,10 +57,10 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill }: A
       setIsRecurring(editBill.is_recurring);
     } else {
       setName(""); setAmount(""); setCategory("Other");
-      setIsDebt(false); setBalance("");
+      setIsDebt(forceDebt ?? false); setBalance("");
       setInterestRate(""); setDueDay("1"); setIsRecurring(true);
     }
-  }, [editBill, visible]);
+  }, [editBill, visible, forceDebt]);
 
   const handleSave = () => {
     const parsedAmount = parseFloat(amount);

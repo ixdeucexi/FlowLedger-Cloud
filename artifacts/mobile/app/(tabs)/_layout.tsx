@@ -20,6 +20,10 @@ function NativeTabLayout() {
         <Icon sf={{ default: "doc.text", selected: "doc.text.fill" }} />
         <Label>Bills</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="debt">
+        <Icon sf={{ default: "creditcard", selected: "creditcard.fill" }} />
+        <Label>Debt</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="monthly">
         <Icon sf={{ default: "calendar", selected: "calendar.circle.fill" }} />
         <Label>Monthly</Label>
@@ -91,6 +95,18 @@ function ClassicTabLayout() {
               <SymbolView name="doc.text" tintColor={color} size={24} />
             ) : (
               <Feather name="file-text" size={22} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
+        name="debt"
+        options={{
+          title: "Debt",
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="creditcard" tintColor={color} size={24} />
+            ) : (
+              <Feather name="credit-card" size={22} color={color} />
             ),
         }}
       />

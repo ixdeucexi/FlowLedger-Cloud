@@ -100,7 +100,7 @@ export default function DashboardScreen() {
     { title: "Total Bills", value: `$${stats.totalDue.toFixed(0)}`, icon: "file-text" as const, col: c.primary, sub: `${stats.billCount} bills`, filter: null as DashboardFilter, tab: "bills" },
     { title: "Paid", value: `$${stats.totalPaid.toFixed(0)}`, icon: "check-circle" as const, col: c.success, sub: `${stats.paidCount}/${stats.billCount} paid`, filter: "paid" as DashboardFilter, tab: "monthly" },
     { title: "Remaining", value: `$${stats.remaining.toFixed(0)}`, icon: "alert-circle" as const, col: stats.remaining > 0 ? c.warning : c.success, sub: `${stats.unpaidCount} unpaid`, filter: "unpaid" as DashboardFilter, tab: "monthly" },
-    { title: "Total Debt", value: `$${stats.totalDebt.toFixed(0)}`, icon: "credit-card" as const, col: c.destructive, sub: `${bills.filter(b => b.is_debt).length} debts`, filter: "debts" as DashboardFilter, tab: "bills" },
+    { title: "Total Debt", value: `$${stats.totalDebt.toFixed(0)}`, icon: "credit-card" as const, col: c.destructive, sub: `${bills.filter(b => b.is_debt).length} debts`, filter: null as DashboardFilter, tab: "debt" },
   ];
 
   return (
