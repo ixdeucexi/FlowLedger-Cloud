@@ -37,6 +37,7 @@ export default function MonthlyScreen() {
   const insets = useSafeAreaInsets();
   const {
     bills, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
+    getCustomDueDay, setCustomDueDay,
     getMonthlyBills, getBillOccurrencesInMonth, runSnowball, settings,
     selectedYear, setSelectedYear, dashboardFilter, setDashboardFilter,
     getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction,
@@ -51,6 +52,7 @@ export default function MonthlyScreen() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [editingAmounts, setEditingAmounts] = useState<Record<string, string>>({});
   const [editingPaid, setEditingPaid] = useState<Record<string, string>>({});
+  const [editingDueDays, setEditingDueDays] = useState<Record<string, string>>({});
   const [billFilter, setBillFilter] = useState<"all" | "paid" | "unpaid">("all");
   const [extraPayment, setExtraPayment] = useState("");
   const [snowballResults, setSnowballResults] = useState<{ name: string; payment: number; paidOff: boolean }[]>([]);
@@ -117,6 +119,18 @@ export default function MonthlyScreen() {
     setCustomAmount(bill.id, month, selectedYear, isNaN(parsed) || parsed === bill.amount ? undefined : parsed);
     setEditingAmounts(p => { const n = { ...p }; delete n[key]; return n; });
   }, [editingAmounts, setCustomAmount, month, selectedYear]);
+
+  const handleDueDayBlur = useCallback((billId: string, originalDueDay: number, key: string) => {
+    const val = editingDueDays[key];
+    if (val === undefined) return;
+    const parsed = parseInt(val, 10);
+    if (!isNaN(parsed) && parsed >= 1 && parsed <= 31 && parsed !== originalDueDay) {
+      setCustomDueDay(billId, month, selectedYear, parsed);
+    } else if (isNaN(parsed) || val.trim() === "") {
+      setCustomDueDay(billId, month, selectedYear, undefined);
+    }
+    setEditingDueDays(p => { const n = { ...p }; delete n[key]; return n; });
+  }, [editingDueDays, setCustomDueDay, month, selectedYear]);
 
   const handleQuickPaid = useCallback((billId: string, amount: number, isPaid: boolean) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -280,16 +294,22 @@ export default function MonthlyScreen() {
               const borderColor = isPaid ? c.success : isPartial ? c.warning : c.destructive;
               const amtKey = `${bill.id}-${month}-${selectedYear}-amt`;
               const paidKey = `${bill.id}-${month}-${selectedYear}-paid`;
+              const dayKey = `${bill.id}-${month}-${selectedYear}-day`;
               const showAmt = editingAmounts[amtKey] !== undefined ? editingAmounts[amtKey] : amount.toFixed(2);
               const showPaid = editingPaid[paidKey] !== undefined ? editingPaid[paidKey] : paid > 0 ? paid.toFixed(2) : "";
               const remaining = Math.max(0, amount - paid);
+              const customDay = getCustomDueDay(bill.id, month, selectedYear);
+              const effectiveDueDay = customDay ?? bill.due_day;
+              const showDay = editingDueDays[dayKey] !== undefined ? editingDueDays[dayKey] : effectiveDueDay.toString();
 
               return (
                 <View style={[styles.entryCard, { backgroundColor: c.card, borderRadius: colors.radius, borderLeftColor: borderColor }]}>
                   <View style={styles.entryTop}>
                     <View style={styles.entryLeft}>
                       <Text style={[styles.entryName, { color: c.foreground }]}>{bill.name}</Text>
-                      <Text style={[styles.entryMeta, { color: c.mutedForeground }]}>Due day {bill.due_day} · {bill.category}</Text>
+                      <Text style={[styles.entryMeta, { color: c.mutedForeground }]}>
+                        Due day {effectiveDueDay}{customDay !== undefined ? " *" : ""} · {bill.category}
+                      </Text>
                     </View>
                     <View style={styles.entryRight}>
                       <PayStatus paid={isPaid} partial={isPartial} />
@@ -341,6 +361,43 @@ export default function MonthlyScreen() {
                       </View>
                     </View>
                   </View>
+
+                  {bill.frequency === "monthly" && (
+                    <View style={styles.dueDayRow}>
+                      <Feather name="calendar" size={11} color={customDay !== undefined ? c.primary : c.mutedForeground} style={{ marginRight: 6 }} />
+                      <Text style={[styles.fieldLabel, { color: customDay !== undefined ? c.primary : c.mutedForeground, marginBottom: 0, marginRight: 8 }]}>
+                        {customDay !== undefined ? "Due day this month:" : "Due day (this month only):"}
+                      </Text>
+                      <TextInput
+                        style={[
+                          styles.dueDayInput,
+                          {
+                            backgroundColor: customDay !== undefined ? c.primary + "15" : c.muted,
+                            color: customDay !== undefined ? c.primary : c.foreground,
+                            borderColor: customDay !== undefined ? c.primary + "40" : "transparent",
+                          },
+                        ]}
+                        value={showDay}
+                        onChangeText={v => setEditingDueDays(p => ({ ...p, [dayKey]: v }))}
+                        onFocus={() => setEditingDueDays(p => ({ ...p, [dayKey]: effectiveDueDay.toString() }))}
+                        onBlur={() => handleDueDayBlur(bill.id, bill.due_day, dayKey)}
+                        keyboardType="number-pad"
+                        returnKeyType="done"
+                        onSubmitEditing={Keyboard.dismiss}
+                        maxLength={2}
+                        selectTextOnFocus
+                      />
+                      {customDay !== undefined && (
+                        <Pressable
+                          onPress={() => { setCustomDueDay(bill.id, month, selectedYear, undefined); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                          style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, marginLeft: 6 })}
+                          hitSlop={8}
+                        >
+                          <Feather name="x-circle" size={14} color={c.mutedForeground} />
+                        </Pressable>
+                      )}
+                    </View>
+                  )}
 
                   {bill.is_debt && bill.balance > 0 && (
                     <View style={[styles.debtNote, { backgroundColor: c.muted }]}>
@@ -539,6 +596,8 @@ const styles = StyleSheet.create({
   leftText: { fontSize: 13, fontFamily: "Inter_700Bold" },
   debtNote: { marginHorizontal: 12, marginBottom: 10, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
   debtNoteText: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  dueDayRow: { flexDirection: "row", alignItems: "center", marginHorizontal: 12, marginBottom: 10 },
+  dueDayInput: { width: 42, height: 30, borderRadius: 6, textAlign: "center", fontSize: 14, fontFamily: "Inter_600SemiBold", borderWidth: 1 },
   calScroll: { paddingTop: 8 },
   txSummary: { flexDirection: "row", padding: 12, marginBottom: 10 },
   txSumItem: { flex: 1, alignItems: "center" },

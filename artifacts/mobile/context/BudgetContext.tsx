@@ -27,6 +27,7 @@ export interface MonthlyOverride {
   month: number;
   year: number;
   custom_amount?: number;
+  custom_due_day?: number;
   paid_amount: number;
 }
 
@@ -286,6 +287,8 @@ interface BudgetContextType {
   getPaidAmount: (billId: string, month: number, year: number) => number;
   setPaidAmount: (billId: string, month: number, year: number, amount: number) => void;
   setCustomAmount: (billId: string, month: number, year: number, amount: number | undefined) => void;
+  getCustomDueDay: (billId: string, month: number, year: number) => number | undefined;
+  setCustomDueDay: (billId: string, month: number, year: number, day: number | undefined) => void;
 
   getMonthlyBills: (month: number, year: number) => Bill[];
   getBillOccurrencesInMonth: (bill: Bill, month: number, year: number) => number[];
@@ -476,6 +479,18 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const setCustomAmount = useCallback(
     (billId: string, month: number, year: number, amount: number | undefined) =>
       upsertOverride(billId, month, year, { custom_amount: amount }),
+    [upsertOverride]
+  );
+
+  const getCustomDueDay = useCallback(
+    (billId: string, month: number, year: number): number | undefined =>
+      overrides.find(o => o.bill_id === billId && o.month === month && o.year === year)?.custom_due_day,
+    [overrides]
+  );
+
+  const setCustomDueDay = useCallback(
+    (billId: string, month: number, year: number, day: number | undefined) =>
+      upsertOverride(billId, month, year, { custom_due_day: day }),
     [upsertOverride]
   );
 
@@ -799,10 +814,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     // Pre-compute bill occurrence map: { day → total bill amount }
     const billsByDay: Record<number, number> = {};
     bills.filter(b => b.is_recurring).forEach(b => {
-      const occ = getBillOccurrenceDays(b, month, year);
+      let occ = getBillOccurrenceDays(b, month, year);
       if (occ.length === 0) return;
       const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
       const amt = o?.custom_amount !== undefined ? o.custom_amount : b.amount;
+      // For monthly bills, honour a per-month custom due day if set
+      if (o?.custom_due_day !== undefined && b.frequency === "monthly") {
+        occ = [Math.min(o.custom_due_day, daysInMonth)];
+      }
       occ.forEach(d => { billsByDay[d] = (billsByDay[d] ?? 0) + amt; });
     });
 
@@ -902,7 +921,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       bills, overrides, transactions, incomes, goals, extraPayments, categories, settings, loading,
       dashboardFilter, setDashboardFilter,
       addBill, updateBill, deleteBill, getBillById,
-      getOverride, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
+      getOverride, getAmount, getPaidAmount, setPaidAmount, setCustomAmount, getCustomDueDay, setCustomDueDay,
       getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal,
       runSnowball, saveExtraPayment, getExtraPayment, deleteExtraPayment,
       addTransaction, updateTransaction, deleteTransaction, getTransactionsForMonth,
