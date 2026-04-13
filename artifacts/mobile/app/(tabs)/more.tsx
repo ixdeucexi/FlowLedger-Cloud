@@ -176,8 +176,8 @@ export default function MoreScreen() {
           <Text style={[styles.emptyText, { color: c.mutedForeground }]}>No income sources added yet.</Text>
         ) : (
           incomes.map((item, i) => {
-            const monthly = item.frequency === "weekly" ? item.amount * 4.33
-              : item.frequency === "biweekly" ? item.amount * 2.17 : item.amount;
+            const monthly = item.frequency === "weekly" ? item.amount * 4
+              : item.frequency === "biweekly" ? item.amount * 2 : item.amount;
             return (
               <View key={item.id} style={[styles.incomeRow, { borderTopWidth: i > 0 ? 1 : 0, borderTopColor: c.border }]}>
                 <View style={[styles.incomeIcon, { backgroundColor: c.success + "20" }]}>

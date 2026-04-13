@@ -9,8 +9,8 @@ import { useColors } from "@/hooks/useColors";
 
 const FREQUENCIES: { key: IncomeItem["frequency"]; label: string; desc: string }[] = [
   { key: "monthly", label: "Monthly", desc: "×1/mo" },
-  { key: "biweekly", label: "Biweekly", desc: "×2.17/mo" },
-  { key: "weekly", label: "Weekly", desc: "×4.33/mo" },
+  { key: "biweekly", label: "Biweekly", desc: "×2/mo" },
+  { key: "weekly", label: "Weekly", desc: "×4–5/mo" },
 ];
 
 interface Props {
@@ -56,8 +56,8 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
 
   const monthlyEquiv = (() => {
     const a = parseFloat(amount) || 0;
-    if (frequency === "weekly") return a * 4.33;
-    if (frequency === "biweekly") return a * 2.17;
+    if (frequency === "weekly")   return a * 4;   // 4 as a conservative estimate (may be 5 in some months)
+    if (frequency === "biweekly") return a * 2;
     return a;
   })();
 

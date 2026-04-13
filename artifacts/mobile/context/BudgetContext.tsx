@@ -153,8 +153,8 @@ function genId(): string {
 }
 
 function incomeToMonthly(amount: number, frequency: IncomeItem["frequency"]): number {
-  if (frequency === "weekly")   return amount * 4.33;
-  if (frequency === "biweekly") return amount * 2.17;
+  if (frequency === "weekly")   return amount * 4;   // 4 occurrences as a generic estimate
+  if (frequency === "biweekly") return amount * 2;   // exactly 2 per month
   return amount;
 }
 
@@ -670,7 +670,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     (month?: number, year?: number) =>
       incomes
         .filter(i => month !== undefined && year !== undefined ? isIncomeActiveForMonth(i, month, year) : true)
-        .reduce((s, i) => s + incomeToMonthly(i.amount, i.frequency), 0),
+        .reduce((s, i) => {
+          if (month !== undefined && year !== undefined) {
+            return s + getIncomeOccurrenceDays(i, month, year).length * i.amount;
+          }
+          return s + incomeToMonthly(i.amount, i.frequency);
+        }, 0),
     [incomes]
   );
 
@@ -704,7 +709,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     (goal: Goal, month: number, year: number): GoalAffordability => {
       const monthlyIncome = incomes
         .filter(i => isIncomeActiveForMonth(i, month, year))
-        .reduce((s, i) => s + incomeToMonthly(i.amount, i.frequency), 0);
+        .reduce((s, i) => s + getIncomeOccurrenceDays(i, month, year).length * i.amount, 0);
       const totalBillsDue = bills
         .filter(b => b.is_recurring && isBillActiveForMonth(b, month, year))
         .reduce((s, b) => {
@@ -728,7 +733,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const getCashFlow = useCallback((month: number, year: number): CashFlow => {
     const monthlyIncome = incomes
       .filter(i => isIncomeActiveForMonth(i, month, year))
-      .reduce((s, i) => s + incomeToMonthly(i.amount, i.frequency), 0);
+      .reduce((s, i) => s + getIncomeOccurrenceDays(i, month, year).length * i.amount, 0);
     const activeBills = bills.filter(b => b.is_recurring && isBillActiveForMonth(b, month, year));
     const totalBillsDue = activeBills.reduce((s, b) => {
       const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
