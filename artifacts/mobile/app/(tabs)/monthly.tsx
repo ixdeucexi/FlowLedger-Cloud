@@ -201,95 +201,98 @@ export default function MonthlyScreen() {
       </View>
 
       {activeTab === "bills" ? (
-        <>
-          <View style={[styles.summaryRow, { backgroundColor: c.card, marginHorizontal: 16, borderRadius: colors.radius, marginTop: 10 }]}>
-            {[
-              { label: "Due", value: `$${totalDue.toFixed(0)}`, color: c.foreground },
-              { label: "Paid", value: `$${totalPaid.toFixed(0)}`, color: c.success },
-              { label: "Left", value: `$${Math.max(0, totalDue - totalPaid).toFixed(0)}`, color: c.destructive },
-            ].map((s, i) => (
-              <React.Fragment key={s.label}>
-                {i > 0 && <View style={[styles.sep, { backgroundColor: c.border }]} />}
-                <View style={styles.summaryItem}>
-                  <Text style={[styles.summaryLabel, { color: c.mutedForeground }]}>{s.label}</Text>
-                  <Text style={[styles.summaryValue, { color: s.color }]}>{s.value}</Text>
-                </View>
-              </React.Fragment>
-            ))}
-          </View>
-
-          {monthlyIncome > 0 && (
-            <View style={[styles.cfBar, { backgroundColor: c.card, marginHorizontal: 16, borderRadius: 10, marginTop: 8 }]}>
-              <View style={styles.cfBarInner}>
-                <Text style={[styles.cfLabel, { color: c.mutedForeground }]}>
-                  {isFuture ? "Forecast" : "Available"} Cash
-                </Text>
-                <Text style={[styles.cfValue, { color: cashFlow.remaining >= 0 ? c.success : c.destructive }]}>
-                  {cashFlow.remaining >= 0 ? "+" : ""}${cashFlow.remaining.toFixed(0)}
-                </Text>
-              </View>
-            </View>
-          )}
-
-          <View style={[styles.extraCard, { backgroundColor: c.card, marginHorizontal: 16, borderRadius: colors.radius, marginTop: 8 }]}>
-            <View style={styles.extraHeader}>
-              <Feather name="zap" size={14} color={c.primary} />
-              <Text style={[styles.extraTitle, { color: c.foreground }]}>
-                Extra Debt Payment ({settings.paymentMethod === "snowball" ? "Snowball" : "Avalanche"})
-              </Text>
-            </View>
-            <View style={styles.extraRow}>
-              <TextInput
-                style={[styles.extraInput, { backgroundColor: c.muted, color: c.foreground }]}
-                value={extraPayment}
-                onChangeText={setExtraPayment}
-                placeholder="$ amount"
-                placeholderTextColor={c.mutedForeground}
-                keyboardType="decimal-pad"
-                returnKeyType="done"
-                onSubmitEditing={handleApplyExtra}
-              />
-              <Pressable
-                onPress={handleApplyExtra}
-                style={({ pressed }) => [styles.applyBtn, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
-              >
-                <Text style={[styles.applyBtnText, { color: c.primaryForeground }]}>Apply Extra</Text>
-              </Pressable>
-            </View>
-            {showSnowballResults && snowballResults.length > 0 && (
-              <View style={[styles.resultsBox, { backgroundColor: c.muted, borderRadius: 8 }]}>
-                {snowballResults.map((r, i) => (
-                  <View key={i} style={styles.resultRow}>
-                    <Feather name={r.paidOff ? "check-circle" : "arrow-right"} size={13} color={r.paidOff ? c.success : c.primary} />
-                    <Text style={[styles.resultText, { color: r.paidOff ? c.success : c.foreground }]}>
-                      {r.name}: <Text style={{ fontFamily: "Inter_700Bold" }}>${r.payment.toFixed(2)}</Text>
-                      {r.paidOff ? " — PAID OFF! 🎉" : ""}
-                    </Text>
-                  </View>
-                ))}
-                <Pressable onPress={() => setShowSnowballResults(false)} style={styles.dismissBtn}>
-                  <Text style={[styles.dismissText, { color: c.mutedForeground }]}>Dismiss</Text>
-                </Pressable>
-              </View>
-            )}
-          </View>
-
-          <View style={[styles.billFilterRow, { paddingHorizontal: 16, marginTop: 8, marginBottom: 4 }]}>
-            {(["all", "paid", "unpaid"] as const).map(f => (
-              <Pressable key={f} onPress={() => setBillFilter(f)} style={[styles.pill, { backgroundColor: billFilter === f ? c.primary : c.muted, borderRadius: 20 }]}>
-                <Text style={[styles.pillText, { color: billFilter === f ? c.primaryForeground : c.mutedForeground }]}>
-                  {f === "all" ? "All" : f === "paid" ? "Paid" : "Unpaid"}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-
           <FlatList
             data={billsWithData}
             keyExtractor={item => item.bill.id}
+            style={{ flex: 1 }}
             contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 100 }]}
             keyboardShouldPersistTaps="handled"
             ListEmptyComponent={<EmptyState icon="calendar" title="No Bills" message="Add recurring bills to track them here." />}
+            ListHeaderComponent={
+              <>
+                <View style={[styles.summaryRow, { backgroundColor: c.card, marginHorizontal: 16, borderRadius: colors.radius, marginTop: 10 }]}>
+                  {[
+                    { label: "Due", value: `$${totalDue.toFixed(0)}`, color: c.foreground },
+                    { label: "Paid", value: `$${totalPaid.toFixed(0)}`, color: c.success },
+                    { label: "Left", value: `$${Math.max(0, totalDue - totalPaid).toFixed(0)}`, color: c.destructive },
+                  ].map((s, i) => (
+                    <React.Fragment key={s.label}>
+                      {i > 0 && <View style={[styles.sep, { backgroundColor: c.border }]} />}
+                      <View style={styles.summaryItem}>
+                        <Text style={[styles.summaryLabel, { color: c.mutedForeground }]}>{s.label}</Text>
+                        <Text style={[styles.summaryValue, { color: s.color }]}>{s.value}</Text>
+                      </View>
+                    </React.Fragment>
+                  ))}
+                </View>
+
+                {monthlyIncome > 0 && (
+                  <View style={[styles.cfBar, { backgroundColor: c.card, marginHorizontal: 16, borderRadius: 10, marginTop: 8 }]}>
+                    <View style={styles.cfBarInner}>
+                      <Text style={[styles.cfLabel, { color: c.mutedForeground }]}>
+                        {isFuture ? "Forecast" : "Available"} Cash
+                      </Text>
+                      <Text style={[styles.cfValue, { color: cashFlow.remaining >= 0 ? c.success : c.destructive }]}>
+                        {cashFlow.remaining >= 0 ? "+" : ""}${cashFlow.remaining.toFixed(0)}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                <View style={[styles.extraCard, { backgroundColor: c.card, marginHorizontal: 16, borderRadius: colors.radius, marginTop: 8 }]}>
+                  <View style={styles.extraHeader}>
+                    <Feather name="zap" size={14} color={c.primary} />
+                    <Text style={[styles.extraTitle, { color: c.foreground }]}>
+                      Extra Debt Payment ({settings.paymentMethod === "snowball" ? "Snowball" : "Avalanche"})
+                    </Text>
+                  </View>
+                  <View style={styles.extraRow}>
+                    <TextInput
+                      style={[styles.extraInput, { backgroundColor: c.muted, color: c.foreground }]}
+                      value={extraPayment}
+                      onChangeText={setExtraPayment}
+                      placeholder="$ amount"
+                      placeholderTextColor={c.mutedForeground}
+                      keyboardType="decimal-pad"
+                      returnKeyType="done"
+                      onSubmitEditing={handleApplyExtra}
+                    />
+                    <Pressable
+                      onPress={handleApplyExtra}
+                      style={({ pressed }) => [styles.applyBtn, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
+                    >
+                      <Text style={[styles.applyBtnText, { color: c.primaryForeground }]}>Apply Extra</Text>
+                    </Pressable>
+                  </View>
+                  {showSnowballResults && snowballResults.length > 0 && (
+                    <View style={[styles.resultsBox, { backgroundColor: c.muted, borderRadius: 8 }]}>
+                      {snowballResults.map((r, i) => (
+                        <View key={i} style={styles.resultRow}>
+                          <Feather name={r.paidOff ? "check-circle" : "arrow-right"} size={13} color={r.paidOff ? c.success : c.primary} />
+                          <Text style={[styles.resultText, { color: r.paidOff ? c.success : c.foreground }]}>
+                            {r.name}: <Text style={{ fontFamily: "Inter_700Bold" }}>${r.payment.toFixed(2)}</Text>
+                            {r.paidOff ? " — PAID OFF! 🎉" : ""}
+                          </Text>
+                        </View>
+                      ))}
+                      <Pressable onPress={() => setShowSnowballResults(false)} style={styles.dismissBtn}>
+                        <Text style={[styles.dismissText, { color: c.mutedForeground }]}>Dismiss</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
+
+                <View style={[styles.billFilterRow, { paddingHorizontal: 16, marginTop: 8, marginBottom: 4 }]}>
+                  {(["all", "paid", "unpaid"] as const).map(f => (
+                    <Pressable key={f} onPress={() => setBillFilter(f)} style={[styles.pill, { backgroundColor: billFilter === f ? c.primary : c.muted, borderRadius: 20 }]}>
+                      <Text style={[styles.pillText, { color: billFilter === f ? c.primaryForeground : c.mutedForeground }]}>
+                        {f === "all" ? "All" : f === "paid" ? "Paid" : "Unpaid"}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </>
+            }
             renderItem={({ item: { bill, amount, paid, isPaid, isPartial } }) => {
               const borderColor = isPaid ? c.success : isPartial ? c.warning : c.destructive;
               const amtKey = `${bill.id}-${month}-${selectedYear}-amt`;
@@ -412,7 +415,6 @@ export default function MonthlyScreen() {
               );
             }}
           />
-        </>
       ) : (
         <ScrollView contentContainerStyle={[styles.calScroll, { paddingBottom: insets.bottom + 100 }]}>
           <View style={{ paddingHorizontal: 16 }}>
