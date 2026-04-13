@@ -1,13 +1,12 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { DonutChart, MiniChart } from "@/components/MiniChart";
-import { GoalModal } from "@/components/GoalModal";
 import colors from "@/constants/colors";
-import type { DashboardFilter, Goal } from "@/context/BudgetContext";
+import type { DashboardFilter } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -25,11 +24,7 @@ export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { bills, getAmount, getPaidAmount, transactions, selectedYear, setDashboardFilter,
-    goals, addGoal, updateGoal, deleteGoal, checkGoalAffordability,
     getCashFlow, getMonthlyIncome } = useBudget();
-
-  const [goalModalVisible, setGoalModalVisible] = useState(false);
-  const [editGoal, setEditGoal] = useState<Goal | null>(null);
 
   const now = new Date();
   const currentMonth = now.getMonth();
@@ -200,97 +195,6 @@ export default function DashboardScreen() {
 
       {debtPayoffData.length > 0 && <MiniChart data={debtPayoffData} title="Debt Payoff Projection" height={120} />}
 
-      <View style={styles.goalsHeader}>
-        <Text style={[styles.sectionTitle, { color: c.foreground, marginBottom: 0 }]}>Financial Goals</Text>
-        <Pressable
-          onPress={() => { setEditGoal(null); setGoalModalVisible(true); }}
-          style={({ pressed }) => [styles.addGoalBtn, { backgroundColor: c.primary + "20", opacity: pressed ? 0.7 : 1 }]}
-        >
-          <Feather name="plus" size={16} color={c.primary} />
-          <Text style={[styles.addGoalText, { color: c.primary }]}>Add Goal</Text>
-        </Pressable>
-      </View>
-
-      {goals.length === 0 ? (
-        <View style={[styles.goalsEmpty, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-          <Feather name="target" size={28} color={c.mutedForeground} />
-          <Text style={[styles.goalsEmptyText, { color: c.mutedForeground }]}>
-            Set a financial goal — Christmas fund, vacation, emergency fund...
-          </Text>
-          <Pressable
-            onPress={() => { setEditGoal(null); setGoalModalVisible(true); }}
-            style={[styles.goalsEmptyBtn, { backgroundColor: c.primary }]}
-          >
-            <Text style={[styles.goalsEmptyBtnText, { color: c.primaryForeground }]}>Create First Goal</Text>
-          </Pressable>
-        </View>
-      ) : (
-        goals.map(goal => {
-          const pct = goal.target_amount > 0 ? Math.min(goal.current_amount / goal.target_amount, 1) : 0;
-          const targetDate = new Date(goal.target_date + "T12:00:00");
-          const goalMonth = targetDate.getMonth();
-          const goalYear = targetDate.getFullYear();
-          const afford = checkGoalAffordability(goal, goalMonth, goalYear);
-          const needed = Math.max(0, goal.target_amount - goal.current_amount);
-          return (
-            <Pressable
-              key={goal.id}
-              onPress={() => { setEditGoal(goal); setGoalModalVisible(true); }}
-              style={[styles.goalCard, { backgroundColor: c.card, borderRadius: colors.radius }]}
-            >
-              <View style={styles.goalTop}>
-                <View style={styles.goalLeft}>
-                  <Text style={[styles.goalName, { color: c.foreground }]}>{goal.name}</Text>
-                  <Text style={[styles.goalDate, { color: c.mutedForeground }]}>
-                    Target: {targetDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                  </Text>
-                </View>
-                <View style={styles.goalRight}>
-                  <Text style={[styles.goalAmount, { color: c.foreground }]}>${goal.current_amount.toFixed(0)}</Text>
-                  <Text style={[styles.goalTarget, { color: c.mutedForeground }]}>of ${goal.target_amount.toFixed(0)}</Text>
-                </View>
-              </View>
-              <View style={[styles.goalProgress, { backgroundColor: c.muted }]}>
-                <View style={[styles.goalProgressFill, { width: `${pct * 100}%` as any, backgroundColor: pct >= 1 ? c.success : "#6366f1" }]} />
-              </View>
-              <View style={[styles.affordBox, {
-                backgroundColor: afford.canAfford ? c.success + "18" : c.destructive + "18",
-                borderRadius: 8,
-              }]}>
-                <Feather
-                  name={afford.canAfford ? "check-circle" : "alert-circle"}
-                  size={14}
-                  color={afford.canAfford ? c.success : c.destructive}
-                />
-                <View style={styles.affordText}>
-                  <Text style={[styles.affordTitle, { color: afford.canAfford ? c.success : c.destructive }]}>
-                    {afford.canAfford ? "You can afford this" : "You cannot afford this"}
-                  </Text>
-                  {needed > 0 && (
-                    <Text style={[styles.affordSub, { color: c.mutedForeground }]}>
-                      {afford.canAfford
-                        ? `Projected balance $${afford.projectedBalance.toFixed(0)} ≥ $${needed.toFixed(0)} needed`
-                        : `$${afford.shortfall.toFixed(0)} short · projected $${afford.projectedBalance.toFixed(0)}`
-                      }
-                    </Text>
-                  )}
-                </View>
-              </View>
-            </Pressable>
-          );
-        })
-      )}
-
-      <GoalModal
-        visible={goalModalVisible}
-        onClose={() => { setGoalModalVisible(false); setEditGoal(null); }}
-        onSave={(data) => {
-          if ("id" in data) updateGoal(data as Goal);
-          else addGoal(data);
-        }}
-        onDelete={deleteGoal}
-        editGoal={editGoal}
-      />
     </ScrollView>
   );
 }
@@ -326,25 +230,4 @@ const styles = StyleSheet.create({
   upcomingName: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   upcomingDate: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 1 },
   upcomingAmt: { fontSize: 15, fontFamily: "Inter_700Bold" },
-  goalsHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10, marginTop: 8 },
-  addGoalBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 },
-  addGoalText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  goalsEmpty: { padding: 24, alignItems: "center", marginBottom: 16 },
-  goalsEmptyText: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: 10, marginBottom: 16, lineHeight: 20 },
-  goalsEmptyBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
-  goalsEmptyBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-  goalCard: { marginBottom: 12, padding: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
-  goalTop: { flexDirection: "row", alignItems: "flex-start", marginBottom: 10 },
-  goalLeft: { flex: 1 },
-  goalRight: { alignItems: "flex-end" },
-  goalName: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
-  goalDate: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
-  goalAmount: { fontSize: 16, fontFamily: "Inter_700Bold" },
-  goalTarget: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
-  goalProgress: { height: 6, borderRadius: 3, overflow: "hidden", marginBottom: 10 },
-  goalProgressFill: { height: 6, borderRadius: 3 },
-  affordBox: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 10 },
-  affordText: { flex: 1 },
-  affordTitle: { fontSize: 13, fontFamily: "Inter_700Bold" },
-  affordSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
 });
