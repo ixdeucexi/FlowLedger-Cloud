@@ -832,41 +832,45 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       return inc + tx - bil;
     };
 
-    let carryover: number;
+    // Compute the starting balance (carryover) for a given month by chaining
+    // net changes from the anchor month forward — so the last day of month M
+    // becomes the first day opening balance of month M+1.
+    const computeCarryover = (toMonth: number, toYear: number): number => {
+      if (settings.starting_balance_date) {
+        const [sbY, sbM] = settings.starting_balance_date.split("-").map(Number);
+        const sbYear = sbY;
+        const sbMonth = sbM - 1; // 0-indexed
 
-    if (settings.starting_balance_date) {
-      // Anchor to the user-specified date
-      const [sbY, sbM] = settings.starting_balance_date.split("-").map(Number);
-      const sbYear  = sbY;
-      const sbMonth = sbM - 1; // 0-indexed
-
-      if (year === sbYear && month === sbMonth) {
-        // This is the starting balance month — seed with the user's balance
-        carryover = settings.starting_balance;
-      } else if (year < sbYear || (year === sbYear && month < sbMonth)) {
-        // Before the tracking start — treat as zero
-        carryover = 0;
+        if (toYear === sbYear && toMonth === sbMonth) {
+          return settings.starting_balance; // anchor month opens at the user's balance
+        }
+        if (toYear < sbYear || (toYear === sbYear && toMonth < sbMonth)) {
+          return 0; // before tracking start
+        }
+        // Chain forward: each month's ending balance = prior balance + that month's net
+        let running = settings.starting_balance;
+        let m = sbMonth;
+        let y = sbYear;
+        while (!(y === toYear && m === toMonth)) {
+          running += computeMonthNet(m, y);
+          m += 1;
+          if (m > 11) { m = 0; y += 1; }
+        }
+        return running;
       } else {
-        // After the starting balance month — roll forward month by month
-        const prevMonth = month === 0 ? 11 : month - 1;
-        const prevYear  = month === 0 ? year - 1 : year;
-        carryover = computeMonthNet(prevMonth, prevYear);
+        // No anchor date — fall back to heuristic
+        const currentMonthStart = new Date(toYear, toMonth, 1);
+        const prevHasActivity =
+          transactions.some(t => { const [ty, tm] = t.date.split("-").map(Number); return new Date(ty, tm - 1, 1) < currentMonthStart; }) ||
+          overrides.some(o => new Date(o.year, o.month, 1) < currentMonthStart);
+        if (!prevHasActivity) return settings.starting_balance;
+        const prevMonth = toMonth === 0 ? 11 : toMonth - 1;
+        const prevYear  = toMonth === 0 ? toYear - 1 : toYear;
+        return computeCarryover(prevMonth, prevYear) + computeMonthNet(prevMonth, prevYear);
       }
-    } else {
-      // No date set — use prevHasActivity heuristic
-      const currentMonthStart = new Date(year, month, 1);
-      const prevHasActivity =
-        transactions.some(t => { const [ty, tm] = t.date.split("-").map(Number); return new Date(ty, tm - 1, 1) < currentMonthStart; }) ||
-        overrides.some(o => new Date(o.year, o.month, 1) < currentMonthStart);
+    };
 
-      if (!prevHasActivity) {
-        carryover = settings.starting_balance;
-      } else {
-        const prevMonth = month === 0 ? 11 : month - 1;
-        const prevYear  = month === 0 ? year - 1 : year;
-        carryover = computeMonthNet(prevMonth, prevYear);
-      }
-    }
+    const carryover = computeCarryover(month, year);
 
     // Build income-by-day map using actual occurrence dates (respects start_date)
     const incomeByDay: Record<number, number> = {};
