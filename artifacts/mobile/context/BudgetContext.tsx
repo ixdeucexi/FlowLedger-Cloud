@@ -119,7 +119,7 @@ const DEFAULT_CATEGORIES = [
 
 const DEFAULT_SETTINGS: Settings = {
   paymentMethod: "snowball",
-  carryover_balances: false,
+  carryover_balances: true,
   starting_balance: 0,
 };
 
@@ -768,12 +768,20 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
       // Iterate month by month from anchor → target, accumulating the running balance.
       // This mirrors what the calendar shows when you page through each month.
-      let balance = seed;
-      let m = anchorM, y = anchorY;
-      while (y < year || (y === year && m <= month)) {
-        balance = (m === anchorM && y === anchorY) ? seed + monthNet(m, y) : balance + monthNet(m, y);
-        if (m === month && y === year) break;
-        m++; if (m > 11) { m = 0; y++; }
+      let balance: number;
+      if (!settings.carryover_balances) {
+        // No chain: each month is independent, opening at seed. The projected
+        // balance at the goal month is simply seed + that month's net.
+        balance = seed + monthNet(month, year);
+      } else {
+        // Chain forward: carry the last day of each month into the next.
+        balance = seed;
+        let m = anchorM, y = anchorY;
+        while (y < year || (y === year && m <= month)) {
+          balance = (m === anchorM && y === anchorY) ? seed + monthNet(m, y) : balance + monthNet(m, y);
+          if (m === month && y === year) break;
+          m++; if (m > 11) { m = 0; y++; }
+        }
       }
 
       const projectedBalance = balance;
@@ -826,55 +834,52 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       return inc + tx - bil;
     };
 
-    // Compute the starting balance (carryover) for a given month by chaining
-    // net changes from the anchor month forward — so the last day of month M
-    // becomes the first day opening balance of month M+1.
+    // Compute the starting balance (carryover) for a given month.
+    // When carryover_balances is ON: chains from the anchor month forward so the
+    // last day of month M becomes the opening balance of month M+1.
+    // When carryover_balances is OFF: every month opens at the anchor's starting_balance
+    // (or 0 for months before the anchor), making each month independent.
     const computeCarryover = (toMonth: number, toYear: number): number => {
+      // ── Determine anchor month / year ────────────────────────────────────────
+      let anchorM: number;
+      let anchorY: number;
       if (settings.starting_balance_date) {
         const [sbY, sbM] = settings.starting_balance_date.split("-").map(Number);
-        const sbYear = sbY;
-        const sbMonth = sbM - 1; // 0-indexed
-
-        if (toYear === sbYear && toMonth === sbMonth) {
-          return settings.starting_balance; // anchor month opens at the user's balance
-        }
-        if (toYear < sbYear || (toYear === sbYear && toMonth < sbMonth)) {
-          return 0; // before tracking start
-        }
-        // Chain forward: each month's ending balance = prior balance + that month's net
-        let running = settings.starting_balance;
-        let m = sbMonth;
-        let y = sbYear;
-        while (!(y === toYear && m === toMonth)) {
-          running += computeMonthNet(m, y);
-          m += 1;
-          if (m > 11) { m = 0; y += 1; }
-        }
-        return running;
+        anchorY = sbY;
+        anchorM = sbM - 1; // 0-indexed
       } else {
-        // No anchor date — treat the current calendar month as the anchor so the
-        // starting_balance applies to right now, not some past month full of old data.
         const now = new Date();
-        const nowM = now.getMonth();
-        const nowY = now.getFullYear();
-
-        if (toYear === nowY && toMonth === nowM) {
-          return settings.starting_balance; // current month opens at the user's balance
-        }
-        if (toYear < nowY || (toYear === nowY && toMonth < nowM)) {
-          return 0; // months before today get no carryover
-        }
-        // Future months: chain forward from the current month
-        let running = settings.starting_balance;
-        let m = nowM;
-        let y = nowY;
-        while (!(y === toYear && m === toMonth)) {
-          running += computeMonthNet(m, y);
-          m += 1;
-          if (m > 11) { m = 0; y += 1; }
-        }
-        return running;
+        anchorM = now.getMonth();
+        anchorY = now.getFullYear();
       }
+
+      // Months before the anchor always open at 0
+      if (toYear < anchorY || (toYear === anchorY && toMonth < anchorM)) {
+        return 0;
+      }
+
+      // The anchor month itself always opens at the user's starting_balance
+      if (toYear === anchorY && toMonth === anchorM) {
+        return settings.starting_balance;
+      }
+
+      // Months after the anchor ────────────────────────────────────────────────
+      if (!settings.carryover_balances) {
+        // No chain: each future month also opens at the starting_balance (fresh start)
+        return settings.starting_balance;
+      }
+
+      // Chain forward: accumulate net changes from anchor to toMonth, carrying the
+      // last day of each month into the next month's opening balance.
+      let running = settings.starting_balance;
+      let m = anchorM;
+      let y = anchorY;
+      while (!(y === toYear && m === toMonth)) {
+        running += computeMonthNet(m, y);
+        m += 1;
+        if (m > 11) { m = 0; y += 1; }
+      }
+      return running;
     };
 
     const carryover = computeCarryover(month, year);
@@ -920,7 +925,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
 
     return result;
-  }, [bills, transactions, incomes, overrides, settings.starting_balance]);
+  }, [bills, transactions, incomes, overrides, settings.starting_balance, settings.starting_balance_date, settings.carryover_balances]);
 
   // ─── Categories ───────────────────────────────────────────────────────────────
 
