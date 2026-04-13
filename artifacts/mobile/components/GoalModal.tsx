@@ -107,7 +107,7 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Prop
       name: name.trim(),
       target_amount: t,
       current_amount: parseFloat(current) || 0,
-      target_date: new Date(targetDate + "T12:00:00").toISOString(),
+      target_date: targetDate, // stored as YYYY-MM-DD
     };
     if (editGoal) onSave({ ...data, id: editGoal.id, created_at: editGoal.created_at });
     else onSave(data);

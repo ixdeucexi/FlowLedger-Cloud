@@ -749,26 +749,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           return { projectedBalance: 0, canAfford: needed === 0, shortfall: needed };
         }
       } else {
-        // No explicit anchor date: find the earliest month that has any data.
-        // If there is no data at all, the seed is the starting balance applied to
-        // the target month itself (matches getDailyBalances' no-prior-activity path).
-        const allMonths: { m: number; y: number }[] = [
-          ...transactions.map(t => {
-            const [ty, tm] = t.date.split("-").map(Number);
-            return { m: tm - 1, y: ty };
-          }),
-          ...overrides.map(o => ({ m: o.month, y: o.year })),
-        ];
-        if (allMonths.length === 0) {
-          // No data at all — seed the target month directly with starting_balance
-          anchorM = month; anchorY = year; seed = settings.starting_balance;
-        } else {
-          // Use the earliest month we have data for as the anchor
-          let em = allMonths[0].m, ey = allMonths[0].y;
-          for (const { m: mm, y: yy } of allMonths) {
-            if (yy < ey || (yy === ey && mm < em)) { em = mm; ey = yy; }
-          }
-          anchorM = em; anchorY = ey; seed = settings.starting_balance;
+        // No explicit anchor date — anchor to the current calendar month, same as
+        // getDailyBalances, so goal projections match what the calendar shows.
+        const now = new Date();
+        anchorM = now.getMonth();
+        anchorY = now.getFullYear();
+        seed = settings.starting_balance;
+        // Target is before the current month — nothing meaningful to project
+        if (year < anchorY || (year === anchorY && month < anchorM)) {
+          const needed = Math.max(0, goal.target_amount - goal.current_amount);
+          return { projectedBalance: seed, canAfford: seed >= needed, shortfall: Math.max(0, needed - seed) };
         }
       }
 
@@ -858,15 +848,28 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }
         return running;
       } else {
-        // No anchor date — fall back to heuristic
-        const currentMonthStart = new Date(toYear, toMonth, 1);
-        const prevHasActivity =
-          transactions.some(t => { const [ty, tm] = t.date.split("-").map(Number); return new Date(ty, tm - 1, 1) < currentMonthStart; }) ||
-          overrides.some(o => new Date(o.year, o.month, 1) < currentMonthStart);
-        if (!prevHasActivity) return settings.starting_balance;
-        const prevMonth = toMonth === 0 ? 11 : toMonth - 1;
-        const prevYear  = toMonth === 0 ? toYear - 1 : toYear;
-        return computeCarryover(prevMonth, prevYear) + computeMonthNet(prevMonth, prevYear);
+        // No anchor date — treat the current calendar month as the anchor so the
+        // starting_balance applies to right now, not some past month full of old data.
+        const now = new Date();
+        const nowM = now.getMonth();
+        const nowY = now.getFullYear();
+
+        if (toYear === nowY && toMonth === nowM) {
+          return settings.starting_balance; // current month opens at the user's balance
+        }
+        if (toYear < nowY || (toYear === nowY && toMonth < nowM)) {
+          return 0; // months before today get no carryover
+        }
+        // Future months: chain forward from the current month
+        let running = settings.starting_balance;
+        let m = nowM;
+        let y = nowY;
+        while (!(y === toYear && m === toMonth)) {
+          running += computeMonthNet(m, y);
+          m += 1;
+          if (m > 11) { m = 0; y += 1; }
+        }
+        return running;
       }
     };
 
