@@ -227,8 +227,10 @@ export default function DashboardScreen() {
       ) : (
         goals.map(goal => {
           const pct = goal.target_amount > 0 ? Math.min(goal.current_amount / goal.target_amount, 1) : 0;
-          const afford = checkGoalAffordability(goal, currentMonth, selectedYear);
-          const targetDate = new Date(goal.target_date);
+          const targetDate = new Date(goal.target_date + "T12:00:00");
+          const goalMonth = targetDate.getMonth();
+          const goalYear = targetDate.getFullYear();
+          const afford = checkGoalAffordability(goal, goalMonth, goalYear);
           const needed = Math.max(0, goal.target_amount - goal.current_amount);
           return (
             <Pressable
