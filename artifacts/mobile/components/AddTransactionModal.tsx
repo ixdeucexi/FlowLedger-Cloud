@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -17,6 +17,8 @@ import colors from "@/constants/colors";
 import type { Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
+
+const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 interface Props {
   visible: boolean;
@@ -35,6 +37,43 @@ export function AddTransactionModal({ visible, onClose, onSave, editTx, defaultD
   const [date, setDate] = useState(defaultDate ?? new Date().toISOString().split("T")[0]);
   const [isExpense, setIsExpense] = useState(true);
 
+  // Parse date into parts for the picker
+  const [pickerYear, setPickerYear] = useState(() => {
+    const init = defaultDate ?? new Date().toISOString().split("T")[0];
+    return parseInt(init.split("-")[0], 10);
+  });
+  const [pickerMonth, setPickerMonth] = useState(() => {
+    const init = defaultDate ?? new Date().toISOString().split("T")[0];
+    return parseInt(init.split("-")[1], 10) - 1; // 0-indexed
+  });
+
+  const daysInPickerMonth = useMemo(
+    () => new Date(pickerYear, pickerMonth + 1, 0).getDate(),
+    [pickerYear, pickerMonth]
+  );
+
+  // Selected day within the picker month (0 if date is in a different month)
+  const selectedDay = useMemo(() => {
+    const [dy, dm, dd] = date.split("-").map(Number);
+    if (dy === pickerYear && dm - 1 === pickerMonth) return dd;
+    return 0;
+  }, [date, pickerYear, pickerMonth]);
+
+  const pickDay = (day: number) => {
+    Haptics.selectionAsync();
+    const d = `${pickerYear}-${String(pickerMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    setDate(d);
+  };
+
+  const shiftMonth = (delta: number) => {
+    let m = pickerMonth + delta;
+    let y = pickerYear;
+    if (m < 0) { m = 11; y--; }
+    if (m > 11) { m = 0; y++; }
+    setPickerMonth(m);
+    setPickerYear(y);
+  };
+
   useEffect(() => {
     if (editTx) {
       setAmount(Math.abs(editTx.amount).toString());
@@ -42,12 +81,19 @@ export function AddTransactionModal({ visible, onClose, onSave, editTx, defaultD
       setNote(editTx.note);
       setDate(editTx.date);
       setIsExpense(editTx.amount < 0);
+      const [dy, dm] = editTx.date.split("-").map(Number);
+      setPickerYear(dy);
+      setPickerMonth(dm - 1);
     } else {
+      const init = defaultDate ?? new Date().toISOString().split("T")[0];
       setAmount("");
       setCategory("Other");
       setNote("");
-      setDate(defaultDate ?? new Date().toISOString().split("T")[0]);
+      setDate(init);
       setIsExpense(true);
+      const [dy, dm] = init.split("-").map(Number);
+      setPickerYear(dy);
+      setPickerMonth(dm - 1);
     }
   }, [editTx, visible, defaultDate]);
 
@@ -98,7 +144,46 @@ export function AddTransactionModal({ visible, onClose, onSave, editTx, defaultD
             <TextInput style={inputStyle} value={amount} onChangeText={setAmount} placeholder="0.00" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
 
             <Text style={labelStyle}>Date</Text>
-            <TextInput style={inputStyle} value={date} onChangeText={setDate} placeholder="YYYY-MM-DD" placeholderTextColor={c.mutedForeground} />
+            {/* Month navigation */}
+            <View style={[styles.monthNav, { backgroundColor: c.muted, borderRadius: 10 }]}>
+              <Pressable onPress={() => shiftMonth(-1)} hitSlop={8} style={styles.monthArrow}>
+                <Feather name="chevron-left" size={18} color={c.foreground} />
+              </Pressable>
+              <Text style={[styles.monthLabel, { color: c.foreground }]}>
+                {MONTH_NAMES[pickerMonth]} {pickerYear}
+              </Text>
+              <Pressable onPress={() => shiftMonth(1)} hitSlop={8} style={styles.monthArrow}>
+                <Feather name="chevron-right" size={18} color={c.foreground} />
+              </Pressable>
+            </View>
+            {/* Day grid */}
+            <View style={styles.dayGrid}>
+              {Array.from({ length: daysInPickerMonth }, (_, i) => i + 1).map(day => {
+                const isSel = day === selectedDay;
+                return (
+                  <Pressable
+                    key={day}
+                    onPress={() => pickDay(day)}
+                    style={({ pressed }) => [
+                      styles.dayBtn,
+                      {
+                        backgroundColor: isSel ? c.primary : c.muted,
+                        opacity: pressed ? 0.7 : 1,
+                        borderRadius: 8,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.dayBtnText, { color: isSel ? c.primaryForeground : c.foreground }]}>
+                      {day}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {/* Show the selected date */}
+            <Text style={[styles.selectedDateLabel, { color: c.mutedForeground }]}>
+              Selected: {date}
+            </Text>
 
             <Text style={labelStyle}>Note</Text>
             <TextInput style={inputStyle} value={note} onChangeText={setNote} placeholder="What was it for?" placeholderTextColor={c.mutedForeground} />
@@ -131,7 +216,7 @@ export function AddTransactionModal({ visible, onClose, onSave, editTx, defaultD
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.6)" },
-  container: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: "85%" },
+  container: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: "90%" },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
   title: { fontSize: 20, fontFamily: "Inter_700Bold" },
   typeToggle: { flexDirection: "row", padding: 4, gap: 4, marginBottom: 4 },
@@ -139,6 +224,13 @@ const styles = StyleSheet.create({
   typeBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   label: { fontSize: 12, fontFamily: "Inter_500Medium", marginBottom: 6, marginTop: 14, textTransform: "uppercase", letterSpacing: 0.5 },
   input: { height: 48, borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, fontSize: 16, fontFamily: "Inter_400Regular" },
+  monthNav: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 10, paddingHorizontal: 14, marginBottom: 8 },
+  monthArrow: { padding: 4 },
+  monthLabel: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  dayGrid: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 6 },
+  dayBtn: { width: 38, height: 38, alignItems: "center", justifyContent: "center" },
+  dayBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  selectedDateLabel: { fontSize: 11, fontFamily: "Inter_400Regular", marginBottom: 4, marginTop: 2 },
   categoryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
   chip: { paddingHorizontal: 12, paddingVertical: 8 },
   chipText: { fontSize: 13, fontFamily: "Inter_500Medium" },

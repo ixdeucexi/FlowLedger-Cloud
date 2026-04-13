@@ -707,6 +707,45 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const checkGoalAffordability = useCallback(
     (goal: Goal, month: number, year: number): GoalAffordability => {
+      // Replicate the same carryover logic used by getDailyBalances so the
+      // projected balance matches what the calendar shows.
+      const computeMonthNet = (m: number, y: number): number => {
+        const inc = incomes
+          .filter(i => isIncomeActiveForMonth(i, m, y))
+          .reduce((s, i) => s + getIncomeOccurrenceDays(i, m, y).length * i.amount, 0);
+        const bil = bills.filter(b => b.is_recurring).reduce((s, b) => {
+          const occ = getBillOccurrenceDays(b, m, y);
+          if (occ.length === 0) return s;
+          const o = overrides.find(o => o.bill_id === b.id && o.month === m && o.year === y);
+          const amt = o?.custom_amount !== undefined ? o.custom_amount : b.amount;
+          return s + amt * occ.length;
+        }, 0);
+        const tx = transactions
+          .filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === y && tm === m + 1; })
+          .reduce((s, t) => s + t.amount, 0);
+        return inc + tx - bil;
+      };
+
+      let carryover: number;
+      if (settings.starting_balance_date) {
+        const [sbY, sbM] = settings.starting_balance_date.split("-").map(Number);
+        if (year === sbY && month === sbM - 1) {
+          carryover = settings.starting_balance;
+        } else if (year < sbY || (year === sbY && month < sbM - 1)) {
+          carryover = 0;
+        } else {
+          carryover = computeMonthNet(month === 0 ? 11 : month - 1, month === 0 ? year - 1 : year);
+        }
+      } else {
+        const currentMonthStart = new Date(year, month, 1);
+        const prevHasActivity =
+          transactions.some(t => { const [ty, tm] = t.date.split("-").map(Number); return new Date(ty, tm - 1, 1) < currentMonthStart; }) ||
+          overrides.some(o => new Date(o.year, o.month, 1) < currentMonthStart);
+        carryover = prevHasActivity
+          ? computeMonthNet(month === 0 ? 11 : month - 1, month === 0 ? year - 1 : year)
+          : settings.starting_balance;
+      }
+
       const monthlyIncome = incomes
         .filter(i => isIncomeActiveForMonth(i, month, year))
         .reduce((s, i) => s + getIncomeOccurrenceDays(i, month, year).length * i.amount, 0);
@@ -720,12 +759,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const netTx = transactions
         .filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === year && tm === month + 1; })
         .reduce((s, t) => s + t.amount, 0);
-      const projectedBalance = monthlyIncome - totalBillsDue + netTx;
+
+      // projectedBalance mirrors the calendar's end-of-month running balance
+      const projectedBalance = carryover + monthlyIncome - totalBillsDue + netTx;
       const needed = Math.max(0, goal.target_amount - goal.current_amount);
       const canAfford = projectedBalance >= needed;
       return { projectedBalance, canAfford, shortfall: canAfford ? 0 : needed - projectedBalance };
     },
-    [bills, incomes, transactions, overrides]
+    [bills, incomes, transactions, overrides, settings]
   );
 
   // ─── Cash Flow ────────────────────────────────────────────────────────────────
