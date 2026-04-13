@@ -238,7 +238,9 @@ function getIncomeOccurrenceDays(income: IncomeItem, month: number, year: number
  * Returns [] if bill is not active for that month.
  */
 function getBillOccurrenceDays(bill: Bill, month: number, year: number): number[] {
-  if (!bill.is_recurring || !isBillActiveForMonth(bill, month, year)) return [];
+  // Debt bills are always monthly obligations regardless of the is_recurring flag
+  if (!bill.is_recurring && !bill.is_debt) return [];
+  if (!isBillActiveForMonth(bill, month, year)) return [];
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
   if (bill.frequency === "weekly") {
@@ -367,6 +369,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           : reorderDebtPriorities(SEED_BILLS);
         // Migrate: fill in any missing fields with defaults
         loadedBills = loadedBills.map(b => ({ frequency: "monthly", day_of_week: 0, ...b }));
+        // Migrate: debt bills must always be recurring (they are monthly obligations)
+        loadedBills = loadedBills.map(b => b.is_debt && !b.is_recurring ? { ...b, is_recurring: true } : b);
         if (!bd) await AsyncStorage.setItem(BILLS_KEY, JSON.stringify(reorderDebtPriorities(SEED_BILLS)));
 
         const loadedIncomes: IncomeItem[] = ind ? JSON.parse(ind) : SEED_INCOMES;
@@ -513,10 +517,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     return perOccurrence * occurrences.length;
   }, [getAmount]);
 
-  /** All recurring bills that are active for the given month/year. */
+  /** All recurring bills (and all debt bills) that are active for the given month/year. */
   const getMonthlyBills = useCallback(
     (month: number, year: number): Bill[] =>
-      bills.filter(b => b.is_recurring && isBillActiveForMonth(b, month, year)),
+      bills.filter(b => (b.is_recurring || b.is_debt) && isBillActiveForMonth(b, month, year)),
     [bills]
   );
 
@@ -722,7 +726,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       // formula used inside getDailyBalances so both stay in sync.
       const monthNet = (m: number, y: number): number => {
         const inc = incomes.reduce((s, i) => s + getIncomeOccurrenceDays(i, m, y).length * i.amount, 0);
-        const bil = bills.filter(b => b.is_recurring).reduce((s, b) => {
+        const bil = bills.filter(b => b.is_recurring || b.is_debt).reduce((s, b) => {
           const occ = getBillOccurrenceDays(b, m, y);
           if (occ.length === 0) return s;
           const o = overrides.find(o => o.bill_id === b.id && o.month === m && o.year === y);
@@ -786,7 +790,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const monthlyIncome = incomes
       .filter(i => isIncomeActiveForMonth(i, month, year))
       .reduce((s, i) => s + getIncomeOccurrenceDays(i, month, year).length * i.amount, 0);
-    const activeBills = bills.filter(b => b.is_recurring && isBillActiveForMonth(b, month, year));
+    const activeBills = bills.filter(b => (b.is_recurring || b.is_debt) && isBillActiveForMonth(b, month, year));
     const totalBillsDue = activeBills.reduce((s, b) => {
       const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
       const amt = o?.custom_amount !== undefined ? o.custom_amount : b.amount;
@@ -809,7 +813,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         const occ = getIncomeOccurrenceDays(i, m, y);
         return s + occ.length * i.amount;
       }, 0);
-      const bil = bills.filter(b => b.is_recurring).reduce((s, b) => {
+      const bil = bills.filter(b => b.is_recurring || b.is_debt).reduce((s, b) => {
         const occ = getBillOccurrenceDays(b, m, y);
         if (occ.length === 0) return s;
         const o = overrides.find(o => o.bill_id === b.id && o.month === m && o.year === y);
@@ -887,7 +891,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
     // Pre-compute bill occurrence map: { day → total bill amount }
     const billsByDay: Record<number, number> = {};
-    bills.filter(b => b.is_recurring).forEach(b => {
+    bills.filter(b => b.is_recurring || b.is_debt).forEach(b => {
       let occ = getBillOccurrenceDays(b, month, year);
       if (occ.length === 0) return;
       const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);

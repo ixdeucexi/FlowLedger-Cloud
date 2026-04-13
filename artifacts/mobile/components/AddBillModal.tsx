@@ -80,7 +80,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
       day_of_week: dayOfWeek,
       start_date: billStartDate.trim() || undefined,
       end_date: billEndDate.trim() || undefined,
-      is_recurring: isRecurring,
+      is_recurring: isDebt ? true : isRecurring,
       frequency,
     };
     if (editBill) onSave({ ...data, id: editBill.id, created_at: editBill.created_at });
@@ -247,15 +247,17 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
               </>
             )}
 
-            {/* Recurring toggle */}
-            <View style={[styles.toggleCard, { backgroundColor: c.card, marginTop: 14 }]}>
-              <View>
-                <Text style={[styles.toggleLabel, { color: c.foreground }]}>Recurring</Text>
-                <Text style={[styles.toggleSub, { color: c.mutedForeground }]}>Appears automatically each month</Text>
+            {/* Recurring toggle — hidden for debt (debts are always recurring) */}
+            {!isDebt && !forceDebt && (
+              <View style={[styles.toggleCard, { backgroundColor: c.card, marginTop: 14 }]}>
+                <View>
+                  <Text style={[styles.toggleLabel, { color: c.foreground }]}>Recurring</Text>
+                  <Text style={[styles.toggleSub, { color: c.mutedForeground }]}>Appears automatically each month</Text>
+                </View>
+                <Switch value={isRecurring} onValueChange={setIsRecurring}
+                  trackColor={{ false: c.muted, true: c.primary }} thumbColor="#fff" />
               </View>
-              <Switch value={isRecurring} onValueChange={setIsRecurring}
-                trackColor={{ false: c.muted, true: c.primary }} thumbColor="#fff" />
-            </View>
+            )}
 
             {/* Save */}
             <Pressable onPress={handleSave}

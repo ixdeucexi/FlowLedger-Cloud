@@ -36,7 +36,7 @@ export default function DashboardScreen() {
   const today = now.getDate();
 
   const stats = useMemo(() => {
-    const monthBills = bills.filter(b => b.is_recurring);
+    const monthBills = bills.filter(b => b.is_recurring || b.is_debt);
     let totalDue = 0, totalPaid = 0, paidCount = 0;
     monthBills.forEach(b => {
       const amt = getAmount(b, currentMonth, selectedYear);
@@ -56,7 +56,7 @@ export default function DashboardScreen() {
   const upcomingBills = useMemo(() => {
     const sevenDaysLater = today + 7;
     return bills
-      .filter(b => b.is_recurring && b.due_day >= today && b.due_day <= sevenDaysLater)
+      .filter(b => (b.is_recurring || b.is_debt) && b.due_day >= today && b.due_day <= sevenDaysLater)
       .sort((a, b) => a.due_day - b.due_day)
       .slice(0, 5);
   }, [bills, today]);
@@ -67,7 +67,7 @@ export default function DashboardScreen() {
   };
 
   const monthlyBarData = useMemo(() =>
-    MONTH_NAMES.map((label, i) => ({ label, value: bills.filter(b => b.is_recurring).reduce((s, b) => s + getAmount(b, i, selectedYear), 0) })),
+    MONTH_NAMES.map((label, i) => ({ label, value: bills.filter(b => b.is_recurring || b.is_debt).reduce((s, b) => s + getAmount(b, i, selectedYear), 0) })),
     [bills, getAmount, selectedYear]);
 
   const categoryData = useMemo(() => {
