@@ -707,12 +707,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const checkGoalAffordability = useCallback(
     (goal: Goal, month: number, year: number): GoalAffordability => {
-      // Replicate the same carryover logic used by getDailyBalances so the
-      // projected balance matches what the calendar shows.
-      const computeMonthNet = (m: number, y: number): number => {
-        const inc = incomes
-          .filter(i => isIncomeActiveForMonth(i, m, y))
-          .reduce((s, i) => s + getIncomeOccurrenceDays(i, m, y).length * i.amount, 0);
+      // Net cash flow (income − bills + transactions) for a single month — same
+      // formula used inside getDailyBalances so both stay in sync.
+      const monthNet = (m: number, y: number): number => {
+        const inc = incomes.reduce((s, i) => s + getIncomeOccurrenceDays(i, m, y).length * i.amount, 0);
         const bil = bills.filter(b => b.is_recurring).reduce((s, b) => {
           const occ = getBillOccurrenceDays(b, m, y);
           if (occ.length === 0) return s;
@@ -726,42 +724,54 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         return inc + tx - bil;
       };
 
-      let carryover: number;
+      // Determine the anchor: the month whose balance we seed from, and the seed value.
+      let anchorM: number, anchorY: number, seed: number;
+
       if (settings.starting_balance_date) {
         const [sbY, sbM] = settings.starting_balance_date.split("-").map(Number);
-        if (year === sbY && month === sbM - 1) {
-          carryover = settings.starting_balance;
-        } else if (year < sbY || (year === sbY && month < sbM - 1)) {
-          carryover = 0;
-        } else {
-          carryover = computeMonthNet(month === 0 ? 11 : month - 1, month === 0 ? year - 1 : year);
+        anchorM = sbM - 1; // 0-indexed
+        anchorY = sbY;
+        seed = settings.starting_balance;
+        // Target is before the anchor — nothing is tracked yet
+        if (year < anchorY || (year === anchorY && month < anchorM)) {
+          const needed = Math.max(0, goal.target_amount - goal.current_amount);
+          return { projectedBalance: 0, canAfford: needed === 0, shortfall: needed };
         }
       } else {
-        const currentMonthStart = new Date(year, month, 1);
-        const prevHasActivity =
-          transactions.some(t => { const [ty, tm] = t.date.split("-").map(Number); return new Date(ty, tm - 1, 1) < currentMonthStart; }) ||
-          overrides.some(o => new Date(o.year, o.month, 1) < currentMonthStart);
-        carryover = prevHasActivity
-          ? computeMonthNet(month === 0 ? 11 : month - 1, month === 0 ? year - 1 : year)
-          : settings.starting_balance;
+        // No explicit anchor date: find the earliest month that has any data.
+        // If there is no data at all, the seed is the starting balance applied to
+        // the target month itself (matches getDailyBalances' no-prior-activity path).
+        const allMonths: { m: number; y: number }[] = [
+          ...transactions.map(t => {
+            const [ty, tm] = t.date.split("-").map(Number);
+            return { m: tm - 1, y: ty };
+          }),
+          ...overrides.map(o => ({ m: o.month, y: o.year })),
+        ];
+        if (allMonths.length === 0) {
+          // No data at all — seed the target month directly with starting_balance
+          anchorM = month; anchorY = year; seed = settings.starting_balance;
+        } else {
+          // Use the earliest month we have data for as the anchor
+          let em = allMonths[0].m, ey = allMonths[0].y;
+          for (const { m: mm, y: yy } of allMonths) {
+            if (yy < ey || (yy === ey && mm < em)) { em = mm; ey = yy; }
+          }
+          anchorM = em; anchorY = ey; seed = settings.starting_balance;
+        }
       }
 
-      const monthlyIncome = incomes
-        .filter(i => isIncomeActiveForMonth(i, month, year))
-        .reduce((s, i) => s + getIncomeOccurrenceDays(i, month, year).length * i.amount, 0);
-      const totalBillsDue = bills
-        .filter(b => b.is_recurring && isBillActiveForMonth(b, month, year))
-        .reduce((s, b) => {
-          const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
-          const amt = o?.custom_amount !== undefined ? o.custom_amount : b.amount;
-          return s + amt * getBillOccurrenceDays(b, month, year).length;
-        }, 0);
-      const netTx = transactions
-        .filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === year && tm === month + 1; })
-        .reduce((s, t) => s + t.amount, 0);
+      // Iterate month by month from anchor → target, accumulating the running balance.
+      // This mirrors what the calendar shows when you page through each month.
+      let balance = seed;
+      let m = anchorM, y = anchorY;
+      while (y < year || (y === year && m <= month)) {
+        balance = (m === anchorM && y === anchorY) ? seed + monthNet(m, y) : balance + monthNet(m, y);
+        if (m === month && y === year) break;
+        m++; if (m > 11) { m = 0; y++; }
+      }
 
-      // projectedBalance mirrors the calendar's end-of-month running balance
-      const projectedBalance = carryover + monthlyIncome - totalBillsDue + netTx;
+      const projectedBalance = balance;
       const needed = Math.max(0, goal.target_amount - goal.current_amount);
       const canAfford = projectedBalance >= needed;
       return { projectedBalance, canAfford, shortfall: canAfford ? 0 : needed - projectedBalance };
