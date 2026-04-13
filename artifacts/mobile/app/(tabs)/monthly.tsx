@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert, FlatList, Keyboard, Platform,
+  Alert, FlatList, Keyboard, Modal, Platform,
   Pressable, ScrollView, StyleSheet, Text,
   TextInput, View,
 } from "react-native";
@@ -13,7 +13,7 @@ import { CalendarView } from "@/components/CalendarView";
 import { EmptyState } from "@/components/EmptyState";
 import { MonthPicker } from "@/components/MonthPicker";
 import colors from "@/constants/colors";
-import type { Transaction } from "@/context/BudgetContext";
+import type { Bill, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -57,6 +57,7 @@ export default function MonthlyScreen() {
   const [extraPayment, setExtraPayment] = useState("");
   const [snowballResults, setSnowballResults] = useState<{ name: string; payment: number; paidOff: boolean }[]>([]);
   const [showSnowballResults, setShowSnowballResults] = useState(false);
+  const [dueDayPickerBill, setDueDayPickerBill] = useState<Bill | null>(null);
 
   useEffect(() => {
     if (dashboardFilter === "paid") { setBillFilter("paid"); setActiveTab("bills"); setDashboardFilter(null); }
@@ -468,8 +469,17 @@ export default function MonthlyScreen() {
                   const isDebt = b.is_debt;
                   const iconColor = isPaid ? c.success : isDebt ? c.destructive : c.warning;
                   const iconName = isDebt ? "credit-card" : "file-text";
+                  const canReschedule = b.frequency === "monthly";
+                  const hasCustomDay = getCustomDueDay(b.id, month, selectedYear) !== undefined;
                   return (
-                    <View key={`sched-${b.id}`} style={[styles.txRow, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+                    <Pressable
+                      key={`sched-${b.id}`}
+                      onPress={() => canReschedule && setDueDayPickerBill(b)}
+                      style={({ pressed }) => [
+                        styles.txRow,
+                        { backgroundColor: c.card, borderRadius: colors.radius, opacity: pressed && canReschedule ? 0.75 : 1 },
+                      ]}
+                    >
                       <View style={styles.txMain}>
                         <View style={[styles.txIcon, { backgroundColor: iconColor + "20" }]}>
                           <Feather name={iconName} size={15} color={iconColor} />
@@ -480,13 +490,19 @@ export default function MonthlyScreen() {
                             {isDebt ? "Debt" : "Bill"} · {b.category}
                             {b.frequency === "weekly" ? " · weekly" : ""}
                             {isPaid ? " · paid" : paid > 0 ? ` · $${paid.toFixed(2)} paid` : ""}
+                            {hasCustomDay ? " · rescheduled" : ""}
                           </Text>
+                          {canReschedule && (
+                            <Text style={[styles.txRescheduleHint, { color: c.primary }]}>
+                              Tap to change due day this month
+                            </Text>
+                          )}
                         </View>
                         <Text style={[styles.txAmt, { color: iconColor }]}>
                           -${amt.toFixed(2)}
                         </Text>
                       </View>
-                    </View>
+                    </Pressable>
                   );
                 })}
               </>
@@ -530,6 +546,100 @@ export default function MonthlyScreen() {
           </View>
         </ScrollView>
       )}
+
+      {/* ── Due-day reschedule picker ── */}
+      <Modal
+        visible={dueDayPickerBill !== null}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setDueDayPickerBill(null)}
+      >
+        <Pressable style={styles.pickerOverlay} onPress={() => setDueDayPickerBill(null)}>
+          <Pressable style={[styles.pickerSheet, { backgroundColor: c.background }]} onPress={e => e.stopPropagation()}>
+            {dueDayPickerBill && (() => {
+              const daysInMonth = new Date(selectedYear, month + 1, 0).getDate();
+              const customDay = getCustomDueDay(dueDayPickerBill.id, month, selectedYear);
+              const effectiveDay = customDay ?? dueDayPickerBill.due_day;
+              return (
+                <>
+                  <View style={styles.pickerHandle} />
+                  <View style={styles.pickerHeader}>
+                    <View>
+                      <Text style={[styles.pickerTitle, { color: c.foreground }]}>{dueDayPickerBill.name}</Text>
+                      <Text style={[styles.pickerSub, { color: c.mutedForeground }]}>
+                        {MONTH_FULL[month]} {selectedYear} · Currently day {effectiveDay}
+                        {customDay !== undefined ? " (custom)" : " (default)"}
+                      </Text>
+                    </View>
+                    <Pressable onPress={() => setDueDayPickerBill(null)} hitSlop={8}>
+                      <Feather name="x" size={20} color={c.mutedForeground} />
+                    </Pressable>
+                  </View>
+
+                  <Text style={[styles.pickerLabel, { color: c.mutedForeground }]}>
+                    Select the new due day for this month only
+                  </Text>
+
+                  <View style={styles.pickerDayGrid}>
+                    {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
+                      const isCurrent = day === effectiveDay;
+                      const isOriginal = day === dueDayPickerBill.due_day && customDay === undefined;
+                      return (
+                        <Pressable
+                          key={day}
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            if (day === dueDayPickerBill.due_day) {
+                              setCustomDueDay(dueDayPickerBill.id, month, selectedYear, undefined);
+                            } else {
+                              setCustomDueDay(dueDayPickerBill.id, month, selectedYear, day);
+                            }
+                            setDueDayPickerBill(null);
+                          }}
+                          style={({ pressed }) => [
+                            styles.pickerDayBtn,
+                            {
+                              backgroundColor: isCurrent ? c.primary : isOriginal ? c.primary + "25" : c.muted,
+                              opacity: pressed ? 0.7 : 1,
+                              borderRadius: 8,
+                            },
+                          ]}
+                        >
+                          <Text style={[
+                            styles.pickerDayText,
+                            { color: isCurrent ? c.primaryForeground : c.foreground },
+                          ]}>
+                            {day}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+
+                  {customDay !== undefined && (
+                    <Pressable
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setCustomDueDay(dueDayPickerBill.id, month, selectedYear, undefined);
+                        setDueDayPickerBill(null);
+                      }}
+                      style={({ pressed }) => [
+                        styles.pickerResetBtn,
+                        { backgroundColor: c.muted, opacity: pressed ? 0.7 : 1, borderRadius: colors.radius },
+                      ]}
+                    >
+                      <Feather name="rotate-ccw" size={14} color={c.mutedForeground} />
+                      <Text style={[styles.pickerResetText, { color: c.mutedForeground }]}>
+                        Reset to default day {dueDayPickerBill.due_day}
+                      </Text>
+                    </Pressable>
+                  )}
+                </>
+              );
+            })()}
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <AddTransactionModal
         visible={txModalVisible}
@@ -614,6 +724,19 @@ const styles = StyleSheet.create({
   txBody: { flex: 1 },
   txNote: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   txDate: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
+  txRescheduleHint: { fontSize: 10, fontFamily: "Inter_400Regular", marginTop: 2 },
   txAmt: { fontSize: 14, fontFamily: "Inter_700Bold", marginLeft: 8 },
   txDelete: { paddingHorizontal: 14, paddingVertical: 11 },
+  pickerOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.55)" },
+  pickerSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 36 },
+  pickerHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#555", alignSelf: "center", marginBottom: 16 },
+  pickerHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 },
+  pickerTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
+  pickerSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  pickerLabel: { fontSize: 11, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 12 },
+  pickerDayGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 },
+  pickerDayBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  pickerDayText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  pickerResetBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 14 },
+  pickerResetText: { fontSize: 14, fontFamily: "Inter_500Medium" },
 });
