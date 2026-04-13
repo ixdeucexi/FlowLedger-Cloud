@@ -191,10 +191,10 @@ function getIncomeOccurrenceDays(income: IncomeItem, month: number, year: number
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
   if (income.frequency === "monthly") {
-    // If this is the exact start month, use the start_date's day; otherwise day 1
+    // Always use start_date's day-of-month so income lands on the same date each month
     if (income.start_date) {
-      const [sy, sm, sd] = income.start_date.split("-").map(Number);
-      if (sy === year && sm === month + 1) return [Math.min(sd, daysInMonth)];
+      const [, , sd] = income.start_date.split("-").map(Number);
+      return [Math.min(sd, daysInMonth)];
     }
     return [1];
   }
