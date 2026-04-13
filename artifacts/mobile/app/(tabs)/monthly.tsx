@@ -41,7 +41,7 @@ export default function MonthlyScreen() {
     getMonthlyBills, getBillOccurrencesInMonth, runSnowball, settings,
     selectedYear, setSelectedYear, dashboardFilter, setDashboardFilter,
     getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction,
-    getCashFlow, getMonthlyIncome, getDailyBalances,
+    getCashFlow, getMonthlyIncome, getDailyBalances, getIncomeOccurrencesInMonth,
     saveExtraPayment, getExtraPayment,
   } = useBudget();
 
@@ -87,6 +87,14 @@ export default function MonthlyScreen() {
 
   const txList = useMemo(() => getTransactionsForMonth(month, selectedYear), [getTransactionsForMonth, month, selectedYear]);
   const dailyBalances = useMemo(() => getDailyBalances(month, selectedYear), [getDailyBalances, month, selectedYear]);
+  const incomeOccurrences = useMemo(() => {
+    const occurrences = getIncomeOccurrencesInMonth(month, selectedYear);
+    const flat: { day: number; name: string; amount: number; frequency: string }[] = [];
+    occurrences.forEach(({ income: inc, days }) => {
+      days.forEach(day => flat.push({ day, name: inc.name, amount: inc.amount, frequency: inc.frequency }));
+    });
+    return flat.sort((a, b) => a.day - b.day);
+  }, [getIncomeOccurrencesInMonth, month, selectedYear]);
   const txIncome = txList.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
   const txExpense = txList.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
 
@@ -237,6 +245,27 @@ export default function MonthlyScreen() {
                         {cashFlow.remaining >= 0 ? "+" : ""}${cashFlow.remaining.toFixed(0)}
                       </Text>
                     </View>
+                  </View>
+                )}
+
+                {incomeOccurrences.length > 0 && (
+                  <View style={[styles.incomeCard, { backgroundColor: c.card, marginHorizontal: 16, borderRadius: colors.radius, marginTop: 8 }]}>
+                    <View style={styles.incomeHeader}>
+                      <Feather name="trending-up" size={14} color={c.success} />
+                      <Text style={[styles.incomeTitle, { color: c.foreground }]}>Income This Month</Text>
+                      <Text style={[styles.incomeTotalText, { color: c.success }]}>
+                        ${incomeOccurrences.reduce((s, o) => s + o.amount, 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                      </Text>
+                    </View>
+                    {incomeOccurrences.map((occ, idx) => (
+                      <View key={`${occ.name}-${occ.day}-${idx}`} style={[styles.incomeRow, idx > 0 && { borderTopWidth: 1, borderTopColor: c.border }]}>
+                        <View style={[styles.incomeDayBadge, { backgroundColor: c.success + "22" }]}>
+                          <Text style={[styles.incomeDayNum, { color: c.success }]}>{occ.day}</Text>
+                        </View>
+                        <Text style={[styles.incomeName, { color: c.foreground }]}>{occ.name}</Text>
+                        <Text style={[styles.incomeAmt, { color: c.success }]}>+${occ.amount.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</Text>
+                      </View>
+                    ))}
                   </View>
                 )}
 
@@ -739,4 +768,13 @@ const styles = StyleSheet.create({
   pickerDayText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
   pickerResetBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 14 },
   pickerResetText: { fontSize: 14, fontFamily: "Inter_500Medium" },
+  incomeCard: { paddingTop: 12, paddingBottom: 4, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
+  incomeHeader: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, marginBottom: 10 },
+  incomeTitle: { flex: 1, fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  incomeTotalText: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  incomeRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12, paddingVertical: 9 },
+  incomeDayBadge: { width: 34, height: 34, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  incomeDayNum: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  incomeName: { flex: 1, fontSize: 13, fontFamily: "Inter_500Medium" },
+  incomeAmt: { fontSize: 14, fontFamily: "Inter_700Bold" },
 });

@@ -100,6 +100,7 @@ export interface CashFlow {
 export interface DailyBalance {
   day: number;
   income: number;
+  scheduledIncome: number;
   expense: number;
   bills: number;
   net: number;
@@ -308,6 +309,7 @@ interface BudgetContextType {
   updateIncome: (item: IncomeItem) => void;
   deleteIncome: (id: string) => void;
   getMonthlyIncome: (month?: number, year?: number) => number;
+  getIncomeOccurrencesInMonth: (month: number, year: number) => { income: IncomeItem; days: number[] }[];
 
   addGoal: (goal: Omit<Goal, "id" | "created_at">) => void;
   updateGoal: (goal: Goal) => void;
@@ -679,6 +681,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     [incomes]
   );
 
+  const getIncomeOccurrencesInMonth = useCallback(
+    (month: number, year: number): { income: IncomeItem; days: number[] }[] =>
+      incomes
+        .filter(i => isIncomeActiveForMonth(i, month, year))
+        .map(i => ({ income: i, days: getIncomeOccurrenceDays(i, month, year) }))
+        .filter(x => x.days.length > 0),
+    [incomes]
+  );
+
   // ─── Goals ────────────────────────────────────────────────────────────────────
 
   const addGoal = useCallback((goal: Omit<Goal, "id" | "created_at">) => {
@@ -894,7 +905,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const billsToday   = billsByDay[day] ?? 0;
       const net = incomeToday - expenseToday - billsToday;
       runningBalance += net;
-      result.push({ day, income: incomeToday, expense: expenseToday, bills: billsToday, net, balance: runningBalance });
+      result.push({ day, income: incomeToday, scheduledIncome, expense: expenseToday, bills: billsToday, net, balance: runningBalance });
     }
 
     return result;
@@ -981,7 +992,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal,
       runSnowball, saveExtraPayment, getExtraPayment, deleteExtraPayment,
       addTransaction, updateTransaction, deleteTransaction, getTransactionsForMonth,
-      addIncome, updateIncome, deleteIncome, getMonthlyIncome,
+      addIncome, updateIncome, deleteIncome, getMonthlyIncome, getIncomeOccurrencesInMonth,
       addGoal, updateGoal, deleteGoal, checkGoalAffordability,
       getCashFlow, getDailyBalances,
       addCategory, updateCategory, deleteCategory,

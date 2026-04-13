@@ -71,7 +71,7 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
           const db = balanceByDay[day];
 
           const net = (dayData ? dayData.income - dayData.expense : 0) - (db ? db.bills : 0);
-          const hasActivity = dayData || (db && db.bills > 0);
+          const hasActivity = dayData || (db && (db.bills > 0 || db.scheduledIncome > 0));
 
           return (
             <Pressable
@@ -103,6 +103,11 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
 
               {hasActivity ? (
                 <View style={styles.amountsCol}>
+                  {db && db.scheduledIncome > 0 && (
+                    <Text style={[styles.amtText, { color: c.success }]} numberOfLines={1}>
+                      ↑{fmt(db.scheduledIncome)}
+                    </Text>
+                  )}
                   {dayData && dayData.income > 0 && (
                     <Text style={[styles.amtText, { color: c.success }]} numberOfLines={1}>
                       +{fmt(dayData.income)}
@@ -136,7 +141,8 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
 
       <View style={[styles.legend, { borderTopColor: c.border }]}>
         {[
-          { color: c.success, label: "+ income" },
+          { color: c.success, label: "↑ pay day" },
+          { color: c.success, label: "+ tx income" },
           { color: c.destructive, label: "- expense" },
           { color: c.warning, label: "↓ bill due" },
         ].map(l => (
