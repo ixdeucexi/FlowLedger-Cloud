@@ -38,7 +38,7 @@ export default function MonthlyScreen() {
   const {
     bills, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
     getCustomDueDay, setCustomDueDay,
-    getMonthlyBills, getBillOccurrencesInMonth, runSnowball, settings,
+    getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, runSnowball, settings,
     selectedYear, setSelectedYear, dashboardFilter, setDashboardFilter,
     getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction,
     getCashFlow, getMonthlyIncome, getDailyBalances, getIncomeOccurrencesInMonth,
@@ -68,11 +68,14 @@ export default function MonthlyScreen() {
 
   const billsWithData = useMemo(() => {
     return monthBills.map(b => {
-      const amount = getAmount(b, month, selectedYear);
+      // monthlyAmount = per-occurrence × number of occurrences this month
+      // (for monthly bills this equals getAmount; for weekly bills it's ×4-5)
+      const monthlyAmount = getBillMonthlyTotal(b, month, selectedYear);
+      const perOccurrence = getAmount(b, month, selectedYear);
       const paid = getPaidAmount(b.id, month, selectedYear);
-      const isPaid = amount > 0 && paid >= amount;
+      const isPaid = monthlyAmount > 0 && paid >= monthlyAmount;
       const isPartial = paid > 0 && !isPaid;
-      return { bill: b, amount, paid, isPaid, isPartial };
+      return { bill: b, amount: monthlyAmount, perOccurrence, paid, isPaid, isPartial };
     })
     .filter(x => {
       if (billFilter === "paid") return x.isPaid;
@@ -82,8 +85,8 @@ export default function MonthlyScreen() {
     .sort((a, b) => a.bill.due_day - b.bill.due_day);
   }, [monthBills, getAmount, getPaidAmount, month, selectedYear, billFilter]);
 
-  const totalDue = useMemo(() => monthBills.reduce((s, b) => s + getAmount(b, month, selectedYear), 0), [monthBills, getAmount, month, selectedYear]);
-  const totalPaid = useMemo(() => monthBills.reduce((s, b) => s + Math.min(getPaidAmount(b.id, month, selectedYear), getAmount(b, month, selectedYear)), 0), [monthBills, getPaidAmount, getAmount, month, selectedYear]);
+  const totalDue = useMemo(() => monthBills.reduce((s, b) => s + getBillMonthlyTotal(b, month, selectedYear), 0), [monthBills, getBillMonthlyTotal, month, selectedYear]);
+  const totalPaid = useMemo(() => monthBills.reduce((s, b) => s + Math.min(getPaidAmount(b.id, month, selectedYear), getBillMonthlyTotal(b, month, selectedYear)), 0), [monthBills, getPaidAmount, getBillMonthlyTotal, month, selectedYear]);
 
   const txList = useMemo(() => getTransactionsForMonth(month, selectedYear), [getTransactionsForMonth, month, selectedYear]);
   const dailyBalances = useMemo(() => getDailyBalances(month, selectedYear), [getDailyBalances, month, selectedYear]);
@@ -323,17 +326,22 @@ export default function MonthlyScreen() {
                 </View>
               </>
             }
-            renderItem={({ item: { bill, amount, paid, isPaid, isPartial } }) => {
+            renderItem={({ item: { bill, amount, perOccurrence, paid, isPaid, isPartial } }) => {
               const borderColor = isPaid ? c.success : isPartial ? c.warning : c.destructive;
               const amtKey = `${bill.id}-${month}-${selectedYear}-amt`;
               const paidKey = `${bill.id}-${month}-${selectedYear}-paid`;
               const dayKey = `${bill.id}-${month}-${selectedYear}-day`;
-              const showAmt = editingAmounts[amtKey] !== undefined ? editingAmounts[amtKey] : amount.toFixed(2);
+              const isWeekly = bill.frequency === "weekly";
+              const occCount = isWeekly ? Math.round(amount / (perOccurrence || 1)) : 1;
+              // For weekly bills: the TextInput edits the per-occurrence (weekly) amount
+              const editableAmt = isWeekly ? perOccurrence : amount;
+              const showAmt = editingAmounts[amtKey] !== undefined ? editingAmounts[amtKey] : editableAmt.toFixed(2);
               const showPaid = editingPaid[paidKey] !== undefined ? editingPaid[paidKey] : paid > 0 ? paid.toFixed(2) : "";
               const remaining = Math.max(0, amount - paid);
               const customDay = getCustomDueDay(bill.id, month, selectedYear);
               const effectiveDueDay = customDay ?? bill.due_day;
               const showDay = editingDueDays[dayKey] !== undefined ? editingDueDays[dayKey] : effectiveDueDay.toString();
+              const WEEKDAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
               return (
                 <View style={[styles.entryCard, { backgroundColor: c.card, borderRadius: colors.radius, borderLeftColor: borderColor }]}>
@@ -341,7 +349,9 @@ export default function MonthlyScreen() {
                     <View style={styles.entryLeft}>
                       <Text style={[styles.entryName, { color: c.foreground }]}>{bill.name}</Text>
                       <Text style={[styles.entryMeta, { color: c.mutedForeground }]}>
-                        Due day {effectiveDueDay}{customDay !== undefined ? " *" : ""} · {bill.category}
+                        {isWeekly
+                          ? `Every ${WEEKDAY_NAMES[bill.day_of_week ?? 0]} · ×${occCount} this month · ${bill.category}`
+                          : `Due day ${effectiveDueDay}${customDay !== undefined ? " *" : ""} · ${bill.category}`}
                       </Text>
                     </View>
                     <View style={styles.entryRight}>
@@ -358,14 +368,24 @@ export default function MonthlyScreen() {
                     </View>
                   </View>
 
+                  {/* Weekly breakdown chip */}
+                  {isWeekly && (
+                    <View style={[styles.weeklyChip, { backgroundColor: c.primary + "12" }]}>
+                      <Feather name="repeat" size={10} color={c.primary} />
+                      <Text style={[styles.weeklyChipText, { color: c.primary }]}>
+                        ${perOccurrence.toFixed(2)}/wk × {occCount} = ${amount.toFixed(2)} total this month
+                      </Text>
+                    </View>
+                  )}
+
                   <View style={styles.amtRow}>
                     <View style={styles.amtField}>
-                      <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>Amount</Text>
+                      <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>{isWeekly ? "Per Week" : "Amount"}</Text>
                       <TextInput
                         style={[styles.fieldInput, { backgroundColor: c.muted, color: c.foreground }]}
                         value={showAmt}
                         onChangeText={v => setEditingAmounts(p => ({ ...p, [amtKey]: v }))}
-                        onFocus={() => setEditingAmounts(p => ({ ...p, [amtKey]: amount.toFixed(2) }))}
+                        onFocus={() => setEditingAmounts(p => ({ ...p, [amtKey]: editableAmt.toFixed(2) }))}
                         onBlur={() => handleAmtBlur({ id: bill.id, amount: bill.amount }, amtKey)}
                         keyboardType="decimal-pad"
                         returnKeyType="done"
@@ -773,6 +793,8 @@ const styles = StyleSheet.create({
   dueDayRow: { flexDirection: "row", alignItems: "center", marginHorizontal: 12, marginBottom: 10 },
   dueDayInput: { width: 42, height: 30, borderRadius: 6, textAlign: "center", fontSize: 14, fontFamily: "Inter_600SemiBold", borderWidth: 1 },
   calScroll: { paddingTop: 8 },
+  weeklyChip: { flexDirection: "row", alignItems: "center", gap: 5, marginHorizontal: 12, marginTop: 2, marginBottom: 6, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  weeklyChipText: { fontSize: 11, fontFamily: "Inter_500Medium" },
   balanceBar: { flexDirection: "row", padding: 12, marginBottom: 0 },
   balanceBarItem: { flex: 1, alignItems: "center" },
   balanceBarLabel: { fontSize: 10, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 },

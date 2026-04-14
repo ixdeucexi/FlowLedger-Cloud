@@ -24,7 +24,7 @@ export default function DashboardScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { bills, getAmount, getPaidAmount, transactions, selectedYear, setDashboardFilter,
+  const { bills, getAmount, getPaidAmount, getBillMonthlyTotal, transactions, selectedYear, setDashboardFilter,
     goals, addGoal, updateGoal, deleteGoal, checkGoalAffordability,
     getCashFlow, getMonthlyIncome } = useBudget();
 
@@ -39,7 +39,7 @@ export default function DashboardScreen() {
     const monthBills = bills.filter(b => b.is_recurring || b.is_debt);
     let totalDue = 0, totalPaid = 0, paidCount = 0;
     monthBills.forEach(b => {
-      const amt = getAmount(b, currentMonth, selectedYear);
+      const amt = getBillMonthlyTotal(b, currentMonth, selectedYear);
       const paid = getPaidAmount(b.id, currentMonth, selectedYear);
       totalDue += amt;
       totalPaid += Math.min(paid, amt);
@@ -48,7 +48,7 @@ export default function DashboardScreen() {
     const totalDebt = bills.filter(b => b.is_debt).reduce((s, b) => s + b.balance, 0);
     const unpaidCount = monthBills.length - paidCount;
     return { totalDue, totalPaid, remaining: totalDue - totalPaid, paidCount, unpaidCount, billCount: monthBills.length, totalDebt };
-  }, [bills, getAmount, getPaidAmount, currentMonth, selectedYear]);
+  }, [bills, getBillMonthlyTotal, getPaidAmount, currentMonth, selectedYear]);
 
   const cashFlow = useMemo(() => getCashFlow(currentMonth, selectedYear), [getCashFlow, currentMonth, selectedYear]);
   const monthlyIncome = getMonthlyIncome();
@@ -67,8 +67,8 @@ export default function DashboardScreen() {
   };
 
   const monthlyBarData = useMemo(() =>
-    MONTH_NAMES.map((label, i) => ({ label, value: bills.filter(b => b.is_recurring || b.is_debt).reduce((s, b) => s + getAmount(b, i, selectedYear), 0) })),
-    [bills, getAmount, selectedYear]);
+    MONTH_NAMES.map((label, i) => ({ label, value: bills.filter(b => b.is_recurring || b.is_debt).reduce((s, b) => s + getBillMonthlyTotal(b, i, selectedYear), 0) })),
+    [bills, getBillMonthlyTotal, selectedYear]);
 
   const categoryData = useMemo(() => {
     const map: Record<string, number> = {};
