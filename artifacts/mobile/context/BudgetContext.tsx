@@ -768,20 +768,13 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
       // Iterate month by month from anchor → target, accumulating the running balance.
       // This mirrors what the calendar shows when you page through each month.
-      let balance: number;
-      if (!settings.carryover_balances) {
-        // No chain: each month is independent, opening at seed. The projected
-        // balance at the goal month is simply seed + that month's net.
-        balance = seed + monthNet(month, year);
-      } else {
-        // Chain forward: carry the last day of each month into the next.
-        balance = seed;
-        let m = anchorM, y = anchorY;
-        while (y < year || (y === year && m <= month)) {
-          balance = (m === anchorM && y === anchorY) ? seed + monthNet(m, y) : balance + monthNet(m, y);
-          if (m === month && y === year) break;
-          m++; if (m > 11) { m = 0; y++; }
-        }
+      // Always chain forward — goal projections must mirror what the calendar shows.
+      let balance = seed;
+      let m = anchorM, y = anchorY;
+      while (y < year || (y === year && m <= month)) {
+        balance = (m === anchorM && y === anchorY) ? seed + monthNet(m, y) : balance + monthNet(m, y);
+        if (m === month && y === year) break;
+        m++; if (m > 11) { m = 0; y++; }
       }
 
       const projectedBalance = balance;
@@ -863,14 +856,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         return settings.starting_balance;
       }
 
-      // Months after the anchor ────────────────────────────────────────────────
-      if (!settings.carryover_balances) {
-        // No chain: each future month also opens at the starting_balance (fresh start)
-        return settings.starting_balance;
-      }
-
-      // Chain forward: accumulate net changes from anchor to toMonth, carrying the
-      // last day of each month into the next month's opening balance.
+      // Months after the anchor — always chain forward so the last day of month M
+      // becomes the opening balance of month M+1 (basic financial continuity).
+      // The carryover_balances setting controls unpaid-bill rollover (a separate feature).
       let running = settings.starting_balance;
       let m = anchorM;
       let y = anchorY;

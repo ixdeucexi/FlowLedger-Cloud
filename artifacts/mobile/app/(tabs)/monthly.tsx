@@ -448,21 +448,54 @@ export default function MonthlyScreen() {
       ) : (
         <ScrollView contentContainerStyle={[styles.calScroll, { paddingBottom: insets.bottom + 100 }]}>
           <View style={{ paddingHorizontal: 16 }}>
-            <View style={[styles.txSummary, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-              {[
-                { label: "Income", val: `$${txIncome.toFixed(0)}`, color: c.success },
-                { label: "Spent", val: `$${txExpense.toFixed(0)}`, color: c.destructive },
-                { label: "Net", val: `$${(txIncome - txExpense).toFixed(0)}`, color: txIncome - txExpense >= 0 ? c.success : c.destructive },
-              ].map((s, i) => (
-                <React.Fragment key={s.label}>
-                  {i > 0 && <View style={[styles.sep, { backgroundColor: c.border }]} />}
-                  <View style={styles.txSumItem}>
-                    <Text style={[styles.txSumLabel, { color: c.mutedForeground }]}>{s.label}</Text>
-                    <Text style={[styles.txSumValue, { color: s.color }]}>{s.val}</Text>
+            {/* Opening / Closing balance bar */}
+            {dailyBalances.length > 0 && (() => {
+              const opening = dailyBalances[0].balance - dailyBalances[0].net;
+              const closing = dailyBalances[dailyBalances.length - 1].balance;
+              return (
+                <View style={[styles.balanceBar, { backgroundColor: c.card, borderRadius: colors.radius, marginBottom: 8 }]}>
+                  <View style={styles.balanceBarItem}>
+                    <Text style={[styles.balanceBarLabel, { color: c.mutedForeground }]}>Opens</Text>
+                    <Text style={[styles.balanceBarValue, { color: opening >= 0 ? c.success : c.destructive }]}>
+                      ${Math.abs(opening).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Text>
                   </View>
-                </React.Fragment>
-              ))}
-            </View>
+                  <View style={[styles.sep, { backgroundColor: c.border }]} />
+                  <View style={styles.balanceBarItem}>
+                    <Text style={[styles.balanceBarLabel, { color: c.mutedForeground }]}>Closes</Text>
+                    <Text style={[styles.balanceBarValue, { color: closing >= 0 ? c.success : c.destructive }]}>
+                      ${Math.abs(closing).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })()}
+
+            {/* Income / Spent / Net — includes both scheduled events and manual transactions */}
+            {(() => {
+              const schedIncome = dailyBalances.reduce((s, db) => s + db.scheduledIncome, 0);
+              const schedBills  = dailyBalances.reduce((s, db) => s + db.bills, 0);
+              const totalIncome = txIncome + schedIncome;
+              const totalSpent  = txExpense + schedBills;
+              const net = totalIncome - totalSpent;
+              return (
+                <View style={[styles.txSummary, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+                  {[
+                    { label: "Income", val: `$${totalIncome.toFixed(0)}`, color: c.success },
+                    { label: "Spent",  val: `$${totalSpent.toFixed(0)}`,  color: c.destructive },
+                    { label: "Net",    val: `${net >= 0 ? "+" : "-"}$${Math.abs(net).toFixed(0)}`, color: net >= 0 ? c.success : c.destructive },
+                  ].map((s, i) => (
+                    <React.Fragment key={s.label}>
+                      {i > 0 && <View style={[styles.sep, { backgroundColor: c.border }]} />}
+                      <View style={styles.txSumItem}>
+                        <Text style={[styles.txSumLabel, { color: c.mutedForeground }]}>{s.label}</Text>
+                        <Text style={[styles.txSumValue, { color: s.color }]}>{s.val}</Text>
+                      </View>
+                    </React.Fragment>
+                  ))}
+                </View>
+              );
+            })()}
 
             <CalendarView
               month={month}
@@ -740,6 +773,10 @@ const styles = StyleSheet.create({
   dueDayRow: { flexDirection: "row", alignItems: "center", marginHorizontal: 12, marginBottom: 10 },
   dueDayInput: { width: 42, height: 30, borderRadius: 6, textAlign: "center", fontSize: 14, fontFamily: "Inter_600SemiBold", borderWidth: 1 },
   calScroll: { paddingTop: 8 },
+  balanceBar: { flexDirection: "row", padding: 12, marginBottom: 0 },
+  balanceBarItem: { flex: 1, alignItems: "center" },
+  balanceBarLabel: { fontSize: 10, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 },
+  balanceBarValue: { fontSize: 15, fontFamily: "Inter_700Bold" },
   txSummary: { flexDirection: "row", padding: 12, marginBottom: 10 },
   txSumItem: { flex: 1, alignItems: "center" },
   txSumLabel: { fontSize: 10, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 },
