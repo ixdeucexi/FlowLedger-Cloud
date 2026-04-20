@@ -596,8 +596,8 @@ export default function DashboardScreen() {
                 onPress={() => setExpenseType("expense")}
                 style={[styles.expenseTypeBtn, expenseType === "expense" && { backgroundColor: c.card }]}
               >
-                <Feather name="shopping-bag" size={14} color={expenseType === "expense" ? c.primary : c.mutedForeground} />
-                <Text style={[styles.expenseTypeBtnText, { color: expenseType === "expense" ? c.primary : c.mutedForeground }]}>
+                <Feather name="shopping-bag" size={14} color={expenseType === "expense" ? c.destructive : c.mutedForeground} />
+                <Text style={[styles.expenseTypeBtnText, { color: expenseType === "expense" ? c.destructive : c.mutedForeground }]}>
                   Expense
                 </Text>
               </Pressable>
@@ -656,7 +656,7 @@ export default function DashboardScreen() {
                   setExpenseNameModal(false);
                   setAddedAsExpense(true);
                 }}
-                style={[styles.expenseBtn, { backgroundColor: expenseType === "expense" ? c.primary : "#8b5cf6" }]}
+                style={[styles.expenseBtn, { backgroundColor: expenseType === "expense" ? c.destructive : "#8b5cf6" }]}
               >
                 <Text style={[styles.expenseBtnText, { color: "#fff" }]}>
                   {expenseType === "expense" ? "Add Expense" : "Add Goal"}
