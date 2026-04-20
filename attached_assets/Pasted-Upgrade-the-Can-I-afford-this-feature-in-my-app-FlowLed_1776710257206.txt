@@ -1,0 +1,133 @@
+Upgrade the "Can I afford this?" feature in my app FlowLedger.
+
+DO NOT rebuild the app. DO NOT change existing data structures unless necessary.
+Enhance logic, accuracy, and user feedback.
+
+-----------------------------------
+PRIMARY GOAL
+-----------------------------------
+Turn this into a true decision tool that answers:
+"Can I afford this AND what happens after I spend it?"
+
+-----------------------------------
+1. INPUT IMPROVEMENT
+-----------------------------------
+
+Update input fields:
+
+Required:
+- Amount
+
+Optional:
+- Date (default = today)
+- Category (optional, for future use)
+
+-----------------------------------
+2. CALCULATION LOGIC (CRITICAL)
+-----------------------------------
+
+When user enters an amount:
+
+STEP 1:
+Determine selected date (or today)
+
+STEP 2:
+Calculate projected balance at that date using:
+- Income up to that date
+- Bills due up to that date
+- Debt payments
+- Existing transactions
+
+STEP 3:
+Subtract entered amount
+
+-----------------------------------
+3. OUTPUT (UPGRADE RESPONSE)
+-----------------------------------
+
+Replace simple YES/NO with:
+
+-----------------------------------
+CASE 1: AFFORDABLE
+-----------------------------------
+
+GREEN:
+
+"You CAN afford this."
+
+Show:
+- Balance after purchase: $X
+- Lowest balance before next income: $Y
+
+-----------------------------------
+CASE 2: RISKY (NEW STATE)
+-----------------------------------
+
+YELLOW:
+
+"You can afford this, but it will be tight."
+
+Trigger if:
+- Balance stays above $0
+BUT drops below a threshold (ex: $200)
+
+Show:
+- Lowest balance: $X
+- Warning message:
+  "You may run low before your next income."
+
+-----------------------------------
+CASE 3: NOT AFFORDABLE
+-----------------------------------
+
+RED:
+
+"You CANNOT afford this."
+
+Show:
+- Shortfall: $X
+- Date when balance goes negative
+
+-----------------------------------
+4. ADD “WHAT HAPPENS NEXT” INSIGHT
+-----------------------------------
+
+Always show:
+
+"After this purchase, your lowest balance will be $X on [date]."
+
+This must be calculated using existing calendar + bills + income.
+
+-----------------------------------
+5. ADD QUICK ACTIONS
+-----------------------------------
+
+After result, show buttons:
+
+- "Add as Expense"
+- "Adjust Amount"
+- "View in Calendar"
+
+-----------------------------------
+6. UX REQUIREMENTS
+-----------------------------------
+
+- Must be instant (no loading delay)
+- Keep UI simple (no complex charts)
+- Highlight key numbers clearly
+
+-----------------------------------
+7. DATA RULES
+-----------------------------------
+
+- Use existing systems (income, bills, transactions)
+- Do NOT create duplicate data
+- Do NOT break existing calculations
+
+-----------------------------------
+FINAL CHECK
+-----------------------------------
+
+- Results must match calendar projections
+- No incorrect balances
+- Works for future dates and today

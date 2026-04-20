@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Keyboard, Modal, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, View,
@@ -29,9 +29,9 @@ export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const {
-    bills, getPaidAmount, getBillMonthlyTotal, transactions, selectedYear, setDashboardFilter,
+    bills, getPaidAmount, getBillMonthlyTotal, selectedYear, setDashboardFilter,
     goals, addGoal, updateGoal, deleteGoal, checkGoalAffordability,
-    getCashFlow, getMonthlyIncome, addBill,
+    getCashFlow, getMonthlyIncome, addBill, addTransaction, getDailyBalances,
   } = useBudget();
 
   const [goalModalVisible, setGoalModalVisible]     = useState(false);
@@ -39,10 +39,39 @@ export default function DashboardScreen() {
   const [actionModalVisible, setActionModalVisible] = useState(false);
   const [addBillVisible, setAddBillVisible]         = useState(false);
   const [affordAmt, setAffordAmt]                   = useState("");
+  const [addedAsExpense, setAddedAsExpense]          = useState(false);
 
   const now          = new Date();
   const currentMonth = now.getMonth();
   const today        = now.getDate();
+
+  // ── Afford date stepper ────────────────────────────────────────────────────
+  const [affordDate, setAffordDate] = useState<Date>(
+    () => new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  );
+  const stepAffordDate = useCallback((delta: number) => {
+    setAffordDate(prev => {
+      const next = new Date(prev);
+      next.setDate(next.getDate() + delta);
+      return next;
+    });
+    setAddedAsExpense(false);
+  }, []);
+  const resetAffordDate = useCallback(() => {
+    setAffordDate(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
+    setAddedAsExpense(false);
+  }, [now.getFullYear(), now.getMonth(), now.getDate()]);
+  const affordDateLabel = useMemo(() => {
+    const base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const diff = Math.round((affordDate.getTime() - base.getTime()) / 86_400_000);
+    if (diff === 0)  return "Today";
+    if (diff === 1)  return "Tomorrow";
+    if (diff === -1) return "Yesterday";
+    return affordDate.toLocaleDateString("en-US", {
+      month: "short", day: "numeric",
+      ...(affordDate.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
+    });
+  }, [affordDate, now]);
 
   const cashFlow     = useMemo(() => getCashFlow(currentMonth, selectedYear), [getCashFlow, currentMonth, selectedYear]);
   const monthlyIncome = getMonthlyIncome();
@@ -93,14 +122,50 @@ export default function DashboardScreen() {
     return months;
   }, [bills, currentMonth]);
 
-  // ── Affordability check ──────────────────────────────────────────────────────
+  // ── Affordability check (real calendar projection) ──────────────────────────
+  const RISKY_THRESHOLD = 200;
   const affordResult = useMemo(() => {
     const amt = parseFloat(affordAmt);
     if (!affordAmt.trim() || isNaN(amt) || amt <= 0) return null;
-    const available = cashFlow.remaining;
-    const canAfford = available >= amt;
-    return { canAfford, remaining: available - amt, shortfall: amt - available };
-  }, [affordAmt, cashFlow.remaining]);
+
+    const purchaseMonth = affordDate.getMonth();
+    const purchaseYear  = affordDate.getFullYear();
+    const purchaseDay   = affordDate.getDate();
+
+    // Pull the full daily balance array for the purchase month (uses real income/bills/tx)
+    const balances = getDailyBalances(purchaseMonth, purchaseYear);
+    const dayEntry = balances.find(db => db.day === purchaseDay);
+    if (!balances.length) return null;
+
+    // If the date is beyond the last day computed, use the last day
+    const effectiveEntry = dayEntry ?? balances[balances.length - 1];
+    const balanceAtDay   = effectiveEntry.balance;
+    const balanceAfter   = balanceAtDay - amt;
+
+    // Lowest balance from purchase day forward (purchase reduces every subsequent day by flat amt)
+    const fromDay = balances.filter(db => db.day >= (dayEntry?.day ?? effectiveEntry.day));
+    let lowestBal = balanceAfter;
+    let lowestDay = effectiveEntry.day;
+    fromDay.forEach(db => {
+      const adj = db.balance - amt;
+      if (adj < lowestBal) { lowestBal = adj; lowestDay = db.day; }
+    });
+
+    const canAfford = balanceAfter >= 0;
+    const isRisky   = canAfford && lowestBal < RISKY_THRESHOLD;
+    const shortfall = canAfford ? 0 : Math.abs(balanceAfter);
+
+    const lowestDateLabel = new Date(purchaseYear, purchaseMonth, lowestDay)
+      .toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const affordDateStr = `${purchaseYear}-${String(purchaseMonth + 1).padStart(2, "0")}-${String(purchaseDay).padStart(2, "0")}`;
+
+    return {
+      canAfford, isRisky, shortfall,
+      balanceAtDay, balanceAfter,
+      lowestBal, lowestDay, lowestDateLabel,
+      purchaseMonth, purchaseYear, purchaseDay, affordDateStr, amt,
+    };
+  }, [affordAmt, affordDate, getDailyBalances]);
 
   const navigate = (filter: DashboardFilter, tab: string) => {
     setDashboardFilter(filter);
@@ -179,46 +244,156 @@ export default function DashboardScreen() {
 
       {/* ── AFFORDABILITY CHECK ── */}
       <View style={[styles.affordCard, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        {/* Header */}
         <View style={styles.affordHeader}>
-          <Feather name="help-circle" size={16} color={c.primary} />
+          <View style={[styles.affordHeaderIcon, { backgroundColor: c.primary + "18" }]}>
+            <Feather name="help-circle" size={16} color={c.primary} />
+          </View>
           <Text style={[styles.affordTitle, { color: c.foreground }]}>Can I afford this?</Text>
         </View>
-        <View style={styles.affordRow}>
+
+        {/* Amount row */}
+        <View style={styles.affordAmtRow}>
+          <Text style={[styles.affordDollar, { color: c.mutedForeground }]}>$</Text>
           <TextInput
             style={[styles.affordInput, { backgroundColor: c.muted, color: c.foreground, borderRadius: 10 }]}
-            placeholder="Enter amount..."
+            placeholder="0.00"
             placeholderTextColor={c.mutedForeground}
             keyboardType="decimal-pad"
             returnKeyType="done"
             onSubmitEditing={Keyboard.dismiss}
             value={affordAmt}
-            onChangeText={setAffordAmt}
+            onChangeText={v => { setAffordAmt(v); setAddedAsExpense(false); }}
           />
           {affordAmt.trim().length > 0 && (
-            <Pressable onPress={() => setAffordAmt("")} style={[styles.affordClear, { backgroundColor: c.muted }]}>
+            <Pressable onPress={() => { setAffordAmt(""); setAddedAsExpense(false); }} style={[styles.affordClear, { backgroundColor: c.muted }]}>
               <Feather name="x" size={14} color={c.mutedForeground} />
             </Pressable>
           )}
         </View>
-        {affordResult && (
-          <View style={[styles.affordResult, { backgroundColor: affordResult.canAfford ? c.success + "18" : c.destructive + "18", borderRadius: 10 }]}>
-            <Feather
-              name={affordResult.canAfford ? "check-circle" : "x-circle"}
-              size={20}
-              color={affordResult.canAfford ? c.success : c.destructive}
-            />
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.affordResultTitle, { color: affordResult.canAfford ? c.success : c.destructive }]}>
-                {affordResult.canAfford ? "YES — You can afford this." : "NO — You'll be short."}
-              </Text>
-              <Text style={[styles.affordResultSub, { color: c.mutedForeground }]}>
-                {affordResult.canAfford
-                  ? `You'll still have $${affordResult.remaining.toFixed(0)} left this month.`
-                  : `You'll be $${affordResult.shortfall.toFixed(0)} short this month.`}
-              </Text>
+
+        {/* Date stepper */}
+        <View style={[styles.affordDateRow, { backgroundColor: c.muted, borderRadius: 10 }]}>
+          <Pressable onPress={() => stepAffordDate(-1)} style={styles.affordDateArrow} hitSlop={8}>
+            <Feather name="chevron-left" size={18} color={c.mutedForeground} />
+          </Pressable>
+          <Pressable onPress={resetAffordDate} style={styles.affordDateCenter}>
+            <Feather name="calendar" size={12} color={c.primary} />
+            <Text style={[styles.affordDateLabel, { color: c.foreground }]}>{affordDateLabel}</Text>
+          </Pressable>
+          <Pressable onPress={() => stepAffordDate(1)} style={styles.affordDateArrow} hitSlop={8}>
+            <Feather name="chevron-right" size={18} color={c.mutedForeground} />
+          </Pressable>
+        </View>
+
+        {/* Result */}
+        {affordResult && (() => {
+          const { canAfford, isRisky, shortfall, balanceAtDay, balanceAfter, lowestBal, lowestDateLabel } = affordResult;
+          const state   = !canAfford ? "red" : isRisky ? "yellow" : "green";
+          const bgColor = state === "green" ? c.success + "15" : state === "yellow" ? "#f0b42918" : c.destructive + "15";
+          const mainCol = state === "green" ? c.success  : state === "yellow" ? "#f0b429"   : c.destructive;
+          const icon    = state === "green" ? "check-circle" as const : state === "yellow" ? "alert-triangle" as const : "x-circle" as const;
+          const headline =
+            state === "green"  ? "You CAN afford this." :
+            state === "yellow" ? "You can afford this, but it will be tight." :
+                                 "You CANNOT afford this.";
+
+          return (
+            <View style={{ marginTop: 12 }}>
+              {/* Main verdict */}
+              <View style={[styles.affordVerdict, { backgroundColor: bgColor, borderRadius: 12 }]}>
+                <Feather name={icon} size={22} color={mainCol} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.affordVerdictTitle, { color: mainCol }]}>{headline}</Text>
+
+                  {state === "green" && (
+                    <Text style={[styles.affordVerdictSub, { color: c.mutedForeground }]}>
+                      Balance after purchase:{" "}
+                      <Text style={{ color: c.success, fontFamily: "Inter_700Bold" }}>
+                        ${balanceAfter.toFixed(2)}
+                      </Text>
+                    </Text>
+                  )}
+                  {state === "yellow" && (
+                    <Text style={[styles.affordVerdictSub, { color: c.mutedForeground }]}>
+                      You may run low before your next income.{"\n"}
+                      Balance after purchase:{" "}
+                      <Text style={{ color: "#f0b429", fontFamily: "Inter_700Bold" }}>
+                        ${balanceAfter.toFixed(2)}
+                      </Text>
+                    </Text>
+                  )}
+                  {state === "red" && (
+                    <Text style={[styles.affordVerdictSub, { color: c.mutedForeground }]}>
+                      Shortfall:{" "}
+                      <Text style={{ color: c.destructive, fontFamily: "Inter_700Bold" }}>
+                        ${shortfall.toFixed(2)}
+                      </Text>
+                      {"\n"}
+                      Your projected balance on{" "}
+                      {affordDateLabel.toLowerCase()} is only{" "}
+                      <Text style={{ fontFamily: "Inter_700Bold" }}>
+                        ${balanceAtDay.toFixed(2)}
+                      </Text>
+                    </Text>
+                  )}
+                </View>
+              </View>
+
+              {/* "What happens next" insight */}
+              <View style={[styles.affordInsight, { backgroundColor: c.muted, borderRadius: 10 }]}>
+                <Feather name="trending-down" size={13} color={lowestBal < 0 ? c.destructive : lowestBal < RISKY_THRESHOLD ? "#f0b429" : c.mutedForeground} />
+                <Text style={[styles.affordInsightText, { color: c.mutedForeground }]}>
+                  Your lowest balance after this will be{" "}
+                  <Text style={{ color: lowestBal < 0 ? c.destructive : lowestBal < RISKY_THRESHOLD ? "#f0b429" : c.foreground, fontFamily: "Inter_700Bold" }}>
+                    {lowestBal < 0 ? "-" : ""}${Math.abs(lowestBal).toFixed(2)}
+                  </Text>
+                  {" "}on {lowestDateLabel}.
+                </Text>
+              </View>
+
+              {/* Quick actions */}
+              <View style={styles.affordActions}>
+                {addedAsExpense ? (
+                  <View style={[styles.affordActionDone, { backgroundColor: c.success + "18", borderRadius: 10 }]}>
+                    <Feather name="check" size={14} color={c.success} />
+                    <Text style={[styles.affordActionDoneText, { color: c.success }]}>Added as expense</Text>
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={() => {
+                      addTransaction({
+                        amount: -Math.abs(affordResult.amt),
+                        category: "Other",
+                        note: "Afford check expense",
+                        date: affordResult.affordDateStr,
+                      });
+                      setAddedAsExpense(true);
+                    }}
+                    style={({ pressed }) => [styles.affordActionBtn, { backgroundColor: c.primary + "18", opacity: pressed ? 0.75 : 1 }]}
+                  >
+                    <Feather name="plus-circle" size={14} color={c.primary} />
+                    <Text style={[styles.affordActionBtnText, { color: c.primary }]}>Add as Expense</Text>
+                  </Pressable>
+                )}
+                <Pressable
+                  onPress={() => setAffordAmt("")}
+                  style={({ pressed }) => [styles.affordActionBtn, { backgroundColor: c.muted, opacity: pressed ? 0.75 : 1 }]}
+                >
+                  <Feather name="edit-2" size={14} color={c.mutedForeground} />
+                  <Text style={[styles.affordActionBtnText, { color: c.mutedForeground }]}>Adjust Amount</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => router.push("/(tabs)/monthly" as any)}
+                  style={({ pressed }) => [styles.affordActionBtn, { backgroundColor: c.muted, opacity: pressed ? 0.75 : 1 }]}
+                >
+                  <Feather name="calendar" size={14} color={c.mutedForeground} />
+                  <Text style={[styles.affordActionBtnText, { color: c.mutedForeground }]}>View Calendar</Text>
+                </Pressable>
+              </View>
             </View>
-          </View>
-        )}
+          );
+        })()}
       </View>
 
       {/* ── Upcoming Bills ── */}
@@ -449,16 +624,29 @@ const styles = StyleSheet.create({
   whatBtnIcon: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   whatBtnText: { flex: 1, fontSize: 16, fontFamily: "Inter_700Bold" },
 
-  // Affordability
-  affordCard:        { padding: 16, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
-  affordHeader:      { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
-  affordTitle:       { fontSize: 15, fontFamily: "Inter_700Bold" },
-  affordRow:         { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
-  affordInput:       { flex: 1, height: 44, paddingHorizontal: 14, fontSize: 16, fontFamily: "Inter_500Medium" },
-  affordClear:       { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  affordResult:      { flexDirection: "row", alignItems: "flex-start", gap: 10, padding: 12 },
-  affordResultTitle: { fontSize: 14, fontFamily: "Inter_700Bold" },
-  affordResultSub:   { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  // Affordability card
+  affordCard:           { padding: 16, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
+  affordHeader:         { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
+  affordHeaderIcon:     { width: 32, height: 32, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  affordTitle:          { fontSize: 16, fontFamily: "Inter_700Bold" },
+  affordAmtRow:         { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
+  affordDollar:         { fontSize: 20, fontFamily: "Inter_700Bold", paddingLeft: 4 },
+  affordInput:          { flex: 1, height: 48, paddingHorizontal: 14, fontSize: 22, fontFamily: "Inter_700Bold" },
+  affordClear:          { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  affordDateRow:        { flexDirection: "row", alignItems: "center", height: 44 },
+  affordDateArrow:      { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  affordDateCenter:     { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  affordDateLabel:      { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  affordVerdict:        { flexDirection: "row", alignItems: "flex-start", gap: 12, padding: 14, marginBottom: 10 },
+  affordVerdictTitle:   { fontSize: 15, fontFamily: "Inter_700Bold", marginBottom: 4 },
+  affordVerdictSub:     { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 18 },
+  affordInsight:        { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, marginBottom: 10 },
+  affordInsightText:    { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 18 },
+  affordActions:        { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  affordActionBtn:      { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 10 },
+  affordActionBtnText:  { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  affordActionDone:     { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 9 },
+  affordActionDoneText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
 
   // Upcoming
   sectionTitle:  { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 10, marginTop: 4 },
