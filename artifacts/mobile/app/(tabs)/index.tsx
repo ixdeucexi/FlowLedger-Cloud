@@ -40,6 +40,8 @@ export default function DashboardScreen() {
   const [addBillVisible, setAddBillVisible]         = useState(false);
   const [affordAmt, setAffordAmt]                   = useState("");
   const [addedAsExpense, setAddedAsExpense]          = useState(false);
+  const [expenseNameModal, setExpenseNameModal]      = useState(false);
+  const [expenseNameInput, setExpenseNameInput]      = useState("");
 
   const now          = new Date();
   const currentMonth = now.getMonth();
@@ -352,7 +354,7 @@ export default function DashboardScreen() {
                 </Text>
               </View>
 
-              {/* Quick actions */}
+              {/* Quick action */}
               <View style={styles.affordActions}>
                 {addedAsExpense ? (
                   <View style={[styles.affordActionDone, { backgroundColor: c.success + "18", borderRadius: 10 }]}>
@@ -361,35 +363,13 @@ export default function DashboardScreen() {
                   </View>
                 ) : (
                   <Pressable
-                    onPress={() => {
-                      addTransaction({
-                        amount: -Math.abs(affordResult.amt),
-                        category: "Other",
-                        note: "Afford check expense",
-                        date: affordResult.affordDateStr,
-                      });
-                      setAddedAsExpense(true);
-                    }}
+                    onPress={() => { setExpenseNameInput(""); setExpenseNameModal(true); }}
                     style={({ pressed }) => [styles.affordActionBtn, { backgroundColor: c.primary + "18", opacity: pressed ? 0.75 : 1 }]}
                   >
                     <Feather name="plus-circle" size={14} color={c.primary} />
                     <Text style={[styles.affordActionBtnText, { color: c.primary }]}>Add as Expense</Text>
                   </Pressable>
                 )}
-                <Pressable
-                  onPress={() => setAffordAmt("")}
-                  style={({ pressed }) => [styles.affordActionBtn, { backgroundColor: c.muted, opacity: pressed ? 0.75 : 1 }]}
-                >
-                  <Feather name="edit-2" size={14} color={c.mutedForeground} />
-                  <Text style={[styles.affordActionBtnText, { color: c.mutedForeground }]}>Adjust Amount</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => router.push("/(tabs)/monthly" as any)}
-                  style={({ pressed }) => [styles.affordActionBtn, { backgroundColor: c.muted, opacity: pressed ? 0.75 : 1 }]}
-                >
-                  <Feather name="calendar" size={14} color={c.mutedForeground} />
-                  <Text style={[styles.affordActionBtnText, { color: c.mutedForeground }]}>View Calendar</Text>
-                </Pressable>
               </View>
             </View>
           );
@@ -599,6 +579,62 @@ export default function DashboardScreen() {
         onDelete={deleteGoal}
         editGoal={editGoal}
       />
+
+      {/* ── Expense name popup ── */}
+      <Modal visible={expenseNameModal} transparent animationType="fade" onRequestClose={() => setExpenseNameModal(false)}>
+        <Pressable style={styles.expenseOverlay} onPress={() => setExpenseNameModal(false)}>
+          <Pressable style={[styles.expenseSheet, { backgroundColor: c.card }]} onPress={() => {}}>
+            <Text style={[styles.expenseSheetTitle, { color: c.foreground }]}>Name this expense</Text>
+            <Text style={[styles.expenseSheetSub, { color: c.mutedForeground }]}>
+              ${affordResult?.amt.toFixed(2)} on {affordDateLabel}
+            </Text>
+            <TextInput
+              style={[styles.expenseNameInput, { backgroundColor: c.muted, color: c.foreground }]}
+              placeholder="e.g. Dinner out, New shoes…"
+              placeholderTextColor={c.mutedForeground}
+              autoFocus
+              returnKeyType="done"
+              value={expenseNameInput}
+              onChangeText={setExpenseNameInput}
+              onSubmitEditing={() => {
+                if (!affordResult) return;
+                addTransaction({
+                  amount: -Math.abs(affordResult.amt),
+                  category: "Other",
+                  note: expenseNameInput.trim() || "Expense",
+                  date: affordResult.affordDateStr,
+                });
+                setExpenseNameModal(false);
+                setAddedAsExpense(true);
+              }}
+            />
+            <View style={styles.expenseBtns}>
+              <Pressable
+                onPress={() => setExpenseNameModal(false)}
+                style={[styles.expenseBtn, { backgroundColor: c.muted }]}
+              >
+                <Text style={[styles.expenseBtnText, { color: c.mutedForeground }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  if (!affordResult) return;
+                  addTransaction({
+                    amount: -Math.abs(affordResult.amt),
+                    category: "Other",
+                    note: expenseNameInput.trim() || "Expense",
+                    date: affordResult.affordDateStr,
+                  });
+                  setExpenseNameModal(false);
+                  setAddedAsExpense(true);
+                }}
+                style={[styles.expenseBtn, { backgroundColor: c.primary }]}
+              >
+                <Text style={[styles.expenseBtnText, { color: "#fff" }]}>Add Expense</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
@@ -689,6 +725,16 @@ const styles = StyleSheet.create({
   affordText:         { flex: 1 },
   affordBoxTitle:     { fontSize: 13, fontFamily: "Inter_700Bold" },
   affordSub:          { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+
+  // Expense name popup
+  expenseOverlay:     { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", alignItems: "center", padding: 32 },
+  expenseSheet:       { width: "100%", borderRadius: 20, padding: 24, shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 16, elevation: 12 },
+  expenseSheetTitle:  { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 4 },
+  expenseSheetSub:    { fontSize: 13, fontFamily: "Inter_400Regular", marginBottom: 18 },
+  expenseNameInput:   { height: 50, borderRadius: 12, paddingHorizontal: 16, fontSize: 16, fontFamily: "Inter_500Medium", marginBottom: 20 },
+  expenseBtns:        { flexDirection: "row", gap: 10 },
+  expenseBtn:         { flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: "center" },
+  expenseBtnText:     { fontSize: 15, fontFamily: "Inter_600SemiBold" },
 
   // Action sheet modal
   modalOverlay:    { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.5)" },
