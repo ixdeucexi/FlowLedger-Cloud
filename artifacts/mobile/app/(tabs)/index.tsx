@@ -42,6 +42,7 @@ export default function DashboardScreen() {
   const [addedAsExpense, setAddedAsExpense]          = useState(false);
   const [expenseNameModal, setExpenseNameModal]      = useState(false);
   const [expenseNameInput, setExpenseNameInput]      = useState("");
+  const [expenseType, setExpenseType]                = useState<"expense" | "goal">("expense");
 
   const now          = new Date();
   const currentMonth = now.getMonth();
@@ -363,11 +364,11 @@ export default function DashboardScreen() {
                   </View>
                 ) : (
                   <Pressable
-                    onPress={() => { setExpenseNameInput(""); setExpenseNameModal(true); }}
+                    onPress={() => { setExpenseNameInput(""); setExpenseType("expense"); setExpenseNameModal(true); }}
                     style={({ pressed }) => [styles.affordActionBtn, { backgroundColor: c.primary + "18", opacity: pressed ? 0.75 : 1 }]}
                   >
                     <Feather name="plus-circle" size={14} color={c.primary} />
-                    <Text style={[styles.affordActionBtnText, { color: c.primary }]}>Add as Expense</Text>
+                    <Text style={[styles.affordActionBtnText, { color: c.primary }]}>Save to Budget</Text>
                   </Pressable>
                 )}
               </View>
@@ -580,17 +581,47 @@ export default function DashboardScreen() {
         editGoal={editGoal}
       />
 
-      {/* ── Expense name popup ── */}
+      {/* ── Save to Budget popup ── */}
       <Modal visible={expenseNameModal} transparent animationType="fade" onRequestClose={() => setExpenseNameModal(false)}>
         <Pressable style={styles.expenseOverlay} onPress={() => setExpenseNameModal(false)}>
           <Pressable style={[styles.expenseSheet, { backgroundColor: c.card }]} onPress={() => {}}>
-            <Text style={[styles.expenseSheetTitle, { color: c.foreground }]}>Name this expense</Text>
+            <Text style={[styles.expenseSheetTitle, { color: c.foreground }]}>Save to Budget</Text>
             <Text style={[styles.expenseSheetSub, { color: c.mutedForeground }]}>
-              ${affordResult?.amt.toFixed(2)} on {affordDateLabel}
+              ${affordResult?.amt.toFixed(2)} · {affordDateLabel}
             </Text>
+
+            {/* Type toggle */}
+            <View style={[styles.expenseTypeRow, { backgroundColor: c.muted }]}>
+              <Pressable
+                onPress={() => setExpenseType("expense")}
+                style={[styles.expenseTypeBtn, expenseType === "expense" && { backgroundColor: c.card }]}
+              >
+                <Feather name="shopping-bag" size={14} color={expenseType === "expense" ? c.primary : c.mutedForeground} />
+                <Text style={[styles.expenseTypeBtnText, { color: expenseType === "expense" ? c.primary : c.mutedForeground }]}>
+                  Expense
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setExpenseType("goal")}
+                style={[styles.expenseTypeBtn, expenseType === "goal" && { backgroundColor: c.card }]}
+              >
+                <Feather name="target" size={14} color={expenseType === "goal" ? "#8b5cf6" : c.mutedForeground} />
+                <Text style={[styles.expenseTypeBtnText, { color: expenseType === "goal" ? "#8b5cf6" : c.mutedForeground }]}>
+                  Goal
+                </Text>
+              </Pressable>
+            </View>
+
+            {/* Context hint */}
+            <Text style={[styles.expenseTypeHint, { color: c.mutedForeground }]}>
+              {expenseType === "expense"
+                ? "Records a one-time transaction on this date."
+                : "Creates a savings goal with this target amount and date."}
+            </Text>
+
             <TextInput
               style={[styles.expenseNameInput, { backgroundColor: c.muted, color: c.foreground }]}
-              placeholder="e.g. Dinner out, New shoes…"
+              placeholder={expenseType === "expense" ? "e.g. Dinner out, New shoes…" : "e.g. Vacation, New laptop…"}
               placeholderTextColor={c.mutedForeground}
               autoFocus
               returnKeyType="done"
@@ -598,38 +629,38 @@ export default function DashboardScreen() {
               onChangeText={setExpenseNameInput}
               onSubmitEditing={() => {
                 if (!affordResult) return;
-                addTransaction({
-                  amount: -Math.abs(affordResult.amt),
-                  category: "Other",
-                  note: expenseNameInput.trim() || "Expense",
-                  date: affordResult.affordDateStr,
-                });
+                const name = expenseNameInput.trim() || (expenseType === "expense" ? "Expense" : "Goal");
+                if (expenseType === "expense") {
+                  addTransaction({ amount: -Math.abs(affordResult.amt), category: "Other", note: name, date: affordResult.affordDateStr });
+                } else {
+                  addGoal({ name, target_amount: affordResult.amt, current_amount: 0, target_date: affordResult.affordDateStr });
+                }
                 setExpenseNameModal(false);
                 setAddedAsExpense(true);
               }}
             />
+
             <View style={styles.expenseBtns}>
-              <Pressable
-                onPress={() => setExpenseNameModal(false)}
-                style={[styles.expenseBtn, { backgroundColor: c.muted }]}
-              >
+              <Pressable onPress={() => setExpenseNameModal(false)} style={[styles.expenseBtn, { backgroundColor: c.muted }]}>
                 <Text style={[styles.expenseBtnText, { color: c.mutedForeground }]}>Cancel</Text>
               </Pressable>
               <Pressable
                 onPress={() => {
                   if (!affordResult) return;
-                  addTransaction({
-                    amount: -Math.abs(affordResult.amt),
-                    category: "Other",
-                    note: expenseNameInput.trim() || "Expense",
-                    date: affordResult.affordDateStr,
-                  });
+                  const name = expenseNameInput.trim() || (expenseType === "expense" ? "Expense" : "Goal");
+                  if (expenseType === "expense") {
+                    addTransaction({ amount: -Math.abs(affordResult.amt), category: "Other", note: name, date: affordResult.affordDateStr });
+                  } else {
+                    addGoal({ name, target_amount: affordResult.amt, current_amount: 0, target_date: affordResult.affordDateStr });
+                  }
                   setExpenseNameModal(false);
                   setAddedAsExpense(true);
                 }}
-                style={[styles.expenseBtn, { backgroundColor: c.primary }]}
+                style={[styles.expenseBtn, { backgroundColor: expenseType === "expense" ? c.primary : "#8b5cf6" }]}
               >
-                <Text style={[styles.expenseBtnText, { color: "#fff" }]}>Add Expense</Text>
+                <Text style={[styles.expenseBtnText, { color: "#fff" }]}>
+                  {expenseType === "expense" ? "Add Expense" : "Add Goal"}
+                </Text>
               </Pressable>
             </View>
           </Pressable>
@@ -730,7 +761,11 @@ const styles = StyleSheet.create({
   expenseOverlay:     { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", alignItems: "center", padding: 32 },
   expenseSheet:       { width: "100%", borderRadius: 20, padding: 24, shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 16, elevation: 12 },
   expenseSheetTitle:  { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 4 },
-  expenseSheetSub:    { fontSize: 13, fontFamily: "Inter_400Regular", marginBottom: 18 },
+  expenseSheetSub:    { fontSize: 13, fontFamily: "Inter_400Regular", marginBottom: 14 },
+  expenseTypeRow:     { flexDirection: "row", borderRadius: 12, padding: 4, gap: 4, marginBottom: 10 },
+  expenseTypeBtn:     { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 9, borderRadius: 9 },
+  expenseTypeBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  expenseTypeHint:    { fontSize: 12, fontFamily: "Inter_400Regular", marginBottom: 14, lineHeight: 17 },
   expenseNameInput:   { height: 50, borderRadius: 12, paddingHorizontal: 16, fontSize: 16, fontFamily: "Inter_500Medium", marginBottom: 20 },
   expenseBtns:        { flexDirection: "row", gap: 10 },
   expenseBtn:         { flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: "center" },
