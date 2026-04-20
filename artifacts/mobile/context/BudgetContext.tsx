@@ -97,12 +97,19 @@ export interface CashFlow {
   remaining: number;
 }
 
+export interface GoalExpense {
+  id: string;
+  name: string;
+  amount: number;
+}
+
 export interface DailyBalance {
   day: number;
   income: number;
   scheduledIncome: number;
   expense: number;
   bills: number;
+  goalExpenses: GoalExpense[];
   net: number;
   balance: number;
 }
@@ -808,7 +815,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const getDailyBalances = useCallback((month: number, year: number): DailyBalance[] => {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-    // Helper: compute a month's ending balance (income − bills + transactions)
+    // Helper: compute a month's ending balance (income − bills + transactions − goals)
     const computeMonthNet = (m: number, y: number): number => {
       const inc = incomes.reduce((s, i) => {
         const occ = getIncomeOccurrenceDays(i, m, y);
@@ -824,7 +831,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const tx = transactions
         .filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === y && tm === m + 1; })
         .reduce((s, t) => s + t.amount, 0);
-      return inc + tx - bil;
+      // Subtract goal amounts that are due in this month
+      const goalDeductions = goals.reduce((s, g) => {
+        if (!g.target_date) return s;
+        const raw = g.target_date.includes("T") ? g.target_date : g.target_date + "T12:00:00";
+        const d = new Date(raw);
+        if (d.getFullYear() === y && d.getMonth() === m) return s + g.target_amount;
+        return s;
+      }, 0);
+      return inc + tx - bil - goalDeductions;
     };
 
     // Compute the starting balance (carryover) for a given month.
@@ -896,6 +911,18 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       occ.forEach(d => { billsByDay[d] = (billsByDay[d] ?? 0) + amt; });
     });
 
+    // Build goals-by-day map: goals whose target_date falls in this month
+    const goalsByDay: Record<number, GoalExpense[]> = {};
+    goals.forEach(g => {
+      if (!g.target_date) return;
+      const raw = g.target_date.includes("T") ? g.target_date : g.target_date + "T12:00:00";
+      const d = new Date(raw);
+      if (d.getFullYear() !== year || d.getMonth() !== month) return;
+      const day = d.getDate();
+      if (!goalsByDay[day]) goalsByDay[day] = [];
+      goalsByDay[day].push({ id: g.id, name: g.name, amount: g.target_amount });
+    });
+
     // Start from carryover — income is added on its actual days, not day 1
     let runningBalance = carryover;
     const result: DailyBalance[] = [];
@@ -903,17 +930,19 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     for (let day = 1; day <= daysInMonth; day++) {
       const dayTxs = monthTxs.filter(t => { const [, , td] = t.date.split("-").map(Number); return td === day; });
       const scheduledIncome = incomeByDay[day] ?? 0;
-      const txIncome  = dayTxs.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+      const txIncome     = dayTxs.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
       const incomeToday  = scheduledIncome + txIncome;
       const expenseToday = dayTxs.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
       const billsToday   = billsByDay[day] ?? 0;
-      const net = incomeToday - expenseToday - billsToday;
+      const dayGoals     = goalsByDay[day] ?? [];
+      const goalTotal    = dayGoals.reduce((s, ge) => s + ge.amount, 0);
+      const net = incomeToday - expenseToday - billsToday - goalTotal;
       runningBalance += net;
-      result.push({ day, income: incomeToday, scheduledIncome, expense: expenseToday, bills: billsToday, net, balance: runningBalance });
+      result.push({ day, income: incomeToday, scheduledIncome, expense: expenseToday, bills: billsToday, goalExpenses: dayGoals, net, balance: runningBalance });
     }
 
     return result;
-  }, [bills, transactions, incomes, overrides, settings.starting_balance, settings.starting_balance_date, settings.carryover_balances]);
+  }, [bills, transactions, incomes, goals, overrides, settings.starting_balance, settings.starting_balance_date, settings.carryover_balances]);
 
   // ─── Categories ───────────────────────────────────────────────────────────────
 

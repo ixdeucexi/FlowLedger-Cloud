@@ -1,7 +1,7 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import type { DailyBalance, Transaction } from "@/context/BudgetContext";
+import type { DailyBalance, GoalExpense, Transaction } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 
 const DAY_NAMES = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
@@ -70,8 +70,9 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
           const dayData = txByDay[day];
           const db = balanceByDay[day];
 
-          const net = (dayData ? dayData.income - dayData.expense : 0) - (db ? db.bills : 0);
-          const hasActivity = dayData || (db && (db.bills > 0 || db.scheduledIncome > 0));
+          const goalTotal = db ? db.goalExpenses.reduce((s, g) => s + g.amount, 0) : 0;
+          const net = (dayData ? dayData.income - dayData.expense : 0) - (db ? db.bills : 0) - goalTotal;
+          const hasActivity = dayData || (db && (db.bills > 0 || db.scheduledIncome > 0 || db.goalExpenses.length > 0));
 
           return (
             <Pressable
@@ -123,6 +124,11 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
                       ↓{fmt(db.bills)}
                     </Text>
                   )}
+                  {db && db.goalExpenses.length > 0 && (
+                    <Text style={[styles.amtText, { color: "#8b5cf6" }]} numberOfLines={1}>
+                      ★{fmt(db.goalExpenses.reduce((s, g) => s + g.amount, 0))}
+                    </Text>
+                  )}
                 </View>
               ) : null}
 
@@ -141,10 +147,11 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
 
       <View style={[styles.legend, { borderTopColor: c.border }]}>
         {[
-          { color: c.success, label: "↑ pay day" },
-          { color: c.success, label: "+ tx income" },
-          { color: c.destructive, label: "- expense" },
-          { color: c.warning, label: "↓ bill due" },
+          { color: c.success,     label: "↑ pay day"  },
+          { color: c.success,     label: "+ tx income" },
+          { color: c.destructive, label: "- expense"  },
+          { color: c.warning,     label: "↓ bill due" },
+          { color: "#8b5cf6",     label: "★ goal"     },
         ].map(l => (
           <View key={l.label} style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: l.color }]} />

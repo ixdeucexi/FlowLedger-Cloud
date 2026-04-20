@@ -107,6 +107,12 @@ export default function MonthlyScreen() {
     return monthBills.filter(b => getBillOccurrencesInMonth(b, month, selectedYear).includes(selectedDay));
   }, [monthBills, getBillOccurrencesInMonth, selectedDay, month, selectedYear]);
 
+  const goalsForSelectedDay = useMemo(() => {
+    if (selectedDay === null) return [];
+    const db = dailyBalances.find(d => d.day === selectedDay);
+    return db ? db.goalExpenses : [];
+  }, [selectedDay, dailyBalances]);
+
   const isFuture = useMemo(() => {
     const now = new Date();
     return selectedYear > now.getFullYear() || (selectedYear === now.getFullYear() && month > now.getMonth());
@@ -529,7 +535,7 @@ export default function MonthlyScreen() {
             <View style={styles.txListHeader}>
               <Text style={[styles.txListTitle, { color: c.foreground }]}>
                 {selectedDate
-                  ? `${selectedDate}${scheduledBillsForDay.length + displayedTxs.length > 0 ? ` · ${scheduledBillsForDay.length + displayedTxs.length} item${scheduledBillsForDay.length + displayedTxs.length !== 1 ? "s" : ""}` : ""}`
+                  ? `${selectedDate}${scheduledBillsForDay.length + displayedTxs.length + goalsForSelectedDay.length > 0 ? ` · ${scheduledBillsForDay.length + displayedTxs.length + goalsForSelectedDay.length} item${scheduledBillsForDay.length + displayedTxs.length + goalsForSelectedDay.length !== 1 ? "s" : ""}` : ""}`
                   : `All Transactions (${txList.length})`}
               </Text>
               <Pressable
@@ -590,12 +596,38 @@ export default function MonthlyScreen() {
               </>
             )}
 
+            {/* Goals due on selected day */}
+            {goalsForSelectedDay.length > 0 && (
+              <>
+                <Text style={[styles.sectionLabel, { color: c.mutedForeground }]}>Goals</Text>
+                {goalsForSelectedDay.map(goal => (
+                  <View
+                    key={`goal-${goal.id}`}
+                    style={[styles.txRow, { backgroundColor: c.card, borderRadius: colors.radius }]}
+                  >
+                    <View style={styles.txMain}>
+                      <View style={[styles.txIcon, { backgroundColor: "#8b5cf620" }]}>
+                        <Feather name="target" size={15} color="#8b5cf6" />
+                      </View>
+                      <View style={styles.txBody}>
+                        <Text style={[styles.txNote, { color: c.foreground }]}>{goal.name}</Text>
+                        <Text style={[styles.txDate, { color: c.mutedForeground }]}>Goal · target date</Text>
+                      </View>
+                      <Text style={[styles.txAmt, { color: "#8b5cf6" }]}>
+                        -${goal.amount.toFixed(2)}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </>
+            )}
+
             {/* Manual transactions */}
-            {displayedTxs.length === 0 && scheduledBillsForDay.length === 0 ? (
+            {displayedTxs.length === 0 && scheduledBillsForDay.length === 0 && goalsForSelectedDay.length === 0 ? (
               <EmptyState icon="credit-card" title="No Activity" message={selectedDate ? "Tap + to log a transaction for this day." : "Tap a day or use + to add transactions."} />
             ) : displayedTxs.length > 0 ? (
               <>
-                {scheduledBillsForDay.length > 0 && (
+                {(scheduledBillsForDay.length > 0 || goalsForSelectedDay.length > 0) && (
                   <Text style={[styles.sectionLabel, { color: c.mutedForeground }]}>Transactions</Text>
                 )}
                 {displayedTxs.map(tx => (
