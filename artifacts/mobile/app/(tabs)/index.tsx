@@ -119,6 +119,9 @@ export default function DashboardScreen() {
     return results;
   }, [getDailyBalances, currentMonth, selectedYear]);
 
+  // First month (across all 12) that goes negative
+  const firstYearNegEntry = yearNegSchedule.find(e => e.firstNegDay !== null) ?? null;
+
   const stats = useMemo(() => {
     const monthBills = bills.filter(b => b.is_recurring || b.is_debt);
     let totalDue = 0, totalPaid = 0, paidCount = 0;
@@ -312,7 +315,7 @@ export default function DashboardScreen() {
       })()}
 
       {/* ── Negative date warning (tappable → 12-month outlook) ── */}
-      {balanceMetrics?.firstNegDay && (
+      {firstYearNegEntry && (
         <Pressable
           onPress={() => setNegCalendarVisible(true)}
           style={({ pressed }) => [styles.negWarning, { backgroundColor: c.destructive + "18", borderRadius: colors.radius, opacity: pressed ? 0.8 : 1 }]}
@@ -321,7 +324,8 @@ export default function DashboardScreen() {
           <Text style={[styles.negWarningText, { color: c.destructive }]}>
             Your balance goes negative on{" "}
             <Text style={{ fontFamily: "Inter_700Bold" }}>
-              {MONTH_NAMES[currentMonth]} {balanceMetrics.firstNegDay}
+              {MONTH_NAMES[firstYearNegEntry.month]} {firstYearNegEntry.firstNegDay}
+              {firstYearNegEntry.year !== selectedYear ? ` ${firstYearNegEntry.year}` : ""}
             </Text>
             {" "}— tap to see full outlook
           </Text>
@@ -534,13 +538,13 @@ export default function DashboardScreen() {
             const amt = b.amount;
             return !best || amt > best.amount ? { name: b.name, amount: amt } : best;
           }, null);
-        const hasRisk = balanceMetrics.firstNegDay !== null || balanceMetrics.lowestBalance < 200;
+        const hasRisk = firstYearNegEntry !== null || balanceMetrics.lowestBalance < 200;
         if (!hasRisk && !largestUpcoming) return null;
         return (
           <View style={{ marginBottom: 14 }}>
             <Text style={[styles.sectionTitle, { color: c.foreground }]}>Financial Outlook</Text>
             <View style={[styles.outlookCard, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-              {balanceMetrics.firstNegDay && (
+              {firstYearNegEntry && (
                 <View style={[styles.outlookRow, { borderBottomWidth: 1, borderBottomColor: c.border }]}>
                   <View style={[styles.outlookIcon, { backgroundColor: c.destructive + "18" }]}>
                     <Feather name="alert-triangle" size={16} color={c.destructive} />
@@ -548,7 +552,7 @@ export default function DashboardScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.outlookLabel, { color: c.mutedForeground }]}>Next Risk Date</Text>
                     <Text style={[styles.outlookValue, { color: c.destructive }]}>
-                      {MONTH_NAMES[currentMonth]} {balanceMetrics.firstNegDay} — balance goes negative
+                      {MONTH_NAMES[firstYearNegEntry.month]}{firstYearNegEntry.year !== selectedYear ? ` ${firstYearNegEntry.year}` : ""} {firstYearNegEntry.firstNegDay} — balance goes negative
                     </Text>
                   </View>
                 </View>
