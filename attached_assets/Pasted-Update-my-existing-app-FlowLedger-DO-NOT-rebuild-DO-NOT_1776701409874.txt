@@ -1,0 +1,153 @@
+Update my existing app "FlowLedger".
+
+DO NOT rebuild. DO NOT remove working features.
+ONLY enhance structure, UX, and decision-making clarity.
+
+-----------------------------------
+PRIMARY GOAL
+-----------------------------------
+Make the app clearly answer:
+"How much money do I have left, and what can I do with it?"
+
+-----------------------------------
+1. DASHBOARD (MAIN CHANGE)
+-----------------------------------
+
+Replace the top section with ONE main card:
+
+TITLE: Available Cash  
+VALUE: $X  
+
+SUBTEXT:
+Income - Bills - Transactions = Remaining  
+
+Example:
+$6416 income - $5740 bills - $660 spent = $1016 left  
+
+-----------------------------------
+2. DECISION BUTTON
+-----------------------------------
+
+Add a large button under the main card:
+
+"What can I do?"
+
+On click, open modal with:
+- Add Bill
+- Add Income
+- Add Expense
+- Check Affordability
+- Pay Debt
+
+-----------------------------------
+3. AFFORDABILITY FEATURE
+-----------------------------------
+
+Add a simple input on dashboard:
+
+"Can I afford this?"
+
+Inputs:
+- Amount
+- Optional date
+
+Logic:
+Use current data (income, bills, transactions, debt)
+
+If affordable:
+Show GREEN:
+"YES — You can afford this. You’ll still have $X left."
+
+If not:
+Show RED:
+"NO — You’ll be short $X by [date]."
+
+Must be instant and simple.
+
+-----------------------------------
+4. CALENDAR (UNIFIED VIEW)
+-----------------------------------
+
+Ensure calendar includes:
+- Bills (due dates)
+- Debt payments
+- Income
+- Transactions
+
+Each day must show:
+- Net amount
+- Running balance
+
+Clicking a day must show:
+- All items
+- Edit + delete options
+
+Calendar must:
+- Start on Sunday
+- Align dates correctly
+
+-----------------------------------
+5. DATE PICKER (GLOBAL)
+-----------------------------------
+
+Use a date picker everywhere:
+- Bills
+- Transactions
+- Income
+- Goals
+
+Remove manual date typing.
+
+-----------------------------------
+6. DEBT SCREEN UPDATE
+-----------------------------------
+
+Add at top:
+
+"Extra Money Available: $X"
+
+Add button:
+"Apply to Snowball"
+
+Use existing logic.
+
+-----------------------------------
+7. DASHBOARD CLEANUP
+-----------------------------------
+
+Move LOWER:
+- Total Bills
+- Paid
+- Debt totals
+- Charts
+
+Do NOT overload the top.
+
+-----------------------------------
+8. USER FLOW
+-----------------------------------
+
+Flow must be:
+
+1. Open app  
+2. See Available Cash  
+3. Tap "What can I do?"  
+4. Take action  
+
+-----------------------------------
+9. RULES
+-----------------------------------
+
+- Do NOT duplicate data
+- Do NOT break calculations
+- Keep UI clean and mobile-friendly
+- Keep actions within 1–2 taps
+
+-----------------------------------
+FINAL CHECK
+-----------------------------------
+
+- Dashboard matches calendar totals  
+- No duplicate entries  
+- All features still work  
+- Navigation is smooth  

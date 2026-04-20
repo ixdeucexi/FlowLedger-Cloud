@@ -1,18 +1,22 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Keyboard, Modal, Platform, Pressable,
+  ScrollView, StyleSheet, Text, TextInput, View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { AddBillModal } from "@/components/AddBillModal";
 import { GoalModal } from "@/components/GoalModal";
 import { DonutChart, MiniChart } from "@/components/MiniChart";
 import colors from "@/constants/colors";
-import type { DashboardFilter, Goal } from "@/context/BudgetContext";
+import type { Bill, DashboardFilter, Goal } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const MONTH_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 const CAT_COLORS: Record<string, string> = {
   Housing: "#0f9b8e", Utilities: "#f0b429", Insurance: "#6366f1",
@@ -24,34 +28,39 @@ export default function DashboardScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { bills, getAmount, getPaidAmount, getBillMonthlyTotal, transactions, selectedYear, setDashboardFilter,
+  const {
+    bills, getPaidAmount, getBillMonthlyTotal, transactions, selectedYear, setDashboardFilter,
     goals, addGoal, updateGoal, deleteGoal, checkGoalAffordability,
-    getCashFlow, getMonthlyIncome } = useBudget();
+    getCashFlow, getMonthlyIncome, addBill,
+  } = useBudget();
 
-  const [goalModalVisible, setGoalModalVisible] = useState(false);
-  const [editGoal, setEditGoal] = useState<Goal | null>(null);
+  const [goalModalVisible, setGoalModalVisible]     = useState(false);
+  const [editGoal, setEditGoal]                     = useState<Goal | null>(null);
+  const [actionModalVisible, setActionModalVisible] = useState(false);
+  const [addBillVisible, setAddBillVisible]         = useState(false);
+  const [affordAmt, setAffordAmt]                   = useState("");
 
-  const now = new Date();
+  const now          = new Date();
   const currentMonth = now.getMonth();
-  const today = now.getDate();
+  const today        = now.getDate();
+
+  const cashFlow     = useMemo(() => getCashFlow(currentMonth, selectedYear), [getCashFlow, currentMonth, selectedYear]);
+  const monthlyIncome = getMonthlyIncome();
 
   const stats = useMemo(() => {
     const monthBills = bills.filter(b => b.is_recurring || b.is_debt);
     let totalDue = 0, totalPaid = 0, paidCount = 0;
     monthBills.forEach(b => {
-      const amt = getBillMonthlyTotal(b, currentMonth, selectedYear);
+      const amt  = getBillMonthlyTotal(b, currentMonth, selectedYear);
       const paid = getPaidAmount(b.id, currentMonth, selectedYear);
-      totalDue += amt;
+      totalDue  += amt;
       totalPaid += Math.min(paid, amt);
       if (paid >= amt && amt > 0) paidCount++;
     });
-    const totalDebt = bills.filter(b => b.is_debt).reduce((s, b) => s + b.balance, 0);
+    const totalDebt  = bills.filter(b => b.is_debt).reduce((s, b) => s + b.balance, 0);
     const unpaidCount = monthBills.length - paidCount;
     return { totalDue, totalPaid, remaining: totalDue - totalPaid, paidCount, unpaidCount, billCount: monthBills.length, totalDebt };
   }, [bills, getBillMonthlyTotal, getPaidAmount, currentMonth, selectedYear]);
-
-  const cashFlow = useMemo(() => getCashFlow(currentMonth, selectedYear), [getCashFlow, currentMonth, selectedYear]);
-  const monthlyIncome = getMonthlyIncome();
 
   const upcomingBills = useMemo(() => {
     const sevenDaysLater = today + 7;
@@ -60,11 +69,6 @@ export default function DashboardScreen() {
       .sort((a, b) => a.due_day - b.due_day)
       .slice(0, 5);
   }, [bills, today]);
-
-  const handleUpcomingBillPress = (billId: string) => {
-    setDashboardFilter("unpaid");
-    router.push("/(tabs)/monthly" as any);
-  };
 
   const monthlyBarData = useMemo(() =>
     MONTH_NAMES.map((label, i) => ({ label, value: bills.filter(b => b.is_recurring || b.is_debt).reduce((s, b) => s + getBillMonthlyTotal(b, i, selectedYear), 0) })),
@@ -89,29 +93,168 @@ export default function DashboardScreen() {
     return months;
   }, [bills, currentMonth]);
 
+  // ── Affordability check ──────────────────────────────────────────────────────
+  const affordResult = useMemo(() => {
+    const amt = parseFloat(affordAmt);
+    if (!affordAmt.trim() || isNaN(amt) || amt <= 0) return null;
+    const available = cashFlow.remaining;
+    const canAfford = available >= amt;
+    return { canAfford, remaining: available - amt, shortfall: amt - available };
+  }, [affordAmt, cashFlow.remaining]);
+
   const navigate = (filter: DashboardFilter, tab: string) => {
     setDashboardFilter(filter);
     router.push(`/(tabs)/${tab}` as any);
   };
 
+  const openAction = (action: string) => {
+    setActionModalVisible(false);
+    setTimeout(() => {
+      if (action === "bill")          setAddBillVisible(true);
+      else if (action === "income")   router.push("/(tabs)/more" as any);
+      else if (action === "expense")  router.push("/(tabs)/monthly" as any);
+      else if (action === "debt")     router.push("/(tabs)/debt" as any);
+      else if (action === "afford") {} // handled inline
+    }, 250);
+  };
+
   const webTopPad = Platform.OS === "web" ? 67 : 0;
 
   const statCards = [
-    { title: "Total Bills", value: `$${stats.totalDue.toFixed(0)}`, icon: "file-text" as const, col: c.primary, sub: `${stats.billCount} bills`, filter: null as DashboardFilter, tab: "bills" },
-    { title: "Paid", value: `$${stats.totalPaid.toFixed(0)}`, icon: "check-circle" as const, col: c.success, sub: `${stats.paidCount}/${stats.billCount} paid`, filter: "paid" as DashboardFilter, tab: "monthly" },
-    { title: "Remaining", value: `$${stats.remaining.toFixed(0)}`, icon: "alert-circle" as const, col: stats.remaining > 0 ? c.warning : c.success, sub: `${stats.unpaidCount} unpaid`, filter: "unpaid" as DashboardFilter, tab: "monthly" },
-    { title: "Total Debt", value: `$${stats.totalDebt.toFixed(0)}`, icon: "credit-card" as const, col: c.destructive, sub: `${bills.filter(b => b.is_debt).length} debts`, filter: null as DashboardFilter, tab: "debt" },
+    { title: "Total Bills",  value: `$${stats.totalDue.toFixed(0)}`,    icon: "file-text"    as const, col: c.primary,     sub: `${stats.billCount} bills`,               filter: null           as DashboardFilter, tab: "bills"   },
+    { title: "Paid",         value: `$${stats.totalPaid.toFixed(0)}`,   icon: "check-circle" as const, col: c.success,     sub: `${stats.paidCount}/${stats.billCount} paid`, filter: "paid"      as DashboardFilter, tab: "monthly" },
+    { title: "Unpaid",       value: `$${stats.remaining.toFixed(0)}`,   icon: "alert-circle" as const, col: stats.remaining > 0 ? c.warning : c.success, sub: `${stats.unpaidCount} unpaid`, filter: "unpaid" as DashboardFilter, tab: "monthly" },
+    { title: "Total Debt",   value: `$${stats.totalDebt.toFixed(0)}`,   icon: "credit-card"  as const, col: c.destructive, sub: `${bills.filter(b => b.is_debt).length} debts`, filter: null      as DashboardFilter, tab: "debt"    },
   ];
+
+  // Build breakdown string: Income − Bills [± Transactions] = Left
+  const txSign    = cashFlow.netTransactions >= 0 ? "+" : "−";
+  const txDisplay = cashFlow.netTransactions !== 0
+    ? ` ${txSign} $${Math.abs(cashFlow.netTransactions).toFixed(0)} spent`
+    : "";
+  const breakdownText =
+    `$${cashFlow.monthlyIncome.toFixed(0)} income − $${cashFlow.totalBillsDue.toFixed(0)} bills${txDisplay} = $${Math.abs(cashFlow.remaining).toFixed(0)} ${cashFlow.remaining >= 0 ? "left" : "short"}`;
 
   return (
     <ScrollView
       style={[styles.screen, { backgroundColor: c.background }]}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + 16 + webTopPad, paddingBottom: insets.bottom + 100 }]}
       showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
     >
-      <Text style={[styles.heading, { color: c.foreground }]}>Dashboard</Text>
+      <Text style={[styles.heading,    { color: c.foreground }]}>Dashboard</Text>
       <Text style={[styles.subheading, { color: c.mutedForeground }]}>{MONTH_FULL[currentMonth]} {selectedYear}</Text>
 
+      {/* ── HERO: Available Cash ── */}
+      <View style={[styles.heroCard, { backgroundColor: cashFlow.remaining >= 0 ? c.primary : c.destructive }]}>
+        <Text style={styles.heroLabel}>Available Cash</Text>
+        <Text style={styles.heroValue}>
+          {cashFlow.remaining >= 0 ? "" : "−"}${Math.abs(cashFlow.remaining).toFixed(0)}
+        </Text>
+        <Text style={styles.heroBreakdown}>{breakdownText}</Text>
+
+        {stats.totalDue > 0 && (
+          <View style={styles.heroProgress}>
+            <View style={[styles.heroProgressTrack, { backgroundColor: "rgba(255,255,255,0.25)" }]}>
+              <View style={[styles.heroProgressFill, { width: `${Math.min((stats.totalPaid / stats.totalDue) * 100, 100)}%` as any }]} />
+            </View>
+            <Text style={styles.heroProgressLabel}>
+              {Math.round((stats.totalPaid / stats.totalDue) * 100)}% of bills paid this month
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* ── WHAT CAN I DO? button ── */}
+      <Pressable
+        onPress={() => setActionModalVisible(true)}
+        style={({ pressed }) => [styles.whatBtn, { backgroundColor: c.card, borderColor: c.border, borderRadius: colors.radius, opacity: pressed ? 0.85 : 1 }]}
+      >
+        <View style={[styles.whatBtnIcon, { backgroundColor: c.primary + "18" }]}>
+          <Feather name="zap" size={18} color={c.primary} />
+        </View>
+        <Text style={[styles.whatBtnText, { color: c.foreground }]}>What can I do?</Text>
+        <Feather name="chevron-right" size={18} color={c.mutedForeground} />
+      </Pressable>
+
+      {/* ── AFFORDABILITY CHECK ── */}
+      <View style={[styles.affordCard, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <View style={styles.affordHeader}>
+          <Feather name="help-circle" size={16} color={c.primary} />
+          <Text style={[styles.affordTitle, { color: c.foreground }]}>Can I afford this?</Text>
+        </View>
+        <View style={styles.affordRow}>
+          <TextInput
+            style={[styles.affordInput, { backgroundColor: c.muted, color: c.foreground, borderRadius: 10 }]}
+            placeholder="Enter amount..."
+            placeholderTextColor={c.mutedForeground}
+            keyboardType="decimal-pad"
+            returnKeyType="done"
+            onSubmitEditing={Keyboard.dismiss}
+            value={affordAmt}
+            onChangeText={setAffordAmt}
+          />
+          {affordAmt.trim().length > 0 && (
+            <Pressable onPress={() => setAffordAmt("")} style={[styles.affordClear, { backgroundColor: c.muted }]}>
+              <Feather name="x" size={14} color={c.mutedForeground} />
+            </Pressable>
+          )}
+        </View>
+        {affordResult && (
+          <View style={[styles.affordResult, { backgroundColor: affordResult.canAfford ? c.success + "18" : c.destructive + "18", borderRadius: 10 }]}>
+            <Feather
+              name={affordResult.canAfford ? "check-circle" : "x-circle"}
+              size={20}
+              color={affordResult.canAfford ? c.success : c.destructive}
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.affordResultTitle, { color: affordResult.canAfford ? c.success : c.destructive }]}>
+                {affordResult.canAfford ? "YES — You can afford this." : "NO — You'll be short."}
+              </Text>
+              <Text style={[styles.affordResultSub, { color: c.mutedForeground }]}>
+                {affordResult.canAfford
+                  ? `You'll still have $${affordResult.remaining.toFixed(0)} left this month.`
+                  : `You'll be $${affordResult.shortfall.toFixed(0)} short this month.`}
+              </Text>
+            </View>
+          </View>
+        )}
+      </View>
+
+      {/* ── Upcoming Bills ── */}
+      {upcomingBills.length > 0 && (
+        <>
+          <Text style={[styles.sectionTitle, { color: c.foreground }]}>Upcoming Bills (7 days)</Text>
+          <View style={[styles.upcomingCard, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+            {upcomingBills.map((bill, i) => {
+              const catColor = CAT_COLORS[bill.category] ?? c.primary;
+              const daysLeft = bill.due_day - today;
+              return (
+                <Pressable
+                  key={bill.id}
+                  onPress={() => { setDashboardFilter("unpaid"); router.push("/(tabs)/monthly" as any); }}
+                  style={({ pressed }) => [styles.upcomingRow, { borderTopWidth: i > 0 ? 1 : 0, borderTopColor: c.border, opacity: pressed ? 0.75 : 1 }]}
+                >
+                  <View style={[styles.upcomingDot, { backgroundColor: catColor + "20" }]}>
+                    <Feather name="calendar" size={13} color={catColor} />
+                  </View>
+                  <View style={styles.upcomingInfo}>
+                    <Text style={[styles.upcomingName, { color: c.foreground }]}>{bill.name}</Text>
+                    <Text style={[styles.upcomingDate, { color: c.mutedForeground }]}>
+                      Due {daysLeft === 0 ? "today" : daysLeft === 1 ? "tomorrow" : `in ${daysLeft} days`}
+                    </Text>
+                  </View>
+                  <Text style={[styles.upcomingAmt, { color: c.foreground }]}>${bill.amount.toFixed(0)}</Text>
+                  <Feather name="chevron-right" size={13} color={c.mutedForeground} style={{ marginLeft: 4 }} />
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      )}
+
+      {/* ── Stat Cards (moved lower) ── */}
+      <Text style={[styles.sectionTitle, { color: c.foreground }]}>This Month</Text>
       <View style={styles.statsGrid}>
         {statCards.map(card => (
           <Pressable
@@ -132,72 +275,9 @@ export default function DashboardScreen() {
         ))}
       </View>
 
-      {stats.totalDue > 0 && (
-        <View style={{ marginBottom: 16 }}>
-          <View style={styles.rowBetween}>
-            <Text style={[styles.sectionLabel, { color: c.mutedForeground }]}>Monthly Progress</Text>
-            <Text style={[styles.pctLabel, { color: c.primary }]}>{Math.round((stats.totalPaid / stats.totalDue) * 100)}%</Text>
-          </View>
-          <View style={[styles.progressBg, { backgroundColor: c.muted }]}>
-            <View style={[styles.progressFill, { width: `${Math.min((stats.totalPaid / stats.totalDue) * 100, 100)}%` as any, backgroundColor: c.primary }]} />
-          </View>
-        </View>
-      )}
-
-      {monthlyIncome > 0 && (
-        <View style={[styles.cashFlowCard, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-          <View style={styles.rowBetween}>
-            <Text style={[styles.cfTitle, { color: c.foreground }]}>Available Cash</Text>
-            <Text style={[styles.cfBigValue, { color: cashFlow.remaining >= 0 ? c.success : c.destructive }]}>
-              {cashFlow.remaining >= 0 ? "+" : ""}${cashFlow.remaining.toFixed(0)}
-            </Text>
-          </View>
-          <Text style={[styles.cfSubtitle, { color: c.mutedForeground }]}>
-            ${cashFlow.monthlyIncome.toFixed(0)} income − ${cashFlow.totalBillsDue.toFixed(0)} bills
-            {cashFlow.netTransactions !== 0 ? ` ${cashFlow.netTransactions > 0 ? "+" : ""}${cashFlow.netTransactions.toFixed(0)} transactions` : ""}
-          </Text>
-          <View style={[styles.cfBarBg, { backgroundColor: c.muted }]}>
-            {cashFlow.monthlyIncome > 0 && (
-              <View style={[styles.cfBarFill, {
-                width: `${Math.min(Math.max(0, cashFlow.remaining / cashFlow.monthlyIncome) * 100, 100)}%` as any,
-                backgroundColor: cashFlow.remaining >= 0 ? c.success : c.destructive,
-              }]} />
-            )}
-          </View>
-        </View>
-      )}
-
-      {upcomingBills.length > 0 && (
-        <>
-          <Text style={[styles.sectionTitle, { color: c.foreground }]}>Upcoming Bills (7 days)</Text>
-          <View style={[styles.upcomingCard, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-            {upcomingBills.map((bill, i) => {
-              const catColor = CAT_COLORS[bill.category] ?? c.primary;
-              const daysLeft = bill.due_day - today;
-              return (
-                <Pressable key={bill.id} onPress={() => handleUpcomingBillPress(bill.id)} style={({ pressed }) => [styles.upcomingRow, { borderTopWidth: i > 0 ? 1 : 0, borderTopColor: c.border, opacity: pressed ? 0.75 : 1 }]}>
-                  <View style={[styles.upcomingDot, { backgroundColor: catColor + "20" }]}>
-                    <Feather name="calendar" size={13} color={catColor} />
-                  </View>
-                  <View style={styles.upcomingInfo}>
-                    <Text style={[styles.upcomingName, { color: c.foreground }]}>{bill.name}</Text>
-                    <Text style={[styles.upcomingDate, { color: c.mutedForeground }]}>
-                      Due {daysLeft === 0 ? "today" : daysLeft === 1 ? "tomorrow" : `in ${daysLeft} days`}
-                    </Text>
-                  </View>
-                  <Text style={[styles.upcomingAmt, { color: c.foreground }]}>${bill.amount.toFixed(0)}</Text>
-                  <Feather name="chevron-right" size={13} color={c.mutedForeground} style={{ marginLeft: 4 }} />
-                </Pressable>
-              );
-            })}
-          </View>
-        </>
-      )}
-
+      {/* ── Charts ── */}
       <MiniChart data={monthlyBarData} title="Monthly Expenses" height={130} />
-
       {categoryData.length > 0 && <DonutChart segments={categoryData} title="By Category" size={90} />}
-
       {debtPayoffData.length > 0 && <MiniChart data={debtPayoffData} title="Debt Payoff Projection" height={120} />}
 
       {/* ── Financial Goals ── */}
@@ -228,13 +308,12 @@ export default function DashboardScreen() {
       ) : (
         goals.map(goal => {
           const pct = goal.target_amount > 0 ? Math.min(goal.current_amount / goal.target_amount, 1) : 0;
-          // Handle both YYYY-MM-DD (new) and full ISO strings (old stored data)
-          const rawDate = goal.target_date ?? "";
+          const rawDate   = goal.target_date ?? "";
           const targetDate = rawDate.includes("T") ? new Date(rawDate) : new Date(rawDate + "T12:00:00");
           const goalMonth = targetDate.getMonth();
-          const goalYear = targetDate.getFullYear();
-          const afford = checkGoalAffordability(goal, goalMonth, goalYear);
-          const needed = Math.max(0, goal.target_amount - goal.current_amount);
+          const goalYear  = targetDate.getFullYear();
+          const afford    = checkGoalAffordability(goal, goalMonth, goalYear);
+          const needed    = Math.max(0, goal.target_amount - goal.current_amount);
           return (
             <Pressable
               key={goal.id}
@@ -259,15 +338,14 @@ export default function DashboardScreen() {
               <View style={[styles.affordBox, { backgroundColor: afford.canAfford ? c.success + "18" : c.destructive + "18", borderRadius: 8 }]}>
                 <Feather name={afford.canAfford ? "check-circle" : "alert-circle"} size={14} color={afford.canAfford ? c.success : c.destructive} />
                 <View style={styles.affordText}>
-                  <Text style={[styles.affordTitle, { color: afford.canAfford ? c.success : c.destructive }]}>
+                  <Text style={[styles.affordBoxTitle, { color: afford.canAfford ? c.success : c.destructive }]}>
                     {afford.canAfford ? "You can afford this" : "You cannot afford this"}
                   </Text>
                   {needed > 0 && (
                     <Text style={[styles.affordSub, { color: c.mutedForeground }]}>
                       {afford.canAfford
                         ? `Projected $${afford.projectedBalance.toLocaleString("en-US", { maximumFractionDigits: 0 })} ≥ $${needed.toLocaleString("en-US", { maximumFractionDigits: 0 })} needed`
-                        : `$${afford.shortfall.toLocaleString("en-US", { maximumFractionDigits: 0 })} short · projected $${afford.projectedBalance.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
-                      }
+                        : `$${afford.shortfall.toLocaleString("en-US", { maximumFractionDigits: 0 })} short · projected $${afford.projectedBalance.toLocaleString("en-US", { maximumFractionDigits: 0 })}`}
                     </Text>
                   )}
                 </View>
@@ -276,6 +354,65 @@ export default function DashboardScreen() {
           );
         })
       )}
+
+      {/* ── "What can I do?" modal ── */}
+      <Modal
+        visible={actionModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setActionModalVisible(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setActionModalVisible(false)}>
+          <Pressable style={[styles.actionSheet, { backgroundColor: c.card }]} onPress={() => {}}>
+            <View style={[styles.sheetHandle, { backgroundColor: c.muted }]} />
+            <Text style={[styles.sheetTitle, { color: c.foreground }]}>What can I do?</Text>
+            <Text style={[styles.sheetSub, { color: c.mutedForeground }]}>
+              You have{" "}
+              <Text style={{ color: cashFlow.remaining >= 0 ? c.success : c.destructive, fontFamily: "Inter_700Bold" }}>
+                ${Math.abs(cashFlow.remaining).toFixed(0)}
+              </Text>
+              {cashFlow.remaining >= 0 ? " available" : " short"} this month
+            </Text>
+
+            {[
+              { id: "bill",    icon: "file-text"   as const, label: "Add a Bill",       sub: "Track a new recurring expense",       col: c.primary     },
+              { id: "income",  icon: "trending-up" as const, label: "Add Income",        sub: "Log a salary, freelance, or other",    col: c.success     },
+              { id: "expense", icon: "shopping-bag"as const, label: "Add a Transaction", sub: "Record a one-time expense or income",  col: c.warning     },
+              { id: "debt",    icon: "credit-card" as const, label: "Pay Down Debt",     sub: "Go to snowball / avalanche planner",   col: c.destructive },
+            ].map(item => (
+              <Pressable
+                key={item.id}
+                onPress={() => openAction(item.id)}
+                style={({ pressed }) => [styles.actionRow, { borderColor: c.border, opacity: pressed ? 0.75 : 1 }]}
+              >
+                <View style={[styles.actionIcon, { backgroundColor: item.col + "18" }]}>
+                  <Feather name={item.icon} size={20} color={item.col} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.actionLabel, { color: c.foreground }]}>{item.label}</Text>
+                  <Text style={[styles.actionSub,   { color: c.mutedForeground }]}>{item.sub}</Text>
+                </View>
+                <Feather name="chevron-right" size={16} color={c.mutedForeground} />
+              </Pressable>
+            ))}
+
+            <Pressable
+              onPress={() => setActionModalVisible(false)}
+              style={[styles.sheetCancel, { backgroundColor: c.muted, borderRadius: colors.radius }]}
+            >
+              <Text style={[styles.sheetCancelText, { color: c.mutedForeground }]}>Cancel</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <AddBillModal
+        visible={addBillVisible}
+        onClose={() => setAddBillVisible(false)}
+        onSave={(data) => { addBill(data as Omit<Bill, "id" | "created_at">); }}
+        onDelete={() => {}}
+        editBill={null}
+      />
 
       <GoalModal
         visible={goalModalVisible}
@@ -292,55 +429,89 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1 },
+  screen:  { flex: 1 },
   content: { paddingHorizontal: 16 },
-  heading: { fontSize: 28, fontFamily: "Inter_700Bold" },
+  heading:    { fontSize: 28, fontFamily: "Inter_700Bold" },
   subheading: { fontSize: 14, fontFamily: "Inter_400Regular", marginTop: 4, marginBottom: 20 },
+
+  // Hero
+  heroCard:         { borderRadius: 20, padding: 22, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 8, elevation: 6 },
+  heroLabel:        { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "rgba(255,255,255,0.8)", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 },
+  heroValue:        { fontSize: 46, fontFamily: "Inter_700Bold", color: "#fff", lineHeight: 52 },
+  heroBreakdown:    { fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.75)", marginTop: 6, lineHeight: 17 },
+  heroProgress:     { marginTop: 16 },
+  heroProgressTrack:{ height: 6, borderRadius: 3, overflow: "hidden" },
+  heroProgressFill: { height: 6, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.9)" },
+  heroProgressLabel:{ fontSize: 11, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.75)", marginTop: 5 },
+
+  // What can I do? button
+  whatBtn:     { flexDirection: "row", alignItems: "center", gap: 12, padding: 16, marginBottom: 14, borderWidth: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
+  whatBtnIcon: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  whatBtnText: { flex: 1, fontSize: 16, fontFamily: "Inter_700Bold" },
+
+  // Affordability
+  affordCard:        { padding: 16, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
+  affordHeader:      { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
+  affordTitle:       { fontSize: 15, fontFamily: "Inter_700Bold" },
+  affordRow:         { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
+  affordInput:       { flex: 1, height: 44, paddingHorizontal: 14, fontSize: 16, fontFamily: "Inter_500Medium" },
+  affordClear:       { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  affordResult:      { flexDirection: "row", alignItems: "flex-start", gap: 10, padding: 12 },
+  affordResultTitle: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  affordResultSub:   { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+
+  // Upcoming
+  sectionTitle:  { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 10, marginTop: 4 },
+  upcomingCard:  { marginBottom: 16, overflow: "hidden" },
+  upcomingRow:   { flexDirection: "row", alignItems: "center", padding: 12, gap: 10 },
+  upcomingDot:   { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  upcomingInfo:  { flex: 1 },
+  upcomingName:  { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  upcomingDate:  { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 1 },
+  upcomingAmt:   { fontSize: 15, fontFamily: "Inter_700Bold" },
+
+  // Stat cards
   statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 16 },
-  statCard: { width: "48%", padding: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 3, position: "relative" },
-  statIcon: { width: 30, height: 30, borderRadius: 8, alignItems: "center", justifyContent: "center", marginBottom: 8 },
+  statCard:  { width: "48%", padding: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 3, position: "relative" },
+  statIcon:  { width: 30, height: 30, borderRadius: 8, alignItems: "center", justifyContent: "center", marginBottom: 8 },
   statTitle: { fontSize: 10, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 2 },
   statValue: { fontSize: 22, fontFamily: "Inter_700Bold" },
-  statSub: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
-  tapBadge: { position: "absolute", top: 10, right: 10, width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  sectionLabel: { fontSize: 12, fontFamily: "Inter_500Medium" },
-  pctLabel: { fontSize: 12, fontFamily: "Inter_700Bold" },
-  progressBg: { height: 6, borderRadius: 3, overflow: "hidden", marginTop: 6 },
-  progressFill: { height: 6, borderRadius: 3 },
-  cashFlowCard: { marginBottom: 16, padding: 16, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
-  cfTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  cfBigValue: { fontSize: 22, fontFamily: "Inter_700Bold" },
-  cfSubtitle: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 4, marginBottom: 10 },
-  cfBarBg: { height: 6, borderRadius: 3, overflow: "hidden" },
-  cfBarFill: { height: 6, borderRadius: 3 },
-  sectionTitle: { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 10, marginTop: 4 },
-  upcomingCard: { marginBottom: 16, overflow: "hidden" },
-  upcomingRow: { flexDirection: "row", alignItems: "center", padding: 12, gap: 10 },
-  upcomingDot: { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  upcomingInfo: { flex: 1 },
-  upcomingName: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-  upcomingDate: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 1 },
-  upcomingAmt: { fontSize: 15, fontFamily: "Inter_700Bold" },
-  goalsHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10, marginTop: 8 },
-  addGoalBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 },
-  addGoalText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  goalsEmpty: { padding: 24, alignItems: "center", marginBottom: 16 },
-  goalsEmptyText: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: 10, marginBottom: 16, lineHeight: 20 },
-  goalsEmptyBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
-  goalsEmptyBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-  goalCard: { marginBottom: 12, padding: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
-  goalTop: { flexDirection: "row", alignItems: "flex-start", marginBottom: 10 },
-  goalLeft: { flex: 1 },
-  goalRight: { alignItems: "flex-end" },
-  goalName: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
-  goalDate: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
-  goalAmount: { fontSize: 16, fontFamily: "Inter_700Bold" },
-  goalTarget: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
-  goalProgress: { height: 6, borderRadius: 3, overflow: "hidden", marginBottom: 10 },
-  goalProgressFill: { height: 6, borderRadius: 3 },
-  affordBox: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 10 },
-  affordText: { flex: 1 },
-  affordTitle: { fontSize: 13, fontFamily: "Inter_700Bold" },
-  affordSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  statSub:   { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
+  tapBadge:  { position: "absolute", top: 10, right: 10, width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+
+  // Goals
+  goalsHeader:        { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10, marginTop: 8 },
+  addGoalBtn:         { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 },
+  addGoalText:        { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  goalsEmpty:         { padding: 24, alignItems: "center", marginBottom: 16 },
+  goalsEmptyText:     { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: 10, marginBottom: 16, lineHeight: 20 },
+  goalsEmptyBtn:      { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
+  goalsEmptyBtnText:  { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  goalCard:           { marginBottom: 12, padding: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
+  goalTop:            { flexDirection: "row", alignItems: "flex-start", marginBottom: 10 },
+  goalLeft:           { flex: 1 },
+  goalRight:          { alignItems: "flex-end" },
+  goalName:           { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  goalDate:           { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  goalAmount:         { fontSize: 16, fontFamily: "Inter_700Bold" },
+  goalTarget:         { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
+  goalProgress:       { height: 6, borderRadius: 3, overflow: "hidden", marginBottom: 10 },
+  goalProgressFill:   { height: 6, borderRadius: 3 },
+  affordBox:          { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 10 },
+  affordText:         { flex: 1 },
+  affordBoxTitle:     { fontSize: 13, fontFamily: "Inter_700Bold" },
+  affordSub:          { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+
+  // Action sheet modal
+  modalOverlay:    { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.5)" },
+  actionSheet:     { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 12, paddingBottom: 36, paddingHorizontal: 20 },
+  sheetHandle:     { width: 40, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 16 },
+  sheetTitle:      { fontSize: 20, fontFamily: "Inter_700Bold", marginBottom: 4 },
+  sheetSub:        { fontSize: 13, fontFamily: "Inter_400Regular", marginBottom: 16 },
+  actionRow:       { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 14, borderTopWidth: 1 },
+  actionIcon:      { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  actionLabel:     { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  actionSub:       { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  sheetCancel:     { marginTop: 14, paddingVertical: 14, alignItems: "center" },
+  sheetCancelText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
 });

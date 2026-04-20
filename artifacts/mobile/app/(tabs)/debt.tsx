@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Alert, FlatList, Platform, Pressable, StyleSheet, Text, View,
 } from "react-native";
@@ -18,11 +18,19 @@ type SortMode = "priority" | "balance" | "interest";
 export default function DebtScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const { bills, addBill, updateBill, deleteBill, settings, updateSettings } = useBudget();
+  const { bills, addBill, updateBill, deleteBill, settings, updateSettings, getCashFlow, runSnowball, saveExtraPayment, getExtraPayment } = useBudget();
 
   const [modalVisible, setModalVisible] = useState(false);
-  const [editBill, setEditBill] = useState<Bill | null>(null);
-  const [sortMode, setSortMode] = useState<SortMode>("priority");
+  const [editBill, setEditBill]         = useState<Bill | null>(null);
+  const [sortMode, setSortMode]         = useState<SortMode>("priority");
+  const [snowballApplied, setSnowballApplied] = useState(false);
+
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear  = now.getFullYear();
+
+  const cashFlow = useMemo(() => getCashFlow(currentMonth, currentYear), [getCashFlow, currentMonth, currentYear]);
+  const extraAvailable = Math.max(0, cashFlow.remaining);
 
   const debts = bills
     .filter(b => b.is_debt)
@@ -35,6 +43,21 @@ export default function DebtScreen() {
   const totalDebt = debts.reduce((s, b) => s + b.balance, 0);
   const totalMinPayments = debts.reduce((s, b) => s + b.amount, 0);
   const highestAPR = debts.length ? Math.max(...debts.map(b => b.interest_rate)) : 0;
+
+  const handleApplySnowball = () => {
+    if (extraAvailable <= 0) {
+      Alert.alert("No Extra Money", "You have no remaining cash to apply to debt this month.");
+      return;
+    }
+    const alloc = runSnowball(currentMonth, currentYear, extraAvailable);
+    saveExtraPayment({ month: currentMonth, year: currentYear, amount: extraAvailable, allocations: alloc });
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setSnowballApplied(true);
+    Alert.alert(
+      "Snowball Applied!",
+      `$${extraAvailable.toFixed(2)} allocated across ${alloc.length} debt${alloc.length !== 1 ? "s" : ""} using the ${settings.paymentMethod} method.`
+    );
+  };
 
   const handleSave = (data: Omit<Bill, "id" | "created_at"> | Bill) => {
     if ("id" in data) updateBill(data as Bill);
@@ -61,6 +84,33 @@ export default function DebtScreen() {
           <Feather name="plus" size={22} color={c.primaryForeground} />
         </Pressable>
       </View>
+
+      {/* Extra Money Available banner */}
+      {debts.length > 0 && (
+        <View style={[styles.extraBanner, { backgroundColor: extraAvailable > 0 ? c.success + "15" : c.muted, marginHorizontal: 16, borderRadius: colors.radius }]}>
+          <View style={styles.extraLeft}>
+            <Feather name="dollar-sign" size={20} color={extraAvailable > 0 ? c.success : c.mutedForeground} />
+            <View>
+              <Text style={[styles.extraLabel, { color: c.mutedForeground }]}>Extra Money Available</Text>
+              <Text style={[styles.extraValue, { color: extraAvailable > 0 ? c.success : c.mutedForeground }]}>
+                ${extraAvailable.toFixed(2)}
+              </Text>
+            </View>
+          </View>
+          <Pressable
+            onPress={handleApplySnowball}
+            style={({ pressed }) => [
+              styles.applyBtn,
+              { backgroundColor: extraAvailable > 0 ? c.primary : c.muted, opacity: pressed ? 0.8 : 1 }
+            ]}
+          >
+            <Feather name="zap" size={13} color={extraAvailable > 0 ? c.primaryForeground : c.mutedForeground} />
+            <Text style={[styles.applyBtnText, { color: extraAvailable > 0 ? c.primaryForeground : c.mutedForeground }]}>
+              Apply to {settings.paymentMethod === "snowball" ? "Snowball" : "Avalanche"}
+            </Text>
+          </Pressable>
+        </View>
+      )}
 
       {debts.length > 0 && (
         <View style={[styles.statsRow, { marginHorizontal: 16, gap: 10 }]}>
@@ -223,6 +273,12 @@ const styles = StyleSheet.create({
   statCard: { flex: 1, alignItems: "center", paddingVertical: 12, gap: 4 },
   statValue: { fontSize: 16, fontFamily: "Inter_700Bold" },
   statLabel: { fontSize: 10, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.4 },
+  extraBanner:   { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 14, marginBottom: 10, marginTop: 4 },
+  extraLeft:     { flexDirection: "row", alignItems: "center", gap: 10 },
+  extraLabel:    { fontSize: 11, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.5 },
+  extraValue:    { fontSize: 20, fontFamily: "Inter_700Bold", marginTop: 2 },
+  applyBtn:      { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
+  applyBtnText:  { fontSize: 13, fontFamily: "Inter_700Bold" },
   methodRow: { flexDirection: "row", gap: 8, alignItems: "center", marginBottom: 6 },
   methodToggle: { flex: 1, flexDirection: "row", padding: 4, gap: 4 },
   methodBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingVertical: 9 },
