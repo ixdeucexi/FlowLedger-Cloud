@@ -43,6 +43,7 @@ export default function DashboardScreen() {
   const [expenseNameModal, setExpenseNameModal]      = useState(false);
   const [expenseNameInput, setExpenseNameInput]      = useState("");
   const [expenseType, setExpenseType]                = useState<"expense" | "goal">("expense");
+  const [negCalendarVisible, setNegCalendarVisible]  = useState(false);
 
   const now          = new Date();
   const currentMonth = now.getMonth();
@@ -98,6 +99,25 @@ export default function DashboardScreen() {
     const firstNegEntry = currentMonthBalances.find(db => db.balance < 0);
     return { currentBalance, endOfMonthBalance, lowestBalance, lowestDay, firstNegDay: firstNegEntry?.day ?? null };
   }, [currentMonthBalances, today]);
+
+  // ── 12-month negative schedule ─────────────────────────────────────────────
+  const yearNegSchedule = useMemo(() => {
+    const results: { month: number; year: number; label: string; firstNegDay: number | null; lowestBalance: number }[] = [];
+    for (let i = 0; i < 12; i++) {
+      const m = (currentMonth + i) % 12;
+      const y = selectedYear + Math.floor((currentMonth + i) / 12);
+      const balances = getDailyBalances(m, y);
+      const negEntry = balances.find(db => db.balance < 0);
+      const lowest = balances.reduce((min, db) => db.balance < min ? db.balance : min, Infinity);
+      results.push({
+        month: m, year: y,
+        label: `${MONTH_FULL[m]} ${y}`,
+        firstNegDay: negEntry?.day ?? null,
+        lowestBalance: lowest === Infinity ? 0 : lowest,
+      });
+    }
+    return results;
+  }, [getDailyBalances, currentMonth, selectedYear]);
 
   const stats = useMemo(() => {
     const monthBills = bills.filter(b => b.is_recurring || b.is_debt);
@@ -291,17 +311,22 @@ export default function DashboardScreen() {
         );
       })()}
 
-      {/* ── Negative date warning ── */}
+      {/* ── Negative date warning (tappable → 12-month outlook) ── */}
       {balanceMetrics?.firstNegDay && (
-        <View style={[styles.negWarning, { backgroundColor: c.destructive + "18", borderRadius: colors.radius }]}>
+        <Pressable
+          onPress={() => setNegCalendarVisible(true)}
+          style={({ pressed }) => [styles.negWarning, { backgroundColor: c.destructive + "18", borderRadius: colors.radius, opacity: pressed ? 0.8 : 1 }]}
+        >
           <Feather name="alert-triangle" size={15} color={c.destructive} />
           <Text style={[styles.negWarningText, { color: c.destructive }]}>
             Your balance goes negative on{" "}
             <Text style={{ fontFamily: "Inter_700Bold" }}>
               {MONTH_NAMES[currentMonth]} {balanceMetrics.firstNegDay}
             </Text>
+            {" "}— tap to see full outlook
           </Text>
-        </View>
+          <Feather name="chevron-right" size={14} color={c.destructive} />
+        </Pressable>
       )}
 
       {/* ── WHAT CAN I DO? button ── */}
@@ -711,6 +736,69 @@ export default function DashboardScreen() {
         editGoal={editGoal}
       />
 
+      {/* ── 12-Month Balance Outlook modal ── */}
+      <Modal visible={negCalendarVisible} transparent animationType="slide" onRequestClose={() => setNegCalendarVisible(false)}>
+        <Pressable style={styles.negSheetOverlay} onPress={() => setNegCalendarVisible(false)}>
+          <Pressable style={[styles.negSheet, { backgroundColor: c.card }]} onPress={() => {}}>
+            {/* Handle */}
+            <View style={[styles.negSheetHandle, { backgroundColor: c.border }]} />
+            <Text style={[styles.negSheetTitle, { color: c.foreground }]}>12-Month Balance Outlook</Text>
+            <Text style={[styles.negSheetSub, { color: c.mutedForeground }]}>
+              Projected first negative date each month
+            </Text>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
+              {yearNegSchedule.map((entry, i) => {
+                const isNeg = entry.firstNegDay !== null;
+                const isLow = !isNeg && entry.lowestBalance < 200;
+                const iconName = isNeg ? "x-circle" as const : isLow ? "alert-circle" as const : "check-circle" as const;
+                const iconColor = isNeg ? c.destructive : isLow ? "#f0b429" : c.success;
+                const bgColor  = isNeg ? c.destructive + "12" : isLow ? "#f0b42912" : c.success + "0a";
+                return (
+                  <View
+                    key={`${entry.year}-${entry.month}`}
+                    style={[styles.negSheetRow, {
+                      backgroundColor: bgColor,
+                      borderRadius: 12,
+                      marginBottom: 8,
+                    }]}
+                  >
+                    <Feather name={iconName} size={20} color={iconColor} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.negSheetRowMonth, { color: c.foreground }]}>{entry.label}</Text>
+                      <Text style={[styles.negSheetRowDetail, { color: isNeg ? c.destructive : isLow ? "#f0b429" : c.mutedForeground }]}>
+                        {isNeg
+                          ? `Goes negative on ${MONTH_NAMES[entry.month]} ${entry.firstNegDay}`
+                          : isLow
+                          ? `Low — floor $${entry.lowestBalance.toFixed(0)}`
+                          : `Safe — floor $${entry.lowestBalance.toFixed(0)}`}
+                      </Text>
+                    </View>
+                    {isNeg && (
+                      <View style={[styles.negSheetBadge, { backgroundColor: c.destructive }]}>
+                        <Text style={styles.negSheetBadgeText}>NEG</Text>
+                      </View>
+                    )}
+                    {isLow && !isNeg && (
+                      <View style={[styles.negSheetBadge, { backgroundColor: "#f0b429" }]}>
+                        <Text style={styles.negSheetBadgeText}>LOW</Text>
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+            </ScrollView>
+
+            <Pressable
+              onPress={() => setNegCalendarVisible(false)}
+              style={[styles.negSheetClose, { backgroundColor: c.muted }]}
+            >
+              <Text style={[styles.negSheetCloseText, { color: c.mutedForeground }]}>Close</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {/* ── Save to Budget popup ── */}
       <Modal visible={expenseNameModal} transparent animationType="fade" onRequestClose={() => setExpenseNameModal(false)}>
         <Pressable style={styles.expenseOverlay} onPress={() => setExpenseNameModal(false)}>
@@ -819,8 +907,21 @@ const styles = StyleSheet.create({
   heroProgressTrack: { height: 6, borderRadius: 3, overflow: "hidden" },
   heroProgressFill:  { height: 6, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.9)" },
   heroProgressLabel: { fontSize: 11, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.75)", marginTop: 5 },
-  negWarning:        { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, marginBottom: 14 },
-  negWarningText:    { flex: 1, fontSize: 13, fontFamily: "Inter_500Medium" },
+  negWarning:          { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, marginBottom: 14 },
+  negWarningText:      { flex: 1, fontSize: 13, fontFamily: "Inter_500Medium" },
+  // 12-month outlook sheet
+  negSheetOverlay:     { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.5)" },
+  negSheet:            { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 36 },
+  negSheetHandle:      { width: 40, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 16 },
+  negSheetTitle:       { fontSize: 20, fontFamily: "Inter_700Bold", marginBottom: 4 },
+  negSheetSub:         { fontSize: 13, fontFamily: "Inter_400Regular", marginBottom: 16 },
+  negSheetRow:         { flexDirection: "row", alignItems: "center", gap: 12, padding: 14 },
+  negSheetRowMonth:    { fontSize: 15, fontFamily: "Inter_600SemiBold", marginBottom: 2 },
+  negSheetRowDetail:   { fontSize: 12, fontFamily: "Inter_400Regular" },
+  negSheetBadge:       { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  negSheetBadgeText:   { fontSize: 10, fontFamily: "Inter_700Bold", color: "#fff" },
+  negSheetClose:       { marginTop: 12, paddingVertical: 14, borderRadius: 12, alignItems: "center" },
+  negSheetCloseText:   { fontSize: 15, fontFamily: "Inter_600SemiBold" },
   // Financial Outlook
   outlookCard:  { overflow: "hidden", marginBottom: 0, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
   outlookRow:   { flexDirection: "row", alignItems: "center", gap: 12, padding: 14 },
