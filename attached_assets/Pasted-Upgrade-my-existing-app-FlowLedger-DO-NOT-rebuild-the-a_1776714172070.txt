@@ -1,0 +1,191 @@
+Upgrade my existing app "FlowLedger".
+
+DO NOT rebuild the app.
+DO NOT remove existing features.
+ONLY enhance clarity, accuracy, and decision-making.
+
+---
+
+1. FIX "AVAILABLE CASH" (CRITICAL)
+
+---
+
+Current issue:
+"Available Cash" = income - bills (misleading)
+
+Replace with 3 clearly defined metrics:
+
+1. "Current Balance (Today)"
+
+   * Based on today's date
+   * Includes:
+
+     * All income received up to today
+     * All bills/transactions already occurred
+
+2. "Projected End of Month"
+
+   * Final balance after all income + bills this month
+
+3. "Lowest Balance"
+
+   * Minimum balance reached during the month
+   * Show:
+
+     * Amount
+     * Exact date
+
+Display example:
+
+* Current: $X
+* End of Month: $X
+* Lowest: $X on Apr XX
+
+---
+
+2. ADD RISK VISUALIZATION (CALENDAR)
+
+---
+
+Enhance calendar day styling:
+
+IF balance < 0:
+
+* Color: RED
+* Label: "Negative"
+
+IF balance between $0–$200:
+
+* Color: YELLOW
+* Label: "Low"
+
+IF balance > $200:
+
+* Color: GREEN
+
+This must update dynamically using real calculations.
+
+---
+
+3. ADD "NEGATIVE DATE DETECTION"
+
+---
+
+System must detect:
+
+FIRST date where balance drops below $0
+
+IF exists:
+Show warning globally (Dashboard + Can I Afford):
+
+"You will go negative on [DATE]"
+
+---
+
+4. UPGRADE "CAN I AFFORD THIS"
+
+---
+
+Enhance output:
+
+IF affordable:
+
+* Show:
+
+  * Balance after purchase
+  * Lowest balance AFTER purchase
+  * Date of lowest balance
+
+IF risky (balance stays above 0 but < $200):
+
+* Show warning:
+  "This is affordable, but your balance gets low"
+
+IF NOT affordable:
+
+* Show:
+
+  * Shortfall amount
+  * Exact date balance goes negative
+
+NEW:
+Always include:
+"Lowest balance after this purchase will be $X on [DATE]"
+
+---
+
+5. ADD "WHY" BREAKDOWN (CRITICAL)
+
+---
+
+When showing lowest balance OR negative:
+
+Add tap-to-expand:
+
+"Why?"
+
+Display top 3 contributors:
+
+Example:
+
+* Rent: -$1200
+* Car Loan: -$350
+* Insurance: -$180
+
+Sorted by impact before that date.
+
+---
+
+6. IMPROVE BILLS SCREEN (USABILITY)
+
+---
+
+Each bill card must include:
+
+* "Mark Paid" button
+* "Skip This Month" option
+* "Edit This Month Only" quick option
+
+These must NOT affect recurring template unless chosen.
+
+---
+
+7. IMPROVE DASHBOARD (DECISION FOCUS)
+
+---
+
+Add new section:
+
+"Financial Outlook"
+
+Include:
+
+* Next Risk Date (if exists)
+* Days until lowest balance
+* Largest upcoming bill (next 7 days)
+
+Keep existing UI but prioritize decision info over totals.
+
+---
+
+8. ENSURE DATA CONSISTENCY
+
+---
+
+All calculations must:
+
+* Match calendar projections
+* Match monthly totals
+* Update instantly when data changes
+
+---
+
+## FINAL REQUIREMENTS
+
+* No lag
+* No duplicate calculations
+* No broken features
+* Must work for future months
+* Must stay mobile-friendly
+
+This is an enhancement pass, not a redesign.

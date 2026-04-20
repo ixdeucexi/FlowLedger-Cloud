@@ -74,6 +74,15 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
           const net = (dayData ? dayData.income - dayData.expense : 0) - (db ? db.bills : 0) - goalTotal;
           const hasActivity = dayData || (db && (db.bills > 0 || db.scheduledIncome > 0 || db.goalExpenses.length > 0));
 
+          // Risk tint based on projected balance
+          const riskBg = db
+            ? db.balance < 0
+              ? "rgba(239,68,68,0.13)"
+              : db.balance < 200
+              ? "rgba(245,158,11,0.11)"
+              : "rgba(34,197,94,0.06)"
+            : "transparent";
+
           return (
             <Pressable
               key={ds}
@@ -85,7 +94,7 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
                     ? c.primary + "30"
                     : isToday
                     ? c.primary + "15"
-                    : "transparent",
+                    : riskBg,
                   opacity: pressed ? 0.75 : 1,
                   borderRadius: 8,
                   borderWidth: isSelected ? 1.5 : 0,
@@ -148,7 +157,7 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
       <View style={[styles.legend, { borderTopColor: c.border }]}>
         {[
           { color: c.success,     label: "↑ pay day"  },
-          { color: c.success,     label: "+ tx income" },
+          { color: c.success,     label: "+ income"   },
           { color: c.destructive, label: "- expense"  },
           { color: c.warning,     label: "↓ bill due" },
           { color: "#8b5cf6",     label: "★ goal"     },
@@ -158,12 +167,16 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
             <Text style={[styles.legendText, { color: c.mutedForeground }]}>{l.label}</Text>
           </View>
         ))}
-        {dailyBalances && (
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: c.success }]} />
-            <Text style={[styles.legendText, { color: c.mutedForeground }]}>balance</Text>
+        {dailyBalances && [
+          { bg: "rgba(34,197,94,0.15)",   label: "safe" },
+          { bg: "rgba(245,158,11,0.18)",  label: "low"  },
+          { bg: "rgba(239,68,68,0.20)",   label: "neg"  },
+        ].map(l => (
+          <View key={l.label} style={styles.legendItem}>
+            <View style={[styles.legendSwatch, { backgroundColor: l.bg }]} />
+            <Text style={[styles.legendText, { color: c.mutedForeground }]}>{l.label}</Text>
           </View>
-        )}
+        ))}
       </View>
     </View>
   );
@@ -182,6 +195,7 @@ const styles = StyleSheet.create({
   balanceText: { fontSize: 7, fontFamily: "Inter_700Bold", marginTop: 1 },
   legend: { flexDirection: "row", justifyContent: "center", gap: 12, paddingTop: 8, marginTop: 4, borderTopWidth: 1, flexWrap: "wrap" },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 4 },
-  legendDot: { width: 6, height: 6, borderRadius: 3 },
-  legendText: { fontSize: 10, fontFamily: "Inter_400Regular" },
+  legendDot:    { width: 6, height: 6, borderRadius: 3 },
+  legendSwatch: { width: 12, height: 10, borderRadius: 3 },
+  legendText:   { fontSize: 10, fontFamily: "Inter_400Regular" },
 });

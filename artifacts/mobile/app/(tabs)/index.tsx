@@ -76,8 +76,28 @@ export default function DashboardScreen() {
     });
   }, [affordDate, now]);
 
-  const cashFlow     = useMemo(() => getCashFlow(currentMonth, selectedYear), [getCashFlow, currentMonth, selectedYear]);
+  const cashFlow      = useMemo(() => getCashFlow(currentMonth, selectedYear), [getCashFlow, currentMonth, selectedYear]);
   const monthlyIncome = getMonthlyIncome();
+
+  // ── Real daily balance metrics for current month ───────────────────────────
+  const currentMonthBalances = useMemo(
+    () => getDailyBalances(currentMonth, selectedYear),
+    [getDailyBalances, currentMonth, selectedYear]
+  );
+
+  const balanceMetrics = useMemo(() => {
+    if (!currentMonthBalances.length) return null;
+    const todayEntry = currentMonthBalances.find(db => db.day === today);
+    const currentBalance = todayEntry?.balance ?? currentMonthBalances[0]?.balance ?? 0;
+    const endOfMonthBalance = currentMonthBalances[currentMonthBalances.length - 1]?.balance ?? 0;
+    let lowestBalance = Infinity;
+    let lowestDay = today;
+    currentMonthBalances.forEach(db => {
+      if (db.balance < lowestBalance) { lowestBalance = db.balance; lowestDay = db.day; }
+    });
+    const firstNegEntry = currentMonthBalances.find(db => db.balance < 0);
+    return { currentBalance, endOfMonthBalance, lowestBalance, lowestDay, firstNegDay: firstNegEntry?.day ?? null };
+  }, [currentMonthBalances, today]);
 
   const stats = useMemo(() => {
     const monthBills = bills.filter(b => b.is_recurring || b.is_debt);
@@ -158,6 +178,12 @@ export default function DashboardScreen() {
     const isRisky   = canAfford && lowestBal < RISKY_THRESHOLD;
     const shortfall = canAfford ? 0 : Math.abs(balanceAfter);
 
+    // First day where balance goes negative after purchase
+    const firstNegAfterEntry = fromDay.find(db => db.balance - amt < 0);
+    const firstNegAfterDay   = firstNegAfterEntry?.day ?? purchaseDay;
+    const firstNegAfterLabel = new Date(purchaseYear, purchaseMonth, firstNegAfterDay)
+      .toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
     const lowestDateLabel = new Date(purchaseYear, purchaseMonth, lowestDay)
       .toLocaleDateString("en-US", { month: "short", day: "numeric" });
     const affordDateStr = `${purchaseYear}-${String(purchaseMonth + 1).padStart(2, "0")}-${String(purchaseDay).padStart(2, "0")}`;
@@ -166,6 +192,7 @@ export default function DashboardScreen() {
       canAfford, isRisky, shortfall,
       balanceAtDay, balanceAfter,
       lowestBal, lowestDay, lowestDateLabel,
+      firstNegAfterLabel,
       purchaseMonth, purchaseYear, purchaseDay, affordDateStr, amt,
     };
   }, [affordAmt, affordDate, getDailyBalances]);
@@ -213,25 +240,69 @@ export default function DashboardScreen() {
       <Text style={[styles.heading,    { color: c.foreground }]}>Dashboard</Text>
       <Text style={[styles.subheading, { color: c.mutedForeground }]}>{MONTH_FULL[currentMonth]} {selectedYear}</Text>
 
-      {/* ── HERO: Available Cash ── */}
-      <View style={[styles.heroCard, { backgroundColor: cashFlow.remaining >= 0 ? c.primary : c.destructive }]}>
-        <Text style={styles.heroLabel}>Available Cash</Text>
-        <Text style={styles.heroValue}>
-          {cashFlow.remaining >= 0 ? "" : "−"}${Math.abs(cashFlow.remaining).toFixed(0)}
-        </Text>
-        <Text style={styles.heroBreakdown}>{breakdownText}</Text>
-
-        {stats.totalDue > 0 && (
-          <View style={styles.heroProgress}>
-            <View style={[styles.heroProgressTrack, { backgroundColor: "rgba(255,255,255,0.25)" }]}>
-              <View style={[styles.heroProgressFill, { width: `${Math.min((stats.totalPaid / stats.totalDue) * 100, 100)}%` as any }]} />
-            </View>
-            <Text style={styles.heroProgressLabel}>
-              {Math.round((stats.totalPaid / stats.totalDue) * 100)}% of bills paid this month
+      {/* ── HERO: 3-metric balance card ── */}
+      {(() => {
+        const cur = balanceMetrics?.currentBalance ?? cashFlow.remaining;
+        const heroColor = cur < 0 ? c.destructive : cur < 200 ? "#f0b429" : c.primary;
+        return (
+          <View style={[styles.heroCard, { backgroundColor: heroColor }]}>
+            <Text style={styles.heroLabel}>Balance Today</Text>
+            <Text style={styles.heroValue}>
+              {cur < 0 ? "−" : ""}${Math.abs(cur).toFixed(0)}
             </Text>
+
+            {/* Sub-metrics row */}
+            <View style={styles.heroMetrics}>
+              <View style={styles.heroMetric}>
+                <Text style={styles.heroMetricLabel}>End of Month</Text>
+                <Text style={[styles.heroMetricValue, {
+                  color: (balanceMetrics?.endOfMonthBalance ?? 0) < 0 ? "#fca5a5" : "rgba(255,255,255,0.95)"
+                }]}>
+                  {(balanceMetrics?.endOfMonthBalance ?? 0) < 0 ? "−" : ""}
+                  ${Math.abs(balanceMetrics?.endOfMonthBalance ?? 0).toFixed(0)}
+                </Text>
+              </View>
+              <View style={styles.heroMetricDivider} />
+              <View style={styles.heroMetric}>
+                <Text style={styles.heroMetricLabel}>Lowest Balance</Text>
+                <Text style={[styles.heroMetricValue, {
+                  color: (balanceMetrics?.lowestBalance ?? 0) < 0 ? "#fca5a5"
+                    : (balanceMetrics?.lowestBalance ?? 0) < 200 ? "#fde68a"
+                    : "rgba(255,255,255,0.95)"
+                }]}>
+                  {(balanceMetrics?.lowestBalance ?? 0) < 0 ? "−" : ""}
+                  ${Math.abs(balanceMetrics?.lowestBalance ?? 0).toFixed(0)}
+                  {balanceMetrics ? ` · ${MONTH_NAMES[currentMonth]} ${balanceMetrics.lowestDay}` : ""}
+                </Text>
+              </View>
+            </View>
+
+            {stats.totalDue > 0 && (
+              <View style={styles.heroProgress}>
+                <View style={[styles.heroProgressTrack, { backgroundColor: "rgba(255,255,255,0.25)" }]}>
+                  <View style={[styles.heroProgressFill, { width: `${Math.min((stats.totalPaid / stats.totalDue) * 100, 100)}%` as any }]} />
+                </View>
+                <Text style={styles.heroProgressLabel}>
+                  {Math.round((stats.totalPaid / stats.totalDue) * 100)}% of bills paid this month
+                </Text>
+              </View>
+            )}
           </View>
-        )}
-      </View>
+        );
+      })()}
+
+      {/* ── Negative date warning ── */}
+      {balanceMetrics?.firstNegDay && (
+        <View style={[styles.negWarning, { backgroundColor: c.destructive + "18", borderRadius: colors.radius }]}>
+          <Feather name="alert-triangle" size={15} color={c.destructive} />
+          <Text style={[styles.negWarningText, { color: c.destructive }]}>
+            Your balance goes negative on{" "}
+            <Text style={{ fontFamily: "Inter_700Bold" }}>
+              {MONTH_NAMES[currentMonth]} {balanceMetrics.firstNegDay}
+            </Text>
+          </Text>
+        </View>
+      )}
 
       {/* ── WHAT CAN I DO? button ── */}
       <Pressable
@@ -328,15 +399,13 @@ export default function DashboardScreen() {
                   )}
                   {state === "red" && (
                     <Text style={[styles.affordVerdictSub, { color: c.mutedForeground }]}>
-                      Shortfall:{" "}
+                      {"Shortfall: "}
                       <Text style={{ color: c.destructive, fontFamily: "Inter_700Bold" }}>
                         ${shortfall.toFixed(2)}
                       </Text>
-                      {"\n"}
-                      Your projected balance on{" "}
-                      {affordDateLabel.toLowerCase()} is only{" "}
-                      <Text style={{ fontFamily: "Inter_700Bold" }}>
-                        ${balanceAtDay.toFixed(2)}
+                      {"\nBalance goes negative on "}
+                      <Text style={{ color: c.destructive, fontFamily: "Inter_700Bold" }}>
+                        {affordResult.firstNegAfterLabel}
                       </Text>
                     </Text>
                   )}
@@ -430,6 +499,67 @@ export default function DashboardScreen() {
           </Pressable>
         ))}
       </View>
+
+      {/* ── Financial Outlook ── */}
+      {balanceMetrics && (() => {
+        const daysUntilLowest = balanceMetrics.lowestDay - today;
+        const largestUpcoming = bills
+          .filter(b => (b.is_recurring || b.is_debt) && b.due_day >= today && b.due_day <= today + 7)
+          .reduce<{ name: string; amount: number } | null>((best, b) => {
+            const amt = b.amount;
+            return !best || amt > best.amount ? { name: b.name, amount: amt } : best;
+          }, null);
+        const hasRisk = balanceMetrics.firstNegDay !== null || balanceMetrics.lowestBalance < 200;
+        if (!hasRisk && !largestUpcoming) return null;
+        return (
+          <View style={{ marginBottom: 14 }}>
+            <Text style={[styles.sectionTitle, { color: c.foreground }]}>Financial Outlook</Text>
+            <View style={[styles.outlookCard, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+              {balanceMetrics.firstNegDay && (
+                <View style={[styles.outlookRow, { borderBottomWidth: 1, borderBottomColor: c.border }]}>
+                  <View style={[styles.outlookIcon, { backgroundColor: c.destructive + "18" }]}>
+                    <Feather name="alert-triangle" size={16} color={c.destructive} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.outlookLabel, { color: c.mutedForeground }]}>Next Risk Date</Text>
+                    <Text style={[styles.outlookValue, { color: c.destructive }]}>
+                      {MONTH_NAMES[currentMonth]} {balanceMetrics.firstNegDay} — balance goes negative
+                    </Text>
+                  </View>
+                </View>
+              )}
+              {balanceMetrics.lowestBalance < 200 && (
+                <View style={[styles.outlookRow, largestUpcoming ? { borderBottomWidth: 1, borderBottomColor: c.border } : {}]}>
+                  <View style={[styles.outlookIcon, { backgroundColor: "#f0b42918" }]}>
+                    <Feather name="trending-down" size={16} color="#f0b429" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.outlookLabel, { color: c.mutedForeground }]}>
+                      {daysUntilLowest > 0 ? `Lowest balance in ${daysUntilLowest} day${daysUntilLowest !== 1 ? "s" : ""}` : "Lowest balance today"}
+                    </Text>
+                    <Text style={[styles.outlookValue, { color: balanceMetrics.lowestBalance < 0 ? c.destructive : "#f0b429" }]}>
+                      {balanceMetrics.lowestBalance < 0 ? "−" : ""}${Math.abs(balanceMetrics.lowestBalance).toFixed(0)} on {MONTH_NAMES[currentMonth]} {balanceMetrics.lowestDay}
+                    </Text>
+                  </View>
+                </View>
+              )}
+              {largestUpcoming && (
+                <View style={styles.outlookRow}>
+                  <View style={[styles.outlookIcon, { backgroundColor: c.warning + "18" }]}>
+                    <Feather name="calendar" size={16} color={c.warning} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.outlookLabel, { color: c.mutedForeground }]}>Largest upcoming bill (7 days)</Text>
+                    <Text style={[styles.outlookValue, { color: c.foreground }]}>
+                      {largestUpcoming.name} — ${largestUpcoming.amount.toFixed(0)} due {MONTH_NAMES[currentMonth]} {bills.find(b => b.name === largestUpcoming!.name)?.due_day}
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          </View>
+        );
+      })()}
 
       {/* ── Charts ── */}
       <MiniChart data={monthlyBarData} title="Monthly Expenses" height={130} />
@@ -677,14 +807,26 @@ const styles = StyleSheet.create({
   subheading: { fontSize: 14, fontFamily: "Inter_400Regular", marginTop: 4, marginBottom: 20 },
 
   // Hero
-  heroCard:         { borderRadius: 20, padding: 22, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 8, elevation: 6 },
-  heroLabel:        { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "rgba(255,255,255,0.8)", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 },
-  heroValue:        { fontSize: 46, fontFamily: "Inter_700Bold", color: "#fff", lineHeight: 52 },
-  heroBreakdown:    { fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.75)", marginTop: 6, lineHeight: 17 },
-  heroProgress:     { marginTop: 16 },
-  heroProgressTrack:{ height: 6, borderRadius: 3, overflow: "hidden" },
-  heroProgressFill: { height: 6, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.9)" },
-  heroProgressLabel:{ fontSize: 11, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.75)", marginTop: 5 },
+  heroCard:          { borderRadius: 20, padding: 22, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 8, elevation: 6 },
+  heroLabel:         { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "rgba(255,255,255,0.8)", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 },
+  heroValue:         { fontSize: 46, fontFamily: "Inter_700Bold", color: "#fff", lineHeight: 52 },
+  heroMetrics:       { flexDirection: "row", marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.2)" },
+  heroMetric:        { flex: 1 },
+  heroMetricLabel:   { fontSize: 11, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 3 },
+  heroMetricValue:   { fontSize: 14, fontFamily: "Inter_700Bold" },
+  heroMetricDivider: { width: 1, backgroundColor: "rgba(255,255,255,0.2)", marginHorizontal: 14 },
+  heroProgress:      { marginTop: 14 },
+  heroProgressTrack: { height: 6, borderRadius: 3, overflow: "hidden" },
+  heroProgressFill:  { height: 6, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.9)" },
+  heroProgressLabel: { fontSize: 11, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.75)", marginTop: 5 },
+  negWarning:        { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, marginBottom: 14 },
+  negWarningText:    { flex: 1, fontSize: 13, fontFamily: "Inter_500Medium" },
+  // Financial Outlook
+  outlookCard:  { overflow: "hidden", marginBottom: 0, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
+  outlookRow:   { flexDirection: "row", alignItems: "center", gap: 12, padding: 14 },
+  outlookIcon:  { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  outlookLabel: { fontSize: 11, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 },
+  outlookValue: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
 
   // What can I do? button
   whatBtn:     { flexDirection: "row", alignItems: "center", gap: 12, padding: 16, marginBottom: 14, borderWidth: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
