@@ -13,7 +13,7 @@ import { CalendarView } from "@/components/CalendarView";
 import { EmptyState } from "@/components/EmptyState";
 import { MonthPicker } from "@/components/MonthPicker";
 import colors from "@/constants/colors";
-import type { Bill, Transaction } from "@/context/BudgetContext";
+import type { Bill, GoalExpense, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -102,21 +102,50 @@ export default function MonthlyScreen() {
   const txExpense = txList.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
 
   const selectedDay = selectedDate ? parseInt(selectedDate.split("-")[2]) : null;
-  const scheduledBillsForDay = useMemo(() => {
-    if (selectedDay === null) return [];
-    return monthBills.filter(b => getBillOccurrencesInMonth(b, month, selectedYear).includes(selectedDay));
-  }, [monthBills, getBillOccurrencesInMonth, selectedDay, month, selectedYear]);
-
-  const goalsForSelectedDay = useMemo(() => {
-    if (selectedDay === null) return [];
-    const db = dailyBalances.find(d => d.day === selectedDay);
-    return db ? db.goalExpenses : [];
-  }, [selectedDay, dailyBalances]);
-
   const isFuture = useMemo(() => {
     const now = new Date();
     return selectedYear > now.getFullYear() || (selectedYear === now.getFullYear() && month > now.getMonth());
   }, [month, selectedYear]);
+
+  // ── Unified all-month activity list for calendar tab ────────────────────
+  type MonthItem =
+    | { kind: "income"; day: number; name: string; amount: number }
+    | { kind: "bill"; day: number; bill: Bill; amt: number; paid: number; canReschedule: boolean; hasCustomDay: boolean }
+    | { kind: "goal"; day: number; goalId: string; goalName: string; goalAmount: number }
+    | { kind: "tx"; day: number; tx: Transaction };
+
+  const allMonthItems = useMemo((): MonthItem[] => {
+    const items: MonthItem[] = [];
+    // Income occurrences
+    incomeOccurrences.forEach(occ => {
+      items.push({ kind: "income", day: occ.day, name: occ.name, amount: occ.amount });
+    });
+    // Scheduled bills (each occurrence day)
+    monthBills.forEach(b => {
+      const days = getBillOccurrencesInMonth(b, month, selectedYear);
+      const amt = getAmount(b, month, selectedYear);
+      const paid = getPaidAmount(b.id, month, selectedYear);
+      days.forEach(day => {
+        items.push({
+          kind: "bill", day, bill: b, amt, paid,
+          canReschedule: b.frequency === "monthly",
+          hasCustomDay: getCustomDueDay(b.id, month, selectedYear) !== undefined,
+        });
+      });
+    });
+    // Goals from dailyBalances
+    dailyBalances.forEach(db => {
+      db.goalExpenses.forEach((g: GoalExpense) => {
+        items.push({ kind: "goal", day: db.day, goalId: g.id, goalName: g.name, goalAmount: g.amount });
+      });
+    });
+    // Manual transactions
+    txList.forEach(tx => {
+      const day = parseInt(tx.date.split("-")[2], 10);
+      items.push({ kind: "tx", day, tx });
+    });
+    return items.sort((a, b) => a.day !== b.day ? a.day - b.day : (a.kind === "income" ? -1 : b.kind === "income" ? 1 : 0));
+  }, [incomeOccurrences, monthBills, getBillOccurrencesInMonth, getAmount, getPaidAmount, getCustomDueDay, dailyBalances, txList, month, selectedYear]);
 
   const cashFlow = useMemo(() => getCashFlow(month, selectedYear), [getCashFlow, month, selectedYear]);
   const monthlyIncome = getMonthlyIncome();
@@ -178,9 +207,6 @@ export default function MonthlyScreen() {
     ]);
   };
 
-  const displayedTxs = selectedDate
-    ? txList.filter(t => t.date === selectedDate)
-    : txList.slice().sort((a, b) => b.date.localeCompare(a.date));
 
   const webTopPad = Platform.OS === "web" ? 67 : 0;
 
@@ -532,131 +558,167 @@ export default function MonthlyScreen() {
               dailyBalances={dailyBalances}
             />
 
-            <View style={styles.txListHeader}>
-              <Text style={[styles.txListTitle, { color: c.foreground }]}>
-                {selectedDate
-                  ? `${selectedDate}${scheduledBillsForDay.length + displayedTxs.length + goalsForSelectedDay.length > 0 ? ` · ${scheduledBillsForDay.length + displayedTxs.length + goalsForSelectedDay.length} item${scheduledBillsForDay.length + displayedTxs.length + goalsForSelectedDay.length !== 1 ? "s" : ""}` : ""}`
-                  : `All Transactions (${txList.length})`}
-              </Text>
-              <Pressable
-                onPress={() => { setEditTx(null); setTxModalVisible(true); }}
-                style={({ pressed }) => [styles.iconBtn, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
-              >
-                <Feather name="plus" size={16} color={c.primaryForeground} />
-              </Pressable>
-            </View>
-
-            {/* Scheduled bills & debts for the selected day */}
-            {scheduledBillsForDay.length > 0 && (
-              <>
-                <Text style={[styles.sectionLabel, { color: c.mutedForeground }]}>Scheduled</Text>
-                {scheduledBillsForDay.map(b => {
-                  const amt = getAmount(b, month, selectedYear);
-                  const paid = getPaidAmount(b.id, month, selectedYear);
-                  const isPaid = amt > 0 && paid >= amt;
-                  const isDebt = b.is_debt;
-                  const iconColor = isPaid ? c.success : isDebt ? c.destructive : c.warning;
-                  const iconName = isDebt ? "credit-card" : "file-text";
-                  const canReschedule = b.frequency === "monthly";
-                  const hasCustomDay = getCustomDueDay(b.id, month, selectedYear) !== undefined;
-                  return (
-                    <Pressable
-                      key={`sched-${b.id}`}
-                      onPress={() => canReschedule && setDueDayPickerBill(b)}
-                      style={({ pressed }) => [
-                        styles.txRow,
-                        { backgroundColor: c.card, borderRadius: colors.radius, opacity: pressed && canReschedule ? 0.75 : 1 },
-                      ]}
-                    >
-                      <View style={styles.txMain}>
-                        <View style={[styles.txIcon, { backgroundColor: iconColor + "20" }]}>
-                          <Feather name={iconName} size={15} color={iconColor} />
-                        </View>
-                        <View style={styles.txBody}>
-                          <Text style={[styles.txNote, { color: c.foreground }]}>{b.name}</Text>
-                          <Text style={[styles.txDate, { color: c.mutedForeground }]}>
-                            {isDebt ? "Debt" : "Bill"} · {b.category}
-                            {b.frequency === "weekly" ? " · weekly" : ""}
-                            {isPaid ? " · paid" : paid > 0 ? ` · $${paid.toFixed(2)} paid` : ""}
-                            {hasCustomDay ? " · rescheduled" : ""}
-                          </Text>
-                          {canReschedule && (
-                            <Text style={[styles.txRescheduleHint, { color: c.primary }]}>
-                              Tap to change due day this month
-                            </Text>
-                          )}
-                        </View>
-                        <Text style={[styles.txAmt, { color: iconColor }]}>
-                          -${amt.toFixed(2)}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </>
-            )}
-
-            {/* Goals due on selected day */}
-            {goalsForSelectedDay.length > 0 && (
-              <>
-                <Text style={[styles.sectionLabel, { color: c.mutedForeground }]}>Goals</Text>
-                {goalsForSelectedDay.map(goal => (
-                  <View
-                    key={`goal-${goal.id}`}
-                    style={[styles.txRow, { backgroundColor: c.card, borderRadius: colors.radius }]}
-                  >
-                    <View style={styles.txMain}>
-                      <View style={[styles.txIcon, { backgroundColor: "#8b5cf620" }]}>
-                        <Feather name="target" size={15} color="#8b5cf6" />
-                      </View>
-                      <View style={styles.txBody}>
-                        <Text style={[styles.txNote, { color: c.foreground }]}>{goal.name}</Text>
-                        <Text style={[styles.txDate, { color: c.mutedForeground }]}>Goal · target date</Text>
-                      </View>
-                      <Text style={[styles.txAmt, { color: "#8b5cf6" }]}>
-                        -${goal.amount.toFixed(2)}
-                      </Text>
+            {/* ── Unified activity list ─────────────────────────── */}
+            {(() => {
+              const displayItems = selectedDay !== null
+                ? allMonthItems.filter(item => item.day === selectedDay)
+                : allMonthItems;
+              const totalCount = displayItems.length;
+              return (
+                <>
+                  <View style={styles.txListHeader}>
+                    <Text style={[styles.txListTitle, { color: c.foreground }]}>
+                      {selectedDate
+                        ? `${selectedDate} · ${totalCount} item${totalCount !== 1 ? "s" : ""}`
+                        : `All Activity · ${totalCount} item${totalCount !== 1 ? "s" : ""}`}
+                    </Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      {selectedDate && (
+                        <Pressable
+                          onPress={() => setSelectedDate(null)}
+                          style={({ pressed }) => [styles.showAllBtn, { backgroundColor: c.muted, opacity: pressed ? 0.75 : 1 }]}
+                        >
+                          <Text style={[styles.showAllBtnText, { color: c.mutedForeground }]}>Show all</Text>
+                        </Pressable>
+                      )}
+                      <Pressable
+                        onPress={() => { setEditTx(null); setTxModalVisible(true); }}
+                        style={({ pressed }) => [styles.iconBtn, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
+                      >
+                        <Feather name="plus" size={16} color={c.primaryForeground} />
+                      </Pressable>
                     </View>
                   </View>
-                ))}
-              </>
-            )}
 
-            {/* Manual transactions */}
-            {displayedTxs.length === 0 && scheduledBillsForDay.length === 0 && goalsForSelectedDay.length === 0 ? (
-              <EmptyState icon="credit-card" title="No Activity" message={selectedDate ? "Tap + to log a transaction for this day." : "Tap a day or use + to add transactions."} />
-            ) : displayedTxs.length > 0 ? (
-              <>
-                {(scheduledBillsForDay.length > 0 || goalsForSelectedDay.length > 0) && (
-                  <Text style={[styles.sectionLabel, { color: c.mutedForeground }]}>Transactions</Text>
-                )}
-                {displayedTxs.map(tx => (
-                  <View
-                    key={tx.id}
-                    style={[styles.txRow, { backgroundColor: c.card, borderRadius: colors.radius }]}
-                  >
-                    <Pressable
-                      onPress={() => { setEditTx(tx); setTxModalVisible(true); }}
-                      style={styles.txMain}
-                    >
-                      <View style={[styles.txIcon, { backgroundColor: tx.amount > 0 ? c.success + "20" : c.destructive + "20" }]}>
-                        <Feather name={tx.amount > 0 ? "arrow-down-left" : "arrow-up-right"} size={15} color={tx.amount > 0 ? c.success : c.destructive} />
-                      </View>
-                      <View style={styles.txBody}>
-                        <Text style={[styles.txNote, { color: c.foreground }]}>{tx.note || tx.category}</Text>
-                        <Text style={[styles.txDate, { color: c.mutedForeground }]}>{tx.date} · {tx.category}</Text>
-                      </View>
-                      <Text style={[styles.txAmt, { color: tx.amount > 0 ? c.success : c.destructive }]}>
-                        {tx.amount > 0 ? "+" : ""}{tx.amount.toFixed(2)}
-                      </Text>
-                    </Pressable>
-                    <Pressable onPress={() => handleDeleteTx(tx.id)} hitSlop={8} style={styles.txDelete}>
-                      <Feather name="trash-2" size={14} color={c.destructive} />
-                    </Pressable>
-                  </View>
-                ))}
-              </>
-            ) : null}
+                  {totalCount === 0 ? (
+                    <EmptyState icon="credit-card" title="No Activity" message={selectedDate ? "Tap + to log a transaction for this day." : "No bills, income, or transactions this month."} />
+                  ) : (
+                    displayItems.map((item, idx) => {
+                      const showDay = !selectedDate;
+                      const key = `item-${idx}-${item.kind}-${item.day}`;
+
+                      if (item.kind === "income") {
+                        return (
+                          <View key={key} style={[styles.txRow, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+                            <View style={styles.txMain}>
+                              {showDay && (
+                                <View style={[styles.dayBadge, { backgroundColor: c.success + "22" }]}>
+                                  <Text style={[styles.dayBadgeText, { color: c.success }]}>{item.day}</Text>
+                                </View>
+                              )}
+                              <View style={[styles.txIcon, { backgroundColor: c.success + "20" }]}>
+                                <Feather name="trending-up" size={15} color={c.success} />
+                              </View>
+                              <View style={styles.txBody}>
+                                <Text style={[styles.txNote, { color: c.foreground }]}>{item.name}</Text>
+                                <Text style={[styles.txDate, { color: c.mutedForeground }]}>Income</Text>
+                              </View>
+                              <Text style={[styles.txAmt, { color: c.success }]}>+${item.amount.toFixed(2)}</Text>
+                            </View>
+                          </View>
+                        );
+                      }
+
+                      if (item.kind === "bill") {
+                        const { bill: b, amt, paid, canReschedule, hasCustomDay } = item;
+                        const isPaid = amt > 0 && paid >= amt;
+                        const isDebt = b.is_debt;
+                        const iconColor = isPaid ? c.success : isDebt ? c.destructive : c.warning;
+                        const iconName: "credit-card" | "file-text" = isDebt ? "credit-card" : "file-text";
+                        return (
+                          <Pressable
+                            key={key}
+                            onPress={() => canReschedule && setDueDayPickerBill(b)}
+                            style={({ pressed }) => [
+                              styles.txRow,
+                              { backgroundColor: c.card, borderRadius: colors.radius, opacity: pressed && canReschedule ? 0.75 : 1 },
+                            ]}
+                          >
+                            <View style={styles.txMain}>
+                              {showDay && (
+                                <View style={[styles.dayBadge, { backgroundColor: iconColor + "22" }]}>
+                                  <Text style={[styles.dayBadgeText, { color: iconColor }]}>{item.day}</Text>
+                                </View>
+                              )}
+                              <View style={[styles.txIcon, { backgroundColor: iconColor + "20" }]}>
+                                <Feather name={iconName} size={15} color={iconColor} />
+                              </View>
+                              <View style={styles.txBody}>
+                                <Text style={[styles.txNote, { color: c.foreground }]}>{b.name}</Text>
+                                <Text style={[styles.txDate, { color: c.mutedForeground }]}>
+                                  {isDebt ? "Debt" : "Bill"} · {b.category}
+                                  {b.frequency === "weekly" ? " · weekly" : ""}
+                                  {isPaid ? " · paid" : paid > 0 ? ` · $${paid.toFixed(2)} paid` : ""}
+                                  {hasCustomDay ? " · rescheduled" : ""}
+                                </Text>
+                                {canReschedule && (
+                                  <Text style={[styles.txRescheduleHint, { color: c.primary }]}>
+                                    Tap to change due day this month
+                                  </Text>
+                                )}
+                              </View>
+                              <Text style={[styles.txAmt, { color: iconColor }]}>-${amt.toFixed(2)}</Text>
+                            </View>
+                          </Pressable>
+                        );
+                      }
+
+                      if (item.kind === "goal") {
+                        return (
+                          <View key={key} style={[styles.txRow, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+                            <View style={styles.txMain}>
+                              {showDay && (
+                                <View style={[styles.dayBadge, { backgroundColor: "#8b5cf622" }]}>
+                                  <Text style={[styles.dayBadgeText, { color: "#8b5cf6" }]}>{item.day}</Text>
+                                </View>
+                              )}
+                              <View style={[styles.txIcon, { backgroundColor: "#8b5cf620" }]}>
+                                <Feather name="target" size={15} color="#8b5cf6" />
+                              </View>
+                              <View style={styles.txBody}>
+                                <Text style={[styles.txNote, { color: c.foreground }]}>{item.goalName}</Text>
+                                <Text style={[styles.txDate, { color: c.mutedForeground }]}>Goal · target date</Text>
+                              </View>
+                              <Text style={[styles.txAmt, { color: "#8b5cf6" }]}>-${item.goalAmount.toFixed(2)}</Text>
+                            </View>
+                          </View>
+                        );
+                      }
+
+                      // tx
+                      const { tx } = item;
+                      return (
+                        <View key={key} style={[styles.txRow, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+                          <Pressable
+                            onPress={() => { setEditTx(tx); setTxModalVisible(true); }}
+                            style={styles.txMain}
+                          >
+                            {showDay && (
+                              <View style={[styles.dayBadge, { backgroundColor: tx.amount > 0 ? c.success + "22" : c.destructive + "22" }]}>
+                                <Text style={[styles.dayBadgeText, { color: tx.amount > 0 ? c.success : c.destructive }]}>{item.day}</Text>
+                              </View>
+                            )}
+                            <View style={[styles.txIcon, { backgroundColor: tx.amount > 0 ? c.success + "20" : c.destructive + "20" }]}>
+                              <Feather name={tx.amount > 0 ? "arrow-down-left" : "arrow-up-right"} size={15} color={tx.amount > 0 ? c.success : c.destructive} />
+                            </View>
+                            <View style={styles.txBody}>
+                              <Text style={[styles.txNote, { color: c.foreground }]}>{tx.note || tx.category}</Text>
+                              <Text style={[styles.txDate, { color: c.mutedForeground }]}>{tx.date} · {tx.category}</Text>
+                            </View>
+                            <Text style={[styles.txAmt, { color: tx.amount > 0 ? c.success : c.destructive }]}>
+                              {tx.amount > 0 ? "+" : ""}{tx.amount.toFixed(2)}
+                            </Text>
+                          </Pressable>
+                          <Pressable onPress={() => handleDeleteTx(tx.id)} hitSlop={8} style={styles.txDelete}>
+                            <Feather name="trash-2" size={14} color={c.destructive} />
+                          </Pressable>
+                        </View>
+                      );
+                    })
+                  )}
+                </>
+              );
+            })()}
           </View>
         </ScrollView>
       )}
@@ -846,6 +908,10 @@ const styles = StyleSheet.create({
   txDate: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
   txRescheduleHint: { fontSize: 10, fontFamily: "Inter_400Regular", marginTop: 2 },
   txAmt: { fontSize: 14, fontFamily: "Inter_700Bold", marginLeft: 8 },
+  dayBadge: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center", marginRight: 6 },
+  dayBadgeText: { fontSize: 11, fontFamily: "Inter_700Bold" },
+  showAllBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
+  showAllBtnText: { fontSize: 12, fontFamily: "Inter_500Medium" },
   txDelete: { paddingHorizontal: 14, paddingVertical: 11 },
   pickerOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.55)" },
   pickerSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 36 },
