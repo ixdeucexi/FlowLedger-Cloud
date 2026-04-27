@@ -510,10 +510,22 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   // ─── Bill scheduling helpers ──────────────────────────────────────────────────
 
   /** Returns 1-indexed days in `month`/`year` when `bill` is due.
-   *  Respects bill.start_date, bill.end_date, and bill.day_of_week for weekly bills. */
+   *  Respects bill.start_date, bill.end_date, bill.day_of_week for weekly bills,
+   *  AND honours any custom_due_day override stored for this month. */
   const getBillOccurrencesInMonth = useCallback(
-    (bill: Bill, month: number, year: number) => getBillOccurrenceDays(bill, month, year),
-    []
+    (bill: Bill, month: number, year: number): number[] => {
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      let occ = getBillOccurrenceDays(bill, month, year);
+      if (occ.length === 0) return occ;
+      const o = overrides.find(
+        ov => ov.bill_id === bill.id && ov.month === month && ov.year === year
+      );
+      if (o?.custom_due_day !== undefined && bill.frequency === "monthly") {
+        occ = [Math.min(o.custom_due_day, daysInMonth)];
+      }
+      return occ;
+    },
+    [overrides]
   );
 
   /** Total amount billed for the given month (per-occurrence amount × number of occurrences). */
