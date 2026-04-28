@@ -3,8 +3,9 @@
  *
  * Routing rules:
  * - GET / or /manifest with expo-platform header → Expo manifest JSON (native clients)
- * - GET / or any unmatched path from a browser → Expo web app (index.html SPA fallback)
+ * - GET / from browser → landing page HTML (health-check safe, returns 200)
  * - Known static assets → served directly from ./static-build/
+ * - Unknown paths → redirect to / so shared links open the app
  *
  * Zero external dependencies — uses only Node.js built-ins (http, fs, path).
  */
@@ -14,6 +15,7 @@ const fs = require("fs");
 const path = require("path");
 
 const STATIC_ROOT = path.resolve(__dirname, "..", "static-build");
+const TEMPLATE_PATH = path.resolve(__dirname, "templates", "landing-page.html");
 const basePath = (process.env.BASE_PATH || "/").replace(/\/+$/, "");
 
 const MIME_TYPES = {
@@ -34,13 +36,27 @@ const MIME_TYPES = {
   ".map": "application/json",
 };
 
+function getAppName() {
+  try {
+    const appJsonPath = path.resolve(__dirname, "..", "app.json");
+    const appJson = JSON.parse(fs.readFileSync(appJsonPath, "utf-8"));
+    return appJson.expo?.name || "App Landing Page";
+  } catch {
+    return "App Landing Page";
+  }
+}
+
 function serveManifest(platform, res) {
   const manifestPath = path.join(STATIC_ROOT, platform, "manifest.json");
+
   if (!fs.existsSync(manifestPath)) {
     res.writeHead(404, { "content-type": "application/json" });
-    res.end(JSON.stringify({ error: `Manifest not found for platform: ${platform}` }));
+    res.end(
+      JSON.stringify({ error: `Manifest not found for platform: ${platform}` }),
+    );
     return;
   }
+
   const manifest = fs.readFileSync(manifestPath, "utf-8");
   res.writeHead(200, {
     "content-type": "application/json",
@@ -50,19 +66,20 @@ function serveManifest(platform, res) {
   res.end(manifest);
 }
 
-function serveWebApp(res) {
-  const indexPath = path.join(STATIC_ROOT, "index.html");
-  if (fs.existsSync(indexPath)) {
-    const content = fs.readFileSync(indexPath);
-    res.writeHead(200, {
-      "content-type": "text/html; charset=utf-8",
-      "cache-control": "no-cache",
-    });
-    res.end(content);
-  } else {
-    res.writeHead(503, { "content-type": "text/html; charset=utf-8" });
-    res.end("<h1>App is starting up…</h1><p>Please refresh in a moment.</p>");
-  }
+function serveLandingPage(req, res, landingPageTemplate, appName) {
+  const forwardedProto = req.headers["x-forwarded-proto"];
+  const protocol = forwardedProto || "https";
+  const host = req.headers["x-forwarded-host"] || req.headers["host"];
+  const baseUrl = `${protocol}://${host}`;
+  const expsUrl = `${host}`;
+
+  const html = landingPageTemplate
+    .replace(/BASE_URL_PLACEHOLDER/g, baseUrl)
+    .replace(/EXPS_URL_PLACEHOLDER/g, expsUrl)
+    .replace(/APP_NAME_PLACEHOLDER/g, appName);
+
+  res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+  res.end(html);
 }
 
 function serveStaticFile(urlPath, res) {
@@ -76,9 +93,7 @@ function serveStaticFile(urlPath, res) {
   }
 
   if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
-    // SPA fallback — let the client-side router handle the path
-    serveWebApp(res);
-    return;
+    return null; // signal: not found, caller should redirect
   }
 
   const ext = path.extname(filePath).toLowerCase();
@@ -86,7 +101,11 @@ function serveStaticFile(urlPath, res) {
   const content = fs.readFileSync(filePath);
   res.writeHead(200, { "content-type": contentType });
   res.end(content);
+  return true;
 }
+
+const landingPageTemplate = fs.readFileSync(TEMPLATE_PATH, "utf-8");
+const appName = getAppName();
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host}`);
@@ -96,19 +115,24 @@ const server = http.createServer((req, res) => {
     pathname = pathname.slice(basePath.length) || "/";
   }
 
-  // Native Expo clients send an expo-platform header — serve the update manifest
-  const platform = req.headers["expo-platform"];
-  if ((pathname === "/" || pathname === "/manifest") && (platform === "ios" || platform === "android")) {
-    return serveManifest(platform, res);
+  if (pathname === "/" || pathname === "/manifest") {
+    const platform = req.headers["expo-platform"];
+    if (platform === "ios" || platform === "android") {
+      return serveManifest(platform, res);
+    }
+
+    if (pathname === "/") {
+      return serveLandingPage(req, res, landingPageTemplate, appName);
+    }
   }
 
-  // Root path from a browser → serve the web app directly
-  if (pathname === "/") {
-    return serveWebApp(res);
+  // Try to serve a real static asset
+  const served = serveStaticFile(pathname, res);
+  if (served === null) {
+    // Unknown path — redirect to the landing page so shared links don't 404
+    res.writeHead(302, { location: basePath + "/" });
+    res.end();
   }
-
-  // Everything else: try to serve a real static file, fall back to index.html for SPA routing
-  serveStaticFile(pathname, res);
 });
 
 const port = parseInt(process.env.PORT || "3000", 10);
