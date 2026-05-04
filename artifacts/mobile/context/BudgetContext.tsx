@@ -83,7 +83,6 @@ export interface ExtraPayment {
 
 export interface Settings {
   paymentMethod: "snowball" | "avalanche";
-  carryover_balances: boolean;
   starting_balance: number;        // user's real account balance on starting_balance_date
   starting_balance_date?: string;  // YYYY-MM-DD — the date the starting balance applies to
 }
@@ -126,7 +125,6 @@ const DEFAULT_CATEGORIES = [
 
 const DEFAULT_SETTINGS: Settings = {
   paymentMethod: "snowball",
-  carryover_balances: true,
   starting_balance: 0,
 };
 
@@ -772,13 +770,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           return { projectedBalance: 0, canAfford: needed === 0, shortfall: needed };
         }
       } else {
-        // No explicit anchor date — anchor to the current calendar month, same as
-        // getDailyBalances, so goal projections match what the calendar shows.
+        // No explicit anchor date — use last month as anchor (mirrors getDailyBalances)
+        // so the current month chains from last month's ending balance.
         const now = new Date();
-        anchorM = now.getMonth();
+        anchorM = now.getMonth() - 1;
         anchorY = now.getFullYear();
+        if (anchorM < 0) { anchorM = 11; anchorY -= 1; }
         seed = settings.starting_balance;
-        // Target is before the current month — nothing meaningful to project
+        // Target is before the anchor — nothing meaningful to project
         if (year < anchorY || (year === anchorY && month < anchorM)) {
           const needed = Math.max(0, goal.target_amount - goal.current_amount);
           return { projectedBalance: seed, canAfford: seed >= needed, shortfall: Math.max(0, needed - seed) };
@@ -855,10 +854,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     };
 
     // Compute the starting balance (carryover) for a given month.
-    // When carryover_balances is ON: chains from the anchor month forward so the
-    // last day of month M becomes the opening balance of month M+1.
-    // When carryover_balances is OFF: every month opens at the anchor's starting_balance
-    // (or 0 for months before the anchor), making each month independent.
+    // Chains from the anchor month forward so the last day of month M becomes
+    // the opening balance of month M+1 (basic financial continuity).
     const computeCarryover = (toMonth: number, toYear: number): number => {
       // ── Determine anchor month / year ────────────────────────────────────────
       let anchorM: number;
@@ -868,9 +865,13 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         anchorY = sbY;
         anchorM = sbM - 1; // 0-indexed
       } else {
+        // No explicit anchor date: use the previous calendar month so the
+        // current month always chains forward from last month's ending balance
+        // instead of re-seeding from starting_balance every time the month rolls over.
         const now = new Date();
-        anchorM = now.getMonth();
+        anchorM = now.getMonth() - 1;
         anchorY = now.getFullYear();
+        if (anchorM < 0) { anchorM = 11; anchorY -= 1; }
       }
 
       // Months before the anchor always open at 0
@@ -885,7 +886,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
       // Months after the anchor — always chain forward so the last day of month M
       // becomes the opening balance of month M+1 (basic financial continuity).
-      // The carryover_balances setting controls unpaid-bill rollover (a separate feature).
       let running = settings.starting_balance;
       let m = anchorM;
       let y = anchorY;
@@ -954,7 +954,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
 
     return result;
-  }, [bills, transactions, incomes, goals, overrides, settings.starting_balance, settings.starting_balance_date, settings.carryover_balances]);
+  }, [bills, transactions, incomes, goals, overrides, settings.starting_balance, settings.starting_balance_date]);
 
   // ─── Categories ───────────────────────────────────────────────────────────────
 

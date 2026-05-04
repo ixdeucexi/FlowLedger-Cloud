@@ -6,7 +6,7 @@ import * as Sharing from "expo-sharing";
 import React, { useEffect, useState } from "react";
 import {
   Alert, Platform, Pressable, ScrollView, StyleSheet,
-  Switch, Text, TextInput, View,
+  Text, TextInput, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -327,20 +327,7 @@ export default function MoreScreen() {
       {/* ── Behavior ── */}
       <SLabel c={c} text="Behavior" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        <View style={styles.switchRow}>
-          <View style={styles.switchInfo}>
-            <Text style={[styles.switchLabel, { color: c.foreground }]}>Carryover Balances</Text>
-            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Unpaid amounts roll forward monthly</Text>
-          </View>
-          <Switch
-            value={settings.carryover_balances}
-            onValueChange={v => updateSettings({ carryover_balances: v })}
-            trackColor={{ false: c.muted, true: c.primary }}
-            thumbColor="#fff"
-          />
-        </View>
-
-        <View style={[styles.balanceDivider, { borderTopColor: c.border }]}>
+        <View style={[styles.balanceDivider, { borderTopColor: c.border, borderTopWidth: 0 }]}>
           <Text style={[styles.switchLabel, { color: c.foreground, marginBottom: 2 }]}>Starting Balance</Text>
           <Text style={[styles.switchDesc, { color: c.mutedForeground, marginBottom: 10 }]}>
             Your account balance on a specific date — used to seed the running balance for that month.
