@@ -36,11 +36,11 @@ export default function MonthlyScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const {
-    bills, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
+    bills, transactions, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
     getCustomDueDay, setCustomDueDay,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, runSnowball, settings,
     selectedYear, setSelectedYear, dashboardFilter, setDashboardFilter,
-    getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction,
+    getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill,
     getCashFlow, getMonthlyIncome, getDailyBalances, getIncomeOccurrencesInMonth,
     saveExtraPayment, getExtraPayment,
   } = useBudget();
@@ -178,6 +178,56 @@ export default function MonthlyScreen() {
       { text: "Delete", style: "destructive", onPress: doDelete },
     ]);
   };
+
+  const checkForRecurring = useCallback((newTx: Omit<Transaction, "id">) => {
+    // Only check expenses with a non-trivial note
+    if (newTx.amount >= 0) return;
+    const newNote = newTx.note.trim().toLowerCase();
+    if (newNote.length < 3) return;
+
+    const [newY, newM] = newTx.date.split("-").map(Number);
+    const seenMonths = new Set<string>();
+
+    for (const tx of transactions) {
+      if (tx.amount >= 0) continue;
+      const txNote = tx.note.trim().toLowerCase();
+      if (txNote !== newNote) continue;
+      const [ty, tm] = tx.date.split("-").map(Number);
+      if (ty === newY && tm === newM) continue; // same month, skip
+      seenMonths.add(`${ty}-${tm}`);
+    }
+
+    if (seenMonths.size >= 1) {
+      const absAmt = Math.abs(newTx.amount);
+      const displayName = newTx.note.trim();
+      const dueDay = parseInt(newTx.date.split("-")[2], 10);
+      Alert.alert(
+        "Recurring Expense?",
+        `"${displayName}" ($${absAmt.toFixed(2)}) has appeared in multiple months. Would you like to add it as a recurring bill?`,
+        [
+          { text: "No Thanks", style: "cancel" },
+          {
+            text: "Add as Bill",
+            onPress: () => {
+              addBill({
+                name: displayName,
+                amount: absAmt,
+                category: newTx.category,
+                due_day: dueDay,
+                is_recurring: true,
+                is_debt: false,
+                frequency: "monthly",
+                priority: 0,
+                balance: 0,
+                interest_rate: 0,
+              });
+              Alert.alert("Bill Added", `"${displayName}" has been added as a monthly recurring bill on day ${dueDay}.`);
+            },
+          },
+        ]
+      );
+    }
+  }, [transactions, addBill]);
 
   const displayedTxs = selectedDate
     ? txList.filter(t => t.date === selectedDate)
@@ -695,8 +745,20 @@ export default function MonthlyScreen() {
                     Select the new due day for this month only
                   </Text>
 
+                  {/* Day-of-week headers */}
+                  <View style={styles.pickerCalDowRow}>
+                    {["Su","Mo","Tu","We","Th","Fr","Sa"].map(d => (
+                      <Text key={d} style={[styles.pickerCalDowLabel, { color: c.mutedForeground }]}>{d}</Text>
+                    ))}
+                  </View>
+
+                  {/* Calendar grid — days aligned to correct weekday column */}
                   <View style={styles.pickerDayGrid}>
-                    {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
+                    {[
+                      ...Array(new Date(selectedYear, month, 1).getDay()).fill(null),
+                      ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+                    ].map((day, idx) => {
+                      if (day === null) return <View key={`e${idx}`} style={styles.pickerDayBtn} />;
                       const isCurrent = day === effectiveDay;
                       const isOriginal = day === dueDayPickerBill.due_day && customDay === undefined;
                       return (
@@ -763,7 +825,9 @@ export default function MonthlyScreen() {
           if (editTx && "id" in data) {
             updateTransaction(data as Transaction);
           } else {
-            addTransaction(data as Omit<Transaction, "id">);
+            const newTx = data as Omit<Transaction, "id">;
+            addTransaction(newTx);
+            checkForRecurring(newTx);
           }
         }}
         editTx={editTx}
@@ -855,9 +919,11 @@ const styles = StyleSheet.create({
   pickerTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
   pickerSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   pickerLabel: { fontSize: 11, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 12 },
-  pickerDayGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 },
-  pickerDayBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  pickerDayText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  pickerCalDowRow: { flexDirection: "row", marginBottom: 4 },
+  pickerCalDowLabel: { width: "14.285714%", textAlign: "center", fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  pickerDayGrid: { flexDirection: "row", flexWrap: "wrap", marginBottom: 16 },
+  pickerDayBtn: { width: "14.285714%", height: 44, alignItems: "center", justifyContent: "center" },
+  pickerDayText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   pickerResetBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 14 },
   pickerResetText: { fontSize: 14, fontFamily: "Inter_500Medium" },
   incomeCard: { paddingTop: 12, paddingBottom: 4, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
