@@ -10,6 +10,7 @@ import {
 import colors from "@/constants/colors";
 import type { Bill } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
+import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
 
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
@@ -272,13 +273,21 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
             )}
 
             {/* Optional date range */}
-            <Text style={lbl}>Start Date (optional, YYYY-MM-DD)</Text>
-            <TextInput style={inp} value={billStartDate} onChangeText={setBillStartDate}
-              placeholder="e.g. 2025-01-01" placeholderTextColor={c.mutedForeground} />
-
-            <Text style={lbl}>End Date (optional, YYYY-MM-DD)</Text>
-            <TextInput style={inp} value={billEndDate} onChangeText={setBillEndDate}
-              placeholder="Leave blank = indefinite" placeholderTextColor={c.mutedForeground} />
+            <DatePickerField
+              label="Start Date (optional)"
+              value={billStartDate}
+              onChange={setBillStartDate}
+              placeholder="No start date"
+              optional
+            />
+            <DatePickerField
+              label="End Date (optional)"
+              value={billEndDate}
+              onChange={setBillEndDate}
+              placeholder="No end date (indefinite)"
+              optional
+              minDate={billStartDate || undefined}
+            />
 
             {(billStartDate.trim() || billEndDate.trim()) && (
               <View style={[styles.infoBox, { backgroundColor: c.success + "12" }]}>

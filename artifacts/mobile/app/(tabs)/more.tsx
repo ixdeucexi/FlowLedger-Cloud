@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { DatePickerField } from "@/components/DatePickerField";
 import { IncomeModal } from "@/components/IncomeModal";
 import colors from "@/constants/colors";
 import type { IncomeItem } from "@/context/BudgetContext";
@@ -344,24 +345,20 @@ export default function MoreScreen() {
             returnKeyType="next"
           />
 
-          <Text style={[styles.balanceFieldLabel, { color: c.mutedForeground, marginTop: 10 }]}>As of Date (YYYY-MM-DD)</Text>
-          <View style={styles.balanceInputRow}>
-            <TextInput
-              style={[styles.balanceInput, { backgroundColor: c.muted, color: c.foreground }]}
-              value={startingBalanceDateText}
-              onChangeText={setStartingBalanceDateText}
-              placeholder="e.g. 2026-04-01"
-              placeholderTextColor={c.mutedForeground}
-              returnKeyType="done"
-              onSubmitEditing={saveStartingBalance}
-            />
-            <Pressable
-              onPress={saveStartingBalance}
-              style={({ pressed }) => [styles.balanceSaveBtn, { backgroundColor: c.primary, opacity: pressed ? 0.8 : 1 }]}
-            >
-              <Feather name="check" size={15} color={c.primaryForeground} />
-            </Pressable>
-          </View>
+          <DatePickerField
+            label="As of Date"
+            value={startingBalanceDateText}
+            onChange={v => { setStartingBalanceDateText(v); }}
+            placeholder="Pick a date…"
+          />
+
+          <Pressable
+            onPress={saveStartingBalance}
+            style={({ pressed }) => [styles.balanceSaveFullBtn, { backgroundColor: c.primary, opacity: pressed ? 0.8 : 1 }]}
+          >
+            <Feather name="check" size={15} color={c.primaryForeground} />
+            <Text style={[styles.balanceSaveBtnText, { color: c.primaryForeground }]}>Save Starting Balance</Text>
+          </Pressable>
 
           {settings.starting_balance_date ? (
             <View style={[styles.balanceNote, { backgroundColor: c.success + "12" }]}>
@@ -493,9 +490,8 @@ const styles = StyleSheet.create({
   balanceHeader: { marginBottom: 10 },
   balanceFieldLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 6 },
   balanceFullInput: { height: 44, borderRadius: 10, paddingHorizontal: 14, fontSize: 16, fontFamily: "Inter_400Regular" },
-  balanceInputRow: { flexDirection: "row", gap: 10, alignItems: "center" },
-  balanceInput: { flex: 1, height: 44, borderRadius: 10, paddingHorizontal: 14, fontSize: 16, fontFamily: "Inter_400Regular" },
-  balanceSaveBtn: { width: 44, height: 44, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  balanceSaveFullBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 44, borderRadius: 10, marginTop: 12 },
+  balanceSaveBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   balanceNote: { flexDirection: "row", alignItems: "flex-start", gap: 6, padding: 9, borderRadius: 8, marginTop: 10 },
 
   dataRow: { flexDirection: "row", alignItems: "center", paddingVertical: 13 },

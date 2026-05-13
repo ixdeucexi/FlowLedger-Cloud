@@ -5,6 +5,7 @@ import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleShee
 
 import colors from "@/constants/colors";
 import type { IncomeItem } from "@/context/BudgetContext";
+import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
 
 const FREQUENCIES: { key: IncomeItem["frequency"]; label: string; desc: string }[] = [
@@ -104,13 +105,12 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
               ))}
             </View>
 
-            <Text style={label}>Start Date (YYYY-MM-DD) — optional</Text>
-            <TextInput
-              style={input}
+            <DatePickerField
+              label="Start Date — optional"
               value={startDate}
-              onChangeText={setStartDate}
-              placeholder="e.g. 2025-03-01"
-              placeholderTextColor={c.mutedForeground}
+              onChange={setStartDate}
+              placeholder="Active immediately"
+              optional
             />
             {startDate.trim() !== "" && (
               <View style={[styles.startDateNote, { backgroundColor: c.primary + "12" }]}>
