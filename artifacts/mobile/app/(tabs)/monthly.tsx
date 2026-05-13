@@ -52,7 +52,6 @@ export default function MonthlyScreen() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [editingAmounts, setEditingAmounts] = useState<Record<string, string>>({});
   const [editingPaid, setEditingPaid] = useState<Record<string, string>>({});
-  const [editingDueDays, setEditingDueDays] = useState<Record<string, string>>({});
   const [billFilter, setBillFilter] = useState<"all" | "paid" | "unpaid">("all");
   const [extraPayment, setExtraPayment] = useState("");
   const [snowballResults, setSnowballResults] = useState<{ name: string; payment: number; paidOff: boolean }[]>([]);
@@ -139,17 +138,6 @@ export default function MonthlyScreen() {
     setEditingAmounts(p => { const n = { ...p }; delete n[key]; return n; });
   }, [editingAmounts, setCustomAmount, month, selectedYear]);
 
-  const handleDueDayBlur = useCallback((billId: string, originalDueDay: number, key: string) => {
-    const val = editingDueDays[key];
-    if (val === undefined) return;
-    const parsed = parseInt(val, 10);
-    if (!isNaN(parsed) && parsed >= 1 && parsed <= 31 && parsed !== originalDueDay) {
-      setCustomDueDay(billId, month, selectedYear, parsed);
-    } else if (isNaN(parsed) || val.trim() === "") {
-      setCustomDueDay(billId, month, selectedYear, undefined);
-    }
-    setEditingDueDays(p => { const n = { ...p }; delete n[key]; return n; });
-  }, [editingDueDays, setCustomDueDay, month, selectedYear]);
 
   const handleQuickPaid = useCallback((billId: string, amount: number, isPaid: boolean) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -397,7 +385,6 @@ export default function MonthlyScreen() {
               const remaining = Math.max(0, amount - paid);
               const customDay = getCustomDueDay(bill.id, month, selectedYear);
               const effectiveDueDay = customDay ?? bill.due_day;
-              const showDay = editingDueDays[dayKey] !== undefined ? editingDueDays[dayKey] : effectiveDueDay.toString();
               const WEEKDAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
               return (
@@ -478,25 +465,23 @@ export default function MonthlyScreen() {
                       <Text style={[styles.fieldLabel, { color: customDay !== undefined ? c.primary : c.mutedForeground, marginBottom: 0, marginRight: 8 }]}>
                         {customDay !== undefined ? "Due day this month:" : "Due day (this month only):"}
                       </Text>
-                      <TextInput
-                        style={[
+                      <Pressable
+                        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setDueDayPickerBill(bill); }}
+                        style={({ pressed }) => [
                           styles.dueDayInput,
                           {
                             backgroundColor: customDay !== undefined ? c.primary + "15" : c.muted,
-                            color: customDay !== undefined ? c.primary : c.foreground,
                             borderColor: customDay !== undefined ? c.primary + "40" : "transparent",
+                            opacity: pressed ? 0.7 : 1,
+                            alignItems: "center",
+                            justifyContent: "center",
                           },
                         ]}
-                        value={showDay}
-                        onChangeText={v => setEditingDueDays(p => ({ ...p, [dayKey]: v }))}
-                        onFocus={() => setEditingDueDays(p => ({ ...p, [dayKey]: effectiveDueDay.toString() }))}
-                        onBlur={() => handleDueDayBlur(bill.id, bill.due_day, dayKey)}
-                        keyboardType="number-pad"
-                        returnKeyType="done"
-                        onSubmitEditing={Keyboard.dismiss}
-                        maxLength={2}
-                        selectTextOnFocus
-                      />
+                      >
+                        <Text style={{ color: customDay !== undefined ? c.primary : c.foreground, fontSize: 15, fontFamily: "Inter_600SemiBold" }}>
+                          {effectiveDueDay}
+                        </Text>
+                      </Pressable>
                       {customDay !== undefined && (
                         <Pressable
                           onPress={() => { setCustomDueDay(bill.id, month, selectedYear, undefined); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}

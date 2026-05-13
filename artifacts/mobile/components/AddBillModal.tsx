@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert, KeyboardAvoidingView, Modal, Platform,
   Pressable, ScrollView, StyleSheet, Switch,
@@ -39,6 +39,28 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
   const [frequency,     setFrequency]     = useState<Bill["frequency"]>("monthly");
   const [billStartDate, setBillStartDate] = useState("");     // YYYY-MM-DD
   const [billEndDate,   setBillEndDate]   = useState("");     // YYYY-MM-DD
+  const [showDayPicker, setShowDayPicker] = useState(false);
+  const [pickerYear,    setPickerYear]    = useState(() => new Date().getFullYear());
+  const [pickerMonth,   setPickerMonth]   = useState(() => new Date().getMonth());
+
+  const firstDOWInDayPickerMonth = useMemo(
+    () => new Date(pickerYear, pickerMonth, 1).getDay(),
+    [pickerYear, pickerMonth]
+  );
+  const daysInDayPickerMonth = useMemo(
+    () => new Date(pickerYear, pickerMonth + 1, 0).getDate(),
+    [pickerYear, pickerMonth]
+  );
+  const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  const shiftPickerMonth = (dir: number) => {
+    setPickerMonth(m => {
+      const next = m + dir;
+      if (next < 0) { setPickerYear(y => y - 1); return 11; }
+      if (next > 11) { setPickerYear(y => y + 1); return 0; }
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (editBill) {
@@ -149,13 +171,79 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
               ))}
             </View>
 
-            {/* Monthly → due day number; Weekly → day-of-week grid */}
+            {/* Monthly → calendar day picker; Weekly → day-of-week grid */}
             {frequency === "monthly" ? (
               <>
-                <Text style={lbl}>Due Day of Month (1–31)</Text>
-                <TextInput style={inp} value={dueDay} onChangeText={setDueDay}
-                  placeholder="1" placeholderTextColor={c.mutedForeground}
-                  keyboardType="number-pad" maxLength={2} />
+                <Text style={lbl}>Due Day of Month</Text>
+                {/* Tappable button showing selected day — opens inline calendar */}
+                <Pressable
+                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowDayPicker(p => !p); }}
+                  style={({ pressed }) => [
+                    styles.dayPickerBtn,
+                    { backgroundColor: c.muted, borderColor: showDayPicker ? c.primary : "transparent", opacity: pressed ? 0.8 : 1 },
+                  ]}
+                >
+                  <Feather name="calendar" size={15} color={c.primary} />
+                  <Text style={[styles.dayPickerBtnText, { color: c.foreground }]}>
+                    Day {dueDay || "—"}
+                  </Text>
+                  <Feather name={showDayPicker ? "chevron-up" : "chevron-down"} size={15} color={c.mutedForeground} />
+                </Pressable>
+
+                {showDayPicker && (
+                  <View style={[styles.dayPickerPanel, { backgroundColor: c.card, borderColor: c.border }]}>
+                    {/* Month nav — just for reference alignment */}
+                    <View style={[styles.dayPickerMonthNav, { backgroundColor: c.muted }]}>
+                      <Pressable onPress={() => shiftPickerMonth(-1)} hitSlop={10}>
+                        <Feather name="chevron-left" size={16} color={c.foreground} />
+                      </Pressable>
+                      <Text style={[styles.dayPickerMonthLabel, { color: c.foreground }]}>
+                        {MONTH_NAMES[pickerMonth]} {pickerYear}
+                      </Text>
+                      <Pressable onPress={() => shiftPickerMonth(1)} hitSlop={10}>
+                        <Feather name="chevron-right" size={16} color={c.foreground} />
+                      </Pressable>
+                    </View>
+                    {/* DOW headers */}
+                    <View style={styles.calDowRow}>
+                      {["Su","Mo","Tu","We","Th","Fr","Sa"].map(d => (
+                        <Text key={d} style={[styles.calDowLabel, { color: c.mutedForeground }]}>{d}</Text>
+                      ))}
+                    </View>
+                    {/* Calendar grid */}
+                    <View style={styles.calGrid}>
+                      {[
+                        ...Array(firstDOWInDayPickerMonth).fill(null),
+                        ...Array.from({ length: daysInDayPickerMonth }, (_, i) => i + 1),
+                      ].map((day, idx) =>
+                        day === null ? (
+                          <View key={`e${idx}`} style={styles.calCell} />
+                        ) : (
+                          <Pressable
+                            key={day}
+                            onPress={() => {
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                              setDueDay(day.toString());
+                              setShowDayPicker(false);
+                            }}
+                            style={({ pressed }) => [
+                              styles.calCell,
+                              {
+                                backgroundColor: String(day) === dueDay ? c.primary : c.muted,
+                                borderRadius: 8,
+                                opacity: pressed ? 0.7 : 1,
+                              },
+                            ]}
+                          >
+                            <Text style={[styles.calCellText, { color: String(day) === dueDay ? c.primaryForeground : c.foreground }]}>
+                              {day}
+                            </Text>
+                          </Pressable>
+                        )
+                      )}
+                    </View>
+                  </View>
+                )}
               </>
             ) : (
               <>
@@ -307,6 +395,16 @@ const styles = StyleSheet.create({
   categoryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
   chip: { paddingHorizontal: 12, paddingVertical: 8 },
   chipText: { fontSize: 13, fontFamily: "Inter_500Medium" },
+  dayPickerBtn: { flexDirection: "row", alignItems: "center", gap: 10, height: 48, borderRadius: 10, paddingHorizontal: 14, borderWidth: 1.5 },
+  dayPickerBtnText: { flex: 1, fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  dayPickerPanel: { borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 8 },
+  dayPickerMonthNav: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 10 },
+  dayPickerMonthLabel: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  calDowRow: { flexDirection: "row", marginBottom: 4 },
+  calDowLabel: { width: "14.285714%", textAlign: "center", fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  calGrid: { flexDirection: "row", flexWrap: "wrap" },
+  calCell: { width: "14.285714%", height: 38, alignItems: "center", justifyContent: "center" },
+  calCellText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   saveBtn: { height: 52, alignItems: "center", justifyContent: "center", marginTop: 24 },
   saveBtnText: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
   deleteBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 48, borderWidth: 1.5, borderRadius: 12, marginTop: 12, marginBottom: 32 },
