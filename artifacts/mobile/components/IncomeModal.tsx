@@ -41,8 +41,8 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
 
   // Rate history
   const [history,       setHistory]       = useState<IncomeAmountEntry[]>([]);
-  const [showRaiseForm, setShowRaiseForm] = useState(false);
-  const [raiseAmount,   setRaiseAmount]   = useState("");
+  const [showUpdateForm, setShowUpdateForm] = useState(false);
+  const [raiseAmount,    setRaiseAmount]    = useState("");
   const [raiseYear,     setRaiseYear]     = useState(new Date().getFullYear());
   const [raiseMonth,    setRaiseMonth]    = useState(new Date().getMonth()); // 0-indexed
 
@@ -57,7 +57,7 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
       setName(""); setAmount(""); setFrequency("monthly");
       setStartDate(""); setHistory([]);
     }
-    setShowRaiseForm(false);
+    setShowUpdateForm(false);
     setRaiseAmount("");
     const now = new Date();
     setRaiseYear(now.getFullYear());
@@ -80,7 +80,7 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
     onClose();
   };
 
-  const handleAddRaise = () => {
+  const handleAddUpdate = () => {
     const a = parseFloat(raiseAmount);
     if (isNaN(a) || a <= 0) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -91,7 +91,7 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
         .sort((a, b) => a.effective_from.localeCompare(b.effective_from));
     });
     setRaiseAmount("");
-    setShowRaiseForm(false);
+    setShowUpdateForm(false);
   };
 
   const handleDeleteHistoryEntry = (ef: string) => {
@@ -177,22 +177,22 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
               <View style={styles.historyHeader}>
                 <View style={styles.historyTitleRow}>
                   <Feather name="trending-up" size={14} color={c.primary} />
-                  <Text style={[styles.historyTitle, { color: c.foreground }]}>Raise / Rate Changes</Text>
+                  <Text style={[styles.historyTitle, { color: c.foreground }]}>Amount Changes</Text>
                 </View>
                 <Pressable
-                  onPress={() => { setShowRaiseForm(p => !p); setRaiseAmount(""); }}
+                  onPress={() => { setShowUpdateForm(p => !p); setRaiseAmount(""); }}
                   style={({ pressed }) => [styles.addRaiseBtn, { backgroundColor: c.primary + "18", opacity: pressed ? 0.7 : 1 }]}
                 >
-                  <Feather name={showRaiseForm ? "minus" : "plus"} size={13} color={c.primary} />
+                  <Feather name={showUpdateForm ? "minus" : "plus"} size={13} color={c.primary} />
                   <Text style={[styles.addRaiseBtnText, { color: c.primary }]}>
-                    {showRaiseForm ? "Cancel" : "Record Raise"}
+                    {showUpdateForm ? "Cancel" : "Record Update"}
                   </Text>
                 </Pressable>
               </View>
 
-              {history.length === 0 && !showRaiseForm && (
+              {history.length === 0 && !showUpdateForm && (
                 <Text style={[styles.historyEmpty, { color: c.mutedForeground }]}>
-                  No rate changes yet. Got a raise? Record it here — past months keep their old amount automatically.
+                  No changes yet. Income go up or down? Record it here — past months keep their old amount automatically.
                 </Text>
               )}
 
@@ -223,8 +223,8 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
                 </View>
               ))}
 
-              {/* Add raise form */}
-              {showRaiseForm && (
+              {/* Add update form */}
+              {showUpdateForm && (
                 <View style={[styles.raiseForm, { borderTopWidth: history.length > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: c.border }]}>
                   <Text style={[styles.raiseFormLabel, { color: c.mutedForeground }]}>New amount per paycheck ($)</Text>
                   <TextInput
@@ -253,16 +253,16 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
                   <View style={[styles.raiseInfoBox, { backgroundColor: c.primary + "12" }]}>
                     <Feather name="info" size={12} color={c.primary} />
                     <Text style={[styles.raiseInfoText, { color: c.mutedForeground }]}>
-                      Months before {MONTH_NAMES[raiseMonth]} {raiseYear} will keep the old amount. Only this month and later will show the new rate.
+                      Months before {MONTH_NAMES[raiseMonth]} {raiseYear} keep the old amount. Only this month and later use the new amount.
                     </Text>
                   </View>
 
                   <Pressable
-                    onPress={handleAddRaise}
+                    onPress={handleAddUpdate}
                     style={({ pressed }) => [styles.confirmRaiseBtn, { backgroundColor: c.primary, opacity: pressed ? 0.8 : 1 }]}
                   >
                     <Feather name="check" size={15} color={c.primaryForeground} />
-                    <Text style={[styles.confirmRaiseBtnText, { color: c.primaryForeground }]}>Save Rate Change</Text>
+                    <Text style={[styles.confirmRaiseBtnText, { color: c.primaryForeground }]}>Save Update</Text>
                   </Pressable>
                 </View>
               )}
