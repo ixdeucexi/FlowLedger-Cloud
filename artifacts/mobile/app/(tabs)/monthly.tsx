@@ -91,9 +91,9 @@ export default function MonthlyScreen() {
   const dailyBalances = useMemo(() => getDailyBalances(month, selectedYear), [getDailyBalances, month, selectedYear]);
   const incomeOccurrences = useMemo(() => {
     const occurrences = getIncomeOccurrencesInMonth(month, selectedYear);
-    const flat: { day: number; name: string; amount: number; frequency: string }[] = [];
-    occurrences.forEach(({ income: inc, days }) => {
-      days.forEach(day => flat.push({ day, name: inc.name, amount: inc.amount, frequency: inc.frequency }));
+    const flat: { day: number; name: string; amount: number; frequency: string; incomeId: string }[] = [];
+    occurrences.forEach(({ income: inc, days, effectiveAmount }) => {
+      days.forEach(day => flat.push({ day, name: inc.name, amount: effectiveAmount, frequency: inc.frequency, incomeId: inc.id }));
     });
     return flat.sort((a, b) => a.day - b.day);
   }, [getIncomeOccurrencesInMonth, month, selectedYear]);

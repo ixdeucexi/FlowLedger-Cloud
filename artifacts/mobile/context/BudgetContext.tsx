@@ -40,13 +40,19 @@ export interface Transaction {
   linked_bill_id?: string;
 }
 
+export interface IncomeAmountEntry {
+  effective_from: string;  // "YYYY-MM" — month this amount takes effect (inclusive)
+  amount: number;          // per-paycheck amount from this month forward
+}
+
 export interface IncomeItem {
   id: string;
   name: string;
-  amount: number;
+  amount: number;                        // base / original per-paycheck amount
   frequency: "monthly" | "biweekly" | "weekly";
   start_date?: string;
   next_payment_date?: string;
+  amount_history?: IncomeAmountEntry[];  // sorted by effective_from ascending
 }
 
 export interface Goal {
@@ -162,6 +168,21 @@ function incomeToMonthly(amount: number, frequency: IncomeItem["frequency"]): nu
   if (frequency === "weekly")   return amount * 4;   // 4 occurrences as a generic estimate
   if (frequency === "biweekly") return amount * 2;   // exactly 2 per month
   return amount;
+}
+
+/**
+ * Returns the per-paycheck amount for a given month, respecting amount_history.
+ * Falls back to income.amount when no history is recorded.
+ */
+function getEffectiveIncomeAmount(income: IncomeItem, month: number, year: number): number {
+  if (!income.amount_history || income.amount_history.length === 0) return income.amount;
+  const monthStr = `${year}-${String(month + 1).padStart(2, "0")}`;
+  // Find the most recent entry whose effective_from is ≤ this month
+  const sorted = [...income.amount_history].sort((a, b) => b.effective_from.localeCompare(a.effective_from));
+  const match = sorted.find(h => h.effective_from <= monthStr);
+  if (match) return match.amount;
+  // Month is before all history entries — use the oldest recorded amount
+  return sorted[sorted.length - 1].amount;
 }
 
 function isIncomeActiveForMonth(income: IncomeItem, month: number, year: number): boolean {
@@ -695,7 +716,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         .filter(i => month !== undefined && year !== undefined ? isIncomeActiveForMonth(i, month, year) : true)
         .reduce((s, i) => {
           if (month !== undefined && year !== undefined) {
-            return s + getIncomeOccurrenceDays(i, month, year).length * i.amount;
+            const amt = getEffectiveIncomeAmount(i, month, year);
+            return s + getIncomeOccurrenceDays(i, month, year).length * amt;
           }
           return s + incomeToMonthly(i.amount, i.frequency);
         }, 0),
@@ -703,10 +725,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   );
 
   const getIncomeOccurrencesInMonth = useCallback(
-    (month: number, year: number): { income: IncomeItem; days: number[] }[] =>
+    (month: number, year: number): { income: IncomeItem; days: number[]; effectiveAmount: number }[] =>
       incomes
         .filter(i => isIncomeActiveForMonth(i, month, year))
-        .map(i => ({ income: i, days: getIncomeOccurrenceDays(i, month, year) }))
+        .map(i => ({
+          income: i,
+          days: getIncomeOccurrenceDays(i, month, year),
+          effectiveAmount: getEffectiveIncomeAmount(i, month, year),
+        }))
         .filter(x => x.days.length > 0),
     [incomes]
   );
@@ -899,11 +925,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
     const carryover = computeCarryover(month, year);
 
-    // Build income-by-day map using actual occurrence dates (respects start_date)
+    // Build income-by-day map using actual occurrence dates (respects start_date + amount_history)
     const incomeByDay: Record<number, number> = {};
     incomes.forEach(i => {
       const occ = getIncomeOccurrenceDays(i, month, year);
-      occ.forEach(d => { incomeByDay[d] = (incomeByDay[d] ?? 0) + i.amount; });
+      const amt = getEffectiveIncomeAmount(i, month, year);
+      occ.forEach(d => { incomeByDay[d] = (incomeByDay[d] ?? 0) + amt; });
     });
 
     // Transactions for this month indexed by day
