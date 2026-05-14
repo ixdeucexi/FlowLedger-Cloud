@@ -8,6 +8,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddBillModal } from "@/components/AddBillModal";
+import { DatePickerField } from "@/components/DatePickerField";
 import { GoalModal } from "@/components/GoalModal";
 import { DonutChart, MiniChart } from "@/components/MiniChart";
 import colors from "@/constants/colors";
@@ -49,33 +50,10 @@ export default function DashboardScreen() {
   const currentMonth = now.getMonth();
   const today        = now.getDate();
 
-  // ── Afford date stepper ────────────────────────────────────────────────────
-  const [affordDate, setAffordDate] = useState<Date>(
-    () => new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  // ── Afford date picker ─────────────────────────────────────────────────────
+  const [affordDate, setAffordDate] = useState<string>(
+    () => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
   );
-  const stepAffordDate = useCallback((delta: number) => {
-    setAffordDate(prev => {
-      const next = new Date(prev);
-      next.setDate(next.getDate() + delta);
-      return next;
-    });
-    setAddedAsExpense(false);
-  }, []);
-  const resetAffordDate = useCallback(() => {
-    setAffordDate(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
-    setAddedAsExpense(false);
-  }, [now.getFullYear(), now.getMonth(), now.getDate()]);
-  const affordDateLabel = useMemo(() => {
-    const base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const diff = Math.round((affordDate.getTime() - base.getTime()) / 86_400_000);
-    if (diff === 0)  return "Today";
-    if (diff === 1)  return "Tomorrow";
-    if (diff === -1) return "Yesterday";
-    return affordDate.toLocaleDateString("en-US", {
-      month: "short", day: "numeric",
-      ...(affordDate.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
-    });
-  }, [affordDate, now]);
 
   const cashFlow      = useMemo(() => getCashFlow(currentMonth, selectedYear), [getCashFlow, currentMonth, selectedYear]);
   const monthlyIncome = getMonthlyIncome();
@@ -174,9 +152,10 @@ export default function DashboardScreen() {
     const amt = parseFloat(affordAmt);
     if (!affordAmt.trim() || isNaN(amt) || amt <= 0) return null;
 
-    const purchaseMonth = affordDate.getMonth();
-    const purchaseYear  = affordDate.getFullYear();
-    const purchaseDay   = affordDate.getDate();
+    const [pyStr, pmStr, pdStr] = affordDate.split("-");
+    const purchaseYear  = parseInt(pyStr);
+    const purchaseMonth = parseInt(pmStr) - 1;
+    const purchaseDay   = parseInt(pdStr);
 
     // Pull the full daily balance array for the purchase month (uses real income/bills/tx)
     const balances = getDailyBalances(purchaseMonth, purchaseYear);
@@ -375,19 +354,12 @@ export default function DashboardScreen() {
           )}
         </View>
 
-        {/* Date stepper */}
-        <View style={[styles.affordDateRow, { backgroundColor: c.muted, borderRadius: 10 }]}>
-          <Pressable onPress={() => stepAffordDate(-1)} style={styles.affordDateArrow} hitSlop={8}>
-            <Feather name="chevron-left" size={18} color={c.mutedForeground} />
-          </Pressable>
-          <Pressable onPress={resetAffordDate} style={styles.affordDateCenter}>
-            <Feather name="calendar" size={12} color={c.primary} />
-            <Text style={[styles.affordDateLabel, { color: c.foreground }]}>{affordDateLabel}</Text>
-          </Pressable>
-          <Pressable onPress={() => stepAffordDate(1)} style={styles.affordDateArrow} hitSlop={8}>
-            <Feather name="chevron-right" size={18} color={c.mutedForeground} />
-          </Pressable>
-        </View>
+        {/* Date picker */}
+        <DatePickerField
+          value={affordDate}
+          onChange={v => { setAffordDate(v); setAddedAsExpense(false); }}
+          placeholder="Today"
+        />
 
         {/* Result */}
         {affordResult && (() => {
@@ -809,7 +781,7 @@ export default function DashboardScreen() {
           <Pressable style={[styles.expenseSheet, { backgroundColor: c.card }]} onPress={() => {}}>
             <Text style={[styles.expenseSheetTitle, { color: c.foreground }]}>Save to Budget</Text>
             <Text style={[styles.expenseSheetSub, { color: c.mutedForeground }]}>
-              ${affordResult?.amt.toFixed(2)} · {affordDateLabel}
+              ${affordResult?.amt.toFixed(2)} · {affordDate}
             </Text>
 
             {/* Type toggle */}
@@ -947,10 +919,6 @@ const styles = StyleSheet.create({
   affordDollar:         { fontSize: 16, fontFamily: "Inter_500Medium", paddingLeft: 4 },
   affordInput:          { flex: 1, height: 44, paddingHorizontal: 14, fontSize: 16, fontFamily: "Inter_500Medium" },
   affordClear:          { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  affordDateRow:        { flexDirection: "row", alignItems: "center", height: 44 },
-  affordDateArrow:      { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  affordDateCenter:     { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
-  affordDateLabel:      { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   affordVerdict:        { flexDirection: "row", alignItems: "flex-start", gap: 12, padding: 14, marginBottom: 10 },
   affordVerdictTitle:   { fontSize: 15, fontFamily: "Inter_700Bold", marginBottom: 4 },
   affordVerdictSub:     { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 18 },
