@@ -16,10 +16,6 @@ const FREQUENCIES: { key: IncomeItem["frequency"]; label: string; desc: string }
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-function yymm(year: number, month: number) {
-  return `${year}-${String(month + 1).padStart(2, "0")}`;
-}
-
 function formatYYMM(ef: string) {
   const [y, m] = ef.split("-").map(Number);
   return `${MONTH_NAMES[m - 1]} ${y}`;
@@ -43,8 +39,7 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
   const [history,       setHistory]       = useState<IncomeAmountEntry[]>([]);
   const [showUpdateForm, setShowUpdateForm] = useState(false);
   const [raiseAmount,    setRaiseAmount]    = useState("");
-  const [raiseYear,     setRaiseYear]     = useState(new Date().getFullYear());
-  const [raiseMonth,    setRaiseMonth]    = useState(new Date().getMonth()); // 0-indexed
+  const [raiseDate,      setRaiseDate]      = useState("");
 
   useEffect(() => {
     if (editItem) {
@@ -60,8 +55,8 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
     setShowUpdateForm(false);
     setRaiseAmount("");
     const now = new Date();
-    setRaiseYear(now.getFullYear());
-    setRaiseMonth(now.getMonth());
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    setRaiseDate(todayStr);
   }, [editItem, visible]);
 
   const handleSave = () => {
@@ -82,9 +77,10 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
 
   const handleAddUpdate = () => {
     const a = parseFloat(raiseAmount);
-    if (isNaN(a) || a <= 0) return;
+    if (isNaN(a) || a <= 0 || !raiseDate) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const ef = yymm(raiseYear, raiseMonth);
+    // Store only YYYY-MM (day doesn't matter for monthly effective_from)
+    const ef = raiseDate.slice(0, 7);
     setHistory(prev => {
       const filtered = prev.filter(h => h.effective_from !== ef);
       return [...filtered, { effective_from: ef, amount: a }]
@@ -97,15 +93,6 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
   const handleDeleteHistoryEntry = (ef: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setHistory(prev => prev.filter(h => h.effective_from !== ef));
-  };
-
-  const shiftRaiseMonth = (dir: number) => {
-    let m = raiseMonth + dir;
-    let y = raiseYear;
-    if (m < 0)  { m = 11; y -= 1; }
-    if (m > 11) { m = 0;  y += 1; }
-    setRaiseMonth(m);
-    setRaiseYear(y);
   };
 
   const monthlyEquiv = (() => {
@@ -237,25 +224,21 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
                     autoFocus
                   />
 
-                  <Text style={[styles.raiseFormLabel, { color: c.mutedForeground, marginTop: 10 }]}>Effective starting</Text>
-                  <View style={[styles.monthNav, { backgroundColor: c.muted, borderRadius: 10 }]}>
-                    <Pressable onPress={() => shiftRaiseMonth(-1)} hitSlop={10} style={styles.monthNavBtn}>
-                      <Feather name="chevron-left" size={18} color={c.foreground} />
-                    </Pressable>
-                    <Text style={[styles.monthNavLabel, { color: c.foreground }]}>
-                      {MONTH_NAMES[raiseMonth]} {raiseYear}
-                    </Text>
-                    <Pressable onPress={() => shiftRaiseMonth(1)} hitSlop={10} style={styles.monthNavBtn}>
-                      <Feather name="chevron-right" size={18} color={c.foreground} />
-                    </Pressable>
-                  </View>
+                  <DatePickerField
+                    label="Effective starting"
+                    value={raiseDate}
+                    onChange={setRaiseDate}
+                    placeholder="Pick a date"
+                  />
 
-                  <View style={[styles.raiseInfoBox, { backgroundColor: c.primary + "12" }]}>
-                    <Feather name="info" size={12} color={c.primary} />
-                    <Text style={[styles.raiseInfoText, { color: c.mutedForeground }]}>
-                      Months before {MONTH_NAMES[raiseMonth]} {raiseYear} keep the old amount. Only this month and later use the new amount.
-                    </Text>
-                  </View>
+                  {raiseDate ? (
+                    <View style={[styles.raiseInfoBox, { backgroundColor: c.primary + "12" }]}>
+                      <Feather name="info" size={12} color={c.primary} />
+                      <Text style={[styles.raiseInfoText, { color: c.mutedForeground }]}>
+                        Months before {MONTH_NAMES[parseInt(raiseDate.split("-")[1]) - 1]} {raiseDate.split("-")[0]} keep the old amount. Only that month onward uses the new amount.
+                      </Text>
+                    </View>
+                  ) : null}
 
                   <Pressable
                     onPress={handleAddUpdate}
@@ -317,9 +300,6 @@ const styles = StyleSheet.create({
   raiseForm: { paddingTop: 12 },
   raiseFormLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 6 },
   raiseInput: { height: 48, borderRadius: 10, paddingHorizontal: 14, fontSize: 18, fontFamily: "Inter_600SemiBold" },
-  monthNav: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 10, paddingHorizontal: 14 },
-  monthNavBtn: { padding: 4 },
-  monthNavLabel: { fontSize: 15, fontFamily: "Inter_700Bold" },
   raiseInfoBox: { flexDirection: "row", alignItems: "flex-start", gap: 7, padding: 9, borderRadius: 8, marginTop: 10 },
   raiseInfoText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
   confirmRaiseBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 44, borderRadius: 10, marginTop: 12 },
