@@ -112,32 +112,34 @@ export default function DebtScreen() {
       {/* Safe Snowball Banner */}
       {debts.length > 0 && (
         <View style={[styles.extraBanner, { backgroundColor: safeSnowballAmount > 0 ? c.success + "15" : c.muted, marginHorizontal: 16, borderRadius: colors.radius }]}>
-          <View style={styles.extraLeft}>
-            <Feather name="shield" size={20} color={safeSnowballAmount > 0 ? c.success : c.mutedForeground} />
-            <View>
-              <Text style={[styles.extraLabel, { color: c.mutedForeground }]}>Safe to Apply</Text>
-              <Text style={[styles.extraValue, { color: safeSnowballAmount > 0 ? c.success : c.mutedForeground }]}>
-                ${safeSnowballAmount.toFixed(2)}
-              </Text>
-              {isCapped && (
-                <Text style={[styles.cappedNote, { color: c.warning }]}>
-                  Capped from ${extraAvailable.toFixed(2)} — keeps 6-mo balance above $0
+          <View style={styles.extraTopRow}>
+            <View style={styles.extraLeft}>
+              <Feather name="shield" size={20} color={safeSnowballAmount > 0 ? c.success : c.mutedForeground} />
+              <View>
+                <Text style={[styles.extraLabel, { color: c.mutedForeground }]}>Safe to Apply</Text>
+                <Text style={[styles.extraValue, { color: safeSnowballAmount > 0 ? c.success : c.mutedForeground }]}>
+                  ${safeSnowballAmount.toFixed(2)}
                 </Text>
-              )}
+              </View>
             </View>
+            <Pressable
+              onPress={handleApplySnowball}
+              style={({ pressed }) => [
+                styles.applyBtn,
+                { backgroundColor: safeSnowballAmount > 0 ? c.primary : c.muted, opacity: pressed ? 0.8 : 1 }
+              ]}
+            >
+              <Feather name="zap" size={13} color={safeSnowballAmount > 0 ? c.primaryForeground : c.mutedForeground} />
+              <Text style={[styles.applyBtnText, { color: safeSnowballAmount > 0 ? c.primaryForeground : c.mutedForeground }]}>
+                Apply to {settings.paymentMethod === "snowball" ? "Snowball" : "Avalanche"}
+              </Text>
+            </Pressable>
           </View>
-          <Pressable
-            onPress={handleApplySnowball}
-            style={({ pressed }) => [
-              styles.applyBtn,
-              { backgroundColor: safeSnowballAmount > 0 ? c.primary : c.muted, opacity: pressed ? 0.8 : 1 }
-            ]}
-          >
-            <Feather name="zap" size={13} color={safeSnowballAmount > 0 ? c.primaryForeground : c.mutedForeground} />
-            <Text style={[styles.applyBtnText, { color: safeSnowballAmount > 0 ? c.primaryForeground : c.mutedForeground }]}>
-              Apply to {settings.paymentMethod === "snowball" ? "Snowball" : "Avalanche"}
+          {isCapped && (
+            <Text style={[styles.cappedNote, { color: c.warning }]}>
+              Capped from ${extraAvailable.toFixed(2)} — keeps your 6-month balance above $0
             </Text>
-          </Pressable>
+          )}
         </View>
       )}
 
@@ -302,13 +304,14 @@ const styles = StyleSheet.create({
   statCard: { flex: 1, alignItems: "center", paddingVertical: 12, gap: 4 },
   statValue: { fontSize: 16, fontFamily: "Inter_700Bold" },
   statLabel: { fontSize: 10, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.4 },
-  extraBanner:   { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 14, marginBottom: 10, marginTop: 4, gap: 10 },
-  extraLeft:     { flexDirection: "row", alignItems: "center", gap: 10, flex: 1, minWidth: 0 },
+  extraBanner:   { flexDirection: "column", padding: 14, marginBottom: 10, marginTop: 4 },
+  extraTopRow:   { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  extraLeft:     { flexDirection: "row", alignItems: "center", gap: 10 },
   extraLabel:    { fontSize: 11, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.5 },
   extraValue:    { fontSize: 20, fontFamily: "Inter_700Bold", marginTop: 2 },
-  applyBtn:      { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, flexShrink: 0 },
+  applyBtn:      { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
   applyBtnText:  { fontSize: 13, fontFamily: "Inter_700Bold" },
-  cappedNote:    { fontSize: 10, fontFamily: "Inter_500Medium", marginTop: 2, lineHeight: 13, flexShrink: 1 },
+  cappedNote:    { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 10, lineHeight: 15 },
   methodRow: { flexDirection: "row", gap: 8, alignItems: "center", marginBottom: 6 },
   methodToggle: { flex: 1, flexDirection: "row", padding: 4, gap: 4 },
   methodBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingVertical: 9 },
