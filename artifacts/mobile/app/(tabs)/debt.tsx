@@ -18,7 +18,7 @@ type SortMode = "priority" | "balance" | "interest";
 export default function DebtScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const { bills, addBill, updateBill, deleteBill, settings, updateSettings, getCashFlow, runSnowball, saveExtraPayment, getExtraPayment } = useBudget();
+  const { bills, addBill, updateBill, deleteBill, settings, updateSettings, getCashFlow, getDailyBalances, runSnowball, saveExtraPayment, getExtraPayment } = useBudget();
 
   const [modalVisible, setModalVisible] = useState(false);
   const [editBill, setEditBill]         = useState<Bill | null>(null);
@@ -31,6 +31,23 @@ export default function DebtScreen() {
 
   const cashFlow = useMemo(() => getCashFlow(currentMonth, currentYear), [getCashFlow, currentMonth, currentYear]);
   const extraAvailable = Math.max(0, cashFlow.remaining);
+
+  // Lowest daily balance across the next 6 months — caps what's safe to apply
+  const safeSnowballAmount = useMemo(() => {
+    let minBalance = Infinity;
+    for (let i = 0; i < 6; i++) {
+      const m = (currentMonth + i) % 12;
+      const y = currentYear + Math.floor((currentMonth + i) / 12);
+      const balances = getDailyBalances(m, y);
+      for (const db of balances) {
+        if (db.balance < minBalance) minBalance = db.balance;
+      }
+    }
+    if (!isFinite(minBalance)) minBalance = 0;
+    return Math.max(0, Math.min(extraAvailable, minBalance));
+  }, [getDailyBalances, currentMonth, currentYear, extraAvailable]);
+
+  const isCapped = safeSnowballAmount < extraAvailable && extraAvailable > 0;
 
   const debts = bills
     .filter(b => b.is_debt)
@@ -45,17 +62,24 @@ export default function DebtScreen() {
   const highestAPR = debts.length ? Math.max(...debts.map(b => b.interest_rate)) : 0;
 
   const handleApplySnowball = () => {
-    if (extraAvailable <= 0) {
-      Alert.alert("No Extra Money", "You have no remaining cash to apply to debt this month.");
+    if (safeSnowballAmount <= 0) {
+      if (extraAvailable <= 0) {
+        Alert.alert("No Extra Money", "You have no remaining cash to apply to debt this month.");
+      } else {
+        Alert.alert(
+          "Balance Too Low",
+          "Applying any extra to debt would push your balance negative within the next 6 months. Build up your cushion first."
+        );
+      }
       return;
     }
-    const alloc = runSnowball(currentMonth, currentYear, extraAvailable);
-    saveExtraPayment({ month: currentMonth, year: currentYear, amount: extraAvailable, allocations: alloc });
+    const alloc = runSnowball(currentMonth, currentYear, safeSnowballAmount);
+    saveExtraPayment(currentMonth, currentYear, safeSnowballAmount, alloc);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setSnowballApplied(true);
     Alert.alert(
-      "Snowball Applied!",
-      `$${extraAvailable.toFixed(2)} allocated across ${alloc.length} debt${alloc.length !== 1 ? "s" : ""} using the ${settings.paymentMethod} method.`
+      "Applied!",
+      `$${safeSnowballAmount.toFixed(2)} allocated across ${alloc.length} debt${alloc.length !== 1 ? "s" : ""} using the ${settings.paymentMethod} method.`
     );
   };
 
@@ -85,27 +109,32 @@ export default function DebtScreen() {
         </Pressable>
       </View>
 
-      {/* Extra Money Available banner */}
+      {/* Safe Snowball Banner */}
       {debts.length > 0 && (
-        <View style={[styles.extraBanner, { backgroundColor: extraAvailable > 0 ? c.success + "15" : c.muted, marginHorizontal: 16, borderRadius: colors.radius }]}>
+        <View style={[styles.extraBanner, { backgroundColor: safeSnowballAmount > 0 ? c.success + "15" : c.muted, marginHorizontal: 16, borderRadius: colors.radius }]}>
           <View style={styles.extraLeft}>
-            <Feather name="dollar-sign" size={20} color={extraAvailable > 0 ? c.success : c.mutedForeground} />
+            <Feather name="shield" size={20} color={safeSnowballAmount > 0 ? c.success : c.mutedForeground} />
             <View>
-              <Text style={[styles.extraLabel, { color: c.mutedForeground }]}>Extra Money Available</Text>
-              <Text style={[styles.extraValue, { color: extraAvailable > 0 ? c.success : c.mutedForeground }]}>
-                ${extraAvailable.toFixed(2)}
+              <Text style={[styles.extraLabel, { color: c.mutedForeground }]}>Safe to Apply</Text>
+              <Text style={[styles.extraValue, { color: safeSnowballAmount > 0 ? c.success : c.mutedForeground }]}>
+                ${safeSnowballAmount.toFixed(2)}
               </Text>
+              {isCapped && (
+                <Text style={[styles.cappedNote, { color: c.warning }]}>
+                  Capped from ${extraAvailable.toFixed(2)} — keeps 6-mo balance above $0
+                </Text>
+              )}
             </View>
           </View>
           <Pressable
             onPress={handleApplySnowball}
             style={({ pressed }) => [
               styles.applyBtn,
-              { backgroundColor: extraAvailable > 0 ? c.primary : c.muted, opacity: pressed ? 0.8 : 1 }
+              { backgroundColor: safeSnowballAmount > 0 ? c.primary : c.muted, opacity: pressed ? 0.8 : 1 }
             ]}
           >
-            <Feather name="zap" size={13} color={extraAvailable > 0 ? c.primaryForeground : c.mutedForeground} />
-            <Text style={[styles.applyBtnText, { color: extraAvailable > 0 ? c.primaryForeground : c.mutedForeground }]}>
+            <Feather name="zap" size={13} color={safeSnowballAmount > 0 ? c.primaryForeground : c.mutedForeground} />
+            <Text style={[styles.applyBtnText, { color: safeSnowballAmount > 0 ? c.primaryForeground : c.mutedForeground }]}>
               Apply to {settings.paymentMethod === "snowball" ? "Snowball" : "Avalanche"}
             </Text>
           </Pressable>
@@ -279,6 +308,7 @@ const styles = StyleSheet.create({
   extraValue:    { fontSize: 20, fontFamily: "Inter_700Bold", marginTop: 2 },
   applyBtn:      { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
   applyBtnText:  { fontSize: 13, fontFamily: "Inter_700Bold" },
+  cappedNote:    { fontSize: 10, fontFamily: "Inter_500Medium", marginTop: 2, lineHeight: 13 },
   methodRow: { flexDirection: "row", gap: 8, alignItems: "center", marginBottom: 6 },
   methodToggle: { flex: 1, flexDirection: "row", padding: 4, gap: 4 },
   methodBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingVertical: 9 },
