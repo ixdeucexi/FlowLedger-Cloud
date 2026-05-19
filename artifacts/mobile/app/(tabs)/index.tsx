@@ -219,10 +219,10 @@ export default function DashboardScreen() {
   const webTopPad = Platform.OS === "web" ? 67 : 0;
 
   const statCards = [
-    { title: "Total Bills",  value: `$${stats.totalDue.toFixed(0)}`,    icon: "file-text"    as const, col: c.primary,     sub: `${stats.billCount} bills`,               filter: null           as DashboardFilter, tab: "bills"   },
-    { title: "Paid",         value: `$${stats.totalPaid.toFixed(0)}`,   icon: "check-circle" as const, col: c.success,     sub: `${stats.paidCount}/${stats.billCount} paid`, filter: "paid"      as DashboardFilter, tab: "monthly" },
-    { title: "Unpaid",       value: `$${stats.remaining.toFixed(0)}`,   icon: "alert-circle" as const, col: stats.remaining > 0 ? c.warning : c.success, sub: `${stats.unpaidCount} unpaid`, filter: "unpaid" as DashboardFilter, tab: "monthly" },
-    { title: "Total Debt",   value: `$${stats.totalDebt.toFixed(0)}`,   icon: "credit-card"  as const, col: c.destructive, sub: `${bills.filter(b => b.is_debt).length} debts`, filter: null      as DashboardFilter, tab: "debt"    },
+    { title: "Bills",   value: `$${stats.totalDue.toFixed(0)}`,    icon: "file-text"    as const, col: c.primary,                                        filter: null    as DashboardFilter, tab: "bills"   },
+    { title: "Paid",    value: `$${stats.totalPaid.toFixed(0)}`,   icon: "check-circle" as const, col: c.success,                                        filter: "paid"  as DashboardFilter, tab: "monthly" },
+    { title: "Unpaid",  value: `$${stats.remaining.toFixed(0)}`,   icon: "alert-circle" as const, col: stats.remaining > 0 ? c.warning : c.success,      filter: "unpaid" as DashboardFilter, tab: "monthly" },
+    { title: "Debt",    value: `$${stats.totalDebt.toFixed(0)}`,   icon: "credit-card"  as const, col: c.destructive,                                    filter: null    as DashboardFilter, tab: "debt"    },
   ];
 
   // Build breakdown string: Income − Bills [± Transactions] = Left
@@ -313,6 +313,25 @@ export default function DashboardScreen() {
           </LinearGradient>
         );
       })()}
+
+      {/* ── Stat Pill Cards ── */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.statsPillRow}
+        style={{ marginBottom: 14 }}
+      >
+        {statCards.map(card => (
+          <Pressable
+            key={card.title}
+            onPress={() => navigate(card.filter, card.tab)}
+            style={({ pressed }) => [styles.statPill, { backgroundColor: c.card, opacity: pressed ? 0.8 : 1 }]}
+          >
+            <Text style={[styles.statPillValue, { color: card.col }]} numberOfLines={1}>{card.value}</Text>
+            <Text style={[styles.statPillLabel, { color: c.mutedForeground }]}>{card.title.toUpperCase()}</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
 
       {/* ── Negative date warning (tappable → 12-month outlook) ── */}
       {firstYearNegEntry && (
@@ -499,28 +518,6 @@ export default function DashboardScreen() {
           </View>
         </>
       )}
-
-      {/* ── Stat Cards (moved lower) ── */}
-      <Text style={[styles.sectionTitle, { color: c.foreground }]}>This Month</Text>
-      <View style={styles.statsGrid}>
-        {statCards.map(card => (
-          <Pressable
-            key={card.title}
-            onPress={() => navigate(card.filter, card.tab)}
-            style={({ pressed }) => [styles.statCard, { backgroundColor: c.card, borderRadius: colors.radius, opacity: pressed ? 0.82 : 1 }]}
-          >
-            <View style={[styles.statIcon, { backgroundColor: card.col + "20" }]}>
-              <Feather name={card.icon} size={15} color={card.col} />
-            </View>
-            <Text style={[styles.statTitle, { color: c.mutedForeground }]}>{card.title}</Text>
-            <Text style={[styles.statValue, { color: c.foreground }]} numberOfLines={1}>{card.value}</Text>
-            <Text style={[styles.statSub, { color: c.mutedForeground }]}>{card.sub}</Text>
-            <View style={[styles.tapBadge, { backgroundColor: card.col + "18" }]}>
-              <Feather name="chevron-right" size={10} color={card.col} />
-            </View>
-          </Pressable>
-        ))}
-      </View>
 
       {/* ── Financial Outlook ── */}
       {balanceMetrics && (() => {
@@ -963,14 +960,11 @@ const styles = StyleSheet.create({
   upcomingDate:  { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 1 },
   upcomingAmt:   { fontSize: 15, fontFamily: "Inter_700Bold" },
 
-  // Stat cards
-  statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 16 },
-  statCard:  { width: "48%", padding: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 3, position: "relative" },
-  statIcon:  { width: 30, height: 30, borderRadius: 8, alignItems: "center", justifyContent: "center", marginBottom: 8 },
-  statTitle: { fontSize: 10, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 2 },
-  statValue: { fontSize: 22, fontFamily: "Inter_700Bold" },
-  statSub:   { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
-  tapBadge:  { position: "absolute", top: 10, right: 10, width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  // Stat pill cards
+  statsPillRow:  { flexDirection: "row", gap: 10, paddingRight: 16 },
+  statPill:      { borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16, minWidth: 90, alignItems: "center", justifyContent: "center" },
+  statPillValue: { fontSize: 22, fontFamily: "Inter_700Bold", marginBottom: 4 },
+  statPillLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", letterSpacing: 0.8 },
 
   // Goals
   goalsHeader:        { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10, marginTop: 8 },
