@@ -424,9 +424,31 @@ export default function MonthlyScreen() {
 
                   <View style={styles.amtRow}>
                     <View style={styles.amtField}>
-                      <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>{isWeekly ? "Per Week" : "Amount"}</Text>
+                      {/* Label row: shows "This month" badge + reset × when overridden */}
+                      {(() => {
+                        const hasCustomAmt = Math.abs(editableAmt - bill.amount) > 0.001;
+                        return (
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 4 }}>
+                            <Text style={[styles.fieldLabel, { color: hasCustomAmt ? c.primary : c.mutedForeground, marginBottom: 0 }]}>
+                              {isWeekly ? "Per Week" : "Amount"}{hasCustomAmt ? " ✎" : ""}
+                            </Text>
+                            {hasCustomAmt && (
+                              <Pressable
+                                onPress={() => { setCustomAmount(bill.id, month, selectedYear, undefined); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                                hitSlop={8}
+                              >
+                                <Feather name="x-circle" size={13} color={c.mutedForeground} />
+                              </Pressable>
+                            )}
+                          </View>
+                        );
+                      })()}
                       <TextInput
-                        style={[styles.fieldInput, { backgroundColor: c.muted, color: c.foreground }]}
+                        style={[styles.fieldInput, {
+                          backgroundColor: Math.abs(editableAmt - bill.amount) > 0.001 ? c.primary + "18" : c.muted,
+                          color: Math.abs(editableAmt - bill.amount) > 0.001 ? c.primary : c.foreground,
+                          marginTop: 0,
+                        }]}
                         value={showAmt}
                         onChangeText={v => setEditingAmounts(p => ({ ...p, [amtKey]: v }))}
                         onFocus={() => setEditingAmounts(p => ({ ...p, [amtKey]: editableAmt.toFixed(2) }))}
