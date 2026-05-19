@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
@@ -245,9 +246,24 @@ export default function DashboardScreen() {
       {/* ── HERO: 3-metric balance card ── */}
       {(() => {
         const cur = balanceMetrics?.currentBalance ?? cashFlow.remaining;
-        const heroColor = cur < 0 ? c.destructive : cur < 200 ? "#f0b429" : c.primary;
+        const isNeg = cur < 0;
+        const isLow = !isNeg && cur < 200;
+        const gradColors: [string, string] = isNeg
+          ? [c.destructive, "#b91c1c"]
+          : isLow
+          ? ["#d97706", "#b45309"]
+          : ["#1d4ed8", "#16a34a"];
         return (
-          <View style={[styles.heroCard, { backgroundColor: heroColor }]}>
+          <LinearGradient
+            colors={gradColors}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.heroCard, { overflow: "hidden" }]}
+          >
+            {/* Decorative glow circles */}
+            <View style={styles.heroGlowTop} />
+            <View style={styles.heroGlowBottom} />
+
             <Text style={styles.heroLabel}>Balance Today</Text>
             <Text style={styles.heroValue}>
               {cur < 0 ? "−" : ""}${Math.abs(cur).toFixed(0)}
@@ -270,7 +286,7 @@ export default function DashboardScreen() {
                 <Text style={[styles.heroMetricValue, {
                   color: (balanceMetrics?.lowestBalance ?? 0) < 0 ? "#fca5a5"
                     : (balanceMetrics?.lowestBalance ?? 0) < 200 ? "#fde68a"
-                    : "rgba(255,255,255,0.95)"
+                    : "#bbf7d0"
                 }]}>
                   {(balanceMetrics?.lowestBalance ?? 0) < 0 ? "−" : ""}
                   ${Math.abs(balanceMetrics?.lowestBalance ?? 0).toFixed(0)}
@@ -282,14 +298,19 @@ export default function DashboardScreen() {
             {stats.totalDue > 0 && (
               <View style={styles.heroProgress}>
                 <View style={[styles.heroProgressTrack, { backgroundColor: "rgba(255,255,255,0.25)" }]}>
-                  <View style={[styles.heroProgressFill, { width: `${Math.min((stats.totalPaid / stats.totalDue) * 100, 100)}%` as any }]} />
+                  <LinearGradient
+                    colors={["rgba(255,255,255,0.6)", "rgba(255,255,255,0.95)"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={[styles.heroProgressFill, { width: `${Math.min((stats.totalPaid / stats.totalDue) * 100, 100)}%` as any }]}
+                  />
                 </View>
                 <Text style={styles.heroProgressLabel}>
                   {Math.round((stats.totalPaid / stats.totalDue) * 100)}% of bills paid this month
                 </Text>
               </View>
             )}
-          </View>
+          </LinearGradient>
         );
       })()}
 
@@ -871,7 +892,9 @@ const styles = StyleSheet.create({
   subheading: { fontSize: 14, fontFamily: "Inter_400Regular", marginTop: 4, marginBottom: 20 },
 
   // Hero
-  heroCard:          { borderRadius: 20, padding: 22, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 8, elevation: 6 },
+  heroCard:          { borderRadius: 22, padding: 22, marginBottom: 14, shadowColor: "#1d4ed8", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 8 },
+  heroGlowTop:       { position: "absolute", top: -40, right: -30, width: 160, height: 160, borderRadius: 80, backgroundColor: "rgba(255,255,255,0.08)" },
+  heroGlowBottom:    { position: "absolute", bottom: -40, left: 20, width: 120, height: 120, borderRadius: 60, backgroundColor: "rgba(255,255,255,0.05)" },
   heroLabel:         { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "rgba(255,255,255,0.8)", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 },
   heroValue:         { fontSize: 46, fontFamily: "Inter_700Bold", color: "#fff", lineHeight: 52 },
   heroMetrics:       { flexDirection: "row", marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.2)" },
@@ -880,8 +903,8 @@ const styles = StyleSheet.create({
   heroMetricValue:   { fontSize: 14, fontFamily: "Inter_700Bold" },
   heroMetricDivider: { width: 1, backgroundColor: "rgba(255,255,255,0.2)", marginHorizontal: 14 },
   heroProgress:      { marginTop: 14 },
-  heroProgressTrack: { height: 6, borderRadius: 3, overflow: "hidden" },
-  heroProgressFill:  { height: 6, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.9)" },
+  heroProgressTrack: { height: 5, borderRadius: 3, overflow: "hidden" },
+  heroProgressFill:  { height: 5, borderRadius: 3 },
   heroProgressLabel: { fontSize: 11, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.75)", marginTop: 5 },
   negWarning:          { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, marginBottom: 14 },
   negWarningText:      { flex: 1, fontSize: 13, fontFamily: "Inter_500Medium" },
