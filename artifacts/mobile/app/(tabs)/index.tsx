@@ -315,13 +315,9 @@ export default function DashboardScreen() {
       })()}
 
       {/* ── Stat Pill Cards ── */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.statsPillRow}
-        style={{ marginBottom: 14 }}
-      >
-        {statCards.map(card => (
+      {/* Row 1: Bills · Paid · Unpaid */}
+      <View style={[styles.statsPillRow, { marginBottom: 8 }]}>
+        {statCards.slice(0, 3).map(card => (
           <Pressable
             key={card.title}
             onPress={() => navigate(card.filter, card.tab)}
@@ -331,7 +327,23 @@ export default function DashboardScreen() {
             <Text style={[styles.statPillLabel, { color: c.mutedForeground }]}>{card.title.toUpperCase()}</Text>
           </Pressable>
         ))}
-      </ScrollView>
+      </View>
+      {/* Row 2: Debt — full width */}
+      {(() => {
+        const debt = statCards[3];
+        return (
+          <Pressable
+            onPress={() => navigate(debt.filter, debt.tab)}
+            style={({ pressed }) => [styles.statDebtRow, { backgroundColor: c.card, opacity: pressed ? 0.8 : 1 }]}
+          >
+            <View>
+              <Text style={[styles.statPillLabel, { color: c.mutedForeground }]}>DEBT</Text>
+              <Text style={[styles.statDebtValue, { color: debt.col }]}>{debt.value}</Text>
+            </View>
+            <Feather name="chevron-right" size={16} color={c.mutedForeground} />
+          </Pressable>
+        );
+      })()}
 
       {/* ── Negative date warning (tappable → 12-month outlook) ── */}
       {firstYearNegEntry && (
@@ -961,10 +973,12 @@ const styles = StyleSheet.create({
   upcomingAmt:   { fontSize: 15, fontFamily: "Inter_700Bold" },
 
   // Stat pill cards
-  statsPillRow:  { flexDirection: "row", gap: 10, paddingRight: 16 },
-  statPill:      { borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16, minWidth: 90, alignItems: "center", justifyContent: "center" },
-  statPillValue: { fontSize: 22, fontFamily: "Inter_700Bold", marginBottom: 4 },
-  statPillLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", letterSpacing: 0.8 },
+  statsPillRow:  { flexDirection: "row", gap: 8, marginBottom: 14 },
+  statPill:      { flex: 1, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 10, alignItems: "center", justifyContent: "center" },
+  statPillValue: { fontSize: 20, fontFamily: "Inter_700Bold", marginBottom: 4 },
+  statPillLabel: { fontSize: 9, fontFamily: "Inter_600SemiBold", letterSpacing: 0.8 },
+  statDebtRow:   { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderRadius: 14, paddingVertical: 14, paddingHorizontal: 18, marginBottom: 14 },
+  statDebtValue: { fontSize: 26, fontFamily: "Inter_700Bold", marginTop: 2 },
 
   // Goals
   goalsHeader:        { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10, marginTop: 8 },

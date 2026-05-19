@@ -15,13 +15,21 @@ import { IncomeModal } from "@/components/IncomeModal";
 import colors from "@/constants/colors";
 import type { IncomeItem } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
+import { type ThemeMode, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
 
+const THEME_OPTIONS: { label: string; value: ThemeMode; icon: string }[] = [
+  { label: "Light", value: "light", icon: "sun" },
+  { label: "Dark",  value: "dark",  icon: "moon" },
+  { label: "Auto",  value: "auto",  icon: "smartphone" },
+];
+
 export default function MoreScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
+  const { themeMode, setThemeMode } = useThemeMode();
   const {
     bills, transactions, overrides, incomes, goals, importBills, settings, updateSettings,
     addIncome, updateIncome, deleteIncome, getMonthlyIncome,
@@ -170,6 +178,26 @@ export default function MoreScreen() {
     >
       <Text style={[styles.pageTitle, { color: c.foreground }]}>Settings</Text>
       <Text style={[styles.pageSubtitle, { color: c.mutedForeground }]}>FlowLedger</Text>
+
+      {/* ── Appearance ── */}
+      <SLabel c={c} text="Appearance" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <View style={[styles.themeRow, { backgroundColor: c.muted, borderRadius: 10 }]}>
+          {THEME_OPTIONS.map(opt => {
+            const active = themeMode === opt.value;
+            return (
+              <Pressable
+                key={opt.value}
+                onPress={() => { setThemeMode(opt.value); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                style={[styles.themeBtn, { backgroundColor: active ? c.primary : "transparent", borderRadius: 8 }]}
+              >
+                <Feather name={opt.icon as any} size={14} color={active ? "#fff" : c.mutedForeground} />
+                <Text style={[styles.themeBtnText, { color: active ? "#fff" : c.mutedForeground }]}>{opt.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
 
       {/* ── Income Sources ── */}
       <SLabel c={c} text="Income Sources" />
@@ -479,6 +507,9 @@ const styles = StyleSheet.create({
 
   methodRow: { flexDirection: "row", padding: 4, gap: 4 },
   methodBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10 },
+  themeRow:  { flexDirection: "row", padding: 4, gap: 4 },
+  themeBtn:  { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10 },
+  themeBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   methodText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   methodDesc: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 19, marginTop: 10 },
   priorityNote: { flexDirection: "row", alignItems: "center", gap: 8, padding: 10, marginTop: 10 },

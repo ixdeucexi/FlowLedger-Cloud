@@ -13,25 +13,47 @@ interface BarData {
 interface MiniChartProps {
   data: BarData[];
   title?: string;
+  subtitle?: string;
   height?: number;
 }
 
-export function MiniChart({ data, title, height = 120 }: MiniChartProps) {
+function fmtK(v: number) {
+  if (v >= 1000) return `$${(v / 1000).toFixed(1)}k`;
+  return `$${v.toFixed(0)}`;
+}
+
+export function MiniChart({ data, title, subtitle, height = 120 }: MiniChartProps) {
   const c = useColors();
   const maxVal = Math.max(...data.map(d => d.value), 1);
+  const total = data.reduce((s, d) => s + d.value, 0);
 
   return (
     <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
       {title ? (
-        <Text style={[styles.title, { color: c.foreground }]}>{title}</Text>
+        <View style={styles.titleRow}>
+          <Text style={[styles.title, { color: c.foreground }]}>{title}</Text>
+          {total > 0 && (
+            <Text style={[styles.titleTotal, { color: c.mutedForeground }]}>
+              {fmtK(total)} total
+            </Text>
+          )}
+        </View>
+      ) : null}
+      {subtitle ? (
+        <Text style={[styles.subtitle, { color: c.mutedForeground }]}>{subtitle}</Text>
       ) : null}
       <View style={[styles.chartArea, { height }]}>
         {data.map((d, i) => {
-          const barH = (d.value / maxVal) * (height - 24);
+          const barH = Math.max((d.value / maxVal) * (height - 40), d.value > 0 ? 4 : 0);
           const barColor = d.color ?? c.primary;
           return (
             <View key={i} style={styles.barWrapper}>
-              <View style={[styles.barContainer, { height: height - 24 }]}>
+              <View style={[styles.barContainer, { height: height - 40 }]}>
+                {d.value > 0 && (
+                  <Text style={[styles.barValue, { color: barColor }]} numberOfLines={1}>
+                    {fmtK(d.value)}
+                  </Text>
+                )}
                 <View
                   style={[
                     styles.bar,
@@ -154,15 +176,30 @@ const styles = StyleSheet.create({
     elevation: 2,
     marginBottom: 12,
   },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
   title: {
     fontSize: 15,
     fontFamily: "Inter_600SemiBold",
-    marginBottom: 12,
+  },
+  titleTotal: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+  },
+  subtitle: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    marginBottom: 10,
   },
   chartArea: {
     flexDirection: "row",
     alignItems: "flex-end",
     gap: 6,
+    marginTop: 10,
   },
   barWrapper: {
     flex: 1,
@@ -173,6 +210,12 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     alignItems: "center",
   },
+  barValue: {
+    fontSize: 9,
+    fontFamily: "Inter_600SemiBold",
+    marginBottom: 3,
+    textAlign: "center",
+  },
   bar: {
     width: "70%",
     minHeight: 2,
@@ -181,6 +224,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: "Inter_500Medium",
     marginTop: 4,
+    textAlign: "center",
   },
   donutRow: {
     flexDirection: "row",
