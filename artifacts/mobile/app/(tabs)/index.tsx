@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
-  Keyboard, Modal, Platform, Pressable,
+  Image, Keyboard, Modal, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -239,8 +239,12 @@ export default function DashboardScreen() {
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
-      <Text style={[styles.heading,    { color: c.foreground }]}>Dashboard</Text>
-      <Text style={[styles.subheading, { color: c.mutedForeground }]}>{MONTH_FULL[currentMonth]} {selectedYear}</Text>
+      <View style={styles.brandRow}>
+        <View>
+          <Image source={require("../../assets/images/logo.png")} style={styles.brandLogo} resizeMode="contain" />
+          <Text style={[styles.subheading, { color: c.mutedForeground }]}>{MONTH_FULL[currentMonth]} {selectedYear}</Text>
+        </View>
+      </View>
 
       {/* ── HERO: 3-metric balance card ── */}
       {(() => {
@@ -867,8 +871,10 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   screen:  { flex: 1 },
   content: { paddingHorizontal: 16 },
+  brandRow:   { marginBottom: 16 },
+  brandLogo:  { width: 200, height: 60 },
   heading:    { fontSize: 28, fontFamily: "Inter_700Bold" },
-  subheading: { fontSize: 14, fontFamily: "Inter_400Regular", marginTop: 4, marginBottom: 20 },
+  subheading: { fontSize: 14, fontFamily: "Inter_400Regular", marginTop: 2 },
 
   // Hero
   heroCard:          { borderRadius: 20, padding: 22, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 8, elevation: 6 },

@@ -169,6 +169,7 @@ export default function MoreScreen() {
       contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 + webTopPad, paddingBottom: insets.bottom + 100 }]}
     >
       <Text style={[styles.pageTitle, { color: c.foreground }]}>Settings</Text>
+      <Text style={[styles.pageSubtitle, { color: c.mutedForeground }]}>FlowLedger</Text>
 
       {/* ── Income Sources ── */}
       <SLabel c={c} text="Income Sources" />
@@ -444,7 +445,8 @@ function SLabel({ c, text }: { c: any; text: string }) {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   content: { paddingHorizontal: 16 },
-  pageTitle: { fontSize: 28, fontFamily: "Inter_700Bold", marginBottom: 20 },
+  pageTitle:    { fontSize: 28, fontFamily: "Inter_700Bold", marginBottom: 2 },
+  pageSubtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginBottom: 20 },
   card: { padding: 16, marginBottom: 20, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
   emptyText: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", paddingVertical: 8 },
 

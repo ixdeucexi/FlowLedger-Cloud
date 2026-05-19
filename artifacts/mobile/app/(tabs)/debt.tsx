@@ -96,7 +96,7 @@ export default function DebtScreen() {
     <View style={[styles.screen, { backgroundColor: c.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 12 + webTopPad }]}>
         <View>
-          <Text style={[styles.title, { color: c.foreground }]}>Debt Tracker</Text>
+          <Text style={[styles.title, { color: c.foreground }]}>Debt</Text>
           <Text style={[styles.subtitle, { color: c.mutedForeground }]}>
             {debts.length} debt{debts.length !== 1 ? "s" : ""} · ${totalDebt.toLocaleString(undefined, { maximumFractionDigits: 0 })} total
           </Text>
