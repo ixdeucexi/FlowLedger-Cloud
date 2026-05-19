@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AddBillModal } from "@/components/AddBillModal";
 import { DatePickerField } from "@/components/DatePickerField";
 import { GoalModal } from "@/components/GoalModal";
-import { DonutChart, MiniChart } from "@/components/MiniChart";
+
 import colors from "@/constants/colors";
 import type { Bill, DashboardFilter, Goal } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
@@ -591,11 +591,6 @@ export default function DashboardScreen() {
           </View>
         );
       })()}
-
-      {/* ── Charts ── */}
-      <MiniChart data={monthlyBarData} title="Monthly Expenses" height={130} />
-      {categoryData.length > 0 && <DonutChart segments={categoryData} title="By Category" size={90} />}
-      {debtPayoffData.length > 0 && <MiniChart data={debtPayoffData} title="Debt Payoff Projection" height={120} />}
 
       {/* ── Financial Goals ── */}
       <View style={styles.goalsHeader}>
