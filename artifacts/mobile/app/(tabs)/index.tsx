@@ -872,7 +872,7 @@ const styles = StyleSheet.create({
   screen:  { flex: 1 },
   content: { paddingHorizontal: 16 },
   brandRow:   { marginBottom: 16 },
-  brandLogo:  { width: 200, height: 60 },
+  brandLogo:  { width: 360, height: 160, marginLeft: -8 },
   heading:    { fontSize: 28, fontFamily: "Inter_700Bold" },
   subheading: { fontSize: 14, fontFamily: "Inter_400Regular", marginTop: 2 },
 
