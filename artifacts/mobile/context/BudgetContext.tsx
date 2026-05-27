@@ -430,12 +430,36 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateBill = useCallback((bill: Bill) => {
+    // When the amount changes, lock every past month that has a payment record
+    // at the OLD amount so history is never retroactively altered.
+    const existing = bills.find(b => b.id === bill.id);
+    if (existing && existing.amount !== bill.amount) {
+      const now      = new Date();
+      const curMonth = now.getMonth();   // 0-indexed
+      const curYear  = now.getFullYear();
+      setOverrides(prev => {
+        let changed = false;
+        const next = prev.map(o => {
+          if (o.bill_id !== bill.id) return o;
+          const isPast =
+            o.year < curYear ||
+            (o.year === curYear && o.month < curMonth);
+          if (isPast && o.custom_amount === undefined) {
+            changed = true;
+            return { ...o, custom_amount: existing.amount };
+          }
+          return o;
+        });
+        if (changed) AsyncStorage.setItem(OVERRIDES_KEY, JSON.stringify(next));
+        return changed ? next : prev;
+      });
+    }
     setBills(prev => {
       const reordered = reorderDebtPriorities(prev.map(b => b.id === bill.id ? bill : b));
       AsyncStorage.setItem(BILLS_KEY, JSON.stringify(reordered));
       return reordered;
     });
-  }, []);
+  }, [bills]);
 
   const deleteBill = useCallback((id: string) => {
     setBills(prev => {
