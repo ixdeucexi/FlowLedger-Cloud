@@ -438,20 +438,33 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const curMonth = now.getMonth();   // 0-indexed
       const curYear  = now.getFullYear();
       setOverrides(prev => {
-        let changed = false;
-        const next = prev.map(o => {
+        let next = prev.map(o => {
           if (o.bill_id !== bill.id) return o;
-          const isPast =
+          // Freeze current month AND all past months at the old amount
+          const isPastOrCurrent =
             o.year < curYear ||
-            (o.year === curYear && o.month < curMonth);
-          if (isPast && o.custom_amount === undefined) {
-            changed = true;
+            (o.year === curYear && o.month <= curMonth);
+          if (isPastOrCurrent && o.custom_amount === undefined) {
             return { ...o, custom_amount: existing.amount };
           }
           return o;
         });
-        if (changed) AsyncStorage.setItem(OVERRIDES_KEY, JSON.stringify(next));
-        return changed ? next : prev;
+        // If the current month has no override yet, create one to hold the old amount
+        const hasCurrentOverride = next.some(
+          o => o.bill_id === bill.id && o.month === curMonth && o.year === curYear
+        );
+        if (!hasCurrentOverride) {
+          next = [...next, {
+            id: genId(),
+            bill_id: bill.id,
+            month: curMonth,
+            year: curYear,
+            custom_amount: existing.amount,
+            paid_amount: 0,
+          }];
+        }
+        AsyncStorage.setItem(OVERRIDES_KEY, JSON.stringify(next));
+        return next;
       });
     }
     setBills(prev => {
