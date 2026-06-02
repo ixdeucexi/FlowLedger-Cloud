@@ -1,16 +1,16 @@
 import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import colors from "@/constants/colors";
 import { useColors } from "@/hooks/useColors";
 
+// API base: on web use relative path; on device use the Replit proxy domain
 const API_BASE = Platform.OS === "web"
   ? "/api"
-  : `https://${process.env.EXPO_PUBLIC_API_HOST ?? "localhost"}/api`;
+  : `https://${process.env.EXPO_PUBLIC_DOMAIN ?? "localhost"}/api`;
 
 const PLAID_STORAGE_KEY = "@plaid_connection_v1";
 
@@ -31,36 +31,48 @@ interface PlaidConnection {
   connected_at: string;
 }
 
+function randomSession() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
 export function PlaidLinkSection() {
   const c = useColors();
   const [connection, setConnection] = useState<PlaidConnection | null>(null);
   const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState("");
   const [loadingTx, setLoadingTx] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sessionRef = useRef<string>("");
 
   useEffect(() => {
     AsyncStorage.getItem(PLAID_STORAGE_KEY).then(raw => {
       if (raw) setConnection(JSON.parse(raw));
     });
+    return () => stopPolling();
   }, []);
 
-  // Handle deep-link redirect from Plaid Link page
-  useEffect(() => {
-    const sub = Linking.addEventListener("url", async ({ url }) => {
-      if (url.startsWith("mobile://plaid-success")) {
-        const parsed = Linking.parse(url);
-        const publicToken = parsed.queryParams?.["public_token"] as string | undefined;
-        const institution = parsed.queryParams?.["institution"] as string | undefined;
-        if (!publicToken) return;
-        await exchangeToken(publicToken, institution ?? "Your Bank");
-      } else if (url.startsWith("mobile://plaid-exit")) {
-        setLoading(false);
+  const stopPolling = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  };
+
+  const startPolling = (session: string) => {
+    stopPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/plaid/poll?session=${session}`);
+        const data = await res.json();
+        if (data.ready) {
+          stopPolling();
+          setStatus("Exchanging token…");
+          await exchangeToken(data.public_token, data.institution ?? "Your Bank");
+        }
+      } catch {
+        // network blip — keep polling
       }
-    });
-    return () => sub.remove();
-  }, []);
+    }, 2000);
+  };
 
   const exchangeToken = async (publicToken: string, institution: string) => {
-    setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/plaid/exchange-token`, {
         method: "POST",
@@ -77,8 +89,10 @@ export function PlaidLinkSection() {
       };
       await AsyncStorage.setItem(PLAID_STORAGE_KEY, JSON.stringify(conn));
       setConnection(conn);
+      setStatus("");
     } catch (e: any) {
       Alert.alert("Connection Error", e.message);
+      setStatus("");
     } finally {
       setLoading(false);
     }
@@ -86,23 +100,40 @@ export function PlaidLinkSection() {
 
   const handleConnect = async () => {
     setLoading(true);
+    setStatus("Opening Plaid…");
+    const session = randomSession();
+    sessionRef.current = session;
+
+    // Start polling BEFORE opening the browser so we don't miss the callback
+    startPolling(session);
+
     try {
-      // Use WebBrowser to open the server-hosted Plaid Link page
-      const linkUrl = `${API_BASE}/plaid/link`;
+      const linkUrl = `${API_BASE}/plaid/link?session=${session}`;
       await WebBrowser.openBrowserAsync(linkUrl, {
         presentationStyle: WebBrowser.WebBrowserPresentationStyle.FORM_SHEET,
         dismissButtonStyle: "cancel",
       });
+      // Browser closed — if polling already got the token it will self-stop.
+      // If user cancelled, stop polling and reset.
+      setTimeout(() => {
+        if (pollRef.current) {
+          stopPolling();
+          setLoading(false);
+          setStatus("");
+        }
+      }, 3000);
     } catch (e: any) {
+      stopPolling();
       Alert.alert("Error", e.message);
       setLoading(false);
+      setStatus("");
     }
   };
 
   const handleDisconnect = () => {
     Alert.alert(
       "Disconnect Bank",
-      "This removes the connection to your bank. Your manually entered bills and history won't be affected.",
+      "This removes the connection. Your manually entered bills and history won't be affected.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -128,10 +159,7 @@ export function PlaidLinkSection() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to fetch");
-      Alert.alert(
-        "Transactions Synced",
-        `Fetched ${data.transactions.length} transactions from the last 30 days.`
-      );
+      Alert.alert("Synced", `${data.transactions.length} transactions from last 30 days.`);
     } catch (e: any) {
       Alert.alert("Sync Error", e.message);
     } finally {
@@ -139,12 +167,12 @@ export function PlaidLinkSection() {
     }
   };
 
+  // ── Connected state ──────────────────────────────────────────────────────
   if (connection) {
     return (
       <View style={[s.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        {/* Connected header */}
         <View style={s.connectedHeader}>
-          <View style={[s.connectedDot, { backgroundColor: c.success + "20" }]}>
+          <View style={[s.iconBox, { backgroundColor: c.success + "20" }]}>
             <Feather name="check-circle" size={18} color={c.success} />
           </View>
           <View style={{ flex: 1 }}>
@@ -153,12 +181,11 @@ export function PlaidLinkSection() {
               Connected · {connection.accounts.length} account{connection.accounts.length !== 1 ? "s" : ""}
             </Text>
           </View>
-          <Pressable onPress={handleDisconnect} hitSlop={8}>
+          <Pressable onPress={handleDisconnect} hitSlop={10}>
             <Feather name="x" size={16} color={c.mutedForeground} />
           </Pressable>
         </View>
 
-        {/* Account list */}
         {connection.accounts.map((acct, i) => (
           <View key={acct.id} style={[s.acctRow, { borderTopColor: c.border, borderTopWidth: i > 0 ? 1 : 0 }]}>
             <View style={{ flex: 1 }}>
@@ -177,11 +204,10 @@ export function PlaidLinkSection() {
           </View>
         ))}
 
-        {/* Sync button */}
         <Pressable
           onPress={handleRefreshTransactions}
           disabled={loadingTx}
-          style={({ pressed }) => [s.syncBtn, { backgroundColor: c.primary + "18", opacity: pressed ? 0.7 : 1, borderRadius: 10 }]}
+          style={({ pressed }) => [s.syncBtn, { backgroundColor: c.primary + "18", borderRadius: 10, opacity: pressed ? 0.7 : 1 }]}
         >
           {loadingTx
             ? <ActivityIndicator size="small" color={c.primary} />
@@ -194,10 +220,11 @@ export function PlaidLinkSection() {
     );
   }
 
+  // ── Not connected state ──────────────────────────────────────────────────
   return (
     <View style={[s.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
       <View style={s.unconnectedRow}>
-        <View style={[s.bankIcon, { backgroundColor: c.primary + "18" }]}>
+        <View style={[s.iconBox, { backgroundColor: c.primary + "18", width: 48, height: 48, borderRadius: 14 }]}>
           <Feather name="link" size={20} color={c.primary} />
         </View>
         <View style={{ flex: 1 }}>
@@ -207,6 +234,7 @@ export function PlaidLinkSection() {
           </Text>
         </View>
       </View>
+
       <Pressable
         onPress={handleConnect}
         disabled={loading}
@@ -215,10 +243,17 @@ export function PlaidLinkSection() {
         {loading
           ? <ActivityIndicator size="small" color="#fff" />
           : <Feather name="link-2" size={15} color="#fff" />}
-        <Text style={s.connectBtnText}>{loading ? "Opening…" : "Connect Bank Account"}</Text>
+        <Text style={s.connectBtnText}>{loading ? (status || "Connecting…") : "Connect Bank Account"}</Text>
       </Pressable>
+
+      {loading && (
+        <Text style={[s.statusText, { color: c.mutedForeground }]}>
+          Complete the connection in the browser, then return here
+        </Text>
+      )}
+
       <Text style={[s.sandboxNote, { color: c.mutedForeground }]}>
-        🔒 Sandbox mode — no real data accessed
+        🔒 Sandbox mode · use username: <Text style={{ color: c.foreground }}>user_good</Text> / password: <Text style={{ color: c.foreground }}>pass_good</Text>
       </Text>
     </View>
   );
@@ -226,8 +261,8 @@ export function PlaidLinkSection() {
 
 const s = StyleSheet.create({
   card:             { padding: 16, marginBottom: 12 },
+  iconBox:          { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   connectedHeader:  { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
-  connectedDot:     { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   connectedTitle:   { fontSize: 15, fontFamily: "Inter_600SemiBold" },
   connectedSub:     { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   acctRow:          { flexDirection: "row", alignItems: "center", paddingVertical: 10 },
@@ -237,10 +272,10 @@ const s = StyleSheet.create({
   syncBtn:          { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12, marginTop: 10 },
   syncBtnText:      { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   unconnectedRow:   { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 16 },
-  bankIcon:         { width: 48, height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   unconnectedTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
   unconnectedSub:   { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 3 },
   connectBtn:       { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 14, paddingVertical: 14, backgroundColor: "#1d4ed8" },
   connectBtnText:   { fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#fff" },
+  statusText:       { fontSize: 12, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: 10 },
   sandboxNote:      { fontSize: 11, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: 10 },
 });
