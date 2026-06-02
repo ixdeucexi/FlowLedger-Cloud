@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { DatePickerField } from "@/components/DatePickerField";
 import { IncomeModal } from "@/components/IncomeModal";
+import { PlaidLinkSection } from "@/components/PlaidLink";
 import colors from "@/constants/colors";
 import type { IncomeItem } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
@@ -198,6 +199,10 @@ export default function MoreScreen() {
           })}
         </View>
       </View>
+
+      {/* ── Bank Connection ── */}
+      <SLabel c={c} text="Bank Connection" />
+      <PlaidLinkSection />
 
       {/* ── Income Sources ── */}
       <SLabel c={c} text="Income Sources" />
