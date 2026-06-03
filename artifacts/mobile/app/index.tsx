@@ -14,39 +14,31 @@ export default function StartupScreen() {
   const router = useRouter();
 
   return (
-    <SafeAreaView style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#0a0e1a" />
+    <Pressable style={{ flex: 1 }} onPress={() => router.replace("/(tabs)")}>
+      <SafeAreaView style={styles.root}>
+        <StatusBar barStyle="light-content" backgroundColor="#0a0e1a" />
 
-      {/* Logo + branding */}
-      <View style={styles.top}>
-        <View style={styles.logoCircle}>
-          <Feather name="trending-up" size={44} color="#2563eb" />
-        </View>
-        <Text style={styles.appName}>FlowLedger</Text>
-        <Text style={styles.tagline}>Your money, clearly.</Text>
-      </View>
-
-      {/* Feature pills */}
-      <View style={styles.pillsRow}>
-        {["Bills & Debts", "Income Tracking", "Monthly View", "Goals"].map(label => (
-          <View key={label} style={styles.pill}>
-            <Text style={styles.pillText}>{label}</Text>
+        <View style={styles.top}>
+          <View style={styles.logoCircle}>
+            <Feather name="trending-up" size={44} color="#2563eb" />
           </View>
-        ))}
-      </View>
+          <Text style={styles.appName}>FlowLedger</Text>
+          <Text style={styles.tagline}>Your money, clearly.</Text>
+        </View>
 
-      {/* CTA */}
-      <View style={styles.bottom}>
-        <Pressable
-          style={({ pressed }) => [styles.btn, { opacity: pressed ? 0.85 : 1 }]}
-          onPress={() => router.replace("/(tabs)")}
-        >
-          <Text style={styles.btnText}>Get Started</Text>
-          <Feather name="arrow-right" size={20} color="#fff" />
-        </Pressable>
-        <Text style={styles.sub}>Your data stays on your device</Text>
-      </View>
-    </SafeAreaView>
+        <View style={styles.pillsRow}>
+          {["Bills & Debts", "Income Tracking", "Monthly View", "Goals"].map(label => (
+            <View key={label} style={styles.pill}>
+              <Text style={styles.pillText}>{label}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.bottom}>
+          <Text style={styles.sub}>Your data stays on your device</Text>
+        </View>
+      </SafeAreaView>
+    </Pressable>
   );
 }
 
@@ -106,24 +98,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   bottom: {
-    gap: 14,
     alignItems: "center",
-  },
-  btn: {
-    backgroundColor: "#2563eb",
-    borderRadius: 16,
-    height: 58,
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-  },
-  btnText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "700",
-    letterSpacing: 0.2,
   },
   sub: {
     color: "#475569",
