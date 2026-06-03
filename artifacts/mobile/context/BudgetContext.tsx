@@ -1,7 +1,5 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-
-import { useAuth } from "@/context/AuthContext";
-import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -301,11 +299,37 @@ interface BudgetContextType {
 
 const BudgetContext = createContext<BudgetContextType | undefined>(undefined);
 
+// ─── AsyncStorage keys ─────────────────────────────────────────────────────────
+
+const KEYS = {
+  bills:         "@budget_bills",
+  overrides:     "@budget_overrides",
+  transactions:  "@budget_transactions",
+  incomes:       "@budget_incomes",
+  goals:         "@budget_goals",
+  extraPayments: "@budget_extra_payments",
+  settings:      "@budget_settings",
+  categories:    "@budget_categories",
+};
+
+const DEFAULT_CATEGORIES = [
+  "Housing", "Utilities", "Insurance", "Transportation", "Food",
+  "Entertainment", "Health", "Education", "Savings", "Debt",
+  "Shopping", "Rent", "Other",
+];
+
+async function load<T>(key: string, fallback: T): Promise<T> {
+  try {
+    const raw = await AsyncStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 // ─── Provider ──────────────────────────────────────────────────────────────────
 
 export function BudgetProvider({ children }: { children: React.ReactNode }) {
-  const { token } = useAuth();
-
   const [bills,         setBills]         = useState<Bill[]>([]);
   const [overrides,     setOverrides]     = useState<MonthlyOverride[]>([]);
   const [transactions,  setTransactions]  = useState<Transaction[]>([]);
@@ -318,61 +342,63 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [selectedYear,  setSelectedYear]  = useState(new Date().getFullYear());
   const [dashboardFilter, setDashboardFilter] = useState<DashboardFilter>(null);
 
-  // Keep a ref so async callbacks always have the latest token
-  const tokenRef = useRef<string | null>(token);
-  useEffect(() => { tokenRef.current = token; }, [token]);
+  // Track whether initial load is done so we don't overwrite on first render
+  const loaded = useRef(false);
 
-  // ── Load data when token changes (login/logout) ───────────────────────────────
+  // ── Load from AsyncStorage on mount ──────────────────────────────────────────
   useEffect(() => {
-    if (!token) {
-      // Logged out — clear all state
-      setBills([]); setOverrides([]); setTransactions([]); setIncomes([]);
-      setGoals([]); setExtraPayments([]); setCategories([]); setSettings(DEFAULT_SETTINGS);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
     (async () => {
       try {
-        const [b, o, t, i, g, s, c, ep] = await Promise.all([
-          apiGet<Bill[]>("/bills", token),
-          apiGet<MonthlyOverride[]>("/overrides", token),
-          apiGet<Transaction[]>("/transactions", token),
-          apiGet<IncomeItem[]>("/incomes", token),
-          apiGet<Goal[]>("/goals", token),
-          apiGet<Settings>("/settings", token),
-          apiGet<string[]>("/categories", token),
-          apiGet<ExtraPayment[]>("/extra-payments", token),
+        const [b, o, t, i, g, ep, s, c] = await Promise.all([
+          load<Bill[]>(KEYS.bills, []),
+          load<MonthlyOverride[]>(KEYS.overrides, []),
+          load<Transaction[]>(KEYS.transactions, []),
+          load<IncomeItem[]>(KEYS.incomes, []),
+          load<Goal[]>(KEYS.goals, []),
+          load<ExtraPayment[]>(KEYS.extraPayments, []),
+          load<Settings>(KEYS.settings, DEFAULT_SETTINGS),
+          load<string[]>(KEYS.categories, DEFAULT_CATEGORIES),
         ]);
-        setBills(reorderDebtPriorities(b.map(bill => ({ ...bill, frequency: (bill.frequency ?? "monthly") as "monthly" | "weekly", day_of_week: bill.day_of_week ?? 0 }))));
+        setBills(reorderDebtPriorities(b.map(bill => ({
+          ...bill,
+          frequency: (bill.frequency ?? "monthly") as "monthly" | "weekly",
+          day_of_week: bill.day_of_week ?? 0,
+        }))));
         setOverrides(o);
         setTransactions(t);
         setIncomes(i);
         setGoals(g);
-        setSettings({ ...DEFAULT_SETTINGS, ...s });
-        setCategories(c);
         setExtraPayments(ep);
-      } catch (e) {
-        console.error("[BudgetContext] load error:", e);
+        setSettings({ ...DEFAULT_SETTINGS, ...s });
+        setCategories(c.length > 0 ? c : DEFAULT_CATEGORIES);
       } finally {
+        loaded.current = true;
         setLoading(false);
       }
     })();
-  }, [token]);
+  }, []);
+
+  // ── Persist to AsyncStorage whenever state changes (after initial load) ───────
+  useEffect(() => { if (loaded.current) AsyncStorage.setItem(KEYS.bills,         JSON.stringify(bills)); },         [bills]);
+  useEffect(() => { if (loaded.current) AsyncStorage.setItem(KEYS.overrides,     JSON.stringify(overrides)); },     [overrides]);
+  useEffect(() => { if (loaded.current) AsyncStorage.setItem(KEYS.transactions,  JSON.stringify(transactions)); },  [transactions]);
+  useEffect(() => { if (loaded.current) AsyncStorage.setItem(KEYS.incomes,       JSON.stringify(incomes)); },       [incomes]);
+  useEffect(() => { if (loaded.current) AsyncStorage.setItem(KEYS.goals,         JSON.stringify(goals)); },         [goals]);
+  useEffect(() => { if (loaded.current) AsyncStorage.setItem(KEYS.extraPayments, JSON.stringify(extraPayments)); }, [extraPayments]);
+  useEffect(() => { if (loaded.current) AsyncStorage.setItem(KEYS.settings,      JSON.stringify(settings)); },      [settings]);
+  useEffect(() => { if (loaded.current) AsyncStorage.setItem(KEYS.categories,    JSON.stringify(categories)); },    [categories]);
 
   // ─── Bills ────────────────────────────────────────────────────────────────────
 
   const addBill = useCallback((bill: Omit<Bill, "id" | "created_at">) => {
     const nb: Bill = { ...bill, id: genId(), created_at: new Date().toISOString() };
     setBills(prev => reorderDebtPriorities([...prev, nb]));
-    apiPost("/bills", tokenRef.current!, nb).catch(e => console.error("addBill:", e));
   }, []);
 
   const updateBill = useCallback((bill: Bill) => {
     setBills(prev => {
       const existing = prev.find(b => b.id === bill.id);
       if (existing && existing.amount !== bill.amount) {
-        // Freeze past overrides at old amount
         const now = new Date();
         const curMonth = now.getMonth();
         const curYear  = now.getFullYear();
@@ -380,38 +406,23 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           let next = prevO.map(o => {
             if (o.bill_id !== bill.id) return o;
             const isPastOrCurrent = o.year < curYear || (o.year === curYear && o.month <= curMonth);
-            if (isPastOrCurrent && o.custom_amount === undefined) {
-              const updated = { ...o, custom_amount: existing.amount };
-              apiPost("/overrides", tokenRef.current!, {
-                bill_id: o.bill_id, month: o.month, year: o.year,
-                custom_amount: existing.amount, paid_amount: o.paid_amount,
-              }).catch(e => console.error("freeze override:", e));
-              return updated;
-            }
+            if (isPastOrCurrent && o.custom_amount === undefined) return { ...o, custom_amount: existing.amount };
             return o;
           });
           const hasCurrentOverride = next.some(o => o.bill_id === bill.id && o.month === curMonth && o.year === curYear);
           if (!hasCurrentOverride) {
-            const newO: MonthlyOverride = { id: genId(), bill_id: bill.id, month: curMonth, year: curYear, custom_amount: existing.amount, paid_amount: 0 };
-            next = [...next, newO];
-            apiPost("/overrides", tokenRef.current!, {
-              id: newO.id, bill_id: newO.bill_id, month: curMonth, year: curYear,
-              custom_amount: existing.amount, paid_amount: 0,
-            }).catch(e => console.error("create freeze override:", e));
+            next = [...next, { id: genId(), bill_id: bill.id, month: curMonth, year: curYear, custom_amount: existing.amount, paid_amount: 0 }];
           }
           return next;
         });
       }
-      const reordered = reorderDebtPriorities(prev.map(b => b.id === bill.id ? bill : b));
-      apiPut(`/bills/${bill.id}`, tokenRef.current!, bill).catch(e => console.error("updateBill:", e));
-      return reordered;
+      return reorderDebtPriorities(prev.map(b => b.id === bill.id ? bill : b));
     });
   }, []);
 
   const deleteBill = useCallback((id: string) => {
     setBills(prev => reorderDebtPriorities(prev.filter(b => b.id !== id)));
     setOverrides(prev => prev.filter(o => o.bill_id !== id));
-    apiDelete(`/bills/${id}`, tokenRef.current!).catch(e => console.error("deleteBill:", e));
   }, []);
 
   const getBillById = useCallback((id: string) => bills.find(b => b.id === id), [bills]);
@@ -442,27 +453,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     (billId: string, month: number, year: number, patch: Partial<Omit<MonthlyOverride, "id" | "bill_id" | "month" | "year">>) => {
       setOverrides(prev => {
         const idx = prev.findIndex(o => o.bill_id === billId && o.month === month && o.year === year);
-        let updated: MonthlyOverride[];
         if (idx !== -1) {
-          updated = prev.map((o, i) => i === idx ? { ...o, ...patch } : o);
-          const merged = { ...prev[idx], ...patch };
-          apiPost("/overrides", tokenRef.current!, {
-            bill_id: billId, month, year,
-            custom_amount: merged.custom_amount,
-            custom_due_day: merged.custom_due_day,
-            paid_amount: merged.paid_amount ?? 0,
-          }).catch(e => console.error("upsertOverride:", e));
-        } else {
-          const newO: MonthlyOverride = { id: genId(), bill_id: billId, month, year, paid_amount: 0, ...patch };
-          updated = [...prev, newO];
-          apiPost("/overrides", tokenRef.current!, {
-            id: newO.id, bill_id: billId, month, year,
-            custom_amount: newO.custom_amount,
-            custom_due_day: newO.custom_due_day,
-            paid_amount: newO.paid_amount ?? 0,
-          }).catch(e => console.error("upsertOverride new:", e));
+          return prev.map((o, i) => i === idx ? { ...o, ...patch } : o);
         }
-        return updated;
+        return [...prev, { id: genId(), bill_id: billId, month, year, paid_amount: 0, ...patch }];
       });
     },
     []
@@ -477,12 +471,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         setBills(prev => {
           const bill = prev.find(b => b.id === billId);
           if (!bill?.is_debt) return prev;
-          const reordered = reorderDebtPriorities(
+          return reorderDebtPriorities(
             prev.map(b => b.id === billId ? { ...b, balance: Math.max(0, b.balance - delta) } : b)
           );
-          const updated = reordered.find(b => b.id === billId);
-          if (updated) apiPut(`/bills/${billId}`, tokenRef.current!, updated).catch(e => console.error("setPaidAmount bill:", e));
-          return reordered;
         });
       }
     },
@@ -576,14 +567,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           pool = 0; cascadePool = 0;
         }
       }
-      const reordered = reorderDebtPriorities(updatedBills);
-      setBills(reordered);
-      reordered.forEach(b => {
-        const orig = bills.find(ob => ob.id === b.id);
-        if (orig && orig.balance !== b.balance) {
-          apiPut(`/bills/${b.id}`, tokenRef.current!, b).catch(e => console.error("snowball bill update:", e));
-        }
-      });
+      setBills(reorderDebtPriorities(updatedBills));
       return allocations;
     },
     [bills, settings.paymentMethod, overrides, upsertOverride]
@@ -592,14 +576,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const saveExtraPayment = useCallback((month: number, year: number, amount: number, allocations: SnowballAllocation[]) => {
     setExtraPayments(prev => {
       const existing = prev.find(ep => ep.month === month && ep.year === year);
-      if (existing) {
-        const updated = prev.map(ep => ep.month === month && ep.year === year ? { ...ep, amount, allocations } : ep);
-        apiPut(`/extra-payments/${existing.id}`, tokenRef.current!, { ...existing, amount, allocations }).catch(e => console.error("saveExtraPayment update:", e));
-        return updated;
-      }
-      const newEp: ExtraPayment = { id: genId(), month, year, amount, allocations };
-      apiPost("/extra-payments", tokenRef.current!, newEp).catch(e => console.error("saveExtraPayment create:", e));
-      return [...prev, newEp];
+      if (existing) return prev.map(ep => ep.month === month && ep.year === year ? { ...ep, amount, allocations } : ep);
+      return [...prev, { id: genId(), month, year, amount, allocations }];
     });
   }, []);
 
@@ -610,25 +588,20 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const deleteExtraPayment = useCallback((id: string) => {
     setExtraPayments(prev => prev.filter(ep => ep.id !== id));
-    apiDelete(`/extra-payments/${id}`, tokenRef.current!).catch(e => console.error("deleteExtraPayment:", e));
   }, []);
 
   // ─── Transactions ─────────────────────────────────────────────────────────────
 
   const addTransaction = useCallback((tx: Omit<Transaction, "id">) => {
-    const newTx: Transaction = { ...tx, id: genId() };
-    setTransactions(prev => [...prev, newTx]);
-    apiPost("/transactions", tokenRef.current!, newTx).catch(e => console.error("addTransaction:", e));
+    setTransactions(prev => [...prev, { ...tx, id: genId() }]);
   }, []);
 
   const updateTransaction = useCallback((tx: Transaction) => {
     setTransactions(prev => prev.map(t => t.id === tx.id ? tx : t));
-    apiPut(`/transactions/${tx.id}`, tokenRef.current!, tx).catch(e => console.error("updateTransaction:", e));
   }, []);
 
   const deleteTransaction = useCallback((id: string) => {
     setTransactions(prev => prev.filter(t => t.id !== id));
-    apiDelete(`/transactions/${id}`, tokenRef.current!).catch(e => console.error("deleteTransaction:", e));
   }, []);
 
   const getTransactionsForMonth = useCallback(
@@ -643,19 +616,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   // ─── Income ───────────────────────────────────────────────────────────────────
 
   const addIncome = useCallback((item: Omit<IncomeItem, "id">) => {
-    const newItem: IncomeItem = { ...item, id: genId() };
-    setIncomes(prev => [...prev, newItem]);
-    apiPost("/incomes", tokenRef.current!, newItem).catch(e => console.error("addIncome:", e));
+    setIncomes(prev => [...prev, { ...item, id: genId() }]);
   }, []);
 
   const updateIncome = useCallback((item: IncomeItem) => {
     setIncomes(prev => prev.map(i => i.id === item.id ? item : i));
-    apiPut(`/incomes/${item.id}`, tokenRef.current!, item).catch(e => console.error("updateIncome:", e));
   }, []);
 
   const deleteIncome = useCallback((id: string) => {
     setIncomes(prev => prev.filter(i => i.id !== id));
-    apiDelete(`/incomes/${id}`, tokenRef.current!).catch(e => console.error("deleteIncome:", e));
   }, []);
 
   const getMonthlyIncome = useCallback(
@@ -688,19 +657,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   // ─── Goals ────────────────────────────────────────────────────────────────────
 
   const addGoal = useCallback((goal: Omit<Goal, "id" | "created_at">) => {
-    const newGoal: Goal = { ...goal, id: genId(), created_at: new Date().toISOString() };
-    setGoals(prev => [...prev, newGoal]);
-    apiPost("/goals", tokenRef.current!, newGoal).catch(e => console.error("addGoal:", e));
+    setGoals(prev => [...prev, { ...goal, id: genId(), created_at: new Date().toISOString() }]);
   }, []);
 
   const updateGoal = useCallback((goal: Goal) => {
     setGoals(prev => prev.map(g => g.id === goal.id ? goal : g));
-    apiPut(`/goals/${goal.id}`, tokenRef.current!, goal).catch(e => console.error("updateGoal:", e));
   }, []);
 
   const deleteGoal = useCallback((id: string) => {
     setGoals(prev => prev.filter(g => g.id !== id));
-    apiDelete(`/goals/${id}`, tokenRef.current!).catch(e => console.error("deleteGoal:", e));
   }, []);
 
   const checkGoalAffordability = useCallback(
@@ -868,11 +833,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const addCategory = useCallback((name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    setCategories(prev => {
-      if (prev.includes(trimmed)) return prev;
-      apiPost("/categories", tokenRef.current!, { name: trimmed }).catch(e => console.error("addCategory:", e));
-      return [...prev, trimmed];
-    });
+    setCategories(prev => prev.includes(trimmed) ? prev : [...prev, trimmed]);
   }, []);
 
   const updateCategory = useCallback((oldName: string, newName: string) => {
@@ -881,24 +842,18 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setCategories(prev => prev.map(c => c === oldName ? trimmed : c));
     setBills(prev => prev.map(b => b.category === oldName ? { ...b, category: trimmed } : b));
     setTransactions(prev => prev.map(t => t.category === oldName ? { ...t, category: trimmed } : t));
-    apiPut(`/categories/${encodeURIComponent(oldName)}`, tokenRef.current!, { name: trimmed }).catch(e => console.error("updateCategory:", e));
   }, []);
 
   const deleteCategory = useCallback((name: string) => {
     setCategories(prev => prev.filter(c => c !== name));
     setBills(prev => prev.map(b => b.category === name ? { ...b, category: "Other" } : b));
     setTransactions(prev => prev.map(t => t.category === name ? { ...t, category: "Other" } : t));
-    apiDelete(`/categories/${encodeURIComponent(name)}`, tokenRef.current!).catch(e => console.error("deleteCategory:", e));
   }, []);
 
   // ─── Settings ─────────────────────────────────────────────────────────────────
 
   const updateSettings = useCallback((s: Partial<Settings>) => {
-    setSettings(prev => {
-      const u = { ...prev, ...s };
-      apiPut("/settings", tokenRef.current!, u).catch(e => console.error("updateSettings:", e));
-      return u;
-    });
+    setSettings(prev => ({ ...prev, ...s }));
   }, []);
 
   const importBills = useCallback((imported: Omit<Bill, "id" | "created_at">[]) => {
@@ -910,9 +865,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       created_at: new Date().toISOString(),
     }));
     setBills(prev => reorderDebtPriorities([...prev, ...newBills]));
-    newBills.forEach(b => {
-      apiPost("/bills", tokenRef.current!, b).catch(e => console.error("importBill:", e));
-    });
   }, []);
 
   // ─── Provider value ───────────────────────────────────────────────────────────

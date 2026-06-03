@@ -16,7 +16,6 @@ import { IncomeModal } from "@/components/IncomeModal";
 import colors from "@/constants/colors";
 import type { IncomeItem } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
-import { useAuth } from "@/context/AuthContext";
 import { type ThemeMode, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -32,19 +31,11 @@ export default function MoreScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const { themeMode, setThemeMode } = useThemeMode();
-  const { user, logout } = useAuth();
   const {
     bills, transactions, overrides, incomes, goals, importBills, settings, updateSettings,
     addIncome, updateIncome, deleteIncome, getMonthlyIncome,
     categories, addCategory, updateCategory, deleteCategory,
   } = useBudget();
-
-  const handleLogout = () => {
-    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Sign Out", style: "destructive", onPress: () => logout() },
-    ]);
-  };
 
   const [incomeModalVisible, setIncomeModalVisible] = useState(false);
   const [editIncome, setEditIncome] = useState<IncomeItem | null>(null);
@@ -514,30 +505,6 @@ export default function MoreScreen() {
         ))}
       </View>
 
-      {/* ── Account ── */}
-      <SLabel c={c} text="Account" />
-      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        <View style={styles.accountRow}>
-          <View style={[styles.accountAvatar, { backgroundColor: "#1e3a5f" }]}>
-            <Text style={styles.accountInitial}>
-              {user?.name?.charAt(0)?.toUpperCase() ?? "?"}
-            </Text>
-          </View>
-          <View style={styles.accountInfo}>
-            <Text style={[styles.accountName, { color: c.foreground }]}>{user?.name}</Text>
-            <Text style={[styles.accountEmail, { color: c.mutedForeground }]}>{user?.email}</Text>
-          </View>
-        </View>
-        <View style={[styles.accountDivider, { backgroundColor: c.border }]} />
-        <Pressable
-          onPress={handleLogout}
-          style={({ pressed }) => [styles.logoutRow, { opacity: pressed ? 0.7 : 1 }]}
-        >
-          <Feather name="log-out" size={16} color="#ef4444" style={{ marginRight: 10 }} />
-          <Text style={{ color: "#ef4444", fontSize: 15, fontWeight: "600" }}>Sign Out</Text>
-        </Pressable>
-      </View>
-
       {/* ── Summary ── */}
       <SLabel c={c} text="Summary" />
       <View style={[styles.summaryCard, { backgroundColor: c.card, borderRadius: colors.radius }]}>
@@ -643,12 +610,4 @@ const styles = StyleSheet.create({
   summaryNum: { fontSize: 24, fontFamily: "Inter_700Bold" },
   summaryLabel: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
 
-  accountRow: { flexDirection: "row", alignItems: "center", paddingVertical: 14, paddingHorizontal: 4 },
-  accountAvatar: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", marginRight: 14 },
-  accountInitial: { color: "#60a5fa", fontSize: 20, fontFamily: "Inter_700Bold" },
-  accountInfo: { flex: 1 },
-  accountName: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
-  accountEmail: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
-  accountDivider: { height: 1, marginHorizontal: -16 },
-  logoutRow: { flexDirection: "row", alignItems: "center", paddingVertical: 14, paddingHorizontal: 4 },
 });
