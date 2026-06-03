@@ -41,7 +41,12 @@ router.get("/plaid/link", async (req, res) => {
     });
     const linkToken = tokenRes.data.link_token;
 
-    const callbackBase = `${req.protocol}://${req.get("host")}/api/plaid/callback`;
+    // Use the public Replit domain so the callback URL works on physical devices
+    const publicHost =
+      (process.env["REPLIT_DOMAINS"] ?? "").split(",")[0]?.trim() ||
+      process.env["REPLIT_DEV_DOMAIN"] ||
+      req.get("host");
+    const callbackBase = `https://${publicHost}/api/plaid/callback`;
 
     const html = `<!DOCTYPE html>
 <html>
