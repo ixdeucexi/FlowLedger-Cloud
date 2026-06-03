@@ -968,12 +968,12 @@ const styles = StyleSheet.create({
   upcomingAmt:   { fontSize: 15, fontFamily: "Inter_700Bold" },
 
   // Stat pill cards
-  statsPillRow:  { flexDirection: "row", gap: 8, marginBottom: 14 },
-  statPill:      { flex: 1, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 10, alignItems: "center", justifyContent: "center" },
-  statPillValue: { fontSize: 20, fontFamily: "Inter_700Bold", marginBottom: 4 },
-  statPillLabel: { fontSize: 9, fontFamily: "Inter_600SemiBold", letterSpacing: 0.8 },
-  statDebtRow:   { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderRadius: 14, paddingVertical: 14, paddingHorizontal: 18, marginBottom: 14 },
-  statDebtValue: { fontSize: 26, fontFamily: "Inter_700Bold", marginTop: 2 },
+  statsPillRow:  { flexDirection: "row", gap: 6, marginBottom: 14 },
+  statPill:      { flex: 1, borderRadius: 14, paddingVertical: 16, paddingHorizontal: 6, alignItems: "center", justifyContent: "center" },
+  statPillValue: { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 5 },
+  statPillLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", letterSpacing: 0.2 },
+  statDebtRow:   { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderRadius: 14, paddingVertical: 16, paddingHorizontal: 18, marginBottom: 14 },
+  statDebtValue: { fontSize: 28, fontFamily: "Inter_700Bold", marginTop: 2 },
 
   // Goals
   goalsHeader:        { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10, marginTop: 8 },
