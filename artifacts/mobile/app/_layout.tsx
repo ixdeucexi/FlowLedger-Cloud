@@ -51,8 +51,9 @@ export default function RootLayout() {
           <QueryClientProvider client={queryClient}>
             <BudgetProvider>
               <GestureHandlerRootView>
-                <Stack screenOptions={{ headerBackTitle: "Back" }}>
-                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack screenOptions={{ headerShown: false }}>
+                  <Stack.Screen name="index" />
+                  <Stack.Screen name="(tabs)" />
                 </Stack>
               </GestureHandlerRootView>
             </BudgetProvider>
