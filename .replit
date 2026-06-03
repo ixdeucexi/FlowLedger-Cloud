@@ -41,3 +41,6 @@ externalPort = 3000
 
 [userenv.shared]
 EXPO_TOKEN = "d1IxYtOUFDXLEUFvEZAJfZB-KAQwyeYLY-H2zeMs"
+
+[nix]
+packages = ["nano"]

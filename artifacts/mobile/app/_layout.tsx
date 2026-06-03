@@ -6,13 +6,14 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useRef } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { BudgetProvider } from "@/context/BudgetContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 
@@ -20,11 +21,34 @@ SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
+function AuthGate() {
+  const { user, loading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (loading) return;
+    const inAuthScreen = segments[0] === "login" || segments[0] === "register";
+    if (!user && !inAuthScreen) {
+      router.replace("/login");
+    } else if (user && inAuthScreen) {
+      router.replace("/(tabs)");
+    }
+  }, [user, loading, segments]);
+
+  return null;
+}
+
 function RootLayoutNav() {
   return (
-    <Stack screenOptions={{ headerBackTitle: "Back" }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-    </Stack>
+    <>
+      <AuthGate />
+      <Stack screenOptions={{ headerBackTitle: "Back" }}>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="login" options={{ headerShown: false }} />
+        <Stack.Screen name="register" options={{ headerShown: false }} />
+      </Stack>
+    </>
   );
 }
 
@@ -44,12 +68,10 @@ export default function RootLayout() {
   };
 
   useEffect(() => {
-    // Hide as soon as fonts finish (success or error)
     if (fontsLoaded || fontError) hideSplash();
   }, [fontsLoaded, fontError]);
 
   useEffect(() => {
-    // Safety net: always hide after 3 s so the app never stays stuck
     const t = setTimeout(hideSplash, 3000);
     return () => clearTimeout(t);
   }, []);
@@ -59,11 +81,13 @@ export default function RootLayout() {
       <ErrorBoundary>
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
-            <BudgetProvider>
-              <GestureHandlerRootView>
-                <RootLayoutNav />
-              </GestureHandlerRootView>
-            </BudgetProvider>
+            <AuthProvider>
+              <BudgetProvider>
+                <GestureHandlerRootView>
+                  <RootLayoutNav />
+                </GestureHandlerRootView>
+              </BudgetProvider>
+            </AuthProvider>
           </QueryClientProvider>
         </ThemeProvider>
       </ErrorBoundary>

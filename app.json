@@ -1,8 +1,9 @@
 {
   "expo": {
+    "slug": "mobile",
     "extra": {
       "eas": {
-        "projectId": "653f75db-d46d-4e50-808b-0dc9c0964ae5"
+        "projectId": "80ec219d-8a12-43f9-b7cf-0dd6541e60f1"
       }
     },
     "android": {
