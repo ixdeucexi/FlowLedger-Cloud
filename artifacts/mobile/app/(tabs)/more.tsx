@@ -13,7 +13,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { DatePickerField } from "@/components/DatePickerField";
 import { IncomeModal } from "@/components/IncomeModal";
-import { PlaidLinkSection } from "@/components/PlaidLink";
 import colors from "@/constants/colors";
 import type { IncomeItem } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
@@ -135,7 +134,6 @@ export default function MoreScreen() {
     "@budget_bills_v3", "@budget_overrides_v1", "@budget_transactions_v2",
     "@budget_incomes_v1", "@budget_goals_v1", "@budget_settings_v4",
     "@budget_categories_v1", "@budget_extra_payments_v1", "@app_theme_v1",
-    "@plaid_connection_v1",
   ];
 
   const handleBackupJSON = async () => {
@@ -270,10 +268,6 @@ export default function MoreScreen() {
           })}
         </View>
       </View>
-
-      {/* ── Bank Connection ── */}
-      <SLabel c={c} text="Bank Connection" />
-      <PlaidLinkSection />
 
       {/* ── Income Sources ── */}
       <SLabel c={c} text="Income Sources" />
