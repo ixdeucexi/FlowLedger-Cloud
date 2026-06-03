@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "653f75db-d46d-4e50-808b-0dc9c0964ae5"
+      }
+    },
+    "android": {
+      "package": "com.flowledger.app"
+    }
+  }
+}
