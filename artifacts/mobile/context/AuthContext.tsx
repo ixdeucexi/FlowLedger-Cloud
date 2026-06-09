@@ -14,17 +14,19 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-function friendlyError(msg: string | undefined): string {
+function friendlyError(raw: unknown): string {
+  const msg = raw instanceof Error ? raw.message : typeof raw === "string" ? raw : String(raw ?? "");
   if (!msg) return "Something went wrong. Please try again.";
-  if (msg.toLowerCase().includes("fetch") || msg.toLowerCase().includes("network") || msg.toLowerCase().includes("failed"))
-    return "Can't reach the server. Try switching to mobile data or a different Wi-Fi, then retry.";
-  if (msg.toLowerCase().includes("invalid login") || msg.toLowerCase().includes("invalid credentials"))
+  const l = msg.toLowerCase();
+  if (l.includes("fetch") || l.includes("network") || l.includes("failed") || l.includes("typeerror"))
+    return "Can't reach the server. Check your internet connection and try again.";
+  if (l.includes("invalid login") || l.includes("invalid credentials"))
     return "Incorrect email or password.";
-  if (msg.toLowerCase().includes("already registered") || msg.toLowerCase().includes("already exists"))
+  if (l.includes("already registered") || l.includes("already exists"))
     return "An account with this email already exists. Try signing in instead.";
-  if (msg.toLowerCase().includes("email not confirmed"))
+  if (l.includes("email not confirmed"))
     return "Please confirm your email before signing in.";
-  if (msg.toLowerCase().includes("rate limit") || msg.toLowerCase().includes("too many"))
+  if (l.includes("rate limit") || l.includes("too many"))
     return "Too many attempts. Please wait a moment and try again.";
   return msg;
 }
@@ -35,15 +37,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     supabase.auth.getSession()
-      .then(({ data }) => {
-        setSession(data.session);
-      })
-      .catch(() => {
-        setSession(null);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+      .then(({ data }) => { setSession(data.session); })
+      .catch(() => { setSession(null); })
+      .finally(() => { setLoading(false); });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
@@ -53,20 +49,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string): Promise<string | null> => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return error ? friendlyError(error.message) : null;
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      return error ? friendlyError(error.message) : null;
+    } catch (e) {
+      return friendlyError(e);
+    }
   };
 
-  const signUp = async (email: string, password: string): Promise<{ error: string | null; needsConfirmation: boolean }> => {
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) return { error: friendlyError(error.message), needsConfirmation: false };
-    // If session is null after signup, Supabase requires email confirmation
-    const needsConfirmation = !data.session;
-    return { error: null, needsConfirmation };
+  const signUp = async (
+    email: string,
+    password: string,
+  ): Promise<{ error: string | null; needsConfirmation: boolean }> => {
+    try {
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) return { error: friendlyError(error.message), needsConfirmation: false };
+      const needsConfirmation = !data.session;
+      return { error: null, needsConfirmation };
+    } catch (e) {
+      return { error: friendlyError(e), needsConfirmation: false };
+    }
   };
 
   const signOut = async () => {
-    // Clear session immediately so AuthObserver navigates to login right away
     setSession(null);
     await supabase.auth.signOut().catch(() => {});
   };
