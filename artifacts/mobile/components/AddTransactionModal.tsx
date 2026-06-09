@@ -24,11 +24,12 @@ interface Props {
   visible: boolean;
   onClose: () => void;
   onSave: (tx: Omit<Transaction, "id"> | Transaction) => void;
+  onDelete?: (id: string) => void;
   editTx?: Transaction | null;
   defaultDate?: string;
 }
 
-export function AddTransactionModal({ visible, onClose, onSave, editTx, defaultDate }: Props) {
+export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx, defaultDate }: Props) {
   const c = useColors();
   const { categories } = useBudget();
   const [amount, setAmount] = useState("");
@@ -216,6 +217,16 @@ export function AddTransactionModal({ visible, onClose, onSave, editTx, defaultD
               ))}
             </View>
 
+            {editTx && onDelete && (
+              <Pressable
+                onPress={() => { onDelete(editTx.id); onClose(); }}
+                style={({ pressed }) => [styles.deleteBtn, { borderColor: c.destructive, opacity: pressed ? 0.8 : 1 }]}
+              >
+                <Feather name="trash-2" size={15} color={c.destructive} />
+                <Text style={[styles.deleteBtnText, { color: c.destructive }]}>Delete Transaction</Text>
+              </Pressable>
+            )}
+
             <Pressable
               onPress={handleSave}
               style={({ pressed }) => [styles.saveBtn, { backgroundColor: c.primary, borderRadius: colors.radius, opacity: pressed ? 0.85 : 1 }]}
@@ -251,6 +262,8 @@ const styles = StyleSheet.create({
   categoryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
   chip: { paddingHorizontal: 12, paddingVertical: 8 },
   chipText: { fontSize: 13, fontFamily: "Inter_500Medium" },
-  saveBtn: { height: 52, alignItems: "center", justifyContent: "center", marginTop: 24, marginBottom: 24 },
+  deleteBtn:     { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 48, borderWidth: 1, borderRadius: 12, marginTop: 20 },
+  deleteBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  saveBtn: { height: 52, alignItems: "center", justifyContent: "center", marginTop: 12, marginBottom: 24 },
   saveBtnText: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
 });
