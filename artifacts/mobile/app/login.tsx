@@ -166,6 +166,9 @@ export default function LoginScreen() {
               <View style={styles.errorBox}>
                 <Feather name="alert-circle" size={14} color="#f87171" />
                 <Text style={styles.errorText}>{error}</Text>
+                <Pressable onPress={handleSubmit} hitSlop={8}>
+                  <Text style={styles.retryText}>Retry</Text>
+                </Pressable>
               </View>
             )}
 
@@ -215,6 +218,7 @@ const styles = StyleSheet.create({
   errorText:     { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: "#f87171" },
   successBox:    { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: "rgba(52,211,153,0.1)", borderRadius: 8, padding: 10, marginBottom: 16 },
   successText:   { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: "#34d399", lineHeight: 18 },
+  retryText:     { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#f87171", textDecorationLine: "underline" },
   btn:           { backgroundColor: "#2563eb", borderRadius: 12, paddingVertical: 14, alignItems: "center", marginTop: 4 },
   btnText:       { fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#fff" },
   hint:          { fontSize: 12, fontFamily: "Inter_400Regular", color: "#475569", textAlign: "center", marginTop: 14, lineHeight: 18 },
