@@ -16,8 +16,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function friendlyError(msg: string | undefined): string {
   if (!msg) return "Something went wrong. Please try again.";
-  if (msg.toLowerCase().includes("fetch") || msg.toLowerCase().includes("network"))
-    return "Connection error — check your internet and try again.";
+  if (msg.toLowerCase().includes("fetch") || msg.toLowerCase().includes("network") || msg.toLowerCase().includes("failed"))
+    return "Can't reach the server. Try switching to mobile data or a different Wi-Fi, then retry.";
   if (msg.toLowerCase().includes("invalid login") || msg.toLowerCase().includes("invalid credentials"))
     return "Incorrect email or password.";
   if (msg.toLowerCase().includes("already registered") || msg.toLowerCase().includes("already exists"))
@@ -34,10 +34,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
-    });
+    supabase.auth.getSession()
+      .then(({ data }) => {
+        setSession(data.session);
+      })
+      .catch(() => {
+        setSession(null);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
