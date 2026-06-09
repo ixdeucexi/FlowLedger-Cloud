@@ -1,0 +1,1 @@
+- [Expo env secrets in Replit workflows](expo-env-secrets.md) — Replit secrets not in workflow env; write EXPO_PUBLIC_* to .env.local in mobile artifact dir.
