@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
 import * as Sharing from "expo-sharing";
 import React, { useEffect, useState } from "react";
@@ -90,7 +90,7 @@ export default function MoreScreen() {
         const a = document.createElement("a"); a.href = url; a.download = "budget_export.csv"; a.click();
         URL.revokeObjectURL(url);
       } else {
-        const uri = FileSystem.documentDirectory + "budget_export.csv";
+        const uri = (FileSystem.cacheDirectory ?? FileSystem.documentDirectory) + "budget_export.csv";
         await FileSystem.writeAsStringAsync(uri, csv);
         await Sharing.shareAsync(uri, { mimeType: "text/csv" });
       }
@@ -130,74 +130,6 @@ export default function MoreScreen() {
     } catch { Alert.alert("Error", "Import failed."); }
   };
 
-  // All storage keys the app uses
-  const ALL_STORAGE_KEYS = [
-    "@budget_bills_v3", "@budget_overrides_v1", "@budget_transactions_v2",
-    "@budget_incomes_v1", "@budget_goals_v1", "@budget_settings_v4",
-    "@budget_categories_v1", "@budget_extra_payments_v1", "@app_theme_v1",
-  ];
-
-  const handleBackupJSON = async () => {
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      const pairs = await AsyncStorage.multiGet(ALL_STORAGE_KEYS);
-      const backup: Record<string, unknown> = { _version: 1, _exported: new Date().toISOString() };
-      for (const [key, value] of pairs) {
-        if (value !== null) {
-          try { backup[key] = JSON.parse(value); } catch { backup[key] = value; }
-        }
-      }
-      const json = JSON.stringify(backup, null, 2);
-      const filename = `flowledger_backup_${new Date().toISOString().slice(0, 10)}.json`;
-      if (Platform.OS === "web") {
-        const blob = new Blob([json], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
-        URL.revokeObjectURL(url);
-      } else {
-        const uri = FileSystem.documentDirectory + filename;
-        await FileSystem.writeAsStringAsync(uri, json);
-        await Sharing.shareAsync(uri, { mimeType: "application/json", dialogTitle: "Save FlowLedger Backup" });
-      }
-    } catch { Alert.alert("Error", "Backup failed."); }
-  };
-
-  const handleRestoreJSON = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({ type: ["application/json", "*/*"] });
-      if (result.canceled || !result.assets?.length) return;
-      const file = result.assets[0]!;
-      let content: string;
-      if (Platform.OS === "web") { const r = await fetch(file.uri); content = await r.text(); }
-      else { content = await FileSystem.readAsStringAsync(file.uri); }
-
-      const backup = JSON.parse(content);
-      if (!backup._version) { Alert.alert("Invalid File", "This doesn't look like a FlowLedger backup."); return; }
-
-      Alert.alert(
-        "Restore Backup",
-        `This will replace all current data with the backup from ${backup._exported ? new Date(backup._exported).toLocaleDateString() : "unknown date"}. Continue?`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Restore",
-            style: "destructive",
-            onPress: async () => {
-              const pairs: [string, string][] = [];
-              for (const key of ALL_STORAGE_KEYS) {
-                if (backup[key] !== undefined) {
-                  pairs.push([key, JSON.stringify(backup[key])]);
-                }
-              }
-              await AsyncStorage.multiSet(pairs);
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              Alert.alert("Restored", "Your data has been restored. Please restart the app to see your data.");
-            },
-          },
-        ]
-      );
-    } catch (e: any) { Alert.alert("Error", "Restore failed: " + e.message); }
-  };
 
   const handleDeleteIncome = (item: IncomeItem) => {
     const doDelete = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); deleteIncome(item.id); };
@@ -484,10 +416,8 @@ export default function MoreScreen() {
       <SLabel c={c} text="Data" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         {[
-          { icon: "upload" as const,    label: "Import Bills from CSV",  desc: "Name, Amount, Category, Balance, Interest Rate…",   onPress: handleImport,     color: c.primary },
-          { icon: "download" as const,  label: "Export Bills (CSV)",     desc: "Bills, transactions, monthly overrides",             onPress: handleExport,     color: "#6366f1" },
-          { icon: "save" as const,      label: "Backup All Data",        desc: "Full JSON backup — use to transfer to another device", onPress: handleBackupJSON, color: "#f59e0b" },
-          { icon: "refresh-cw" as const, label: "Restore from Backup",   desc: "Restore a JSON backup file made on this or another device", onPress: handleRestoreJSON, color: "#ec4899" },
+          { icon: "upload" as const,   label: "Import Bills from CSV", desc: "Name, Amount, Category, Balance, Interest Rate…", onPress: handleImport, color: c.primary },
+          { icon: "download" as const, label: "Export Bills (CSV)",    desc: "Bills, transactions, monthly overrides",           onPress: handleExport, color: "#6366f1" },
         ].map((item, i) => (
           <Pressable
             key={item.label}

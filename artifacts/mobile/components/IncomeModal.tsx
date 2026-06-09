@@ -9,8 +9,8 @@ import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
 
 const FREQUENCIES: { key: IncomeItem["frequency"]; label: string; desc: string }[] = [
-  { key: "monthly",  label: "Monthly",  desc: "×1/mo" },
-  { key: "biweekly", label: "Biweekly", desc: "×2/mo" },
+  { key: "monthly",  label: "Monthly",  desc: "×1/mo"   },
+  { key: "biweekly", label: "Biweekly", desc: "×2/mo"   },
   { key: "weekly",   label: "Weekly",   desc: "×4–5/mo" },
 ];
 
@@ -30,44 +30,55 @@ interface Props {
 
 export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
   const c = useColors();
-  const [name,      setName]      = useState("");
-  const [amount,    setAmount]    = useState("");
-  const [frequency, setFrequency] = useState<IncomeItem["frequency"]>("monthly");
-  const [startDate, setStartDate] = useState("");
+  const [name,            setName]            = useState("");
+  const [amount,          setAmount]          = useState("");
+  const [frequency,       setFrequency]       = useState<IncomeItem["frequency"]>("monthly");
+  const [firstPayDate,    setFirstPayDate]    = useState("");   // next_payment_date anchor
+  const [monthlyStartDate, setMonthlyStartDate] = useState(""); // start_date for monthly only
 
-  // Rate history
-  const [history,       setHistory]       = useState<IncomeAmountEntry[]>([]);
-  const [showUpdateForm, setShowUpdateForm] = useState(false);
-  const [raiseAmount,    setRaiseAmount]    = useState("");
-  const [raiseDate,      setRaiseDate]      = useState("");
+  const [history,         setHistory]         = useState<IncomeAmountEntry[]>([]);
+  const [showUpdateForm,  setShowUpdateForm]  = useState(false);
+  const [raiseAmount,     setRaiseAmount]     = useState("");
+  const [raiseDate,       setRaiseDate]       = useState("");
 
   useEffect(() => {
     if (editItem) {
       setName(editItem.name);
       setAmount(editItem.amount.toString());
       setFrequency(editItem.frequency);
-      setStartDate(editItem.start_date ?? "");
+      setFirstPayDate(editItem.next_payment_date ?? editItem.start_date ?? "");
+      setMonthlyStartDate(editItem.frequency === "monthly" ? (editItem.start_date ?? "") : "");
       setHistory(editItem.amount_history ?? []);
     } else {
       setName(""); setAmount(""); setFrequency("monthly");
-      setStartDate(""); setHistory([]);
+      setFirstPayDate(""); setMonthlyStartDate(""); setHistory([]);
     }
     setShowUpdateForm(false);
     setRaiseAmount("");
     const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    setRaiseDate(todayStr);
+    setRaiseDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`);
   }, [editItem, visible]);
 
   const handleSave = () => {
     const a = parseFloat(amount);
     if (!name.trim() || isNaN(a) || a <= 0) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    const isRecurring = frequency === "biweekly" || frequency === "weekly";
+
+    // For biweekly/weekly: first pay date is both the anchor AND the month-activation gate
+    const next_payment_date = isRecurring ? (firstPayDate.trim() || undefined) : undefined;
+    // start_date: for biweekly/weekly derive from firstPayDate (YYYY-MM only), for monthly use separate field
+    const start_date = isRecurring
+      ? (firstPayDate.trim() ? firstPayDate.trim().slice(0, 7) + "-01" : undefined)
+      : (monthlyStartDate.trim() || undefined);
+
     const data: Omit<IncomeItem, "id"> = {
       name: name.trim(),
       amount: a,
       frequency,
-      start_date: startDate.trim() || undefined,
+      start_date,
+      next_payment_date,
       amount_history: history.length > 0 ? history : undefined,
     };
     if (editItem) onSave({ ...data, id: editItem.id });
@@ -79,7 +90,6 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
     const a = parseFloat(raiseAmount);
     if (isNaN(a) || a <= 0 || !raiseDate) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // Store only YYYY-MM (day doesn't matter for monthly effective_from)
     const ef = raiseDate.slice(0, 7);
     setHistory(prev => {
       const filtered = prev.filter(h => h.effective_from !== ef);
@@ -97,13 +107,33 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
 
   const monthlyEquiv = (() => {
     const a = parseFloat(amount) || 0;
-    if (frequency === "weekly")   return a * 4;
-    if (frequency === "biweekly") return a * 2;
+    if (frequency === "weekly")   return (a * 52 / 12);
+    if (frequency === "biweekly") return (a * 26 / 12);
     return a;
   })();
 
+  const isRecurring = frequency === "biweekly" || frequency === "weekly";
   const input = [styles.input, { backgroundColor: c.muted, color: c.foreground }];
   const lbl   = [styles.label, { color: c.mutedForeground }];
+
+  // Preview: compute next few pay dates from firstPayDate
+  const payDatePreview = (() => {
+    if (!isRecurring || !firstPayDate.trim()) return null;
+    const [y, m, d] = firstPayDate.split("-").map(Number);
+    if (!y || !m || !d) return null;
+    const intervalDays = frequency === "biweekly" ? 14 : 7;
+    const anchor = new Date(y, m - 1, d);
+    const dates: string[] = [];
+    let cur = new Date(anchor.getTime());
+    // Walk forward to get the next 4 occurrences from today
+    const today = new Date();
+    while (cur < today) cur = new Date(cur.getTime() + intervalDays * 86400000);
+    for (let i = 0; i < 4; i++) {
+      dates.push(`${MONTH_NAMES[cur.getMonth()]} ${cur.getDate()}`);
+      cur = new Date(cur.getTime() + intervalDays * 86400000);
+    }
+    return dates;
+  })();
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
@@ -119,7 +149,7 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
             <Text style={lbl}>Source Name</Text>
             <TextInput style={input} value={name} onChangeText={setName} placeholder="e.g. Main Job" placeholderTextColor={c.mutedForeground} />
 
-            <Text style={lbl}>Base Amount per Paycheck ($)</Text>
+            <Text style={lbl}>Amount per Paycheck ($)</Text>
             <TextInput style={input} value={amount} onChangeText={setAmount} placeholder="0.00" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
 
             {parseFloat(amount) > 0 && (
@@ -143,20 +173,57 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
               ))}
             </View>
 
-            <DatePickerField
-              label="Start Date — optional"
-              value={startDate}
-              onChange={setStartDate}
-              placeholder="Active immediately"
-              optional
-            />
-            {startDate.trim() !== "" && (
-              <View style={[styles.infoBox, { backgroundColor: c.primary + "12" }]}>
-                <Feather name="calendar" size={12} color={c.primary} />
-                <Text style={[styles.infoText, { color: c.mutedForeground }]}>
-                  Income only applies for months on or after this date.
-                </Text>
-              </View>
+            {/* ── Biweekly / Weekly: first pay date anchor ── */}
+            {isRecurring && (
+              <>
+                <DatePickerField
+                  label={`First pay date (sets the ${frequency === "biweekly" ? "every-14-day" : "weekly"} schedule)`}
+                  value={firstPayDate}
+                  onChange={setFirstPayDate}
+                  placeholder="Pick any known pay date"
+                />
+                <View style={[styles.infoBox, { backgroundColor: c.primary + "12" }]}>
+                  <Feather name="info" size={12} color={c.primary} />
+                  <Text style={[styles.infoText, { color: c.mutedForeground }]}>
+                    All pay dates are calculated {frequency === "biweekly" ? "every 14 days" : "every 7 days"} from this anchor.
+                    Income is also only counted from this month onward.
+                  </Text>
+                </View>
+
+                {payDatePreview && (
+                  <View style={[styles.previewBox, { backgroundColor: c.card, borderColor: c.border }]}>
+                    <Text style={[styles.previewLabel, { color: c.mutedForeground }]}>Upcoming pay dates</Text>
+                    <View style={styles.previewDates}>
+                      {payDatePreview.map((d, i) => (
+                        <View key={i} style={[styles.previewChip, { backgroundColor: c.primary + "18" }]}>
+                          <Text style={[styles.previewChipText, { color: c.primary }]}>{d}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </>
+            )}
+
+            {/* ── Monthly: optional start date ── */}
+            {!isRecurring && (
+              <>
+                <DatePickerField
+                  label="Start Date — optional"
+                  value={monthlyStartDate}
+                  onChange={setMonthlyStartDate}
+                  placeholder="Active immediately"
+                  optional
+                />
+                {monthlyStartDate.trim() !== "" && (
+                  <View style={[styles.infoBox, { backgroundColor: c.primary + "12" }]}>
+                    <Feather name="calendar" size={12} color={c.primary} />
+                    <Text style={[styles.infoText, { color: c.mutedForeground }]}>
+                      Income only applies for months on or after this date.
+                    </Text>
+                  </View>
+                )}
+              </>
             )}
 
             {/* ── Rate History ── */}
@@ -179,11 +246,10 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
 
               {history.length === 0 && !showUpdateForm && (
                 <Text style={[styles.historyEmpty, { color: c.mutedForeground }]}>
-                  No changes yet. Income go up or down? Record it here — past months keep their old amount automatically.
+                  No changes yet. Income go up or down? Record it here.
                 </Text>
               )}
 
-              {/* Existing history entries */}
               {history.map((entry, idx) => (
                 <View
                   key={entry.effective_from}
@@ -196,21 +262,14 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
                     <Text style={[styles.historyEntryAmt, { color: c.foreground }]}>
                       ${entry.amount.toFixed(2)}<Text style={[styles.historyEntryFreq, { color: c.mutedForeground }]}>/{frequency === "monthly" ? "mo" : "paycheck"}</Text>
                     </Text>
-                    <Text style={[styles.historyEntryDate, { color: c.mutedForeground }]}>
-                      From {formatYYMM(entry.effective_from)} onward
-                    </Text>
+                    <Text style={[styles.historyEntryDate, { color: c.mutedForeground }]}>From {formatYYMM(entry.effective_from)} onward</Text>
                   </View>
-                  <Pressable
-                    onPress={() => handleDeleteHistoryEntry(entry.effective_from)}
-                    hitSlop={10}
-                    style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
-                  >
+                  <Pressable onPress={() => handleDeleteHistoryEntry(entry.effective_from)} hitSlop={10} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}>
                     <Feather name="trash-2" size={14} color={c.destructive} />
                   </Pressable>
                 </View>
               ))}
 
-              {/* Add update form */}
               {showUpdateForm && (
                 <View style={[styles.raiseForm, { borderTopWidth: history.length > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: c.border }]}>
                   <Text style={[styles.raiseFormLabel, { color: c.mutedForeground }]}>New amount per paycheck ($)</Text>
@@ -223,23 +282,15 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
                     keyboardType="decimal-pad"
                     autoFocus
                   />
-
-                  <DatePickerField
-                    label="Effective starting"
-                    value={raiseDate}
-                    onChange={setRaiseDate}
-                    placeholder="Pick a date"
-                  />
-
+                  <DatePickerField label="Effective starting" value={raiseDate} onChange={setRaiseDate} placeholder="Pick a date" />
                   {raiseDate ? (
                     <View style={[styles.raiseInfoBox, { backgroundColor: c.primary + "12" }]}>
                       <Feather name="info" size={12} color={c.primary} />
                       <Text style={[styles.raiseInfoText, { color: c.mutedForeground }]}>
-                        Months before {MONTH_NAMES[parseInt(raiseDate.split("-")[1]) - 1]} {raiseDate.split("-")[0]} keep the old amount. Only that month onward uses the new amount.
+                        Months before {MONTH_NAMES[parseInt(raiseDate.split("-")[1]) - 1]} {raiseDate.split("-")[0]} keep the old amount.
                       </Text>
                     </View>
                   ) : null}
-
                   <Pressable
                     onPress={handleAddUpdate}
                     style={({ pressed }) => [styles.confirmRaiseBtn, { backgroundColor: c.primary, opacity: pressed ? 0.8 : 1 }]}
@@ -281,7 +332,12 @@ const styles = StyleSheet.create({
   infoBox: { flexDirection: "row", alignItems: "flex-start", gap: 7, padding: 9, borderRadius: 8, marginTop: 6 },
   infoText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
 
-  // Rate history section
+  previewBox: { marginTop: 10, padding: 12, borderRadius: 10, borderWidth: 1 },
+  previewLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 8 },
+  previewDates: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  previewChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
+  previewChipText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+
   historySection: { marginTop: 20, padding: 14 },
   historyHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
   historyTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -295,8 +351,6 @@ const styles = StyleSheet.create({
   historyEntryAmt: { fontSize: 15, fontFamily: "Inter_700Bold" },
   historyEntryFreq: { fontSize: 12, fontFamily: "Inter_400Regular" },
   historyEntryDate: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
-
-  // Raise form
   raiseForm: { paddingTop: 12 },
   raiseFormLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 6 },
   raiseInput: { height: 48, borderRadius: 10, paddingHorizontal: 14, fontSize: 18, fontFamily: "Inter_600SemiBold" },
@@ -304,7 +358,6 @@ const styles = StyleSheet.create({
   raiseInfoText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
   confirmRaiseBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 44, borderRadius: 10, marginTop: 12 },
   confirmRaiseBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-
   saveBtn: { height: 52, alignItems: "center", justifyContent: "center", marginTop: 20, marginBottom: 32 },
   saveBtnText: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
 });
