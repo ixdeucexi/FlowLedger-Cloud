@@ -250,7 +250,10 @@ function getIncomeOccurrenceDays(i: IncomeItem, month: number, year: number): nu
     return [Math.min(dd, daysInMonth)];
   }
   const intervalDays = i.frequency === "biweekly" ? 14 : 7;
-  if (!i.next_payment_date) return [];
+  // Fallback when no next_payment_date: biweekly → days 1 & 15, weekly → days 1, 8, 15, 22
+  if (!i.next_payment_date) {
+    return i.frequency === "biweekly" ? [1, 15] : [1, 8, 15, 22];
+  }
   const [ny, nm, nd] = i.next_payment_date.split("-").map(Number);
   let cursor = new Date(ny, nm - 1, nd);
   const target = new Date(year, month, 1);

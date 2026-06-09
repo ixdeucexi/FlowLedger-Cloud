@@ -97,8 +97,8 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
 
   const monthlyEquiv = (() => {
     const a = parseFloat(amount) || 0;
-    if (frequency === "weekly")   return a * 52 / 12;
-    if (frequency === "biweekly") return a * 26 / 12;
+    if (frequency === "weekly")   return a * 4;
+    if (frequency === "biweekly") return a * 2;
     return a;
   })();
 
