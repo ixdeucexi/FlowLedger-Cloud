@@ -6,7 +6,7 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Redirect, Stack } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useRef } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -14,18 +14,30 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
-import { BudgetProvider } from "@/context/BudgetContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
-function AppGate({ children }: { children: React.ReactNode }) {
+function AuthObserver() {
   const { session, loading } = useAuth();
-  if (loading) return null;
-  if (!session) return <Redirect href="/login" />;
-  return <>{children}</>;
+  const router = useRouter();
+  const segments = useSegments();
+  const ready = useRef(false);
+
+  useEffect(() => {
+    if (loading) return;
+    ready.current = true;
+    const inAuth = segments[0] === "login";
+    if (!session && !inAuth) {
+      router.replace("/login");
+    } else if (session && inAuth) {
+      router.replace("/(tabs)");
+    }
+  }, [session, loading]);
+
+  return null;
 }
 
 export default function RootLayout() {
@@ -58,17 +70,13 @@ export default function RootLayout() {
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
             <AuthProvider>
-              <AppGate>
-                <BudgetProvider>
-                  <GestureHandlerRootView>
-                    <Stack screenOptions={{ headerShown: false }}>
-                      <Stack.Screen name="login" />
-                      <Stack.Screen name="index" />
-                      <Stack.Screen name="(tabs)" />
-                    </Stack>
-                  </GestureHandlerRootView>
-                </BudgetProvider>
-              </AppGate>
+              <AuthObserver />
+              <GestureHandlerRootView style={{ flex: 1 }}>
+                <Stack screenOptions={{ headerShown: false }}>
+                  <Stack.Screen name="login" />
+                  <Stack.Screen name="(tabs)" />
+                </Stack>
+              </GestureHandlerRootView>
             </AuthProvider>
           </QueryClientProvider>
         </ThemeProvider>
