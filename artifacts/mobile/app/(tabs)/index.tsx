@@ -637,7 +637,7 @@ export default function DashboardScreen() {
               return (
                 <Pressable
                   key={bill.id}
-                  onPress={() => { setDashboardFilter("unpaid"); router.push("/(tabs)/monthly" as any); }}
+                  onPress={() => { router.push("/(tabs)/monthly" as any); }}
                   style={({ pressed }) => [styles.upcomingRow, { borderTopWidth: i > 0 ? 1 : 0, borderTopColor: c.border, opacity: pressed ? 0.75 : 1 }]}
                 >
                   <View style={[styles.upcomingDot, { backgroundColor: catColor + "20" }]}>

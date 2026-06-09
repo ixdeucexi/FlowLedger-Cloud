@@ -1,5 +1,4 @@
 import { Feather } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as Haptics from "expo-haptics";
@@ -16,6 +15,7 @@ import { IncomeModal } from "@/components/IncomeModal";
 import colors from "@/constants/colors";
 import type { IncomeItem } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
+import { useAuth } from "@/context/AuthContext";
 import { type ThemeMode, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -31,6 +31,7 @@ export default function MoreScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const { themeMode, setThemeMode } = useThemeMode();
+  const { signOut, user } = useAuth();
   const {
     bills, transactions, overrides, incomes, goals, importBills, settings, updateSettings,
     addIncome, updateIncome, deleteIncome, getMonthlyIncome,
@@ -519,6 +520,29 @@ export default function MoreScreen() {
             <Text style={[styles.summaryLabel, { color: c.mutedForeground }]}>{s.label}</Text>
           </View>
         ))}
+      </View>
+
+      {/* ── Account section ── */}
+      <View style={{ marginTop: 8, marginBottom: 8 }}>
+        <SLabel c={c} text="Account" />
+        <View style={[styles.card, { borderRadius: 14, backgroundColor: c.card }]}>
+          <View style={{ flexDirection: "row", alignItems: "center", paddingBottom: 12, marginBottom: 12, borderBottomWidth: 1, borderBottomColor: c.border }}>
+            <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: c.primary + "22", alignItems: "center", justifyContent: "center", marginRight: 12 }}>
+              <Feather name="user" size={18} color={c.primary} />
+            </View>
+            <Text style={{ flex: 1, fontSize: 14, fontFamily: "Inter_500Medium", color: c.mutedForeground }} numberOfLines={1}>{user?.email}</Text>
+          </View>
+          <Pressable
+            onPress={() => Alert.alert("Sign Out", "Sign out of FlowLedger?", [
+              { text: "Cancel", style: "cancel" },
+              { text: "Sign Out", style: "destructive", onPress: () => signOut() },
+            ])}
+            style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 10, opacity: pressed ? 0.7 : 1 })}
+          >
+            <Feather name="log-out" size={18} color={c.destructive} />
+            <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: c.destructive }}>Sign Out</Text>
+          </Pressable>
+        </View>
       </View>
 
       <IncomeModal

@@ -1,5 +1,7 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/context/AuthContext";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -119,118 +121,9 @@ export interface DailyBalance {
   balance: number;
 }
 
-export type DashboardFilter = null | "paid" | "unpaid" | "debts";
+export type DashboardFilter = "bills" | "debt" | null;
 
-// ─── Constants ─────────────────────────────────────────────────────────────────
-
-const DEFAULT_SETTINGS: Settings = {
-  paymentMethod: "snowball",
-  starting_balance: 0,
-};
-
-// ─── Pure helpers ──────────────────────────────────────────────────────────────
-
-function genId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
-}
-
-function incomeToMonthly(amount: number, frequency: IncomeItem["frequency"]): number {
-  if (frequency === "weekly")   return amount * 4;
-  if (frequency === "biweekly") return amount * 2;
-  return amount;
-}
-
-function getEffectiveIncomeAmount(income: IncomeItem, month: number, year: number): number {
-  if (!income.amount_history || income.amount_history.length === 0) return income.amount;
-  const monthStr = `${year}-${String(month + 1).padStart(2, "0")}`;
-  const sorted = [...income.amount_history].sort((a, b) => b.effective_from.localeCompare(a.effective_from));
-  const match = sorted.find(h => h.effective_from <= monthStr);
-  if (match) return match.amount;
-  return sorted[sorted.length - 1].amount;
-}
-
-function isIncomeActiveForMonth(income: IncomeItem, month: number, year: number): boolean {
-  if (!income.start_date) return true;
-  const [sy, sm] = income.start_date.split("-").map(Number);
-  return year > sy || (year === sy && month >= sm - 1);
-}
-
-function isBillActiveForMonth(bill: Bill, month: number, year: number): boolean {
-  const monthStart = new Date(year, month, 1);
-  const monthEnd   = new Date(year, month + 1, 0);
-  if (bill.start_date) {
-    const sd = new Date(bill.start_date + "T00:00:00");
-    if (sd > monthEnd) return false;
-  }
-  if (bill.end_date) {
-    const ed = new Date(bill.end_date + "T00:00:00");
-    if (ed < monthStart) return false;
-  }
-  return true;
-}
-
-function getIncomeOccurrenceDays(income: IncomeItem, month: number, year: number): number[] {
-  if (!isIncomeActiveForMonth(income, month, year)) return [];
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  if (income.frequency === "monthly") {
-    if (income.start_date) {
-      const [, , sd] = income.start_date.split("-").map(Number);
-      return [Math.min(sd, daysInMonth)];
-    }
-    return [1];
-  }
-  const intervalDays = income.frequency === "biweekly" ? 14 : 7;
-  let anchor: Date;
-  if (income.start_date) {
-    anchor = new Date(income.start_date + "T00:00:00");
-  } else {
-    anchor = new Date(year, month, 1);
-  }
-  const monthStart = new Date(year, month, 1);
-  const monthEnd   = new Date(year, month + 1, 0);
-  let current = new Date(anchor);
-  if (current < monthStart) {
-    const msPerInterval = intervalDays * 86400000;
-    const diff = monthStart.getTime() - current.getTime();
-    const steps = Math.floor(diff / msPerInterval);
-    current = new Date(current.getTime() + steps * msPerInterval);
-    if (current < monthStart) current = new Date(current.getTime() + msPerInterval);
-  }
-  const days: number[] = [];
-  while (current <= monthEnd) {
-    days.push(current.getDate());
-    current = new Date(current.getTime() + intervalDays * 86400000);
-  }
-  return days;
-}
-
-function getBillOccurrenceDays(bill: Bill, month: number, year: number): number[] {
-  if (!bill.is_recurring && !bill.is_debt) return [];
-  if (!isBillActiveForMonth(bill, month, year)) return [];
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  if (bill.frequency === "weekly") {
-    const dow = bill.day_of_week ?? 0;
-    const firstDayOfMonth = new Date(year, month, 1).getDay();
-    const firstOcc = (dow - firstDayOfMonth + 7) % 7 + 1;
-    const days: number[] = [];
-    for (let d = firstOcc; d <= daysInMonth; d += 7) days.push(d);
-    return days;
-  } else {
-    const d = Math.min(bill.due_day, daysInMonth);
-    return d >= 1 ? [d] : [];
-  }
-}
-
-function reorderDebtPriorities(allBills: Bill[]): Bill[] {
-  const nonDebts = allBills.filter(b => !b.is_debt);
-  const debts = allBills
-    .filter(b => b.is_debt)
-    .sort((a, b) => a.balance - b.balance)
-    .map((b, i) => ({ ...b, priority: i + 1 }));
-  return [...nonDebts, ...debts];
-}
-
-// ─── Context type ──────────────────────────────────────────────────────────────
+// ─── Context shape ─────────────────────────────────────────────────────────────
 
 interface BudgetContextType {
   bills: Bill[];
@@ -242,75 +135,62 @@ interface BudgetContextType {
   categories: string[];
   settings: Settings;
   loading: boolean;
+  selectedYear: number;
+  setSelectedYear: (y: number) => void;
   dashboardFilter: DashboardFilter;
   setDashboardFilter: (f: DashboardFilter) => void;
 
-  addBill: (bill: Omit<Bill, "id" | "created_at">) => void;
-  updateBill: (bill: Bill) => void;
-  deleteBill: (id: string) => void;
+  addBill: (bill: Omit<Bill, "id" | "created_at">) => Promise<void>;
+  updateBill: (bill: Bill) => Promise<void>;
+  deleteBill: (id: string) => Promise<void>;
   getBillById: (id: string) => Bill | undefined;
 
   getOverride: (billId: string, month: number, year: number) => MonthlyOverride | undefined;
   getAmount: (bill: Bill, month: number, year: number) => number;
   getPaidAmount: (billId: string, month: number, year: number) => number;
-  setPaidAmount: (billId: string, month: number, year: number, amount: number) => void;
-  setCustomAmount: (billId: string, month: number, year: number, amount: number | undefined) => void;
+  setPaidAmount: (billId: string, month: number, year: number, amount: number) => Promise<void>;
+  setCustomAmount: (billId: string, month: number, year: number, amount: number | undefined) => Promise<void>;
   getCustomDueDay: (billId: string, month: number, year: number) => number | undefined;
-  setCustomDueDay: (billId: string, month: number, year: number, day: number | undefined) => void;
-
+  setCustomDueDay: (billId: string, month: number, year: number, day: number | undefined) => Promise<void>;
   getMonthlyBills: (month: number, year: number) => Bill[];
   getBillOccurrencesInMonth: (bill: Bill, month: number, year: number) => number[];
   getBillMonthlyTotal: (bill: Bill, month: number, year: number) => number;
 
   runSnowball: (month: number, year: number, extraAmount: number) => SnowballAllocation[];
-  saveExtraPayment: (month: number, year: number, amount: number, allocations: SnowballAllocation[]) => void;
+  saveExtraPayment: (month: number, year: number, amount: number, allocations: SnowballAllocation[]) => Promise<void>;
   getExtraPayment: (month: number, year: number) => ExtraPayment | undefined;
-  deleteExtraPayment: (id: string) => void;
+  deleteExtraPayment: (id: string) => Promise<void>;
 
-  addTransaction: (tx: Omit<Transaction, "id">) => void;
-  updateTransaction: (tx: Transaction) => void;
-  deleteTransaction: (id: string) => void;
+  addTransaction: (tx: Omit<Transaction, "id">) => Promise<void>;
+  updateTransaction: (tx: Transaction) => Promise<void>;
+  deleteTransaction: (id: string) => Promise<void>;
   getTransactionsForMonth: (month: number, year: number) => Transaction[];
 
-  addIncome: (item: Omit<IncomeItem, "id">) => void;
-  updateIncome: (item: IncomeItem) => void;
-  deleteIncome: (id: string) => void;
+  addIncome: (item: Omit<IncomeItem, "id">) => Promise<void>;
+  updateIncome: (item: IncomeItem) => Promise<void>;
+  deleteIncome: (id: string) => Promise<void>;
   getMonthlyIncome: (month?: number, year?: number) => number;
-  getIncomeOccurrencesInMonth: (month: number, year: number) => { income: IncomeItem; days: number[]; effectiveAmount?: number }[];
+  getIncomeOccurrencesInMonth: (month: number, year: number) => { income: IncomeItem; days: number[]; effectiveAmount: number }[];
 
-  addGoal: (goal: Omit<Goal, "id" | "created_at">) => void;
-  updateGoal: (goal: Goal) => void;
-  deleteGoal: (id: string) => void;
+  addGoal: (goal: Omit<Goal, "id" | "created_at">) => Promise<void>;
+  updateGoal: (goal: Goal) => Promise<void>;
+  deleteGoal: (id: string) => Promise<void>;
   checkGoalAffordability: (goal: Goal, month: number, year: number) => GoalAffordability;
 
   getCashFlow: (month: number, year: number) => CashFlow;
   getDailyBalances: (month: number, year: number) => DailyBalance[];
 
-  addCategory: (name: string) => void;
-  updateCategory: (oldName: string, newName: string) => void;
-  deleteCategory: (name: string) => void;
+  addCategory: (name: string) => Promise<void>;
+  updateCategory: (oldName: string, newName: string) => Promise<void>;
+  deleteCategory: (name: string) => Promise<void>;
 
-  updateSettings: (s: Partial<Settings>) => void;
-  importBills: (bills: Omit<Bill, "id" | "created_at">[]) => void;
-
-  selectedYear: number;
-  setSelectedYear: (y: number) => void;
+  updateSettings: (s: Partial<Settings>) => Promise<void>;
+  importBills: (imported: Omit<Bill, "id" | "created_at">[]) => Promise<void>;
 }
 
-const BudgetContext = createContext<BudgetContextType | undefined>(undefined);
+// ─── Helpers ───────────────────────────────────────────────────────────────────
 
-// ─── AsyncStorage keys ─────────────────────────────────────────────────────────
-
-const KEYS = {
-  bills:         "@budget_bills",
-  overrides:     "@budget_overrides",
-  transactions:  "@budget_transactions",
-  incomes:       "@budget_incomes",
-  goals:         "@budget_goals",
-  extraPayments: "@budget_extra_payments",
-  settings:      "@budget_settings",
-  categories:    "@budget_categories",
-};
+const DEFAULT_SETTINGS: Settings = { paymentMethod: "snowball", starting_balance: 0 };
 
 const DEFAULT_CATEGORIES = [
   "Housing", "Utilities", "Insurance", "Transportation", "Food",
@@ -318,18 +198,99 @@ const DEFAULT_CATEGORIES = [
   "Shopping", "Rent", "Other",
 ];
 
-async function load<T>(key: string, fallback: T): Promise<T> {
-  try {
-    const raw = await AsyncStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
+function genId(): string {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
+
+function reorderDebtPriorities(bills: Bill[]): Bill[] {
+  let p = 1;
+  return bills.map(b => b.is_debt ? { ...b, priority: p++ } : b);
+}
+
+function isBillActiveForMonth(b: Bill, month: number, year: number): boolean {
+  const date = new Date(year, month, 1);
+  if (b.start_date) {
+    const [sy, sm] = b.start_date.split("-").map(Number);
+    if (date < new Date(sy, sm - 1, 1)) return false;
+  }
+  if (b.end_date) {
+    const [ey, em] = b.end_date.split("-").map(Number);
+    if (date > new Date(ey, em - 1, 1)) return false;
+  }
+  return true;
+}
+
+function getBillOccurrenceDays(b: Bill, month: number, year: number): number[] {
+  if (!isBillActiveForMonth(b, month, year)) return [];
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  if (b.frequency === "weekly") {
+    const days: number[] = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dow = new Date(year, month, d).getDay();
+      if (dow === (b.day_of_week ?? 0)) days.push(d);
+    }
+    return days;
+  }
+  const day = Math.min(b.due_day, daysInMonth);
+  return day > 0 ? [day] : [];
+}
+
+function isIncomeActiveForMonth(i: IncomeItem, month: number, year: number): boolean {
+  if (!i.start_date) return true;
+  const [sy, sm] = i.start_date.split("-").map(Number);
+  return new Date(year, month, 1) >= new Date(sy, sm - 1, 1);
+}
+
+function getIncomeOccurrenceDays(i: IncomeItem, month: number, year: number): number[] {
+  if (!isIncomeActiveForMonth(i, month, year)) return [];
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  if (i.frequency === "monthly") {
+    if (!i.next_payment_date) return [1];
+    const [, , dd] = i.next_payment_date.split("-").map(Number);
+    return [Math.min(dd, daysInMonth)];
+  }
+  const intervalDays = i.frequency === "biweekly" ? 14 : 7;
+  if (!i.next_payment_date) return [];
+  const [ny, nm, nd] = i.next_payment_date.split("-").map(Number);
+  let cursor = new Date(ny, nm - 1, nd);
+  const target = new Date(year, month, 1);
+  while (cursor > target) cursor = new Date(cursor.getTime() - intervalDays * 86400000);
+  while (cursor < target) cursor = new Date(cursor.getTime() + intervalDays * 86400000);
+  const days: number[] = [];
+  while (cursor.getMonth() === month && cursor.getFullYear() === year) {
+    days.push(cursor.getDate());
+    cursor = new Date(cursor.getTime() + intervalDays * 86400000);
+  }
+  return days;
+}
+
+function getEffectiveIncomeAmount(i: IncomeItem, month: number, year: number): number {
+  if (!i.amount_history?.length) return i.amount;
+  const target = new Date(year, month, 1);
+  const sorted = [...i.amount_history].sort((a, b) => a.effective_from.localeCompare(b.effective_from));
+  let effective = i.amount;
+  for (const entry of sorted) {
+    const [ey, em] = entry.effective_from.split("-").map(Number);
+    if (new Date(ey, em - 1, 1) <= target) effective = entry.amount;
+  }
+  return effective;
+}
+
+function incomeToMonthly(amount: number, frequency: IncomeItem["frequency"]): number {
+  if (frequency === "biweekly") return amount * 26 / 12;
+  if (frequency === "weekly")   return amount * 52 / 12;
+  return amount;
+}
+
+// ─── Context ───────────────────────────────────────────────────────────────────
+
+const BudgetContext = createContext<BudgetContextType | undefined>(undefined);
 
 // ─── Provider ──────────────────────────────────────────────────────────────────
 
 export function BudgetProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+
   const [bills,         setBills]         = useState<Bill[]>([]);
   const [overrides,     setOverrides]     = useState<MonthlyOverride[]>([]);
   const [transactions,  setTransactions]  = useState<Transaction[]>([]);
@@ -342,88 +303,133 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [selectedYear,  setSelectedYear]  = useState(new Date().getFullYear());
   const [dashboardFilter, setDashboardFilter] = useState<DashboardFilter>(null);
 
-  // Track whether initial load is done so we don't overwrite on first render
   const loaded = useRef(false);
 
-  // ── Load from AsyncStorage on mount ──────────────────────────────────────────
+  // ── Load from Supabase when user changes ────────────────────────────────────
   useEffect(() => {
+    if (!user) {
+      setBills([]); setOverrides([]); setTransactions([]); setIncomes([]);
+      setGoals([]); setExtraPayments([]); setCategories([]); setSettings(DEFAULT_SETTINGS);
+      loaded.current = false;
+      setLoading(false);
+      return;
+    }
+    loaded.current = false;
+    setLoading(true);
     (async () => {
       try {
-        const [b, o, t, i, g, ep, s, c] = await Promise.all([
-          load<Bill[]>(KEYS.bills, []),
-          load<MonthlyOverride[]>(KEYS.overrides, []),
-          load<Transaction[]>(KEYS.transactions, []),
-          load<IncomeItem[]>(KEYS.incomes, []),
-          load<Goal[]>(KEYS.goals, []),
-          load<ExtraPayment[]>(KEYS.extraPayments, []),
-          load<Settings>(KEYS.settings, DEFAULT_SETTINGS),
-          load<string[]>(KEYS.categories, DEFAULT_CATEGORIES),
+        const uid = user.id;
+        const [
+          { data: bData },
+          { data: oData },
+          { data: tData },
+          { data: iData },
+          { data: gData },
+          { data: epData },
+          { data: sData },
+          { data: cData },
+        ] = await Promise.all([
+          supabase.from("bills").select("*").eq("user_id", uid),
+          supabase.from("monthly_overrides").select("*").eq("user_id", uid),
+          supabase.from("transactions").select("*").eq("user_id", uid),
+          supabase.from("incomes").select("*").eq("user_id", uid),
+          supabase.from("goals").select("*").eq("user_id", uid),
+          supabase.from("extra_payments").select("*").eq("user_id", uid),
+          supabase.from("settings").select("*").eq("user_id", uid).maybeSingle(),
+          supabase.from("categories").select("name").eq("user_id", uid),
         ]);
-        setBills(reorderDebtPriorities(b.map(bill => ({
-          ...bill,
-          frequency: (bill.frequency ?? "monthly") as "monthly" | "weekly",
-          day_of_week: bill.day_of_week ?? 0,
+
+        setBills(reorderDebtPriorities((bData ?? []).map((b: any) => ({
+          ...b,
+          frequency:   (b.frequency ?? "monthly") as "monthly" | "weekly",
+          day_of_week: b.day_of_week ?? 0,
+          amount:       Number(b.amount),
+          balance:      Number(b.balance),
+          interest_rate: Number(b.interest_rate),
         }))));
-        setOverrides(o);
-        setTransactions(t);
-        setIncomes(i);
-        setGoals(g);
-        setExtraPayments(ep);
-        setSettings({ ...DEFAULT_SETTINGS, ...s });
-        setCategories(c.length > 0 ? c : DEFAULT_CATEGORIES);
+        setOverrides((oData ?? []).map((o: any) => ({
+          ...o,
+          paid_amount:   Number(o.paid_amount),
+          custom_amount: o.custom_amount !== null ? Number(o.custom_amount) : undefined,
+          custom_due_day: o.custom_due_day !== null ? Number(o.custom_due_day) : undefined,
+        })));
+        setTransactions((tData ?? []).map((t: any) => ({ ...t, amount: Number(t.amount) })));
+        setIncomes((iData ?? []).map((i: any) => ({
+          ...i,
+          amount:         Number(i.amount),
+          amount_history: i.amount_history ?? [],
+        })));
+        setGoals((gData ?? []).map((g: any) => ({
+          ...g,
+          target_amount:  Number(g.target_amount),
+          current_amount: Number(g.current_amount),
+        })));
+        setExtraPayments((epData ?? []).map((ep: any) => ({
+          ...ep,
+          amount:      Number(ep.amount),
+          allocations: ep.allocations ?? [],
+        })));
+        if (sData) {
+          setSettings({
+            paymentMethod:        sData.payment_method as Settings["paymentMethod"],
+            starting_balance:     Number(sData.starting_balance),
+            starting_balance_date: sData.starting_balance_date ?? undefined,
+          });
+        }
+        const cats = (cData ?? []).map((c: any) => c.name as string);
+        setCategories(cats.length > 0 ? cats : DEFAULT_CATEGORIES);
       } finally {
         loaded.current = true;
         setLoading(false);
       }
     })();
-  }, []);
-
-  // ── Persist to AsyncStorage whenever state changes (after initial load) ───────
-  useEffect(() => { if (loaded.current) AsyncStorage.setItem(KEYS.bills,         JSON.stringify(bills)); },         [bills]);
-  useEffect(() => { if (loaded.current) AsyncStorage.setItem(KEYS.overrides,     JSON.stringify(overrides)); },     [overrides]);
-  useEffect(() => { if (loaded.current) AsyncStorage.setItem(KEYS.transactions,  JSON.stringify(transactions)); },  [transactions]);
-  useEffect(() => { if (loaded.current) AsyncStorage.setItem(KEYS.incomes,       JSON.stringify(incomes)); },       [incomes]);
-  useEffect(() => { if (loaded.current) AsyncStorage.setItem(KEYS.goals,         JSON.stringify(goals)); },         [goals]);
-  useEffect(() => { if (loaded.current) AsyncStorage.setItem(KEYS.extraPayments, JSON.stringify(extraPayments)); }, [extraPayments]);
-  useEffect(() => { if (loaded.current) AsyncStorage.setItem(KEYS.settings,      JSON.stringify(settings)); },      [settings]);
-  useEffect(() => { if (loaded.current) AsyncStorage.setItem(KEYS.categories,    JSON.stringify(categories)); },    [categories]);
+  }, [user]);
 
   // ─── Bills ────────────────────────────────────────────────────────────────────
 
-  const addBill = useCallback((bill: Omit<Bill, "id" | "created_at">) => {
+  const addBill = useCallback(async (bill: Omit<Bill, "id" | "created_at">) => {
+    if (!user) return;
     const nb: Bill = { ...bill, id: genId(), created_at: new Date().toISOString() };
+    await supabase.from("bills").insert({ ...nb, user_id: user.id });
     setBills(prev => reorderDebtPriorities([...prev, nb]));
-  }, []);
+  }, [user]);
 
-  const updateBill = useCallback((bill: Bill) => {
-    setBills(prev => {
-      const existing = prev.find(b => b.id === bill.id);
-      if (existing && existing.amount !== bill.amount) {
-        const now = new Date();
-        const curMonth = now.getMonth();
-        const curYear  = now.getFullYear();
-        setOverrides(prevO => {
-          let next = prevO.map(o => {
-            if (o.bill_id !== bill.id) return o;
-            const isPastOrCurrent = o.year < curYear || (o.year === curYear && o.month <= curMonth);
-            if (isPastOrCurrent && o.custom_amount === undefined) return { ...o, custom_amount: existing.amount };
-            return o;
-          });
-          const hasCurrentOverride = next.some(o => o.bill_id === bill.id && o.month === curMonth && o.year === curYear);
-          if (!hasCurrentOverride) {
-            next = [...next, { id: genId(), bill_id: bill.id, month: curMonth, year: curYear, custom_amount: existing.amount, paid_amount: 0 }];
-          }
-          return next;
+  const updateBill = useCallback(async (bill: Bill) => {
+    if (!user) return;
+    const existing = bills.find(b => b.id === bill.id);
+    if (existing && existing.amount !== bill.amount) {
+      const now = new Date();
+      const curMonth = now.getMonth();
+      const curYear  = now.getFullYear();
+      setOverrides(prevO => {
+        let next = prevO.map(o => {
+          if (o.bill_id !== bill.id) return o;
+          const isPastOrCurrent = o.year < curYear || (o.year === curYear && o.month <= curMonth);
+          if (isPastOrCurrent && o.custom_amount === undefined) return { ...o, custom_amount: existing.amount };
+          return o;
         });
-      }
-      return reorderDebtPriorities(prev.map(b => b.id === bill.id ? bill : b));
-    });
-  }, []);
+        const hasCurrentOverride = next.some(o => o.bill_id === bill.id && o.month === curMonth && o.year === curYear);
+        if (!hasCurrentOverride) {
+          const no = { id: genId(), bill_id: bill.id, month: curMonth, year: curYear, custom_amount: existing.amount, paid_amount: 0 };
+          next = [...next, no];
+          supabase.from("monthly_overrides").insert({ ...no, user_id: user.id });
+        }
+        return next;
+      });
+    }
+    await supabase.from("bills").update({ ...bill }).eq("id", bill.id).eq("user_id", user.id);
+    setBills(prev => reorderDebtPriorities(prev.map(b => b.id === bill.id ? bill : b)));
+  }, [user, bills]);
 
-  const deleteBill = useCallback((id: string) => {
+  const deleteBill = useCallback(async (id: string) => {
+    if (!user) return;
+    await Promise.all([
+      supabase.from("bills").delete().eq("id", id).eq("user_id", user.id),
+      supabase.from("monthly_overrides").delete().eq("bill_id", id).eq("user_id", user.id),
+    ]);
     setBills(prev => reorderDebtPriorities(prev.filter(b => b.id !== id)));
     setOverrides(prev => prev.filter(o => o.bill_id !== id));
-  }, []);
+  }, [user]);
 
   const getBillById = useCallback((id: string) => bills.find(b => b.id === id), [bills]);
 
@@ -450,38 +456,45 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   );
 
   const upsertOverride = useCallback(
-    (billId: string, month: number, year: number, patch: Partial<Omit<MonthlyOverride, "id" | "bill_id" | "month" | "year">>) => {
+    async (billId: string, month: number, year: number, patch: Partial<Omit<MonthlyOverride, "id" | "bill_id" | "month" | "year">>) => {
+      if (!user) return;
       setOverrides(prev => {
         const idx = prev.findIndex(o => o.bill_id === billId && o.month === month && o.year === year);
         if (idx !== -1) {
-          return prev.map((o, i) => i === idx ? { ...o, ...patch } : o);
+          const updated = prev.map((o, i) => i === idx ? { ...o, ...patch } : o);
+          supabase.from("monthly_overrides").update({ ...updated[idx] }).eq("id", updated[idx].id).eq("user_id", user.id);
+          return updated;
         }
-        return [...prev, { id: genId(), bill_id: billId, month, year, paid_amount: 0, ...patch }];
+        const no: MonthlyOverride = { id: genId(), bill_id: billId, month, year, paid_amount: 0, ...patch };
+        supabase.from("monthly_overrides").insert({ ...no, user_id: user.id });
+        return [...prev, no];
       });
     },
-    []
+    [user]
   );
 
   const setPaidAmount = useCallback(
-    (billId: string, month: number, year: number, amount: number) => {
+    async (billId: string, month: number, year: number, amount: number) => {
       const prevPaid = overrides.find(o => o.bill_id === billId && o.month === month && o.year === year)?.paid_amount ?? 0;
-      upsertOverride(billId, month, year, { paid_amount: Math.max(0, amount) });
+      await upsertOverride(billId, month, year, { paid_amount: Math.max(0, amount) });
       const delta = amount - prevPaid;
       if (delta !== 0) {
         setBills(prev => {
           const bill = prev.find(b => b.id === billId);
           if (!bill?.is_debt) return prev;
-          return reorderDebtPriorities(
+          const updated = reorderDebtPriorities(
             prev.map(b => b.id === billId ? { ...b, balance: Math.max(0, b.balance - delta) } : b)
           );
+          if (user) supabase.from("bills").update({ balance: Math.max(0, bill.balance - delta) }).eq("id", billId).eq("user_id", user.id);
+          return updated;
         });
       }
     },
-    [upsertOverride, overrides]
+    [upsertOverride, overrides, user]
   );
 
   const setCustomAmount = useCallback(
-    (billId: string, month: number, year: number, amount: number | undefined) =>
+    async (billId: string, month: number, year: number, amount: number | undefined) =>
       upsertOverride(billId, month, year, { custom_amount: amount }),
     [upsertOverride]
   );
@@ -493,7 +506,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   );
 
   const setCustomDueDay = useCallback(
-    (billId: string, month: number, year: number, day: number | undefined) =>
+    async (billId: string, month: number, year: number, day: number | undefined) =>
       upsertOverride(billId, month, year, { custom_due_day: day }),
     [upsertOverride]
   );
@@ -573,36 +586,51 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     [bills, settings.paymentMethod, overrides, upsertOverride]
   );
 
-  const saveExtraPayment = useCallback((month: number, year: number, amount: number, allocations: SnowballAllocation[]) => {
+  const saveExtraPayment = useCallback(async (month: number, year: number, amount: number, allocations: SnowballAllocation[]) => {
+    if (!user) return;
     setExtraPayments(prev => {
       const existing = prev.find(ep => ep.month === month && ep.year === year);
-      if (existing) return prev.map(ep => ep.month === month && ep.year === year ? { ...ep, amount, allocations } : ep);
-      return [...prev, { id: genId(), month, year, amount, allocations }];
+      if (existing) {
+        supabase.from("extra_payments").update({ amount, allocations }).eq("id", existing.id).eq("user_id", user.id);
+        return prev.map(ep => ep.month === month && ep.year === year ? { ...ep, amount, allocations } : ep);
+      }
+      const ne: ExtraPayment = { id: genId(), month, year, amount, allocations };
+      supabase.from("extra_payments").insert({ ...ne, user_id: user.id });
+      return [...prev, ne];
     });
-  }, []);
+  }, [user]);
 
   const getExtraPayment = useCallback(
     (month: number, year: number) => extraPayments.find(ep => ep.month === month && ep.year === year),
     [extraPayments]
   );
 
-  const deleteExtraPayment = useCallback((id: string) => {
+  const deleteExtraPayment = useCallback(async (id: string) => {
+    if (!user) return;
+    await supabase.from("extra_payments").delete().eq("id", id).eq("user_id", user.id);
     setExtraPayments(prev => prev.filter(ep => ep.id !== id));
-  }, []);
+  }, [user]);
 
   // ─── Transactions ─────────────────────────────────────────────────────────────
 
-  const addTransaction = useCallback((tx: Omit<Transaction, "id">) => {
-    setTransactions(prev => [...prev, { ...tx, id: genId() }]);
-  }, []);
+  const addTransaction = useCallback(async (tx: Omit<Transaction, "id">) => {
+    if (!user) return;
+    const nt: Transaction = { ...tx, id: genId() };
+    await supabase.from("transactions").insert({ ...nt, user_id: user.id });
+    setTransactions(prev => [...prev, nt]);
+  }, [user]);
 
-  const updateTransaction = useCallback((tx: Transaction) => {
+  const updateTransaction = useCallback(async (tx: Transaction) => {
+    if (!user) return;
+    await supabase.from("transactions").update({ ...tx }).eq("id", tx.id).eq("user_id", user.id);
     setTransactions(prev => prev.map(t => t.id === tx.id ? tx : t));
-  }, []);
+  }, [user]);
 
-  const deleteTransaction = useCallback((id: string) => {
+  const deleteTransaction = useCallback(async (id: string) => {
+    if (!user) return;
+    await supabase.from("transactions").delete().eq("id", id).eq("user_id", user.id);
     setTransactions(prev => prev.filter(t => t.id !== id));
-  }, []);
+  }, [user]);
 
   const getTransactionsForMonth = useCallback(
     (month: number, year: number) =>
@@ -615,17 +643,24 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Income ───────────────────────────────────────────────────────────────────
 
-  const addIncome = useCallback((item: Omit<IncomeItem, "id">) => {
-    setIncomes(prev => [...prev, { ...item, id: genId() }]);
-  }, []);
+  const addIncome = useCallback(async (item: Omit<IncomeItem, "id">) => {
+    if (!user) return;
+    const ni: IncomeItem = { ...item, id: genId() };
+    await supabase.from("incomes").insert({ ...ni, amount_history: ni.amount_history ?? [], user_id: user.id });
+    setIncomes(prev => [...prev, ni]);
+  }, [user]);
 
-  const updateIncome = useCallback((item: IncomeItem) => {
+  const updateIncome = useCallback(async (item: IncomeItem) => {
+    if (!user) return;
+    await supabase.from("incomes").update({ ...item, amount_history: item.amount_history ?? [] }).eq("id", item.id).eq("user_id", user.id);
     setIncomes(prev => prev.map(i => i.id === item.id ? item : i));
-  }, []);
+  }, [user]);
 
-  const deleteIncome = useCallback((id: string) => {
+  const deleteIncome = useCallback(async (id: string) => {
+    if (!user) return;
+    await supabase.from("incomes").delete().eq("id", id).eq("user_id", user.id);
     setIncomes(prev => prev.filter(i => i.id !== id));
-  }, []);
+  }, [user]);
 
   const getMonthlyIncome = useCallback(
     (month?: number, year?: number) =>
@@ -656,17 +691,24 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Goals ────────────────────────────────────────────────────────────────────
 
-  const addGoal = useCallback((goal: Omit<Goal, "id" | "created_at">) => {
-    setGoals(prev => [...prev, { ...goal, id: genId(), created_at: new Date().toISOString() }]);
-  }, []);
+  const addGoal = useCallback(async (goal: Omit<Goal, "id" | "created_at">) => {
+    if (!user) return;
+    const ng: Goal = { ...goal, id: genId(), created_at: new Date().toISOString() };
+    await supabase.from("goals").insert({ ...ng, user_id: user.id });
+    setGoals(prev => [...prev, ng]);
+  }, [user]);
 
-  const updateGoal = useCallback((goal: Goal) => {
+  const updateGoal = useCallback(async (goal: Goal) => {
+    if (!user) return;
+    await supabase.from("goals").update({ ...goal }).eq("id", goal.id).eq("user_id", user.id);
     setGoals(prev => prev.map(g => g.id === goal.id ? goal : g));
-  }, []);
+  }, [user]);
 
-  const deleteGoal = useCallback((id: string) => {
+  const deleteGoal = useCallback(async (id: string) => {
+    if (!user) return;
+    await supabase.from("goals").delete().eq("id", id).eq("user_id", user.id);
     setGoals(prev => prev.filter(g => g.id !== id));
-  }, []);
+  }, [user]);
 
   const checkGoalAffordability = useCallback(
     (goal: Goal, month: number, year: number): GoalAffordability => {
@@ -830,42 +872,75 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Categories ───────────────────────────────────────────────────────────────
 
-  const addCategory = useCallback((name: string) => {
+  const addCategory = useCallback(async (name: string) => {
+    if (!user) return;
     const trimmed = name.trim();
     if (!trimmed) return;
-    setCategories(prev => prev.includes(trimmed) ? prev : [...prev, trimmed]);
-  }, []);
+    if (categories.includes(trimmed)) return;
+    await supabase.from("categories").insert({ user_id: user.id, name: trimmed });
+    setCategories(prev => [...prev, trimmed]);
+  }, [user, categories]);
 
-  const updateCategory = useCallback((oldName: string, newName: string) => {
+  const updateCategory = useCallback(async (oldName: string, newName: string) => {
+    if (!user) return;
     const trimmed = newName.trim();
     if (!trimmed || trimmed === oldName) return;
+    await supabase.from("categories").update({ name: trimmed }).eq("user_id", user.id).eq("name", oldName);
     setCategories(prev => prev.map(c => c === oldName ? trimmed : c));
-    setBills(prev => prev.map(b => b.category === oldName ? { ...b, category: trimmed } : b));
-    setTransactions(prev => prev.map(t => t.category === oldName ? { ...t, category: trimmed } : t));
-  }, []);
+    setBills(prev => {
+      const updated = prev.map(b => b.category === oldName ? { ...b, category: trimmed } : b);
+      updated.forEach(b => { if (b.category === trimmed) supabase.from("bills").update({ category: trimmed }).eq("id", b.id).eq("user_id", user.id); });
+      return updated;
+    });
+    setTransactions(prev => {
+      const updated = prev.map(t => t.category === oldName ? { ...t, category: trimmed } : t);
+      updated.forEach(t => { if (t.category === trimmed) supabase.from("transactions").update({ category: trimmed }).eq("id", t.id).eq("user_id", user.id); });
+      return updated;
+    });
+  }, [user]);
 
-  const deleteCategory = useCallback((name: string) => {
+  const deleteCategory = useCallback(async (name: string) => {
+    if (!user) return;
+    await supabase.from("categories").delete().eq("user_id", user.id).eq("name", name);
     setCategories(prev => prev.filter(c => c !== name));
-    setBills(prev => prev.map(b => b.category === name ? { ...b, category: "Other" } : b));
-    setTransactions(prev => prev.map(t => t.category === name ? { ...t, category: "Other" } : t));
-  }, []);
+    setBills(prev => {
+      const updated = prev.map(b => b.category === name ? { ...b, category: "Other" } : b);
+      updated.forEach(b => { if (b.category === "Other") supabase.from("bills").update({ category: "Other" }).eq("id", b.id).eq("user_id", user.id); });
+      return updated;
+    });
+    setTransactions(prev => {
+      const updated = prev.map(t => t.category === name ? { ...t, category: "Other" } : t);
+      updated.forEach(t => { if (t.category === "Other") supabase.from("transactions").update({ category: "Other" }).eq("id", t.id).eq("user_id", user.id); });
+      return updated;
+    });
+  }, [user]);
 
   // ─── Settings ─────────────────────────────────────────────────────────────────
 
-  const updateSettings = useCallback((s: Partial<Settings>) => {
-    setSettings(prev => ({ ...prev, ...s }));
-  }, []);
+  const updateSettings = useCallback(async (s: Partial<Settings>) => {
+    if (!user) return;
+    const next = { ...settings, ...s };
+    setSettings(next);
+    await supabase.from("settings").upsert({
+      user_id:               user.id,
+      payment_method:        next.paymentMethod,
+      starting_balance:      next.starting_balance,
+      starting_balance_date: next.starting_balance_date ?? null,
+    });
+  }, [user, settings]);
 
-  const importBills = useCallback((imported: Omit<Bill, "id" | "created_at">[]) => {
+  const importBills = useCallback(async (imported: Omit<Bill, "id" | "created_at">[]) => {
+    if (!user) return;
     const newBills = imported.map(b => ({
       ...b,
-      frequency: (b.frequency ?? "monthly") as "monthly" | "weekly",
+      frequency:   (b.frequency ?? "monthly") as "monthly" | "weekly",
       day_of_week: b.day_of_week ?? 0,
-      id: genId(),
-      created_at: new Date().toISOString(),
+      id:          genId(),
+      created_at:  new Date().toISOString(),
     }));
+    await supabase.from("bills").insert(newBills.map(b => ({ ...b, user_id: user.id })));
     setBills(prev => reorderDebtPriorities([...prev, ...newBills]));
-  }, []);
+  }, [user]);
 
   // ─── Provider value ───────────────────────────────────────────────────────────
 

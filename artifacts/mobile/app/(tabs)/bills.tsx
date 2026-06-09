@@ -41,7 +41,7 @@ export default function BillsScreen() {
   const [snowballApplied, setSnowballApplied] = useState(false);
 
   useEffect(() => {
-    if (dashboardFilter === "debts") {
+    if (dashboardFilter === "debt") {
       setActiveTab("debt");
       setDashboardFilter(null);
     }
