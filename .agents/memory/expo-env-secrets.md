@@ -12,4 +12,14 @@ Replit secrets (e.g. `EXPO_PUBLIC_SUPABASE_URL`) are available in the **agent's 
 ```bash
 printf 'EXPO_PUBLIC_FOO=%s\n' "$EXPO_PUBLIC_FOO" >> artifacts/mobile/.env.local
 ```
-The `.env.local` file is gitignored and must be re-created if the Repl is cloned or the file is deleted. `app.config.js` + `Constants.expoConfig.extra` approach also failed for the same reason (process.env is empty in the workflow).
+The `.env.local` file is gitignored and must be re-created if the Repl is forked or the file is deleted. `app.config.js` + `Constants.expoConfig.extra` also failed for the same reason (process.env is empty in the workflow).
+
+## Verify secret values aren't swapped before writing .env.local
+```bash
+echo "URL: $(printenv EXPO_PUBLIC_SUPABASE_URL | cut -c1-10)"   # should start https://
+echo "KEY: $(printenv EXPO_PUBLIC_SUPABASE_ANON_KEY | cut -c1-10)"  # should start eyJ
+```
+In this project, the two secrets were originally stored with swapped values and had to be fixed in the Secrets tab. Always verify before writing.
+
+## Do NOT forward these vars explicitly in the dev script
+Adding `EXPO_PUBLIC_SUPABASE_URL=$EXPO_PUBLIC_SUPABASE_URL` inline in the pnpm dev script causes the OS env (which may be wrong) to override `.env.local`. Leave Supabase vars out of the dev script entirely.
