@@ -1,6 +1,9 @@
 import { Feather } from "@expo/vector-icons";
-import React, { useCallback, useEffect, useState } from "react";
-import { FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import * as Haptics from "expo-haptics";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Alert, FlatList, Platform, Pressable, StyleSheet, Text, View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddBillModal } from "@/components/AddBillModal";
@@ -16,48 +19,127 @@ const CAT_COLORS: Record<string, string> = {
   Health: "#ef4444", Education: "#3b82f6", Savings: "#22c55e", Debt: "#e11d48", Other: "#94a3b8",
 };
 
+type Tab    = "bills" | "debt";
 type Filter = "all" | "recurring" | "one-time";
+type SortMode = "priority" | "balance" | "interest";
 
 export default function BillsScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const { bills, addBill, updateBill, deleteBill, dashboardFilter, setDashboardFilter } = useBudget();
+  const {
+    bills, addBill, updateBill, deleteBill,
+    dashboardFilter, setDashboardFilter,
+    settings, updateSettings,
+    getCashFlow, getDailyBalances, runSnowball, saveExtraPayment,
+  } = useBudget();
+
+  const [activeTab, setActiveTab]       = useState<Tab>("bills");
   const [modalVisible, setModalVisible] = useState(false);
-  const [editBill, setEditBill] = useState<Bill | null>(null);
-  const [filter, setFilter] = useState<Filter>("all");
+  const [editBill, setEditBill]         = useState<Bill | null>(null);
+  const [filter, setFilter]             = useState<Filter>("all");
+  const [sortMode, setSortMode]         = useState<SortMode>("priority");
+  const [snowballApplied, setSnowballApplied] = useState(false);
 
   useEffect(() => {
-    if (dashboardFilter === "debts") { setDashboardFilter(null); }
+    if (dashboardFilter === "debts") {
+      setActiveTab("debt");
+      setDashboardFilter(null);
+    }
   }, [dashboardFilter]);
 
-  const nonDebtBills = bills.filter(b => !b.is_debt);
+  const webTopPad = Platform.OS === "web" ? 67 : 0;
 
+  // ── Bills data ──────────────────────────────────────────────────
+  const nonDebtBills = bills.filter(b => !b.is_debt);
   const filteredBills = nonDebtBills
     .filter(b => {
       if (filter === "recurring") return b.is_recurring;
-      if (filter === "one-time") return !b.is_recurring;
+      if (filter === "one-time")  return !b.is_recurring;
       return true;
     })
     .sort((a, b) => a.due_day - b.due_day);
 
   const totalAmount = nonDebtBills.filter(b => b.is_recurring).reduce((s, b) => s + b.amount, 0);
-  const totalCount = nonDebtBills.length;
+  const totalCount  = nonDebtBills.length;
 
+  // ── Debt data ───────────────────────────────────────────────────
+  const now          = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear  = now.getFullYear();
+
+  const cashFlow = useMemo(() => getCashFlow(currentMonth, currentYear), [getCashFlow, currentMonth, currentYear]);
+  const extraAvailable = Math.max(0, cashFlow.remaining);
+
+  const safeSnowballAmount = useMemo(() => {
+    let minBalance = Infinity;
+    for (let i = 0; i < 6; i++) {
+      const m = (currentMonth + i) % 12;
+      const y = currentYear + Math.floor((currentMonth + i) / 12);
+      const balances = getDailyBalances(m, y);
+      for (const db of balances) {
+        if (db.balance < minBalance) minBalance = db.balance;
+      }
+    }
+    if (!isFinite(minBalance)) minBalance = 0;
+    return Math.max(0, Math.min(extraAvailable, minBalance));
+  }, [getDailyBalances, currentMonth, currentYear, extraAvailable]);
+
+  const isCapped = safeSnowballAmount < extraAvailable && extraAvailable > 0;
+
+  const debts = bills
+    .filter(b => b.is_debt)
+    .sort((a, b) => {
+      if (sortMode === "priority") return a.priority - b.priority;
+      if (sortMode === "balance")  return b.balance - a.balance;
+      return b.interest_rate - a.interest_rate;
+    });
+
+  const totalDebt        = debts.reduce((s, b) => s + b.balance, 0);
+  const totalMinPayments = debts.reduce((s, b) => s + b.amount, 0);
+  const highestAPR       = debts.length ? Math.max(...debts.map(b => b.interest_rate)) : 0;
+
+  const priorityColors = ["#22c55e", "#f0b429", "#ef4444", "#8b5cf6", "#ec4899"];
+
+  // ── Handlers ────────────────────────────────────────────────────
   const handleSave = useCallback((data: Omit<Bill, "id" | "created_at"> | Bill) => {
     if ("id" in data) updateBill(data as Bill);
     else addBill(data);
   }, [addBill, updateBill]);
 
-  const webTopPad = Platform.OS === "web" ? 67 : 0;
+  const handleApplySnowball = () => {
+    if (safeSnowballAmount <= 0) {
+      if (extraAvailable <= 0) {
+        Alert.alert("No Extra Money", "You have no remaining cash to apply to debt this month.");
+      } else {
+        Alert.alert(
+          "Balance Too Low",
+          "Applying any extra to debt would push your balance negative within the next 6 months. Build up your cushion first."
+        );
+      }
+      return;
+    }
+    const alloc = runSnowball(currentMonth, currentYear, safeSnowballAmount);
+    saveExtraPayment(currentMonth, currentYear, safeSnowballAmount, alloc);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setSnowballApplied(true);
+    Alert.alert(
+      "Applied!",
+      `$${safeSnowballAmount.toFixed(2)} allocated across ${alloc.length} debt${alloc.length !== 1 ? "s" : ""} using the ${settings.paymentMethod} method.`
+    );
+  };
+
+  // ── Subtitle ─────────────────────────────────────────────────────
+  const subtitle = activeTab === "bills"
+    ? `${totalCount} bill${totalCount !== 1 ? "s" : ""} · $${totalAmount.toFixed(0)}/mo recurring`
+    : `${debts.length} debt${debts.length !== 1 ? "s" : ""} · $${totalDebt.toLocaleString(undefined, { maximumFractionDigits: 0 })} total`;
 
   return (
     <View style={[styles.screen, { backgroundColor: c.background }]}>
+      {/* ── Header ── */}
       <View style={[styles.header, { paddingTop: insets.top + 12 + webTopPad }]}>
         <View>
           <Text style={[styles.title, { color: c.foreground }]}>Bills</Text>
-          <Text style={[styles.subtitle, { color: c.mutedForeground }]}>
-            {totalCount} bill{totalCount !== 1 ? "s" : ""} · ${totalAmount.toFixed(0)}/mo recurring
-          </Text>
+          <Text style={[styles.subtitle, { color: c.mutedForeground }]}>{subtitle}</Text>
         </View>
         <Pressable
           onPress={() => { setEditBill(null); setModalVisible(true); }}
@@ -67,64 +149,269 @@ export default function BillsScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.filterRow}>
-        {(["all", "recurring", "one-time"] as Filter[]).map(f => (
-          <Pressable
-            key={f}
-            onPress={() => setFilter(f)}
-            style={[styles.filterChip, { backgroundColor: filter === f ? c.primary : c.card, borderRadius: colors.radius }]}
-          >
-            <Text style={[styles.filterText, { color: filter === f ? c.primaryForeground : c.mutedForeground }]}>
-              {f === "all" ? "All" : f === "recurring" ? "Recurring" : "One-Time"}
-            </Text>
-          </Pressable>
-        ))}
+      {/* ── Bills / Debt segment toggle ── */}
+      <View style={[styles.segmentWrap, { paddingHorizontal: 16, marginBottom: 12 }]}>
+        <View style={[styles.segment, { backgroundColor: c.muted }]}>
+          {(["bills", "debt"] as Tab[]).map(t => (
+            <Pressable
+              key={t}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setActiveTab(t); }}
+              style={[styles.segmentBtn, { backgroundColor: activeTab === t ? c.primary : "transparent" }]}
+            >
+              <Feather
+                name={t === "bills" ? "file-text" : "credit-card"}
+                size={13}
+                color={activeTab === t ? c.primaryForeground : c.mutedForeground}
+              />
+              <Text style={[styles.segmentText, { color: activeTab === t ? c.primaryForeground : c.mutedForeground }]}>
+                {t === "bills" ? "Bills" : "Debt"}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
       </View>
 
-      <FlatList
-        data={filteredBills}
-        keyExtractor={item => item.id}
-        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 100 }]}
-        ListEmptyComponent={
-          <EmptyState icon="file-text" title="No Bills" message="Tap + to add your first bill." actionLabel="Add Bill" onAction={() => { setEditBill(null); setModalVisible(true); }} />
-        }
-        renderItem={({ item }) => {
-          const catColor = CAT_COLORS[item.category] ?? c.primary;
-          return (
-            <Pressable
-              onPress={() => { setEditBill(item); setModalVisible(true); }}
-              style={({ pressed }) => [styles.card, { backgroundColor: c.card, borderRadius: colors.radius, opacity: pressed ? 0.88 : 1 }]}
-            >
-              <View style={[styles.catBar, { backgroundColor: catColor }]} />
-              <View style={styles.cardBody}>
-                <View style={styles.cardTop}>
-                  <View style={styles.cardLeft}>
-                    <Text style={[styles.billName, { color: c.foreground }]}>{item.name}</Text>
-                    <View style={styles.metaRow}>
-                      <View style={[styles.tag, { backgroundColor: catColor + "18" }]}>
-                        <Text style={[styles.tagText, { color: catColor }]}>{item.category}</Text>
-                      </View>
-                      <Text style={[styles.metaText, { color: c.mutedForeground }]}>Due day {item.due_day}</Text>
-                      {!item.is_recurring && (
-                        <View style={[styles.tag, { backgroundColor: c.muted }]}>
-                          <Text style={[styles.tagText, { color: c.mutedForeground }]}>One-time</Text>
+      {/* ════════════════════ BILLS VIEW ════════════════════ */}
+      {activeTab === "bills" && (
+        <>
+          <View style={styles.filterRow}>
+            {(["all", "recurring", "one-time"] as Filter[]).map(f => (
+              <Pressable
+                key={f}
+                onPress={() => setFilter(f)}
+                style={[styles.filterChip, { backgroundColor: filter === f ? c.primary : c.card, borderRadius: colors.radius }]}
+              >
+                <Text style={[styles.filterText, { color: filter === f ? c.primaryForeground : c.mutedForeground }]}>
+                  {f === "all" ? "All" : f === "recurring" ? "Recurring" : "One-Time"}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <FlatList
+            data={filteredBills}
+            keyExtractor={item => item.id}
+            contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 100 }]}
+            ListEmptyComponent={
+              <EmptyState icon="file-text" title="No Bills" message="Tap + to add your first bill." actionLabel="Add Bill" onAction={() => { setEditBill(null); setModalVisible(true); }} />
+            }
+            renderItem={({ item }) => {
+              const catColor = CAT_COLORS[item.category] ?? c.primary;
+              return (
+                <Pressable
+                  onPress={() => { setEditBill(item); setModalVisible(true); }}
+                  style={({ pressed }) => [styles.card, { backgroundColor: c.card, borderRadius: colors.radius, opacity: pressed ? 0.88 : 1 }]}
+                >
+                  <View style={[styles.catBar, { backgroundColor: catColor }]} />
+                  <View style={styles.cardBody}>
+                    <View style={styles.cardTop}>
+                      <View style={styles.cardLeft}>
+                        <Text style={[styles.billName, { color: c.foreground }]}>{item.name}</Text>
+                        <View style={styles.metaRow}>
+                          <View style={[styles.tag, { backgroundColor: catColor + "18" }]}>
+                            <Text style={[styles.tagText, { color: catColor }]}>{item.category}</Text>
+                          </View>
+                          <Text style={[styles.metaText, { color: c.mutedForeground }]}>Due day {item.due_day}</Text>
+                          {!item.is_recurring && (
+                            <View style={[styles.tag, { backgroundColor: c.muted }]}>
+                              <Text style={[styles.tagText, { color: c.mutedForeground }]}>One-time</Text>
+                            </View>
+                          )}
                         </View>
-                      )}
+                      </View>
+                      <View style={styles.cardRight}>
+                        <Text style={[styles.amount, { color: c.foreground }]}>${item.amount.toFixed(2)}</Text>
+                        <Text style={[styles.amountSub, { color: c.mutedForeground }]}>{item.is_recurring ? "/month" : "one-time"}</Text>
+                      </View>
                     </View>
                   </View>
-                  <View style={styles.cardRight}>
-                    <Text style={[styles.amount, { color: c.foreground }]}>${item.amount.toFixed(2)}</Text>
-                    <Text style={[styles.amountSub, { color: c.mutedForeground }]}>{item.is_recurring ? "/month" : "one-time"}</Text>
+                  <View style={styles.editHint}>
+                    <Feather name="edit-2" size={13} color={c.mutedForeground} />
+                  </View>
+                </Pressable>
+              );
+            }}
+          />
+        </>
+      )}
+
+      {/* ════════════════════ DEBT VIEW ════════════════════ */}
+      {activeTab === "debt" && (
+        <>
+          {/* Safe Snowball Banner */}
+          {debts.length > 0 && (
+            <View style={[styles.extraBanner, { backgroundColor: safeSnowballAmount > 0 ? c.success + "15" : c.muted, marginHorizontal: 16, borderRadius: colors.radius }]}>
+              <View style={styles.extraTopRow}>
+                <View style={styles.extraLeft}>
+                  <Feather name="shield" size={20} color={safeSnowballAmount > 0 ? c.success : c.mutedForeground} />
+                  <View>
+                    <Text style={[styles.extraLabel, { color: c.mutedForeground }]}>Safe to Apply</Text>
+                    <Text style={[styles.extraValue, { color: safeSnowballAmount > 0 ? c.success : c.mutedForeground }]}>
+                      ${safeSnowballAmount.toFixed(2)}
+                    </Text>
                   </View>
                 </View>
+                <Pressable
+                  onPress={handleApplySnowball}
+                  style={({ pressed }) => [
+                    styles.applyBtn,
+                    { backgroundColor: safeSnowballAmount > 0 ? c.primary : c.muted, opacity: pressed ? 0.8 : 1 }
+                  ]}
+                >
+                  <Feather name="zap" size={13} color={safeSnowballAmount > 0 ? c.primaryForeground : c.mutedForeground} />
+                  <Text style={[styles.applyBtnText, { color: safeSnowballAmount > 0 ? c.primaryForeground : c.mutedForeground }]}>
+                    Apply to {settings.paymentMethod === "snowball" ? "Snowball" : "Avalanche"}
+                  </Text>
+                </Pressable>
               </View>
-              <View style={styles.editHint}>
-                <Feather name="edit-2" size={13} color={c.mutedForeground} />
-              </View>
-            </Pressable>
-          );
-        }}
-      />
+              {isCapped && (
+                <Text style={[styles.cappedNote, { color: c.warning }]}>
+                  Capped from ${extraAvailable.toFixed(2)} — keeps your 6-month balance above $0
+                </Text>
+              )}
+            </View>
+          )}
+
+          {debts.length > 0 && (
+            <View style={[styles.statsRow, { marginHorizontal: 16, gap: 10 }]}>
+              {[
+                { label: "Total Debt", value: `$${totalDebt.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, color: c.destructive, icon: "trending-down" as const },
+                { label: "Min/Month",  value: `$${totalMinPayments.toFixed(0)}`,                                        color: c.warning,     icon: "calendar"     as const },
+                { label: "Highest APR",value: `${highestAPR}%`,                                                         color: c.primary,     icon: "percent"      as const },
+              ].map(s => (
+                <View key={s.label} style={[styles.statCard, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+                  <Feather name={s.icon} size={14} color={s.color} />
+                  <Text style={[styles.statValue, { color: s.color }]}>{s.value}</Text>
+                  <Text style={[styles.statLabel, { color: c.mutedForeground }]}>{s.label}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          <View style={[styles.methodRow, { marginHorizontal: 16, marginTop: 10 }]}>
+            <View style={[styles.methodToggle, { backgroundColor: c.muted, borderRadius: 10 }]}>
+              {(["snowball", "avalanche"] as const).map(m => (
+                <Pressable
+                  key={m}
+                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); updateSettings({ paymentMethod: m }); }}
+                  style={[styles.methodBtn, { backgroundColor: settings.paymentMethod === m ? c.primary : "transparent", borderRadius: 8 }]}
+                >
+                  <Feather name={m === "snowball" ? "trending-down" : "percent"} size={12} color={settings.paymentMethod === m ? c.primaryForeground : c.mutedForeground} />
+                  <Text style={[styles.methodBtnText, { color: settings.paymentMethod === m ? c.primaryForeground : c.mutedForeground }]}>
+                    {m === "snowball" ? "Snowball" : "Avalanche"}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <View style={[styles.sortToggle, { backgroundColor: c.muted, borderRadius: 10 }]}>
+              {(["priority", "balance", "interest"] as SortMode[]).map(s => (
+                <Pressable
+                  key={s}
+                  onPress={() => setSortMode(s)}
+                  style={[styles.sortBtn, { backgroundColor: sortMode === s ? c.card : "transparent", borderRadius: 8 }]}
+                >
+                  <Text style={[styles.sortBtnText, { color: sortMode === s ? c.foreground : c.mutedForeground }]}>
+                    {s === "priority" ? "#" : s === "balance" ? "$" : "%"}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          <FlatList
+            data={debts}
+            keyExtractor={item => item.id}
+            contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 100 }]}
+            ListEmptyComponent={
+              <EmptyState
+                icon="credit-card"
+                title="No Debts Tracked"
+                message="Add credit cards, loans, or any debt to track payoff progress and get snowball/avalanche recommendations."
+                actionLabel="Add Debt"
+                onAction={() => { setEditBill(null); setModalVisible(true); }}
+              />
+            }
+            renderItem={({ item }) => {
+              const priorityColor = priorityColors[Math.min(item.priority - 1, priorityColors.length - 1)] ?? c.primary;
+              const originalBalance = item.balance + item.amount * 12;
+              const paidPct = originalBalance > 0 ? Math.min(((originalBalance - item.balance) / originalBalance) * 100, 100) : 0;
+              const monthsToPayoff = item.balance > 0 && item.amount > 0
+                ? Math.ceil(item.balance / item.amount)
+                : 0;
+
+              return (
+                <Pressable
+                  onPress={() => { setEditBill(item); setModalVisible(true); }}
+                  style={({ pressed }) => [styles.card, { backgroundColor: c.card, borderRadius: colors.radius, opacity: pressed ? 0.88 : 1 }]}
+                >
+                  <View style={[styles.priorityStrip, { backgroundColor: priorityColor }]}>
+                    <Text style={styles.priorityNum}>#{item.priority}</Text>
+                  </View>
+
+                  <View style={styles.cardBody}>
+                    <View style={styles.cardTop}>
+                      <View style={styles.cardLeft}>
+                        <Text style={[styles.debtName, { color: c.foreground }]}>{item.name}</Text>
+                        <View style={styles.metaRow}>
+                          {item.interest_rate > 0 && (
+                            <View style={[styles.aprBadge, { backgroundColor: c.destructive + "20" }]}>
+                              <Text style={[styles.aprText, { color: c.destructive }]}>{item.interest_rate}% APR</Text>
+                            </View>
+                          )}
+                          <Text style={[styles.metaText, { color: c.mutedForeground }]}>Due day {item.due_day}</Text>
+                          {monthsToPayoff > 0 && (
+                            <Text style={[styles.metaText, { color: c.mutedForeground }]}>~{monthsToPayoff} mo left</Text>
+                          )}
+                        </View>
+                      </View>
+                      <View style={styles.cardRight}>
+                        <Text style={[styles.balance, { color: c.destructive }]}>${item.balance.toLocaleString(undefined, { maximumFractionDigits: 0 })}</Text>
+                        <Text style={[styles.minPay, { color: c.mutedForeground }]}>${item.amount}/mo min</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.progressSection}>
+                      <View style={styles.progressHeader}>
+                        <Text style={[styles.progressLabel, { color: c.mutedForeground }]}>Payoff progress</Text>
+                        <Text style={[styles.progressPct, { color: paidPct > 0 ? c.success : c.mutedForeground }]}>{paidPct.toFixed(0)}%</Text>
+                      </View>
+                      <View style={[styles.progressBg, { backgroundColor: c.muted }]}>
+                        <View style={[styles.progressFill, { width: `${paidPct}%` as any, backgroundColor: priorityColor }]} />
+                      </View>
+                    </View>
+
+                    {settings.paymentMethod === "snowball" && (
+                      <View style={[styles.strategyNote, { backgroundColor: priorityColor + "12" }]}>
+                        <Feather name="zap" size={11} color={priorityColor} />
+                        <Text style={[styles.strategyText, { color: c.mutedForeground }]}>
+                          {item.priority === 1
+                            ? "Target first — put all extra here"
+                            : `Pay off #${item.priority - 1} first, then cascade here`}
+                        </Text>
+                      </View>
+                    )}
+                    {settings.paymentMethod === "avalanche" && item.interest_rate > 0 && (
+                      <View style={[styles.strategyNote, { backgroundColor: c.primary + "12" }]}>
+                        <Feather name="trending-up" size={11} color={c.primary} />
+                        <Text style={[styles.strategyText, { color: c.mutedForeground }]}>
+                          {item.priority === 1
+                            ? "Highest interest — target this first"
+                            : `Lower APR than priority #${item.priority - 1}`}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={styles.editHint}>
+                    <Feather name="edit-2" size={13} color={c.mutedForeground} />
+                  </View>
+                </Pressable>
+              );
+            }}
+          />
+        </>
+      )}
 
       <AddBillModal
         visible={modalVisible}
@@ -132,33 +419,82 @@ export default function BillsScreen() {
         onSave={handleSave}
         onDelete={deleteBill}
         editBill={editBill}
+        forceDebt={activeTab === "debt"}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1 },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingBottom: 10 },
-  title: { fontSize: 24, fontFamily: "Inter_700Bold" },
+  screen:   { flex: 1 },
+  header:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingBottom: 10 },
+  title:    { fontSize: 24, fontFamily: "Inter_700Bold" },
   subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
-  addBtn: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  filterRow: { flexDirection: "row", gap: 8, paddingHorizontal: 16, marginBottom: 12 },
+  addBtn:   { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
+
+  // Segment toggle
+  segmentWrap: {},
+  segment:    { flexDirection: "row", borderRadius: 12, padding: 4, gap: 4 },
+  segmentBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, borderRadius: 9 },
+  segmentText:{ fontSize: 14, fontFamily: "Inter_600SemiBold" },
+
+  // Bills filters
+  filterRow:  { flexDirection: "row", gap: 8, paddingHorizontal: 16, marginBottom: 12 },
   filterChip: { paddingHorizontal: 14, paddingVertical: 8 },
   filterText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  list: { paddingHorizontal: 16 },
-  card: { flexDirection: "row", marginBottom: 10, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2, overflow: "hidden" },
-  catBar: { width: 4 },
+
+  // Shared list / card
+  list:     { paddingHorizontal: 16, paddingTop: 6 },
+  card:     { flexDirection: "row", marginBottom: 10, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2, overflow: "hidden" },
   cardBody: { flex: 1, padding: 14 },
-  cardTop: { flexDirection: "row", alignItems: "flex-start" },
+  cardTop:  { flexDirection: "row", alignItems: "flex-start", marginBottom: 10 },
   cardLeft: { flex: 1 },
-  cardRight: { alignItems: "flex-end", marginLeft: 8 },
-  billName: { fontSize: 15, fontFamily: "Inter_600SemiBold", marginBottom: 6 },
-  metaRow: { flexDirection: "row", gap: 8, alignItems: "center", flexWrap: "wrap" },
-  tag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  tagText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  cardRight:{ alignItems: "flex-end", marginLeft: 8 },
+  metaRow:  { flexDirection: "row", gap: 8, alignItems: "center", flexWrap: "wrap" },
   metaText: { fontSize: 11, fontFamily: "Inter_400Regular" },
-  amount: { fontSize: 18, fontFamily: "Inter_700Bold" },
-  amountSub: { fontSize: 10, fontFamily: "Inter_400Regular" },
   editHint: { padding: 14, justifyContent: "center" },
+
+  // Bills-specific
+  catBar:    { width: 4 },
+  billName:  { fontSize: 15, fontFamily: "Inter_600SemiBold", marginBottom: 6 },
+  tag:       { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  tagText:   { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  amount:    { fontSize: 18, fontFamily: "Inter_700Bold" },
+  amountSub: { fontSize: 10, fontFamily: "Inter_400Regular" },
+
+  // Debt-specific
+  statsRow:       { flexDirection: "row" },
+  statCard:       { flex: 1, alignItems: "center", paddingVertical: 12, gap: 4 },
+  statValue:      { fontSize: 16, fontFamily: "Inter_700Bold" },
+  statLabel:      { fontSize: 10, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.4 },
+  extraBanner:    { flexDirection: "column", padding: 14, marginBottom: 10, marginTop: 4 },
+  extraTopRow:    { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  extraLeft:      { flexDirection: "row", alignItems: "center", gap: 10 },
+  extraLabel:     { fontSize: 11, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.5 },
+  extraValue:     { fontSize: 20, fontFamily: "Inter_700Bold", marginTop: 2 },
+  applyBtn:       { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
+  applyBtnText:   { fontSize: 13, fontFamily: "Inter_700Bold" },
+  cappedNote:     { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 10, lineHeight: 15 },
+  methodRow:      { flexDirection: "row", gap: 8, alignItems: "center", marginBottom: 6 },
+  methodToggle:   { flex: 1, flexDirection: "row", padding: 4, gap: 4 },
+  methodBtn:      { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingVertical: 9 },
+  methodBtnText:  { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  sortToggle:     { flexDirection: "row", padding: 4, gap: 2 },
+  sortBtn:        { paddingHorizontal: 12, paddingVertical: 9 },
+  sortBtnText:    { fontSize: 13, fontFamily: "Inter_700Bold" },
+  priorityStrip:  { width: 32, alignItems: "center", justifyContent: "center" },
+  priorityNum:    { fontSize: 11, fontFamily: "Inter_700Bold", color: "#fff", transform: [{ rotate: "-90deg" }] },
+  debtName:       { fontSize: 16, fontFamily: "Inter_700Bold", marginBottom: 6 },
+  aprBadge:       { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
+  aprText:        { fontSize: 11, fontFamily: "Inter_700Bold" },
+  balance:        { fontSize: 20, fontFamily: "Inter_700Bold" },
+  minPay:         { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
+  progressSection:{ marginBottom: 8 },
+  progressHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 5 },
+  progressLabel:  { fontSize: 11, fontFamily: "Inter_400Regular" },
+  progressPct:    { fontSize: 11, fontFamily: "Inter_700Bold" },
+  progressBg:     { height: 6, borderRadius: 3, overflow: "hidden" },
+  progressFill:   { height: 6, borderRadius: 3 },
+  strategyNote:   { flexDirection: "row", alignItems: "center", gap: 6, padding: 7, borderRadius: 6 },
+  strategyText:   { flex: 1, fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 15 },
 });

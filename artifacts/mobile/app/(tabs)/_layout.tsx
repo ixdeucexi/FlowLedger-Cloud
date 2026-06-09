@@ -9,7 +9,6 @@ import { useColors } from "@/hooks/useColors";
 const TABS = [
   { name: "index",   title: "Dashboard", icon: "bar-chart-2"    },
   { name: "bills",   title: "Bills",     icon: "file-text"      },
-  { name: "debt",    title: "Debt",      icon: "credit-card"    },
   { name: "monthly", title: "Monthly",   icon: "calendar"       },
   { name: "more",    title: "More",      icon: "more-horizontal" },
 ] as const;
