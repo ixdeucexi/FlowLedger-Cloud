@@ -1,9 +1,9 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
-  Keyboard, Modal, Platform, Pressable,
+  Animated, Keyboard, Modal, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -46,6 +46,20 @@ export default function DashboardScreen() {
   const [expenseNameInput, setExpenseNameInput]      = useState("");
   const [expenseType, setExpenseType]                = useState<"expense" | "goal">("expense");
   const [negCalendarVisible, setNegCalendarVisible]  = useState(false);
+
+  // ── Hero card flip ──────────────────────────────────────────────────────────
+  const flipAnim   = useRef(new Animated.Value(0)).current;
+  const [flipped, setFlipped] = useState(false);
+  const [cardHeight, setCardHeight] = useState(0);
+
+  const doFlip = () => {
+    const toValue = flipped ? 0 : 1;
+    Animated.spring(flipAnim, { toValue, friction: 8, tension: 10, useNativeDriver: true }).start();
+    setFlipped(f => !f);
+  };
+
+  const frontRotate = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] });
+  const backRotate  = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ["180deg", "360deg"] });
 
   const now          = new Date();
   const currentMonth = now.getMonth();
@@ -147,6 +161,15 @@ export default function DashboardScreen() {
     return months;
   }, [bills, currentMonth]);
 
+  // ── Savings summary for back of hero card ──────────────────────────────────
+  const savingsData = useMemo(() => {
+    const totalSaved  = goals.reduce((s, g) => s + g.current_amount, 0);
+    const totalTarget = goals.reduce((s, g) => s + g.target_amount, 0);
+    const cf          = getCashFlow(currentMonth, now.getFullYear());
+    const monthlySurplus = Math.max(0, cf.remaining);
+    return { totalSaved, totalTarget, monthlySurplus, goalCount: goals.length };
+  }, [goals, getCashFlow, currentMonth]);
+
   // ── Affordability check (real calendar projection) ──────────────────────────
   const RISKY_THRESHOLD = 200;
   const affordResult = useMemo(() => {
@@ -243,7 +266,7 @@ export default function DashboardScreen() {
       <Text style={[styles.heading,    { color: c.foreground }]}>FlowLedger</Text>
       <Text style={[styles.subheading, { color: c.mutedForeground }]}>{MONTH_FULL[currentMonth]} {selectedYear}</Text>
 
-      {/* ── HERO: 3-metric balance card ── */}
+      {/* ── HERO: flip card — front = Balance Today, back = Savings ── */}
       {(() => {
         const cur = balanceMetrics?.currentBalance ?? cashFlow.remaining;
         const isNeg = cur < 0;
@@ -253,64 +276,168 @@ export default function DashboardScreen() {
           : isLow
           ? ["#d97706", "#b45309"]
           : ["#1d4ed8", "#16a34a"];
+
+        const savingsPct = savingsData.totalTarget > 0
+          ? Math.min((savingsData.totalSaved / savingsData.totalTarget) * 100, 100)
+          : 0;
+
         return (
-          <LinearGradient
-            colors={gradColors}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[styles.heroCard, { overflow: "hidden" }]}
+          <Pressable
+            onPress={doFlip}
+            style={{ marginBottom: 14 }}
+            onLayout={e => setCardHeight(e.nativeEvent.layout.height)}
           >
-            {/* Decorative glow circles */}
-            <View style={styles.heroGlowTop} />
-            <View style={styles.heroGlowBottom} />
+            {/* ── FRONT: Balance Today ── */}
+            <Animated.View
+              style={{
+                transform: [{ perspective: 1000 }, { rotateY: frontRotate }],
+                backfaceVisibility: "hidden",
+              }}
+            >
+              <LinearGradient
+                colors={gradColors}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.heroCard, { overflow: "hidden", marginBottom: 0 }]}
+              >
+                <View style={styles.heroGlowTop} />
+                <View style={styles.heroGlowBottom} />
 
-            <Text style={styles.heroLabel}>Balance Today</Text>
-            <Text style={styles.heroValue}>
-              {cur < 0 ? "−" : ""}${Math.abs(cur).toFixed(0)}
-            </Text>
-
-            {/* Sub-metrics row */}
-            <View style={styles.heroMetrics}>
-              <View style={styles.heroMetric}>
-                <Text style={styles.heroMetricLabel}>End of Month</Text>
-                <Text style={[styles.heroMetricValue, {
-                  color: (balanceMetrics?.endOfMonthBalance ?? 0) < 0 ? "#fca5a5" : "rgba(255,255,255,0.95)"
-                }]}>
-                  {(balanceMetrics?.endOfMonthBalance ?? 0) < 0 ? "−" : ""}
-                  ${Math.abs(balanceMetrics?.endOfMonthBalance ?? 0).toFixed(0)}
-                </Text>
-              </View>
-              <View style={styles.heroMetricDivider} />
-              <View style={styles.heroMetric}>
-                <Text style={styles.heroMetricLabel}>Lowest Balance</Text>
-                <Text style={[styles.heroMetricValue, {
-                  color: (balanceMetrics?.lowestBalance ?? 0) < 0 ? "#fca5a5"
-                    : (balanceMetrics?.lowestBalance ?? 0) < 200 ? "#fde68a"
-                    : "#bbf7d0"
-                }]}>
-                  {(balanceMetrics?.lowestBalance ?? 0) < 0 ? "−" : ""}
-                  ${Math.abs(balanceMetrics?.lowestBalance ?? 0).toFixed(0)}
-                  {balanceMetrics ? ` · ${MONTH_NAMES[currentMonth]} ${balanceMetrics.lowestDay}` : ""}
-                </Text>
-              </View>
-            </View>
-
-            {stats.totalDue > 0 && (
-              <View style={styles.heroProgress}>
-                <View style={[styles.heroProgressTrack, { backgroundColor: "rgba(255,255,255,0.25)" }]}>
-                  <LinearGradient
-                    colors={["rgba(255,255,255,0.6)", "rgba(255,255,255,0.95)"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={[styles.heroProgressFill, { width: `${Math.min((stats.totalPaid / stats.totalDue) * 100, 100)}%` as any }]}
-                  />
+                <View style={styles.heroFlipHint}>
+                  <Feather name="refresh-cw" size={12} color="rgba(255,255,255,0.55)" />
+                  <Text style={styles.heroFlipHintText}>tap to see savings</Text>
                 </View>
-                <Text style={styles.heroProgressLabel}>
-                  {Math.round((stats.totalPaid / stats.totalDue) * 100)}% of bills paid this month
+
+                <Text style={styles.heroLabel}>Balance Today</Text>
+                <Text style={styles.heroValue}>
+                  {cur < 0 ? "−" : ""}${Math.abs(cur).toFixed(0)}
                 </Text>
-              </View>
-            )}
-          </LinearGradient>
+
+                <View style={styles.heroMetrics}>
+                  <View style={styles.heroMetric}>
+                    <Text style={styles.heroMetricLabel}>End of Month</Text>
+                    <Text style={[styles.heroMetricValue, {
+                      color: (balanceMetrics?.endOfMonthBalance ?? 0) < 0 ? "#fca5a5" : "rgba(255,255,255,0.95)"
+                    }]}>
+                      {(balanceMetrics?.endOfMonthBalance ?? 0) < 0 ? "−" : ""}
+                      ${Math.abs(balanceMetrics?.endOfMonthBalance ?? 0).toFixed(0)}
+                    </Text>
+                  </View>
+                  <View style={styles.heroMetricDivider} />
+                  <View style={styles.heroMetric}>
+                    <Text style={styles.heroMetricLabel}>Lowest Balance</Text>
+                    <Text style={[styles.heroMetricValue, {
+                      color: (balanceMetrics?.lowestBalance ?? 0) < 0 ? "#fca5a5"
+                        : (balanceMetrics?.lowestBalance ?? 0) < 200 ? "#fde68a"
+                        : "#bbf7d0"
+                    }]}>
+                      {(balanceMetrics?.lowestBalance ?? 0) < 0 ? "−" : ""}
+                      ${Math.abs(balanceMetrics?.lowestBalance ?? 0).toFixed(0)}
+                      {balanceMetrics ? ` · ${MONTH_NAMES[currentMonth]} ${balanceMetrics.lowestDay}` : ""}
+                    </Text>
+                  </View>
+                </View>
+
+                {stats.totalDue > 0 && (
+                  <View style={styles.heroProgress}>
+                    <View style={[styles.heroProgressTrack, { backgroundColor: "rgba(255,255,255,0.25)" }]}>
+                      <LinearGradient
+                        colors={["rgba(255,255,255,0.6)", "rgba(255,255,255,0.95)"]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={[styles.heroProgressFill, { width: `${Math.min((stats.totalPaid / stats.totalDue) * 100, 100)}%` as any }]}
+                      />
+                    </View>
+                    <Text style={styles.heroProgressLabel}>
+                      {Math.round((stats.totalPaid / stats.totalDue) * 100)}% of bills paid this month
+                    </Text>
+                  </View>
+                )}
+              </LinearGradient>
+            </Animated.View>
+
+            {/* ── BACK: Savings ── */}
+            <Animated.View
+              style={[
+                StyleSheet.absoluteFill,
+                {
+                  transform: [{ perspective: 1000 }, { rotateY: backRotate }],
+                  backfaceVisibility: "hidden",
+                },
+              ]}
+            >
+              <LinearGradient
+                colors={["#065f46", "#047857"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.heroCard, { overflow: "hidden", marginBottom: 0, height: cardHeight || undefined }]}
+              >
+                <View style={styles.heroGlowTop} />
+                <View style={styles.heroGlowBottom} />
+
+                <View style={styles.heroFlipHint}>
+                  <Feather name="refresh-cw" size={12} color="rgba(255,255,255,0.55)" />
+                  <Text style={styles.heroFlipHintText}>tap to go back</Text>
+                </View>
+
+                <Text style={styles.heroLabel}>Savings</Text>
+                <Text style={styles.heroValue}>
+                  ${savingsData.totalSaved.toFixed(0)}
+                </Text>
+
+                <View style={styles.heroMetrics}>
+                  <View style={styles.heroMetric}>
+                    <Text style={styles.heroMetricLabel}>Total Target</Text>
+                    <Text style={[styles.heroMetricValue, { color: "rgba(255,255,255,0.95)" }]}>
+                      ${savingsData.totalTarget.toFixed(0)}
+                    </Text>
+                  </View>
+                  <View style={styles.heroMetricDivider} />
+                  <View style={styles.heroMetric}>
+                    <Text style={styles.heroMetricLabel}>Monthly Surplus</Text>
+                    <Text style={[styles.heroMetricValue, {
+                      color: savingsData.monthlySurplus > 0 ? "#bbf7d0" : "#fca5a5"
+                    }]}>
+                      {savingsData.monthlySurplus > 0 ? "+" : ""}${savingsData.monthlySurplus.toFixed(0)}/mo
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Savings progress bar */}
+                <View style={styles.heroProgress}>
+                  <View style={[styles.heroProgressTrack, { backgroundColor: "rgba(255,255,255,0.25)" }]}>
+                    <LinearGradient
+                      colors={["#6ee7b7", "#34d399"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={[styles.heroProgressFill, { width: `${savingsPct}%` as any }]}
+                    />
+                  </View>
+                  <Text style={styles.heroProgressLabel}>
+                    {savingsData.goalCount > 0
+                      ? `${savingsPct.toFixed(0)}% of ${savingsData.goalCount} goal${savingsData.goalCount !== 1 ? "s" : ""} funded`
+                      : "No savings goals yet — tap Goals below to add one"}
+                  </Text>
+                </View>
+
+                {/* Mini goal list */}
+                {goals.slice(0, 3).map(g => {
+                  const pct = g.target_amount > 0
+                    ? Math.min((g.current_amount / g.target_amount) * 100, 100)
+                    : 0;
+                  return (
+                    <View key={g.id} style={styles.heroGoalRow}>
+                      <Text style={styles.heroGoalName} numberOfLines={1}>{g.name}</Text>
+                      <View style={styles.heroGoalTrack}>
+                        <View style={[styles.heroGoalFill, { width: `${pct}%` as any }]} />
+                      </View>
+                      <Text style={styles.heroGoalPct}>{pct.toFixed(0)}%</Text>
+                    </View>
+                  );
+                })}
+              </LinearGradient>
+            </Animated.View>
+          </Pressable>
         );
       })()}
 
@@ -910,6 +1037,13 @@ const styles = StyleSheet.create({
   heroProgressTrack: { height: 5, borderRadius: 3, overflow: "hidden" },
   heroProgressFill:  { height: 5, borderRadius: 3 },
   heroProgressLabel: { fontSize: 11, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.75)", marginTop: 5 },
+  heroFlipHint:      { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-end", marginBottom: 6 },
+  heroFlipHintText:  { fontSize: 10, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.55)" },
+  heroGoalRow:       { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 },
+  heroGoalName:      { fontSize: 11, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.85)", width: 90 },
+  heroGoalTrack:     { flex: 1, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.2)", overflow: "hidden" },
+  heroGoalFill:      { height: 4, borderRadius: 2, backgroundColor: "#6ee7b7" },
+  heroGoalPct:       { fontSize: 10, fontFamily: "Inter_700Bold", color: "rgba(255,255,255,0.75)", width: 30, textAlign: "right" },
   negWarning:          { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, marginBottom: 14 },
   negWarningText:      { flex: 1, fontSize: 13, fontFamily: "Inter_500Medium" },
   // 12-month outlook sheet
