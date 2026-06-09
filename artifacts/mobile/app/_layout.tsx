@@ -35,7 +35,7 @@ function AuthObserver() {
     } else if (session && inAuth) {
       router.replace("/(tabs)");
     }
-  }, [session, loading]);
+  }, [session, loading, segments]);
 
   return null;
 }
