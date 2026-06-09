@@ -22,9 +22,11 @@ export default function LoginScreen() {
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState<string | null>(null);
   const [showPass, setShowPass] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
 
   const handleSubmit = async () => {
     setError(null);
+    setConfirmed(false);
     if (!email.trim() || !password.trim()) {
       setError("Please enter your email and password.");
       return;
@@ -38,14 +40,21 @@ export default function LoginScreen() {
       return;
     }
     setLoading(true);
-    const err = mode === "signin"
-      ? await signIn(email.trim(), password)
-      : await signUp(email.trim(), password);
-    setLoading(false);
-    if (err) {
-      setError(err);
+    if (mode === "signin") {
+      const err = await signIn(email.trim(), password);
+      setLoading(false);
+      if (err) setError(err);
+      else router.replace("/(tabs)");
     } else {
-      router.replace("/(tabs)");
+      const { error: err, needsConfirmation } = await signUp(email.trim(), password);
+      setLoading(false);
+      if (err) {
+        setError(err);
+      } else if (needsConfirmation) {
+        setConfirmed(true);
+      } else {
+        router.replace("/(tabs)");
+      }
     }
   };
 
@@ -76,7 +85,7 @@ export default function LoginScreen() {
                 <Pressable
                   key={m}
                   style={[styles.tab, mode === m && styles.tabActive]}
-                  onPress={() => { setMode(m); setError(null); }}
+                  onPress={() => { setMode(m); setError(null); setConfirmed(false); }}
                 >
                   <Text style={[styles.tabText, mode === m && styles.tabTextActive]}>
                     {m === "signin" ? "Sign In" : "Create Account"}
@@ -142,6 +151,16 @@ export default function LoginScreen() {
               </View>
             )}
 
+            {/* Confirmation notice */}
+            {confirmed && (
+              <View style={styles.successBox}>
+                <Feather name="mail" size={14} color="#34d399" />
+                <Text style={styles.successText}>
+                  Check your email and click the confirmation link, then come back to sign in.
+                </Text>
+              </View>
+            )}
+
             {/* Error */}
             {error && (
               <View style={styles.errorBox}>
@@ -194,6 +213,8 @@ const styles = StyleSheet.create({
   eyeBtn:        { padding: 8 },
   errorBox:      { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(239,68,68,0.1)", borderRadius: 8, padding: 10, marginBottom: 16 },
   errorText:     { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: "#f87171" },
+  successBox:    { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: "rgba(52,211,153,0.1)", borderRadius: 8, padding: 10, marginBottom: 16 },
+  successText:   { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: "#34d399", lineHeight: 18 },
   btn:           { backgroundColor: "#2563eb", borderRadius: 12, paddingVertical: 14, alignItems: "center", marginTop: 4 },
   btnText:       { fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#fff" },
   hint:          { fontSize: 12, fontFamily: "Inter_400Regular", color: "#475569", textAlign: "center", marginTop: 14, lineHeight: 18 },
