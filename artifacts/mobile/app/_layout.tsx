@@ -31,11 +31,11 @@ function AuthObserver() {
     ready.current = true;
     const inAuth = segments[0] === "login";
     if (!session && !inAuth) {
-      router.replace({ pathname: "/login", params: { mode: "signup" } });
+      router.replace("/login");
     } else if (session && inAuth) {
       router.replace("/(tabs)");
     }
-  }, [session, loading, segments]);
+  }, [session, loading]);
 
   return null;
 }

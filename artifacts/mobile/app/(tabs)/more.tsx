@@ -15,7 +15,6 @@ import { IncomeModal } from "@/components/IncomeModal";
 import colors from "@/constants/colors";
 import type { IncomeItem } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
-import { useRouter } from "expo-router";
 import { useAuth } from "@/context/AuthContext";
 import { type ThemeMode, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
@@ -31,7 +30,6 @@ const THEME_OPTIONS: { label: string; value: ThemeMode; icon: string }[] = [
 export default function MoreScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const router = useRouter();
   const { themeMode, setThemeMode } = useThemeMode();
   const { signOut, user } = useAuth();
   const {
@@ -279,7 +277,7 @@ export default function MoreScreen() {
           <Text style={[styles.emptyText, { color: c.mutedForeground }]}>No income sources added yet.</Text>
         ) : (
           incomes.map((item, i) => {
-            const monthly = item.frequency === "weekly"   ? item.amount * 4
+            const monthly = item.frequency === "weekly" ? item.amount * 4
               : item.frequency === "biweekly" ? item.amount * 2 : item.amount;
             return (
               <View key={item.id} style={[styles.incomeRow, { borderTopWidth: i > 0 ? 1 : 0, borderTopColor: c.border }]}>
@@ -537,7 +535,7 @@ export default function MoreScreen() {
           <Pressable
             onPress={() => Alert.alert("Sign Out", "Sign out of FlowLedger?", [
               { text: "Cancel", style: "cancel" },
-              { text: "Sign Out", style: "destructive", onPress: () => { signOut(); } },
+              { text: "Sign Out", style: "destructive", onPress: () => signOut() },
             ])}
             style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 10, opacity: pressed ? 0.7 : 1 })}
           >

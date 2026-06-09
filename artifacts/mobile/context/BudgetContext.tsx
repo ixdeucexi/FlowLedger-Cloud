@@ -250,12 +250,8 @@ function getIncomeOccurrenceDays(i: IncomeItem, month: number, year: number): nu
     return [Math.min(dd, daysInMonth)];
   }
   const intervalDays = i.frequency === "biweekly" ? 14 : 7;
-  // Fall back to start_date as the anchor when next_payment_date is missing
-  const anchorDate = i.next_payment_date ?? i.start_date;
-  if (!anchorDate) {
-    return i.frequency === "biweekly" ? [1, 15] : [1, 8, 15, 22];
-  }
-  const [ny, nm, nd] = anchorDate.split("-").map(Number);
+  if (!i.next_payment_date) return [];
+  const [ny, nm, nd] = i.next_payment_date.split("-").map(Number);
   let cursor = new Date(ny, nm - 1, nd);
   const target = new Date(year, month, 1);
   while (cursor > target) cursor = new Date(cursor.getTime() - intervalDays * 86400000);

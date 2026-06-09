@@ -1,6 +1,3 @@
-const SUPABASE_URL  = process.env.EXPO_PUBLIC_SUPABASE_URL  ?? "https://imqmhfdquqlqxgtcdbvc.supabase.co";
-const SUPABASE_ANON = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImltcW1oZmRxdXFscXhndGNkYnZjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5OTcwMTIsImV4cCI6MjA5NjU3MzAxMn0.lcjjNxrhhip6ZQfyk2qfTSZA8blN2ipNJYFAbCbeSp0";
-
 module.exports = {
   expo: {
     name: "FlowLedger",
@@ -37,8 +34,8 @@ module.exports = {
       reactCompiler: true,
     },
     extra: {
-      supabaseUrl:     SUPABASE_URL,
-      supabaseAnonKey: SUPABASE_ANON,
+      supabaseUrl:      process.env.EXPO_PUBLIC_SUPABASE_URL,
+      supabaseAnonKey:  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
       eas: { projectId: "80ec219d-8a12-43f9-b7cf-0dd6541e60f1" },
     },
   },
