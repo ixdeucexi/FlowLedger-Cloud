@@ -31,7 +31,7 @@ function AuthObserver() {
     ready.current = true;
     const inAuth = segments[0] === "login";
     if (!session && !inAuth) {
-      router.replace("/login");
+      router.replace({ pathname: "/login", params: { mode: "signup" } });
     } else if (session && inAuth) {
       router.replace("/(tabs)");
     }

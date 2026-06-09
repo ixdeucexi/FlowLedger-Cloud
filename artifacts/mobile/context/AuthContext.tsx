@@ -60,7 +60,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    // Clear session immediately so AuthObserver navigates to login right away
+    setSession(null);
+    await supabase.auth.signOut().catch(() => {});
   };
 
   return (

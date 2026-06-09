@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator, KeyboardAvoidingView, Platform,
@@ -14,8 +14,9 @@ export default function LoginScreen() {
   const { signIn, signUp } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { mode: initialMode } = useLocalSearchParams<{ mode?: string }>();
 
-  const [mode,     setMode]     = useState<"signin" | "signup">("signin");
+  const [mode,     setMode]     = useState<"signin" | "signup">(initialMode === "signup" ? "signup" : "signin");
   const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
   const [confirm,  setConfirm]  = useState("");

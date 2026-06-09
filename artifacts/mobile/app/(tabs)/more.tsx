@@ -537,10 +537,7 @@ export default function MoreScreen() {
           <Pressable
             onPress={() => Alert.alert("Sign Out", "Sign out of FlowLedger?", [
               { text: "Cancel", style: "cancel" },
-              { text: "Sign Out", style: "destructive", onPress: async () => {
-                await signOut();
-                router.replace("/login");
-              }},
+              { text: "Sign Out", style: "destructive", onPress: () => { signOut(); } },
             ])}
             style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 10, opacity: pressed ? 0.7 : 1 })}
           >
