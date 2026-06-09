@@ -1,1 +1,2 @@
 project.tar.gz filter=lfs diff=lfs merge=lfs -text
+attached_assets/application-6143cb42-714e-4749-87e9-d2b61ff546ed_1781023798399.apk filter=lfs diff=lfs merge=lfs -text
