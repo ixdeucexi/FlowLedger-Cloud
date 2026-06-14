@@ -402,19 +402,30 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const curMonth = now.getMonth();
       const curYear  = now.getFullYear();
       setOverrides(prevO => {
-        let next = prevO.map(o => {
+        return prevO.map(o => {
           if (o.bill_id !== bill.id) return o;
-          const isPastOrCurrent = o.year < curYear || (o.year === curYear && o.month <= curMonth);
-          if (isPastOrCurrent && o.custom_amount === undefined) return { ...o, custom_amount: existing.amount };
-          return o;
+          const isStrictlyPast = o.year < curYear || (o.year === curYear && o.month < curMonth);
+          if (isStrictlyPast) {
+            // Lock in the old amount for past months that had no custom override yet
+            if (o.custom_amount === undefined) {
+              supabase.from("monthly_overrides")
+                .update({ custom_amount: existing.amount })
+                .eq("id", o.id).eq("user_id", user.id);
+              return { ...o, custom_amount: existing.amount };
+            }
+            return o;
+          } else {
+            // Current month and future: clear any custom_amount so the
+            // new bill.amount is picked up immediately
+            if (o.custom_amount !== undefined) {
+              supabase.from("monthly_overrides")
+                .update({ custom_amount: null })
+                .eq("id", o.id).eq("user_id", user.id);
+              return { ...o, custom_amount: undefined };
+            }
+            return o;
+          }
         });
-        const hasCurrentOverride = next.some(o => o.bill_id === bill.id && o.month === curMonth && o.year === curYear);
-        if (!hasCurrentOverride) {
-          const no = { id: genId(), bill_id: bill.id, month: curMonth, year: curYear, custom_amount: existing.amount, paid_amount: 0 };
-          next = [...next, no];
-          supabase.from("monthly_overrides").insert({ ...no, user_id: user.id });
-        }
-        return next;
       });
     }
     await supabase.from("bills").update({ ...bill }).eq("id", bill.id).eq("user_id", user.id);
