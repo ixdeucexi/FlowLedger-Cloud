@@ -239,7 +239,7 @@ export default function DashboardScreen() {
     }, 250);
   };
 
-  const webTopPad = Platform.OS === "web" ? 67 : 0;
+  const webTopPad = Platform.OS === "web" ? 0 : 0;
 
   const statCards = [
     { title: "Bills",   value: `$${stats.totalDue.toFixed(0)}`,    icon: "file-text"    as const, col: c.primary,                                        filter: null    as DashboardFilter, tab: "bills"   },
@@ -259,7 +259,7 @@ export default function DashboardScreen() {
   return (
     <ScrollView
       style={[styles.screen, { backgroundColor: c.background }]}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + 16 + webTopPad, paddingBottom: insets.bottom + 100 }]}
+      contentContainerStyle={[styles.content, { paddingTop: Platform.OS === "web" ? 16 : insets.top + 16, paddingBottom: insets.bottom + 100 }]}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
@@ -1159,3 +1159,4 @@ const styles = StyleSheet.create({
   sheetCancel:     { marginTop: 14, paddingVertical: 14, alignItems: "center" },
   sheetCancelText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
 });
+
