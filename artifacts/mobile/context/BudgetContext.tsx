@@ -308,6 +308,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [dashboardFilter, setDashboardFilter] = useState<DashboardFilter>(null);
 
   const loaded = useRef(false);
+  const overridesRef = useRef<MonthlyOverride[]>([]);
+  useEffect(() => { overridesRef.current = overrides; }, [overrides]);
 
   // ── Load from Supabase when user changes ────────────────────────────────────
   useEffect(() => {
@@ -405,32 +407,39 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const now = new Date();
       const curMonth = now.getMonth();
       const curYear  = now.getFullYear();
-      setOverrides(prevO => {
-        return prevO.map(o => {
-          if (o.bill_id !== bill.id) return o;
-          const isStrictlyPast = o.year < curYear || (o.year === curYear && o.month < curMonth);
-          if (isStrictlyPast) {
-            // Lock in the old amount for past months that had no custom override yet
-            if (o.custom_amount === undefined) {
-              supabase.from("monthly_overrides")
-                .update({ custom_amount: existing.amount })
-                .eq("id", o.id).eq("user_id", user.id);
-              return { ...o, custom_amount: existing.amount };
-            }
-            return o;
-          } else {
-            // Current month and future: clear any custom_amount so the
-            // new bill.amount is picked up immediately
-            if (o.custom_amount !== undefined) {
-              supabase.from("monthly_overrides")
-                .update({ custom_amount: null })
-                .eq("id", o.id).eq("user_id", user.id);
-              return { ...o, custom_amount: undefined };
-            }
-            return o;
-          }
-        });
+      const currentOverrides = overridesRef.current.filter(o => o.bill_id === bill.id);
+      const dbUpdates: Promise<any>[] = [];
+
+      const nextOverrides = currentOverrides.map(o => {
+        const isStrictlyPast = o.year < curYear || (o.year === curYear && o.month < curMonth);
+        if (isStrictlyPast && o.custom_amount === undefined) {
+          dbUpdates.push(
+            supabase.from("monthly_overrides")
+              .update({ custom_amount: existing.amount })
+              .eq("id", o.id).eq("user_id", user.id) as unknown as Promise<any>
+          );
+          return { ...o, custom_amount: existing.amount };
+        } else if (!isStrictlyPast && o.custom_amount !== undefined) {
+          dbUpdates.push(
+            supabase.from("monthly_overrides")
+              .update({ custom_amount: null })
+              .eq("id", o.id).eq("user_id", user.id) as unknown as Promise<any>
+          );
+          return { ...o, custom_amount: undefined };
+        }
+        return o;
       });
+
+      const changedIds = new Set(nextOverrides.filter((o, i) => o !== currentOverrides[i]).map(o => o.id));
+      if (changedIds.size > 0) {
+        setOverrides(prev =>
+          prev.map(o => {
+            const changed = nextOverrides.find(n => n.id === o.id);
+            return changed && changedIds.has(o.id) ? changed : o;
+          })
+        );
+      }
+      await Promise.all(dbUpdates);
     }
     await supabase.from("bills").update({ ...bill }).eq("id", bill.id).eq("user_id", user.id);
     setBills(prev => reorderDebtPriorities(prev.map(b => b.id === bill.id ? bill : b)));
@@ -473,39 +482,46 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const upsertOverride = useCallback(
     async (billId: string, month: number, year: number, patch: Partial<Omit<MonthlyOverride, "id" | "bill_id" | "month" | "year">>) => {
       if (!user) return;
-      setOverrides(prev => {
-        const idx = prev.findIndex(o => o.bill_id === billId && o.month === month && o.year === year);
-        if (idx !== -1) {
-          const updated = prev.map((o, i) => i === idx ? { ...o, ...patch } : o);
-          supabase.from("monthly_overrides").update({ ...updated[idx] }).eq("id", updated[idx].id).eq("user_id", user.id);
-          return updated;
-        }
+      const existing = overridesRef.current.find(o => o.bill_id === billId && o.month === month && o.year === year);
+      if (existing) {
+        const updated = { ...existing, ...patch };
+        setOverrides(prev => prev.map(o => o.id === existing.id ? updated : o));
+        await supabase.from("monthly_overrides")
+          .update({ ...updated })
+          .eq("id", existing.id)
+          .eq("user_id", user.id);
+      } else {
         const no: MonthlyOverride = { id: genId(), bill_id: billId, month, year, paid_amount: 0, ...patch };
-        supabase.from("monthly_overrides").insert({ ...no, user_id: user.id });
-        return [...prev, no];
-      });
+        setOverrides(prev => [...prev, no]);
+        await supabase.from("monthly_overrides").insert({ ...no, user_id: user.id });
+      }
     },
     [user]
   );
 
   const setPaidAmount = useCallback(
     async (billId: string, month: number, year: number, amount: number) => {
-      const prevPaid = overrides.find(o => o.bill_id === billId && o.month === month && o.year === year)?.paid_amount ?? 0;
+      const prevPaid = overridesRef.current.find(o => o.bill_id === billId && o.month === month && o.year === year)?.paid_amount ?? 0;
       await upsertOverride(billId, month, year, { paid_amount: Math.max(0, amount) });
       const delta = amount - prevPaid;
-      if (delta !== 0) {
+      if (delta !== 0 && user) {
         setBills(prev => {
           const bill = prev.find(b => b.id === billId);
           if (!bill?.is_debt) return prev;
-          const updated = reorderDebtPriorities(
+          return reorderDebtPriorities(
             prev.map(b => b.id === billId ? { ...b, balance: Math.max(0, b.balance - delta) } : b)
           );
-          if (user) supabase.from("bills").update({ balance: Math.max(0, bill.balance - delta) }).eq("id", billId).eq("user_id", user.id);
-          return updated;
         });
+        const bill = bills.find(b => b.id === billId);
+        if (bill?.is_debt) {
+          await supabase.from("bills")
+            .update({ balance: Math.max(0, bill.balance - delta) })
+            .eq("id", billId)
+            .eq("user_id", user.id);
+        }
       }
     },
-    [upsertOverride, overrides, user]
+    [upsertOverride, bills, user]
   );
 
   const setCustomAmount = useCallback(
