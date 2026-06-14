@@ -179,7 +179,7 @@ export default function MoreScreen() {
       style={[styles.screen, { backgroundColor: c.background }]}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 + webTopPad, paddingBottom: insets.bottom + 100 }]}
     >
-      <Text style={[styles.pageTitle, { color: c.foreground }]}>Settings</Text>
+      <Text style={[styles.pageTitle, { color: c.foreground }]}>Settings</Text>`r`n      <Text style={{ color: c.primary, fontSize: 16, fontFamily: "Inter_700Bold", marginBottom: 16 }}>Testing App</Text>
       <Text style={[styles.pageSubtitle, { color: c.mutedForeground }]}>FlowLedger</Text>
 
       {/* ── Appearance ── */}
@@ -565,3 +565,4 @@ const styles = StyleSheet.create({
   summaryLabel: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
 
 });
+
