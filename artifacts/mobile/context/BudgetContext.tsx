@@ -203,8 +203,12 @@ function genId(): string {
 }
 
 function reorderDebtPriorities(bills: Bill[]): Bill[] {
-  let p = 1;
-  return bills.map(b => b.is_debt ? { ...b, priority: p++ } : b);
+  // Assign priorities based on balance ascending: lowest balance = #1 (snowball order)
+  const debtsSorted = bills
+    .filter(b => b.is_debt)
+    .sort((a, b) => a.balance - b.balance);
+  const priorityMap = new Map(debtsSorted.map((b, i) => [b.id, i + 1]));
+  return bills.map(b => b.is_debt ? { ...b, priority: priorityMap.get(b.id) ?? 1 } : b);
 }
 
 function isBillActiveForMonth(b: Bill, month: number, year: number): boolean {
