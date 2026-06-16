@@ -18,7 +18,7 @@ import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-const MONTH_FULL  = ["January","Februar1y","March","April","May","June","July","August","September","October","November","December"];
+const MONTH_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 const CAT_COLORS: Record<string, string> = {
   Housing: "#0f9b8e", Utilities: "#f0b429", Insurance: "#6366f1",
