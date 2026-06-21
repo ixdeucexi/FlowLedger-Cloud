@@ -46,6 +46,9 @@ export default function DashboardScreen() {
   const [expenseNameInput, setExpenseNameInput]      = useState("");
   const [expenseType, setExpenseType]                = useState<"expense" | "goal">("expense");
   const [negCalendarVisible, setNegCalendarVisible]  = useState(false);
+  const [savingsModalVisible, setSavingsModalVisible] = useState(false);
+  const [savingsGoalId, setSavingsGoalId]             = useState("");
+  const [savingsAmount, setSavingsAmount]             = useState("");
 
   // ── Hero card flip ──────────────────────────────────────────────────────────
   const flipAnim   = useRef(new Animated.Value(0)).current;
@@ -222,6 +225,34 @@ export default function DashboardScreen() {
       purchaseMonth, purchaseYear, purchaseDay, affordDateStr, amt,
     };
   }, [affordAmt, affordDate, getDailyBalances]);
+
+  const openSavingsModal = () => {
+    if (goals.length === 0) {
+      setEditGoal(null);
+      setGoalModalVisible(true);
+      return;
+    }
+    setSavingsGoalId(goals[0]?.id ?? "");
+    setSavingsAmount("");
+    setSavingsModalVisible(true);
+  };
+
+  const handleAddSavings = async () => {
+    const amount = Number.parseFloat(savingsAmount);
+    const goal = goals.find(item => item.id === savingsGoalId);
+    if (!goal || !Number.isFinite(amount) || amount <= 0) return;
+
+    await updateGoal({ ...goal, current_amount: goal.current_amount + amount });
+    const contributionDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    await addTransaction({
+      date: contributionDate,
+      amount: -amount,
+      category: "Savings",
+      note: `Savings contribution · ${goal.name}`,
+    });
+    setSavingsModalVisible(false);
+    setSavingsAmount("");
+  };
 
   const navigate = (filter: DashboardFilter, tab: string) => {
     setDashboardFilter(filter);
@@ -722,13 +753,22 @@ export default function DashboardScreen() {
       {/* ── Financial Goals ── */}
       <View style={styles.goalsHeader}>
         <Text style={[styles.sectionTitle, { color: c.foreground, marginBottom: 0 }]}>Financial Goals</Text>
-        <Pressable
-          onPress={() => { setEditGoal(null); setGoalModalVisible(true); }}
-          style={({ pressed }) => [styles.addGoalBtn, { backgroundColor: c.primary + "20", opacity: pressed ? 0.7 : 1 }]}
-        >
-          <Feather name="plus" size={16} color={c.primary} />
-          <Text style={[styles.addGoalText, { color: c.primary }]}>Add Goal</Text>
-        </Pressable>
+        <View style={styles.goalHeaderActions}>
+          <Pressable
+            onPress={openSavingsModal}
+            style={({ pressed }) => [styles.addGoalBtn, { backgroundColor: c.success + "20", opacity: pressed ? 0.7 : 1 }]}
+          >
+            <Feather name="dollar-sign" size={15} color={c.success} />
+            <Text style={[styles.addGoalText, { color: c.success }]}>Add Savings</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => { setEditGoal(null); setGoalModalVisible(true); }}
+            style={({ pressed }) => [styles.addGoalBtn, { backgroundColor: c.primary + "20", opacity: pressed ? 0.7 : 1 }]}
+          >
+            <Feather name="plus" size={16} color={c.primary} />
+            <Text style={[styles.addGoalText, { color: c.primary }]}>Goal</Text>
+          </Pressable>
+        </View>
       </View>
 
       {goals.length === 0 ? (
@@ -863,6 +903,85 @@ export default function DashboardScreen() {
         onDelete={deleteGoal}
         editGoal={editGoal}
       />
+
+      {/* ── Add savings contribution modal ── */}
+      <Modal
+        visible={savingsModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSavingsModalVisible(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => { Keyboard.dismiss(); setSavingsModalVisible(false); }}>
+          <Pressable style={[styles.actionSheet, { backgroundColor: c.card }]} onPress={() => {}}>
+            <View style={[styles.sheetHandle, { backgroundColor: c.muted }]} />
+            <Text style={[styles.sheetTitle, { color: c.foreground }]}>Add to Savings</Text>
+            <Text style={[styles.sheetSub, { color: c.mutedForeground }]}>
+              Choose a goal and record a contribution. It will also appear in Transactions.
+            </Text>
+
+            <Text style={[styles.savingsFieldLabel, { color: c.mutedForeground }]}>SAVINGS GOAL</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.savingsGoalRow}>
+              {goals.map(goal => (
+                <Pressable
+                  key={goal.id}
+                  onPress={() => setSavingsGoalId(goal.id)}
+                  style={[
+                    styles.savingsGoalChip,
+                    {
+                      backgroundColor: savingsGoalId === goal.id ? c.primary : c.muted,
+                      borderColor: savingsGoalId === goal.id ? c.primary : c.border,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.savingsGoalText, { color: savingsGoalId === goal.id ? c.primaryForeground : c.foreground }]}>
+                    {goal.name}
+                  </Text>
+                  <Text style={[styles.savingsGoalBalance, { color: savingsGoalId === goal.id ? c.primaryForeground : c.mutedForeground }]}>
+                    {`$${goal.current_amount.toFixed(0)} saved`}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+
+            <Text style={[styles.savingsFieldLabel, { color: c.mutedForeground }]}>CONTRIBUTION AMOUNT</Text>
+            <View style={[styles.savingsAmountWrap, { backgroundColor: c.muted, borderColor: c.border }]}>
+              <Text style={[styles.savingsDollar, { color: c.mutedForeground }]}>$</Text>
+              <TextInput
+                value={savingsAmount}
+                onChangeText={setSavingsAmount}
+                placeholder="0.00"
+                placeholderTextColor={c.mutedForeground}
+                keyboardType="decimal-pad"
+                style={[styles.savingsInput, { color: c.foreground }]}
+                autoFocus
+              />
+            </View>
+
+            <View style={styles.savingsActions}>
+              <Pressable
+                onPress={() => setSavingsModalVisible(false)}
+                style={[styles.savingsCancel, { backgroundColor: c.muted }]}
+              >
+                <Text style={[styles.savingsCancelText, { color: c.mutedForeground }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleAddSavings}
+                disabled={!savingsGoalId || !(Number.parseFloat(savingsAmount) > 0)}
+                style={[
+                  styles.savingsSave,
+                  {
+                    backgroundColor: c.success,
+                    opacity: savingsGoalId && Number.parseFloat(savingsAmount) > 0 ? 1 : 0.45,
+                  },
+                ]}
+              >
+                <Feather name="plus" size={16} color="#fff" />
+                <Text style={styles.savingsSaveText}>Add Savings</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* ── 12-Month Balance Outlook modal ── */}
       <Modal visible={negCalendarVisible} transparent animationType="slide" onRequestClose={() => setNegCalendarVisible(false)}>
@@ -1110,8 +1229,9 @@ const styles = StyleSheet.create({
   statDebtValue: { fontSize: 28, fontFamily: "Inter_700Bold", marginTop: 2 },
 
   // Goals
-  goalsHeader:        { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10, marginTop: 8 },
-  addGoalBtn:         { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 },
+  goalsHeader:        { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10, marginTop: 8, gap: 8 },
+  goalHeaderActions:  { flexDirection: "row", alignItems: "center", gap: 6 },
+  addGoalBtn:         { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 20 },
   addGoalText:        { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   goalsEmpty:         { padding: 24, alignItems: "center", marginBottom: 16 },
   goalsEmptyText:     { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: 10, marginBottom: 16, lineHeight: 20 },
@@ -1158,5 +1278,20 @@ const styles = StyleSheet.create({
   actionSub:       { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   sheetCancel:     { marginTop: 14, paddingVertical: 14, alignItems: "center" },
   sheetCancelText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+
+  // Savings contribution
+  savingsFieldLabel:  { fontSize: 10, fontFamily: "Inter_700Bold", letterSpacing: 0.7, marginBottom: 8 },
+  savingsGoalRow:     { gap: 8, paddingBottom: 16 },
+  savingsGoalChip:    { minWidth: 120, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1 },
+  savingsGoalText:    { fontSize: 13, fontFamily: "Inter_700Bold" },
+  savingsGoalBalance: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 3 },
+  savingsAmountWrap:  { flexDirection: "row", alignItems: "center", borderWidth: 1, borderRadius: 12, marginBottom: 18 },
+  savingsDollar:      { fontSize: 20, fontFamily: "Inter_600SemiBold", paddingLeft: 14 },
+  savingsInput:       { flex: 1, height: 52, paddingHorizontal: 8, fontSize: 20, fontFamily: "Inter_700Bold" },
+  savingsActions:     { flexDirection: "row", gap: 10 },
+  savingsCancel:      { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: "center" },
+  savingsCancelText:  { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  savingsSave:        { flex: 1.5, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 6, paddingVertical: 14, borderRadius: 12 },
+  savingsSaveText:    { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold" },
 });
 
