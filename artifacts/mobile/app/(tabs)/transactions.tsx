@@ -17,6 +17,9 @@ import { useColors } from "@/hooks/useColors";
 
 type ActivitySource = "transaction" | "bill_payment" | "income" | "extra_payment";
 type TypeFilter     = "all" | "expense" | "income";
+type SourceFilter   = "all" | ActivitySource;
+type DateFilter     = "all" | "this_month" | "last_month" | "this_year";
+type SortOrder      = "asc" | "desc";
 
 interface ActivityItem {
   id: string;
@@ -98,6 +101,10 @@ export default function TransactionsScreen() {
   const [editTx, setEditTx]                     = useState<Transaction | null>(null);
   const [detailItem, setDetailItem]             = useState<ActivityItem | null>(null);
   const [typeFilter, setTypeFilter]             = useState<TypeFilter>("all");
+  const [sourceFilter, setSourceFilter]         = useState<SourceFilter>("all");
+  const [dateFilter, setDateFilter]             = useState<DateFilter>("all");
+  const [categoryFilter, setCategoryFilter]     = useState("all");
+  const [sortOrder, setSortOrder]               = useState<SortOrder>("asc");
   const [search, setSearch]                     = useState("");
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
@@ -189,20 +196,60 @@ export default function TransactionsScreen() {
   }, [transactions, overrides, bills, extraPayments, getIncomeOccurrencesInMonth]);
 
   // ── Filter & sort ─────────────────────────────────────────────────────────
+  const categoryOptions = useMemo(
+    () => Array.from(new Set(allActivity.map(t => t.category))).sort((a, b) => a.localeCompare(b)),
+    [allActivity]
+  );
+
+  const hasActiveFilters =
+    typeFilter !== "all" ||
+    sourceFilter !== "all" ||
+    dateFilter !== "all" ||
+    categoryFilter !== "all" ||
+    search.trim().length > 0;
+
+  const clearFilters = () => {
+    setTypeFilter("all");
+    setSourceFilter("all");
+    setDateFilter("all");
+    setCategoryFilter("all");
+    setSearch("");
+  };
+
   const filtered = useMemo(() => {
     let list = [...allActivity];
     if (typeFilter === "expense") list = list.filter(t => t.amount < 0);
     if (typeFilter === "income")  list = list.filter(t => t.amount > 0);
+    if (sourceFilter !== "all") list = list.filter(t => t.source === sourceFilter);
+    if (categoryFilter !== "all") list = list.filter(t => t.category === categoryFilter);
+
+    if (dateFilter !== "all") {
+      const now = new Date();
+      const thisYear = now.getFullYear();
+      const thisMonth = now.getMonth() + 1;
+      const lastMonthDate = new Date(thisYear, now.getMonth() - 1, 1);
+      list = list.filter(t => {
+        const [year, month] = t.date.split("-").map(Number);
+        if (dateFilter === "this_month") return year === thisYear && month === thisMonth;
+        if (dateFilter === "last_month") return year === lastMonthDate.getFullYear() && month === lastMonthDate.getMonth() + 1;
+        return year === thisYear;
+      });
+    }
+
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(t =>
         t.label.toLowerCase().includes(q) ||
-        t.category.toLowerCase().includes(q)
+        t.category.toLowerCase().includes(q) ||
+        SOURCE_META[t.source].label.toLowerCase().includes(q)
       );
     }
-    list.sort((a, b) => b.date.localeCompare(a.date));
+    list.sort((a, b) => sortOrder === "asc"
+      ? a.date.localeCompare(b.date)
+      : b.date.localeCompare(a.date)
+    );
     return list;
-  }, [allActivity, typeFilter, search]);
+  }, [allActivity, typeFilter, sourceFilter, dateFilter, categoryFilter, search, sortOrder]);
 
   const sections = useMemo(() => groupByMonth(filtered), [filtered]);
 
@@ -357,22 +404,106 @@ export default function TransactionsScreen() {
         </View>
       </View>
 
-      {/* ── Type filter ── */}
-      <View style={[styles.filterRow, { paddingHorizontal: 16, marginBottom: 12 }]}>
-        {(["all", "expense", "income"] as TypeFilter[]).map(f => (
+      {/* ── Filters ── */}
+      <View style={styles.filtersWrap}>
+        <View style={styles.filterHeader}>
+          <Text style={[styles.filterLabel, { color: c.mutedForeground }]}>FILTERS</Text>
           <Pressable
-            key={f}
-            onPress={() => setTypeFilter(f)}
-            style={[
-              styles.filterChip,
-              { backgroundColor: typeFilter === f ? c.primary : c.card, borderRadius: colors.radius },
-            ]}
+            onPress={() => setSortOrder(current => current === "asc" ? "desc" : "asc")}
+            style={[styles.sortButton, { backgroundColor: c.card, borderColor: c.border }]}
           >
-            <Text style={[styles.filterText, { color: typeFilter === f ? c.primaryForeground : c.mutedForeground }]}>
-              {f === "all" ? "All" : f === "expense" ? "Expenses" : "Income"}
+            <Feather name={sortOrder === "asc" ? "arrow-up" : "arrow-down"} size={13} color={c.primary} />
+            <Text style={[styles.sortText, { color: c.foreground }]}>
+              {sortOrder === "asc" ? "Earlier first" : "Later first"}
             </Text>
           </Pressable>
-        ))}
+          {hasActiveFilters && (
+            <Pressable onPress={clearFilters} hitSlop={8}>
+              <Text style={[styles.clearText, { color: c.primary }]}>Clear</Text>
+            </Pressable>
+          )}
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          {(["all", "expense", "income"] as TypeFilter[]).map(f => (
+            <Pressable
+              key={f}
+              onPress={() => setTypeFilter(f)}
+              style={[
+                styles.filterChip,
+                { backgroundColor: typeFilter === f ? c.primary : c.card, borderRadius: colors.radius },
+              ]}
+            >
+              <Text style={[styles.filterText, { color: typeFilter === f ? c.primaryForeground : c.mutedForeground }]}>
+                {f === "all" ? "All amounts" : f === "expense" ? "Expenses" : "Income"}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          {([
+            { id: "all", label: "All sources" },
+            { id: "transaction", label: "Manual" },
+            { id: "bill_payment", label: "Bills" },
+            { id: "income", label: "Scheduled income" },
+            { id: "extra_payment", label: "Debt payments" },
+          ] as { id: SourceFilter; label: string }[]).map(option => (
+            <Pressable
+              key={option.id}
+              onPress={() => setSourceFilter(option.id)}
+              style={[
+                styles.filterChip,
+                { backgroundColor: sourceFilter === option.id ? c.primary : c.card, borderRadius: colors.radius },
+              ]}
+            >
+              <Text style={[styles.filterText, { color: sourceFilter === option.id ? c.primaryForeground : c.mutedForeground }]}>
+                {option.label}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          {([
+            { id: "all", label: "All dates" },
+            { id: "this_month", label: "This month" },
+            { id: "last_month", label: "Last month" },
+            { id: "this_year", label: "This year" },
+          ] as { id: DateFilter; label: string }[]).map(option => (
+            <Pressable
+              key={option.id}
+              onPress={() => setDateFilter(option.id)}
+              style={[
+                styles.filterChip,
+                { backgroundColor: dateFilter === option.id ? c.primary : c.card, borderRadius: colors.radius },
+              ]}
+            >
+              <Text style={[styles.filterText, { color: dateFilter === option.id ? c.primaryForeground : c.mutedForeground }]}>
+                {option.label}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+
+        {categoryOptions.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+            {["all", ...categoryOptions].map(category => (
+              <Pressable
+                key={category}
+                onPress={() => setCategoryFilter(category)}
+                style={[
+                  styles.filterChip,
+                  { backgroundColor: categoryFilter === category ? c.primary : c.card, borderRadius: colors.radius },
+                ]}
+              >
+                <Text style={[styles.filterText, { color: categoryFilter === category ? c.primaryForeground : c.mutedForeground }]}>
+                  {category === "all" ? "All categories" : category}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        )}
       </View>
 
       {/* ── Summary bar ── */}
@@ -405,12 +536,12 @@ export default function TransactionsScreen() {
             icon="repeat"
             title="No Activity"
             message={
-              search || typeFilter !== "all"
-                ? "Nothing matches your filter."
+              hasActiveFilters
+                ? "Nothing matches your filters."
                 : "Mark bills paid or add income sources to see your activity here."
             }
-            actionLabel={search || typeFilter !== "all" ? undefined : "Add Transaction"}
-            onAction={search || typeFilter !== "all" ? undefined : () => { setEditTx(null); setEditModalVisible(true); }}
+            actionLabel={hasActiveFilters ? undefined : "Add Transaction"}
+            onAction={hasActiveFilters ? undefined : () => { setEditTx(null); setEditModalVisible(true); }}
           />
         }
         renderSectionHeader={({ section: { title } }) => (
@@ -507,9 +638,15 @@ const styles = StyleSheet.create({
   searchBox:   { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
   searchInput: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", padding: 0 },
 
-  filterRow:  { flexDirection: "row", gap: 8, paddingHorizontal: 16, marginBottom: 12 },
-  filterChip: { paddingHorizontal: 14, paddingVertical: 8 },
-  filterText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  filtersWrap:  { marginBottom: 12 },
+  filterHeader:{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, marginBottom: 8 },
+  filterLabel: { flex: 1, fontSize: 10, fontFamily: "Inter_700Bold", letterSpacing: 0.7 },
+  filterRow:   { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingBottom: 8 },
+  filterChip:  { paddingHorizontal: 14, paddingVertical: 8 },
+  filterText:  { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  sortButton:  { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderRadius: 9, paddingHorizontal: 9, paddingVertical: 6 },
+  sortText:    { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  clearText:   { fontSize: 12, fontFamily: "Inter_700Bold" },
 
   summaryRow:     { flexDirection: "row", paddingVertical: 14 },
   summaryStat:    { flex: 1, alignItems: "center", gap: 4 },
