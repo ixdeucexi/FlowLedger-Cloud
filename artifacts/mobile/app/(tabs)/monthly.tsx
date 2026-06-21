@@ -36,7 +36,7 @@ export default function MonthlyScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const {
-    bills, transactions, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
+    bills, transactions, goals, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
     getCustomDueDay, setCustomDueDay,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, runSnowball, settings,
     selectedYear, setSelectedYear, dashboardFilter, setDashboardFilter,
@@ -588,6 +588,7 @@ export default function MonthlyScreen() {
               selectedDate={selectedDate}
               onDayPress={(date) => setSelectedDate(prev => prev === date ? null : date)}
               dailyBalances={dailyBalances}
+              goals={goals}
             />
 
             <View style={styles.txListHeader}>
