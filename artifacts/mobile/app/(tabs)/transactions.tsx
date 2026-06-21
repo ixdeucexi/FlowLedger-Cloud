@@ -106,6 +106,7 @@ export default function TransactionsScreen() {
   const [categoryFilter, setCategoryFilter]     = useState("all");
   const [sortOrder, setSortOrder]               = useState<SortOrder>("asc");
   const [search, setSearch]                     = useState("");
+  const [filterModalVisible, setFilterModalVisible] = useState(false);
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
 
@@ -207,18 +208,26 @@ export default function TransactionsScreen() {
     [allActivity]
   );
 
-  const hasActiveFilters =
-    typeFilter !== "all" ||
-    sourceFilter !== "all" ||
-    dateFilter !== "all" ||
-    categoryFilter !== "all" ||
-    search.trim().length > 0;
+  const activeFilterCount = [
+    typeFilter !== "all",
+    sourceFilter !== "all",
+    dateFilter !== "all",
+    categoryFilter !== "all",
+    sortOrder !== "asc",
+  ].filter(Boolean).length;
 
-  const clearFilters = () => {
+  const hasActiveFilters = activeFilterCount > 0 || search.trim().length > 0;
+
+  const clearFilterSelections = () => {
     setTypeFilter("all");
     setSourceFilter("all");
     setDateFilter("all");
     setCategoryFilter("all");
+    setSortOrder("asc");
+  };
+
+  const clearFilters = () => {
+    clearFilterSelections();
     setSearch("");
   };
 
@@ -390,8 +399,8 @@ export default function TransactionsScreen() {
         </Pressable>
       </View>
 
-      {/* ── Search bar ── */}
-      <View style={[styles.searchWrap, { paddingHorizontal: 16, marginBottom: 10 }]}>
+      {/* ── Search + filter button ── */}
+      <View style={[styles.searchWrap, { marginBottom: 10 }]}>
         <View style={[styles.searchBox, { backgroundColor: c.card, borderColor: c.border }]}>
           <Feather name="search" size={15} color={c.mutedForeground} />
           <TextInput
@@ -408,110 +417,26 @@ export default function TransactionsScreen() {
             </Pressable>
           )}
         </View>
-      </View>
-
-      {/* ── Filters ── */}
-      <View style={styles.filtersWrap}>
-        <View style={styles.filterHeader}>
-          <Text style={[styles.filterLabel, { color: c.mutedForeground }]}>FILTERS</Text>
-          <Pressable
-            onPress={() => setSortOrder(current => current === "asc" ? "desc" : "asc")}
-            style={[styles.sortButton, { backgroundColor: c.card, borderColor: c.border }]}
-          >
-            <Feather name={sortOrder === "asc" ? "arrow-up" : "arrow-down"} size={13} color={c.primary} />
-            <Text style={[styles.sortText, { color: c.foreground }]}>
-              {sortOrder === "asc" ? "Earlier first" : "Later first"}
-            </Text>
-          </Pressable>
-          {hasActiveFilters && (
-            <Pressable onPress={clearFilters} hitSlop={8}>
-              <Text style={[styles.clearText, { color: c.primary }]}>Clear</Text>
-            </Pressable>
+        <Pressable
+          accessibilityLabel="Filter transactions"
+          onPress={() => setFilterModalVisible(true)}
+          style={({ pressed }) => [
+            styles.filterIconButton,
+            {
+              backgroundColor: activeFilterCount > 0 ? c.primary : c.card,
+              borderColor: activeFilterCount > 0 ? c.primary : c.border,
+              opacity: pressed ? 0.8 : 1,
+            },
+          ]}
+        >
+          <Feather name="filter" size={20} color={activeFilterCount > 0 ? c.primaryForeground : c.foreground} />
+          {activeFilterCount > 0 && (
+            <View style={[styles.filterCount, { backgroundColor: c.destructive }]}>
+              <Text style={styles.filterCountText}>{activeFilterCount}</Text>
+            </View>
           )}
-        </View>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-          {(["all", "expense", "income"] as TypeFilter[]).map(f => (
-            <Pressable
-              key={f}
-              onPress={() => setTypeFilter(f)}
-              style={[
-                styles.filterChip,
-                { backgroundColor: typeFilter === f ? c.primary : c.card, borderRadius: colors.radius },
-              ]}
-            >
-              <Text style={[styles.filterText, { color: typeFilter === f ? c.primaryForeground : c.mutedForeground }]}>
-                {f === "all" ? "All amounts" : f === "expense" ? "Expenses" : "Income"}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-          {([
-            { id: "all", label: "All sources" },
-            { id: "transaction", label: "Manual" },
-            { id: "bill_payment", label: "Bills" },
-            { id: "income", label: "Scheduled income" },
-            { id: "extra_payment", label: "Debt payments" },
-          ] as { id: SourceFilter; label: string }[]).map(option => (
-            <Pressable
-              key={option.id}
-              onPress={() => setSourceFilter(option.id)}
-              style={[
-                styles.filterChip,
-                { backgroundColor: sourceFilter === option.id ? c.primary : c.card, borderRadius: colors.radius },
-              ]}
-            >
-              <Text style={[styles.filterText, { color: sourceFilter === option.id ? c.primaryForeground : c.mutedForeground }]}>
-                {option.label}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-          {([
-            { id: "all", label: "All dates" },
-            { id: "this_month", label: "This month" },
-            { id: "last_month", label: "Last month" },
-            { id: "this_year", label: "This year" },
-          ] as { id: DateFilter; label: string }[]).map(option => (
-            <Pressable
-              key={option.id}
-              onPress={() => setDateFilter(option.id)}
-              style={[
-                styles.filterChip,
-                { backgroundColor: dateFilter === option.id ? c.primary : c.card, borderRadius: colors.radius },
-              ]}
-            >
-              <Text style={[styles.filterText, { color: dateFilter === option.id ? c.primaryForeground : c.mutedForeground }]}>
-                {option.label}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-
-        {categoryOptions.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-            {["all", ...categoryOptions].map(category => (
-              <Pressable
-                key={category}
-                onPress={() => setCategoryFilter(category)}
-                style={[
-                  styles.filterChip,
-                  { backgroundColor: categoryFilter === category ? c.primary : c.card, borderRadius: colors.radius },
-                ]}
-              >
-                <Text style={[styles.filterText, { color: categoryFilter === category ? c.primaryForeground : c.mutedForeground }]}>
-                  {category === "all" ? "All categories" : category}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        )}
+        </Pressable>
       </View>
-
       {/* ── Summary bar ── */}
       {filtered.length > 0 && (
         <View style={[styles.summaryRow, { marginHorizontal: 16, marginBottom: 14, borderRadius: colors.radius, backgroundColor: c.card }]}>
@@ -618,6 +543,129 @@ export default function TransactionsScreen() {
         }}
       />
 
+      {/* ── Filter sheet ── */}
+      <Modal
+        visible={filterModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setFilterModalVisible(false)}
+      >
+        <Pressable style={styles.filterOverlay} onPress={() => setFilterModalVisible(false)}>
+          <Pressable style={[styles.filterSheet, { backgroundColor: c.background }]} onPress={() => {}}>
+            <View style={[styles.filterHandle, { backgroundColor: c.border }]} />
+            <View style={styles.filterSheetHeader}>
+              <View>
+                <Text style={[styles.filterSheetTitle, { color: c.foreground }]}>Filter transactions</Text>
+                <Text style={[styles.filterSheetSub, { color: c.mutedForeground }]}>Choose any combination</Text>
+              </View>
+              <Pressable accessibilityLabel="Close filters" onPress={() => setFilterModalVisible(false)} hitSlop={8}>
+                <Feather name="x" size={21} color={c.mutedForeground} />
+              </Pressable>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={styles.filterSheetScroll}>
+              <Text style={[styles.filterGroupLabel, { color: c.mutedForeground }]}>AMOUNT</Text>
+              <View style={styles.filterOptionGrid}>
+                {([
+                  { id: "all" as TypeFilter, label: "All amounts" },
+                  { id: "expense" as TypeFilter, label: "Expenses" },
+                  { id: "income" as TypeFilter, label: "Income" },
+                ]).map(option => (
+                  <Pressable
+                    key={option.id}
+                    onPress={() => setTypeFilter(option.id)}
+                    style={[styles.filterChip, { backgroundColor: typeFilter === option.id ? c.primary : c.card, borderColor: typeFilter === option.id ? c.primary : c.border }]}
+                  >
+                    <Text style={[styles.filterText, { color: typeFilter === option.id ? c.primaryForeground : c.foreground }]}>{option.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Text style={[styles.filterGroupLabel, { color: c.mutedForeground }]}>SOURCE</Text>
+              <View style={styles.filterOptionGrid}>
+                {([
+                  { id: "all" as SourceFilter, label: "All sources" },
+                  { id: "transaction" as SourceFilter, label: "Manual" },
+                  { id: "bill_payment" as SourceFilter, label: "Bills" },
+                  { id: "income" as SourceFilter, label: "Scheduled income" },
+                  { id: "extra_payment" as SourceFilter, label: "Debt payments" },
+                ]).map(option => (
+                  <Pressable
+                    key={option.id}
+                    onPress={() => setSourceFilter(option.id)}
+                    style={[styles.filterChip, { backgroundColor: sourceFilter === option.id ? c.primary : c.card, borderColor: sourceFilter === option.id ? c.primary : c.border }]}
+                  >
+                    <Text style={[styles.filterText, { color: sourceFilter === option.id ? c.primaryForeground : c.foreground }]}>{option.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Text style={[styles.filterGroupLabel, { color: c.mutedForeground }]}>DATE</Text>
+              <View style={styles.filterOptionGrid}>
+                {([
+                  { id: "all" as DateFilter, label: "All dates" },
+                  { id: "this_month" as DateFilter, label: "This month" },
+                  { id: "last_month" as DateFilter, label: "Last month" },
+                  { id: "this_year" as DateFilter, label: "This year" },
+                ]).map(option => (
+                  <Pressable
+                    key={option.id}
+                    onPress={() => setDateFilter(option.id)}
+                    style={[styles.filterChip, { backgroundColor: dateFilter === option.id ? c.primary : c.card, borderColor: dateFilter === option.id ? c.primary : c.border }]}
+                  >
+                    <Text style={[styles.filterText, { color: dateFilter === option.id ? c.primaryForeground : c.foreground }]}>{option.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              {categoryOptions.length > 0 && (
+                <>
+                  <Text style={[styles.filterGroupLabel, { color: c.mutedForeground }]}>CATEGORY</Text>
+                  <View style={styles.filterOptionGrid}>
+                    {["all", ...categoryOptions].map(category => (
+                      <Pressable
+                        key={category}
+                        onPress={() => setCategoryFilter(category)}
+                        style={[styles.filterChip, { backgroundColor: categoryFilter === category ? c.primary : c.card, borderColor: categoryFilter === category ? c.primary : c.border }]}
+                      >
+                        <Text style={[styles.filterText, { color: categoryFilter === category ? c.primaryForeground : c.foreground }]}>
+                          {category === "all" ? "All categories" : category}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </>
+              )}
+
+              <Text style={[styles.filterGroupLabel, { color: c.mutedForeground }]}>SORT</Text>
+              <View style={styles.filterOptionGrid}>
+                {([
+                  { id: "asc" as SortOrder, label: "Earlier first", icon: "arrow-up" as const },
+                  { id: "desc" as SortOrder, label: "Later first", icon: "arrow-down" as const },
+                ]).map(option => (
+                  <Pressable
+                    key={option.id}
+                    onPress={() => setSortOrder(option.id)}
+                    style={[styles.filterChip, { backgroundColor: sortOrder === option.id ? c.primary : c.card, borderColor: sortOrder === option.id ? c.primary : c.border }]}
+                  >
+                    <Feather name={option.icon} size={13} color={sortOrder === option.id ? c.primaryForeground : c.foreground} />
+                    <Text style={[styles.filterText, { color: sortOrder === option.id ? c.primaryForeground : c.foreground }]}>{option.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </ScrollView>
+
+            <View style={styles.filterActions}>
+              <Pressable onPress={clearFilterSelections} style={[styles.filterActionButton, { backgroundColor: c.card, borderColor: c.border }]}>
+                <Text style={[styles.filterActionText, { color: c.mutedForeground }]}>Clear</Text>
+              </Pressable>
+              <Pressable onPress={() => setFilterModalVisible(false)} style={[styles.filterActionButton, { backgroundColor: c.primary, borderColor: c.primary }]}>
+                <Text style={[styles.filterActionText, { color: c.primaryForeground }]}>Show {filtered.length} results</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
       {/* ── Edit modal (manual transactions) ── */}
       <AddTransactionModal
         visible={editModalVisible}
@@ -640,19 +688,27 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
   addBtn:   { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
 
-  searchWrap:  {},
-  searchBox:   { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
+  searchWrap:  { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16 },
+  searchBox:   { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
   searchInput: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", padding: 0 },
+  filterIconButton: { width: 44, height: 44, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  filterCount: { position: "absolute", top: -5, right: -5, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, alignItems: "center", justifyContent: "center" },
+  filterCountText: { color: "#fff", fontSize: 10, fontFamily: "Inter_700Bold" },
 
-  filtersWrap:  { marginBottom: 12 },
-  filterHeader:{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, marginBottom: 8 },
-  filterLabel: { flex: 1, fontSize: 10, fontFamily: "Inter_700Bold", letterSpacing: 0.7 },
-  filterRow:   { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingBottom: 8 },
-  filterChip:  { paddingHorizontal: 14, paddingVertical: 8 },
-  filterText:  { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  sortButton:  { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderRadius: 9, paddingHorizontal: 9, paddingVertical: 6 },
-  sortText:    { fontSize: 11, fontFamily: "Inter_600SemiBold" },
-  clearText:   { fontSize: 12, fontFamily: "Inter_700Bold" },
+  filterOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.55)" },
+  filterSheet: { borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32, maxHeight: "88%" },
+  filterHandle: { width: 38, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 16 },
+  filterSheetHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 },
+  filterSheetTitle: { fontSize: 20, fontFamily: "Inter_700Bold" },
+  filterSheetSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 3 },
+  filterSheetScroll: { flexGrow: 0 },
+  filterGroupLabel: { fontSize: 10, fontFamily: "Inter_700Bold", letterSpacing: 0.7, marginTop: 12, marginBottom: 8 },
+  filterOptionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  filterChip: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 13, paddingVertical: 9, borderWidth: 1, borderRadius: 10 },
+  filterText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  filterActions: { flexDirection: "row", gap: 10, marginTop: 18 },
+  filterActionButton: { flex: 1, minHeight: 48, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 10 },
+  filterActionText: { fontSize: 14, fontFamily: "Inter_700Bold" },
 
   summaryRow:     { flexDirection: "row", paddingVertical: 14 },
   summaryStat:    { flex: 1, alignItems: "center", gap: 4 },
