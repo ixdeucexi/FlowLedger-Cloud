@@ -172,7 +172,7 @@ export default function MoreScreen() {
     ]);
   };
 
-  const webTopPad = Platform.OS === "web" ? 67 : 0;
+  const webTopPad = Platform.OS === "web" ? 4 : 0;
 
   return (
     <ScrollView

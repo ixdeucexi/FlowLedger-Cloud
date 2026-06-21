@@ -221,7 +221,7 @@ export default function MonthlyScreen() {
     ? txList.filter(t => t.date === selectedDate)
     : txList.slice().sort((a, b) => b.date.localeCompare(a.date));
 
-  const webTopPad = Platform.OS === "web" ? 67 : 0;
+  const webTopPad = Platform.OS === "web" ? 4 : 0;
 
   return (
     <View style={[styles.screen, { backgroundColor: c.background }]}>

@@ -100,7 +100,7 @@ export default function TransactionsScreen() {
   const [typeFilter, setTypeFilter]             = useState<TypeFilter>("all");
   const [search, setSearch]                     = useState("");
 
-  const webTopPad = Platform.OS === "web" ? 67 : 0;
+  const webTopPad = Platform.OS === "web" ? 4 : 0;
 
   // ── Build unified activity feed ───────────────────────────────────────────
   const allActivity = useMemo((): ActivityItem[] => {
