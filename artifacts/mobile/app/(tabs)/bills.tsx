@@ -47,7 +47,7 @@ export default function BillsScreen() {
     }
   }, [dashboardFilter]);
 
-  const webTopPad = Platform.OS === "web" ? 67 : 0;
+  const webTopPad = Platform.OS === "web" ? 4 : 0;
 
   // ── Bills data ──────────────────────────────────────────────────
   const nonDebtBills = bills.filter(b => !b.is_debt);
