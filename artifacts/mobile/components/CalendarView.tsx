@@ -47,16 +47,18 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
     dailyBalances.forEach(db => { balanceByDay[db.day] = db; });
   }
 
-  // Keep affordability goals visible even when projected-balance data is unavailable or stale.
-  const budgetGoalsByDay: Record<number, GoalExpense[]> = {};
+  // Read goal dates directly so calendar markers never depend on projection cache state.
+  const goalsByDay: Record<number, GoalExpense[]> = {};
   goals.forEach(goal => {
-    if (goal.current_amount >= 0 || !goal.target_date) return;
-    const raw = goal.target_date.includes("T") ? goal.target_date : goal.target_date + "T12:00:00";
-    const target = new Date(raw);
-    if (target.getFullYear() !== year || target.getMonth() !== month) return;
-    const day = target.getDate();
-    if (!budgetGoalsByDay[day]) budgetGoalsByDay[day] = [];
-    budgetGoalsByDay[day].push({ id: goal.id, name: goal.name, amount: goal.target_amount });
+    if (!goal.target_date) return;
+    const [targetYear, targetMonth, targetDay] = goal.target_date.split("T")[0].split("-").map(Number);
+    if (targetYear !== year || targetMonth - 1 !== month || !Number.isFinite(targetDay)) return;
+    const target = Number(goal.target_amount) || 0;
+    const saved = Math.max(0, Number(goal.current_amount) || 0);
+    const remaining = Math.max(0, target - saved);
+    if (remaining <= 0) return;
+    if (!goalsByDay[targetDay]) goalsByDay[targetDay] = [];
+    goalsByDay[targetDay].push({ id: goal.id, name: goal.name, amount: remaining });
   });
 
   const cells: (number | null)[] = [];
@@ -84,7 +86,7 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
           const db = balanceByDay[day];
 
           const calendarGoals = [...(db?.goalExpenses ?? [])];
-          (budgetGoalsByDay[day] ?? []).forEach(goal => {
+          (goalsByDay[day] ?? []).forEach(goal => {
             if (!calendarGoals.some(existing => existing.id === goal.id)) calendarGoals.push(goal);
           });
           const goalTotal = db ? db.goalExpenses.reduce((s, g) => s + g.amount, 0) : 0;
