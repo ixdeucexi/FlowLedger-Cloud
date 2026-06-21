@@ -202,6 +202,19 @@ function genId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+function parseGoalTargetDate(targetDate: string): { year: number; month: number; day: number } | null {
+  const datePart = targetDate.split("T")[0];
+  const [year, month, day] = datePart.split("-").map(Number);
+  if (![year, month, day].every(Number.isFinite) || month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return { year, month: month - 1, day };
+}
+
+function getGoalRemainingAmount(goal: Pick<Goal, "target_amount" | "current_amount">): number {
+  const target = Number(goal.target_amount) || 0;
+  const saved = Math.max(0, Number(goal.current_amount) || 0);
+  return Math.max(0, target - saved);
+}
+
 async function ensureSaved(
   operation: PromiseLike<{ error: { message: string } | null }>,
   action: string
@@ -774,7 +787,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         const [sbY, sbM] = settings.starting_balance_date.split("-").map(Number);
         anchorM = sbM - 1; anchorY = sbY; seed = settings.starting_balance;
         if (year < anchorY || (year === anchorY && month < anchorM)) {
-          const needed = Math.max(0, goal.target_amount - goal.current_amount);
+          const needed = getGoalRemainingAmount(goal);
           return { projectedBalance: 0, canAfford: needed === 0, shortfall: needed };
         }
       } else {
@@ -783,7 +796,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         if (anchorM < 0) { anchorM = 11; anchorY -= 1; }
         seed = settings.starting_balance;
         if (year < anchorY || (year === anchorY && month < anchorM)) {
-          const needed = Math.max(0, goal.target_amount - goal.current_amount);
+          const needed = getGoalRemainingAmount(goal);
           return { projectedBalance: seed, canAfford: seed >= needed, shortfall: Math.max(0, needed - seed) };
         }
       }
@@ -795,7 +808,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         m++; if (m > 11) { m = 0; y++; }
       }
       const projectedBalance = balance;
-      const needed = Math.max(0, goal.target_amount - goal.current_amount);
+      const needed = getGoalRemainingAmount(goal);
       const canAfford = projectedBalance >= needed;
       return { projectedBalance, canAfford, shortfall: canAfford ? 0 : needed - projectedBalance };
     },
@@ -839,9 +852,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         .reduce((s, t) => s + t.amount, 0);
       const goalDeductions = goals.reduce((s, g) => {
         if (!g.target_date) return s;
-        const raw = g.target_date.includes("T") ? g.target_date : g.target_date + "T12:00:00";
-        const d = new Date(raw);
-        if (d.getFullYear() === y && d.getMonth() === m) return s + Math.max(0, g.target_amount - g.current_amount);
+        const targetDate = parseGoalTargetDate(g.target_date);
+        if (targetDate?.year === y && targetDate.month === m) return s + getGoalRemainingAmount(g);
         return s;
       }, 0);
       return inc + tx - bil - goalDeductions;
@@ -888,12 +900,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const goalsByDay: Record<number, GoalExpense[]> = {};
     goals.forEach(g => {
       if (!g.target_date) return;
-      const raw = g.target_date.includes("T") ? g.target_date : g.target_date + "T12:00:00";
-      const d = new Date(raw);
-      if (d.getFullYear() !== year || d.getMonth() !== month) return;
-      const day = d.getDate();
+      const targetDate = parseGoalTargetDate(g.target_date);
+      if (!targetDate || targetDate.year !== year || targetDate.month !== month) return;
+      const day = targetDate.day;
       if (!goalsByDay[day]) goalsByDay[day] = [];
-      const remaining = Math.max(0, g.target_amount - g.current_amount);
+      const remaining = getGoalRemainingAmount(g);
       if (remaining > 0) goalsByDay[day].push({ id: g.id, name: g.name, amount: remaining });
     });
     let runningBalance = carryover;

@@ -31,6 +31,7 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Prop
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
   const [current, setCurrent] = useState("");
+  const [goalMode, setGoalMode] = useState<"savings" | "budget">("savings");
   const [targetDate, setTargetDate] = useState(""); // YYYY-MM-DD
 
   const today = new Date();
@@ -41,9 +42,10 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Prop
       setName(editGoal.name);
       setTarget(editGoal.target_amount.toString());
       setCurrent(editGoal.current_amount > 0 ? editGoal.current_amount.toString() : "");
+      setGoalMode(editGoal.current_amount < 0 ? "budget" : "savings");
       setTargetDate(editGoal.target_date.split("T")[0]);
     } else {
-      setName(""); setTarget(""); setCurrent("");
+      setName(""); setTarget(""); setCurrent(""); setGoalMode("savings");
       const d = new Date();
       d.setFullYear(d.getFullYear() + 1);
       setTargetDate(dateToYMD(d));
@@ -57,7 +59,7 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Prop
     const data: Omit<Goal, "id" | "created_at"> = {
       name: name.trim(),
       target_amount: t,
-      current_amount: parseFloat(current) || 0,
+      current_amount: goalMode === "budget" ? -1 : (parseFloat(current) || 0),
       target_date: targetDate, // stored as YYYY-MM-DD
     };
     if (editGoal) onSave({ ...data, id: editGoal.id, created_at: editGoal.created_at });
@@ -98,13 +100,39 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Prop
 
           <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
+            {/* ── Goal type ── */}
+            <Text style={lbl}>Goal Type</Text>
+            <View style={styles.modeRow}>
+              {([
+                { id: "savings" as const, label: "Savings Goal", icon: "trending-up" as const },
+                { id: "budget" as const, label: "Can I Afford It?", icon: "calendar" as const },
+              ]).map(option => {
+                const selected = goalMode === option.id;
+                return (
+                  <Pressable
+                    key={option.id}
+                    onPress={() => setGoalMode(option.id)}
+                    style={[styles.modeBtn, { backgroundColor: selected ? c.primary + "18" : c.muted, borderColor: selected ? c.primary : c.border }]}
+                  >
+                    <Feather name={option.icon} size={16} color={selected ? c.primary : c.mutedForeground} />
+                    <Text style={[styles.modeText, { color: selected ? c.primary : c.foreground }]}>{option.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={[styles.modeHint, { color: c.mutedForeground }]}>
+              {goalMode === "budget"
+                ? "See whether your projected account balance can cover the full amount on that date."
+                : "Track money you are actively setting aside toward a target."}
+            </Text>
+
             {/* ── Name ── */}
-            <Text style={lbl}>Goal Name</Text>
+            <Text style={lbl}>{goalMode === "budget" ? "What are you planning?" : "Goal Name"}</Text>
             <TextInput
               style={input}
               value={name}
               onChangeText={setName}
-              placeholder="e.g. Christmas Fund"
+              placeholder={goalMode === "budget" ? "e.g. Christmas gifts" : "e.g. Emergency fund"}
               placeholderTextColor={c.mutedForeground}
             />
 
@@ -119,16 +147,20 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Prop
               keyboardType="decimal-pad"
             />
 
-            {/* ── Already saved ── */}
-            <Text style={lbl}>Already Saved ($)</Text>
-            <TextInput
-              style={input}
-              value={current}
-              onChangeText={setCurrent}
-              placeholder="0.00"
-              placeholderTextColor={c.mutedForeground}
-              keyboardType="decimal-pad"
-            />
+            {goalMode === "savings" && (
+              <>
+                {/* ── Already saved ── */}
+                <Text style={lbl}>Already Saved ($)</Text>
+                <TextInput
+                  style={input}
+                  value={current}
+                  onChangeText={setCurrent}
+                  placeholder="0.00"
+                  placeholderTextColor={c.mutedForeground}
+                  keyboardType="decimal-pad"
+                />
+              </>
+            )}
 
             {/* ── Target date ── */}
             <DatePickerField
@@ -143,7 +175,9 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Prop
             <View style={[styles.hint, { backgroundColor: c.primary + "15", borderRadius: 8 }]}>
               <Feather name="info" size={13} color={c.primary} />
               <Text style={[styles.hintText, { color: c.mutedForeground }]}>
-                The app will check if your projected balance (income − bills) covers this goal amount by the target date.
+                {goalMode === "budget"
+                  ? "This checks your projected account balance on the selected date. Nothing is treated as already saved."
+                  : "Add contributions over time and compare your saved amount with the target."}
               </Text>
             </View>
 
@@ -184,6 +218,10 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontFamily: "Inter_700Bold" },
   label: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginBottom: 6, marginTop: 14, textTransform: "uppercase", letterSpacing: 0.7 },
   input: { height: 48, borderRadius: 10, paddingHorizontal: 14, fontSize: 16, fontFamily: "Inter_400Regular" },
+  modeRow: { flexDirection: "row", gap: 8 },
+  modeBtn: { flex: 1, minHeight: 48, borderRadius: 10, borderWidth: 1.5, paddingHorizontal: 10, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7 },
+  modeText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  modeHint: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 7 },
   hint: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 10, marginTop: 14 },
   hintText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
   saveBtn: { height: 52, alignItems: "center", justifyContent: "center", marginTop: 20 },

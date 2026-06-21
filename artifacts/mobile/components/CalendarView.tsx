@@ -1,7 +1,7 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import type { DailyBalance, GoalExpense, Transaction } from "@/context/BudgetContext";
+import type { DailyBalance, Goal, GoalExpense, Transaction } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 
 const DAY_NAMES = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
@@ -13,6 +13,7 @@ interface CalendarViewProps {
   selectedDate: string | null;
   onDayPress: (date: string) => void;
   dailyBalances?: DailyBalance[];
+  goals?: Goal[];
 }
 
 function fmt(n: number, compact = true) {
@@ -21,7 +22,7 @@ function fmt(n: number, compact = true) {
   return abs.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-export function CalendarView({ month, year, transactions, selectedDate, onDayPress, dailyBalances }: CalendarViewProps) {
+export function CalendarView({ month, year, transactions, selectedDate, onDayPress, dailyBalances, goals = [] }: CalendarViewProps) {
   const c = useColors();
 
   const firstDay = new Date(year, month, 1).getDay();
@@ -45,6 +46,20 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
   if (dailyBalances) {
     dailyBalances.forEach(db => { balanceByDay[db.day] = db; });
   }
+
+  // Read goal dates directly so calendar markers never depend on projection cache state.
+  const goalsByDay: Record<number, GoalExpense[]> = {};
+  goals.forEach(goal => {
+    if (!goal.target_date) return;
+    const [targetYear, targetMonth, targetDay] = goal.target_date.split("T")[0].split("-").map(Number);
+    if (targetYear !== year || targetMonth - 1 !== month || !Number.isFinite(targetDay)) return;
+    const target = Number(goal.target_amount) || 0;
+    const saved = Math.max(0, Number(goal.current_amount) || 0);
+    const remaining = Math.max(0, target - saved);
+    if (remaining <= 0) return;
+    if (!goalsByDay[targetDay]) goalsByDay[targetDay] = [];
+    goalsByDay[targetDay].push({ id: goal.id, name: goal.name, amount: remaining });
+  });
 
   const cells: (number | null)[] = [];
   for (let i = 0; i < firstDay; i++) cells.push(null);
@@ -70,9 +85,13 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
           const dayData = txByDay[day];
           const db = balanceByDay[day];
 
+          const calendarGoals = [...(db?.goalExpenses ?? [])];
+          (goalsByDay[day] ?? []).forEach(goal => {
+            if (!calendarGoals.some(existing => existing.id === goal.id)) calendarGoals.push(goal);
+          });
           const goalTotal = db ? db.goalExpenses.reduce((s, g) => s + g.amount, 0) : 0;
           const net = (dayData ? dayData.income - dayData.expense : 0) - (db ? db.bills : 0) - goalTotal;
-          const hasActivity = dayData || (db && (db.bills > 0 || db.scheduledIncome > 0 || db.goalExpenses.length > 0));
+          const hasActivity = dayData || calendarGoals.length > 0 || (db && (db.bills > 0 || db.scheduledIncome > 0));
 
           // Risk tint based on projected balance
           const riskBg = db
@@ -133,9 +152,9 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
                       ↓{fmt(db.bills)}
                     </Text>
                   )}
-                  {db && db.goalExpenses.length > 0 && (
+                  {calendarGoals.length > 0 && (
                     <Text style={[styles.amtText, { color: "#8b5cf6" }]} numberOfLines={1}>
-                      ★{fmt(db.goalExpenses.reduce((s, g) => s + g.amount, 0))}
+                      ★{fmt(calendarGoals.reduce((s, g) => s + g.amount, 0))}
                     </Text>
                   )}
                 </View>
