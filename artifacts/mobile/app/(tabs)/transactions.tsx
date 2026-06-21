@@ -499,7 +499,7 @@ export default function TransactionsScreen() {
 const styles = StyleSheet.create({
   screen:   { flex: 1 },
   header:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingBottom: 10 },
-  title:    { fontSize: 24, fontFamily: "Inter_700Bold" },
+  title:    { fontSize: 28, fontFamily: "Inter_700Bold" },
   subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
   addBtn:   { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
 
