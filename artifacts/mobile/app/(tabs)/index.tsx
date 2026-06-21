@@ -164,14 +164,17 @@ export default function DashboardScreen() {
     return months;
   }, [bills, currentMonth]);
 
+  // Budget goals use a negative current amount as a backwards-compatible type marker.
+  const savingsGoals = useMemo(() => goals.filter(goal => goal.current_amount >= 0), [goals]);
+
   // ── Savings summary for back of hero card ──────────────────────────────────
   const savingsData = useMemo(() => {
-    const totalSaved  = goals.reduce((s, g) => s + g.current_amount, 0);
-    const totalTarget = goals.reduce((s, g) => s + g.target_amount, 0);
+    const totalSaved  = savingsGoals.reduce((s, g) => s + g.current_amount, 0);
+    const totalTarget = savingsGoals.reduce((s, g) => s + g.target_amount, 0);
     const cf          = getCashFlow(currentMonth, now.getFullYear());
     const monthlySurplus = Math.max(0, cf.remaining);
-    return { totalSaved, totalTarget, monthlySurplus, goalCount: goals.length };
-  }, [goals, getCashFlow, currentMonth]);
+    return { totalSaved, totalTarget, monthlySurplus, goalCount: savingsGoals.length };
+  }, [savingsGoals, getCashFlow, currentMonth]);
 
   // ── Affordability check (real calendar projection) ──────────────────────────
   const RISKY_THRESHOLD = 200;
@@ -227,19 +230,19 @@ export default function DashboardScreen() {
   }, [affordAmt, affordDate, getDailyBalances]);
 
   const openSavingsModal = () => {
-    if (goals.length === 0) {
+    if (savingsGoals.length === 0) {
       setEditGoal(null);
       setGoalModalVisible(true);
       return;
     }
-    setSavingsGoalId(goals[0]?.id ?? "");
+    setSavingsGoalId(savingsGoals[0]?.id ?? "");
     setSavingsAmount("");
     setSavingsModalVisible(true);
   };
 
   const handleAddSavings = async () => {
     const amount = Number.parseFloat(savingsAmount);
-    const goal = goals.find(item => item.id === savingsGoalId);
+    const goal = savingsGoals.find(item => item.id === savingsGoalId);
     if (!goal || !Number.isFinite(amount) || amount <= 0) return;
 
     await updateGoal({ ...goal, current_amount: goal.current_amount + amount });
@@ -452,7 +455,7 @@ export default function DashboardScreen() {
                 </View>
 
                 {/* Mini goal list */}
-                {goals.slice(0, 3).map(g => {
+                {savingsGoals.slice(0, 3).map(g => {
                   const pct = g.target_amount > 0
                     ? Math.min((g.current_amount / g.target_amount) * 100, 100)
                     : 0;
@@ -786,13 +789,15 @@ export default function DashboardScreen() {
         </View>
       ) : (
         goals.map(goal => {
-          const pct = goal.target_amount > 0 ? Math.min(goal.current_amount / goal.target_amount, 1) : 0;
+          const isBudgetGoal = goal.current_amount < 0;
+          const savedAmount = Math.max(0, goal.current_amount);
+          const pct = goal.target_amount > 0 ? Math.min(savedAmount / goal.target_amount, 1) : 0;
           const rawDate   = goal.target_date ?? "";
           const targetDate = rawDate.includes("T") ? new Date(rawDate) : new Date(rawDate + "T12:00:00");
           const goalMonth = targetDate.getMonth();
           const goalYear  = targetDate.getFullYear();
           const afford    = checkGoalAffordability(goal, goalMonth, goalYear);
-          const needed    = Math.max(0, goal.target_amount - goal.current_amount);
+          const needed    = Math.max(0, goal.target_amount - savedAmount);
           return (
             <Pressable
               key={goal.id}
@@ -801,19 +806,32 @@ export default function DashboardScreen() {
             >
               <View style={styles.goalTop}>
                 <View style={styles.goalLeft}>
-                  <Text style={[styles.goalName, { color: c.foreground }]}>{goal.name}</Text>
+                  <View style={styles.goalNameRow}>
+                    <Text style={[styles.goalName, { color: c.foreground }]}>{goal.name}</Text>
+                    {isBudgetGoal && (
+                      <View style={[styles.goalTypeBadge, { backgroundColor: c.primary + "18" }]}>
+                        <Text style={[styles.goalTypeBadgeText, { color: c.primary }]}>CAN I AFFORD IT?</Text>
+                      </View>
+                    )}
+                  </View>
                   <Text style={[styles.goalDate, { color: c.mutedForeground }]}>
                     Target: {targetDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                   </Text>
                 </View>
                 <View style={styles.goalRight}>
-                  <Text style={[styles.goalAmount, { color: c.foreground }]}>${goal.current_amount.toFixed(0)}</Text>
-                  <Text style={[styles.goalTarget, { color: c.mutedForeground }]}>of ${goal.target_amount.toFixed(0)}</Text>
+                  <Text style={[styles.goalAmount, { color: c.foreground }]}>
+                    {goal.target_amount.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })}
+                  </Text>
+                  <Text style={[styles.goalTarget, { color: c.mutedForeground }]}>
+                    {isBudgetGoal ? "purchase amount" : savedAmount.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }) + " saved"}
+                  </Text>
                 </View>
               </View>
-              <View style={[styles.goalProgress, { backgroundColor: c.muted }]}>
-                <View style={[styles.goalProgressFill, { width: `${pct * 100}%` as any, backgroundColor: pct >= 1 ? c.success : c.primary }]} />
-              </View>
+              {!isBudgetGoal && (
+                <View style={[styles.goalProgress, { backgroundColor: c.muted }]}>
+                  <View style={[styles.goalProgressFill, { width: `${pct * 100}%` as any, backgroundColor: pct >= 1 ? c.success : c.primary }]} />
+                </View>
+              )}
               <View style={[styles.affordBox, { backgroundColor: afford.canAfford ? c.success + "18" : c.destructive + "18", borderRadius: 8 }]}>
                 <Feather name={afford.canAfford ? "check-circle" : "alert-circle"} size={14} color={afford.canAfford ? c.success : c.destructive} />
                 <View style={styles.affordText}>
@@ -921,7 +939,7 @@ export default function DashboardScreen() {
 
             <Text style={[styles.savingsFieldLabel, { color: c.mutedForeground }]}>SAVINGS GOAL</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.savingsGoalRow}>
-              {goals.map(goal => (
+              {savingsGoals.map(goal => (
                 <Pressable
                   key={goal.id}
                   onPress={() => setSavingsGoalId(goal.id)}
@@ -1241,7 +1259,10 @@ const styles = StyleSheet.create({
   goalTop:            { flexDirection: "row", alignItems: "flex-start", marginBottom: 10 },
   goalLeft:           { flex: 1 },
   goalRight:          { alignItems: "flex-end" },
+  goalNameRow:        { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6 },
   goalName:           { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  goalTypeBadge:      { borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3 },
+  goalTypeBadgeText:  { fontSize: 9, fontFamily: "Inter_700Bold", letterSpacing: 0.45 },
   goalDate:           { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   goalAmount:         { fontSize: 16, fontFamily: "Inter_700Bold" },
   goalTarget:         { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
