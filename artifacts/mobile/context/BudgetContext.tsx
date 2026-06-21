@@ -774,7 +774,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         const [sbY, sbM] = settings.starting_balance_date.split("-").map(Number);
         anchorM = sbM - 1; anchorY = sbY; seed = settings.starting_balance;
         if (year < anchorY || (year === anchorY && month < anchorM)) {
-          const needed = Math.max(0, goal.target_amount - goal.current_amount);
+          const needed = Math.max(0, goal.target_amount - Math.max(0, goal.current_amount));
           return { projectedBalance: 0, canAfford: needed === 0, shortfall: needed };
         }
       } else {
@@ -783,7 +783,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         if (anchorM < 0) { anchorM = 11; anchorY -= 1; }
         seed = settings.starting_balance;
         if (year < anchorY || (year === anchorY && month < anchorM)) {
-          const needed = Math.max(0, goal.target_amount - goal.current_amount);
+          const needed = Math.max(0, goal.target_amount - Math.max(0, goal.current_amount));
           return { projectedBalance: seed, canAfford: seed >= needed, shortfall: Math.max(0, needed - seed) };
         }
       }
@@ -795,7 +795,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         m++; if (m > 11) { m = 0; y++; }
       }
       const projectedBalance = balance;
-      const needed = Math.max(0, goal.target_amount - goal.current_amount);
+      const needed = Math.max(0, goal.target_amount - Math.max(0, goal.current_amount));
       const canAfford = projectedBalance >= needed;
       return { projectedBalance, canAfford, shortfall: canAfford ? 0 : needed - projectedBalance };
     },
@@ -841,7 +841,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         if (!g.target_date) return s;
         const raw = g.target_date.includes("T") ? g.target_date : g.target_date + "T12:00:00";
         const d = new Date(raw);
-        if (d.getFullYear() === y && d.getMonth() === m) return s + Math.max(0, g.target_amount - g.current_amount);
+        if (d.getFullYear() === y && d.getMonth() === m) return s + Math.max(0, g.target_amount - Math.max(0, g.current_amount));
         return s;
       }, 0);
       return inc + tx - bil - goalDeductions;
@@ -893,7 +893,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       if (d.getFullYear() !== year || d.getMonth() !== month) return;
       const day = d.getDate();
       if (!goalsByDay[day]) goalsByDay[day] = [];
-      const remaining = Math.max(0, g.target_amount - g.current_amount);
+      const remaining = Math.max(0, g.target_amount - Math.max(0, g.current_amount));
       if (remaining > 0) goalsByDay[day].push({ id: g.id, name: g.name, amount: remaining });
     });
     let runningBalance = carryover;
