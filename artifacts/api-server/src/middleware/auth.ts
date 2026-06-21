@@ -1,9 +1,11 @@
 import { jwtVerify } from "jose";
 import type { NextFunction, Request, Response } from "express";
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.SESSION_SECRET ?? "fallback-dev-secret-change-in-prod"
-);
+const sessionSecret = process.env.SESSION_SECRET;
+if (!sessionSecret) {
+  throw new Error("SESSION_SECRET is required");
+}
+const JWT_SECRET = new TextEncoder().encode(sessionSecret);
 
 export interface AuthPayload {
   userId: string;

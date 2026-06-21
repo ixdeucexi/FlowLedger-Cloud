@@ -133,9 +133,15 @@ export default function TransactionsScreen() {
 
     // 2. Bill payments — overrides where paid_amount > 0
     for (const override of overrides) {
-      if (override.paid_amount <= 0) continue;
       const bill = bills.find(b => b.id === override.bill_id);
       if (!bill) continue;
+      const extraApplied = extraPayments
+        .filter(ep => ep.month === override.month && ep.year === override.year)
+        .flatMap(ep => ep.allocations)
+        .filter(allocation => allocation.billId === override.bill_id)
+        .reduce((sum, allocation) => sum + allocation.payment, 0);
+      const regularPaid = Math.max(0, override.paid_amount - extraApplied);
+      if (regularPaid <= 0) continue;
       const dueDay      = override.custom_due_day ?? bill.due_day;
       const daysInMonth = new Date(override.year, override.month + 1, 0).getDate();
       const day         = Math.min(dueDay, daysInMonth);
@@ -143,12 +149,12 @@ export default function TransactionsScreen() {
       items.push({
         id:       `bill-${override.id}`,
         date,
-        amount:   -override.paid_amount,
+        amount:   -regularPaid,
         label:    bill.name,
         category: bill.category,
         source:   "bill_payment",
         editable: false,
-        detail:   `$${override.paid_amount.toFixed(2)} paid on day ${day} of ${MONTH_NAMES_LONG[override.month]} ${override.year}`,
+        detail:   `${regularPaid.toFixed(2)} paid on day ${day} of ${MONTH_NAMES_LONG[override.month]} ${override.year}`,
       });
     }
 
