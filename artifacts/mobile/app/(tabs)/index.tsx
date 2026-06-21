@@ -276,7 +276,7 @@ export default function DashboardScreen() {
     { title: "Bills",   value: `$${stats.totalDue.toFixed(0)}`,    icon: "file-text"    as const, col: c.primary,                                        filter: null    as DashboardFilter, tab: "bills"   },
     { title: "Paid",    value: `$${stats.totalPaid.toFixed(0)}`,   icon: "check-circle" as const, col: c.success,                                        filter: "paid"  as DashboardFilter, tab: "monthly" },
     { title: "Unpaid",  value: `$${stats.remaining.toFixed(0)}`,   icon: "alert-circle" as const, col: stats.remaining > 0 ? c.warning : c.success,      filter: "unpaid" as DashboardFilter, tab: "monthly" },
-    { title: "Debt",    value: `${stats.totalDebt.toFixed(0)}`,   icon: "credit-card"  as const, col: c.destructive,                                    filter: "debt"  as DashboardFilter, tab: "bills"   },
+    { title: "Debt",    value: `$${stats.totalDebt.toFixed(0)}`,   icon: "credit-card"  as const, col: c.destructive,                                    filter: "debt"  as DashboardFilter, tab: "bills"   },
   ];
 
   // Build breakdown string: Income − Bills [± Transactions] = Left
