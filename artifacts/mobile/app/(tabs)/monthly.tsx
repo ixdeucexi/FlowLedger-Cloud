@@ -847,7 +847,7 @@ export default function MonthlyScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingBottom: 8 },
-  title: { fontSize: 22, fontFamily: "Inter_700Bold" },
+  title: { fontSize: 28, fontFamily: "Inter_700Bold" },
   forecastTag: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginTop: 1 },
   iconBtn: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
   tabBar: { flexDirection: "row", padding: 4, gap: 4 },
