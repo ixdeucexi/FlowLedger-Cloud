@@ -121,7 +121,7 @@ export interface DailyBalance {
   balance: number;
 }
 
-export type DashboardFilter = "bills" | "debt" | null;
+export type DashboardFilter = "bills" | "debt" | "paid" | "unpaid" | null;
 
 // ─── Context shape ─────────────────────────────────────────────────────────────
 
@@ -200,6 +200,14 @@ const DEFAULT_CATEGORIES = [
 
 function genId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+async function ensureSaved(
+  operation: PromiseLike<{ error: { message: string } | null }>,
+  action: string
+): Promise<void> {
+  const { error } = await operation;
+  if (error) throw new Error(`${action}: ${error.message}`);
 }
 
 function reorderDebtPriorities(bills: Bill[]): Bill[] {
@@ -396,7 +404,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const addBill = useCallback(async (bill: Omit<Bill, "id" | "created_at">) => {
     if (!user) return;
     const nb: Bill = { ...bill, id: genId(), created_at: new Date().toISOString() };
-    await supabase.from("bills").insert({ ...nb, user_id: user.id });
+    await ensureSaved(supabase.from("bills").insert({ ...nb, user_id: user.id }), "Add bill");
     setBills(prev => reorderDebtPriorities([...prev, nb]));
   }, [user]);
 
@@ -441,7 +449,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       }
       await Promise.all(dbUpdates);
     }
-    await supabase.from("bills").update({ ...bill }).eq("id", bill.id).eq("user_id", user.id);
+    await ensureSaved(supabase.from("bills").update({ ...bill }).eq("id", bill.id).eq("user_id", user.id), "Update bill");
     setBills(prev => reorderDebtPriorities(prev.map(b => b.id === bill.id ? bill : b)));
   }, [user, bills]);
 
@@ -647,19 +655,19 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const addTransaction = useCallback(async (tx: Omit<Transaction, "id">) => {
     if (!user) return;
     const nt: Transaction = { ...tx, id: genId() };
-    await supabase.from("transactions").insert({ ...nt, user_id: user.id });
+    await ensureSaved(supabase.from("transactions").insert({ ...nt, user_id: user.id }), "Add transaction");
     setTransactions(prev => [...prev, nt]);
   }, [user]);
 
   const updateTransaction = useCallback(async (tx: Transaction) => {
     if (!user) return;
-    await supabase.from("transactions").update({ ...tx }).eq("id", tx.id).eq("user_id", user.id);
+    await ensureSaved(supabase.from("transactions").update({ ...tx }).eq("id", tx.id).eq("user_id", user.id), "Update transaction");
     setTransactions(prev => prev.map(t => t.id === tx.id ? tx : t));
   }, [user]);
 
   const deleteTransaction = useCallback(async (id: string) => {
     if (!user) return;
-    await supabase.from("transactions").delete().eq("id", id).eq("user_id", user.id);
+    await ensureSaved(supabase.from("transactions").delete().eq("id", id).eq("user_id", user.id), "Delete transaction");
     setTransactions(prev => prev.filter(t => t.id !== id));
   }, [user]);
 
@@ -677,19 +685,19 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const addIncome = useCallback(async (item: Omit<IncomeItem, "id">) => {
     if (!user) return;
     const ni: IncomeItem = { ...item, id: genId() };
-    await supabase.from("incomes").insert({ ...ni, amount_history: ni.amount_history ?? [], user_id: user.id });
+    await ensureSaved(supabase.from("incomes").insert({ ...ni, amount_history: ni.amount_history ?? [], user_id: user.id }), "Add income");
     setIncomes(prev => [...prev, ni]);
   }, [user]);
 
   const updateIncome = useCallback(async (item: IncomeItem) => {
     if (!user) return;
-    await supabase.from("incomes").update({ ...item, amount_history: item.amount_history ?? [] }).eq("id", item.id).eq("user_id", user.id);
+    await ensureSaved(supabase.from("incomes").update({ ...item, amount_history: item.amount_history ?? [] }).eq("id", item.id).eq("user_id", user.id), "Update income");
     setIncomes(prev => prev.map(i => i.id === item.id ? item : i));
   }, [user]);
 
   const deleteIncome = useCallback(async (id: string) => {
     if (!user) return;
-    await supabase.from("incomes").delete().eq("id", id).eq("user_id", user.id);
+    await ensureSaved(supabase.from("incomes").delete().eq("id", id).eq("user_id", user.id), "Delete income");
     setIncomes(prev => prev.filter(i => i.id !== id));
   }, [user]);
 
@@ -725,26 +733,26 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const addGoal = useCallback(async (goal: Omit<Goal, "id" | "created_at">) => {
     if (!user) return;
     const ng: Goal = { ...goal, id: genId(), created_at: new Date().toISOString() };
-    await supabase.from("goals").insert({ ...ng, user_id: user.id });
+    await ensureSaved(supabase.from("goals").insert({ ...ng, user_id: user.id }), "Add goal");
     setGoals(prev => [...prev, ng]);
   }, [user]);
 
   const updateGoal = useCallback(async (goal: Goal) => {
     if (!user) return;
-    await supabase.from("goals").update({ ...goal }).eq("id", goal.id).eq("user_id", user.id);
+    await ensureSaved(supabase.from("goals").update({ ...goal }).eq("id", goal.id).eq("user_id", user.id), "Update goal");
     setGoals(prev => prev.map(g => g.id === goal.id ? goal : g));
   }, [user]);
 
   const deleteGoal = useCallback(async (id: string) => {
     if (!user) return;
-    await supabase.from("goals").delete().eq("id", id).eq("user_id", user.id);
+    await ensureSaved(supabase.from("goals").delete().eq("id", id).eq("user_id", user.id), "Delete goal");
     setGoals(prev => prev.filter(g => g.id !== id));
   }, [user]);
 
   const checkGoalAffordability = useCallback(
     (goal: Goal, month: number, year: number): GoalAffordability => {
       const monthNet = (m: number, y: number): number => {
-        const inc = incomes.reduce((s, i) => s + getIncomeOccurrenceDays(i, m, y).length * i.amount, 0);
+        const inc = incomes.reduce((s, i) => s + getIncomeOccurrenceDays(i, m, y).length * getEffectiveIncomeAmount(i, m, y), 0);
         const bil = bills.filter(b => b.is_recurring || b.is_debt).reduce((s, b) => {
           const occ = getBillOccurrenceDays(b, m, y);
           if (occ.length === 0) return s;
@@ -795,7 +803,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const getCashFlow = useCallback((month: number, year: number): CashFlow => {
     const monthlyIncome = incomes
       .filter(i => isIncomeActiveForMonth(i, month, year))
-      .reduce((s, i) => s + getIncomeOccurrenceDays(i, month, year).length * i.amount, 0);
+      .reduce((s, i) => s + getIncomeOccurrenceDays(i, month, year).length * getEffectiveIncomeAmount(i, month, year), 0);
     const activeBills = bills.filter(b => (b.is_recurring || b.is_debt) && isBillActiveForMonth(b, month, year));
     const totalBillsDue = activeBills.reduce((s, b) => {
       const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
@@ -814,7 +822,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const getDailyBalances = useCallback((month: number, year: number): DailyBalance[] => {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const computeMonthNet = (m: number, y: number): number => {
-      const inc = incomes.reduce((s, i) => s + getIncomeOccurrenceDays(i, m, y).length * i.amount, 0);
+      const inc = incomes.reduce((s, i) => s + getIncomeOccurrenceDays(i, m, y).length * getEffectiveIncomeAmount(i, m, y), 0);
       const bil = bills.filter(b => b.is_recurring || b.is_debt).reduce((s, b) => {
         const occ = getBillOccurrenceDays(b, m, y);
         if (occ.length === 0) return s;
@@ -829,7 +837,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         if (!g.target_date) return s;
         const raw = g.target_date.includes("T") ? g.target_date : g.target_date + "T12:00:00";
         const d = new Date(raw);
-        if (d.getFullYear() === y && d.getMonth() === m) return s + g.target_amount;
+        if (d.getFullYear() === y && d.getMonth() === m) return s + Math.max(0, g.target_amount - g.current_amount);
         return s;
       }, 0);
       return inc + tx - bil - goalDeductions;
@@ -881,7 +889,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       if (d.getFullYear() !== year || d.getMonth() !== month) return;
       const day = d.getDate();
       if (!goalsByDay[day]) goalsByDay[day] = [];
-      goalsByDay[day].push({ id: g.id, name: g.name, amount: g.target_amount });
+      const remaining = Math.max(0, g.target_amount - g.current_amount);
+      if (remaining > 0) goalsByDay[day].push({ id: g.id, name: g.name, amount: remaining });
     });
     let runningBalance = carryover;
     const result: DailyBalance[] = [];
