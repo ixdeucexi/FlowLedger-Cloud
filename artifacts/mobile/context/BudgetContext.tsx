@@ -125,6 +125,15 @@ export interface CashFlow {
   remaining: number;
 }
 
+export interface MonthlyBillSummary {
+  totalDue: number;
+  totalPaid: number;
+  remaining: number;
+  paidCount: number;
+  unpaidCount: number;
+  billCount: number;
+}
+
 export interface GoalExpense {
   id: string;
   name: string;
@@ -177,6 +186,7 @@ interface BudgetContextType {
   getBillOccurrencesInMonth: (bill: Bill, month: number, year: number) => number[];
   getBillMonthlyTotal: (bill: Bill, month: number, year: number) => number;
   getBillEffectiveMonthlyTotal: (bill: Bill, month: number, year: number) => number;
+  getMonthlyBillSummary: (month: number, year: number) => MonthlyBillSummary;
 
   runSnowball: (month: number, year: number, extraAmount: number) => SnowballAllocation[];
   previewDebtSnowball: (month: number, year: number, extraAmount?: number, additionalSafeCredit?: number) => SnowballProjectionResult;
@@ -630,6 +640,30 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       bills.filter(b => (b.is_recurring || b.is_debt) && isBillActiveForMonth(b, month, year)),
     [bills]
   );
+
+  const getMonthlyBillSummary = useCallback((month: number, year: number): MonthlyBillSummary => {
+    const monthBills = getMonthlyBills(month, year);
+    let totalDue = 0;
+    let totalPaid = 0;
+    let paidCount = 0;
+
+    monthBills.forEach(bill => {
+      const due = getBillEffectiveMonthlyTotal(bill, month, year);
+      const paid = Math.min(getPaidAmount(bill.id, month, year), due);
+      totalDue += due;
+      totalPaid += paid;
+      if (due > 0 && paid >= due) paidCount += 1;
+    });
+
+    return {
+      totalDue,
+      totalPaid,
+      remaining: Math.max(0, totalDue - totalPaid),
+      paidCount,
+      unpaidCount: monthBills.length - paidCount,
+      billCount: monthBills.length,
+    };
+  }, [getMonthlyBills, getBillEffectiveMonthlyTotal, getPaidAmount]);
 
   // ─── Snowball / Avalanche ─────────────────────────────────────────────────────
 
@@ -1202,7 +1236,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       dashboardFilter, setDashboardFilter,
       addBill, updateBill, deleteBill, getBillById,
       getOverride, getAmount, getPaidAmount, setPaidAmount, setCustomAmount, getCustomDueDay, setCustomDueDay,
-      getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal,
+      getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal, getMonthlyBillSummary,
       runSnowball, previewDebtSnowball, applyDebtSnowballPayment, saveExtraPayment, getExtraPayment, deleteExtraPayment, removeDebtSnowballPayment, finalizeBillPayment,
       addTransaction, updateTransaction, deleteTransaction, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome, getIncomeOccurrencesInMonth,

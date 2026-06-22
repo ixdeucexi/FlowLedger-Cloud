@@ -41,7 +41,7 @@ export default function MonthlyScreen() {
   const {
     bills, overrides, transactions, goals, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
     getCustomDueDay, setCustomDueDay,
-    getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, settings,
+    getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getMonthlyBillSummary, settings,
     selectedYear, setSelectedYear, dashboardFilter, setDashboardFilter,
     getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill,
     getCashFlow, getMonthlyIncome, getDailyBalances, getIncomeOccurrencesInMonth,
@@ -90,8 +90,8 @@ export default function MonthlyScreen() {
     .sort((a, b) => a.bill.due_day - b.bill.due_day);
   }, [monthBills, getAmount, getPaidAmount, month, selectedYear, billFilter]);
 
-  const totalDue = useMemo(() => monthBills.reduce((s, b) => s + getBillMonthlyTotal(b, month, selectedYear), 0), [monthBills, getBillMonthlyTotal, month, selectedYear]);
-  const totalPaid = useMemo(() => monthBills.reduce((s, b) => s + Math.min(getPaidAmount(b.id, month, selectedYear), getBillMonthlyTotal(b, month, selectedYear)), 0), [monthBills, getPaidAmount, getBillMonthlyTotal, month, selectedYear]);
+  const billSummary = useMemo(() => getMonthlyBillSummary(month, selectedYear), [getMonthlyBillSummary, month, selectedYear]);
+  const { totalDue, totalPaid } = billSummary;
 
   const txList = useMemo(() => getTransactionsForMonth(month, selectedYear), [getTransactionsForMonth, month, selectedYear]);
   const dailyBalances = useMemo(() => getDailyBalances(month, selectedYear), [getDailyBalances, month, selectedYear]);
