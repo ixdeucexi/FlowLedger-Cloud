@@ -5,7 +5,7 @@ import * as Haptics from "expo-haptics";
 import * as Sharing from "expo-sharing";
 import React, { useEffect, useState } from "react";
 import {
-  Alert, Image, Platform, Pressable, ScrollView, StyleSheet,
+  Alert, Platform, Pressable, ScrollView, StyleSheet,
   Text, TextInput, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -179,12 +179,6 @@ export default function MoreScreen() {
       style={[styles.screen, { backgroundColor: c.background }]}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 + webTopPad, paddingBottom: insets.bottom + 100 }]}
     >
-      <Image
-        source={require("@/assets/images/settings-logo.jpg")}
-        style={styles.settingsLogo}
-        resizeMode="cover"
-        accessibilityLabel="App logo"
-      />
       <Text style={[styles.pageTitle, { color: c.foreground }]}>Settings</Text>
 
       {/* ── Appearance ── */}
@@ -504,7 +498,6 @@ function SLabel({ c, text }: { c: any; text: string }) {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   content: { paddingHorizontal: 16 },
-  settingsLogo: { width: 76, height: 76, borderRadius: 18, alignSelf: "center", marginBottom: 12 },
   pageTitle:    { fontSize: 28, fontFamily: "Inter_700Bold", marginBottom: 20 },
   pageSubtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginBottom: 20 },
   card: { padding: 16, marginBottom: 20, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
