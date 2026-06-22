@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated, Keyboard, Modal, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, View,
@@ -29,6 +29,7 @@ const CAT_COLORS: Record<string, string> = {
 
 export default function DashboardScreen() {
   const c = useColors();
+  const [isFocused, setIsFocused] = useState(true);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const {
@@ -77,11 +78,31 @@ export default function DashboardScreen() {
   const cashFlow      = useMemo(() => getCashFlow(currentMonth, selectedYear), [getCashFlow, currentMonth, selectedYear]);
   const monthlyIncome = getMonthlyIncome();
 
+  const currentBalancesCache = useRef<ReturnType<typeof getDailyBalances>>([]);
+  const yearScheduleCache = useRef<{ month: number; year: number; label: string; firstNegDay: number | null; lowestBalance: number }[]>([]);
+  const [forecastRefresh, setForecastRefresh] = useState(0);
+  const wasFocused = useRef(isFocused);
+
+  useFocusEffect(useCallback(() => {
+    setIsFocused(true);
+    return () => setIsFocused(false);
+  }, []));
+
+  useEffect(() => {
+    const becameFocused = isFocused && !wasFocused.current;
+    wasFocused.current = isFocused;
+    if (!becameFocused) return;
+    const frame = requestAnimationFrame(() => setForecastRefresh(value => value + 1));
+    return () => cancelAnimationFrame(frame);
+  }, [isFocused]);
+
   // ── Real daily balance metrics for current month ───────────────────────────
-  const currentMonthBalances = useMemo(
-    () => getDailyBalances(currentMonth, selectedYear),
-    [getDailyBalances, currentMonth, selectedYear]
-  );
+  const currentMonthBalances = useMemo(() => {
+    if (!isFocused && currentBalancesCache.current.length) return currentBalancesCache.current;
+    const balances = getDailyBalances(currentMonth, selectedYear);
+    currentBalancesCache.current = balances;
+    return balances;
+  }, [getDailyBalances, currentMonth, selectedYear, forecastRefresh]);
 
   const balanceMetrics = useMemo(() => {
     if (!currentMonthBalances.length) return null;
@@ -99,6 +120,7 @@ export default function DashboardScreen() {
 
   // ── 12-month negative schedule ─────────────────────────────────────────────
   const yearNegSchedule = useMemo(() => {
+    if (!isFocused && yearScheduleCache.current.length) return yearScheduleCache.current;
     const results: { month: number; year: number; label: string; firstNegDay: number | null; lowestBalance: number }[] = [];
     for (let i = 0; i < 12; i++) {
       const m = (currentMonth + i) % 12;
@@ -113,8 +135,9 @@ export default function DashboardScreen() {
         lowestBalance: lowest === Infinity ? 0 : lowest,
       });
     }
+    yearScheduleCache.current = results;
     return results;
-  }, [getDailyBalances, currentMonth, selectedYear]);
+  }, [getDailyBalances, currentMonth, selectedYear, forecastRefresh]);
 
   // First month (across all 12) that goes negative
   const firstYearNegEntry = yearNegSchedule.find(e => e.firstNegDay !== null) ?? null;

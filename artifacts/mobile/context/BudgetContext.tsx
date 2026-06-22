@@ -550,17 +550,38 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     async (billId: string, month: number, year: number, patch: Partial<Omit<MonthlyOverride, "id" | "bill_id" | "month" | "year">>) => {
       if (!user) return;
       const existing = overridesRef.current.find(o => o.bill_id === billId && o.month === month && o.year === year);
-      if (existing) {
-        const updated = { ...existing, ...patch };
-        await ensureSaved(
-          supabase.from("monthly_overrides").update({ ...updated }).eq("id", existing.id).eq("user_id", user.id),
-          "Update monthly bill"
+      const updated: MonthlyOverride = existing
+        ? { ...existing, ...patch }
+        : { id: genId(), bill_id: billId, month, year, paid_amount: 0, ...patch };
+      const optimisticOverrides = existing
+        ? overridesRef.current.map(o => o.id === existing.id ? updated : o)
+        : [...overridesRef.current, updated];
+
+      overridesRef.current = optimisticOverrides;
+      setOverrides(optimisticOverrides);
+
+      try {
+        if (existing) {
+          await ensureSaved(
+            supabase.from("monthly_overrides").update({ ...updated }).eq("id", existing.id).eq("user_id", user.id),
+            "Update monthly bill"
+          );
+        } else {
+          await ensureSaved(supabase.from("monthly_overrides").insert({ ...updated, user_id: user.id }), "Create monthly bill");
+        }
+      } catch (error) {
+        const current = overridesRef.current.find(o => o.id === updated.id);
+        const isStillThisEdit = current && Object.entries(patch).every(
+          ([key, value]) => current[key as keyof MonthlyOverride] === value
         );
-        setOverrides(prev => prev.map(o => o.id === existing.id ? updated : o));
-      } else {
-        const no: MonthlyOverride = { id: genId(), bill_id: billId, month, year, paid_amount: 0, ...patch };
-        await ensureSaved(supabase.from("monthly_overrides").insert({ ...no, user_id: user.id }), "Create monthly bill");
-        setOverrides(prev => [...prev, no]);
+        if (isStillThisEdit) {
+          const rolledBack = existing
+            ? overridesRef.current.map(o => o.id === existing.id ? existing : o)
+            : overridesRef.current.filter(o => o.id !== updated.id);
+          overridesRef.current = rolledBack;
+          setOverrides(rolledBack);
+        }
+        throw error;
       }
     },
     [user]
