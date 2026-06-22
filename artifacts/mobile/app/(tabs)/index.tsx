@@ -9,6 +9,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddBillModal } from "@/components/AddBillModal";
+import { BrandLogo } from "@/components/BrandLogo";
 import { DatePickerField } from "@/components/DatePickerField";
 import { GoalModal } from "@/components/GoalModal";
 
@@ -297,7 +298,7 @@ export default function DashboardScreen() {
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
-      <Text style={[styles.heading,    { color: c.foreground }]}>FlowLedger</Text>
+      <BrandLogo width={176} style={styles.dashboardLogo} />
       <Text style={[styles.subheading, { color: c.mutedForeground }]}>{MONTH_FULL[currentMonth]} {selectedYear}</Text>
 
       {/* ── HERO: flip card — front = Balance Today, back = Savings ── */}
@@ -1156,7 +1157,7 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   screen:  { flex: 1 },
   content: { paddingHorizontal: 16 },
-  heading:    { fontSize: 28, fontFamily: "Inter_700Bold" },
+  dashboardLogo: { marginBottom: 1 },
   subheading: { fontSize: 14, fontFamily: "Inter_400Regular", marginTop: 4, marginBottom: 20 },
 
   // Hero
