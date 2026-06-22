@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { router, Tabs } from "expo-router";
 import React, { useEffect } from "react";
-import { Platform, StyleSheet, View, useColorScheme } from "react-native";
+import { InteractionManager, Platform, StyleSheet, View, useColorScheme } from "react-native";
 
 import { BudgetProvider } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
@@ -29,11 +29,40 @@ export default function TabLayout() {
       "/(tabs)/monthly",
       "/(tabs)/more",
     ] as const;
-    const timers = routes.map((route, index) =>
-      setTimeout(() => router.prefetch(route), 700 + index * 350)
-    );
-    return () => timers.forEach(clearTimeout);
-  }, []);
+    let cancelled = false;
+    let delayTimer: ReturnType<typeof setTimeout> | undefined;
+    let idleHandle: number | undefined;
+    let interactionTask: { cancel: () => void } | undefined;
+
+    const preloadNext = (index: number) => {
+      if (cancelled || index >= routes.length) return;
+      const run = () => {
+        if (cancelled) return;
+        router.prefetch(routes[index]);
+        delayTimer = setTimeout(() => preloadNext(index + 1), 1200);
+      };
+
+      const browser = globalThis as typeof globalThis & {
+        requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      };
+      if (isWeb && browser.requestIdleCallback) {
+        idleHandle = browser.requestIdleCallback(run, { timeout: 6000 });
+      } else {
+        interactionTask = InteractionManager.runAfterInteractions(run);
+      }
+    };
+
+    delayTimer = setTimeout(() => preloadNext(0), 2500);
+    return () => {
+      cancelled = true;
+      if (delayTimer) clearTimeout(delayTimer);
+      if (idleHandle !== undefined) {
+        const browser = globalThis as typeof globalThis & { cancelIdleCallback?: (handle: number) => void };
+        browser.cancelIdleCallback?.(idleHandle);
+      }
+      interactionTask?.cancel();
+    };
+  }, [isWeb]);
 
   return (
     <BudgetProvider>
