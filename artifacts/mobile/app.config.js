@@ -25,10 +25,7 @@ module.exports = {
     },
     web: { favicon: "./assets/images/icon.png" },
     plugins: [
-      ["expo-router", {
-        origin: "https://replit.com/",
-        asyncRoutes: { web: "production" },
-      }],
+      ["expo-router", { origin: "https://replit.com/" }],
       "expo-font",
       "expo-web-browser",
     ],
