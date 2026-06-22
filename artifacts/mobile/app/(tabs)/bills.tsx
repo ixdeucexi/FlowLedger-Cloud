@@ -8,10 +8,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddBillModal } from "@/components/AddBillModal";
 import { EmptyState } from "@/components/EmptyState";
+import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
 import colors from "@/constants/colors";
 import type { Bill } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
+import type { SnowballProjectionResult } from "@/lib/snowball";
 
 const CAT_COLORS: Record<string, string> = {
   Housing: "#0f9b8e", Utilities: "#f0b429", Insurance: "#6366f1",
@@ -30,7 +32,7 @@ export default function BillsScreen() {
     bills, addBill, updateBill, deleteBill,
     dashboardFilter, setDashboardFilter,
     settings, updateSettings,
-    getCashFlow, getDailyBalances, runSnowball, saveExtraPayment,
+    previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, getExtraPayment,
   } = useBudget();
 
   const [activeTab, setActiveTab]       = useState<Tab>("bills");
@@ -39,6 +41,9 @@ export default function BillsScreen() {
   const [filter, setFilter]             = useState<Filter>("all");
   const [sortMode, setSortMode]         = useState<SortMode>("priority");
   const [snowballApplied, setSnowballApplied] = useState(false);
+  const [snowballModalVisible, setSnowballModalVisible] = useState(false);
+  const [snowballAmount, setSnowballAmount] = useState("");
+  const [snowballPreview, setSnowballPreview] = useState<SnowballProjectionResult | null>(null);
 
   useEffect(() => {
     if (dashboardFilter === "debt") {
@@ -67,24 +72,12 @@ export default function BillsScreen() {
   const currentMonth = now.getMonth();
   const currentYear  = now.getFullYear();
 
-  const cashFlow = useMemo(() => getCashFlow(currentMonth, currentYear), [getCashFlow, currentMonth, currentYear]);
-  const extraAvailable = Math.max(0, cashFlow.remaining);
-
-  const safeSnowballAmount = useMemo(() => {
-    let minBalance = Infinity;
-    for (let i = 0; i < 6; i++) {
-      const m = (currentMonth + i) % 12;
-      const y = currentYear + Math.floor((currentMonth + i) / 12);
-      const balances = getDailyBalances(m, y);
-      for (const db of balances) {
-        if (db.balance < minBalance) minBalance = db.balance;
-      }
-    }
-    if (!isFinite(minBalance)) minBalance = 0;
-    return Math.max(0, Math.min(extraAvailable, minBalance));
-  }, [getDailyBalances, currentMonth, currentYear, extraAvailable]);
-
-  const isCapped = safeSnowballAmount < extraAvailable && extraAvailable > 0;
+  const baseSnowballPreview = useMemo(
+    () => previewDebtSnowball(currentMonth, currentYear),
+    [previewDebtSnowball, currentMonth, currentYear, bills],
+  );
+  const safeSnowballAmount = baseSnowballPreview.safeMaximum;
+  const existingSnowball = getExtraPayment(currentMonth, currentYear);
 
   const debts = bills
     .filter(b => b.is_debt)
@@ -108,24 +101,34 @@ export default function BillsScreen() {
 
   const handleApplySnowball = () => {
     if (safeSnowballAmount <= 0) {
-      if (extraAvailable <= 0) {
-        Alert.alert("No Extra Money", "You have no remaining cash to apply to debt this month.");
-      } else {
-        Alert.alert(
-          "Balance Too Low",
-          "Applying any extra to debt would push your balance negative within the next 6 months. Build up your cushion first."
-        );
-      }
+      Alert.alert("$200 Buffer Protected", "There is no extra amount available without moving the six-month forecast below $200.");
       return;
     }
-    const alloc = runSnowball(currentMonth, currentYear, safeSnowballAmount);
-    saveExtraPayment(currentMonth, currentYear, safeSnowballAmount, alloc);
+    const starting = existingSnowball?.amount ?? safeSnowballAmount;
+    setSnowballAmount(starting.toFixed(2));
+    setSnowballPreview(previewDebtSnowball(currentMonth, currentYear, starting));
+    setSnowballModalVisible(true);
+  };
+
+  const handleSnowballAmountChange = (value: string) => {
+    setSnowballAmount(value);
+    const amount = Number.parseFloat(value);
+    setSnowballPreview(previewDebtSnowball(currentMonth, currentYear, Number.isFinite(amount) ? amount : 0));
+  };
+
+  const handleConfirmSnowball = async () => {
+    if (!snowballPreview) return;
+    await applyDebtSnowballPayment(snowballPreview);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setSnowballApplied(true);
-    Alert.alert(
-      "Applied!",
-      `$${safeSnowballAmount.toFixed(2)} allocated across ${alloc.length} debt${alloc.length !== 1 ? "s" : ""} using the ${settings.paymentMethod} method.`
-    );
+    setSnowballModalVisible(false);
+    Alert.alert("Payment Recorded", `$${snowballPreview.selectedExtra.toFixed(2)} was applied to your snowball.`);
+  };
+
+  const handleRemoveSnowball = async () => {
+    await removeDebtSnowballPayment(currentMonth, currentYear);
+    setSnowballModalVisible(false);
+    setSnowballApplied(false);
   };
 
   // ── Subtitle ─────────────────────────────────────────────────────
@@ -264,11 +267,7 @@ export default function BillsScreen() {
                   </Text>
                 </Pressable>
               </View>
-              {isCapped && (
-                <Text style={[styles.cappedNote, { color: c.warning }]}>
-                  Capped from ${extraAvailable.toFixed(2)} — keeps your 6-month balance above $0
-                </Text>
-              )}
+              <Text style={[styles.cappedNote, { color: c.mutedForeground }]}>Keeps your six-month projected balance at or above $200</Text>
             </View>
           )}
 
@@ -420,6 +419,16 @@ export default function BillsScreen() {
         onDelete={deleteBill}
         editBill={editBill}
         forceDebt={activeTab === "debt"}
+      />
+      <SnowballPreviewModal
+        visible={snowballModalVisible}
+        preview={snowballPreview}
+        amount={snowballAmount}
+        existingPayment={!!existingSnowball}
+        onAmountChange={handleSnowballAmountChange}
+        onClose={() => setSnowballModalVisible(false)}
+        onConfirm={handleConfirmSnowball}
+        onRemove={handleRemoveSnowball}
       />
     </View>
   );

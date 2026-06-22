@@ -9,6 +9,8 @@ export const extraPaymentsTable = pgTable("extra_payments", {
   year: integer("year").notNull(),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   allocations: jsonb("allocations").notNull().default("[]"),
+  paymentDate: text("payment_date"),
+  sources: jsonb("sources").notNull().default("[]"),
 });
 
 export const insertExtraPaymentSchema = createInsertSchema(extraPaymentsTable).omit({ userId: true });

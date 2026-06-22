@@ -146,7 +146,7 @@ export default function TransactionsScreen() {
       const dueDay      = override.custom_due_day ?? bill.due_day;
       const daysInMonth = new Date(override.year, override.month + 1, 0).getDate();
       const day         = Math.min(dueDay, daysInMonth);
-      const date        = `${override.year}-${String(override.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const date        = override.paid_date ?? `${override.year}-${String(override.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
       items.push({
         id:       `bill-${override.id}`,
         date,
@@ -185,8 +185,9 @@ export default function TransactionsScreen() {
 
     // 4. Extra debt payments
     for (const ep of extraPayments) {
-      const date  = `${ep.year}-${String(ep.month + 1).padStart(2, "0")}-01`;
+      const date  = ep.payment_date ?? `${ep.year}-${String(ep.month + 1).padStart(2, "0")}-01`;
       const names = ep.allocations.map(a => a.billName).join(", ");
+      const funding = (ep.sources ?? []).map(source => source.type === "bill_surplus" ? `${source.billName ?? "bill"} surplus` : "manual safe extra").join(", ");
       items.push({
         id:       `extra-${ep.id}`,
         date,
@@ -195,7 +196,7 @@ export default function TransactionsScreen() {
         category: "Debt",
         source:   "extra_payment",
         editable: false,
-        detail:   `$${ep.amount.toFixed(2)} applied to: ${names || "debt accounts"} in ${MONTH_NAMES_LONG[ep.month]} ${ep.year}`,
+        detail:   `$${ep.amount.toFixed(2)} applied to: ${names || "debt accounts"}${funding ? ` · Funded by ${funding}` : ""}`,
       });
     }
 

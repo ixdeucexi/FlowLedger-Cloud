@@ -9,13 +9,16 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddTransactionModal } from "@/components/AddTransactionModal";
+import { BillSurplusModal } from "@/components/BillSurplusModal";
 import { CalendarView } from "@/components/CalendarView";
 import { EmptyState } from "@/components/EmptyState";
 import { MonthPicker } from "@/components/MonthPicker";
+import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
 import colors from "@/constants/colors";
 import type { Bill, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
+import type { SnowballProjectionResult } from "@/lib/snowball";
 
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
@@ -36,13 +39,13 @@ export default function MonthlyScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const {
-    bills, transactions, goals, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
+    bills, overrides, transactions, goals, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
     getCustomDueDay, setCustomDueDay,
-    getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, runSnowball, settings,
+    getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, settings,
     selectedYear, setSelectedYear, dashboardFilter, setDashboardFilter,
     getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill,
     getCashFlow, getMonthlyIncome, getDailyBalances, getIncomeOccurrencesInMonth,
-    saveExtraPayment, getExtraPayment,
+    previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, finalizeBillPayment, getExtraPayment,
   } = useBudget();
 
   const [month, setMonth] = useState(new Date().getMonth());
@@ -57,6 +60,9 @@ export default function MonthlyScreen() {
   const [snowballResults, setSnowballResults] = useState<{ name: string; payment: number; paidOff: boolean }[]>([]);
   const [showSnowballResults, setShowSnowballResults] = useState(false);
   const [dueDayPickerBill, setDueDayPickerBill] = useState<Bill | null>(null);
+  const [snowballModalVisible, setSnowballModalVisible] = useState(false);
+  const [snowballPreview, setSnowballPreview] = useState<SnowballProjectionResult | null>(null);
+  const [surplusPrompt, setSurplusPrompt] = useState<{ bill: Bill; budgeted: number; actual: number; paidDate: string } | null>(null);
 
   useEffect(() => {
     if (dashboardFilter === "paid") { setBillFilter("paid"); setActiveTab("bills"); setDashboardFilter(null); }
@@ -121,14 +127,85 @@ export default function MonthlyScreen() {
   const cashFlow = useMemo(() => getCashFlow(month, selectedYear), [getCashFlow, month, selectedYear]);
   const monthlyIncome = getMonthlyIncome();
 
-  const handlePaidBlur = useCallback((billId: string, key: string) => {
+  const surplusSnowballOffer = useMemo(() => {
+    if (!surplusPrompt) return null;
+    const surplus = Math.max(0, surplusPrompt.budgeted - surplusPrompt.actual);
+    const existing = getExtraPayment(month, selectedYear);
+    const previousSource = existing?.sources?.find(source => source.type === "bill_surplus" && source.billId === surplusPrompt.bill.id)?.amount ?? 0;
+    const total = Math.max(0, (existing?.amount ?? 0) - previousSource + surplus);
+    const preview = previewDebtSnowball(month, selectedYear, total, surplus - previousSource);
+    return { preview, total, targetDebt: preview.allocations[0]?.billName, safe: preview.selectedExtra + 0.005 >= total };
+  }, [surplusPrompt, getExtraPayment, previewDebtSnowball, month, selectedYear]);
+
+  const handlePaidBlur = useCallback(async (billId: string, key: string) => {
     const val = editingPaid[key];
     if (val === undefined) return;
     const parsed = parseFloat(val) || 0;
+    const bill = bills.find(item => item.id === billId);
+    const budgeted = bill ? getBillMonthlyTotal(bill, month, selectedYear) : 0;
+    const day = bill ? Math.min(new Date(selectedYear, month + 1, 0).getDate(), getCustomDueDay(bill.id, month, selectedYear) ?? bill.due_day) : 1;
+    const paidDate = `${selectedYear}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const existing = getExtraPayment(month, selectedYear);
+    const previousSource = existing?.sources?.find(source => source.type === "bill_surplus" && source.billId === billId);
+    const newSurplus = Math.max(0, budgeted - parsed);
+
+    if (bill && !bill.is_debt && previousSource && newSurplus <= previousSource.amount + 0.005) {
+      const sources = (existing?.sources ?? [])
+        .filter(source => !(source.type === "bill_surplus" && source.billId === billId));
+      if (newSurplus > 0.005) sources.push({ ...previousSource, amount: newSurplus });
+      const total = sources.reduce((sum, source) => sum + source.amount, 0);
+      const preview = previewDebtSnowball(month, selectedYear, total);
+      await finalizeBillPayment(bill.id, month, selectedYear, parsed, paidDate);
+      if (total > 0.005) await applyDebtSnowballPayment(preview, sources);
+      else await removeDebtSnowballPayment(month, selectedYear);
+      setEditingPaid(p => { const n = { ...p }; delete n[key]; return n; });
+      return;
+    }
+    if (bill && !bill.is_debt && parsed >= 0 && parsed < budgeted) {
+      setSurplusPrompt({ bill, budgeted, actual: parsed, paidDate });
+      setEditingPaid(p => { const n = { ...p }; delete n[key]; return n; });
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setPaidAmount(billId, month, selectedYear, parsed);
+    if (bill && !bill.is_debt) await finalizeBillPayment(billId, month, selectedYear, parsed, paidDate);
+    else await setPaidAmount(billId, month, selectedYear, parsed);
     setEditingPaid(p => { const n = { ...p }; delete n[key]; return n; });
-  }, [editingPaid, setPaidAmount, month, selectedYear]);
+  }, [editingPaid, setPaidAmount, bills, overrides, getBillMonthlyTotal, getCustomDueDay, getExtraPayment, previewDebtSnowball, finalizeBillPayment, applyDebtSnowballPayment, removeDebtSnowballPayment, month, selectedYear]);
+
+  const keepBillSurplus = async () => {
+    if (!surplusPrompt) return;
+    const existing = getExtraPayment(month, selectedYear);
+    const sources = (existing?.sources ?? []).filter(source => !(source.type === "bill_surplus" && source.billId === surplusPrompt.bill.id));
+    const total = sources.reduce((sum, source) => sum + source.amount, 0);
+    const preview = previewDebtSnowball(month, selectedYear, total);
+    await finalizeBillPayment(surplusPrompt.bill.id, month, selectedYear, surplusPrompt.actual, surplusPrompt.paidDate);
+    if ((existing?.sources?.length ?? 0) !== sources.length) {
+      if (total > 0.005) await applyDebtSnowballPayment(preview, sources);
+      else await removeDebtSnowballPayment(month, selectedYear);
+    }
+    setSurplusPrompt(null);
+  };
+
+  const addBillSurplusToSnowball = async () => {
+    if (!surplusPrompt || !surplusSnowballOffer) return;
+    const surplus = surplusPrompt.budgeted - surplusPrompt.actual;
+    const existing = getExtraPayment(month, selectedYear);
+    const otherSources = (existing?.sources ?? [{ type: "manual" as const, amount: existing?.amount ?? 0 }])
+      .filter(source => !(source.type === "bill_surplus" && source.billId === surplusPrompt.bill.id));
+    const sources = [...otherSources, { type: "bill_surplus" as const, amount: surplus, billId: surplusPrompt.bill.id, billName: surplusPrompt.bill.name }]
+      .filter(source => source.amount > 0.005);
+    if (!surplusSnowballOffer.safe || !surplusSnowballOffer.preview.allocations.length) return;
+    await finalizeBillPayment(surplusPrompt.bill.id, month, selectedYear, surplusPrompt.actual, surplusPrompt.paidDate);
+    try {
+      await applyDebtSnowballPayment(surplusSnowballOffer.preview, sources);
+    } catch {
+      Alert.alert(
+        "Bill Finalized",
+        "The actual bill amount was saved, but the surplus could not be added to debt. The difference is still available in your account, so you can safely try again.",
+      );
+    }
+    setSurplusPrompt(null);
+  };
 
   const handleAmtBlur = useCallback((bill: { id: string; amount: number }, key: string) => {
     const val = editingAmounts[key];
@@ -150,12 +227,25 @@ export default function MonthlyScreen() {
     const debtCount = bills.filter(b => b.is_debt && b.balance > 0).length;
     if (debtCount === 0) { Alert.alert("No Debts", "You have no active debts to apply extra payments to."); return; }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const results = runSnowball(month, selectedYear, amt);
-    saveExtraPayment(month, selectedYear, amt, results);
-    setSnowballResults(results.map(r => ({ name: r.billName, payment: r.payment, paidOff: r.paidOff })));
-    setShowSnowballResults(true);
-    setExtraPayment("");
+    const preview = previewDebtSnowball(month, selectedYear, amt);
+    setSnowballPreview(preview);
+    setSnowballModalVisible(true);
     Keyboard.dismiss();
+  };
+
+  const updateSnowballAmount = (value: string) => {
+    setExtraPayment(value);
+    const amount = Number.parseFloat(value) || 0;
+    setSnowballPreview(previewDebtSnowball(month, selectedYear, amount));
+  };
+
+  const confirmSnowballPayment = async () => {
+    if (!snowballPreview) return;
+    await applyDebtSnowballPayment(snowballPreview);
+    setSnowballResults(snowballPreview.allocations.map(r => ({ name: r.billName, payment: r.payment, paidOff: r.paidOff })));
+    setShowSnowballResults(true);
+    setSnowballModalVisible(false);
+    setExtraPayment("");
   };
 
   const handleDeleteTx = (id: string) => {
@@ -840,6 +930,27 @@ export default function MonthlyScreen() {
         }}
         editTx={editTx}
         defaultDate={selectedDate ?? undefined}
+      />
+      <SnowballPreviewModal
+        visible={snowballModalVisible}
+        preview={snowballPreview}
+        amount={extraPayment}
+        existingPayment={!!getExtraPayment(month, selectedYear)}
+        onAmountChange={updateSnowballAmount}
+        onClose={() => setSnowballModalVisible(false)}
+        onConfirm={confirmSnowballPayment}
+        onRemove={() => removeDebtSnowballPayment(month, selectedYear).then(() => setSnowballModalVisible(false))}
+      />
+      <BillSurplusModal
+        visible={!!surplusPrompt}
+        billName={surplusPrompt?.bill.name ?? "Bill"}
+        budgeted={surplusPrompt?.budgeted ?? 0}
+        actual={surplusPrompt?.actual ?? 0}
+        targetDebt={surplusSnowballOffer?.targetDebt}
+        snowballSafe={surplusSnowballOffer?.safe ?? false}
+        onKeep={keepBillSurplus}
+        onSnowball={addBillSurplusToSnowball}
+        onClose={() => setSurplusPrompt(null)}
       />
     </View>
   );

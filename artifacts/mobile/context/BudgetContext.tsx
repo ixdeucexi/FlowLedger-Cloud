@@ -2,6 +2,14 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
+import {
+  allocateSnowballExtra,
+  orderDebts,
+  simulateSnowballPayoff,
+  SNOWBALL_BUFFER,
+  type SnowballDebtInput,
+  type SnowballProjectionResult,
+} from "@/lib/snowball";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -21,6 +29,7 @@ export interface Bill {
   is_recurring: boolean;
   frequency: "monthly" | "weekly";
   created_at: string;
+  include_in_snowball?: boolean;
 }
 
 export interface MonthlyOverride {
@@ -31,6 +40,8 @@ export interface MonthlyOverride {
   custom_amount?: number;
   custom_due_day?: number;
   paid_amount: number;
+  actual_amount?: number;
+  paid_date?: string;
 }
 
 export interface Transaction {
@@ -79,6 +90,14 @@ export interface SnowballAllocation {
   balanceBefore: number;
   balanceAfter: number;
   paidOff: boolean;
+  paymentDate?: string;
+}
+
+export interface SnowballFundingSource {
+  type: "manual" | "bill_surplus";
+  amount: number;
+  billId?: string;
+  billName?: string;
 }
 
 export interface ExtraPayment {
@@ -87,6 +106,8 @@ export interface ExtraPayment {
   year: number;
   amount: number;
   allocations: SnowballAllocation[];
+  payment_date?: string;
+  sources?: SnowballFundingSource[];
 }
 
 export interface Settings {
@@ -155,9 +176,14 @@ interface BudgetContextType {
   getMonthlyBills: (month: number, year: number) => Bill[];
   getBillOccurrencesInMonth: (bill: Bill, month: number, year: number) => number[];
   getBillMonthlyTotal: (bill: Bill, month: number, year: number) => number;
+  getBillEffectiveMonthlyTotal: (bill: Bill, month: number, year: number) => number;
 
   runSnowball: (month: number, year: number, extraAmount: number) => SnowballAllocation[];
-  saveExtraPayment: (month: number, year: number, amount: number, allocations: SnowballAllocation[]) => Promise<void>;
+  previewDebtSnowball: (month: number, year: number, extraAmount?: number, additionalSafeCredit?: number) => SnowballProjectionResult;
+  applyDebtSnowballPayment: (preview: SnowballProjectionResult, sources?: SnowballFundingSource[]) => Promise<void>;
+  saveExtraPayment: (month: number, year: number, amount: number, allocations: SnowballAllocation[], paymentDate?: string, sources?: SnowballFundingSource[]) => Promise<void>;
+  removeDebtSnowballPayment: (month: number, year: number) => Promise<void>;
+  finalizeBillPayment: (billId: string, month: number, year: number, actualAmount: number, paidDate: string) => Promise<{ budgeted: number; actual: number; surplus: number }>;
   getExtraPayment: (month: number, year: number) => ExtraPayment | undefined;
   deleteExtraPayment: (id: string) => Promise<void>;
 
@@ -376,12 +402,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           amount:       Number(b.amount),
           balance:      Number(b.balance),
           interest_rate: Number(b.interest_rate),
+          include_in_snowball: b.include_in_snowball !== false,
         }))));
         setOverrides((oData ?? []).map((o: any) => ({
           ...o,
           paid_amount:   Number(o.paid_amount),
           custom_amount: o.custom_amount !== null ? Number(o.custom_amount) : undefined,
           custom_due_day: o.custom_due_day !== null ? Number(o.custom_due_day) : undefined,
+          actual_amount: o.actual_amount !== null ? Number(o.actual_amount) : undefined,
+          paid_date: o.paid_date ?? undefined,
         })));
         setTransactions((tData ?? []).map((t: any) => ({ ...t, amount: Number(t.amount) })));
         setIncomes((iData ?? []).map((i: any) => ({
@@ -398,6 +427,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           ...ep,
           amount:      Number(ep.amount),
           allocations: ep.allocations ?? [],
+          payment_date: ep.payment_date ?? undefined,
+          sources: ep.sources ?? [{ type: "manual", amount: Number(ep.amount) }],
         })));
         if (sData) {
           setSettings({
@@ -587,6 +618,13 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     return getAmount(bill, month, year) * occurrences.length;
   }, [getAmount]);
 
+  const getBillEffectiveMonthlyTotal = useCallback((bill: Bill, month: number, year: number): number => {
+    const override = overrides.find(o => o.bill_id === bill.id && o.month === month && o.year === year);
+    return override?.actual_amount !== undefined
+      ? Math.max(0, override.actual_amount)
+      : getBillMonthlyTotal(bill, month, year);
+  }, [overrides, getBillMonthlyTotal]);
+
   const getMonthlyBills = useCallback(
     (month: number, year: number): Bill[] =>
       bills.filter(b => (b.is_recurring || b.is_debt) && isBillActiveForMonth(b, month, year)),
@@ -597,60 +635,34 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const runSnowball = useCallback(
     (month: number, year: number, extraAmount: number): SnowballAllocation[] => {
-      const debtBills = bills.filter(b => b.is_debt && b.balance > 0).map(b => ({ ...b }));
-      debtBills.sort(settings.paymentMethod === "snowball"
-        ? (a, b) => a.balance - b.balance
-        : (a, b) => b.interest_rate - a.interest_rate);
-
-      const allocations: SnowballAllocation[] = [];
-      let pool = extraAmount;
-      let cascadePool = 0;
-      const updatedBills = [...bills];
-
-      for (let i = 0; i < debtBills.length; i++) {
-        const debt = debtBills[i];
-        const available = pool + cascadePool;
-        if (available <= 0) break;
-        const alreadyPaid = overrides.find(o => o.bill_id === debt.id && o.month === month && o.year === year)?.paid_amount ?? 0;
-        const remaining = Math.max(0, debt.balance - alreadyPaid);
-        const payment = Math.min(available, remaining);
-        if (payment <= 0) continue;
-        const balanceBefore = debt.balance;
-        const balanceAfter  = Math.max(0, balanceBefore - payment);
-        const paidOff       = balanceAfter === 0;
-        allocations.push({ billId: debt.id, billName: debt.name, payment, balanceBefore, balanceAfter, paidOff });
-        const bidx = updatedBills.findIndex(b => b.id === debt.id);
-        if (bidx !== -1) updatedBills[bidx] = { ...updatedBills[bidx], balance: balanceAfter };
-        upsertOverride(debt.id, month, year, { paid_amount: alreadyPaid + payment });
-        if (paidOff) {
-          const nextDebt = debtBills.slice(i + 1).find(d => d.balance > payment);
-          if (nextDebt) {
-            const nidx = updatedBills.findIndex(b => b.id === nextDebt.id);
-            if (nidx !== -1) updatedBills[nidx] = { ...updatedBills[nidx], amount: updatedBills[nidx].amount + debt.amount };
-          }
-          cascadePool = Math.max(0, available - payment);
-          pool = 0;
-        } else {
-          pool = 0; cascadePool = 0;
-        }
-      }
-      setBills(reorderDebtPriorities(updatedBills));
-      return allocations;
+      const debts = bills.filter(b => b.is_debt && b.balance > 0).map(b => ({
+        id: b.id, name: b.name, balance: b.balance, minimum: getBillMonthlyTotal(b, month, year),
+        apr: b.interest_rate, dueDay: b.due_day, included: b.include_in_snowball !== false,
+      }));
+      const target = orderDebts(debts.filter(d => d.included), settings.paymentMethod)[0];
+      const today = new Date();
+      const requestedDay = target?.dueDay ?? 1;
+      const day = today.getFullYear() === year && today.getMonth() === month && requestedDay < today.getDate()
+        ? today.getDate()
+        : requestedDay;
+      const paymentDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(Math.min(new Date(year, month + 1, 0).getDate(), day)).padStart(2, "0")}`;
+      return allocateSnowballExtra(debts, extraAmount, settings.paymentMethod, paymentDate).allocations;
     },
-    [bills, settings.paymentMethod, overrides, upsertOverride]
+    [bills, settings.paymentMethod, getBillMonthlyTotal]
   );
 
-  const saveExtraPayment = useCallback(async (month: number, year: number, amount: number, allocations: SnowballAllocation[]) => {
+  const saveExtraPayment = useCallback(async (month: number, year: number, amount: number, allocations: SnowballAllocation[], paymentDate?: string, sources: SnowballFundingSource[] = [{ type: "manual", amount }]) => {
     if (!user) return;
     const existing = extraPayments.find(ep => ep.month === month && ep.year === year);
+    const payload = { amount, allocations, payment_date: paymentDate, sources };
     if (existing) {
       await ensureSaved(
-        supabase.from("extra_payments").update({ amount, allocations }).eq("id", existing.id).eq("user_id", user.id),
+        supabase.from("extra_payments").update(payload).eq("id", existing.id).eq("user_id", user.id),
         "Update extra payment"
       );
-      setExtraPayments(prev => prev.map(ep => ep.id === existing.id ? { ...ep, amount, allocations } : ep));
+      setExtraPayments(prev => prev.map(ep => ep.id === existing.id ? { ...ep, ...payload } : ep));
     } else {
-      const next: ExtraPayment = { id: genId(), month, year, amount, allocations };
+      const next: ExtraPayment = { id: genId(), month, year, ...payload };
       await ensureSaved(supabase.from("extra_payments").insert({ ...next, user_id: user.id }), "Add extra payment");
       setExtraPayments(prev => [...prev, next]);
     }
@@ -666,6 +678,102 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     await ensureSaved(supabase.from("extra_payments").delete().eq("id", id).eq("user_id", user.id), "Delete extra payment");
     setExtraPayments(prev => prev.filter(ep => ep.id !== id));
   }, [user]);
+
+  const applyDebtSnowballPayment = useCallback(async (
+    preview: SnowballProjectionResult,
+    sources: SnowballFundingSource[] = [{ type: "manual", amount: preview.selectedExtra }],
+  ) => {
+    if (!user) return;
+    const [year, monthNumber] = preview.paymentDate.split("-").map(Number);
+    const month = monthNumber - 1;
+    const existing = extraPayments.find(ep => ep.month === month && ep.year === year);
+    const oldByBill = new Map<string, number>();
+    existing?.allocations.forEach(a => oldByBill.set(a.billId, (oldByBill.get(a.billId) ?? 0) + a.payment));
+    const nextByBill = new Map<string, number>();
+    preview.allocations.forEach(a => nextByBill.set(a.billId, (nextByBill.get(a.billId) ?? 0) + a.payment));
+    const updatedBalances = new Map<string, number>();
+    const paymentId = existing?.id ?? genId();
+
+    for (const billId of new Set([...oldByBill.keys(), ...nextByBill.keys()])) {
+      const delta = (nextByBill.get(billId) ?? 0) - (oldByBill.get(billId) ?? 0);
+      if (Math.abs(delta) < 0.005) continue;
+      const bill = bills.find(b => b.id === billId);
+      if (!bill) throw new Error(`Debt ${billId} was not found`);
+      updatedBalances.set(billId, Math.max(0, bill.balance - delta));
+    }
+
+    const { data: savedPaymentId, error } = await supabase.rpc("apply_debt_snowball_payment", {
+      p_payment_id: paymentId,
+      p_month: month,
+      p_year: year,
+      p_amount: preview.selectedExtra,
+      p_payment_date: preview.paymentDate,
+      p_allocations: preview.allocations,
+      p_sources: sources,
+    });
+    if (error) throw new Error(`Apply debt snowball: ${error.message}`);
+
+    const overrideResult = await supabase.from("monthly_overrides").select("*")
+      .eq("user_id", user.id).eq("month", month).eq("year", year);
+    if (overrideResult.error) throw new Error(`Refresh monthly bills: ${overrideResult.error.message}`);
+    const refreshedOverrides = (overrideResult.data ?? []).map((o: any) => ({
+      ...o,
+      paid_amount: Number(o.paid_amount),
+      custom_amount: o.custom_amount !== null ? Number(o.custom_amount) : undefined,
+      custom_due_day: o.custom_due_day !== null ? Number(o.custom_due_day) : undefined,
+      actual_amount: o.actual_amount !== null ? Number(o.actual_amount) : undefined,
+      paid_date: o.paid_date ?? undefined,
+    }));
+
+    setBills(prev => reorderDebtPriorities(prev.map(b => updatedBalances.has(b.id) ? { ...b, balance: updatedBalances.get(b.id)! } : b)));
+    setOverrides(prev => [...prev.filter(o => o.month !== month || o.year !== year), ...refreshedOverrides]);
+    const nextPayment: ExtraPayment = {
+      id: String(savedPaymentId ?? paymentId), month, year,
+      amount: preview.selectedExtra, allocations: preview.allocations,
+      payment_date: preview.paymentDate, sources,
+    };
+    setExtraPayments(prev => existing
+      ? prev.map(ep => ep.id === existing.id ? nextPayment : ep)
+      : [...prev, nextPayment]);
+  }, [user, bills, extraPayments]);
+
+  const removeDebtSnowballPayment = useCallback(async (month: number, year: number) => {
+    const existing = extraPayments.find(ep => ep.month === month && ep.year === year);
+    if (!existing || !user) return;
+    const restored = new Map<string, number>();
+    for (const allocation of existing.allocations) {
+      const bill = bills.find(b => b.id === allocation.billId);
+      if (!bill) continue;
+      const restoredBalance = (restored.get(bill.id) ?? bill.balance) + allocation.payment;
+      restored.set(bill.id, restoredBalance);
+    }
+
+    const { error } = await supabase.rpc("remove_debt_snowball_payment", { p_month: month, p_year: year });
+    if (error) throw new Error(`Remove debt snowball: ${error.message}`);
+    const overrideResult = await supabase.from("monthly_overrides").select("*")
+      .eq("user_id", user.id).eq("month", month).eq("year", year);
+    if (overrideResult.error) throw new Error(`Refresh monthly bills: ${overrideResult.error.message}`);
+    const refreshedOverrides = (overrideResult.data ?? []).map((o: any) => ({
+      ...o,
+      paid_amount: Number(o.paid_amount),
+      custom_amount: o.custom_amount !== null ? Number(o.custom_amount) : undefined,
+      custom_due_day: o.custom_due_day !== null ? Number(o.custom_due_day) : undefined,
+      actual_amount: o.actual_amount !== null ? Number(o.actual_amount) : undefined,
+      paid_date: o.paid_date ?? undefined,
+    }));
+    setBills(prev => reorderDebtPriorities(prev.map(b => restored.has(b.id) ? { ...b, balance: restored.get(b.id)! } : b)));
+    setOverrides(prev => [...prev.filter(o => o.month !== month || o.year !== year), ...refreshedOverrides]);
+    setExtraPayments(prev => prev.filter(ep => ep.id !== existing.id));
+  }, [user, bills, extraPayments]);
+
+  const finalizeBillPayment = useCallback(async (billId: string, month: number, year: number, actualAmount: number, paidDate: string) => {
+    const bill = bills.find(b => b.id === billId);
+    if (!bill) throw new Error("Bill not found");
+    const budgeted = getBillMonthlyTotal(bill, month, year);
+    const actual = Math.max(0, Number(actualAmount) || 0);
+    await upsertOverride(billId, month, year, { actual_amount: actual, paid_amount: actual, paid_date: paidDate });
+    return { budgeted, actual, surplus: Math.max(0, budgeted - actual) };
+  }, [bills, getBillMonthlyTotal, upsertOverride]);
 
   // ─── Transactions ─────────────────────────────────────────────────────────────
 
@@ -822,17 +930,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       .filter(i => isIncomeActiveForMonth(i, month, year))
       .reduce((s, i) => s + getIncomeOccurrenceDays(i, month, year).length * getEffectiveIncomeAmount(i, month, year), 0);
     const activeBills = bills.filter(b => (b.is_recurring || b.is_debt) && isBillActiveForMonth(b, month, year));
-    const totalBillsDue = activeBills.reduce((s, b) => {
-      const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
-      const amt = o?.custom_amount !== undefined ? o.custom_amount : b.amount;
-      return s + amt * getBillOccurrenceDays(b, month, year).length;
-    }, 0);
+    const totalBillsDue = activeBills.reduce((s, b) => s + getBillEffectiveMonthlyTotal(b, month, year), 0);
     const totalPaid = activeBills.reduce((s, b) =>
       s + (overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year)?.paid_amount ?? 0), 0);
     const monthTxs = transactions.filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === year && tm === month + 1; });
     const netTransactions = monthTxs.reduce((s, t) => s + t.amount, 0);
-    return { monthlyIncome, totalBillsDue, totalPaid, netTransactions, goalAllocations: 0, remaining: monthlyIncome - totalBillsDue + netTransactions };
-  }, [bills, incomes, transactions, overrides]);
+    const snowballExtra = extraPayments.find(ep => ep.month === month && ep.year === year)?.amount ?? 0;
+    return { monthlyIncome, totalBillsDue, totalPaid, netTransactions, goalAllocations: 0, remaining: monthlyIncome - totalBillsDue - snowballExtra + netTransactions };
+  }, [bills, incomes, transactions, overrides, extraPayments, getBillEffectiveMonthlyTotal]);
 
   // ─── Daily Balances ───────────────────────────────────────────────────────────
 
@@ -843,9 +948,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const bil = bills.filter(b => b.is_recurring || b.is_debt).reduce((s, b) => {
         const occ = getBillOccurrenceDays(b, m, y);
         if (occ.length === 0) return s;
-        const o = overrides.find(o => o.bill_id === b.id && o.month === m && o.year === y);
-        const amt = o?.custom_amount !== undefined ? o.custom_amount : b.amount;
-        return s + amt * occ.length;
+        return s + getBillEffectiveMonthlyTotal(b, m, y);
       }, 0);
       const tx = transactions
         .filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === y && tm === m + 1; })
@@ -856,7 +959,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         if (targetDate?.year === y && targetDate.month === m) return s + getGoalRemainingAmount(g);
         return s;
       }, 0);
-      return inc + tx - bil - goalDeductions;
+      const snowball = extraPayments.find(ep => ep.month === m && ep.year === y)?.amount ?? 0;
+      return inc + tx - bil - goalDeductions - snowball;
     };
     const computeCarryover = (toMonth: number, toYear: number): number => {
       let anchorM: number, anchorY: number;
@@ -891,11 +995,24 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       let occ = getBillOccurrenceDays(b, month, year);
       if (occ.length === 0) return;
       const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
-      const amt = o?.custom_amount !== undefined ? o.custom_amount : b.amount;
+      const total = getBillEffectiveMonthlyTotal(b, month, year);
+      const amt = occ.length > 0 ? total / occ.length : 0;
+      if (o?.actual_amount !== undefined && o.paid_date) {
+        const [paidYear, paidMonth, paidDay] = o.paid_date.split("-").map(Number);
+        if (paidYear === year && paidMonth === month + 1) {
+          billsByDay[paidDay] = (billsByDay[paidDay] ?? 0) + total;
+          return;
+        }
+      }
       if (o?.custom_due_day !== undefined && b.frequency === "monthly") {
         occ = [Math.min(o.custom_due_day, daysInMonth)];
       }
       occ.forEach(d => { billsByDay[d] = (billsByDay[d] ?? 0) + amt; });
+    });
+    const debtExtrasByDay: Record<number, number> = {};
+    extraPayments.filter(ep => ep.month === month && ep.year === year).forEach(ep => {
+      const day = ep.payment_date ? Number(ep.payment_date.split("-")[2]) : 1;
+      debtExtrasByDay[day] = (debtExtrasByDay[day] ?? 0) + ep.amount;
     });
     const goalsByDay: Record<number, GoalExpense[]> = {};
     goals.forEach(g => {
@@ -914,7 +1031,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const scheduledIncome = incomeByDay[day] ?? 0;
       const txIncome     = dayTxs.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
       const incomeToday  = scheduledIncome + txIncome;
-      const expenseToday = dayTxs.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+      const expenseToday = dayTxs.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0) + (debtExtrasByDay[day] ?? 0);
       const billsToday   = billsByDay[day] ?? 0;
       const dayGoals     = goalsByDay[day] ?? [];
       const goalTotal    = dayGoals.reduce((s, ge) => s + ge.amount, 0);
@@ -923,7 +1040,87 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       result.push({ day, income: incomeToday, scheduledIncome, expense: expenseToday, bills: billsToday, goalExpenses: dayGoals, net, balance: runningBalance });
     }
     return result;
-  }, [bills, transactions, incomes, goals, overrides, settings.starting_balance, settings.starting_balance_date]);
+  }, [bills, transactions, incomes, goals, overrides, extraPayments, getBillEffectiveMonthlyTotal, settings.starting_balance, settings.starting_balance_date]);
+
+  const previewDebtSnowball = useCallback((month: number, year: number, requestedExtra?: number, additionalSafeCredit = 0): SnowballProjectionResult => {
+    const debtInputs: SnowballDebtInput[] = bills
+      .filter(b => b.is_debt && b.balance > 0)
+      .map(b => ({
+        id: b.id,
+        name: b.name,
+        balance: Number(b.balance),
+        minimum: getBillMonthlyTotal(b, month, year),
+        apr: Number(b.interest_rate),
+        dueDay: b.due_day,
+        included: b.include_in_snowball !== false,
+      }));
+    const included = debtInputs.filter(d => d.included);
+    const target = orderDebts(included, settings.paymentMethod)[0];
+    const existing = extraPayments.find(ep => ep.month === month && ep.year === year);
+    const today = new Date();
+    const requestedDay = target?.dueDay ?? 1;
+    const dueDay = today.getFullYear() === year && today.getMonth() === month && requestedDay < today.getDate()
+      ? today.getDate()
+      : requestedDay;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const paymentDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(Math.min(daysInMonth, dueDay)).padStart(2, "0")}`;
+
+    const getWindowMinimum = (startMonth: number, startYear: number) => {
+      let minimum = Infinity;
+      for (let offset = 0; offset < 6; offset++) {
+        const absolute = startYear * 12 + startMonth + offset;
+        const m = absolute % 12;
+        const y = Math.floor(absolute / 12);
+        getDailyBalances(m, y).forEach(day => { minimum = Math.min(minimum, day.balance); });
+      }
+      return Number.isFinite(minimum) ? minimum : 0;
+    };
+
+    const baselineMinimum = getWindowMinimum(month, year);
+    const existingAmount = existing?.amount ?? 0;
+    const totalIncluded = included.reduce((sum, debt) => sum + debt.balance, 0);
+    const safeMaximum = Math.max(0, Math.min(totalIncluded, baselineMinimum + existingAmount + Math.max(0, additionalSafeCredit) - SNOWBALL_BUFFER));
+    const selectedExtra = Math.max(0, Math.min(requestedExtra ?? safeMaximum, safeMaximum));
+    const current = allocateSnowballExtra(debtInputs, selectedExtra, settings.paymentMethod, paymentDate);
+    let cumulativeProjectedDelta = selectedExtra - existingAmount;
+    const simulated = simulateSnowballPayoff({
+      debts: debtInputs,
+      method: settings.paymentMethod,
+      startMonth: month,
+      startYear: year,
+      firstMonthBalances: current.balances,
+      firstPayoffOrder: current.payoffOrder,
+      getExtraForMonth: (_offset, futureMonth, futureYear, remainingDebt) => {
+        const futureBaseline = getWindowMinimum(futureMonth, futureYear);
+        const extra = Math.max(0, Math.min(remainingDebt, futureBaseline - cumulativeProjectedDelta - SNOWBALL_BUFFER));
+        cumulativeProjectedDelta += extra;
+        return { extra, lowestBalance: futureBaseline - cumulativeProjectedDelta };
+      },
+    });
+    const currentLowest = baselineMinimum - (selectedExtra - existingAmount);
+    const endingDebt = Array.from(current.balances.values()).reduce((sum, balance) => sum + balance, 0);
+    const currentMonthProjection = {
+      month,
+      year,
+      targetName: target?.name ?? null,
+      minimumPayments: debtInputs.reduce((sum, debt) => sum + debt.minimum, 0),
+      extraPayment: selectedExtra,
+      rolledPayment: 0,
+      interest: 0,
+      endingDebt,
+      lowestAccountBalance: currentLowest,
+    };
+    return {
+      safeMaximum,
+      selectedExtra,
+      paymentDate,
+      allocations: current.allocations,
+      months: [currentMonthProjection, ...simulated.months],
+      payoffOrder: simulated.payoffOrder,
+      debtFreeDate: endingDebt <= 0.009 ? `${year}-${String(month + 1).padStart(2, "0")}` : simulated.debtFreeDate,
+      lowestSixMonthBalance: Math.min(currentLowest, ...simulated.months.slice(0, 5).map(item => item.lowestAccountBalance)),
+    };
+  }, [bills, settings.paymentMethod, extraPayments, getBillMonthlyTotal, getDailyBalances]);
 
   // ─── Categories ───────────────────────────────────────────────────────────────
 
@@ -1005,8 +1202,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       dashboardFilter, setDashboardFilter,
       addBill, updateBill, deleteBill, getBillById,
       getOverride, getAmount, getPaidAmount, setPaidAmount, setCustomAmount, getCustomDueDay, setCustomDueDay,
-      getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal,
-      runSnowball, saveExtraPayment, getExtraPayment, deleteExtraPayment,
+      getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal,
+      runSnowball, previewDebtSnowball, applyDebtSnowballPayment, saveExtraPayment, getExtraPayment, deleteExtraPayment, removeDebtSnowballPayment, finalizeBillPayment,
       addTransaction, updateTransaction, deleteTransaction, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome, getIncomeOccurrencesInMonth,
       addGoal, updateGoal, deleteGoal, checkGoalAffordability,
