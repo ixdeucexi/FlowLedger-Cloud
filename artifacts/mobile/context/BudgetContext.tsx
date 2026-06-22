@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
@@ -540,17 +540,38 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     async (billId: string, month: number, year: number, patch: Partial<Omit<MonthlyOverride, "id" | "bill_id" | "month" | "year">>) => {
       if (!user) return;
       const existing = overridesRef.current.find(o => o.bill_id === billId && o.month === month && o.year === year);
-      if (existing) {
-        const updated = { ...existing, ...patch };
-        await ensureSaved(
-          supabase.from("monthly_overrides").update({ ...updated }).eq("id", existing.id).eq("user_id", user.id),
-          "Update monthly bill"
+      const updated: MonthlyOverride = existing
+        ? { ...existing, ...patch }
+        : { id: genId(), bill_id: billId, month, year, paid_amount: 0, ...patch };
+      const optimisticOverrides = existing
+        ? overridesRef.current.map(o => o.id === existing.id ? updated : o)
+        : [...overridesRef.current, updated];
+
+      overridesRef.current = optimisticOverrides;
+      setOverrides(optimisticOverrides);
+
+      try {
+        if (existing) {
+          await ensureSaved(
+            supabase.from("monthly_overrides").update({ ...updated }).eq("id", existing.id).eq("user_id", user.id),
+            "Update monthly bill"
+          );
+        } else {
+          await ensureSaved(supabase.from("monthly_overrides").insert({ ...updated, user_id: user.id }), "Create monthly bill");
+        }
+      } catch (error) {
+        const current = overridesRef.current.find(o => o.id === updated.id);
+        const isStillThisEdit = current && Object.entries(patch).every(
+          ([key, value]) => current[key as keyof MonthlyOverride] === value
         );
-        setOverrides(prev => prev.map(o => o.id === existing.id ? updated : o));
-      } else {
-        const no: MonthlyOverride = { id: genId(), bill_id: billId, month, year, paid_amount: 0, ...patch };
-        await ensureSaved(supabase.from("monthly_overrides").insert({ ...no, user_id: user.id }), "Create monthly bill");
-        setOverrides(prev => [...prev, no]);
+        if (isStillThisEdit) {
+          const rolledBack = existing
+            ? overridesRef.current.map(o => o.id === existing.id ? existing : o)
+            : overridesRef.current.filter(o => o.id !== updated.id);
+          overridesRef.current = rolledBack;
+          setOverrides(rolledBack);
+        }
+        throw error;
       }
     },
     [user]
@@ -941,9 +962,21 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Daily Balances ───────────────────────────────────────────────────────────
 
+  const balanceComputationCache = useMemo(() => ({
+    monthNet: new Map<string, number>(),
+    carryover: new Map<string, number>(),
+    daily: new Map<string, DailyBalance[]>(),
+  }), [bills, transactions, incomes, goals, overrides, extraPayments, getBillEffectiveMonthlyTotal, settings.starting_balance, settings.starting_balance_date]);
+
   const getDailyBalances = useCallback((month: number, year: number): DailyBalance[] => {
+    const dailyKey = `${year}-${month}`;
+    const cachedDaily = balanceComputationCache.daily.get(dailyKey);
+    if (cachedDaily) return cachedDaily;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const computeMonthNet = (m: number, y: number): number => {
+      const key = `${y}-${m}`;
+      const cached = balanceComputationCache.monthNet.get(key);
+      if (cached !== undefined) return cached;
       const inc = incomes.reduce((s, i) => s + getIncomeOccurrenceDays(i, m, y).length * getEffectiveIncomeAmount(i, m, y), 0);
       const bil = bills.filter(b => b.is_recurring || b.is_debt).reduce((s, b) => {
         const occ = getBillOccurrenceDays(b, m, y);
@@ -960,9 +993,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         return s;
       }, 0);
       const snowball = extraPayments.find(ep => ep.month === m && ep.year === y)?.amount ?? 0;
-      return inc + tx - bil - goalDeductions - snowball;
+      const net = inc + tx - bil - goalDeductions - snowball;
+      balanceComputationCache.monthNet.set(key, net);
+      return net;
     };
     const computeCarryover = (toMonth: number, toYear: number): number => {
+      const key = `${toYear}-${toMonth}`;
+      const cached = balanceComputationCache.carryover.get(key);
+      if (cached !== undefined) return cached;
       let anchorM: number, anchorY: number;
       if (settings.starting_balance_date) {
         const [sbY, sbM] = settings.starting_balance_date.split("-").map(Number);
@@ -980,6 +1018,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         running += computeMonthNet(m, y);
         m += 1; if (m > 11) { m = 0; y += 1; }
       }
+      balanceComputationCache.carryover.set(key, running);
       return running;
     };
     const carryover = computeCarryover(month, year);
@@ -1039,8 +1078,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       runningBalance += net;
       result.push({ day, income: incomeToday, scheduledIncome, expense: expenseToday, bills: billsToday, goalExpenses: dayGoals, net, balance: runningBalance });
     }
+    balanceComputationCache.daily.set(dailyKey, result);
     return result;
-  }, [bills, transactions, incomes, goals, overrides, extraPayments, getBillEffectiveMonthlyTotal, settings.starting_balance, settings.starting_balance_date]);
+  }, [bills, transactions, incomes, goals, overrides, extraPayments, getBillEffectiveMonthlyTotal, settings.starting_balance, settings.starting_balance_date, balanceComputationCache]);
 
   const previewDebtSnowball = useCallback((month: number, year: number, requestedExtra?: number, additionalSafeCredit = 0): SnowballProjectionResult => {
     const debtInputs: SnowballDebtInput[] = bills

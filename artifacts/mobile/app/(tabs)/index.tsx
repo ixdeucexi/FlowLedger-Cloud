@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated, Keyboard, Modal, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, View,
@@ -28,6 +28,7 @@ const CAT_COLORS: Record<string, string> = {
 
 export default function DashboardScreen() {
   const c = useColors();
+  const [isFocused, setIsFocused] = useState(true);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const {
@@ -49,6 +50,11 @@ export default function DashboardScreen() {
   const [savingsModalVisible, setSavingsModalVisible] = useState(false);
   const [savingsGoalId, setSavingsGoalId]             = useState("");
   const [savingsAmount, setSavingsAmount]             = useState("");
+
+  useFocusEffect(useCallback(() => {
+    setIsFocused(true);
+    return () => setIsFocused(false);
+  }, []));
 
   // ── Hero card flip ──────────────────────────────────────────────────────────
   const flipAnim   = useRef(new Animated.Value(0)).current;
@@ -77,10 +83,13 @@ export default function DashboardScreen() {
   const monthlyIncome = getMonthlyIncome();
 
   // ── Real daily balance metrics for current month ───────────────────────────
-  const currentMonthBalances = useMemo(
-    () => getDailyBalances(currentMonth, selectedYear),
-    [getDailyBalances, currentMonth, selectedYear]
-  );
+  const currentBalancesCache = useRef<ReturnType<typeof getDailyBalances>>([]);
+  const currentMonthBalances = useMemo(() => {
+    if (!isFocused && currentBalancesCache.current.length) return currentBalancesCache.current;
+    const balances = getDailyBalances(currentMonth, selectedYear);
+    currentBalancesCache.current = balances;
+    return balances;
+  }, [getDailyBalances, currentMonth, selectedYear, isFocused]);
 
   const balanceMetrics = useMemo(() => {
     if (!currentMonthBalances.length) return null;
@@ -97,23 +106,40 @@ export default function DashboardScreen() {
   }, [currentMonthBalances, today]);
 
   // ── 12-month negative schedule ─────────────────────────────────────────────
-  const yearNegSchedule = useMemo(() => {
-    const results: { month: number; year: number; label: string; firstNegDay: number | null; lowestBalance: number }[] = [];
-    for (let i = 0; i < 12; i++) {
+  type OutlookMonth = { month: number; year: number; label: string; firstNegDay: number | null; lowestBalance: number };
+  const [yearNegSchedule, setYearNegSchedule] = useState<OutlookMonth[]>([]);
+
+  useEffect(() => {
+    if (!isFocused) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let i = 0;
+    setYearNegSchedule([]);
+
+    const calculateNextMonth = () => {
+      if (cancelled || i >= 12) return;
       const m = (currentMonth + i) % 12;
       const y = selectedYear + Math.floor((currentMonth + i) / 12);
       const balances = getDailyBalances(m, y);
       const negEntry = balances.find(db => db.balance < 0);
       const lowest = balances.reduce((min, db) => db.balance < min ? db.balance : min, Infinity);
-      results.push({
+      const next: OutlookMonth = {
         month: m, year: y,
         label: `${MONTH_FULL[m]} ${y}`,
         firstNegDay: negEntry?.day ?? null,
         lowestBalance: lowest === Infinity ? 0 : lowest,
-      });
-    }
-    return results;
-  }, [getDailyBalances, currentMonth, selectedYear]);
+      };
+      setYearNegSchedule(previous => [...previous, next]);
+      i += 1;
+      if (i < 12) timer = setTimeout(calculateNextMonth, 0);
+    };
+
+    timer = setTimeout(calculateNextMonth, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [getDailyBalances, currentMonth, selectedYear, isFocused]);
 
   // First month (across all 12) that goes negative
   const firstYearNegEntry = yearNegSchedule.find(e => e.firstNegDay !== null) ?? null;

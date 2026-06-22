@@ -25,7 +25,11 @@ export default function TabLayout() {
   return (
     <BudgetProvider>
       <Tabs
+        detachInactiveScreens={false}
         screenOptions={{
+          animation: "none",
+          freezeOnBlur: !isWeb,
+          lazy: true,
           tabBarActiveTintColor: "#22c55e",
           tabBarInactiveTintColor: colors.mutedForeground,
           headerShown: false,
