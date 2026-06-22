@@ -32,7 +32,7 @@ export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const {
-    bills, getPaidAmount, getBillMonthlyTotal, selectedYear, setDashboardFilter,
+    bills, getMonthlyBillSummary, selectedYear, setDashboardFilter,
     goals, addGoal, updateGoal, deleteGoal, checkGoalAffordability,
     getCashFlow, getMonthlyIncome, addBill, addTransaction, getDailyBalances,
   } = useBudget();
@@ -120,19 +120,10 @@ export default function DashboardScreen() {
   const firstYearNegEntry = yearNegSchedule.find(e => e.firstNegDay !== null) ?? null;
 
   const stats = useMemo(() => {
-    const monthBills = bills.filter(b => b.is_recurring || b.is_debt);
-    let totalDue = 0, totalPaid = 0, paidCount = 0;
-    monthBills.forEach(b => {
-      const amt  = getBillMonthlyTotal(b, currentMonth, selectedYear);
-      const paid = getPaidAmount(b.id, currentMonth, selectedYear);
-      totalDue  += amt;
-      totalPaid += Math.min(paid, amt);
-      if (paid >= amt && amt > 0) paidCount++;
-    });
+    const summary = getMonthlyBillSummary(currentMonth, selectedYear);
     const totalDebt  = bills.filter(b => b.is_debt).reduce((s, b) => s + b.balance, 0);
-    const unpaidCount = monthBills.length - paidCount;
-    return { totalDue, totalPaid, remaining: totalDue - totalPaid, paidCount, unpaidCount, billCount: monthBills.length, totalDebt };
-  }, [bills, getBillMonthlyTotal, getPaidAmount, currentMonth, selectedYear]);
+    return { ...summary, totalDebt };
+  }, [bills, getMonthlyBillSummary, currentMonth, selectedYear]);
 
   const upcomingBills = useMemo(() => {
     const sevenDaysLater = today + 7;
@@ -143,8 +134,8 @@ export default function DashboardScreen() {
   }, [bills, today]);
 
   const monthlyBarData = useMemo(() =>
-    MONTH_NAMES.map((label, i) => ({ label, value: bills.filter(b => b.is_recurring || b.is_debt).reduce((s, b) => s + getBillMonthlyTotal(b, i, selectedYear), 0) })),
-    [bills, getBillMonthlyTotal, selectedYear]);
+    MONTH_NAMES.map((label, i) => ({ label, value: getMonthlyBillSummary(i, selectedYear).totalDue })),
+    [getMonthlyBillSummary, selectedYear]);
 
   const categoryData = useMemo(() => {
     const map: Record<string, number> = {};
