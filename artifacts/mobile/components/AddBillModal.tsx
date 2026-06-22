@@ -34,6 +34,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
   const [isDebt,        setIsDebt]        = useState(false);
   const [balance,       setBalance]       = useState("");
   const [interestRate,  setInterestRate]  = useState("");
+  const [includeInSnowball, setIncludeInSnowball] = useState(true);
   const [dueDay,        setDueDay]        = useState("1");
   const [dayOfWeek,     setDayOfWeek]     = useState(0);      // 0=Sun … 6=Sat
   const [isRecurring,   setIsRecurring]   = useState(true);
@@ -71,6 +72,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
       setIsDebt(editBill.is_debt);
       setBalance(editBill.balance > 0 ? editBill.balance.toString() : "");
       setInterestRate(editBill.interest_rate > 0 ? editBill.interest_rate.toString() : "");
+      setIncludeInSnowball(editBill.include_in_snowball !== false);
       setDueDay(editBill.due_day.toString());
       setDayOfWeek(editBill.day_of_week ?? 0);
       setIsRecurring(editBill.is_recurring);
@@ -79,7 +81,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
       setBillEndDate(editBill.end_date ?? "");
     } else {
       setName(""); setAmount(""); setCategory("Other");
-      setIsDebt(forceDebt ?? false); setBalance(""); setInterestRate("");
+      setIsDebt(forceDebt ?? false); setBalance(""); setInterestRate(""); setIncludeInSnowball(true);
       setDueDay("1"); setDayOfWeek(0); setIsRecurring(true);
       setFrequency("monthly"); setBillStartDate(""); setBillEndDate("");
     }
@@ -105,6 +107,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
       end_date: billEndDate.trim() || undefined,
       is_recurring: isDebt ? true : isRecurring,
       frequency,
+      include_in_snowball: isDebt ? includeInSnowball : false,
     };
     if (editBill) onSave({ ...data, id: editBill.id, created_at: editBill.created_at });
     else onSave(data);
@@ -320,6 +323,14 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
                 <Text style={lbl}>Interest Rate (% APR)</Text>
                 <TextInput style={inp} value={interestRate} onChangeText={setInterestRate}
                   placeholder="0.0" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
+                <View style={[styles.toggleCard, { backgroundColor: c.card }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.toggleLabel, { color: c.foreground }]}>Include in Snowball</Text>
+                    <Text style={[styles.toggleSub, { color: c.mutedForeground }]}>Send extra payments to this debt</Text>
+                  </View>
+                  <Switch value={includeInSnowball} onValueChange={setIncludeInSnowball}
+                    trackColor={{ false: c.muted, true: c.primary }} thumbColor="#fff" />
+                </View>
                 <View style={[styles.infoBox, { backgroundColor: c.primary + "15" }]}>
                   <Feather name="info" size={13} color={c.primary} />
                   <Text style={[styles.infoText, { color: c.primary }]}>

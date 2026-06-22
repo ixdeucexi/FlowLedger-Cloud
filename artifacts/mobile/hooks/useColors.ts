@@ -10,7 +10,7 @@ export function useColors() {
   const effective = themeMode === "auto" ? scheme : themeMode;
   const palette =
     effective === "dark" && "dark" in colors
-      ? (colors as Record<string, typeof colors.light>).dark
+      ? colors.dark
       : colors.light;
   return { ...palette, radius: colors.radius };
 }

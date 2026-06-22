@@ -146,7 +146,7 @@ export default function TransactionsScreen() {
       const dueDay      = override.custom_due_day ?? bill.due_day;
       const daysInMonth = new Date(override.year, override.month + 1, 0).getDate();
       const day         = Math.min(dueDay, daysInMonth);
-      const date        = `${override.year}-${String(override.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const date        = override.paid_date ?? `${override.year}-${String(override.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
       items.push({
         id:       `bill-${override.id}`,
         date,
@@ -185,8 +185,9 @@ export default function TransactionsScreen() {
 
     // 4. Extra debt payments
     for (const ep of extraPayments) {
-      const date  = `${ep.year}-${String(ep.month + 1).padStart(2, "0")}-01`;
+      const date  = ep.payment_date ?? `${ep.year}-${String(ep.month + 1).padStart(2, "0")}-01`;
       const names = ep.allocations.map(a => a.billName).join(", ");
+      const funding = (ep.sources ?? []).map(source => source.type === "bill_surplus" ? `${source.billName ?? "bill"} surplus` : "manual safe extra").join(", ");
       items.push({
         id:       `extra-${ep.id}`,
         date,
@@ -195,7 +196,7 @@ export default function TransactionsScreen() {
         category: "Debt",
         source:   "extra_payment",
         editable: false,
-        detail:   `$${ep.amount.toFixed(2)} applied to: ${names || "debt accounts"} in ${MONTH_NAMES_LONG[ep.month]} ${ep.year}`,
+        detail:   `$${ep.amount.toFixed(2)} applied to: ${names || "debt accounts"}${funding ? ` Â· Funded by ${funding}` : ""}`,
       });
     }
 
@@ -336,421 +337,4 @@ export default function TransactionsScreen() {
               </Text>
               <Text style={[styles.sheetAmtLabel, { color: c.mutedForeground }]}>
                 {isExpense ? "Expense" : "Income"}
-              </Text>
-            </View>
-
-            {/* Detail rows */}
-            {[
-              { icon: "calendar" as const,   label: "Date",        value: formatDateLong(detailItem.date) },
-              { icon: "tag"      as const,   label: "Category",    value: detailItem.category },
-              { icon: "info"     as const,   label: "Source",      value: meta.description },
-              ...(detailItem.detail ? [{ icon: "file-text" as const, label: "Details", value: detailItem.detail }] : []),
-            ].map(row => (
-              <View key={row.label} style={[styles.sheetRow, { borderBottomColor: c.border }]}>
-                <View style={[styles.sheetRowIcon, { backgroundColor: c.muted }]}>
-                  <Feather name={row.icon} size={14} color={c.mutedForeground} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.sheetRowLabel, { color: c.mutedForeground }]}>{row.label}</Text>
-                  <Text style={[styles.sheetRowValue, { color: c.foreground }]}>{row.value}</Text>
-                </View>
-              </View>
-            ))}
-
-            {/* Source note */}
-            <View style={[styles.sheetNote, { backgroundColor: c.muted, borderRadius: colors.radius }]}>
-              <Feather name="lock" size={13} color={c.mutedForeground} />
-              <Text style={[styles.sheetNoteText, { color: c.mutedForeground }]}>
-                {detailItem.source === "bill_payment"
-                  ? "Edit this entry by adjusting the paid amount in Monthly view."
-                  : detailItem.source === "income"
-                  ? "Edit this entry by updating your income in More â†’ Income Sources."
-                  : "Edit this entry from the Bills â†’ Debt tab."}
-              </Text>
-            </View>
-
-            <Pressable
-              onPress={() => setDetailItem(null)}
-              style={({ pressed }) => [styles.sheetClose, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
-            >
-              <Text style={[styles.sheetCloseText, { color: c.primaryForeground }]}>Done</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
-    );
-  };
-
-  return (
-    <View style={[styles.screen, { backgroundColor: c.background }]}>
-      {/* â”€â”€ Header â”€â”€ */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 + webTopPad }]}>
-        <View>
-          <Text style={[styles.title, { color: c.foreground }]}>Transactions</Text>
-          <Text style={[styles.subtitle, { color: c.mutedForeground }]}>
-            {allActivity.length} entries
-          </Text>
-        </View>
-        <Pressable
-          onPress={() => { setEditTx(null); setEditModalVisible(true); }}
-          style={({ pressed }) => [styles.addBtn, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
-        >
-          <Feather name="plus" size={22} color={c.primaryForeground} />
-        </Pressable>
-      </View>
-
-      {/* â”€â”€ Search + filter button â”€â”€ */}
-      <View style={[styles.searchWrap, { marginBottom: 10 }]}>
-        <View style={[styles.searchBox, { backgroundColor: c.card, borderColor: c.border }]}>
-          <Feather name="search" size={15} color={c.mutedForeground} />
-          <TextInput
-            style={[styles.searchInput, { color: c.foreground }]}
-            placeholder="Search by name or categoryâ€¦"
-            placeholderTextColor={c.mutedForeground}
-            value={search}
-            onChangeText={setSearch}
-            returnKeyType="search"
-          />
-          {search.length > 0 && (
-            <Pressable onPress={() => setSearch("")} hitSlop={8}>
-              <Feather name="x" size={14} color={c.mutedForeground} />
-            </Pressable>
-          )}
-        </View>
-        <Pressable
-          accessibilityLabel="Filter transactions"
-          onPress={() => setFilterModalVisible(true)}
-          style={({ pressed }) => [
-            styles.filterIconButton,
-            {
-              backgroundColor: activeFilterCount > 0 ? c.primary : c.card,
-              borderColor: activeFilterCount > 0 ? c.primary : c.border,
-              opacity: pressed ? 0.8 : 1,
-            },
-          ]}
-        >
-          <Feather name="filter" size={20} color={activeFilterCount > 0 ? c.primaryForeground : c.foreground} />
-          {activeFilterCount > 0 && (
-            <View style={[styles.filterCount, { backgroundColor: c.destructive }]}>
-              <Text style={styles.filterCountText}>{activeFilterCount}</Text>
-            </View>
-          )}
-        </Pressable>
-      </View>
-      {/* â”€â”€ Summary bar â”€â”€ */}
-      {filtered.length > 0 && (
-        <View style={[styles.summaryRow, { marginHorizontal: 16, marginBottom: 14, borderRadius: colors.radius, backgroundColor: c.card }]}>
-          {([
-            { label: "IN",  value: `+$${totalIn.toFixed(0)}`,                                         color: c.success },
-            { label: "OUT", value: `-$${totalOut.toFixed(0)}`,                                         color: c.destructive },
-            { label: "NET", value: `${net >= 0 ? "+" : "-"}$${Math.abs(net).toFixed(0)}`,              color: net >= 0 ? c.success : c.destructive },
-          ] as const).map((s, i) => (
-            <React.Fragment key={s.label}>
-              {i > 0 && <View style={[styles.summaryDivider, { backgroundColor: c.border }]} />}
-              <View style={styles.summaryStat}>
-                <Text style={[styles.summaryValue, { color: s.color }]}>{s.value}</Text>
-                <Text style={[styles.summaryLabel, { color: c.mutedForeground }]}>{s.label}</Text>
-              </View>
-            </React.Fragment>
-          ))}
-        </View>
-      )}
-
-      {/* â”€â”€ Grouped list â”€â”€ */}
-      <SectionList
-        sections={sections}
-        keyExtractor={item => item.id}
-        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 100 }]}
-        stickySectionHeadersEnabled
-        ListEmptyComponent={
-          <EmptyState
-            icon="repeat"
-            title="No Activity"
-            message={
-              hasActiveFilters
-                ? "Nothing matches your filters."
-                : "Mark bills paid or add income sources to see your activity here."
-            }
-            actionLabel={hasActiveFilters ? undefined : "Add Transaction"}
-            onAction={hasActiveFilters ? undefined : () => { setEditTx(null); setEditModalVisible(true); }}
-          />
-        }
-        renderSectionHeader={({ section: { title } }) => (
-          <View style={[styles.sectionHeader, { backgroundColor: c.background }]}>
-            <Text style={[styles.sectionTitle, { color: c.mutedForeground }]}>{title}</Text>
-          </View>
-        )}
-        renderItem={({ item, index, section }) => {
-          const isLast     = index === section.data.length - 1;
-          const isExpense  = item.amount < 0;
-          const sourceMeta = SOURCE_META[item.source];
-          const catColor   = CAT_COLORS[item.category] ?? c.primary;
-
-          return (
-            <Pressable
-              onPress={() => openItem(item)}
-              style={({ pressed }) => [
-                styles.txRow,
-                {
-                  backgroundColor: c.card,
-                  borderRadius: colors.radius,
-                  opacity: pressed ? 0.85 : 1,
-                  marginBottom: isLast ? 8 : 2,
-                },
-              ]}
-            >
-              {/* Source icon */}
-              <View style={[styles.sourceIcon, { backgroundColor: sourceMeta.color + "20" }]}>
-                <Feather name={sourceMeta.icon} size={15} color={sourceMeta.color} />
-              </View>
-
-              {/* Middle */}
-              <View style={styles.txMid}>
-                <Text style={[styles.txNote, { color: c.foreground }]} numberOfLines={1}>
-                  {item.label}
-                </Text>
-                <View style={styles.txMeta}>
-                  <View style={[styles.sourceBadge, { backgroundColor: sourceMeta.color + "18" }]}>
-                    <Text style={[styles.sourceBadgeText, { color: sourceMeta.color }]}>
-                      {sourceMeta.label}
-                    </Text>
-                  </View>
-                  {item.category !== "Income" && (
-                    <View style={[styles.catBadge, { backgroundColor: catColor + "18" }]}>
-                      <Text style={[styles.catBadgeText, { color: catColor }]}>{item.category}</Text>
-                    </View>
-                  )}
-                  <Text style={[styles.txDate, { color: c.mutedForeground }]}>
-                    {formatDate(item.date)}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Amount + action hint */}
-              <View style={styles.txRight}>
-                <Text style={[styles.txAmount, { color: isExpense ? c.destructive : c.success }]}>
-                  {isExpense ? "âˆ’" : "+"}${Math.abs(item.amount).toFixed(2)}
-                </Text>
-                <Feather
-                  name={item.editable ? "edit-2" : "chevron-right"}
-                  size={12}
-                  color={c.mutedForeground}
-                  style={{ marginTop: 3 }}
-                />
-              </View>
-            </Pressable>
-          );
-        }}
-      />
-
-      {/* â”€â”€ Filter sheet â”€â”€ */}
-      <Modal
-        visible={filterModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setFilterModalVisible(false)}
-      >
-        <Pressable style={styles.filterOverlay} onPress={() => setFilterModalVisible(false)}>
-          <Pressable style={[styles.filterSheet, { backgroundColor: c.background }]} onPress={() => {}}>
-            <View style={[styles.filterHandle, { backgroundColor: c.border }]} />
-            <View style={styles.filterSheetHeader}>
-              <View>
-                <Text style={[styles.filterSheetTitle, { color: c.foreground }]}>Filter transactions</Text>
-                <Text style={[styles.filterSheetSub, { color: c.mutedForeground }]}>Choose any combination</Text>
-              </View>
-              <Pressable accessibilityLabel="Close filters" onPress={() => setFilterModalVisible(false)} hitSlop={8}>
-                <Feather name="x" size={21} color={c.mutedForeground} />
-              </Pressable>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false} style={styles.filterSheetScroll}>
-              <Text style={[styles.filterGroupLabel, { color: c.mutedForeground }]}>AMOUNT</Text>
-              <View style={styles.filterOptionGrid}>
-                {([
-                  { id: "all" as TypeFilter, label: "All amounts" },
-                  { id: "expense" as TypeFilter, label: "Expenses" },
-                  { id: "income" as TypeFilter, label: "Income" },
-                ]).map(option => (
-                  <Pressable
-                    key={option.id}
-                    onPress={() => setTypeFilter(option.id)}
-                    style={[styles.filterChip, { backgroundColor: typeFilter === option.id ? c.primary : c.card, borderColor: typeFilter === option.id ? c.primary : c.border }]}
-                  >
-                    <Text style={[styles.filterText, { color: typeFilter === option.id ? c.primaryForeground : c.foreground }]}>{option.label}</Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              <Text style={[styles.filterGroupLabel, { color: c.mutedForeground }]}>SOURCE</Text>
-              <View style={styles.filterOptionGrid}>
-                {([
-                  { id: "all" as SourceFilter, label: "All sources" },
-                  { id: "transaction" as SourceFilter, label: "Manual" },
-                  { id: "bill_payment" as SourceFilter, label: "Bills" },
-                  { id: "income" as SourceFilter, label: "Scheduled income" },
-                  { id: "extra_payment" as SourceFilter, label: "Debt payments" },
-                ]).map(option => (
-                  <Pressable
-                    key={option.id}
-                    onPress={() => setSourceFilter(option.id)}
-                    style={[styles.filterChip, { backgroundColor: sourceFilter === option.id ? c.primary : c.card, borderColor: sourceFilter === option.id ? c.primary : c.border }]}
-                  >
-                    <Text style={[styles.filterText, { color: sourceFilter === option.id ? c.primaryForeground : c.foreground }]}>{option.label}</Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              <Text style={[styles.filterGroupLabel, { color: c.mutedForeground }]}>DATE</Text>
-              <View style={styles.filterOptionGrid}>
-                {([
-                  { id: "all" as DateFilter, label: "All dates" },
-                  { id: "this_month" as DateFilter, label: "This month" },
-                  { id: "last_month" as DateFilter, label: "Last month" },
-                  { id: "this_year" as DateFilter, label: "This year" },
-                ]).map(option => (
-                  <Pressable
-                    key={option.id}
-                    onPress={() => setDateFilter(option.id)}
-                    style={[styles.filterChip, { backgroundColor: dateFilter === option.id ? c.primary : c.card, borderColor: dateFilter === option.id ? c.primary : c.border }]}
-                  >
-                    <Text style={[styles.filterText, { color: dateFilter === option.id ? c.primaryForeground : c.foreground }]}>{option.label}</Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              {categoryOptions.length > 0 && (
-                <>
-                  <Text style={[styles.filterGroupLabel, { color: c.mutedForeground }]}>CATEGORY</Text>
-                  <View style={styles.filterOptionGrid}>
-                    {["all", ...categoryOptions].map(category => (
-                      <Pressable
-                        key={category}
-                        onPress={() => setCategoryFilter(category)}
-                        style={[styles.filterChip, { backgroundColor: categoryFilter === category ? c.primary : c.card, borderColor: categoryFilter === category ? c.primary : c.border }]}
-                      >
-                        <Text style={[styles.filterText, { color: categoryFilter === category ? c.primaryForeground : c.foreground }]}>
-                          {category === "all" ? "All categories" : category}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </>
-              )}
-
-              <Text style={[styles.filterGroupLabel, { color: c.mutedForeground }]}>SORT</Text>
-              <View style={styles.filterOptionGrid}>
-                {([
-                  { id: "asc" as SortOrder, label: "Earlier first", icon: "arrow-up" as const },
-                  { id: "desc" as SortOrder, label: "Later first", icon: "arrow-down" as const },
-                ]).map(option => (
-                  <Pressable
-                    key={option.id}
-                    onPress={() => setSortOrder(option.id)}
-                    style={[styles.filterChip, { backgroundColor: sortOrder === option.id ? c.primary : c.card, borderColor: sortOrder === option.id ? c.primary : c.border }]}
-                  >
-                    <Feather name={option.icon} size={13} color={sortOrder === option.id ? c.primaryForeground : c.foreground} />
-                    <Text style={[styles.filterText, { color: sortOrder === option.id ? c.primaryForeground : c.foreground }]}>{option.label}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </ScrollView>
-
-            <View style={styles.filterActions}>
-              <Pressable onPress={clearFilterSelections} style={[styles.filterActionButton, { backgroundColor: c.card, borderColor: c.border }]}>
-                <Text style={[styles.filterActionText, { color: c.mutedForeground }]}>Clear</Text>
-              </Pressable>
-              <Pressable onPress={() => setFilterModalVisible(false)} style={[styles.filterActionButton, { backgroundColor: c.primary, borderColor: c.primary }]}>
-                <Text style={[styles.filterActionText, { color: c.primaryForeground }]}>Show {filtered.length} results</Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
-      {/* â”€â”€ Edit modal (manual transactions) â”€â”€ */}
-      <AddTransactionModal
-        visible={editModalVisible}
-        onClose={() => { setEditModalVisible(false); setEditTx(null); }}
-        onSave={handleSave}
-        onDelete={handleDelete}
-        editTx={editTx}
-      />
-
-      {/* â”€â”€ Detail sheet (auto-generated entries) â”€â”€ */}
-      {renderDetailSheet()}
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  screen:   { flex: 1 },
-  header:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingBottom: 10 },
-  title:    { fontSize: 28, fontFamily: "Inter_700Bold" },
-  subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
-  addBtn:   { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-
-  searchWrap:  { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16 },
-  searchBox:   { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
-  searchInput: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", padding: 0 },
-  filterIconButton: { width: 44, height: 44, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  filterCount: { position: "absolute", top: -5, right: -5, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, alignItems: "center", justifyContent: "center" },
-  filterCountText: { color: "#fff", fontSize: 10, fontFamily: "Inter_700Bold" },
-
-  filterOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.55)" },
-  filterSheet: { borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32, maxHeight: "88%" },
-  filterHandle: { width: 38, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 16 },
-  filterSheetHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 },
-  filterSheetTitle: { fontSize: 20, fontFamily: "Inter_700Bold" },
-  filterSheetSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 3 },
-  filterSheetScroll: { flexGrow: 0 },
-  filterGroupLabel: { fontSize: 10, fontFamily: "Inter_700Bold", letterSpacing: 0.7, marginTop: 12, marginBottom: 8 },
-  filterOptionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  filterChip: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 13, paddingVertical: 9, borderWidth: 1, borderRadius: 10 },
-  filterText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  filterActions: { flexDirection: "row", gap: 10, marginTop: 18 },
-  filterActionButton: { flex: 1, minHeight: 48, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 10 },
-  filterActionText: { fontSize: 14, fontFamily: "Inter_700Bold" },
-
-  summaryRow:     { flexDirection: "row", paddingVertical: 14 },
-  summaryStat:    { flex: 1, alignItems: "center", gap: 4 },
-  summaryValue:   { fontSize: 18, fontFamily: "Inter_700Bold" },
-  summaryLabel:   { fontSize: 10, fontFamily: "Inter_600SemiBold", letterSpacing: 0.4, textTransform: "uppercase" },
-  summaryDivider: { width: 1 },
-
-  list:          { paddingHorizontal: 16 },
-  sectionHeader: { paddingVertical: 6 },
-  sectionTitle:  { fontSize: 12, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.6 },
-
-  txRow:          { flexDirection: "row", alignItems: "center", padding: 12, gap: 12 },
-  sourceIcon:     { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
-  txMid:          { flex: 1 },
-  txNote:         { fontSize: 14, fontFamily: "Inter_600SemiBold", marginBottom: 4 },
-  txMeta:         { flexDirection: "row", gap: 6, alignItems: "center", flexWrap: "wrap" },
-  sourceBadge:    { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
-  sourceBadgeText:{ fontSize: 10, fontFamily: "Inter_700Bold" },
-  catBadge:       { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
-  catBadgeText:   { fontSize: 10, fontFamily: "Inter_600SemiBold" },
-  txDate:         { fontSize: 10, fontFamily: "Inter_400Regular" },
-  txRight:        { alignItems: "flex-end" },
-  txAmount:       { fontSize: 15, fontFamily: "Inter_700Bold" },
-
-  // Detail bottom sheet
-  sheetOverlay:    { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.55)" },
-  sheet:           { borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 20, paddingBottom: 36, paddingTop: 12 },
-  sheetHandle:     { width: 38, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 18 },
-  sheetHeader:     { flexDirection: "row", alignItems: "flex-start", gap: 14, marginBottom: 18 },
-  sheetIconWrap:   { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
-  sheetName:       { fontSize: 20, fontFamily: "Inter_700Bold", marginBottom: 6, lineHeight: 26 },
-  sourcePill:      { alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  sourcePillText:  { fontSize: 11, fontFamily: "Inter_700Bold" },
-  sheetAmtBox:     { alignItems: "center", paddingVertical: 20, marginBottom: 16 },
-  sheetAmt:        { fontSize: 40, fontFamily: "Inter_700Bold" },
-  sheetAmtLabel:   { fontSize: 13, fontFamily: "Inter_500Medium", marginTop: 4 },
-  sheetRow:        { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
-  sheetRowIcon:    { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", marginTop: 1 },
-  sheetRowLabel:   { fontSize: 11, fontFamily: "Inter_500Medium", marginBottom: 2, textTransform: "uppercase", letterSpacing: 0.4 },
-  sheetRowValue:   { fontSize: 14, fontFamily: "Inter_400Regular" },
-  sheetNote:       { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, marginTop: 16, marginBottom: 4 },
-  sheetNoteText:   { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
-  sheetClose:      { height: 50, borderRadius: 14, alignItems: "center", justifyContent: "center", marginTop: 14 },
-  sheetCloseText:  { fontSize: 15, fontFamily: "Inter_600SemiBold" },
-});
+              </Text>Û½y¶‰žËkºwµç@€€ñY¥•ÜÍÑå±”õímÍÑå±•Ì¹Í½ÕÉ•	…‘”°ì‰…­É½Õ¹‘½±½ÈèÍ½ÕÉ•5•Ñ„¹½±½È€¬€ˆÄàˆõuôø4(€€€€€€€€€€€€€€€€€€€€ñQ•áÐÍÑå±”õímÍÑå±•Ì¹Í½ÕÉ•	…‘•Q•áÐ°ì½±½ÈèÍ½ÕÉ•5•Ñ„¹½±½Èõuôø4(€€€€€€€€€€€€€€€€€€€€€íÍ½ÕÉ•5•Ñ„¹±…‰•±ô4(€€€€€€€€€€€€€€€€€€€€ð½Q•áÐø4(€€€€€€€€€€€€€€€€€€ð½Y¥•Üø4(€€€€€€€€€€€€€€€€€í¥Ñ•´¹…Ñ•½Éä€„ôô€‰%¹½µ”ˆ€˜˜€ 4(€€€€€€€€€€€€€€€€€€€€ñY¥•ÜÍÑå±”õímÍÑå±•Ì¹…Ñ	…‘”°ì‰…­É½Õ¹‘½±½Èè…Ñ½±½È€¬€ˆÄàˆõuôø4(€€€€€€€€€€€€€€€€€€€€€€ñQ•áÐÍÑå±”õímÍÑå±•Ì¹…Ñ	…‘•Q•áÐ°ì½±½Èè…Ñ½±½Èõuôùí¥Ñ•´¹…Ñ•½Éåôð½Q•áÐø4(€€€€€€€€€€€€€€€€€€€€ð½Y¥•Üø4(€€€€€€€€€€€€€€€€€€¥ô4(€€€€€€€€€€€€€€€€€€ñQ•áÐÍÑå±”õímÍÑå±•Ì¹Ñá…Ñ”°ì½±½ÈèŒ¹µÕÑ•‘½É•É½Õ¹õuôø4(€€€€€€€€€€€€€€€€€€€í™½Éµ…Ñ…Ñ”¡¥Ñ•´¹‘…Ñ”¥ô4(€€€€€€€€€€€€€€€€€€ð½Q•áÐø4(€€€€€€€€€€€€€€€€ð½Y¥•Üø4(€€€€€€€€€€€€€€ð½Y¥•Üø4(4(€€€€€€€€€€€€€ì¼¨µ½Õ¹Ð€¬…Ñ¥½¸¡¥¹Ð€¨½ô4(€€€€€€€€€€€€€€ñY¥•ÜÍÑå±”õíÍÑå±•Ì¹ÑáI¥¡Ñôø4(€€€€€€€€€€€€€€€€ñQ•áÐÍÑå±”õímÍÑå±•Ì¹Ñáµ½Õ¹Ð°ì½±½Èè¥ÍáÁ•¹Í”€üŒ¹‘•ÍÑÉÕÑ¥Ù”€èŒ¹ÍÕ•ÍÌõuôø4(€€€€€€€€€€€€€€€€€í¥ÍáÁ•¹Í”€ü€‹Š"Hˆ€è€ˆ¬‰ô‘í5…Ñ ¹…‰Ì¡¥Ñ•´¹…µ½Õ¹Ð¤¹Ñ½¥á• È¥ô4(€€€€€€€€€€€€€€€€ð½Q•áÐø4(€€€€€€€€€€€€€€€€ñ•…Ñ¡•È4(€€€€€€€€€€€€€€€€€¹…µ”õí¥Ñ•´¹•‘¥Ñ…‰±”€ü€‰•‘¥Ð´Èˆ€è€‰¡•ÙÉ½¸µÉ¥¡Ð‰ô4(€€€€€€€€€€€€€€€€€Í¥é”õìÄÉô4(€€€€€€€€€€€€€€€€€½±½ÈõíŒ¹µÕÑ•‘½É•É½Õ¹‘ô4(€€€€€€€€€€€€€€€€€ÍÑå±”õíìµ…É¥¹Q½Àè€Ìõô4(€€€€€€€€€€€€€€€€¼ø4(€€€€€€€€€€€€€€ð½Y¥•Üø4(€€€€€€€€€€€€ð½AÉ•ÍÍ…‰±”ø4(€€€€€€€€€€¤ì4(€€€€€€€õô4(€€€€€€¼ø4(4(€€€€€ì¼¨ƒŠRŠR ¥±Ñ•ÈÍ¡••ÐƒŠRŠR €¨½ô4(€€€€€€ñ5½‘…°4(€€€€€€€Ù¥Í¥‰±”õí™¥±Ñ•É5½‘…±Y¥Í¥‰±•ô4(€€€€€€€ÑÉ…¹ÍÁ…É•¹Ð4(€€€€€€€…¹¥µ…Ñ¥½¹QåÁ”ô‰Í±¥‘”ˆ4(€€€€€€€½¹I•ÅÕ•ÍÑ±½Í”õì ¤€ôøÍ•Ñ¥±Ñ•É5½‘…±Y¥Í¥‰±”¡™…±Í”¥ô4(€€€€€€ø4(€€€€€€€€ñAÉ•ÍÍ…‰±”ÍÑå±”õíÍÑå±•Ì¹™¥±Ñ•É=Ù•É±…åô½¹AÉ•ÍÌõì ¤€ôøÍ•Ñ¥±Ñ•É5½‘…±Y¥Í¥‰±”¡™…±Í”¥ôø4(€€€€€€€€€€ñAÉ•ÍÍ…‰±”ÍÑå±”õímÍÑå±•Ì¹™¥±Ñ•ÉM¡••Ð°ì‰…­É½Õ¹‘½±½ÈèŒ¹‰…­É½Õ¹õuô½¹AÉ•ÍÌõì ¤€ôøíõôø4(€€€€€€€€€€€€ñY¥•ÜÍÑå±”õímÍÑå±•Ì¹™¥±Ñ•É!…¹‘±”°ì‰…­É½Õ¹‘½±½ÈèŒ¹‰½É‘•Èõuô€¼ø4(€€€€€€€€€€€€ñY¥•ÜÍÑå±”õíÍÑå±•Ì¹™¥±Ñ•ÉM¡••Ñ!•…‘•Éôø4(€€€€€€€€€€€€€€ñY¥•Üø4(€€€€€€€€€€€€€€€€ñQ•áÐÍÑå±”õímÍÑå±•Ì¹™¥±Ñ•ÉM¡••ÑQ¥Ñ±”°ì½±½ÈèŒ¹™½É•É½Õ¹õuôù¥±Ñ•ÈÑÉ…¹Í…Ñ¥½¹Ìð½Q•áÐø4(€€€€€€€€€€€€€€€€ñQ•áÐÍÑå±”õímÍÑå±•Ì¹™¥±Ñ•ÉM¡••ÑMÕˆ°ì½±½ÈèŒ¹µÕÑ•‘½É•É½Õ¹õuôù¡½½Í”…¹ä½µ‰¥¹…Ñ¥½¸ð½Q•áÐø4(€€€€€€€€€€€€€€ð½Y¥•Üø4(€€€€€€€€€€€€€€ñAÉ•ÍÍ…‰±”…•ÍÍ¥‰¥±¥Ñå1…‰•°ô‰±½Í”™¥±Ñ•ÉÌˆ½¹AÉ•ÍÌõì ¤€ôøÍ•Ñ¥±Ñ•É5½‘…±Y¥Í¥‰±”¡™…±Í”¥ô¡¥ÑM±½Àõìáôø4(€€€€€€€€€€€€€€€€ñ•…Ñ¡•È¹…µ”ô‰àˆÍ¥é”õìÈÅô½±½ÈõíŒ¹µÕÑ•‘½É•É½Õ¹‘ô€¼ø4(€€€€€€€€€€€€€€ð½AÉ•ÍÍ…‰±”ø4(€€€€€€€€€€€€ð½Y¥•Üø4(4(€€€€€€€€€€€€ñMÉ½±±Y¥•ÜÍ¡½ÝÍY•ÉÑ¥…±MÉ½±±%¹‘¥…Ñ½Èõí™…±Í•ôÍÑå±”õíÍÑå±•Ì¹™¥±Ñ•ÉM¡••ÑMÉ½±±ôø4(€€€€€€€€€€€€€€ñQ•áÐÍÑå±”õímÍÑå±•Ì¹™¥±Ñ•ÉÉ½ÕÁ1…‰•°°ì½±½ÈèŒ¹µÕÑ•‘½É•É½Õ¹õuôù5=U9Pð½Q•áÐø4(€€€€€€€€€€€€€€ñY¥•ÜÍÑå±”õíÍÑå±•Ì¹™¥±Ñ•É=ÁÑ¥½¹É¥‘ôø4(€€€€€€€€€€€€€€€ì¡l4(€€€€€€€€€€€€€€€€€ì¥è€‰…±°ˆ…ÌQåÁ•¥±Ñ•È°±…‰•°è€‰±°…µ½Õ¹ÑÌˆô°4(€€€€€€€€€€€€€€€€€ì¥è€‰•áÁ•¹Í”ˆ…ÌQåÁ•¥±Ñ•È°±…‰•°è€‰áÁ•¹Í•Ìˆô°4(€€€€€€€€€€€€€€€€€ì¥è€‰¥¹½µ”ˆ…ÌQåÁ•¥±Ñ•È°±…‰•°è€‰%¹½µ”ˆô°4(€€€€€€€€€€€€€€€t¤¹µ…À¡½ÁÑ¥½¸€ôø€ 4(€€€€€€€€€€€€€€€€€€ñAÉ•ÍÍ…‰±”4(€€€€€€€€€€€€€€€€€€€­•äõí½ÁÑ¥½¸¹¥‘ô4(€€€€€€€€€€€€€€€€€€€½¹AÉ•ÍÌõì ¤€ôøÍ•ÑQåÁ•¥±Ñ•È¡½ÁÑ¥½¸¹¥¥ô4(€€€€€€€€€€€€€€€€€€€ÍÑå±”õímÍÑå±•Ì¹™¥±Ñ•É¡¥À°ì‰…­É½Õ¹‘½±½ÈèÑåÁ•¥±Ñ•È€ôôô½ÁÑ¥½¸¹¥€üŒ¹ÁÉ¥µ…Éä€èŒ¹…É°‰½É‘•É½±½ÈèÑåÁ•¥±Ñ•È€ôôô½ÁÑ¥½¸¹¥€üŒ¹ÁÉ¥µ…Éä€èŒ¹‰½É‘•Èõuô4(€€€€€€€€€€€€€€€€€€ø4(€€€€€€€€€€€€€€€€€€€€ñQ•áÐÍÑå±”õímÍÑå±•Ì¹™¥±Ñ•ÉQ•áÐ°ì½±½ÈèÑåÁ•¥±Ñ•È€ôôô½ÁÑ¥½¸¹¥€üŒ¹ÁÉ¥µ…Éå½É•É½Õ¹€èŒ¹™½É•É½Õ¹õuôùí½ÁÑ¥½¸¹±…‰•±ôð½Q•áÐø4(€€€€€€€€€€€€€€€€€€ð½AÉ•ÍÍ…‰±”ø4(€€€€€€€€€€€€€€€€¤¥ô4(€€€€€€€€€€€€€€ð½Y¥•Üø4(4(€€€€€€€€€€€€€€ñQ•áÐÍÑå±”õímÍÑå±•Ì¹™¥±Ñ•ÉÉ½ÕÁ1…‰•°°ì½±½ÈèŒ¹µÕÑ•‘½É•É½Õ¹õuôùM=UIð½Q•áÐø4(€€€€€€€€€€€€€€ñY¥•ÜÍÑå±”õíÍÑå±•Ì¹™¥±Ñ•É=ÁÑ¥½¹É¥‘ôø4(€€€€€€€€€€€€€€€ì¡l4(€€€€€€€€€€€€€€€€€ì¥è€‰…±°ˆ…ÌM½ÕÉ•¥±Ñ•È°±…‰•°è€‰±°Í½ÕÉ•Ìˆô°4(€€€€€€€€€€€€€€€€€ì¥è€‰ÑÉ…¹Í…Ñ¥½¸ˆ…ÌM½ÕÉ•¥±Ñ•È°±…‰•°è€‰5…¹Õ…°ˆô°4(€€€€€€€€€€€€€€€€€ì¥è€‰‰¥±±}Á…åµ•¹Ðˆ…ÌM½ÕÉ•¥±Ñ•È°±…‰•°è€‰	¥±±Ìˆô°4(€€€€€€€€€€€€€€€€€ì¥è€‰¥¹½µ”ˆ…ÌM½ÕÉ•¥±Ñ•È°±…‰•°è€‰M¡•‘Õ±•¥¹½µ”ˆô°4(€€€€€€€€€€€€€€€€€ì¥è€‰•áÑÉ…}Á…åµ•¹Ðˆ…ÌM½ÕÉ•¥±Ñ•È°±…‰•°è€‰•‰ÐÁ…åµ•¹ÑÌˆô°4(€€€€€€€€€€€€€€€t¤¹µ…À¡½ÁÑ¥½¸€ôø€ 4(€€€€€€€€€€€€€€€€€€ñAÉ•ÍÍ…‰±”4(€€€€€€€€€€€€€€€€€€€­•äõí½ÁÑ¥½¸¹¥‘ô4(€€€€€€€€€€€€€€€€€€€½¹AÉ•ÍÌõì ¤€ôøÍ•ÑM½ÕÉ•¥±Ñ•È¡½ÁÑ¥½¸¹¥¥ô4(€€€€€€€€€€€€€€€€€€€ÍÑå±”õímÍÑå±•Ì¹™¥±Ñ•É¡¥À°ì‰…­É½Õ¹‘½±½ÈèÍ½ÕÉ•¥±Ñ•È€ôôô½ÁÑ¥½¸¹¥€üŒ¹ÁÉ¥µ…Éä€èŒ¹…É°‰½É‘•É½±½ÈèÍ½ÕÉ•¥±Ñ•È€ôôô½ÁÑ¥½¸¹¥€üŒ¹ÁÉ¥µ…Éä€èŒ¹‰½É‘•Èõuô4(€€€€€€€€€€€€€€€€€€ø4(€€€€€€€€€€€€€€€€€€€€ñQ•áÐÍÑå±”õímÍÑå±•Ì¹™¥±Ñ•ÉQ•áÐ°ì½±½ÈèÍ½ÕÉ•¥±Ñ•È€ôôô½ÁÑ¥½¸¹¥€üŒ¹ÁÉ¥µ…Éå½É•É½Õ¹€èŒ¹™½É•É½Õ¹õuôùí½ÁÑ¥½¸¹±…‰•±ôð½Q•áÐø4(€€€€€€€€€€€€€€€€€€ð½AÉ•ÍÍ…‰±”ø4(€€€€€€€€€€€€€€€€¤¥ô4(€€€€€€€€€€€€€€ð½Y¥•Üø4(4(€€€€€€€€€€€€€€ñQ•áÐÍÑå±”õímÍÑå±•Ì¹™¥±Ñ•ÉÉ½ÕÁ1…‰•°°ì½±½ÈèŒ¹µÕÑ•‘½É•É½Õ¹õuôùQð½Q•áÐø4(€€€€€€€€€€€€€€ñY¥•ÜÍÑå±”õíÍÑå±•Ì¹™¥±Ñ•É=ÁÑ¥½¹É¥‘ôø4(€€€€€€€€€€€€€€€ì¡l4(€€€€€€€€€€€€€€€€€ì¥è€‰…±°ˆ…Ì…Ñ•¥±Ñ•È°±…‰•°è€‰±°‘…Ñ•Ìˆô°4(€€€€€€€€€€€€€€€€€ì¥è€‰Ñ¡¥Í}µ½¹Ñ ˆ…Ì…Ñ•¥±Ñ•È°±…‰•°è€‰Q¡¥Ìµ½¹Ñ ˆô°4(€€€€€€€€€€€€€€€€€ì¥è€‰±…ÍÑ}µ½¹Ñ ˆ…Ì…Ñ•¥±Ñ•È°±…‰•°è€‰1…ÍÐµ½¹Ñ ˆô°4(€€€€€€€€€€€€€€€€€ì¥è€‰Ñ¡¥Í}å•…Èˆ…Ì…Ñ•¥±Ñ•È°±…‰•°è€‰Q¡¥Ìå•…Èˆô°4(€€€€€€€€€€€€€€€t¤¹µ…À¡½ÁÑ¥½¸€ôø€ 4(€€€€€€€€€€€€€€€€€€ñAÉ•ÍÍ…‰±”4(€€€€€€€€€€€€€€€€€€€­•äõí½ÁÑ¥½¸¹¥‘ô4(€€€€€€€€€€€€€€€€€€€½¹AÉ•ÍÌõì ¤€ôøÍ•Ñ…Ñ•¥±Ñ•È¡½ÁÑ¥½¸¹¥¥ô4(€€€€€€€€€€€€€€€€€€€ÍÑå±”õímÍÑå±•Ì¹™¥±Ñ•É¡¥À°ì‰…­É½Õ¹‘½±½Èè‘…Ñ•¥±Ñ•È€ôôô½ÁÑ¥½¸¹¥€üŒ¹ÁÉ¥µ…Éä€èŒ¹…É°‰½É‘•É½±½Èè‘…Ñ•¥±Ñ•È€ôôô½ÁÑ¥½¸¹¥€üŒ¹ÁÉ¥µ…Éä€èŒ¹‰½É‘•Èõuô4(€€€€€€€€€€€€€€€€€€ø4(€€€€€€€€€€€€€€€€€€€€ñQ•áÐÍÑå±”õímÍÑå±•Ì¹™¥±Ñ•ÉQ•áÐ°ì½±½Èè‘…Ñ•¥±Ñ•È€ôôô½ÁÑ¥½¸¹¥€üŒ¹ÁÉ¥µ…Éå½É•É½Õ¹€èŒ¹™½É•É½Õ¹õuôùí½ÁÑ¥½¸¹±…‰•±ôð½Q•áÐø4(€€€€€€€€€€€€€€€€€€ð½AÉ•ÍÍ…‰±”ø4(€€€€€€€€€€€€€€€€¤¥ô4(€€€€€€€€€€€€€€ð½Y¥•Üø4(4(€€€€€€€€€€€€€í…Ñ•½Éå=ÁÑ¥½¹Ì¹±•¹Ñ €ø€À€˜˜€ 4(€€€€€€€€€€€€€€€€ðø4(€€€€€€€€€€€€€€€€€€ñQ•áÐÍÑå±”õímÍÑå±•Ì¹™¥±Ñ•ÉÉ½ÕÁ1…‰•°°ì½±½ÈèŒ¹µÕÑ•‘½É•É½Õ¹õuôùQ=Idð½Q•áÐø4(€€€€€€€€€€€€€€€€€€ñY¥•ÜÍÑå±”õíÍÑå±•Ì¹™¥±Ñ•É=ÁÑ¥½¹É¥‘ôø4(€€€€€€€€€€€€€€€€€€€íl‰…±°ˆ°€¸¸¹…Ñ•½Éå=ÁÑ¥½¹Ít¹µ…À¡…Ñ•½Éä€ôø€ 4(€€€€€€€€€€€€€€€€€€€€€€ñAÉ•ÍÍ…‰±”4(€€€€€€€€€€€€€€€€€€€€€€€­•äõí…Ñ•½Éåô4(€€€€€€€€€€€€€€€€€€€€€€€½¹AÉ•ÍÌõì ¤€ôøÍ•Ñ…Ñ•½Éå¥±Ñ•È¡…Ñ•½Éä¥ô4(€€€€€€€€€€€€€€€€€€€€€€€ÍÑå±”õímÍÑå±•Ì¹™¥±Ñ•É¡¥À°ì‰…­É½Õ¹‘½±½Èè…Ñ•½Éå¥±Ñ•È€ôôô…Ñ•½Éä€üŒ¹ÁÉ¥µ…Éä€èŒ¹…É°‰½É‘•É½±½Èè…Ñ•½Éå¥±Ñ•È€ôôô…Ñ•½Éä€üŒ¹ÁÉ¥µ…Éä€èŒ¹‰½É‘•Èõuô4(€€€€€€€€€€€€€€€€€€€€€€ø4(€€€€€€€€€€€€€€€€€€€€€€€€ñQ•áÐÍÑå±”õímÍÑå±•Ì¹™¥±Ñ•ÉQ•áÐ°ì½±½Èè…Ñ•½Éå¥±Ñ•È€ôôô…Ñ•½Éä€üŒ¹ÁÉ¥µ…Éå½É•É½Õ¹€èŒ¹™½É•É½Õ¹õuôø4(€€€€€€€€€€€€€€€€€€€€€€€€€í…Ñ•½Éä€ôôô€‰…±°ˆ€ü€‰±°…Ñ•½É¥•Ìˆ€è…Ñ•½Éåô4(€€€€€€€€€€€€€€€€€€€€€€€€ð½Q•áÐø4(€€€€€€€€€€€€€€€€€€€€€€ð½AÉ•ÍÍ…‰±”ø4(€€€€€€€€€€€€€€€€€€€€¤¥ô4(€€€€€€€€€€€€€€€€€€ð½Y¥•Üø4(€€€€€€€€€€€€€€€€ð¼ø4(€€€€€€€€€€€€€€¥ô4(4(€€€€€€€€€€€€€€ñQ•áÐÍÑå±”õímÍÑå±•Ì¹™¥±Ñ•ÉÉ½ÕÁ1…‰•°°ì½±½ÈèŒ¹µÕÑ•‘½É•É½Õ¹õuôùM=IPð½Q•áÐø4(€€€€€€€€€€€€€€ñY¥•ÜÍÑå±”õíÍÑå±•Ì¹™¥±Ñ•É=ÁÑ¥½¹É¥‘ôø4(€€€€€€€€€€€€€€€ì¡l4(€€€€€€€€€€€€€€€€€ì¥è€‰…ÍŒˆ…ÌM½ÉÑ=É‘•È°±…‰•°è€‰…É±¥•È™¥ÉÍÐˆ°¥½¸è€‰…ÉÉ½ÜµÕÀˆ…Ì½¹ÍÐô°4(€€€€€€€€€€€€€€€€€ì¥è€‰‘•ÍŒˆ…ÌM½ÉÑ=É‘•È°±…‰•°è€‰1…Ñ•È™¥ÉÍÐˆ°¥½¸è€‰…ÉÉ½Üµ‘½Ý¸ˆ…Ì½¹ÍÐô°4(€€€€€€€€€€€€€€€t¤¹µ…À¡½ÁÑ¥½¸€ôø€ 4(€€€€€€€€€€€€€€€€€€ñAÉ•ÍÍ…‰±”4(€€€€€€€€€€€€€€€€€€€­•äõí½ÁÑ¥½¸¹¥‘ô4(€€€€€€€€€€€€€€€€€€€½¹AÉ•ÍÌõì ¤€ôøÍ•ÑM½ÉÑ=É‘•È¡½ÁÑ¥½¸¹¥¥ô4(€€€€€€€€€€€€€€€€€€€ÍÑå±”õímÍÑå±•Ì¹™¥±Ñ•É¡¥À°ì‰…­É½Õ¹‘½±½ÈèÍ½ÉÑ=É‘•È€ôôô½ÁÑ¥½¸¹¥€üŒ¹ÁÉ¥µ…Éä€èŒ¹…É°‰½É‘•É½±½ÈèÍ½ÉÑ=É‘•È€ôôô½ÁÑ¥½¸¹¥€üŒ¹ÁÉ¥µ…Éä€èŒ¹‰½É‘•Èõuô4(€€€€€€€€€€€€€€€€€€ø4(€€€€€€€€€€€€€€€€€€€€ñ•…Ñ¡•È¹…µ”õí½ÁÑ¥½¸¹¥½¹ôÍ¥é”õìÄÍô½±½ÈõíÍ½ÉÑ=É‘•È€ôôô½ÁÑ¥½¸¹¥€üŒ¹ÁÉ¥µ…Éå½É•É½Õ¹€èŒ¹™½É•É½Õ¹‘ô€¼ø4(€€€€€€€€€€€€€€€€€€€€ñQ•áÐÍÑå±”õímÍÑå±•Ì¹™¥±Ñ•ÉQ•áÐ°ì½±½ÈèÍ½ÉÑ=É‘•È€ôôô½ÁÑ¥½¸¹¥€üŒ¹ÁÉ¥µ…Éå½É•É½Õ¹€èŒ¹™½É•É½Õ¹õuôùí½ÁÑ¥½¸¹±…‰•±ôð½Q•áÐø4(€€€€€€€€€€€€€€€€€€ð½AÉ•ÍÍ…‰±”ø4(€€€€€€€€€€€€€€€€¤¥ô4(€€€€€€€€€€€€€€ð½Y¥•Üø4(€€€€€€€€€€€€ð½MÉ½±±Y¥•Üø4(4(€€€€€€€€€€€€ñY¥•ÜÍÑå±”õíÍÑå±•Ì¹™¥±Ñ•ÉÑ¥½¹Íôø4(€€€€€€€€€€€€€€ñAÉ•ÍÍ…‰±”½¹AÉ•ÍÌõí±•…É¥±Ñ•ÉM•±•Ñ¥½¹ÍôÍÑå±”õímÍÑå±•Ì¹™¥±Ñ•ÉÑ¥½¹	ÕÑÑ½¸°ì‰…­É½Õ¹‘½±½ÈèŒ¹…É°‰½É‘•É½±½ÈèŒ¹‰½É‘•Èõuôø4(€€€€€€€€€€€€€€€€ñQ•áÐÍÑå±”õímÍÑå±•Ì¹™¥±Ñ•ÉÑ¥½¹Q•áÐ°ì½±½ÈèŒ¹µÕÑ•‘½É•É½Õ¹õuôù±•…Èð½Q•áÐø4(€€€€€€€€€€€€€€ð½AÉ•ÍÍ…‰±”ø4(€€€€€€€€€€€€€€ñAÉ•ÍÍ…‰±”½¹AÉ•ÍÌõì ¤€ôøÍ•Ñ¥±Ñ•É5½‘…±Y¥Í¥‰±”¡™…±Í”¥ôÍÑå±”õímÍÑå±•Ì¹™¥±Ñ•ÉÑ¥½¹	ÕÑÑ½¸°ì‰…­É½Õ¹‘½±½ÈèŒ¹ÁÉ¥µ…Éä°‰½É‘•É½±½ÈèŒ¹ÁÉ¥µ…Éäõuôø4(€€€€€€€€€€€€€€€€ñQ•áÐÍÑå±”õímÍÑå±•Ì¹™¥±Ñ•ÉÑ¥½¹Q•áÐ°ì½±½ÈèŒ¹ÁÉ¥µ…Éå½É•É½Õ¹õuôùM¡½Üí™¥±Ñ•É•¹±•¹Ñ¡ôÉ•ÍÕ±ÑÌð½Q•áÐø4(€€€€€€€€€€€€€€ð½AÉ•ÍÍ…‰±”ø4(€€€€€€€€€€€€ð½Y¥•Üø4(€€€€€€€€€€ð½AÉ•ÍÍ…‰±”ø4(€€€€€€€€ð½AÉ•ÍÍ…‰±”ø4(€€€€€€ð½5½‘…°ø4(€€€€€ì¼¨ƒŠRŠR ‘¥Ðµ½‘…°€¡µ…¹Õ…°ÑÉ…¹Í…Ñ¥½¹Ì¤ƒŠRŠR €¨½ô4(€€€€€€ñ‘‘QÉ…¹Í…Ñ¥½¹5½‘…°4(€€€€€€€Ù¥Í¥‰±”õí•‘¥Ñ5½‘…±Y¥Í¥‰±•ô4(€€€€€€€½¹±½Í”õì ¤€ôøìÍ•Ñ‘¥Ñ5½‘…±Y¥Í¥‰±”¡™…±Í”¤ìÍ•Ñ‘¥ÑQà¡¹Õ±°¤ìõô4(€€€€€€€½¹M…Ù”õí¡…¹‘±•M…Ù•ô4(€€€€€€€½¹•±•Ñ”õí¡…¹‘±••±•Ñ•ô4(€€€€€€€•‘¥ÑQàõí•‘¥ÑQáô4(€€€€€€¼ø4(4(€€€€€ì¼¨ƒŠRŠR •Ñ…¥°Í¡••Ð€¡…ÕÑ¼µ•¹•É…Ñ••¹ÑÉ¥•Ì¤ƒŠRŠR €¨½ô4(€€€€€íÉ•¹‘•É•Ñ…¥±M¡••Ð ¥ô4(€€€€ð½Y¥•Üø4(€€¤ì4)ô4(4)½¹ÍÐÍÑå±•Ì€ôMÑå±•M¡••Ð¹É•…Ñ”¡ì4(€ÍÉ••¸è€€ì™±•àè€Äô°4(€¡•…‘•Èè€€ì™±•á¥É•Ñ¥½¸è€‰É½Üˆ°©ÕÍÑ¥™å½¹Ñ•¹Ðè€‰ÍÁ…”µ‰•ÑÝ••¸ˆ°…±¥¹%Ñ•µÌè€‰•¹Ñ•Èˆ°Á…‘‘¥¹!½É¥é½¹Ñ…°è€ÄØ°Á…‘‘¥¹	½ÑÑ½´è€ÄÀô°4(€Ñ¥Ñ±”è€€€ì™½¹ÑM¥é”è€Èà°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ÜÀÁ	½±ˆô°4(€ÍÕ‰Ñ¥Ñ±”èì™½¹ÑM¥é”è€ÄÌ°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ÐÀÁI•Õ±…Èˆ°µ…É¥¹Q½Àè€Èô°4(€…‘‘	Ñ¸è€€ìÝ¥‘Ñ è€ÐÐ°¡•¥¡Ðè€ÐÐ°‰½É‘•ÉI…‘¥ÕÌè€ÈÈ°…±¥¹%Ñ•µÌè€‰•¹Ñ•Èˆ°©ÕÍÑ¥™å½¹Ñ•¹Ðè€‰•¹Ñ•Èˆô°4(4(€Í•…É¡]É…Àè€ì™±•á¥É•Ñ¥½¸è€‰É½Üˆ°…±¥¹%Ñ•µÌè€‰•¹Ñ•Èˆ°…Àè€à°Á…‘‘¥¹!½É¥é½¹Ñ…°è€ÄØô°4(€Í•…É¡	½àè€€ì™±•àè€Ä°™±•á¥É•Ñ¥½¸è€‰É½Üˆ°…±¥¹%Ñ•µÌè€‰•¹Ñ•Èˆ°…Àè€à°‰½É‘•É]¥‘Ñ è€Ä°‰½É‘•ÉI…‘¥ÕÌè€ÄÈ°Á…‘‘¥¹!½É¥é½¹Ñ…°è€ÄÈ°Á…‘‘¥¹Y•ÉÑ¥…°è€ÄÀô°4(€Í•…É¡%¹ÁÕÐèì™±•àè€Ä°™½¹ÑM¥é”è€ÄÐ°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ÐÀÁI•Õ±…Èˆ°Á…‘‘¥¹œè€Àô°4(€™¥±Ñ•É%½¹	ÕÑÑ½¸èìÝ¥‘Ñ è€ÐÐ°¡•¥¡Ðè€ÐÐ°‰½É‘•ÉI…‘¥ÕÌè€ÄÈ°‰½É‘•É]¥‘Ñ è€Ä°…±¥¹%Ñ•µÌè€‰•¹Ñ•Èˆ°©ÕÍÑ¥™å½¹Ñ•¹Ðè€‰•¹Ñ•Èˆô°4(€™¥±Ñ•É½Õ¹ÐèìÁ½Í¥Ñ¥½¸è€‰…‰Í½±ÕÑ”ˆ°Ñ½Àè€´Ô°É¥¡Ðè€´Ô°µ¥¹]¥‘Ñ è€Äà°¡•¥¡Ðè€Äà°‰½É‘•ÉI…‘¥ÕÌè€ä°Á…‘‘¥¹!½É¥é½¹Ñ…°è€Ð°…±¥¹%Ñ•µÌè€‰•¹Ñ•Èˆ°©ÕÍÑ¥™å½¹Ñ•¹Ðè€‰•¹Ñ•Èˆô°4(€™¥±Ñ•É½Õ¹ÑQ•áÐèì½±½Èè€ˆ™™˜ˆ°™½¹ÑM¥é”è€ÄÀ°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ÜÀÁ	½±ˆô°4(4(€™¥±Ñ•É=Ù•É±…äèì™±•àè€Ä°©ÕÍÑ¥™å½¹Ñ•¹Ðè€‰™±•àµ•¹ˆ°‰…­É½Õ¹‘½±½Èè€‰É‰„ À°À°À°À¸ÔÔ¤ˆô°4(€™¥±Ñ•ÉM¡••Ðèì‰½É‘•ÉQ½Á1•™ÑI…‘¥ÕÌè€ÈØ°‰½É‘•ÉQ½ÁI¥¡ÑI…‘¥ÕÌè€ÈØ°Á…‘‘¥¹!½É¥é½¹Ñ…°è€ÈÀ°Á…‘‘¥¹Q½Àè€ÄÈ°Á…‘‘¥¹	½ÑÑ½´è€ÌÈ°µ…á!•¥¡Ðè€ˆàà”ˆô°4(€™¥±Ñ•É!…¹‘±”èìÝ¥‘Ñ è€Ìà°¡•¥¡Ðè€Ð°‰½É‘•ÉI…‘¥ÕÌè€È°…±¥¹M•±˜è€‰•¹Ñ•Èˆ°µ…É¥¹	½ÑÑ½´è€ÄØô°4(€™¥±Ñ•ÉM¡••Ñ!•…‘•Èèì™±•á¥É•Ñ¥½¸è€‰É½Üˆ°…±¥¹%Ñ•µÌè€‰™±•àµÍÑ…ÉÐˆ°©ÕÍÑ¥™å½¹Ñ•¹Ðè€‰ÍÁ…”µ‰•ÑÝ••¸ˆ°µ…É¥¹	½ÑÑ½´è€ÄÈô°4(€™¥±Ñ•ÉM¡••ÑQ¥Ñ±”èì™½¹ÑM¥é”è€ÈÀ°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ÜÀÁ	½±ˆô°4(€™¥±Ñ•ÉM¡••ÑMÕˆèì™½¹ÑM¥é”è€ÄÈ°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ÐÀÁI•Õ±…Èˆ°µ…É¥¹Q½Àè€Ìô°4(€™¥±Ñ•ÉM¡••ÑMÉ½±°èì™±•áÉ½Üè€Àô°4(€™¥±Ñ•ÉÉ½ÕÁ1…‰•°èì™½¹ÑM¥é”è€ÄÀ°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ÜÀÁ	½±ˆ°±•ÑÑ•ÉMÁ…¥¹œè€À¸Ü°µ…É¥¹Q½Àè€ÄÈ°µ…É¥¹	½ÑÑ½´è€àô°4(€™¥±Ñ•É=ÁÑ¥½¹É¥èì™±•á¥É•Ñ¥½¸è€‰É½Üˆ°™±•á]É…Àè€‰ÝÉ…Àˆ°…Àè€àô°4(€™¥±Ñ•É¡¥Àèì™±•á¥É•Ñ¥½¸è€‰É½Üˆ°…±¥¹%Ñ•µÌè€‰•¹Ñ•Èˆ°…Àè€Ô°Á…‘‘¥¹!½É¥é½¹Ñ…°è€ÄÌ°Á…‘‘¥¹Y•ÉÑ¥…°è€ä°‰½É‘•É]¥‘Ñ è€Ä°‰½É‘•ÉI…‘¥ÕÌè€ÄÀô°4(€™¥±Ñ•ÉQ•áÐèì™½¹ÑM¥é”è€ÄÌ°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ØÀÁM•µ¥	½±ˆô°4(€™¥±Ñ•ÉÑ¥½¹Ìèì™±•á¥É•Ñ¥½¸è€‰É½Üˆ°…Àè€ÄÀ°µ…É¥¹Q½Àè€Äàô°4(€™¥±Ñ•ÉÑ¥½¹	ÕÑÑ½¸èì™±•àè€Ä°µ¥¹!•¥¡Ðè€Ðà°‰½É‘•ÉI…‘¥ÕÌè€ÄÈ°‰½É‘•É]¥‘Ñ è€Ä°…±¥¹%Ñ•µÌè€‰•¹Ñ•Èˆ°©ÕÍÑ¥™å½¹Ñ•¹Ðè€‰•¹Ñ•Èˆ°Á…‘‘¥¹!½É¥é½¹Ñ…°è€ÄÀô°4(€™¥±Ñ•ÉÑ¥½¹Q•áÐèì™½¹ÑM¥é”è€ÄÐ°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ÜÀÁ	½±ˆô°4(4(€ÍÕµµ…ÉåI½Üè€€€€ì™±•á¥É•Ñ¥½¸è€‰É½Üˆ°Á…‘‘¥¹Y•ÉÑ¥…°è€ÄÐô°4(€ÍÕµµ…ÉåMÑ…Ðè€€€ì™±•àè€Ä°…±¥¹%Ñ•µÌè€‰•¹Ñ•Èˆ°…Àè€Ðô°4(€ÍÕµµ…ÉåY…±Õ”è€€ì™½¹ÑM¥é”è€Äà°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ÜÀÁ	½±ˆô°4(€ÍÕµµ…Éå1…‰•°è€€ì™½¹ÑM¥é”è€ÄÀ°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ØÀÁM•µ¥	½±ˆ°±•ÑÑ•ÉMÁ…¥¹œè€À¸Ð°Ñ•áÑQÉ…¹Í™½É´è€‰ÕÁÁ•É…Í”ˆô°4(€ÍÕµµ…Éå¥Ù¥‘•ÈèìÝ¥‘Ñ è€Äô°4(4(€±¥ÍÐè€€€€€€€€€ìÁ…‘‘¥¹!½É¥é½¹Ñ…°è€ÄØô°4(€Í•Ñ¥½¹!•…‘•ÈèìÁ…‘‘¥¹Y•ÉÑ¥…°è€Øô°4(€Í•Ñ¥½¹Q¥Ñ±”è€ì™½¹ÑM¥é”è€ÄÈ°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ØÀÁM•µ¥	½±ˆ°Ñ•áÑQÉ…¹Í™½É´è€‰ÕÁÁ•É…Í”ˆ°±•ÑÑ•ÉMÁ…¥¹œè€À¸Øô°4(4(€ÑáI½Üè€€€€€€€€€ì™±•á¥É•Ñ¥½¸è€‰É½Üˆ°…±¥¹%Ñ•µÌè€‰•¹Ñ•Èˆ°Á…‘‘¥¹œè€ÄÈ°…Àè€ÄÈô°4(€Í½ÕÉ•%½¸è€€€€ìÝ¥‘Ñ è€Ìà°¡•¥¡Ðè€Ìà°‰½É‘•ÉI…‘¥ÕÌè€Ää°…±¥¹%Ñ•µÌè€‰•¹Ñ•Èˆ°©ÕÍÑ¥™å½¹Ñ•¹Ðè€‰•¹Ñ•Èˆô°4(€Ñá5¥è€€€€€€€€€ì™±•àè€Äô°4(€Ñá9½Ñ”è€€€€€€€€ì™½¹ÑM¥é”è€ÄÐ°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ØÀÁM•µ¥	½±ˆ°µ…É¥¹	½ÑÑ½´è€Ðô°4(€Ñá5•Ñ„è€€€€€€€€ì™±•á¥É•Ñ¥½¸è€‰É½Üˆ°…Àè€Ø°…±¥¹%Ñ•µÌè€‰•¹Ñ•Èˆ°™±•á]É…Àè€‰ÝÉ…Àˆô°4(€Í½ÕÉ•	…‘”è€€€ìÁ…‘‘¥¹!½É¥é½¹Ñ…°è€Ø°Á…‘‘¥¹Y•ÉÑ¥…°è€È°‰½É‘•ÉI…‘¥ÕÌè€Ôô°4(€Í½ÕÉ•	…‘•Q•áÐéì™½¹ÑM¥é”è€ÄÀ°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ÜÀÁ	½±ˆô°4(€…Ñ	…‘”è€€€€€€ìÁ…‘‘¥¹!½É¥é½¹Ñ…°è€Ø°Á…‘‘¥¹Y•ÉÑ¥…°è€È°‰½É‘•ÉI…‘¥ÕÌè€Ôô°4(€…Ñ	…‘•Q•áÐè€€ì™½¹ÑM¥é”è€ÄÀ°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ØÀÁM•µ¥	½±ˆô°4(€Ñá…Ñ”è€€€€€€€€ì™½¹ÑM¥é”è€ÄÀ°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ÐÀÁI•Õ±…Èˆô°4(€ÑáI¥¡Ðè€€€€€€€ì…±¥¹%Ñ•µÌè€‰™±•àµ•¹ˆô°4(€Ñáµ½Õ¹Ðè€€€€€€ì™½¹ÑM¥é”è€ÄÔ°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ÜÀÁ	½±ˆô°4(4(€€¼¼•Ñ…¥°‰½ÑÑ½´Í¡••Ð4(€Í¡••Ñ=Ù•É±…äè€€€ì™±•àè€Ä°©ÕÍÑ¥™å½¹Ñ•¹Ðè€‰™±•àµ•¹ˆ°‰…­É½Õ¹‘½±½Èè€‰É‰„ À°À°À°À¸ÔÔ¤ˆô°4(€Í¡••Ðè€€€€€€€€€€ì‰½É‘•ÉQ½Á1•™ÑI…‘¥ÕÌè€ÈØ°‰½É‘•ÉQ½ÁI¥¡ÑI…‘¥ÕÌè€ÈØ°Á…‘‘¥¹!½É¥é½¹Ñ…°è€ÈÀ°Á…‘‘¥¹	½ÑÑ½´è€ÌØ°Á…‘‘¥¹Q½Àè€ÄÈô°4(€Í¡••Ñ!…¹‘±”è€€€€ìÝ¥‘Ñ è€Ìà°¡•¥¡Ðè€Ð°‰½É‘•ÉI…‘¥ÕÌè€È°…±¥¹M•±˜è€‰•¹Ñ•Èˆ°µ…É¥¹	½ÑÑ½´è€Äàô°4(€Í¡••Ñ!•…‘•Èè€€€€ì™±•á¥É•Ñ¥½¸è€‰É½Üˆ°…±¥¹%Ñ•µÌè€‰™±•àµÍÑ…ÉÐˆ°…Àè€ÄÐ°µ…É¥¹	½ÑÑ½´è€Äàô°4(€Í¡••Ñ%½¹]É…Àè€€ìÝ¥‘Ñ è€ÔÈ°¡•¥¡Ðè€ÔÈ°‰½É‘•ÉI…‘¥ÕÌè€ÈØ°…±¥¹%Ñ•µÌè€‰•¹Ñ•Èˆ°©ÕÍÑ¥™å½¹Ñ•¹Ðè€‰•¹Ñ•Èˆô°4(€Í¡••Ñ9…µ”è€€€€€€ì™½¹ÑM¥é”è€ÈÀ°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ÜÀÁ	½±ˆ°µ…É¥¹	½ÑÑ½´è€Ø°±¥¹•!•¥¡Ðè€ÈØô°4(€Í½ÕÉ•A¥±°è€€€€€ì…±¥¹M•±˜è€‰™±•àµÍÑ…ÉÐˆ°Á…‘‘¥¹!½É¥é½¹Ñ…°è€à°Á…‘‘¥¹Y•ÉÑ¥…°è€Ì°‰½É‘•ÉI…‘¥ÕÌè€Øô°4(€Í½ÕÉ•A¥±±Q•áÐè€ì™½¹ÑM¥é”è€ÄÄ°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ÜÀÁ	½±ˆô°4(€Í¡••ÑµÑ	½àè€€€€ì…±¥¹%Ñ•µÌè€‰•¹Ñ•Èˆ°Á…‘‘¥¹Y•ÉÑ¥…°è€ÈÀ°µ…É¥¹	½ÑÑ½´è€ÄØô°4(€Í¡••ÑµÐè€€€€€€€ì™½¹ÑM¥é”è€ÐÀ°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ÜÀÁ	½±ˆô°4(€Í¡••ÑµÑ1…‰•°è€€ì™½¹ÑM¥é”è€ÄÌ°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ÔÀÁ5•‘¥Õ´ˆ°µ…É¥¹Q½Àè€Ðô°4(€Í¡••ÑI½Üè€€€€€€€ì™±•á¥É•Ñ¥½¸è€‰É½Üˆ°…±¥¹%Ñ•µÌè€‰™±•àµÍÑ…ÉÐˆ°…Àè€ÄÈ°Á…‘‘¥¹Y•ÉÑ¥…°è€ÄÈ°‰½É‘•É	½ÑÑ½µ]¥‘Ñ èMÑå±•M¡••Ð¹¡…¥É±¥¹•]¥‘Ñ ô°4(€Í¡••ÑI½Ý%½¸è€€€ìÝ¥‘Ñ è€ÌÀ°¡•¥¡Ðè€ÌÀ°‰½É‘•ÉI…‘¥ÕÌè€ÄÔ°…±¥¹%Ñ•µÌè€‰•¹Ñ•Èˆ°©ÕÍÑ¥™å½¹Ñ•¹Ðè€‰•¹Ñ•Èˆ°µ…É¥¹Q½Àè€Äô°4(€Í¡••ÑI½Ý1…‰•°è€€ì™½¹ÑM¥é”è€ÄÄ°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ÔÀÁ5•‘¥Õ´ˆ°µ…É¥¹	½ÑÑ½´è€È°Ñ•áÑQÉ…¹Í™½É´è€‰ÕÁÁ•É…Í”ˆ°±•ÑÑ•ÉMÁ…¥¹œè€À¸Ðô°4(€Í¡••ÑI½ÝY…±Õ”è€€ì™½¹ÑM¥é”è€ÄÐ°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ÐÀÁI•Õ±…Èˆô°4(€Í¡••Ñ9½Ñ”è€€€€€€ì™±•á¥É•Ñ¥½¸è€‰É½Üˆ°…±¥¹%Ñ•µÌè€‰™±•àµÍÑ…ÉÐˆ°…Àè€à°Á…‘‘¥¹œè€ÄÈ°µ…É¥¹Q½Àè€ÄØ°µ…É¥¹	½ÑÑ½´è€Ðô°4(€Í¡••Ñ9½Ñ•Q•áÐè€€ì™±•àè€Ä°™½¹ÑM¥é”è€ÄÈ°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ÐÀÁI•Õ±…Èˆ°±¥¹•!•¥¡Ðè€ÄÜô°4(€Í¡••Ñ±½Í”è€€€€€ì¡•¥¡Ðè€ÔÀ°‰½É‘•ÉI…‘¥ÕÌè€ÄÐ°…±¥¹%Ñ•µÌè€‰•¹Ñ•Èˆ°©ÕÍÑ¥™å½¹Ñ•¹Ðè€‰•¹Ñ•Èˆ°µ…É¥¹Q½Àè€ÄÐô°4(€Í¡••Ñ±½Í•Q•áÐè€ì™½¹ÑM¥é”è€ÄÔ°™½¹Ñ…µ¥±äè€‰%¹Ñ•É|ØÀÁM•µ¥	½±ˆô°4)ô¤ì4(

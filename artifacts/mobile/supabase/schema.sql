@@ -18,6 +18,7 @@ create table if not exists bills (
   end_date        text,
   is_recurring    boolean not null default true,
   frequency       text not null default 'monthly',
+  include_in_snowball boolean not null default true,
   created_at      text not null
 );
 alter table bills enable row level security;
@@ -32,7 +33,9 @@ create table if not exists monthly_overrides (
   year            integer not null,
   custom_amount   numeric,
   custom_due_day  integer,
-  paid_amount     numeric not null default 0
+  paid_amount     numeric not null default 0,
+  actual_amount   numeric,
+  paid_date       date
 );
 alter table monthly_overrides enable row level security;
 create policy "overrides: user owns rows" on monthly_overrides for all using (auth.uid() = user_id);
@@ -84,7 +87,9 @@ create table if not exists extra_payments (
   month           integer not null,
   year            integer not null,
   amount          numeric not null default 0,
-  allocations     jsonb not null default '[]'
+  allocations     jsonb not null default '[]',
+  payment_date    date,
+  sources         jsonb not null default '[]'
 );
 alter table extra_payments enable row level security;
 create policy "extra_payments: user owns rows" on extra_payments for all using (auth.uid() = user_id);

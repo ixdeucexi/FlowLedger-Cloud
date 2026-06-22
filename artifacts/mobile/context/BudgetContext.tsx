@@ -2,6 +2,14 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
+import {
+  allocateSnowballExtra,
+  orderDebts,
+  simulateSnowballPayoff,
+  SNOWBALL_BUFFER,
+  type SnowballDebtInput,
+  type SnowballProjectionResult,
+} from "@/lib/snowball";
 
 // â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -21,6 +29,7 @@ export interface Bill {
   is_recurring: boolean;
   frequency: "monthly" | "weekly";
   created_at: string;
+  include_in_snowball?: boolean;
 }
 
 export interface MonthlyOverride {
@@ -31,6 +40,8 @@ export interface MonthlyOverride {
   custom_amount?: number;
   custom_due_day?: number;
   paid_amount: number;
+  actual_amount?: number;
+  paid_date?: string;
 }
 
 export interface Transaction {
@@ -79,6 +90,14 @@ export interface SnowballAllocation {
   balanceBefore: number;
   balanceAfter: number;
   paidOff: boolean;
+  paymentDate?: string;
+}
+
+export interface SnowballFundingSource {
+  type: "manual" | "bill_surplus";
+  amount: number;
+  billId?: string;
+  billName?: string;
 }
 
 export interface ExtraPayment {
@@ -87,6 +106,8 @@ export interface ExtraPayment {
   year: number;
   amount: number;
   allocations: SnowballAllocation[];
+  payment_date?: string;
+  sources?: SnowballFundingSource[];
 }
 
 export interface Settings {
@@ -155,9 +176,14 @@ interface BudgetContextType {
   getMonthlyBills: (month: number, year: number) => Bill[];
   getBillOccurrencesInMonth: (bill: Bill, month: number, year: number) => number[];
   getBillMonthlyTotal: (bill: Bill, month: number, year: number) => number;
+  getBillEffectiveMonthlyTotal: (bill: Bill, month: number, year: number) => number;
 
   runSnowball: (month: number, year: number, extraAmount: number) => SnowballAllocation[];
-  saveExtraPayment: (month: number, year: number, amount: number, allocations: SnowballAllocation[]) => Promise<void>;
+  previewDebtSnowball: (month: number, year: number, extraAmount?: number, additionalSafeCredit?: number) => SnowballProjectionResult;
+  applyDebtSnowballPayment: (preview: SnowballProjectionResult, sources?: SnowballFundingSource[]) => Promise<void>;
+  saveExtraPayment: (month: number, year: number, amount: number, allocations: SnowballAllocation[], paymentDate?: string, sources?: SnowballFundingSource[]) => Promise<void>;
+  removeDebtSnowballPayment: (month: number, year: number) => Promise<void>;
+  finalizeBillPayment: (billId: string, month: number, year: number, actualAmount: number, paidDate: string) => Promise<{ budgeted: number; actual: number; surplus: number }>;
   getExtraPayment: (month: number, year: number) => ExtraPayment | undefined;
   deleteExtraPayment: (id: string) => Promise<void>;
 
@@ -354,674 +380,4 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           supabase.from("goals").select("*").eq("user_id", uid),
           supabase.from("extra_payments").select("*").eq("user_id", uid),
           supabase.from("settings").select("*").eq("user_id", uid).maybeSingle(),
-          supabase.from("categories").select("name").eq("user_id", uid),
-        ]);
-        const failed = results.find(result => result.error);
-        if (failed?.error) throw new Error(`Load budget data: ${failed.error.message}`);
-        const [
-          { data: bData },
-          { data: oData },
-          { data: tData },
-          { data: iData },
-          { data: gData },
-          { data: epData },
-          { data: sData },
-          { data: cData },
-        ] = results;
-
-        setBills(reorderDebtPriorities((bData ?? []).map((b: any) => ({
-          ...b,
-          frequency:   (b.frequency ?? "monthly") as "monthly" | "weekly",
-          day_of_week: b.day_of_week ?? 0,
-          amount:       Number(b.amount),
-          balance:      Number(b.balance),
-          interest_rate: Number(b.interest_rate),
-        }))));
-        setOverrides((oData ?? []).map((o: any) => ({
-          ...o,
-          paid_amount:   Number(o.paid_amount),
-          custom_amount: o.custom_amount !== null ? Number(o.custom_amount) : undefined,
-          custom_due_day: o.custom_due_day !== null ? Number(o.custom_due_day) : undefined,
-        })));
-        setTransactions((tData ?? []).map((t: any) => ({ ...t, amount: Number(t.amount) })));
-        setIncomes((iData ?? []).map((i: any) => ({
-          ...i,
-          amount:         Number(i.amount),
-          amount_history: i.amount_history ?? [],
-        })));
-        setGoals((gData ?? []).map((g: any) => ({
-          ...g,
-          target_amount:  Number(g.target_amount),
-          current_amount: Number(g.current_amount),
-        })));
-        setExtraPayments((epData ?? []).map((ep: any) => ({
-          ...ep,
-          amount:      Number(ep.amount),
-          allocations: ep.allocations ?? [],
-        })));
-        if (sData) {
-          setSettings({
-            paymentMethod:        sData.payment_method as Settings["paymentMethod"],
-            starting_balance:     Number(sData.starting_balance),
-            starting_balance_date: sData.starting_balance_date ?? undefined,
-          });
-        }
-        const cats = (cData ?? []).map((c: any) => c.name as string);
-        setCategories(cats.length > 0 ? cats : DEFAULT_CATEGORIES);
-      } finally {
-        loaded.current = true;
-        setLoading(false);
-      }
-    })();
-  }, [user]);
-
-  // â”€â”€â”€ Bills â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const addBill = useCallback(async (bill: Omit<Bill, "id" | "created_at">) => {
-    if (!user) return;
-    const nb: Bill = { ...bill, id: genId(), created_at: new Date().toISOString() };
-    await ensureSaved(supabase.from("bills").insert({ ...nb, user_id: user.id }), "Add bill");
-    setBills(prev => reorderDebtPriorities([...prev, nb]));
-  }, [user]);
-
-  const updateBill = useCallback(async (bill: Bill) => {
-    if (!user) return;
-    const existing = bills.find(b => b.id === bill.id);
-    if (existing && existing.amount !== bill.amount) {
-      const now = new Date();
-      const curMonth = now.getMonth();
-      const curYear  = now.getFullYear();
-      const currentOverrides = overridesRef.current.filter(o => o.bill_id === bill.id);
-      const dbUpdates: Promise<any>[] = [];
-
-      const nextOverrides = currentOverrides.map(o => {
-        const isStrictlyPast = o.year < curYear || (o.year === curYear && o.month < curMonth);
-        if (isStrictlyPast && o.custom_amount === undefined) {
-          dbUpdates.push(
-            supabase.from("monthly_overrides")
-              .update({ custom_amount: existing.amount })
-              .eq("id", o.id).eq("user_id", user.id) as unknown as Promise<any>
-          );
-          return { ...o, custom_amount: existing.amount };
-        } else if (!isStrictlyPast && o.custom_amount !== undefined) {
-          dbUpdates.push(
-            supabase.from("monthly_overrides")
-              .update({ custom_amount: null })
-              .eq("id", o.id).eq("user_id", user.id) as unknown as Promise<any>
-          );
-          return { ...o, custom_amount: undefined };
-        }
-        return o;
-      });
-
-      const changedIds = new Set(nextOverrides.filter((o, i) => o !== currentOverrides[i]).map(o => o.id));
-      if (changedIds.size > 0) {
-        setOverrides(prev =>
-          prev.map(o => {
-            const changed = nextOverrides.find(n => n.id === o.id);
-            return changed && changedIds.has(o.id) ? changed : o;
-          })
-        );
-      }
-      await Promise.all(dbUpdates);
-    }
-    await ensureSaved(supabase.from("bills").update({ ...bill }).eq("id", bill.id).eq("user_id", user.id), "Update bill");
-    setBills(prev => reorderDebtPriorities(prev.map(b => b.id === bill.id ? bill : b)));
-  }, [user, bills]);
-
-  const deleteBill = useCallback(async (id: string) => {
-    if (!user) return;
-    const results = await Promise.all([
-      supabase.from("bills").delete().eq("id", id).eq("user_id", user.id),
-      supabase.from("monthly_overrides").delete().eq("bill_id", id).eq("user_id", user.id),
-    ]);
-    const failed = results.find(result => result.error);
-    if (failed?.error) throw new Error(`Delete bill: ${failed.error.message}`);
-    setBills(prev => reorderDebtPriorities(prev.filter(b => b.id !== id)));
-    setOverrides(prev => prev.filter(o => o.bill_id !== id));
-  }, [user]);
-
-  const getBillById = useCallback((id: string) => bills.find(b => b.id === id), [bills]);
-
-  // â”€â”€â”€ Overrides â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const getOverride = useCallback(
-    (billId: string, month: number, year: number) =>
-      overrides.find(o => o.bill_id === billId && o.month === month && o.year === year),
-    [overrides]
-  );
-
-  const getAmount = useCallback(
-    (bill: Bill, month: number, year: number): number => {
-      const o = overrides.find(o => o.bill_id === bill.id && o.month === month && o.year === year);
-      return o?.custom_amount !== undefined ? o.custom_amount : bill.amount;
-    },
-    [overrides]
-  );
-
-  const getPaidAmount = useCallback(
-    (billId: string, month: number, year: number): number =>
-      overrides.find(o => o.bill_id === billId && o.month === month && o.year === year)?.paid_amount ?? 0,
-    [overrides]
-  );
-
-  const upsertOverride = useCallback(
-    async (billId: string, month: number, year: number, patch: Partial<Omit<MonthlyOverride, "id" | "bill_id" | "month" | "year">>) => {
-      if (!user) return;
-      const existing = overridesRef.current.find(o => o.bill_id === billId && o.month === month && o.year === year);
-      if (existing) {
-        const updated = { ...existing, ...patch };
-        await ensureSaved(
-          supabase.from("monthly_overrides").update({ ...updated }).eq("id", existing.id).eq("user_id", user.id),
-          "Update monthly bill"
-        );
-        setOverrides(prev => prev.map(o => o.id === existing.id ? updated : o));
-      } else {
-        const no: MonthlyOverride = { id: genId(), bill_id: billId, month, year, paid_amount: 0, ...patch };
-        await ensureSaved(supabase.from("monthly_overrides").insert({ ...no, user_id: user.id }), "Create monthly bill");
-        setOverrides(prev => [...prev, no]);
-      }
-    },
-    [user]
-  );
-
-  const setPaidAmount = useCallback(
-    async (billId: string, month: number, year: number, amount: number) => {
-      const prevPaid = overridesRef.current.find(o => o.bill_id === billId && o.month === month && o.year === year)?.paid_amount ?? 0;
-      await upsertOverride(billId, month, year, { paid_amount: Math.max(0, amount) });
-      const delta = amount - prevPaid;
-      if (delta !== 0 && user) {
-        const bill = bills.find(b => b.id === billId);
-        if (bill?.is_debt) {
-          const nextBalance = Math.max(0, bill.balance - delta);
-          await ensureSaved(
-            supabase.from("bills").update({ balance: nextBalance }).eq("id", billId).eq("user_id", user.id),
-            "Update debt balance"
-          );
-          setBills(prev => reorderDebtPriorities(
-            prev.map(b => b.id === billId ? { ...b, balance: nextBalance } : b)
-          ));
-        }
-      }
-    },
-    [upsertOverride, bills, user]
-  );
-
-  const setCustomAmount = useCallback(
-    async (billId: string, month: number, year: number, amount: number | undefined) =>
-      upsertOverride(billId, month, year, { custom_amount: amount }),
-    [upsertOverride]
-  );
-
-  const getCustomDueDay = useCallback(
-    (billId: string, month: number, year: number): number | undefined =>
-      overrides.find(o => o.bill_id === billId && o.month === month && o.year === year)?.custom_due_day,
-    [overrides]
-  );
-
-  const setCustomDueDay = useCallback(
-    async (billId: string, month: number, year: number, day: number | undefined) =>
-      upsertOverride(billId, month, year, { custom_due_day: day }),
-    [upsertOverride]
-  );
-
-  // â”€â”€â”€ Bill scheduling helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const getBillOccurrencesInMonth = useCallback(
-    (bill: Bill, month: number, year: number): number[] => {
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
-      let occ = getBillOccurrenceDays(bill, month, year);
-      if (occ.length === 0) return occ;
-      const o = overrides.find(ov => ov.bill_id === bill.id && ov.month === month && ov.year === year);
-      if (o?.custom_due_day !== undefined && bill.frequency === "monthly") {
-        occ = [Math.min(o.custom_due_day, daysInMonth)];
-      }
-      return occ;
-    },
-    [overrides]
-  );
-
-  const getBillMonthlyTotal = useCallback((bill: Bill, month: number, year: number): number => {
-    const occurrences = getBillOccurrenceDays(bill, month, year);
-    if (occurrences.length === 0) return 0;
-    return getAmount(bill, month, year) * occurrences.length;
-  }, [getAmount]);
-
-  const getMonthlyBills = useCallback(
-    (month: number, year: number): Bill[] =>
-      bills.filter(b => (b.is_recurring || b.is_debt) && isBillActiveForMonth(b, month, year)),
-    [bills]
-  );
-
-  // â”€â”€â”€ Snowball / Avalanche â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const runSnowball = useCallback(
-    (month: number, year: number, extraAmount: number): SnowballAllocation[] => {
-      const debtBills = bills.filter(b => b.is_debt && b.balance > 0).map(b => ({ ...b }));
-      debtBills.sort(settings.paymentMethod === "snowball"
-        ? (a, b) => a.balance - b.balance
-        : (a, b) => b.interest_rate - a.interest_rate);
-
-      const allocations: SnowballAllocation[] = [];
-      let pool = extraAmount;
-      let cascadePool = 0;
-      const updatedBills = [...bills];
-
-      for (let i = 0; i < debtBills.length; i++) {
-        const debt = debtBills[i];
-        const available = pool + cascadePool;
-        if (available <= 0) break;
-        const alreadyPaid = overrides.find(o => o.bill_id === debt.id && o.month === month && o.year === year)?.paid_amount ?? 0;
-        const remaining = Math.max(0, debt.balance - alreadyPaid);
-        const payment = Math.min(available, remaining);
-        if (payment <= 0) continue;
-        const balanceBefore = debt.balance;
-        const balanceAfter  = Math.max(0, balanceBefore - payment);
-        const paidOff       = balanceAfter === 0;
-        allocations.push({ billId: debt.id, billName: debt.name, payment, balanceBefore, balanceAfter, paidOff });
-        const bidx = updatedBills.findIndex(b => b.id === debt.id);
-        if (bidx !== -1) updatedBills[bidx] = { ...updatedBills[bidx], balance: balanceAfter };
-        upsertOverride(debt.id, month, year, { paid_amount: alreadyPaid + payment });
-        if (paidOff) {
-          const nextDebt = debtBills.slice(i + 1).find(d => d.balance > payment);
-          if (nextDebt) {
-            const nidx = updatedBills.findIndex(b => b.id === nextDebt.id);
-            if (nidx !== -1) updatedBills[nidx] = { ...updatedBills[nidx], amount: updatedBills[nidx].amount + debt.amount };
-          }
-          cascadePool = Math.max(0, available - payment);
-          pool = 0;
-        } else {
-          pool = 0; cascadePool = 0;
-        }
-      }
-      setBills(reorderDebtPriorities(updatedBills));
-      return allocations;
-    },
-    [bills, settings.paymentMethod, overrides, upsertOverride]
-  );
-
-  const saveExtraPayment = useCallback(async (month: number, year: number, amount: number, allocations: SnowballAllocation[]) => {
-    if (!user) return;
-    const existing = extraPayments.find(ep => ep.month === month && ep.year === year);
-    if (existing) {
-      await ensureSaved(
-        supabase.from("extra_payments").update({ amount, allocations }).eq("id", existing.id).eq("user_id", user.id),
-        "Update extra payment"
-      );
-      setExtraPayments(prev => prev.map(ep => ep.id === existing.id ? { ...ep, amount, allocations } : ep));
-    } else {
-      const next: ExtraPayment = { id: genId(), month, year, amount, allocations };
-      await ensureSaved(supabase.from("extra_payments").insert({ ...next, user_id: user.id }), "Add extra payment");
-      setExtraPayments(prev => [...prev, next]);
-    }
-  }, [user, extraPayments]);
-
-  const getExtraPayment = useCallback(
-    (month: number, year: number) => extraPayments.find(ep => ep.month === month && ep.year === year),
-    [extraPayments]
-  );
-
-  const deleteExtraPayment = useCallback(async (id: string) => {
-    if (!user) return;
-    await ensureSaved(supabase.from("extra_payments").delete().eq("id", id).eq("user_id", user.id), "Delete extra payment");
-    setExtraPayments(prev => prev.filter(ep => ep.id !== id));
-  }, [user]);
-
-  // â”€â”€â”€ Transactions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const addTransaction = useCallback(async (tx: Omit<Transaction, "id">) => {
-    if (!user) return;
-    const nt: Transaction = { ...tx, id: genId() };
-    await ensureSaved(supabase.from("transactions").insert({ ...nt, user_id: user.id }), "Add transaction");
-    setTransactions(prev => [...prev, nt]);
-  }, [user]);
-
-  const updateTransaction = useCallback(async (tx: Transaction) => {
-    if (!user) return;
-    await ensureSaved(supabase.from("transactions").update({ ...tx }).eq("id", tx.id).eq("user_id", user.id), "Update transaction");
-    setTransactions(prev => prev.map(t => t.id === tx.id ? tx : t));
-  }, [user]);
-
-  const deleteTransaction = useCallback(async (id: string) => {
-    if (!user) return;
-    await ensureSaved(supabase.from("transactions").delete().eq("id", id).eq("user_id", user.id), "Delete transaction");
-    setTransactions(prev => prev.filter(t => t.id !== id));
-  }, [user]);
-
-  const getTransactionsForMonth = useCallback(
-    (month: number, year: number) =>
-      transactions.filter(t => {
-        const [ty, tm] = t.date.split("-").map(Number);
-        return ty === year && tm === month + 1;
-      }),
-    [transactions]
-  );
-
-  // â”€â”€â”€ Income â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const addIncome = useCallback(async (item: Omit<IncomeItem, "id">) => {
-    if (!user) return;
-    const ni: IncomeItem = { ...item, id: genId() };
-    await ensureSaved(supabase.from("incomes").insert({ ...ni, amount_history: ni.amount_history ?? [], user_id: user.id }), "Add income");
-    setIncomes(prev => [...prev, ni]);
-  }, [user]);
-
-  const updateIncome = useCallback(async (item: IncomeItem) => {
-    if (!user) return;
-    await ensureSaved(supabase.from("incomes").update({ ...item, amount_history: item.amount_history ?? [] }).eq("id", item.id).eq("user_id", user.id), "Update income");
-    setIncomes(prev => prev.map(i => i.id === item.id ? item : i));
-  }, [user]);
-
-  const deleteIncome = useCallback(async (id: string) => {
-    if (!user) return;
-    await ensureSaved(supabase.from("incomes").delete().eq("id", id).eq("user_id", user.id), "Delete income");
-    setIncomes(prev => prev.filter(i => i.id !== id));
-  }, [user]);
-
-  const getMonthlyIncome = useCallback(
-    (month?: number, year?: number) =>
-      incomes
-        .filter(i => month !== undefined && year !== undefined ? isIncomeActiveForMonth(i, month, year) : true)
-        .reduce((s, i) => {
-          if (month !== undefined && year !== undefined) {
-            const amt = getEffectiveIncomeAmount(i, month, year);
-            return s + getIncomeOccurrenceDays(i, month, year).length * amt;
-          }
-          return s + incomeToMonthly(i.amount, i.frequency);
-        }, 0),
-    [incomes]
-  );
-
-  const getIncomeOccurrencesInMonth = useCallback(
-    (month: number, year: number) =>
-      incomes
-        .filter(i => isIncomeActiveForMonth(i, month, year))
-        .map(i => ({
-          income: i,
-          days: getIncomeOccurrenceDays(i, month, year),
-          effectiveAmount: getEffectiveIncomeAmount(i, month, year),
-        }))
-        .filter(x => x.days.length > 0),
-    [incomes]
-  );
-
-  // â”€â”€â”€ Goals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const addGoal = useCallback(async (goal: Omit<Goal, "id" | "created_at">) => {
-    if (!user) return;
-    const ng: Goal = { ...goal, id: genId(), created_at: new Date().toISOString() };
-    await ensureSaved(supabase.from("goals").insert({ ...ng, user_id: user.id }), "Add goal");
-    setGoals(prev => [...prev, ng]);
-  }, [user]);
-
-  const updateGoal = useCallback(async (goal: Goal) => {
-    if (!user) return;
-    await ensureSaved(supabase.from("goals").update({ ...goal }).eq("id", goal.id).eq("user_id", user.id), "Update goal");
-    setGoals(prev => prev.map(g => g.id === goal.id ? goal : g));
-  }, [user]);
-
-  const deleteGoal = useCallback(async (id: string) => {
-    if (!user) return;
-    await ensureSaved(supabase.from("goals").delete().eq("id", id).eq("user_id", user.id), "Delete goal");
-    setGoals(prev => prev.filter(g => g.id !== id));
-  }, [user]);
-
-  const checkGoalAffordability = useCallback(
-    (goal: Goal, month: number, year: number): GoalAffordability => {
-      const monthNet = (m: number, y: number): number => {
-        const inc = incomes.reduce((s, i) => s + getIncomeOccurrenceDays(i, m, y).length * getEffectiveIncomeAmount(i, m, y), 0);
-        const bil = bills.filter(b => b.is_recurring || b.is_debt).reduce((s, b) => {
-          const occ = getBillOccurrenceDays(b, m, y);
-          if (occ.length === 0) return s;
-          const o = overrides.find(o => o.bill_id === b.id && o.month === m && o.year === y);
-          const amt = o?.custom_amount !== undefined ? o.custom_amount : b.amount;
-          return s + amt * occ.length;
-        }, 0);
-        const tx = transactions
-          .filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === y && tm === m + 1; })
-          .reduce((s, t) => s + t.amount, 0);
-        return inc + tx - bil;
-      };
-      let anchorM: number, anchorY: number, seed: number;
-      if (settings.starting_balance_date) {
-        const [sbY, sbM] = settings.starting_balance_date.split("-").map(Number);
-        anchorM = sbM - 1; anchorY = sbY; seed = settings.starting_balance;
-        if (year < anchorY || (year === anchorY && month < anchorM)) {
-          const needed = getGoalRemainingAmount(goal);
-          return { projectedBalance: 0, canAfford: needed === 0, shortfall: needed };
-        }
-      } else {
-        const now = new Date();
-        anchorM = now.getMonth() - 1; anchorY = now.getFullYear();
-        if (anchorM < 0) { anchorM = 11; anchorY -= 1; }
-        seed = settings.starting_balance;
-        if (year < anchorY || (year === anchorY && month < anchorM)) {
-          const needed = getGoalRemainingAmount(goal);
-          return { projectedBalance: seed, canAfford: seed >= needed, shortfall: Math.max(0, needed - seed) };
-        }
-      }
-      let balance = seed;
-      let m = anchorM, y = anchorY;
-      while (y < year || (y === year && m <= month)) {
-        balance = (m === anchorM && y === anchorY) ? seed + monthNet(m, y) : balance + monthNet(m, y);
-        if (m === month && y === year) break;
-        m++; if (m > 11) { m = 0; y++; }
-      }
-      const projectedBalance = balance;
-      const needed = getGoalRemainingAmount(goal);
-      const canAfford = projectedBalance >= needed;
-      return { projectedBalance, canAfford, shortfall: canAfford ? 0 : needed - projectedBalance };
-    },
-    [bills, incomes, transactions, overrides, settings]
-  );
-
-  // â”€â”€â”€ Cash Flow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const getCashFlow = useCallback((month: number, year: number): CashFlow => {
-    const monthlyIncome = incomes
-      .filter(i => isIncomeActiveForMonth(i, month, year))
-      .reduce((s, i) => s + getIncomeOccurrenceDays(i, month, year).length * getEffectiveIncomeAmount(i, month, year), 0);
-    const activeBills = bills.filter(b => (b.is_recurring || b.is_debt) && isBillActiveForMonth(b, month, year));
-    const totalBillsDue = activeBills.reduce((s, b) => {
-      const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
-      const amt = o?.custom_amount !== undefined ? o.custom_amount : b.amount;
-      return s + amt * getBillOccurrenceDays(b, month, year).length;
-    }, 0);
-    const totalPaid = activeBills.reduce((s, b) =>
-      s + (overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year)?.paid_amount ?? 0), 0);
-    const monthTxs = transactions.filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === year && tm === month + 1; });
-    const netTransactions = monthTxs.reduce((s, t) => s + t.amount, 0);
-    return { monthlyIncome, totalBillsDue, totalPaid, netTransactions, goalAllocations: 0, remaining: monthlyIncome - totalBillsDue + netTransactions };
-  }, [bills, incomes, transactions, overrides]);
-
-  // â”€â”€â”€ Daily Balances â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const getDailyBalances = useCallback((month: number, year: number): DailyBalance[] => {
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const computeMonthNet = (m: number, y: number): number => {
-      const inc = incomes.reduce((s, i) => s + getIncomeOccurrenceDays(i, m, y).length * getEffectiveIncomeAmount(i, m, y), 0);
-      const bil = bills.filter(b => b.is_recurring || b.is_debt).reduce((s, b) => {
-        const occ = getBillOccurrenceDays(b, m, y);
-        if (occ.length === 0) return s;
-        const o = overrides.find(o => o.bill_id === b.id && o.month === m && o.year === y);
-        const amt = o?.custom_amount !== undefined ? o.custom_amount : b.amount;
-        return s + amt * occ.length;
-      }, 0);
-      const tx = transactions
-        .filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === y && tm === m + 1; })
-        .reduce((s, t) => s + t.amount, 0);
-      const goalDeductions = goals.reduce((s, g) => {
-        if (!g.target_date) return s;
-        const targetDate = parseGoalTargetDate(g.target_date);
-        if (targetDate?.year === y && targetDate.month === m) return s + getGoalRemainingAmount(g);
-        return s;
-      }, 0);
-      return inc + tx - bil - goalDeductions;
-    };
-    const computeCarryover = (toMonth: number, toYear: number): number => {
-      let anchorM: number, anchorY: number;
-      if (settings.starting_balance_date) {
-        const [sbY, sbM] = settings.starting_balance_date.split("-").map(Number);
-        anchorY = sbY; anchorM = sbM - 1;
-      } else {
-        const now = new Date();
-        anchorM = now.getMonth() - 1; anchorY = now.getFullYear();
-        if (anchorM < 0) { anchorM = 11; anchorY -= 1; }
-      }
-      if (toYear < anchorY || (toYear === anchorY && toMonth < anchorM)) return 0;
-      if (toYear === anchorY && toMonth === anchorM) return settings.starting_balance;
-      let running = settings.starting_balance;
-      let m = anchorM, y = anchorY;
-      while (!(y === toYear && m === toMonth)) {
-        running += computeMonthNet(m, y);
-        m += 1; if (m > 11) { m = 0; y += 1; }
-      }
-      return running;
-    };
-    const carryover = computeCarryover(month, year);
-    const incomeByDay: Record<number, number> = {};
-    incomes.forEach(i => {
-      const occ = getIncomeOccurrenceDays(i, month, year);
-      const amt = getEffectiveIncomeAmount(i, month, year);
-      occ.forEach(d => { incomeByDay[d] = (incomeByDay[d] ?? 0) + amt; });
-    });
-    const monthTxs = transactions.filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === year && tm === month + 1; });
-    const billsByDay: Record<number, number> = {};
-    bills.filter(b => b.is_recurring || b.is_debt).forEach(b => {
-      let occ = getBillOccurrenceDays(b, month, year);
-      if (occ.length === 0) return;
-      const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
-      const amt = o?.custom_amount !== undefined ? o.custom_amount : b.amount;
-      if (o?.custom_due_day !== undefined && b.frequency === "monthly") {
-        occ = [Math.min(o.custom_due_day, daysInMonth)];
-      }
-      occ.forEach(d => { billsByDay[d] = (billsByDay[d] ?? 0) + amt; });
-    });
-    const goalsByDay: Record<number, GoalExpense[]> = {};
-    goals.forEach(g => {
-      if (!g.target_date) return;
-      const targetDate = parseGoalTargetDate(g.target_date);
-      if (!targetDate || targetDate.year !== year || targetDate.month !== month) return;
-      const day = targetDate.day;
-      if (!goalsByDay[day]) goalsByDay[day] = [];
-      const remaining = getGoalRemainingAmount(g);
-      if (remaining > 0) goalsByDay[day].push({ id: g.id, name: g.name, amount: remaining });
-    });
-    let runningBalance = carryover;
-    const result: DailyBalance[] = [];
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dayTxs = monthTxs.filter(t => { const [, , td] = t.date.split("-").map(Number); return td === day; });
-      const scheduledIncome = incomeByDay[day] ?? 0;
-      const txIncome     = dayTxs.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
-      const incomeToday  = scheduledIncome + txIncome;
-      const expenseToday = dayTxs.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
-      const billsToday   = billsByDay[day] ?? 0;
-      const dayGoals     = goalsByDay[day] ?? [];
-      const goalTotal    = dayGoals.reduce((s, ge) => s + ge.amount, 0);
-      const net = incomeToday - expenseToday - billsToday - goalTotal;
-      runningBalance += net;
-      result.push({ day, income: incomeToday, scheduledIncome, expense: expenseToday, bills: billsToday, goalExpenses: dayGoals, net, balance: runningBalance });
-    }
-    return result;
-  }, [bills, transactions, incomes, goals, overrides, settings.starting_balance, settings.starting_balance_date]);
-
-  // â”€â”€â”€ Categories â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const addCategory = useCallback(async (name: string) => {
-    if (!user) return;
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    if (categories.includes(trimmed)) return;
-    await ensureSaved(supabase.from("categories").insert({ user_id: user.id, name: trimmed }), "Add category");
-    setCategories(prev => [...prev, trimmed]);
-  }, [user, categories]);
-
-  const updateCategory = useCallback(async (oldName: string, newName: string) => {
-    if (!user) return;
-    const trimmed = newName.trim();
-    if (!trimmed || trimmed === oldName) return;
-    const affectedBills = bills.filter(b => b.category === oldName);
-    const affectedTransactions = transactions.filter(t => t.category === oldName);
-    const results = await Promise.all([
-      supabase.from("categories").update({ name: trimmed }).eq("user_id", user.id).eq("name", oldName),
-      ...affectedBills.map(b => supabase.from("bills").update({ category: trimmed }).eq("id", b.id).eq("user_id", user.id)),
-      ...affectedTransactions.map(t => supabase.from("transactions").update({ category: trimmed }).eq("id", t.id).eq("user_id", user.id)),
-    ]);
-    const failed = results.find(result => result.error);
-    if (failed?.error) throw new Error(`Rename category: ${failed.error.message}`);
-    setCategories(prev => prev.map(c => c === oldName ? trimmed : c));
-    setBills(prev => prev.map(b => b.category === oldName ? { ...b, category: trimmed } : b));
-    setTransactions(prev => prev.map(t => t.category === oldName ? { ...t, category: trimmed } : t));
-  }, [user, bills, transactions]);
-
-  const deleteCategory = useCallback(async (name: string) => {
-    if (!user) return;
-    const affectedBills = bills.filter(b => b.category === name);
-    const affectedTransactions = transactions.filter(t => t.category === name);
-    const results = await Promise.all([
-      supabase.from("categories").delete().eq("user_id", user.id).eq("name", name),
-      ...affectedBills.map(b => supabase.from("bills").update({ category: "Other" }).eq("id", b.id).eq("user_id", user.id)),
-      ...affectedTransactions.map(t => supabase.from("transactions").update({ category: "Other" }).eq("id", t.id).eq("user_id", user.id)),
-    ]);
-    const failed = results.find(result => result.error);
-    if (failed?.error) throw new Error(`Delete category: ${failed.error.message}`);
-    setCategories(prev => prev.filter(c => c !== name));
-    setBills(prev => prev.map(b => b.category === name ? { ...b, category: "Other" } : b));
-    setTransactions(prev => prev.map(t => t.category === name ? { ...t, category: "Other" } : t));
-  }, [user, bills, transactions]);
-
-  // â”€â”€â”€ Settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const updateSettings = useCallback(async (s: Partial<Settings>) => {
-    if (!user) return;
-    const next = { ...settings, ...s };
-    await ensureSaved(supabase.from("settings").upsert({
-      user_id:               user.id,
-      payment_method:        next.paymentMethod,
-      starting_balance:      next.starting_balance,
-      starting_balance_date: next.starting_balance_date ?? null,
-    }), "Update settings");
-    setSettings(next);
-  }, [user, settings]);
-
-  const importBills = useCallback(async (imported: Omit<Bill, "id" | "created_at">[]) => {
-    if (!user) return;
-    const newBills = imported.map(b => ({
-      ...b,
-      frequency:   (b.frequency ?? "monthly") as "monthly" | "weekly",
-      day_of_week: b.day_of_week ?? 0,
-      id:          genId(),
-      created_at:  new Date().toISOString(),
-    }));
-    await ensureSaved(supabase.from("bills").insert(newBills.map(b => ({ ...b, user_id: user.id }))), "Import bills");
-    setBills(prev => reorderDebtPriorities([...prev, ...newBills]));
-  }, [user]);
-
-  // â”€â”€â”€ Provider value â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  return (
-    <BudgetContext.Provider value={{
-      bills, overrides, transactions, incomes, goals, extraPayments, categories, settings, loading,
-      dashboardFilter, setDashboardFilter,
-      addBill, updateBill, deleteBill, getBillById,
-      getOverride, getAmount, getPaidAmount, setPaidAmount, setCustomAmount, getCustomDueDay, setCustomDueDay,
-      getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal,
-      runSnowball, saveExtraPayment, getExtraPayment, deleteExtraPayment,
-      addTransaction, updateTransaction, deleteTransaction, getTransactionsForMonth,
-      addIncome, updateIncome, deleteIncome, getMonthlyIncome, getIncomeOccurrencesInMonth,
-      addGoal, updateGoal, deleteGoal, checkGoalAffordability,
-      getCashFlow, getDailyBalances,
-      addCategory, updateCategory, deleteCategory,
-      updateSettings, importBills,
-      selectedYear, setSelectedYear,
-    }}>
-      {children}
-    </BudgetContext.Provider>
-  );
-}
-
-export function useBudget() {
-  const ctx = useContext(BudgetContext);
-  if (!ctx) throw new Error("useBudget must be used within BudgetProvider");
-  return ctx;
-}
+          supabase.from("categories").select("name").eq("user_id",óÞ´¶‰žËkºwµçM” ¡Ì°¤¤€ôøÌ€¬•Ñ%¹½µ•=ÕÉÉ•¹•…åÌ¡¤°´°ä¤¹±•¹Ñ €¨•Ñ™™•Ñ¥Ù•%¹½µ•µ½Õ¹Ð¡¤°´°ä¤°€À¤ì4(€€€€€½¹ÍÐ‰¥°€ô‰¥±±Ì¹™¥±Ñ•È¡ˆ€ôøˆ¹¥Í}É•ÕÉÉ¥¹œñðˆ¹¥Í}‘•‰Ð¤¹É•‘Õ” ¡Ì°ˆ¤€ôøì(€€€€€€€½¹ÍÐ½Œ€ô•Ñ	¥±±=ÕÉÉ•¹•…åÌ¡ˆ°´°ä¤ì(€€€€€€€¥˜€¡½Œ¹±•¹Ñ €ôôô€À¤É•ÑÕÉ¸Ìì(€€€€€€€É•ÑÕÉ¸Ì€¬•Ñ	¥±±™™•Ñ¥Ù•5½¹Ñ¡±åQ½Ñ…°¡ˆ°´°ä¤ì(€€€€€ô°€À¤ì(€€€€€½¹ÍÐÑà€ôÑÉ…¹Í…Ñ¥½¹Ì4(€€€€€€€€¹™¥±Ñ•È¡Ð€ôøì½¹ÍÐmÑä°Ñµt€ôÐ¹‘…Ñ”¹ÍÁ±¥Ð ˆ´ˆ¤¹µ…À¡9Õµ‰•È¤ìÉ•ÑÕÉ¸Ñä€ôôôä€˜˜Ñ´€ôôô´€¬€Äìô¤4(€€€€€€€€¹É•‘Õ” ¡Ì°Ð¤€ôøÌ€¬Ð¹…µ½Õ¹Ð°€À¤ì4(€€€€€½¹ÍÐ½…±•‘ÕÑ¥½¹Ì€ô½…±Ì¹É•‘Õ” ¡Ì°œ¤€ôøì4(€€€€€€€¥˜€ …œ¹Ñ…É•Ñ}‘…Ñ”¤É•ÑÕÉ¸Ìì4(€€€€€€€½¹ÍÐÑ…É•Ñ…Ñ”€ôÁ…ÉÍ•½…±Q…É•Ñ…Ñ”¡œ¹Ñ…É•Ñ}‘…Ñ”¤ì4(€€€€€€€¥˜€¡Ñ…É•Ñ…Ñ”ü¹å•…È€ôôôä€˜˜Ñ…É•Ñ…Ñ”¹µ½¹Ñ €ôôô´¤É•ÑÕÉ¸Ì€¬•Ñ½…±I•µ…¥¹¥¹µ½Õ¹Ð¡œ¤ì4(€€€€€€€É•ÑÕÉ¸Ìì4(€€€€€ô°€À¤ì4(€€€€€½¹ÍÐÍ¹½Ý‰…±°€ô•áÑÉ…A…åµ•¹ÑÌ¹™¥¹¡•À€ôø•À¹µ½¹Ñ €ôôô´€˜˜•À¹å•…È€ôôôä¤ü¹…µ½Õ¹Ð€üü€Àì(€€€€€É•ÑÕÉ¸¥¹Œ€¬Ñà€´‰¥°€´½…±•‘ÕÑ¥½¹Ì€´Í¹½Ý‰…±°ì(€€€ôì4(€€€½¹ÍÐ½µÁÕÑ•…ÉÉå½Ù•È€ô€¡Ñ½5½¹Ñ è¹Õµ‰•È°Ñ½e•…Èè¹Õµ‰•È¤è¹Õµ‰•È€ôøì4(€€€€€±•Ð…¹¡½É4è¹Õµ‰•È°…¹¡½Édè¹Õµ‰•Èì4(€€€€€¥˜€¡Í•ÑÑ¥¹Ì¹ÍÑ…ÉÑ¥¹}‰…±…¹•}‘…Ñ”¤ì4(€€€€€€€½¹ÍÐmÍ‰d°Í‰5t€ôÍ•ÑÑ¥¹Ì¹ÍÑ…ÉÑ¥¹}‰…±…¹•}‘…Ñ”¹ÍÁ±¥Ð ˆ´ˆ¤¹µ…À¡9Õµ‰•È¤ì4(€€€€€€€…¹¡½Éd€ôÍ‰dì…¹¡½É4€ôÍ‰4€´€Äì4(€€€€€ô•±Í”ì4(€€€€€€€½¹ÍÐ¹½Ü€ô¹•Ü…Ñ” ¤ì4(€€€€€€€…¹¡½É4€ô¹½Ü¹•Ñ5½¹Ñ  ¤€´€Äì…¹¡½Éd€ô¹½Ü¹•ÑÕ±±e•…È ¤ì4(€€€€€€€¥˜€¡…¹¡½É4€ð€À¤ì…¹¡½É4€ô€ÄÄì…¹¡½Éd€´ô€Äìô4(€€€€€ô4(€€€€€¥˜€¡Ñ½e•…È€ð…¹¡½Édñð€¡Ñ½e•…È€ôôô…¹¡½Éd€˜˜Ñ½5½¹Ñ €ð…¹¡½É4¤¤É•ÑÕÉ¸€Àì4(€€€€€¥˜€¡Ñ½e•…È€ôôô…¹¡½Éd€˜˜Ñ½5½¹Ñ €ôôô…¹¡½É4¤É•ÑÕÉ¸Í•ÑÑ¥¹Ì¹ÍÑ…ÉÑ¥¹}‰…±…¹”ì4(€€€€€±•ÐÉÕ¹¹¥¹œ€ôÍ•ÑÑ¥¹Ì¹ÍÑ…ÉÑ¥¹}‰…±…¹”ì4(€€€€€±•Ð´€ô…¹¡½É4°ä€ô…¹¡½Édì4(€€€€€Ý¡¥±”€ „¡ä€ôôôÑ½e•…È€˜˜´€ôôôÑ½5½¹Ñ ¤¤ì4(€€€€€€€ÉÕ¹¹¥¹œ€¬ô½µÁÕÑ•5½¹Ñ¡9•Ð¡´°ä¤ì4(€€€€€€€´€¬ô€Äì¥˜€¡´€ø€ÄÄ¤ì´€ô€Àìä€¬ô€Äìô4(€€€€€ô4(€€€€€É•ÑÕÉ¸ÉÕ¹¹¥¹œì4(€€€ôì4(€€€½¹ÍÐ…ÉÉå½Ù•È€ô½µÁÕÑ•…ÉÉå½Ù•È¡µ½¹Ñ °å•…È¤ì4(€€€½¹ÍÐ¥¹½µ•	å…äèI•½Éñ¹Õµ‰•È°¹Õµ‰•Èø€ôíôì4(€€€¥¹½µ•Ì¹™½É… ¡¤€ôøì4(€€€€€½¹ÍÐ½Œ€ô•Ñ%¹½µ•=ÕÉÉ•¹•…åÌ¡¤°µ½¹Ñ °å•…È¤ì4(€€€€€½¹ÍÐ…µÐ€ô•Ñ™™•Ñ¥Ù•%¹½µ•µ½Õ¹Ð¡¤°µ½¹Ñ °å•…È¤ì4(€€€€€½Œ¹™½É… ¡€ôøì¥¹½µ•	å…åm‘t€ô€¡¥¹½µ•	å…åm‘t€üü€À¤€¬…µÐìô¤ì4(€€€ô¤ì4(€€€½¹ÍÐµ½¹Ñ¡QáÌ€ôÑÉ…¹Í…Ñ¥½¹Ì¹™¥±Ñ•È¡Ð€ôøì½¹ÍÐmÑä°Ñµt€ôÐ¹‘…Ñ”¹ÍÁ±¥Ð ˆ´ˆ¤¹µ…À¡9Õµ‰•È¤ìÉ•ÑÕÉ¸Ñä€ôôôå•…È€˜˜Ñ´€ôôôµ½¹Ñ €¬€Äìô¤ì4(€€€½¹ÍÐ‰¥±±Í	å…äèI•½Éñ¹Õµ‰•È°¹Õµ‰•Èø€ôíôì4(€€€‰¥±±Ì¹™¥±Ñ•È¡ˆ€ôøˆ¹¥Í}É•ÕÉÉ¥¹œñðˆ¹¥Í}‘•‰Ð¤¹™½É… ¡ˆ€ôøì(€€€€€±•Ð½Œ€ô•Ñ	¥±±=ÕÉÉ•¹•…åÌ¡ˆ°µ½¹Ñ °å•…È¤ì4(€€€€€¥˜€¡½Œ¹±•¹Ñ €ôôô€À¤É•ÑÕÉ¸ì4(€€€€€½¹ÍÐ¼€ô½Ù•ÉÉ¥‘•Ì¹™¥¹¡¼€ôø¼¹‰¥±±}¥€ôôôˆ¹¥€˜˜¼¹µ½¹Ñ €ôôôµ½¹Ñ €˜˜¼¹å•…È€ôôôå•…È¤ì(€€€€€½¹ÍÐÑ½Ñ…°€ô•Ñ	¥±±™™•Ñ¥Ù•5½¹Ñ¡±åQ½Ñ…°¡ˆ°µ½¹Ñ °å•…È¤ì(€€€€€½¹ÍÐ…µÐ€ô½Œ¹±•¹Ñ €ø€À€üÑ½Ñ…°€¼½Œ¹±•¹Ñ €è€Àì(€€€€€¥˜€¡¼ü¹…ÑÕ…±}…µ½Õ¹Ð€„ôôÕ¹‘•™¥¹•€˜˜¼¹Á…¥‘}‘…Ñ”¤ì(€€€€€€€½¹ÍÐmÁ…¥‘e•…È°Á…¥‘5½¹Ñ °Á…¥‘…åt€ô¼¹Á…¥‘}‘…Ñ”¹ÍÁ±¥Ð ˆ´ˆ¤¹µ…À¡9Õµ‰•È¤ì(€€€€€€€¥˜€¡Á…¥‘e•…È€ôôôå•…È€˜˜Á…¥‘5½¹Ñ €ôôôµ½¹Ñ €¬€Ä¤ì(€€€€€€€€€‰¥±±Í	å…åmÁ…¥‘…åt€ô€¡‰¥±±Í	å…åmÁ…¥‘…åt€üü€À¤€¬Ñ½Ñ…°ì(€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€ô(€€€€€ô(€€€€€¥˜€¡¼ü¹ÕÍÑ½µ}‘Õ•}‘…ä€„ôôÕ¹‘•™¥¹•€˜˜ˆ¹™É•ÅÕ•¹ä€ôôô€‰µ½¹Ñ¡±äˆ¤ì4(€€€€€€€½Œ€ôm5…Ñ ¹µ¥¸¡¼¹ÕÍÑ½µ}‘Õ•}‘…ä°‘…åÍ%¹5½¹Ñ ¥tì4(€€€€€ô4(€€€€€½Œ¹™½É… ¡€ôøì‰¥±±Í	å…åm‘t€ô€¡‰¥±±Í	å…åm‘t€üü€À¤€¬…µÐìô¤ì(€€€ô¤ì(€€€½¹ÍÐ‘•‰ÑáÑÉ…Í	å…äèI•½Éñ¹Õµ‰•È°¹Õµ‰•Èø€ôíôì(€€€•áÑÉ…A…åµ•¹ÑÌ¹™¥±Ñ•È¡•À€ôø•À¹µ½¹Ñ €ôôôµ½¹Ñ €˜˜•À¹å•…È€ôôôå•…È¤¹™½É… ¡•À€ôøì(€€€€€½¹ÍÐ‘…ä€ô•À¹Á…åµ•¹Ñ}‘…Ñ”€ü9Õµ‰•È¡•À¹Á…åµ•¹Ñ}‘…Ñ”¹ÍÁ±¥Ð ˆ´ˆ¥lÉt¤€è€Äì(€€€€€‘•‰ÑáÑÉ…Í	å…åm‘…åt€ô€¡‘•‰ÑáÑÉ…Í	å…åm‘…åt€üü€À¤€¬•À¹…µ½Õ¹Ðì(€€€ô¤ì(€€€½¹ÍÐ½…±Í	å…äèI•½Éñ¹Õµ‰•È°½…±áÁ•¹Í•mtø€ôíôì4(€€€½…±Ì¹™½É… ¡œ€ôøì4(€€€€€¥˜€ …œ¹Ñ…É•Ñ}‘…Ñ”¤É•ÑÕÉ¸ì4(€€€€€½¹ÍÐÑ…É•Ñ…Ñ”€ôÁ…ÉÍ•½…±Q…É•Ñ…Ñ”¡œ¹Ñ…É•Ñ}‘…Ñ”¤ì4(€€€€€¥˜€ …Ñ…É•Ñ…Ñ”ñðÑ…É•Ñ…Ñ”¹å•…È€„ôôå•…ÈñðÑ…É•Ñ…Ñ”¹µ½¹Ñ €„ôôµ½¹Ñ ¤É•ÑÕÉ¸ì4(€€€€€½¹ÍÐ‘…ä€ôÑ…É•Ñ…Ñ”¹‘…äì4(€€€€€¥˜€ …½…±Í	å…åm‘…åt¤½…±Í	å…åm‘…åt€ômtì4(€€€€€½¹ÍÐÉ•µ…¥¹¥¹œ€ô•Ñ½…±I•µ…¥¹¥¹µ½Õ¹Ð¡œ¤ì4(€€€€€¥˜€¡É•µ…¥¹¥¹œ€ø€À¤½…±Í	å…åm‘…åt¹ÁÕÍ ¡ì¥èœ¹¥°¹…µ”èœ¹¹…µ”°…µ½Õ¹ÐèÉ•µ…¥¹¥¹œô¤ì4(€€€ô¤ì4(€€€±•ÐÉÕ¹¹¥¹	…±…¹”€ô…ÉÉå½Ù•Èì4(€€€½¹ÍÐÉ•ÍÕ±Ðè…¥±å	…±…¹•mt€ômtì4(€€€™½È€¡±•Ð‘…ä€ô€Äì‘…ä€ðô‘…åÍ%¹5½¹Ñ ì‘…ä¬¬¤ì4(€€€€€½¹ÍÐ‘…åQáÌ€ôµ½¹Ñ¡QáÌ¹™¥±Ñ•È¡Ð€ôøì½¹ÍÐl°€°Ñ‘t€ôÐ¹‘…Ñ”¹ÍÁ±¥Ð ˆ´ˆ¤¹µ…À¡9Õµ‰•È¤ìÉ•ÑÕÉ¸Ñ€ôôô‘…äìô¤ì4(€€€€€½¹ÍÐÍ¡•‘Õ±•‘%¹½µ”€ô¥¹½µ•	å…åm‘…åt€üü€Àì4(€€€€€½¹ÍÐÑá%¹½µ”€€€€€ô‘…åQáÌ¹™¥±Ñ•È¡Ð€ôøÐ¹…µ½Õ¹Ð€ø€À¤¹É•‘Õ” ¡Ì°Ð¤€ôøÌ€¬Ð¹…µ½Õ¹Ð°€À¤ì4(€€€€€½¹ÍÐ¥¹½µ•Q½‘…ä€€ôÍ¡•‘Õ±•‘%¹½µ”€¬Ñá%¹½µ”ì4(€€€€€½¹ÍÐ•áÁ•¹Í•Q½‘…ä€ô‘…åQáÌ¹™¥±Ñ•È¡Ð€ôøÐ¹…µ½Õ¹Ð€ð€À¤¹É•‘Õ” ¡Ì°Ð¤€ôøÌ€¬5…Ñ ¹…‰Ì¡Ð¹…µ½Õ¹Ð¤°€À¤€¬€¡‘•‰ÑáÑÉ…Í	å…åm‘…åt€üü€À¤ì(€€€€€½¹ÍÐ‰¥±±ÍQ½‘…ä€€€ô‰¥±±Í	å…åm‘…åt€üü€Àì4(€€€€€½¹ÍÐ‘…å½…±Ì€€€€€ô½…±Í	å…åm‘…åt€üümtì4(€€€€€½¹ÍÐ½…±Q½Ñ…°€€€€ô‘…å½…±Ì¹É•‘Õ” ¡Ì°”¤€ôøÌ€¬”¹…µ½Õ¹Ð°€À¤ì4(€€€€€½¹ÍÐ¹•Ð€ô¥¹½µ•Q½‘…ä€´•áÁ•¹Í•Q½‘…ä€´‰¥±±ÍQ½‘…ä€´½…±Q½Ñ…°ì4(€€€€€ÉÕ¹¹¥¹	…±…¹”€¬ô¹•Ðì4(€€€€€É•ÍÕ±Ð¹ÁÕÍ ¡ì‘…ä°¥¹½µ”è¥¹½µ•Q½‘…ä°Í¡•‘Õ±•‘%¹½µ”°•áÁ•¹Í”è•áÁ•¹Í•Q½‘…ä°‰¥±±Ìè‰¥±±ÍQ½‘…ä°½…±áÁ•¹Í•Ìè‘…å½…±Ì°¹•Ð°‰…±…¹”èÉÕ¹¹¥¹	…±…¹”ô¤ì4(€€€ô4(€€€É•ÑÕÉ¸É•ÍÕ±Ðì4(€ô°m‰¥±±Ì°ÑÉ…¹Í…Ñ¥½¹Ì°¥¹½µ•Ì°½…±Ì°½Ù•ÉÉ¥‘•Ì°•áÑÉ…A…åµ•¹ÑÌ°•Ñ	¥±±™™•Ñ¥Ù•5½¹Ñ¡±åQ½Ñ…°°Í•ÑÑ¥¹Ì¹ÍÑ…ÉÑ¥¹}‰…±…¹”°Í•ÑÑ¥¹Ì¹ÍÑ…ÉÑ¥¹}‰…±…¹•}‘…Ñ•t¤ì(4(€½¹ÍÐÁÉ•Ù¥•Ý•‰ÑM¹½Ý‰…±°€ôÕÍ•…±±‰…¬ ¡µ½¹Ñ è¹Õµ‰•È°å•…Èè¹Õµ‰•È°É•ÅÕ•ÍÑ•‘áÑÉ„üè¹Õµ‰•È°…‘‘¥Ñ¥½¹…±M…™•É•‘¥Ð€ô€À¤èM¹½Ý‰…±±AÉ½©•Ñ¥½¹I•ÍÕ±Ð€ôøì(€€€½¹ÍÐ‘•‰Ñ%¹ÁÕÑÌèM¹½Ý‰…±±•‰Ñ%¹ÁÕÑmt€ô‰¥±±Ì(€€€€€€¹™¥±Ñ•È¡ˆ€ôøˆ¹¥Í}‘•‰Ð€˜˜ˆ¹‰…±…¹”€ø€À¤(€€€€€€¹µ…À¡ˆ€ôø€¡ì(€€€€€€€¥èˆ¹¥°(€€€€€€€¹…µ”èˆ¹¹…µ”°(€€€€€€€‰…±…¹”è9Õµ‰•È¡ˆ¹‰…±…¹”¤°(€€€€€€€µ¥¹¥µÕ´è•Ñ	¥±±5½¹Ñ¡±åQ½Ñ…°¡ˆ°µ½¹Ñ °å•…È¤°(€€€€€€€…ÁÈè9Õµ‰•È¡ˆ¹¥¹Ñ•É•ÍÑ}É…Ñ”¤°(€€€€€€€‘Õ•…äèˆ¹‘Õ•}‘…ä°(€€€€€€€¥¹±Õ‘•èˆ¹¥¹±Õ‘•}¥¹}Í¹½Ý‰…±°€„ôô™…±Í”°(€€€€€ô¤¤ì(€€€½¹ÍÐ¥¹±Õ‘•€ô‘•‰Ñ%¹ÁÕÑÌ¹™¥±Ñ•È¡€ôø¹¥¹±Õ‘•¤ì(€€€½¹ÍÐÑ…É•Ð€ô½É‘•É•‰ÑÌ¡¥¹±Õ‘•°Í•ÑÑ¥¹Ì¹Á…åµ•¹Ñ5•Ñ¡½¥lÁtì(€€€½¹ÍÐ•á¥ÍÑ¥¹œ€ô•áÑÉ…A…åµ•¹ÑÌ¹™¥¹¡•À€ôø•À¹µ½¹Ñ €ôôôµ½¹Ñ €˜˜•À¹å•…È€ôôôå•…È¤ì(€€€½¹ÍÐÑ½‘…ä€ô¹•Ü…Ñ” ¤ì(€€€½¹ÍÐÉ•ÅÕ•ÍÑ•‘…ä€ôÑ…É•Ðü¹‘Õ•…ä€üü€Äì(€€€½¹ÍÐ‘Õ•…ä€ôÑ½‘…ä¹•ÑÕ±±e•…È ¤€ôôôå•…È€˜˜Ñ½‘…ä¹•Ñ5½¹Ñ  ¤€ôôôµ½¹Ñ €˜˜É•ÅÕ•ÍÑ•‘…ä€ðÑ½‘…ä¹•Ñ…Ñ” ¤(€€€€€€üÑ½‘…ä¹•Ñ…Ñ” ¤(€€€€€€èÉ•ÅÕ•ÍÑ•‘…äì(€€€½¹ÍÐ‘…åÍ%¹5½¹Ñ €ô¹•Ü…Ñ”¡å•…È°µ½¹Ñ €¬€Ä°€À¤¹•Ñ…Ñ” ¤ì(€€€½¹ÍÐÁ…åµ•¹Ñ…Ñ”€ô€‘íå•…Éô´‘íMÑÉ¥¹œ¡µ½¹Ñ €¬€Ä¤¹Á…‘MÑ…ÉÐ È°€ˆÀˆ¥ô´‘íMÑÉ¥¹œ¡5…Ñ ¹µ¥¸¡‘…åÍ%¹5½¹Ñ °‘Õ•…ä¤¤¹Á…‘MÑ…ÉÐ È°€ˆÀˆ¥õ€ì((€€€½¹ÍÐ•Ñ]¥¹‘½Ý5¥¹¥µÕ´€ô€¡ÍÑ…ÉÑ5½¹Ñ è¹Õµ‰•È°ÍÑ…ÉÑe•…Èè¹Õµ‰•È¤€ôøì(€€€€€±•Ðµ¥¹¥µÕ´€ô%¹™¥¹¥Ñäì(€€€€€™½È€¡±•Ð½™™Í•Ð€ô€Àì½™™Í•Ð€ð€Øì½™™Í•Ð¬¬¤ì(€€€€€€€½¹ÍÐ…‰Í½±ÕÑ”€ôÍÑ…ÉÑe•…È€¨€ÄÈ€¬ÍÑ…ÉÑ5½¹Ñ €¬½™™Í•Ðì(€€€€€€€½¹ÍÐ´€ô…‰Í½±ÕÑ”€”€ÄÈì(€€€€€€€½¹ÍÐä€ô5…Ñ ¹™±½½È¡…‰Í½±ÕÑ”€¼€ÄÈ¤ì(€€€€€€€•Ñ…¥±å	…±…¹•Ì¡´°ä¤¹™½É… ¡‘…ä€ôøìµ¥¹¥µÕ´€ô5…Ñ ¹µ¥¸¡µ¥¹¥µÕ´°‘…ä¹‰…±…¹”¤ìô¤ì(€€€€€ô(€€€€€É•ÑÕÉ¸9Õµ‰•È¹¥Í¥¹¥Ñ”¡µ¥¹¥µÕ´¤€üµ¥¹¥µÕ´€è€Àì(€€€ôì((€€€½¹ÍÐ‰…Í•±¥¹•5¥¹¥µÕ´€ô•Ñ]¥¹‘½Ý5¥¹¥µÕ´¡µ½¹Ñ °å•…È¤ì(€€€½¹ÍÐ•á¥ÍÑ¥¹µ½Õ¹Ð€ô•á¥ÍÑ¥¹œü¹…µ½Õ¹Ð€üü€Àì(€€€½¹ÍÐÑ½Ñ…±%¹±Õ‘•€ô¥¹±Õ‘•¹É•‘Õ” ¡ÍÕ´°‘•‰Ð¤€ôøÍÕ´€¬‘•‰Ð¹‰…±…¹”°€À¤ì(€€€½¹ÍÐÍ…™•5…á¥µÕ´€ô5…Ñ ¹µ…à À°5…Ñ ¹µ¥¸¡Ñ½Ñ…±%¹±Õ‘•°‰…Í•±¥¹•5¥¹¥µÕ´€¬•á¥ÍÑ¥¹µ½Õ¹Ð€¬5…Ñ ¹µ…à À°…‘‘¥Ñ¥½¹…±M…™•É•‘¥Ð¤€´M9=]	11}	UH¤¤ì(€€€½¹ÍÐÍ•±•Ñ•‘áÑÉ„€ô5…Ñ ¹µ…à À°5…Ñ ¹µ¥¸¡É•ÅÕ•ÍÑ•‘áÑÉ„€üüÍ…™•5…á¥µÕ´°Í…™•5…á¥µÕ´¤¤ì(€€€½¹ÍÐÕÉÉ•¹Ð€ô…±±½…Ñ•M¹½Ý‰…±±áÑÉ„¡‘•‰Ñ%¹ÁÕÑÌ°Í•±•Ñ•‘áÑÉ„°Í•ÑÑ¥¹Ì¹Á…åµ•¹Ñ5•Ñ¡½°Á…åµ•¹Ñ…Ñ”¤ì(€€€±•ÐÕµÕ±…Ñ¥Ù•AÉ½©•Ñ•‘•±Ñ„€ôÍ•±•Ñ•‘áÑÉ„€´•á¥ÍÑ¥¹µ½Õ¹Ðì(€€€½¹ÍÐÍ¥µÕ±…Ñ•€ôÍ¥µÕ±…Ñ•M¹½Ý‰…±±A…å½™˜¡ì(€€€€€‘•‰ÑÌè‘•‰Ñ%¹ÁÕÑÌ°(€€€€€µ•Ñ¡½èÍ•ÑÑ¥¹Ì¹Á…åµ•¹Ñ5•Ñ¡½°(€€€€€ÍÑ…ÉÑ5½¹Ñ èµ½¹Ñ °(€€€€€ÍÑ…ÉÑe•…Èèå•…È°(€€€€€™¥ÉÍÑ5½¹Ñ¡	…±…¹•ÌèÕÉÉ•¹Ð¹‰…±…¹•Ì°(€€€€€™¥ÉÍÑA…å½™™=É‘•ÈèÕÉÉ•¹Ð¹Á…å½™™=É‘•È°(€€€€€•ÑáÑÉ…½É5½¹Ñ è€¡}½™™Í•Ð°™ÕÑÕÉ•5½¹Ñ °™ÕÑÕÉ•e•…È°É•µ…¥¹¥¹•‰Ð¤€ôøì(€€€€€€€½¹ÍÐ™ÕÑÕÉ•	…Í•±¥¹”€ô•Ñ]¥¹‘½Ý5¥¹¥µÕ´¡™ÕÑÕÉ•5½¹Ñ °™ÕÑÕÉ•e•…È¤ì(€€€€€€€½¹ÍÐ•áÑÉ„€ô5…Ñ ¹µ…à À°5…Ñ ¹µ¥¸¡É•µ…¥¹¥¹•‰Ð°™ÕÑÕÉ•	…Í•±¥¹”€´ÕµÕ±…Ñ¥Ù•AÉ½©•Ñ•‘•±Ñ„€´M9=]	11}	UH¤¤ì(€€€€€€€ÕµÕ±…Ñ¥Ù•AÉ½©•Ñ•‘•±Ñ„€¬ô•áÑÉ„ì(€€€€€€€É•ÑÕÉ¸ì•áÑÉ„°±½Ý•ÍÑ	…±…¹”è™ÕÑÕÉ•	…Í•±¥¹”€´ÕµÕ±…Ñ¥Ù•AÉ½©•Ñ•‘•±Ñ„ôì(€€€€€ô°(€€€ô¤ì(€€€½¹ÍÐÕÉÉ•¹Ñ1½Ý•ÍÐ€ô‰…Í•±¥¹•5¥¹¥µÕ´€´€¡Í•±•Ñ•‘áÑÉ„€´•á¥ÍÑ¥¹µ½Õ¹Ð¤ì(€€€½¹ÍÐ•¹‘¥¹•‰Ð€ôÉÉ…ä¹™É½´¡ÕÉÉ•¹Ð¹‰…±…¹•Ì¹Ù…±Õ•Ì ¤¤¹É•‘Õ” ¡ÍÕ´°‰…±…¹”¤€ôøÍÕ´€¬‰…±…¹”°€À¤ì(€€€½¹ÍÐÕÉÉ•¹Ñ5½¹Ñ¡AÉ½©•Ñ¥½¸€ôì(€€€€€µ½¹Ñ °(€€€€€å•…È°(€€€€€Ñ…É•Ñ9…µ”èÑ…É•Ðü¹¹…µ”€üü¹Õ±°°(€€€€€µ¥¹¥µÕµA…åµ•¹ÑÌè‘•‰Ñ%¹ÁÕÑÌ¹É•‘Õ” ¡ÍÕ´°‘•‰Ð¤€ôøÍÕ´€¬‘•‰Ð¹µ¥¹¥µÕ´°€À¤°(€€€€€•áÑÉ…A…åµ•¹ÐèÍ•±•Ñ•‘áÑÉ„°(€€€€€É½±±•‘A…åµ•¹Ðè€À°(€€€€€¥¹Ñ•É•ÍÐè€À°(€€€€€•¹‘¥¹•‰Ð°(€€€€€±½Ý•ÍÑ½Õ¹Ñ	…±…¹”èÕÉÉ•¹Ñ1½Ý•ÍÐ°(€€€ôì(€€€É•ÑÕÉ¸ì(€€€€€Í…™•5…á¥µÕ´°(€€€€€Í•±•Ñ•‘áÑÉ„°(€€€€€Á…åµ•¹Ñ…Ñ”°(€€€€€…±±½…Ñ¥½¹ÌèÕÉÉ•¹Ð¹…±±½…Ñ¥½¹Ì°(€€€€€µ½¹Ñ¡ÌèmÕÉÉ•¹Ñ5½¹Ñ¡AÉ½©•Ñ¥½¸°€¸¸¹Í¥µÕ±…Ñ•¹µ½¹Ñ¡Ít°(€€€€€Á…å½™™=É‘•ÈèÍ¥µÕ±…Ñ•¹Á…å½™™=É‘•È°(€€€€€‘•‰ÑÉ••…Ñ”è•¹‘¥¹•‰Ð€ðô€À¸ÀÀä€ü€‘íå•…Éô´‘íMÑÉ¥¹œ¡µ½¹Ñ €¬€Ä¤¹Á…‘MÑ…ÉÐ È°€ˆÀˆ¥õ€€èÍ¥µÕ±…Ñ•¹‘•‰ÑÉ••…Ñ”°(€€€€€±½Ý•ÍÑM¥á5½¹Ñ¡	…±…¹”è5…Ñ ¹µ¥¸¡ÕÉÉ•¹Ñ1½Ý•ÍÐ°€¸¸¹Í¥µÕ±…Ñ•¹µ½¹Ñ¡Ì¹Í±¥” À°€Ô¤¹µ…À¡¥Ñ•´€ôø¥Ñ•´¹±½Ý•ÍÑ½Õ¹Ñ	…±…¹”¤¤°(€€€ôì(€ô°m‰¥±±Ì°Í•ÑÑ¥¹Ì¹Á…åµ•¹Ñ5•Ñ¡½°•áÑÉ…A…åµ•¹ÑÌ°•Ñ	¥±±5½¹Ñ¡±åQ½Ñ…°°•Ñ…¥±å	…±…¹•Ít¤ì((€€¼¼ƒŠRŠRŠR …Ñ•½É¥•ÌƒŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠR (4(€½¹ÍÐ…‘‘…Ñ•½Éä€ôÕÍ•…±±‰…¬¡…Íå¹Œ€¡¹…µ”èÍÑÉ¥¹œ¤€ôøì4(€€€¥˜€ …ÕÍ•È¤É•ÑÕÉ¸ì4(€€€½¹ÍÐÑÉ¥µµ•€ô¹…µ”¹ÑÉ¥´ ¤ì4(€€€¥˜€ …ÑÉ¥µµ•¤É•ÑÕÉ¸ì4(€€€¥˜€¡…Ñ•½É¥•Ì¹¥¹±Õ‘•Ì¡ÑÉ¥µµ•¤¤É•ÑÕÉ¸ì4(€€€…Ý…¥Ð•¹ÍÕÉ•M…Ù•¡ÍÕÁ…‰…Í”¹™É½´ ‰…Ñ•½É¥•Ìˆ¤¹¥¹Í•ÉÐ¡ìÕÍ•É}¥èÕÍ•È¹¥°¹…µ”èÑÉ¥µµ•ô¤°€‰‘…Ñ•½Éäˆ¤ì4(€€€Í•Ñ…Ñ•½É¥•Ì¡ÁÉ•Ø€ôøl¸¸¹ÁÉ•Ø°ÑÉ¥µµ•‘t¤ì4(€ô°mÕÍ•È°…Ñ•½É¥•Ít¤ì4(4(€½¹ÍÐÕÁ‘…Ñ•…Ñ•½Éä€ôÕÍ•…±±‰…¬¡…Íå¹Œ€¡½±‘9…µ”èÍÑÉ¥¹œ°¹•Ý9…µ”èÍÑÉ¥¹œ¤€ôøì4(€€€¥˜€ …ÕÍ•È¤É•ÑÕÉ¸ì4(€€€½¹ÍÐÑÉ¥µµ•€ô¹•Ý9…µ”¹ÑÉ¥´ ¤ì4(€€€¥˜€ …ÑÉ¥µµ•ñðÑÉ¥µµ•€ôôô½±‘9…µ”¤É•ÑÕÉ¸ì4(€€€½¹ÍÐ…™™•Ñ•‘	¥±±Ì€ô‰¥±±Ì¹™¥±Ñ•È¡ˆ€ôøˆ¹…Ñ•½Éä€ôôô½±‘9…µ”¤ì4(€€€½¹ÍÐ…™™•Ñ•‘QÉ…¹Í…Ñ¥½¹Ì€ôÑÉ…¹Í…Ñ¥½¹Ì¹™¥±Ñ•È¡Ð€ôøÐ¹…Ñ•½Éä€ôôô½±‘9…µ”¤ì4(€€€½¹ÍÐÉ•ÍÕ±ÑÌ€ô…Ý…¥ÐAÉ½µ¥Í”¹…±°¡l4(€€€€€ÍÕÁ…‰…Í”¹™É½´ ‰…Ñ•½É¥•Ìˆ¤¹ÕÁ‘…Ñ”¡ì¹…µ”èÑÉ¥µµ•ô¤¹•Ä ‰ÕÍ•É}¥ˆ°ÕÍ•È¹¥¤¹•Ä ‰¹…µ”ˆ°½±‘9…µ”¤°4(€€€€€€¸¸¹…™™•Ñ•‘	¥±±Ì¹µ…À¡ˆ€ôøÍÕÁ…‰…Í”¹™É½´ ‰‰¥±±Ìˆ¤¹ÕÁ‘…Ñ”¡ì…Ñ•½ÉäèÑÉ¥µµ•ô¤¹•Ä ‰¥ˆ°ˆ¹¥¤¹•Ä ‰ÕÍ•É}¥ˆ°ÕÍ•È¹¥¤¤°4(€€€€€€¸¸¹…™™•Ñ•‘QÉ…¹Í…Ñ¥½¹Ì¹µ…À¡Ð€ôøÍÕÁ…‰…Í”¹™É½´ ‰ÑÉ…¹Í…Ñ¥½¹Ìˆ¤¹ÕÁ‘…Ñ”¡ì…Ñ•½ÉäèÑÉ¥µµ•ô¤¹•Ä ‰¥ˆ°Ð¹¥¤¹•Ä ‰ÕÍ•É}¥ˆ°ÕÍ•È¹¥¤¤°4(€€€t¤ì4(€€€½¹ÍÐ™…¥±•€ôÉ•ÍÕ±ÑÌ¹™¥¹¡É•ÍÕ±Ð€ôøÉ•ÍÕ±Ð¹•ÉÉ½È¤ì4(€€€¥˜€¡™…¥±•ü¹•ÉÉ½È¤Ñ¡É½Ü¹•ÜÉÉ½È¡I•¹…µ”…Ñ•½Éäè€‘í™…¥±•¹•ÉÉ½È¹µ•ÍÍ…•õ€¤ì4(€€€Í•Ñ…Ñ•½É¥•Ì¡ÁÉ•Ø€ôøÁÉ•Ø¹µ…À¡Œ€ôøŒ€ôôô½±‘9…µ”€üÑÉ¥µµ•€èŒ¤¤ì4(€€€Í•Ñ	¥±±Ì¡ÁÉ•Ø€ôøÁÉ•Ø¹µ…À¡ˆ€ôøˆ¹…Ñ•½Éä€ôôô½±‘9…µ”€üì€¸¸¹ˆ°…Ñ•½ÉäèÑÉ¥µµ•ô€èˆ¤¤ì4(€€€Í•ÑQÉ…¹Í…Ñ¥½¹Ì¡ÁÉ•Ø€ôøÁÉ•Ø¹µ…À¡Ð€ôøÐ¹…Ñ•½Éä€ôôô½±‘9…µ”€üì€¸¸¹Ð°…Ñ•½ÉäèÑÉ¥µµ•ô€èÐ¤¤ì4(€ô°mÕÍ•È°‰¥±±Ì°ÑÉ…¹Í…Ñ¥½¹Ít¤ì4(4(€½¹ÍÐ‘•±•Ñ•…Ñ•½Éä€ôÕÍ•…±±‰…¬¡…Íå¹Œ€¡¹…µ”èÍÑÉ¥¹œ¤€ôøì4(€€€¥˜€ …ÕÍ•È¤É•ÑÕÉ¸ì4(€€€½¹ÍÐ…™™•Ñ•‘	¥±±Ì€ô‰¥±±Ì¹™¥±Ñ•È¡ˆ€ôøˆ¹…Ñ•½Éä€ôôô¹…µ”¤ì4(€€€½¹ÍÐ…™™•Ñ•‘QÉ…¹Í…Ñ¥½¹Ì€ôÑÉ…¹Í…Ñ¥½¹Ì¹™¥±Ñ•È¡Ð€ôøÐ¹…Ñ•½Éä€ôôô¹…µ”¤ì4(€€€½¹ÍÐÉ•ÍÕ±ÑÌ€ô…Ý…¥ÐAÉ½µ¥Í”¹…±°¡l4(€€€€€ÍÕÁ…‰…Í”¹™É½´ ‰…Ñ•½É¥•Ìˆ¤¹‘•±•Ñ” ¤¹•Ä ‰ÕÍ•É}¥ˆ°ÕÍ•È¹¥¤¹•Ä ‰¹…µ”ˆ°¹…µ”¤°4(€€€€€€¸¸¹…™™•Ñ•‘	¥±±Ì¹µ…À¡ˆ€ôøÍÕÁ…‰…Í”¹™É½´ ‰‰¥±±Ìˆ¤¹ÕÁ‘…Ñ”¡ì…Ñ•½Éäè€‰=Ñ¡•Èˆô¤¹•Ä ‰¥ˆ°ˆ¹¥¤¹•Ä ‰ÕÍ•É}¥ˆ°ÕÍ•È¹¥¤¤°4(€€€€€€¸¸¹…™™•Ñ•‘QÉ…¹Í…Ñ¥½¹Ì¹µ…À¡Ð€ôøÍÕÁ…‰…Í”¹™É½´ ‰ÑÉ…¹Í…Ñ¥½¹Ìˆ¤¹ÕÁ‘…Ñ”¡ì…Ñ•½Éäè€‰=Ñ¡•Èˆô¤¹•Ä ‰¥ˆ°Ð¹¥¤¹•Ä ‰ÕÍ•É}¥ˆ°ÕÍ•È¹¥¤¤°4(€€€t¤ì4(€€€½¹ÍÐ™…¥±•€ôÉ•ÍÕ±ÑÌ¹™¥¹¡É•ÍÕ±Ð€ôøÉ•ÍÕ±Ð¹•ÉÉ½È¤ì4(€€€¥˜€¡™…¥±•ü¹•ÉÉ½È¤Ñ¡É½Ü¹•ÜÉÉ½È¡•±•Ñ”…Ñ•½Éäè€‘í™…¥±•¹•ÉÉ½È¹µ•ÍÍ…•õ€¤ì4(€€€Í•Ñ…Ñ•½É¥•Ì¡ÁÉ•Ø€ôøÁÉ•Ø¹™¥±Ñ•È¡Œ€ôøŒ€„ôô¹…µ”¤¤ì4(€€€Í•Ñ	¥±±Ì¡ÁÉ•Ø€ôøÁÉ•Ø¹µ…À¡ˆ€ôøˆ¹…Ñ•½Éä€ôôô¹…µ”€üì€¸¸¹ˆ°…Ñ•½Éäè€‰=Ñ¡•Èˆô€èˆ¤¤ì4(€€€Í•ÑQÉ…¹Í…Ñ¥½¹Ì¡ÁÉ•Ø€ôøÁÉ•Ø¹µ…À¡Ð€ôøÐ¹…Ñ•½Éä€ôôô¹…µ”€üì€¸¸¹Ð°…Ñ•½Éäè€‰=Ñ¡•Èˆô€èÐ¤¤ì4(€ô°mÕÍ•È°‰¥±±Ì°ÑÉ…¹Í…Ñ¥½¹Ít¤ì4(4(€€¼¼ƒŠRŠRŠR M•ÑÑ¥¹ÌƒŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠR 4(4(€½¹ÍÐÕÁ‘…Ñ•M•ÑÑ¥¹Ì€ôÕÍ•…±±‰…¬¡…Íå¹Œ€¡ÌèA…ÉÑ¥…°ñM•ÑÑ¥¹Ìø¤€ôøì4(€€€¥˜€ …ÕÍ•È¤É•ÑÕÉ¸ì4(€€€½¹ÍÐ¹•áÐ€ôì€¸¸¹Í•ÑÑ¥¹Ì°€¸¸¹Ìôì4(€€€…Ý…¥Ð•¹ÍÕÉ•M…Ù•¡ÍÕÁ…‰…Í”¹™É½´ ‰Í•ÑÑ¥¹Ìˆ¤¹ÕÁÍ•ÉÐ¡ì4(€€€€€ÕÍ•É}¥è€€€€€€€€€€€€€€ÕÍ•È¹¥°4(€€€€€Á…åµ•¹Ñ}µ•Ñ¡½è€€€€€€€¹•áÐ¹Á…åµ•¹Ñ5•Ñ¡½°4(€€€€€ÍÑ…ÉÑ¥¹}‰…±…¹”è€€€€€¹•áÐ¹ÍÑ…ÉÑ¥¹}‰…±…¹”°4(€€€€€ÍÑ…ÉÑ¥¹}‰…±…¹•}‘…Ñ”è¹•áÐ¹ÍÑ…ÉÑ¥¹}‰…±…¹•}‘…Ñ”€üü¹Õ±°°4(€€€ô¤°€‰UÁ‘…Ñ”Í•ÑÑ¥¹Ìˆ¤ì4(€€€Í•ÑM•ÑÑ¥¹Ì¡¹•áÐ¤ì4(€ô°mÕÍ•È°Í•ÑÑ¥¹Ít¤ì4(4(€½¹ÍÐ¥µÁ½ÉÑ	¥±±Ì€ôÕÍ•…±±‰…¬¡…Íå¹Œ€¡¥µÁ½ÉÑ•è=µ¥Ðñ	¥±°°€‰¥ˆð€‰É•…Ñ•‘}…Ðˆùmt¤€ôøì4(€€€¥˜€ …ÕÍ•È¤É•ÑÕÉ¸ì4(€€€½¹ÍÐ¹•Ý	¥±±Ì€ô¥µÁ½ÉÑ•¹µ…À¡ˆ€ôø€¡ì4(€€€€€€¸¸¹ˆ°4(€€€€€™É•ÅÕ•¹äè€€€¡ˆ¹™É•ÅÕ•¹ä€üü€‰µ½¹Ñ¡±äˆ¤…Ì€‰µ½¹Ñ¡±äˆð€‰Ý••­±äˆ°4(€€€€€‘…å}½™}Ý••¬èˆ¹‘…å}½™}Ý••¬€üü€À°4(€€€€€¥è€€€€€€€€€•¹% ¤°4(€€€€€É•…Ñ•‘}…Ðè€¹•Ü…Ñ” ¤¹Ñ½%M=MÑÉ¥¹œ ¤°4(€€€ô¤¤ì4(€€€…Ý…¥Ð•¹ÍÕÉ•M…Ù•¡ÍÕÁ…‰…Í”¹™É½´ ‰‰¥±±Ìˆ¤¹¥¹Í•ÉÐ¡¹•Ý	¥±±Ì¹µ…À¡ˆ€ôø€¡ì€¸¸¹ˆ°ÕÍ•É}¥èÕÍ•È¹¥ô¤¤¤°€‰%µÁ½ÉÐ‰¥±±Ìˆ¤ì4(€€€Í•Ñ	¥±±Ì¡ÁÉ•Ø€ôøÉ•½É‘•É•‰ÑAÉ¥½É¥Ñ¥•Ì¡l¸¸¹ÁÉ•Ø°€¸¸¹¹•Ý	¥±±Ít¤¤ì4(€ô°mÕÍ•Ét¤ì4(4(€€¼¼ƒŠRŠRŠR AÉ½Ù¥‘•ÈÙ…±Õ”ƒŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠRŠR 4(4(€É•ÑÕÉ¸€ 4(€€€€ñ	Õ‘•Ñ½¹Ñ•áÐ¹AÉ½Ù¥‘•ÈÙ…±Õ”õíì4(€€€€€‰¥±±Ì°½Ù•ÉÉ¥‘•Ì°ÑÉ…¹Í…Ñ¥½¹Ì°¥¹½µ•Ì°½…±Ì°•áÑÉ…A…åµ•¹ÑÌ°…Ñ•½É¥•Ì°Í•ÑÑ¥¹Ì°±½…‘¥¹œ°4(€€€€€‘…Í¡‰½…É‘¥±Ñ•È°Í•Ñ…Í¡‰½…É‘¥±Ñ•È°4(€€€€€…‘‘	¥±°°ÕÁ‘…Ñ•	¥±°°‘•±•Ñ•	¥±°°•Ñ	¥±±	å%°4(€€€€€•Ñ=Ù•ÉÉ¥‘”°•Ñµ½Õ¹Ð°•ÑA…¥‘µ½Õ¹Ð°Í•ÑA…¥‘µ½Õ¹Ð°Í•ÑÕÍÑ½µµ½Õ¹Ð°•ÑÕÍÑ½µÕ•…ä°Í•ÑÕÍÑ½µÕ•…ä°4(€€€€€•Ñ5½¹Ñ¡±å	¥±±Ì°•Ñ	¥±±=ÕÉÉ•¹•Í%¹5½¹Ñ °•Ñ	¥±±5½¹Ñ¡±åQ½Ñ…°°•Ñ	¥±±™™•Ñ¥Ù•5½¹Ñ¡±åQ½Ñ…°°(€€€€€ÉÕ¹M¹½Ý‰…±°°ÁÉ•Ù¥•Ý•‰ÑM¹½Ý‰…±°°…ÁÁ±å•‰ÑM¹½Ý‰…±±A…åµ•¹Ð°Í…Ù•áÑÉ…A…åµ•¹Ð°•ÑáÑÉ…A…åµ•¹Ð°‘•±•Ñ•áÑÉ…A…åµ•¹Ð°É•µ½Ù••‰ÑM¹½Ý‰…±±A…åµ•¹Ð°™¥¹…±¥é•	¥±±A…åµ•¹Ð°(€€€€€…‘‘QÉ…¹Í…Ñ¥½¸°ÕÁ‘…Ñ•QÉ…¹Í…Ñ¥½¸°‘•±•Ñ•QÉ…¹Í…Ñ¥½¸°•ÑQÉ…¹Í…Ñ¥½¹Í½É5½¹Ñ °4(€€€€€…‘‘%¹½µ”°ÕÁ‘…Ñ•%¹½µ”°‘•±•Ñ•%¹½µ”°•Ñ5½¹Ñ¡±å%¹½µ”°•Ñ%¹½µ•=ÕÉÉ•¹•Í%¹5½¹Ñ °4(€€€€€…‘‘½…°°ÕÁ‘…Ñ•½…°°‘•±•Ñ•½…°°¡•­½…±™™½É‘…‰¥±¥Ñä°4(€€€€€•Ñ…Í¡±½Ü°•Ñ…¥±å	…±…¹•Ì°4(€€€€€…‘‘…Ñ•½Éä°ÕÁ‘…Ñ•…Ñ•½Éä°‘•±•Ñ•…Ñ•½Éä°4(€€€€€ÕÁ‘…Ñ•M•ÑÑ¥¹Ì°¥µÁ½ÉÑ	¥±±Ì°4(€€€€€Í•±•Ñ•‘e•…È°Í•ÑM•±•Ñ•‘e•…È°4(€€€õôø4(€€€€€í¡¥±‘É•¹ô4(€€€€ð½	Õ‘•Ñ½¹Ñ•áÐ¹AÉ½Ù¥‘•Èø4(€€¤ì4)ô4(4)•áÁ½ÉÐ™Õ¹Ñ¥½¸ÕÍ•	Õ‘•Ð ¤ì4(€½¹ÍÐÑà€ôÕÍ•½¹Ñ•áÐ¡	Õ‘•Ñ½¹Ñ•áÐ¤ì4(€¥˜€ …Ñà¤Ñ¡É½Ü¹•ÜÉÉ½È ‰ÕÍ•	Õ‘•ÐµÕÍÐ‰”ÕÍ•Ý¥Ñ¡¥¸	Õ‘•ÑAÉ½Ù¥‘•Èˆ¤ì4(€É•ÑÕÉ¸Ñàì4)ô4

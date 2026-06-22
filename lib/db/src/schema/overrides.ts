@@ -11,6 +11,8 @@ export const overridesTable = pgTable("monthly_overrides", {
   customAmount: numeric("custom_amount", { precision: 12, scale: 2 }),
   customDueDay: integer("custom_due_day"),
   paidAmount: numeric("paid_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  actualAmount: numeric("actual_amount", { precision: 12, scale: 2 }),
+  paidDate: text("paid_date"),
 });
 
 export const insertOverrideSchema = createInsertSchema(overridesTable).omit({ userId: true });

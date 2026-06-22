@@ -18,6 +18,7 @@ export const billsTable = pgTable("bills", {
   endDate: text("end_date"),
   isRecurring: boolean("is_recurring").notNull().default(true),
   frequency: text("frequency").notNull().default("monthly"),
+  includeInSnowball: boolean("include_in_snowball").notNull().default(true),
   createdAt: text("created_at").notNull(),
 });
 
