@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { BrandLogo } from "@/components/BrandLogo";
 import { useAuth } from "@/context/AuthContext";
 
 export default function LoginScreen() {
@@ -61,10 +62,7 @@ export default function LoginScreen() {
         >
           {/* Logo / hero */}
           <View style={styles.hero}>
-            <View style={styles.logoRing}>
-              <Feather name="bar-chart-2" size={32} color="#22c55e" />
-            </View>
-            <Text style={styles.appName}>FlowLedger</Text>
+            <BrandLogo width={250} style={styles.brandLogo} />
             <Text style={styles.tagline}>Your money, clearly.</Text>
           </View>
 
@@ -177,8 +175,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container:     { flexGrow: 1, paddingHorizontal: 24, justifyContent: "center" },
   hero:          { alignItems: "center", marginBottom: 32 },
-  logoRing:      { width: 72, height: 72, borderRadius: 36, backgroundColor: "rgba(34,197,94,0.15)", alignItems: "center", justifyContent: "center", marginBottom: 12, borderWidth: 1, borderColor: "rgba(34,197,94,0.3)" },
-  appName:       { fontSize: 32, fontFamily: "Inter_700Bold", color: "#f8fafc" },
+  brandLogo:     { marginBottom: 8 },
   tagline:       { fontSize: 14, fontFamily: "Inter_400Regular", color: "#64748b", marginTop: 4 },
   card:          { backgroundColor: "#111827", borderRadius: 20, padding: 24, borderWidth: 1, borderColor: "#1e293b" },
   tabs:          { flexDirection: "row", backgroundColor: "#0f172a", borderRadius: 10, padding: 3, marginBottom: 24 },
