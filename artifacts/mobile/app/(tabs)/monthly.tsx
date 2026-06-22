@@ -196,7 +196,14 @@ export default function MonthlyScreen() {
       .filter(source => source.amount > 0.005);
     if (!surplusSnowballOffer.safe || !surplusSnowballOffer.preview.allocations.length) return;
     await finalizeBillPayment(surplusPrompt.bill.id, month, selectedYear, surplusPrompt.actual, surplusPrompt.paidDate);
-    await applyDebtSnowballPayment(surplusSnowballOffer.preview, sources);
+    try {
+      await applyDebtSnowballPayment(surplusSnowballOffer.preview, sources);
+    } catch {
+      Alert.alert(
+        "Bill Finalized",
+        "The actual bill amount was saved, but the surplus could not be added to debt. The difference is still available in your account, so you can safely try again.",
+      );
+    }
     setSurplusPrompt(null);
   };
 
