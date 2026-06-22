@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { Tabs } from "expo-router";
-import React from "react";
+import { router, Tabs } from "expo-router";
+import React, { useEffect } from "react";
 import { Platform, StyleSheet, View, useColorScheme } from "react-native";
 
 import { BudgetProvider } from "@/context/BudgetContext";
@@ -22,10 +22,27 @@ export default function TabLayout() {
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
 
+  useEffect(() => {
+    const routes = [
+      "/(tabs)/bills",
+      "/(tabs)/transactions",
+      "/(tabs)/monthly",
+      "/(tabs)/more",
+    ] as const;
+    const timers = routes.map((route, index) =>
+      setTimeout(() => router.prefetch(route), 700 + index * 350)
+    );
+    return () => timers.forEach(clearTimeout);
+  }, []);
+
   return (
     <BudgetProvider>
       <Tabs
+        detachInactiveScreens={false}
         screenOptions={{
+          animation: "none",
+          freezeOnBlur: !isWeb,
+          lazy: true,
           tabBarActiveTintColor: "#22c55e",
           tabBarInactiveTintColor: colors.mutedForeground,
           headerShown: false,
