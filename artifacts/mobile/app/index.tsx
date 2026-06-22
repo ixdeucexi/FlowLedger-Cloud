@@ -16,9 +16,10 @@ export default function SplashScreen() {
       <StatusBar barStyle="light-content" backgroundColor="#0a0e1a" />
       <View style={styles.center}>
         <Image
-          source={require("@/assets/images/logo_cropped.png")}
+          source={require("@/assets/images/logo_wordmark_optimized.png")}
           style={styles.logo}
           resizeMode="contain"
+          fadeDuration={0}
         />
         <Text style={styles.tagline}>Your money, clearly.</Text>
       </View>
