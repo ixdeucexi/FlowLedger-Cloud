@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { Platform } from "react-native";
 
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
@@ -6,10 +7,13 @@ import {
   allocateSnowballExtra,
   orderDebts,
   simulateSnowballPayoff,
-  SNOWBALL_BUFFER,
   type SnowballDebtInput,
   type SnowballProjectionResult,
 } from "@/lib/snowball";
+import { forecastBalances, type FinancialEvent } from "@/lib/forecast";
+import { diagnosticErrorCode } from "@/lib/diagnosticPolicy";
+import { recordDiagnostic } from "@/lib/diagnostics";
+import { getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isIncomeActiveForMonth } from "@/lib/schedule";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -114,6 +118,8 @@ export interface Settings {
   paymentMethod: "snowball" | "avalanche";
   starting_balance: number;
   starting_balance_date?: string;
+  safety_floor: number;
+  forecast_horizon_months: number;
 }
 
 export interface CashFlow {
@@ -140,9 +146,11 @@ export interface DailyBalance {
   goalExpenses: GoalExpense[];
   net: number;
   balance: number;
+  events?: FinancialEvent[];
 }
 
 export type DashboardFilter = "bills" | "debt" | "paid" | "unpaid" | null;
+export type SaveStatus = "idle" | "saving" | "saved" | "failed";
 
 // ─── Context shape ─────────────────────────────────────────────────────────────
 
@@ -160,6 +168,10 @@ interface BudgetContextType {
   setSelectedYear: (y: number) => void;
   dashboardFilter: DashboardFilter;
   setDashboardFilter: (f: DashboardFilter) => void;
+  saveStatus: SaveStatus;
+  saveError: string | null;
+  retryLastSave: () => Promise<void>;
+  clearSaveError: () => void;
 
   addBill: (bill: Omit<Bill, "id" | "created_at">) => Promise<void>;
   updateBill: (bill: Bill) => Promise<void>;
@@ -216,13 +228,21 @@ interface BudgetContextType {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-const DEFAULT_SETTINGS: Settings = { paymentMethod: "snowball", starting_balance: 0 };
+const DEFAULT_SETTINGS: Settings = {
+  paymentMethod: "snowball",
+  starting_balance: 0,
+  safety_floor: 200,
+  forecast_horizon_months: 6,
+};
 
 const DEFAULT_CATEGORIES = [
   "Housing", "Utilities", "Insurance", "Transportation", "Food",
   "Entertainment", "Health", "Education", "Savings", "Debt",
   "Shopping", "Rent", "Other",
 ];
+
+const diagnosticPlatform = (): "web" | "ios" | "android" | "unknown" =>
+  Platform.OS === "web" || Platform.OS === "ios" || Platform.OS === "android" ? Platform.OS : "unknown";
 
 function genId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -258,75 +278,6 @@ function reorderDebtPriorities(bills: Bill[]): Bill[] {
   return bills.map(b => b.is_debt ? { ...b, priority: priorityMap.get(b.id) ?? 1 } : b);
 }
 
-function isBillActiveForMonth(b: Bill, month: number, year: number): boolean {
-  const date = new Date(year, month, 1);
-  if (b.start_date) {
-    const [sy, sm] = b.start_date.split("-").map(Number);
-    if (date < new Date(sy, sm - 1, 1)) return false;
-  }
-  if (b.end_date) {
-    const [ey, em] = b.end_date.split("-").map(Number);
-    if (date > new Date(ey, em - 1, 1)) return false;
-  }
-  return true;
-}
-
-function getBillOccurrenceDays(b: Bill, month: number, year: number): number[] {
-  if (!isBillActiveForMonth(b, month, year)) return [];
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  if (b.frequency === "weekly") {
-    const days: number[] = [];
-    for (let d = 1; d <= daysInMonth; d++) {
-      const dow = new Date(year, month, d).getDay();
-      if (dow === (b.day_of_week ?? 0)) days.push(d);
-    }
-    return days;
-  }
-  const day = Math.min(b.due_day, daysInMonth);
-  return day > 0 ? [day] : [];
-}
-
-function isIncomeActiveForMonth(i: IncomeItem, month: number, year: number): boolean {
-  if (!i.start_date) return true;
-  const [sy, sm] = i.start_date.split("-").map(Number);
-  return new Date(year, month, 1) >= new Date(sy, sm - 1, 1);
-}
-
-function getIncomeOccurrenceDays(i: IncomeItem, month: number, year: number): number[] {
-  if (!isIncomeActiveForMonth(i, month, year)) return [];
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  if (i.frequency === "monthly") {
-    if (!i.next_payment_date) return [1];
-    const [, , dd] = i.next_payment_date.split("-").map(Number);
-    return [Math.min(dd, daysInMonth)];
-  }
-  const intervalDays = i.frequency === "biweekly" ? 14 : 7;
-  if (!i.next_payment_date) return [];
-  const [ny, nm, nd] = i.next_payment_date.split("-").map(Number);
-  let cursor = new Date(ny, nm - 1, nd);
-  const target = new Date(year, month, 1);
-  while (cursor > target) cursor = new Date(cursor.getTime() - intervalDays * 86400000);
-  while (cursor < target) cursor = new Date(cursor.getTime() + intervalDays * 86400000);
-  const days: number[] = [];
-  while (cursor.getMonth() === month && cursor.getFullYear() === year) {
-    days.push(cursor.getDate());
-    cursor = new Date(cursor.getTime() + intervalDays * 86400000);
-  }
-  return days;
-}
-
-function getEffectiveIncomeAmount(i: IncomeItem, month: number, year: number): number {
-  if (!i.amount_history?.length) return i.amount;
-  const target = new Date(year, month, 1);
-  const sorted = [...i.amount_history].sort((a, b) => a.effective_from.localeCompare(b.effective_from));
-  let effective = i.amount;
-  for (const entry of sorted) {
-    const [ey, em] = entry.effective_from.split("-").map(Number);
-    if (new Date(ey, em - 1, 1) <= target) effective = entry.amount;
-  }
-  return effective;
-}
-
 function incomeToMonthly(amount: number, frequency: IncomeItem["frequency"]): number {
   if (frequency === "biweekly") return amount * 26 / 12;
   if (frequency === "weekly")   return amount * 52 / 12;
@@ -353,10 +304,54 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [loading,       setLoading]       = useState(true);
   const [selectedYear,  setSelectedYear]  = useState(new Date().getFullYear());
   const [dashboardFilter, setDashboardFilter] = useState<DashboardFilter>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const loaded = useRef(false);
   const overridesRef = useRef<MonthlyOverride[]>([]);
+  const retrySaveRef = useRef<null | (() => Promise<void>)>(null);
+  const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => { overridesRef.current = overrides; }, [overrides]);
+
+  const markSaveStarted = useCallback(() => {
+    if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
+    setSaveError(null);
+    setSaveStatus("saving");
+  }, []);
+
+  const markSaveCompleted = useCallback(() => {
+    retrySaveRef.current = null;
+    setSaveError(null);
+    setSaveStatus("saved");
+    if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
+    saveStatusTimerRef.current = setTimeout(() => setSaveStatus("idle"), 1400);
+  }, []);
+
+  const markSaveFailed = useCallback((error: unknown, retry: () => Promise<void>) => {
+    retrySaveRef.current = retry;
+    setSaveError(error instanceof Error ? error.message : "Your change could not be saved.");
+    setSaveStatus("failed");
+    void recordDiagnostic(user?.id, {
+      eventType: "save_failure", operation: "amount_save", platform: diagnosticPlatform(),
+      errorCode: diagnosticErrorCode(error),
+    }).catch(() => undefined);
+  }, [user]);
+
+  const retryLastSave = useCallback(async () => {
+    const retry = retrySaveRef.current;
+    if (!retry) return;
+    try {
+      await retry();
+    } catch {
+      // The retried mutation refreshes the failure banner and keeps the latest retry callback.
+    }
+  }, []);
+
+  const clearSaveError = useCallback(() => {
+    retrySaveRef.current = null;
+    setSaveError(null);
+    setSaveStatus("idle");
+  }, []);
 
   // ── Load from Supabase when user changes ────────────────────────────────────
   useEffect(() => {
@@ -370,6 +365,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     loaded.current = false;
     setLoading(true);
     (async () => {
+      const loadStarted = Date.now();
       try {
         const uid = user.id;
         const results = await Promise.all([
@@ -435,6 +431,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
             paymentMethod:        sData.payment_method as Settings["paymentMethod"],
             starting_balance:     Number(sData.starting_balance),
             starting_balance_date: sData.starting_balance_date ?? undefined,
+            safety_floor:         Number(sData.safety_floor ?? 200),
+            forecast_horizon_months: Math.min(24, Math.max(1, Number(sData.forecast_horizon_months ?? 6))),
           });
         }
         const cats = (cData ?? []).map((c: any) => c.name as string);
@@ -442,6 +440,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       } finally {
         loaded.current = true;
         setLoading(false);
+        void recordDiagnostic(user.id, {
+          eventType: "performance", operation: "data_load", platform: diagnosticPlatform(),
+          durationMs: Date.now() - loadStarted,
+        }).catch(() => undefined);
       }
     })();
   }, [user]);
@@ -458,7 +460,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const updateBill = useCallback(async (bill: Bill) => {
     if (!user) return;
     const existing = bills.find(b => b.id === bill.id);
-    if (existing && existing.amount !== bill.amount) {
+    if (!existing) return;
+    const previousOverrides = overridesRef.current;
+    setBills(prev => reorderDebtPriorities(prev.map(item => item.id === bill.id ? bill : item)));
+    markSaveStarted();
+    try {
+    if (existing.amount !== bill.amount) {
       const now = new Date();
       const curMonth = now.getMonth();
       const curYear  = now.getFullYear();
@@ -487,18 +494,30 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
       const changedIds = new Set(nextOverrides.filter((o, i) => o !== currentOverrides[i]).map(o => o.id));
       if (changedIds.size > 0) {
-        setOverrides(prev =>
-          prev.map(o => {
+        const optimisticOverrides = overridesRef.current.map(o => {
             const changed = nextOverrides.find(n => n.id === o.id);
             return changed && changedIds.has(o.id) ? changed : o;
-          })
-        );
+          });
+        overridesRef.current = optimisticOverrides;
+        setOverrides(optimisticOverrides);
       }
-      await Promise.all(dbUpdates);
+      const results = await Promise.all(dbUpdates);
+      const failed = results.find(result => result?.error);
+      if (failed?.error) throw new Error(`Update monthly bill: ${failed.error.message}`);
     }
     await ensureSaved(supabase.from("bills").update({ ...bill }).eq("id", bill.id).eq("user_id", user.id), "Update bill");
-    setBills(prev => reorderDebtPriorities(prev.map(b => b.id === bill.id ? bill : b)));
-  }, [user, bills]);
+    markSaveCompleted();
+    } catch (error) {
+      setBills(prev => reorderDebtPriorities(prev.map(item => {
+        const stillFailedEdit = item.id === existing.id && Object.entries(bill).every(([key, value]) => item[key as keyof Bill] === value);
+        return stillFailedEdit ? existing : item;
+      })));
+      overridesRef.current = previousOverrides;
+      setOverrides(previousOverrides);
+      markSaveFailed(error, () => updateBill(bill));
+      throw error;
+    }
+  }, [user, bills, markSaveStarted, markSaveCompleted, markSaveFailed]);
 
   const deleteBill = useCallback(async (id: string) => {
     if (!user) return;
@@ -549,6 +568,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
       overridesRef.current = optimisticOverrides;
       setOverrides(optimisticOverrides);
+      const saveStarted = Date.now();
+      markSaveStarted();
 
       try {
         if (existing) {
@@ -559,6 +580,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         } else {
           await ensureSaved(supabase.from("monthly_overrides").insert({ ...updated, user_id: user.id }), "Create monthly bill");
         }
+        markSaveCompleted();
+        void recordDiagnostic(user.id, {
+          eventType: "performance", operation: "amount_save", platform: diagnosticPlatform(),
+          durationMs: Date.now() - saveStarted,
+        }).catch(() => undefined);
       } catch (error) {
         const current = overridesRef.current.find(o => o.id === updated.id);
         const isStillThisEdit = current && Object.entries(patch).every(
@@ -571,10 +597,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           overridesRef.current = rolledBack;
           setOverrides(rolledBack);
         }
+        markSaveFailed(error, () => upsertOverride(billId, month, year, patch));
         throw error;
       }
     },
-    [user]
+    [user, markSaveStarted, markSaveCompleted, markSaveFailed]
   );
 
   const setPaidAmount = useCallback(
@@ -807,9 +834,18 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const updateTransaction = useCallback(async (tx: Transaction) => {
     if (!user) return;
-    await ensureSaved(supabase.from("transactions").update({ ...tx }).eq("id", tx.id).eq("user_id", user.id), "Update transaction");
+    const existing = transactions.find(item => item.id === tx.id);
     setTransactions(prev => prev.map(t => t.id === tx.id ? tx : t));
-  }, [user]);
+    markSaveStarted();
+    try {
+      await ensureSaved(supabase.from("transactions").update({ ...tx }).eq("id", tx.id).eq("user_id", user.id), "Update transaction");
+      markSaveCompleted();
+    } catch (error) {
+      if (existing) setTransactions(prev => prev.map(item => item.id === existing.id && item === tx ? existing : item));
+      markSaveFailed(error, () => updateTransaction(tx));
+      throw error;
+    }
+  }, [user, transactions, markSaveStarted, markSaveCompleted, markSaveFailed]);
 
   const deleteTransaction = useCallback(async (id: string) => {
     if (!user) return;
@@ -837,9 +873,18 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const updateIncome = useCallback(async (item: IncomeItem) => {
     if (!user) return;
-    await ensureSaved(supabase.from("incomes").update({ ...item, amount_history: item.amount_history ?? [] }).eq("id", item.id).eq("user_id", user.id), "Update income");
+    const existing = incomes.find(income => income.id === item.id);
     setIncomes(prev => prev.map(i => i.id === item.id ? item : i));
-  }, [user]);
+    markSaveStarted();
+    try {
+      await ensureSaved(supabase.from("incomes").update({ ...item, amount_history: item.amount_history ?? [] }).eq("id", item.id).eq("user_id", user.id), "Update income");
+      markSaveCompleted();
+    } catch (error) {
+      if (existing) setIncomes(prev => prev.map(income => income.id === existing.id && income === item ? existing : income));
+      markSaveFailed(error, () => updateIncome(item));
+      throw error;
+    }
+  }, [user, incomes, markSaveStarted, markSaveCompleted, markSaveFailed]);
 
   const deleteIncome = useCallback(async (id: string) => {
     if (!user) return;
@@ -885,9 +930,18 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const updateGoal = useCallback(async (goal: Goal) => {
     if (!user) return;
-    await ensureSaved(supabase.from("goals").update({ ...goal }).eq("id", goal.id).eq("user_id", user.id), "Update goal");
+    const existing = goals.find(item => item.id === goal.id);
     setGoals(prev => prev.map(g => g.id === goal.id ? goal : g));
-  }, [user]);
+    markSaveStarted();
+    try {
+      await ensureSaved(supabase.from("goals").update({ ...goal }).eq("id", goal.id).eq("user_id", user.id), "Update goal");
+      markSaveCompleted();
+    } catch (error) {
+      if (existing) setGoals(prev => prev.map(item => item.id === existing.id && item === goal ? existing : item));
+      markSaveFailed(error, () => updateGoal(goal));
+      throw error;
+    }
+  }, [user, goals, markSaveStarted, markSaveCompleted, markSaveFailed]);
 
   const deleteGoal = useCallback(async (id: string) => {
     if (!user) return;
@@ -926,7 +980,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         seed = settings.starting_balance;
         if (year < anchorY || (year === anchorY && month < anchorM)) {
           const needed = getGoalRemainingAmount(goal);
-          return { projectedBalance: seed, canAfford: seed >= needed, shortfall: Math.max(0, needed - seed) };
+          const available = seed - settings.safety_floor;
+          return { projectedBalance: seed, canAfford: available >= needed, shortfall: Math.max(0, needed - available) };
         }
       }
       let balance = seed;
@@ -938,8 +993,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       }
       const projectedBalance = balance;
       const needed = getGoalRemainingAmount(goal);
-      const canAfford = projectedBalance >= needed;
-      return { projectedBalance, canAfford, shortfall: canAfford ? 0 : needed - projectedBalance };
+      const available = projectedBalance - settings.safety_floor;
+      const canAfford = available >= needed;
+      return { projectedBalance, canAfford, shortfall: canAfford ? 0 : needed - available };
     },
     [bills, incomes, transactions, overrides, settings]
   );
@@ -1022,13 +1078,27 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       return running;
     };
     const carryover = computeCarryover(month, year);
+    const financialEvents: FinancialEvent[] = [];
     const incomeByDay: Record<number, number> = {};
     incomes.forEach(i => {
       const occ = getIncomeOccurrenceDays(i, month, year);
       const amt = getEffectiveIncomeAmount(i, month, year);
-      occ.forEach(d => { incomeByDay[d] = (incomeByDay[d] ?? 0) + amt; });
+      occ.forEach(d => {
+        incomeByDay[d] = (incomeByDay[d] ?? 0) + amt;
+        financialEvents.push({
+          id: `income:${i.id}:${year}-${month + 1}-${d}`,
+          sourceType: "income", sourceId: i.id,
+          date: `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`,
+          kind: "scheduled_income", amount: amt, status: "planned", name: i.name,
+        });
+      });
     });
     const monthTxs = transactions.filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === year && tm === month + 1; });
+    monthTxs.forEach(t => financialEvents.push({
+      id: `transaction:${t.id}`, sourceType: "transaction", sourceId: t.id, date: t.date,
+      kind: t.amount >= 0 ? "transaction_income" : "transaction_expense",
+      amount: t.amount, status: "actual", name: t.note || t.category,
+    }));
     const billsByDay: Record<number, number> = {};
     bills.filter(b => b.is_recurring || b.is_debt).forEach(b => {
       let occ = getBillOccurrenceDays(b, month, year);
@@ -1040,18 +1110,35 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         const [paidYear, paidMonth, paidDay] = o.paid_date.split("-").map(Number);
         if (paidYear === year && paidMonth === month + 1) {
           billsByDay[paidDay] = (billsByDay[paidDay] ?? 0) + total;
+          financialEvents.push({
+            id: `bill:${b.id}:${year}-${month + 1}-${paidDay}`, sourceType: "bill", sourceId: b.id,
+            date: `${year}-${String(month + 1).padStart(2, "0")}-${String(paidDay).padStart(2, "0")}`,
+            kind: "bill", amount: -total, status: "finalized", name: b.name,
+          });
           return;
         }
       }
       if (o?.custom_due_day !== undefined && b.frequency === "monthly") {
         occ = [Math.min(o.custom_due_day, daysInMonth)];
       }
-      occ.forEach(d => { billsByDay[d] = (billsByDay[d] ?? 0) + amt; });
+      occ.forEach(d => {
+        billsByDay[d] = (billsByDay[d] ?? 0) + amt;
+        financialEvents.push({
+          id: `bill:${b.id}:${year}-${month + 1}-${d}`, sourceType: "bill", sourceId: b.id,
+          date: `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`,
+          kind: "bill", amount: -amt, status: "planned", name: b.name,
+        });
+      });
     });
     const debtExtrasByDay: Record<number, number> = {};
     extraPayments.filter(ep => ep.month === month && ep.year === year).forEach(ep => {
       const day = ep.payment_date ? Number(ep.payment_date.split("-")[2]) : 1;
       debtExtrasByDay[day] = (debtExtrasByDay[day] ?? 0) + ep.amount;
+      financialEvents.push({
+        id: `extra:${ep.id}:${year}-${month + 1}-${day}`, sourceType: "extra_payment", sourceId: ep.id,
+        date: `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+        kind: "debt_payment", amount: -ep.amount, status: "finalized", name: "Extra debt payment",
+      });
     });
     const goalsByDay: Record<number, GoalExpense[]> = {};
     goals.forEach(g => {
@@ -1061,9 +1148,28 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const day = targetDate.day;
       if (!goalsByDay[day]) goalsByDay[day] = [];
       const remaining = getGoalRemainingAmount(g);
-      if (remaining > 0) goalsByDay[day].push({ id: g.id, name: g.name, amount: remaining });
+      if (remaining > 0) {
+        goalsByDay[day].push({ id: g.id, name: g.name, amount: remaining });
+        financialEvents.push({
+          id: `goal:${g.id}:${year}-${month + 1}-${day}`, sourceType: "goal", sourceId: g.id,
+          date: `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+          kind: "goal", amount: -remaining, status: "planned", name: g.name,
+        });
+      }
     });
-    let runningBalance = carryover;
+    const forecastStarted = Date.now();
+    const forecast = forecastBalances({
+      openingBalance: carryover,
+      startDate: `${year}-${String(month + 1).padStart(2, "0")}-01`,
+      endDate: `${year}-${String(month + 1).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`,
+      events: financialEvents,
+    });
+    const forecastDuration = Date.now() - forecastStarted;
+    if (forecastDuration >= 50) {
+      void recordDiagnostic(user?.id, {
+        eventType: "performance", operation: "forecast", platform: diagnosticPlatform(), durationMs: forecastDuration,
+      }).catch(() => undefined);
+    }
     const result: DailyBalance[] = [];
     for (let day = 1; day <= daysInMonth; day++) {
       const dayTxs = monthTxs.filter(t => { const [, , td] = t.date.split("-").map(Number); return td === day; });
@@ -1074,13 +1180,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const billsToday   = billsByDay[day] ?? 0;
       const dayGoals     = goalsByDay[day] ?? [];
       const goalTotal    = dayGoals.reduce((s, ge) => s + ge.amount, 0);
-      const net = incomeToday - expenseToday - billsToday - goalTotal;
-      runningBalance += net;
-      result.push({ day, income: incomeToday, scheduledIncome, expense: expenseToday, bills: billsToday, goalExpenses: dayGoals, net, balance: runningBalance });
+      const forecastDay = forecast.days[day - 1];
+      result.push({
+        day, income: incomeToday, scheduledIncome, expense: expenseToday, bills: billsToday,
+        goalExpenses: dayGoals, net: forecastDay.net, balance: forecastDay.balance, events: forecastDay.events,
+      });
     }
     balanceComputationCache.daily.set(dailyKey, result);
     return result;
-  }, [bills, transactions, incomes, goals, overrides, extraPayments, getBillEffectiveMonthlyTotal, settings.starting_balance, settings.starting_balance_date, balanceComputationCache]);
+  }, [bills, transactions, incomes, goals, overrides, extraPayments, getBillEffectiveMonthlyTotal, settings.starting_balance, settings.starting_balance_date, balanceComputationCache, user]);
 
   const previewDebtSnowball = useCallback((month: number, year: number, requestedExtra?: number, additionalSafeCredit = 0): SnowballProjectionResult => {
     const debtInputs: SnowballDebtInput[] = bills
@@ -1107,7 +1215,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
     const getWindowMinimum = (startMonth: number, startYear: number) => {
       let minimum = Infinity;
-      for (let offset = 0; offset < 6; offset++) {
+      for (let offset = 0; offset < settings.forecast_horizon_months; offset++) {
         const absolute = startYear * 12 + startMonth + offset;
         const m = absolute % 12;
         const y = Math.floor(absolute / 12);
@@ -1119,7 +1227,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const baselineMinimum = getWindowMinimum(month, year);
     const existingAmount = existing?.amount ?? 0;
     const totalIncluded = included.reduce((sum, debt) => sum + debt.balance, 0);
-    const safeMaximum = Math.max(0, Math.min(totalIncluded, baselineMinimum + existingAmount + Math.max(0, additionalSafeCredit) - SNOWBALL_BUFFER));
+    const safeMaximum = Math.max(0, Math.min(totalIncluded, baselineMinimum + existingAmount + Math.max(0, additionalSafeCredit) - settings.safety_floor));
     const selectedExtra = Math.max(0, Math.min(requestedExtra ?? safeMaximum, safeMaximum));
     const current = allocateSnowballExtra(debtInputs, selectedExtra, settings.paymentMethod, paymentDate);
     let cumulativeProjectedDelta = selectedExtra - existingAmount;
@@ -1132,7 +1240,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       firstPayoffOrder: current.payoffOrder,
       getExtraForMonth: (_offset, futureMonth, futureYear, remainingDebt) => {
         const futureBaseline = getWindowMinimum(futureMonth, futureYear);
-        const extra = Math.max(0, Math.min(remainingDebt, futureBaseline - cumulativeProjectedDelta - SNOWBALL_BUFFER));
+        const extra = Math.max(0, Math.min(remainingDebt, futureBaseline - cumulativeProjectedDelta - settings.safety_floor));
         cumulativeProjectedDelta += extra;
         return { extra, lowestBalance: futureBaseline - cumulativeProjectedDelta };
       },
@@ -1160,7 +1268,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       debtFreeDate: endingDebt <= 0.009 ? `${year}-${String(month + 1).padStart(2, "0")}` : simulated.debtFreeDate,
       lowestSixMonthBalance: Math.min(currentLowest, ...simulated.months.slice(0, 5).map(item => item.lowestAccountBalance)),
     };
-  }, [bills, settings.paymentMethod, extraPayments, getBillMonthlyTotal, getDailyBalances]);
+  }, [bills, settings.paymentMethod, settings.safety_floor, settings.forecast_horizon_months, extraPayments, getBillMonthlyTotal, getDailyBalances]);
 
   // ─── Categories ───────────────────────────────────────────────────────────────
 
@@ -1212,14 +1320,29 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const updateSettings = useCallback(async (s: Partial<Settings>) => {
     if (!user) return;
     const next = { ...settings, ...s };
-    await ensureSaved(supabase.from("settings").upsert({
-      user_id:               user.id,
-      payment_method:        next.paymentMethod,
-      starting_balance:      next.starting_balance,
-      starting_balance_date: next.starting_balance_date ?? null,
-    }), "Update settings");
     setSettings(next);
-  }, [user, settings]);
+    const saveStarted = Date.now();
+    markSaveStarted();
+    try {
+      await ensureSaved(supabase.from("settings").upsert({
+        user_id:               user.id,
+        payment_method:        next.paymentMethod,
+        starting_balance:      next.starting_balance,
+        starting_balance_date: next.starting_balance_date ?? null,
+        safety_floor:          next.safety_floor,
+        forecast_horizon_months: next.forecast_horizon_months,
+      }), "Update settings");
+      markSaveCompleted();
+      void recordDiagnostic(user.id, {
+        eventType: "performance", operation: "settings_save", platform: diagnosticPlatform(),
+        durationMs: Date.now() - saveStarted,
+      }).catch(() => undefined);
+    } catch (error) {
+      setSettings(current => Object.entries(s).every(([key, value]) => current[key as keyof Settings] === value) ? settings : current);
+      markSaveFailed(error, () => updateSettings(s));
+      throw error;
+    }
+  }, [user, settings, markSaveStarted, markSaveCompleted, markSaveFailed]);
 
   const importBills = useCallback(async (imported: Omit<Bill, "id" | "created_at">[]) => {
     if (!user) return;
@@ -1239,6 +1362,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   return (
     <BudgetContext.Provider value={{
       bills, overrides, transactions, incomes, goals, extraPayments, categories, settings, loading,
+      saveStatus, saveError, retryLastSave, clearSaveError,
       dashboardFilter, setDashboardFilter,
       addBill, updateBill, deleteBill, getBillById,
       getOverride, getAmount, getPaidAmount, setPaidAmount, setCustomAmount, getCustomDueDay, setCustomDueDay,

@@ -101,7 +101,7 @@ export default function BillsScreen() {
 
   const handleApplySnowball = () => {
     if (safeSnowballAmount <= 0) {
-      Alert.alert("$200 Buffer Protected", "There is no extra amount available without moving the six-month forecast below $200.");
+      Alert.alert("Safety Floor Protected", `There is no extra amount available without moving the ${settings.forecast_horizon_months}-month forecast below $${settings.safety_floor.toFixed(0)}.`);
       return;
     }
     const starting = existingSnowball?.amount ?? safeSnowballAmount;
@@ -267,7 +267,7 @@ export default function BillsScreen() {
                   </Text>
                 </Pressable>
               </View>
-              <Text style={[styles.cappedNote, { color: c.mutedForeground }]}>Keeps your six-month projected balance at or above $200</Text>
+              <Text style={[styles.cappedNote, { color: c.mutedForeground }]}>Keeps your {settings.forecast_horizon_months}-month projected balance at or above ${settings.safety_floor.toFixed(0)}</Text>
             </View>
           )}
 
@@ -425,6 +425,8 @@ export default function BillsScreen() {
         preview={snowballPreview}
         amount={snowballAmount}
         existingPayment={!!existingSnowball}
+        safetyFloor={settings.safety_floor}
+        forecastHorizonMonths={settings.forecast_horizon_months}
         onAmountChange={handleSnowballAmountChange}
         onClose={() => setSnowballModalVisible(false)}
         onConfirm={handleConfirmSnowball}
