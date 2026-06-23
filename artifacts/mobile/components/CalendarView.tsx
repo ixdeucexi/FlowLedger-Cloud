@@ -14,6 +14,7 @@ interface CalendarViewProps {
   onDayPress: (date: string) => void;
   dailyBalances?: DailyBalance[];
   goals?: Goal[];
+  safetyFloor?: number;
 }
 
 function fmt(n: number, compact = true) {
@@ -22,7 +23,7 @@ function fmt(n: number, compact = true) {
   return abs.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-export function CalendarView({ month, year, transactions, selectedDate, onDayPress, dailyBalances, goals = [] }: CalendarViewProps) {
+export function CalendarView({ month, year, transactions, selectedDate, onDayPress, dailyBalances, goals = [], safetyFloor = 200 }: CalendarViewProps) {
   const c = useColors();
 
   const firstDay = new Date(year, month, 1).getDay();
@@ -97,7 +98,7 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
           const riskBg = db
             ? db.balance < 0
               ? "rgba(239,68,68,0.13)"
-              : db.balance < 200
+              : db.balance < safetyFloor
               ? "rgba(245,158,11,0.11)"
               : "rgba(34,197,94,0.06)"
             : "transparent";

@@ -5,6 +5,7 @@ import React from "react";
 import { Platform, StyleSheet, View, useColorScheme } from "react-native";
 
 import { BudgetProvider } from "@/context/BudgetContext";
+import { SaveStatusBanner } from "@/components/SaveStatusBanner";
 import { useColors } from "@/hooks/useColors";
 
 const TABS = [
@@ -66,6 +67,7 @@ export default function TabLayout() {
           />
         ))}
       </Tabs>
+      <SaveStatusBanner />
     </BudgetProvider>
   );
 }

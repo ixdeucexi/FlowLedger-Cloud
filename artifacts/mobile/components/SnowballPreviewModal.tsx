@@ -12,13 +12,15 @@ interface Props {
   preview: SnowballProjectionResult | null;
   amount: string;
   existingPayment?: boolean;
+  safetyFloor?: number;
+  forecastHorizonMonths?: number;
   onAmountChange: (value: string) => void;
   onClose: () => void;
   onConfirm: () => void;
   onRemove?: () => void;
 }
 
-export function SnowballPreviewModal({ visible, preview, amount, existingPayment, onAmountChange, onClose, onConfirm, onRemove }: Props) {
+export function SnowballPreviewModal({ visible, preview, amount, existingPayment, safetyFloor = 200, forecastHorizonMonths = 6, onAmountChange, onClose, onConfirm, onRemove }: Props) {
   const c = useColors();
   const requested = Number.parseFloat(amount) || 0;
   const valid = !!preview && requested > 0 && requested <= preview.safeMaximum + 0.005 && preview.allocations.length > 0;
@@ -43,7 +45,7 @@ export function SnowballPreviewModal({ visible, preview, amount, existingPayment
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.safeLabel, { color: c.mutedForeground }]}>MAXIMUM SAFE EXTRA</Text>
                   <Text style={[styles.safeValue, { color: c.success }]}>${preview.safeMaximum.toFixed(2)}</Text>
-                  <Text style={[styles.safeNote, { color: c.mutedForeground }]}>Keeps the six-month forecast at or above $200</Text>
+                  <Text style={[styles.safeNote, { color: c.mutedForeground }]}>Keeps the {forecastHorizonMonths}-month forecast at or above ${safetyFloor.toFixed(0)}</Text>
                 </View>
               </View>
 
@@ -53,7 +55,7 @@ export function SnowballPreviewModal({ visible, preview, amount, existingPayment
                 <TextInput value={amount} onChangeText={onAmountChange} keyboardType="decimal-pad" style={[styles.input, { color: c.foreground }]} />
               </View>
               {requested > preview.safeMaximum && (
-                <Text style={[styles.error, { color: c.destructive }]}>That amount would move the projected balance below the $200 buffer.</Text>
+                <Text style={[styles.error, { color: c.destructive }]}>That amount would move the projected balance below your ${safetyFloor.toFixed(0)} safety floor.</Text>
               )}
 
               <Text style={[styles.label, { color: c.mutedForeground }]}>THIS PAYMENT Â· {preview.paymentDate}</Text>
@@ -67,14 +69,14 @@ export function SnowballPreviewModal({ visible, preview, amount, existingPayment
                 ))}
               </View>
 
-              <Text style={[styles.label, { color: c.mutedForeground }]}>NEXT SIX MONTHS</Text>
+              <Text style={[styles.label, { color: c.mutedForeground }]}>NEXT {forecastHorizonMonths} MONTHS</Text>
               <View style={[styles.card, { backgroundColor: c.card }]}>
-                {preview.months.slice(0, 6).map(item => (
+                {preview.months.slice(0, forecastHorizonMonths).map(item => (
                   <View key={`${item.year}-${item.month}`} style={styles.monthRow}>
                     <Text style={[styles.month, { color: c.foreground }]}>{MONTHS[item.month]} {item.year}</Text>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.monthTarget, { color: c.mutedForeground }]}>{item.targetName ?? "Snowball complete"}</Text>
-                      <Text style={[styles.monthBalance, { color: item.lowestAccountBalance >= 200 ? c.success : c.destructive }]}>Lowest cash ${item.lowestAccountBalance.toFixed(0)}</Text>
+                      <Text style={[styles.monthBalance, { color: item.lowestAccountBalance >= safetyFloor ? c.success : c.destructive }]}>Lowest cash ${item.lowestAccountBalance.toFixed(0)}</Text>
                     </View>
                     <Text style={[styles.monthExtra, { color: c.primary }]}>+${item.extraPayment.toFixed(0)}</Text>
                   </View>

@@ -11,12 +11,14 @@ interface Props {
   actual: number;
   targetDebt?: string;
   snowballSafe: boolean;
+  safetyFloor?: number;
+  forecastHorizonMonths?: number;
   onKeep: () => void;
   onSnowball: () => void;
   onClose: () => void;
 }
 
-export function BillSurplusModal({ visible, billName, budgeted, actual, targetDebt, snowballSafe, onKeep, onSnowball, onClose }: Props) {
+export function BillSurplusModal({ visible, billName, budgeted, actual, targetDebt, snowballSafe, safetyFloor = 200, forecastHorizonMonths = 6, onKeep, onSnowball, onClose }: Props) {
   const c = useColors();
   const difference = Math.max(0, budgeted - actual);
   return (
@@ -33,7 +35,7 @@ export function BillSurplusModal({ visible, billName, budgeted, actual, targetDe
             <View style={styles.row}><Text style={[styles.rowLabel, { color: c.success }]}>Available</Text><Text style={[styles.rowValue, { color: c.success }]}>${difference.toFixed(2)}</Text></View>
           </View>
           {!targetDebt && <Text style={[styles.note, { color: c.mutedForeground }]}>No debt is currently included in your snowball.</Text>}
-          {targetDebt && !snowballSafe && <Text style={[styles.note, { color: c.warning }]}>Keep this money available to preserve your $200 six-month buffer.</Text>}
+          {targetDebt && !snowballSafe && <Text style={[styles.note, { color: c.warning }]}>Keep this money available to preserve your ${safetyFloor.toFixed(0)} floor across {forecastHorizonMonths} months.</Text>}
           <Pressable disabled={!targetDebt || !snowballSafe} onPress={onSnowball} style={[styles.primary, { backgroundColor: targetDebt && snowballSafe ? c.primary : c.muted }]}> 
             <Feather name="zap" size={16} color={targetDebt && snowballSafe ? c.primaryForeground : c.mutedForeground} />
             <Text style={[styles.primaryText, { color: targetDebt && snowballSafe ? c.primaryForeground : c.mutedForeground }]}>Add ${difference.toFixed(2)} to {targetDebt ?? "Snowball"}</Text>

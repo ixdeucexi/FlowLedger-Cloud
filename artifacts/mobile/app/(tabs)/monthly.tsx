@@ -107,6 +107,7 @@ export default function MonthlyScreen() {
   const txExpense = txList.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
 
   const selectedDay = selectedDate ? parseInt(selectedDate.split("-")[2]) : null;
+  const selectedForecastDay = selectedDay === null ? undefined : dailyBalances.find(item => item.day === selectedDay);
 
   const scheduledBillsForDay = useMemo(() => {
     if (selectedDay === null) return [];
@@ -677,8 +678,9 @@ export default function MonthlyScreen() {
               transactions={txList}
               selectedDate={selectedDate}
               onDayPress={(date) => setSelectedDate(prev => prev === date ? null : date)}
-              dailyBalances={dailyBalances}
-              goals={goals}
+                dailyBalances={dailyBalances}
+                goals={goals}
+                safetyFloor={settings.safety_floor}
             />
 
             <View style={styles.txListHeader}>
@@ -694,6 +696,24 @@ export default function MonthlyScreen() {
                 <Feather name="plus" size={16} color={c.primaryForeground} />
               </Pressable>
             </View>
+
+            {selectedForecastDay && (
+              <View style={[styles.forecastExplanation, { backgroundColor: c.card, borderColor: c.border }]}>
+                <View style={styles.forecastExplanationHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.forecastExplanationTitle, { color: c.foreground }]}>How this balance is calculated</Text>
+                    <Text style={[styles.forecastExplanationSub, { color: c.mutedForeground }]}>Projected close ${selectedForecastDay.balance.toFixed(2)} from {selectedForecastDay.events?.length ?? 0} dated item{(selectedForecastDay.events?.length ?? 0) === 1 ? "" : "s"}.</Text>
+                  </View>
+                  <Feather name="info" size={16} color={c.primary} />
+                </View>
+                {(selectedForecastDay.events ?? []).map(event => (
+                  <View key={event.id} style={styles.forecastSourceRow}>
+                    <Text numberOfLines={1} style={[styles.forecastSourceName, { color: c.mutedForeground }]}>{event.name ?? event.sourceType} · {event.status}</Text>
+                    <Text style={[styles.forecastSourceAmount, { color: event.amount >= 0 ? c.success : c.foreground }]}>{event.amount >= 0 ? "+" : "-"}${Math.abs(event.amount).toFixed(2)}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
 
             {/* Scheduled bills & debts for the selected day */}
             {scheduledBillsForDay.length > 0 && (
@@ -936,6 +956,8 @@ export default function MonthlyScreen() {
         preview={snowballPreview}
         amount={extraPayment}
         existingPayment={!!getExtraPayment(month, selectedYear)}
+        safetyFloor={settings.safety_floor}
+        forecastHorizonMonths={settings.forecast_horizon_months}
         onAmountChange={updateSnowballAmount}
         onClose={() => setSnowballModalVisible(false)}
         onConfirm={confirmSnowballPayment}
@@ -948,6 +970,8 @@ export default function MonthlyScreen() {
         actual={surplusPrompt?.actual ?? 0}
         targetDebt={surplusSnowballOffer?.targetDebt}
         snowballSafe={surplusSnowballOffer?.safe ?? false}
+        safetyFloor={settings.safety_floor}
+        forecastHorizonMonths={settings.forecast_horizon_months}
         onKeep={keepBillSurplus}
         onSnowball={addBillSurplusToSnowball}
         onClose={() => setSurplusPrompt(null)}
@@ -1020,6 +1044,13 @@ const styles = StyleSheet.create({
   txSumLabel: { fontSize: 10, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 },
   txSumValue: { fontSize: 15, fontFamily: "Inter_700Bold" },
   txListHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8, marginTop: 4 },
+  forecastExplanation: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 10 },
+  forecastExplanationHeader: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginBottom: 6 },
+  forecastExplanationTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  forecastExplanationSub: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
+  forecastSourceRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 5 },
+  forecastSourceName: { flex: 1, fontSize: 11, fontFamily: "Inter_400Regular", textTransform: "capitalize" },
+  forecastSourceAmount: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   txListTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   sectionLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.8, marginHorizontal: 16, marginTop: 10, marginBottom: 4 },
   txRow: { flexDirection: "row", alignItems: "center", marginBottom: 7, overflow: "hidden" },

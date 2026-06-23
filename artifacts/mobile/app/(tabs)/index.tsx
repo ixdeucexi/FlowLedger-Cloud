@@ -34,7 +34,7 @@ export default function DashboardScreen() {
   const {
     bills, getPaidAmount, getBillMonthlyTotal, selectedYear, setDashboardFilter,
     goals, addGoal, updateGoal, deleteGoal, checkGoalAffordability,
-    getCashFlow, getMonthlyIncome, addBill, addTransaction, getDailyBalances,
+    getCashFlow, getMonthlyIncome, addBill, addTransaction, getDailyBalances, settings,
   } = useBudget();
 
   const [goalModalVisible, setGoalModalVisible]     = useState(false);
@@ -117,7 +117,7 @@ export default function DashboardScreen() {
     setYearNegSchedule([]);
 
     const calculateNextMonth = () => {
-      if (cancelled || i >= 12) return;
+      if (cancelled || i >= settings.forecast_horizon_months) return;
       const m = (currentMonth + i) % 12;
       const y = selectedYear + Math.floor((currentMonth + i) / 12);
       const balances = getDailyBalances(m, y);
@@ -131,7 +131,7 @@ export default function DashboardScreen() {
       };
       setYearNegSchedule(previous => [...previous, next]);
       i += 1;
-      if (i < 12) timer = setTimeout(calculateNextMonth, 0);
+      if (i < settings.forecast_horizon_months) timer = setTimeout(calculateNextMonth, 0);
     };
 
     timer = setTimeout(calculateNextMonth, 0);
@@ -139,7 +139,7 @@ export default function DashboardScreen() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [getDailyBalances, currentMonth, selectedYear, isFocused]);
+  }, [getDailyBalances, currentMonth, selectedYear, isFocused, settings.forecast_horizon_months]);
 
   // First month (across all 12) that goes negative
   const firstYearNegEntry = yearNegSchedule.find(e => e.firstNegDay !== null) ?? null;
@@ -203,7 +203,7 @@ export default function DashboardScreen() {
   }, [savingsGoals, getCashFlow, currentMonth]);
 
   // ── Affordability check (real calendar projection) ──────────────────────────
-  const RISKY_THRESHOLD = 200;
+  const RISKY_THRESHOLD = settings.safety_floor;
   const affordResult = useMemo(() => {
     const amt = parseFloat(affordAmt);
     if (!affordAmt.trim() || isNaN(amt) || amt <= 0) return null;
@@ -330,7 +330,7 @@ export default function DashboardScreen() {
       {(() => {
         const cur = balanceMetrics?.currentBalance ?? cashFlow.remaining;
         const isNeg = cur < 0;
-        const isLow = !isNeg && cur < 200;
+        const isLow = !isNeg && cur < settings.safety_floor;
         const gradColors: [string, string] = isNeg
           ? [c.destructive, "#b91c1c"]
           : isLow
@@ -388,7 +388,7 @@ export default function DashboardScreen() {
                     <Text style={styles.heroMetricLabel}>Lowest Balance</Text>
                     <Text style={[styles.heroMetricValue, {
                       color: (balanceMetrics?.lowestBalance ?? 0) < 0 ? "#fca5a5"
-                        : (balanceMetrics?.lowestBalance ?? 0) < 200 ? "#fde68a"
+                        : (balanceMetrics?.lowestBalance ?? 0) < settings.safety_floor ? "#fde68a"
                         : "#bbf7d0"
                     }]}>
                       {(balanceMetrics?.lowestBalance ?? 0) < 0 ? "−" : ""}
@@ -727,7 +727,7 @@ export default function DashboardScreen() {
             const amt = b.amount;
             return !best || amt > best.amount ? { name: b.name, amount: amt } : best;
           }, null);
-        const hasRisk = firstYearNegEntry !== null || balanceMetrics.lowestBalance < 200;
+        const hasRisk = firstYearNegEntry !== null || balanceMetrics.lowestBalance < settings.safety_floor;
         if (!hasRisk && !largestUpcoming) return null;
         return (
           <View style={{ marginBottom: 14 }}>
@@ -746,7 +746,7 @@ export default function DashboardScreen() {
                   </View>
                 </View>
               )}
-              {balanceMetrics.lowestBalance < 200 && (
+              {balanceMetrics.lowestBalance < settings.safety_floor && (
                 <View style={[styles.outlookRow, largestUpcoming ? { borderBottomWidth: 1, borderBottomColor: c.border } : {}]}>
                   <View style={[styles.outlookIcon, { backgroundColor: "#f0b42918" }]}>
                     <Feather name="trending-down" size={16} color="#f0b429" />
@@ -1033,7 +1033,7 @@ export default function DashboardScreen() {
           <Pressable style={[styles.negSheet, { backgroundColor: c.card }]} onPress={() => {}}>
             {/* Handle */}
             <View style={[styles.negSheetHandle, { backgroundColor: c.border }]} />
-            <Text style={[styles.negSheetTitle, { color: c.foreground }]}>12-Month Balance Outlook</Text>
+              <Text style={[styles.negSheetTitle, { color: c.foreground }]}>{settings.forecast_horizon_months}-Month Balance Outlook</Text>
             <Text style={[styles.negSheetSub, { color: c.mutedForeground }]}>
               Projected first negative date each month
             </Text>
@@ -1041,7 +1041,7 @@ export default function DashboardScreen() {
             <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
               {yearNegSchedule.map((entry, i) => {
                 const isNeg = entry.firstNegDay !== null;
-                const isLow = !isNeg && entry.lowestBalance < 200;
+                const isLow = !isNeg && entry.lowestBalance < settings.safety_floor;
                 const iconName = isNeg ? "x-circle" as const : isLow ? "alert-circle" as const : "check-circle" as const;
                 const iconColor = isNeg ? c.destructive : isLow ? "#f0b429" : c.success;
                 const bgColor  = isNeg ? c.destructive + "12" : isLow ? "#f0b42912" : c.success + "0a";

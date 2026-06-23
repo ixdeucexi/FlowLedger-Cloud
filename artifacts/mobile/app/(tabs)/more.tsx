@@ -49,11 +49,15 @@ export default function MoreScreen() {
   const [startingBalanceDateText, setStartingBalanceDateText] = useState(
     settings.starting_balance_date ?? ""
   );
+  const [safetyFloorText, setSafetyFloorText] = useState(settings.safety_floor.toString());
+  const [forecastHorizonText, setForecastHorizonText] = useState(settings.forecast_horizon_months.toString());
 
   useEffect(() => {
     setStartingBalanceText(settings.starting_balance > 0 ? settings.starting_balance.toString() : "");
     setStartingBalanceDateText(settings.starting_balance_date ?? "");
-  }, [settings.starting_balance, settings.starting_balance_date]);
+    setSafetyFloorText(settings.safety_floor.toString());
+    setForecastHorizonText(settings.forecast_horizon_months.toString());
+  }, [settings.starting_balance, settings.starting_balance_date, settings.safety_floor, settings.forecast_horizon_months]);
 
   const saveStartingBalance = () => {
     const parsed = parseFloat(startingBalanceText);
@@ -62,6 +66,15 @@ export default function MoreScreen() {
       starting_balance: isNaN(parsed) ? 0 : parsed,
       starting_balance_date: dateVal,
     });
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const saveSafetySettings = () => {
+    const floor = Math.max(0, parseFloat(safetyFloorText) || 0);
+    const horizon = Math.min(24, Math.max(1, Math.round(parseFloat(forecastHorizonText) || 6)));
+    setSafetyFloorText(floor.toString());
+    setForecastHorizonText(horizon.toString());
+    updateSettings({ safety_floor: floor, forecast_horizon_months: horizon });
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
@@ -359,7 +372,42 @@ export default function MoreScreen() {
       {/* ── Behavior ── */}
       <SLabel c={c} text="Behavior" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        <View style={[styles.balanceDivider, { borderTopColor: c.border, borderTopWidth: 0 }]}>
+        <View>
+          <Text style={[styles.switchLabel, { color: c.foreground, marginBottom: 2 }]}>Forecast Safety</Text>
+          <Text style={[styles.switchDesc, { color: c.mutedForeground, marginBottom: 10 }]}>Protect this minimum balance across your selected forecast window.</Text>
+          <View style={styles.safetyFields}>
+            <View style={styles.safetyField}>
+              <Text style={[styles.balanceFieldLabel, { color: c.mutedForeground }]}>Safety floor ($)</Text>
+              <TextInput
+                style={[styles.balanceFullInput, { backgroundColor: c.muted, color: c.foreground }]}
+                value={safetyFloorText}
+                onChangeText={setSafetyFloorText}
+                keyboardType="decimal-pad"
+                placeholder="200"
+                placeholderTextColor={c.mutedForeground}
+              />
+            </View>
+            <View style={styles.safetyField}>
+              <Text style={[styles.balanceFieldLabel, { color: c.mutedForeground }]}>Months (1–24)</Text>
+              <TextInput
+                style={[styles.balanceFullInput, { backgroundColor: c.muted, color: c.foreground }]}
+                value={forecastHorizonText}
+                onChangeText={setForecastHorizonText}
+                keyboardType="number-pad"
+                placeholder="6"
+                placeholderTextColor={c.mutedForeground}
+              />
+            </View>
+          </View>
+          <Pressable
+            onPress={saveSafetySettings}
+            style={({ pressed }) => [styles.balanceSaveFullBtn, { backgroundColor: c.primary, opacity: pressed ? 0.8 : 1 }]}
+          >
+            <Feather name="shield" size={15} color={c.primaryForeground} />
+            <Text style={[styles.balanceSaveBtnText, { color: c.primaryForeground }]}>Save Forecast Safety</Text>
+          </Pressable>
+        </View>
+        <View style={[styles.balanceDivider, { borderTopColor: c.border }]}>
           <Text style={[styles.switchLabel, { color: c.foreground, marginBottom: 2 }]}>Starting Balance</Text>
           <Text style={[styles.switchDesc, { color: c.mutedForeground, marginBottom: 10 }]}>
             Your account balance on a specific date — used to seed the running balance for that month.
@@ -551,6 +599,8 @@ const styles = StyleSheet.create({
   balanceSaveFullBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 44, borderRadius: 10, marginTop: 12 },
   balanceSaveBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   balanceNote: { flexDirection: "row", alignItems: "flex-start", gap: 6, padding: 9, borderRadius: 8, marginTop: 10 },
+  safetyFields: { flexDirection: "row", gap: 10 },
+  safetyField: { flex: 1 },
 
   dataRow: { flexDirection: "row", alignItems: "center", paddingVertical: 13 },
   dataIcon: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center", marginRight: 12 },
