@@ -14,6 +14,7 @@ import { forecastBalances, type FinancialEvent } from "@/lib/forecast";
 import { diagnosticErrorCode } from "@/lib/diagnosticPolicy";
 import { recordDiagnostic } from "@/lib/diagnostics";
 import { getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isIncomeActiveForMonth } from "@/lib/schedule";
+import { evaluateForecastConfidence, totalForecastBalance, type AccountSnapshot, type AccountType, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -34,6 +35,7 @@ export interface Bill {
   frequency: "monthly" | "weekly";
   created_at: string;
   include_in_snowball?: boolean;
+  last_reviewed_at?: string;
 }
 
 export interface MonthlyOverride {
@@ -55,6 +57,19 @@ export interface Transaction {
   category: string;
   note: string;
   linked_bill_id?: string;
+  account_id?: string;
+  import_hash?: string;
+}
+
+export interface Account {
+  id: string;
+  name: string;
+  account_type: AccountType;
+  current_balance: number;
+  balance_as_of: string;
+  last_reconciled_at?: string;
+  is_active: boolean;
+  created_at: string;
 }
 
 export interface IncomeAmountEntry {
@@ -70,6 +85,7 @@ export interface IncomeItem {
   start_date?: string;
   next_payment_date?: string;
   amount_history?: IncomeAmountEntry[];
+  last_reviewed_at?: string;
 }
 
 export interface Goal {
@@ -120,6 +136,7 @@ export interface Settings {
   starting_balance_date?: string;
   safety_floor: number;
   forecast_horizon_months: number;
+  onboarding_completed: boolean;
 }
 
 export interface CashFlow {
@@ -163,6 +180,8 @@ interface BudgetContextType {
   extraPayments: ExtraPayment[];
   categories: string[];
   settings: Settings;
+  accounts: Account[];
+  forecastConfidence: ForecastConfidence;
   loading: boolean;
   selectedYear: number;
   setSelectedYear: (y: number) => void;
@@ -224,6 +243,11 @@ interface BudgetContextType {
 
   updateSettings: (s: Partial<Settings>) => Promise<void>;
   importBills: (imported: Omit<Bill, "id" | "created_at">[]) => Promise<void>;
+  addAccount: (account: Omit<Account, "id" | "created_at" | "last_reconciled_at">) => Promise<void>;
+  updateAccount: (account: Account) => Promise<void>;
+  reconcileAccount: (accountId: string, balance: number, asOfDate: string) => Promise<void>;
+  archiveAccount: (accountId: string) => Promise<void>;
+  importStatementTransactions: (accountId: string, rows: ImportedTransactionRow[]) => Promise<{ imported: number; duplicates: number }>;
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -233,7 +257,16 @@ const DEFAULT_SETTINGS: Settings = {
   starting_balance: 0,
   safety_floor: 200,
   forecast_horizon_months: 6,
+  onboarding_completed: false,
 };
+
+function toAccountSnapshot(account: Account): AccountSnapshot {
+  return {
+    id: account.id, name: account.name, type: account.account_type,
+    currentBalance: account.current_balance, balanceAsOf: account.balance_as_of,
+    lastReconciledAt: account.last_reconciled_at, active: account.is_active,
+  };
+}
 
 const DEFAULT_CATEGORIES = [
   "Housing", "Utilities", "Insurance", "Transportation", "Food",
@@ -300,6 +333,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [goals,         setGoals]         = useState<Goal[]>([]);
   const [extraPayments, setExtraPayments] = useState<ExtraPayment[]>([]);
   const [categories,    setCategories]    = useState<string[]>([]);
+  const [accounts,      setAccounts]      = useState<Account[]>([]);
   const [settings,      setSettings]      = useState<Settings>(DEFAULT_SETTINGS);
   const [loading,       setLoading]       = useState(true);
   const [selectedYear,  setSelectedYear]  = useState(new Date().getFullYear());
@@ -357,7 +391,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user) {
       setBills([]); setOverrides([]); setTransactions([]); setIncomes([]);
-      setGoals([]); setExtraPayments([]); setCategories([]); setSettings(DEFAULT_SETTINGS);
+      setGoals([]); setExtraPayments([]); setCategories([]); setAccounts([]); setSettings(DEFAULT_SETTINGS);
       loaded.current = false;
       setLoading(false);
       return;
@@ -377,6 +411,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           supabase.from("extra_payments").select("*").eq("user_id", uid),
           supabase.from("settings").select("*").eq("user_id", uid).maybeSingle(),
           supabase.from("categories").select("name").eq("user_id", uid),
+          supabase.from("accounts").select("*").eq("user_id", uid).order("created_at"),
         ]);
         const failed = results.find(result => result.error);
         if (failed?.error) throw new Error(`Load budget data: ${failed.error.message}`);
@@ -389,6 +424,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           { data: epData },
           { data: sData },
           { data: cData },
+          { data: aData },
         ] = results;
 
         setBills(reorderDebtPriorities((bData ?? []).map((b: any) => ({
@@ -426,6 +462,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           payment_date: ep.payment_date ?? undefined,
           sources: ep.sources ?? [{ type: "manual", amount: Number(ep.amount) }],
         })));
+        setAccounts((aData ?? []).map((a: any) => ({
+          ...a,
+          current_balance: Number(a.current_balance),
+          last_reconciled_at: a.last_reconciled_at ?? undefined,
+          is_active: a.is_active !== false,
+        })));
         if (sData) {
           setSettings({
             paymentMethod:        sData.payment_method as Settings["paymentMethod"],
@@ -433,6 +475,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
             starting_balance_date: sData.starting_balance_date ?? undefined,
             safety_floor:         Number(sData.safety_floor ?? 200),
             forecast_horizon_months: Math.min(24, Math.max(1, Number(sData.forecast_horizon_months ?? 6))),
+            onboarding_completed: Boolean(sData.onboarding_completed),
           });
         }
         const cats = (cData ?? []).map((c: any) => c.name as string);
@@ -462,7 +505,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const existing = bills.find(b => b.id === bill.id);
     if (!existing) return;
     const previousOverrides = overridesRef.current;
-    setBills(prev => reorderDebtPriorities(prev.map(item => item.id === bill.id ? bill : item)));
+    const reviewedBill = { ...bill, last_reviewed_at: new Date().toISOString() };
+    setBills(prev => reorderDebtPriorities(prev.map(item => item.id === bill.id ? reviewedBill : item)));
     markSaveStarted();
     try {
     if (existing.amount !== bill.amount) {
@@ -505,7 +549,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const failed = results.find(result => result?.error);
       if (failed?.error) throw new Error(`Update monthly bill: ${failed.error.message}`);
     }
-    await ensureSaved(supabase.from("bills").update({ ...bill }).eq("id", bill.id).eq("user_id", user.id), "Update bill");
+      await ensureSaved(supabase.from("bills").update({ ...reviewedBill }).eq("id", bill.id).eq("user_id", user.id), "Update bill");
     markSaveCompleted();
     } catch (error) {
       setBills(prev => reorderDebtPriorities(prev.map(item => {
@@ -874,10 +918,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const updateIncome = useCallback(async (item: IncomeItem) => {
     if (!user) return;
     const existing = incomes.find(income => income.id === item.id);
-    setIncomes(prev => prev.map(i => i.id === item.id ? item : i));
+    const reviewedItem = { ...item, last_reviewed_at: new Date().toISOString() };
+    setIncomes(prev => prev.map(i => i.id === item.id ? reviewedItem : i));
     markSaveStarted();
     try {
-      await ensureSaved(supabase.from("incomes").update({ ...item, amount_history: item.amount_history ?? [] }).eq("id", item.id).eq("user_id", user.id), "Update income");
+      await ensureSaved(supabase.from("incomes").update({ ...reviewedItem, amount_history: item.amount_history ?? [] }).eq("id", item.id).eq("user_id", user.id), "Update income");
       markSaveCompleted();
     } catch (error) {
       if (existing) setIncomes(prev => prev.map(income => income.id === existing.id && income === item ? existing : income));
@@ -1331,6 +1376,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         starting_balance_date: next.starting_balance_date ?? null,
         safety_floor:          next.safety_floor,
         forecast_horizon_months: next.forecast_horizon_months,
+        onboarding_completed:   next.onboarding_completed,
       }), "Update settings");
       markSaveCompleted();
       void recordDiagnostic(user.id, {
@@ -1343,6 +1389,123 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       throw error;
     }
   }, [user, settings, markSaveStarted, markSaveCompleted, markSaveFailed]);
+
+  const persistAccountAnchor = useCallback(async (nextAccounts: Account[], asOfDate: string) => {
+    if (!user) return;
+    const nextBalance = totalForecastBalance(nextAccounts.map(toAccountSnapshot));
+    const nextSettings = { ...settings, starting_balance: nextBalance, starting_balance_date: asOfDate };
+    setSettings(nextSettings);
+    await ensureSaved(supabase.from("settings").upsert({
+      user_id: user.id,
+      payment_method: nextSettings.paymentMethod,
+      starting_balance: nextBalance,
+      starting_balance_date: asOfDate,
+      safety_floor: nextSettings.safety_floor,
+      forecast_horizon_months: nextSettings.forecast_horizon_months,
+      onboarding_completed: nextSettings.onboarding_completed,
+    }), "Update forecast balance");
+  }, [user, settings]);
+
+  const addAccount = useCallback(async (input: Omit<Account, "id" | "created_at" | "last_reconciled_at">) => {
+    if (!user) return;
+    const now = new Date().toISOString();
+    const account: Account = { ...input, id: genId(), created_at: now, last_reconciled_at: now };
+    markSaveStarted();
+    try {
+      await ensureSaved(supabase.from("accounts").insert({ ...account, user_id: user.id }), "Add account");
+      await ensureSaved(supabase.from("account_balances").insert({
+        id: genId(), account_id: account.id, user_id: user.id, balance: account.current_balance,
+        as_of_date: account.balance_as_of, source: "manual",
+      }), "Save opening balance");
+      const next = [...accounts, account];
+      setAccounts(next);
+      await persistAccountAnchor(next, account.balance_as_of);
+      markSaveCompleted();
+    } catch (error) {
+      markSaveFailed(error, () => addAccount(input));
+      throw error;
+    }
+  }, [user, accounts, persistAccountAnchor, markSaveStarted, markSaveCompleted, markSaveFailed]);
+
+  const updateAccount = useCallback(async (account: Account) => {
+    if (!user) return;
+    const previous = accounts.find(item => item.id === account.id);
+    const next = accounts.map(item => item.id === account.id ? account : item);
+    setAccounts(next);
+    markSaveStarted();
+    try {
+      await ensureSaved(supabase.from("accounts").update({
+        name: account.name, account_type: account.account_type, is_active: account.is_active,
+      }).eq("id", account.id).eq("user_id", user.id), "Update account");
+      await persistAccountAnchor(next, account.balance_as_of);
+      markSaveCompleted();
+    } catch (error) {
+      if (previous) setAccounts(current => current.map(item => item.id === previous.id ? previous : item));
+      markSaveFailed(error, () => updateAccount(account));
+      throw error;
+    }
+  }, [user, accounts, persistAccountAnchor, markSaveStarted, markSaveCompleted, markSaveFailed]);
+
+  const reconcileAccount = useCallback(async (accountId: string, balance: number, asOfDate: string) => {
+    if (!user) return;
+    const reconciledAt = new Date().toISOString();
+    const next = accounts.map(account => account.id === accountId ? {
+      ...account, current_balance: balance, balance_as_of: asOfDate, last_reconciled_at: reconciledAt,
+    } : account);
+    setAccounts(next);
+    markSaveStarted();
+    try {
+      await ensureSaved(supabase.from("accounts").update({
+        current_balance: balance, balance_as_of: asOfDate, last_reconciled_at: reconciledAt,
+      }).eq("id", accountId).eq("user_id", user.id), "Reconcile account");
+      await ensureSaved(supabase.from("account_balances").insert({
+        id: genId(), account_id: accountId, user_id: user.id, balance, as_of_date: asOfDate, source: "reconciliation",
+      }), "Save reconciliation");
+      await persistAccountAnchor(next, asOfDate);
+      markSaveCompleted();
+      void recordDiagnostic(user.id, { eventType: "performance", operation: "reconciliation", platform: diagnosticPlatform() }).catch(() => undefined);
+    } catch (error) {
+      setAccounts(accounts);
+      markSaveFailed(error, () => reconcileAccount(accountId, balance, asOfDate));
+      throw error;
+    }
+  }, [user, accounts, persistAccountAnchor, markSaveStarted, markSaveCompleted, markSaveFailed]);
+
+  const archiveAccount = useCallback(async (accountId: string) => {
+    const account = accounts.find(item => item.id === accountId);
+    if (!account) return;
+    await updateAccount({ ...account, is_active: false });
+  }, [accounts, updateAccount]);
+
+  const importStatementTransactions = useCallback(async (accountId: string, rows: ImportedTransactionRow[]) => {
+    if (!user || !rows.length) return { imported: 0, duplicates: 0 };
+    const hashes = rows.map(row => row.importHash);
+    const existingResult = await supabase.from("transactions").select("import_hash").eq("user_id", user.id).in("import_hash", hashes);
+    if (existingResult.error) throw new Error(`Check statement duplicates: ${existingResult.error.message}`);
+    const existing = new Set((existingResult.data ?? []).map((row: any) => row.import_hash));
+    const seen = new Set<string>();
+    const fresh = rows.filter(row => !existing.has(row.importHash) && !seen.has(row.importHash) && !!seen.add(row.importHash));
+    if (fresh.length) {
+      const records = fresh.map(row => ({
+        id: genId(), user_id: user.id, account_id: accountId, import_hash: row.importHash,
+        date: row.date, amount: row.amount, category: "Other", note: row.description,
+      }));
+      await ensureSaved(supabase.from("transactions").insert(records), "Import statement");
+      setTransactions(previous => [...previous, ...records.map(({ user_id: _userId, ...record }) => record)]);
+    }
+    void recordDiagnostic(user.id, { eventType: "performance", operation: "statement_import", platform: diagnosticPlatform() }).catch(() => undefined);
+    return { imported: fresh.length, duplicates: rows.length - fresh.length };
+  }, [user]);
+
+  const forecastConfidence = useMemo(() => {
+    const base = evaluateForecastConfidence(accounts.map(toAccountSnapshot), incomes.length > 0, bills.some(bill => bill.is_recurring || bill.is_debt));
+    const cutoff = Date.now() - 60 * 86_400_000;
+    const staleRecurring = [...bills.filter(bill => bill.is_recurring || bill.is_debt), ...incomes]
+      .some(item => !item.last_reviewed_at || new Date(item.last_reviewed_at).getTime() < cutoff);
+    if (!staleRecurring) return base;
+    const reasons = [...base.reasons.filter(reason => reason !== "Accounts and recurring cash flow are current"), "Review recurring income and bills older than 60 days"];
+    return { level: base.level === "high" ? "medium" : base.level, label: base.level === "high" ? "Medium" : base.label, reasons } as ForecastConfidence;
+  }, [accounts, incomes, bills]);
 
   const importBills = useCallback(async (imported: Omit<Bill, "id" | "created_at">[]) => {
     if (!user) return;
@@ -1361,7 +1524,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <BudgetContext.Provider value={{
-      bills, overrides, transactions, incomes, goals, extraPayments, categories, settings, loading,
+      bills, overrides, transactions, incomes, goals, extraPayments, categories, settings, accounts, forecastConfidence, loading,
       saveStatus, saveError, retryLastSave, clearSaveError,
       dashboardFilter, setDashboardFilter,
       addBill, updateBill, deleteBill, getBillById,
@@ -1374,6 +1537,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       getCashFlow, getDailyBalances,
       addCategory, updateCategory, deleteCategory,
       updateSettings, importBills,
+      addAccount, updateAccount, reconcileAccount, archiveAccount, importStatementTransactions,
       selectedYear, setSelectedYear,
     }}>
       {children}

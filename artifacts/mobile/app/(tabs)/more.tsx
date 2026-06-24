@@ -10,14 +10,15 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { DatePickerField } from "@/components/DatePickerField";
+import { AccountModal } from "@/components/AccountModal";
 import { IncomeModal } from "@/components/IncomeModal";
 import colors from "@/constants/colors";
-import type { IncomeItem } from "@/context/BudgetContext";
+import type { Account, IncomeItem } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useAuth } from "@/context/AuthContext";
 import { type ThemeMode, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
+import { parseStatementCsv } from "@/lib/accounts";
 
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
 
@@ -33,41 +34,27 @@ export default function MoreScreen() {
   const { themeMode, setThemeMode } = useThemeMode();
   const { signOut, user } = useAuth();
   const {
-    bills, transactions, overrides, incomes, goals, importBills, settings, updateSettings,
+    bills, transactions, overrides, incomes, goals, importBills, settings, updateSettings, accounts, forecastConfidence,
     addIncome, updateIncome, deleteIncome, getMonthlyIncome,
     categories, addCategory, updateCategory, deleteCategory,
+    addAccount, updateAccount, reconcileAccount, archiveAccount, importStatementTransactions,
   } = useBudget();
 
   const [incomeModalVisible, setIncomeModalVisible] = useState(false);
+  const [accountModalVisible, setAccountModalVisible] = useState(false);
+  const [accountMode, setAccountMode] = useState<"add" | "edit" | "reconcile">("add");
+  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
   const [editIncome, setEditIncome] = useState<IncomeItem | null>(null);
   const [newCategory, setNewCategory] = useState("");
   const [renamingCategory, setRenamingCategory] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
-  const [startingBalanceText, setStartingBalanceText] = useState(
-    settings.starting_balance > 0 ? settings.starting_balance.toString() : ""
-  );
-  const [startingBalanceDateText, setStartingBalanceDateText] = useState(
-    settings.starting_balance_date ?? ""
-  );
   const [safetyFloorText, setSafetyFloorText] = useState(settings.safety_floor.toString());
   const [forecastHorizonText, setForecastHorizonText] = useState(settings.forecast_horizon_months.toString());
 
   useEffect(() => {
-    setStartingBalanceText(settings.starting_balance > 0 ? settings.starting_balance.toString() : "");
-    setStartingBalanceDateText(settings.starting_balance_date ?? "");
     setSafetyFloorText(settings.safety_floor.toString());
     setForecastHorizonText(settings.forecast_horizon_months.toString());
-  }, [settings.starting_balance, settings.starting_balance_date, settings.safety_floor, settings.forecast_horizon_months]);
-
-  const saveStartingBalance = () => {
-    const parsed = parseFloat(startingBalanceText);
-    const dateVal = startingBalanceDateText.trim() || undefined;
-    updateSettings({
-      starting_balance: isNaN(parsed) ? 0 : parsed,
-      starting_balance_date: dateVal,
-    });
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
+  }, [settings.safety_floor, settings.forecast_horizon_months]);
 
   const saveSafetySettings = () => {
     const floor = Math.max(0, parseFloat(safetyFloorText) || 0);
@@ -143,6 +130,39 @@ export default function MoreScreen() {
     } catch { Alert.alert("Error", "Import failed."); }
   };
 
+  const openAccount = (mode: "add" | "edit" | "reconcile", account: Account | null = null) => {
+    setSelectedAccount(account); setAccountMode(mode); setAccountModalVisible(true);
+  };
+
+  const readPickedFile = async () => {
+    const result = await DocumentPicker.getDocumentAsync({ type: ["text/csv", "text/comma-separated-values", "*/*"] });
+    if (result.canceled || !result.assets?.length) return null;
+    const file = result.assets[0];
+    if (Platform.OS === "web") { const response = await fetch(file.uri); return response.text(); }
+    return FileSystem.readAsStringAsync(file.uri);
+  };
+
+  const importStatementFor = async (account: Account) => {
+    try {
+      const content = await readPickedFile();
+      if (!content) return;
+      const rows = parseStatementCsv(content, account.id);
+      if (!rows.length) { Alert.alert("No transactions found", "Use a CSV with Date, Description, and Amount columns (or separate Debit and Credit columns)."); return; }
+      const result = await importStatementTransactions(account.id, rows);
+      Alert.alert("Statement imported", `${result.imported} new transaction${result.imported === 1 ? "" : "s"} added.${result.duplicates ? ` ${result.duplicates} duplicate${result.duplicates === 1 ? " was" : "s were"} skipped.` : ""}`);
+    } catch { Alert.alert("Import failed", "The statement could not be imported. Your existing transactions were not changed."); }
+  };
+
+  const handleStatementImport = () => {
+    const active = accounts.filter(account => account.is_active);
+    if (!active.length) { Alert.alert("Add an account first", "Transactions need an account so FlowLedger can detect duplicate statement rows."); return; }
+    if (active.length === 1) { void importStatementFor(active[0]); return; }
+    Alert.alert("Choose account", "Which account is this statement for?", [
+      ...active.slice(0, 4).map(account => ({ text: account.name, onPress: () => void importStatementFor(account) })),
+      { text: "Cancel", style: "cancel" as const },
+    ]);
+  };
+
 
   const handleDeleteIncome = (item: IncomeItem) => {
     const doDelete = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); deleteIncome(item.id); };
@@ -212,6 +232,26 @@ export default function MoreScreen() {
             );
           })}
         </View>
+      </View>
+
+      {/* ── Accounts and reconciliation ── */}
+      <SLabel c={c} text="Accounts" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <View style={[styles.confidenceBox, { backgroundColor: forecastConfidence.level === "high" ? c.success + "14" : forecastConfidence.level === "medium" ? "#f59e0b18" : c.destructive + "12" }]}>
+          <Feather name={forecastConfidence.level === "high" ? "check-circle" : "alert-circle"} size={16} color={forecastConfidence.level === "high" ? c.success : forecastConfidence.level === "medium" ? "#d97706" : c.destructive} />
+          <View style={{ flex: 1 }}><Text style={[styles.accountName, { color: c.foreground }]}>Forecast confidence: {forecastConfidence.label}</Text><Text style={[styles.switchDesc, { color: c.mutedForeground }]}>{forecastConfidence.reasons[0]}</Text></View>
+        </View>
+        {accounts.filter(account => account.is_active).map((account, index) => {
+          const reviewed = account.last_reconciled_at ?? account.balance_as_of;
+          const age = Math.max(0, Math.floor((Date.now() - new Date(reviewed).getTime()) / 86_400_000));
+          return <View key={account.id} style={[styles.accountRow, { borderTopWidth: index ? 1 : 0, borderTopColor: c.border }]}>
+            <View style={[styles.incomeIcon, { backgroundColor: c.primary + "16" }]}><Feather name={account.account_type === "credit_card" ? "credit-card" : account.account_type === "savings" ? "heart" : "dollar-sign"} size={17} color={c.primary} /></View>
+            <Pressable style={{ flex: 1 }} onPress={() => openAccount("edit", account)}><Text style={[styles.accountName, { color: c.foreground }]}>{account.name}</Text><Text style={[styles.incomeFreq, { color: age > 30 ? c.destructive : c.mutedForeground }]}>{account.account_type.replace("_", " ")} · {age === 0 ? "reconciled today" : `${age} days since review`}</Text></Pressable>
+            <View style={styles.accountRight}><Text style={[styles.incomeMonthly, { color: c.foreground }]}>{account.account_type === "credit_card" ? "−" : ""}${Math.abs(account.current_balance).toFixed(2)}</Text><Pressable onPress={() => openAccount("reconcile", account)}><Text style={[styles.reconcileText, { color: c.primary }]}>Reconcile</Text></Pressable></View>
+          </View>;
+        })}
+        {!accounts.some(account => account.is_active) && <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Add the accounts that fund your budget. Credit-card balances count as money owed.</Text>}
+        <Pressable onPress={() => openAccount("add")} style={[styles.addBtn, { backgroundColor: c.primary + "12", borderRadius: 10 }]}><Feather name="plus" size={16} color={c.primary} /><Text style={[styles.addBtnText, { color: c.primary }]}>Add Account</Text></Pressable>
       </View>
 
       {/* ── Income Sources ── */}
@@ -408,54 +448,8 @@ export default function MoreScreen() {
           </Pressable>
         </View>
         <View style={[styles.balanceDivider, { borderTopColor: c.border }]}>
-          <Text style={[styles.switchLabel, { color: c.foreground, marginBottom: 2 }]}>Starting Balance</Text>
-          <Text style={[styles.switchDesc, { color: c.mutedForeground, marginBottom: 10 }]}>
-            Your account balance on a specific date — used to seed the running balance for that month.
-          </Text>
-
-          <Text style={[styles.balanceFieldLabel, { color: c.mutedForeground }]}>Amount ($)</Text>
-          <TextInput
-            style={[styles.balanceFullInput, { backgroundColor: c.muted, color: c.foreground }]}
-            value={startingBalanceText}
-            onChangeText={setStartingBalanceText}
-            placeholder="0.00"
-            placeholderTextColor={c.mutedForeground}
-            keyboardType="decimal-pad"
-            returnKeyType="next"
-          />
-
-          <DatePickerField
-            label="As of Date"
-            value={startingBalanceDateText}
-            onChange={v => { setStartingBalanceDateText(v); }}
-            placeholder="Pick a date…"
-          />
-
-          <Pressable
-            onPress={saveStartingBalance}
-            style={({ pressed }) => [styles.balanceSaveFullBtn, { backgroundColor: c.primary, opacity: pressed ? 0.8 : 1 }]}
-          >
-            <Feather name="check" size={15} color={c.primaryForeground} />
-            <Text style={[styles.balanceSaveBtnText, { color: c.primaryForeground }]}>Save Starting Balance</Text>
-          </Pressable>
-
-          {settings.starting_balance_date ? (
-            <View style={[styles.balanceNote, { backgroundColor: c.success + "12" }]}>
-              <Feather name="check-circle" size={11} color={c.success} />
-              <Text style={[styles.switchDesc, { color: c.mutedForeground, flex: 1 }]}>
-                Balance of ${settings.starting_balance.toFixed(2)} applied to{" "}
-                {new Date(settings.starting_balance_date + "T00:00:00").toLocaleDateString("en-US", { month: "long", year: "numeric" })}.
-                Subsequent months carry over automatically.
-              </Text>
-            </View>
-          ) : (
-            <View style={[styles.balanceNote, { backgroundColor: c.primary + "12" }]}>
-              <Feather name="info" size={11} color={c.primary} />
-              <Text style={[styles.switchDesc, { color: c.mutedForeground, flex: 1 }]}>
-                Set a date so the app knows exactly which month to apply your starting balance to.
-              </Text>
-            </View>
-          )}
+          <Text style={[styles.switchLabel, { color: c.foreground, marginBottom: 2 }]}>Forecast balance source</Text>
+          <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Your active accounts now supply the dated starting balance. Reconcile an account above whenever the bank and FlowLedger differ.</Text>
         </View>
       </View>
 
@@ -464,6 +458,7 @@ export default function MoreScreen() {
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         {[
           { icon: "upload" as const,   label: "Import Bills from CSV", desc: "Name, Amount, Category, Balance, Interest Rate…", onPress: handleImport, color: c.primary },
+          { icon: "file-text" as const, label: "Import Bank Statement", desc: "Transactions CSV with automatic duplicate detection", onPress: handleStatementImport, color: c.success },
           { icon: "download" as const, label: "Export Bills (CSV)",    desc: "Bills, transactions, monthly overrides",           onPress: handleExport, color: "#6366f1" },
         ].map((item, i) => (
           <Pressable
@@ -531,6 +526,17 @@ export default function MoreScreen() {
         }}
         editItem={editIncome}
       />
+      <AccountModal
+        visible={accountModalVisible}
+        account={selectedAccount}
+        mode={accountMode}
+        onClose={() => setAccountModalVisible(false)}
+        onSave={value => {
+          if (selectedAccount) void updateAccount({ ...selectedAccount, name: value.name, account_type: value.account_type });
+          else void addAccount({ ...value, is_active: true });
+        }}
+        onReconcile={(balance, date) => { if (selectedAccount) void reconcileAccount(selectedAccount.id, balance, date); }}
+      />
     </ScrollView>
   );
 }
@@ -565,6 +571,11 @@ const styles = StyleSheet.create({
   incomeTotalValue: { fontSize: 15, fontFamily: "Inter_700Bold" },
   addBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 11, marginTop: 10 },
   addBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  confidenceBox: { flexDirection: "row", alignItems: "flex-start", gap: 9, padding: 11, borderRadius: 10, marginBottom: 8 },
+  accountRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12 },
+  accountName: { fontSize: 14, fontFamily: "Inter_600SemiBold", textTransform: "capitalize" },
+  accountRight: { alignItems: "flex-end", gap: 3 },
+  reconcileText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
 
   categoryRow: { flexDirection: "row", alignItems: "center", paddingVertical: 11 },
   catDot: { width: 8, height: 8, borderRadius: 4, marginRight: 10 },

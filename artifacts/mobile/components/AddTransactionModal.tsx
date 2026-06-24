@@ -31,12 +31,13 @@ interface Props {
 
 export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx, defaultDate }: Props) {
   const c = useColors();
-  const { categories } = useBudget();
+  const { categories, accounts } = useBudget();
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Other");
   const [note, setNote] = useState("");
   const [date, setDate] = useState(defaultDate ?? new Date().toISOString().split("T")[0]);
   const [isExpense, setIsExpense] = useState(true);
+  const [accountId, setAccountId] = useState<string | undefined>();
 
   // Parse date into parts for the picker
   const [pickerYear, setPickerYear] = useState(() => {
@@ -87,6 +88,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
       setNote(editTx.note);
       setDate(editTx.date);
       setIsExpense(editTx.amount < 0);
+      setAccountId(editTx.account_id);
       const [dy, dm] = editTx.date.split("-").map(Number);
       setPickerYear(dy);
       setPickerMonth(dm - 1);
@@ -97,11 +99,12 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
       setNote("");
       setDate(init);
       setIsExpense(true);
+      setAccountId(accounts.find(account => account.is_active)?.id);
       const [dy, dm] = init.split("-").map(Number);
       setPickerYear(dy);
       setPickerMonth(dm - 1);
     }
-  }, [editTx, visible, defaultDate]);
+  }, [editTx, visible, defaultDate, accounts]);
 
   const handleSave = () => {
     const parsed = parseFloat(amount);
@@ -112,6 +115,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
       category,
       note: note.trim(),
       date,
+      account_id: accountId,
     };
     if (editTx) onSave({ ...data, id: editTx.id });
     else onSave(data);
@@ -216,6 +220,13 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
                 </Pressable>
               ))}
             </View>
+
+            {accounts.some(account => account.is_active) && <>
+              <Text style={labelStyle}>Account</Text>
+              <View style={styles.categoryGrid}>
+                {accounts.filter(account => account.is_active).map(account => <Pressable key={account.id} onPress={() => setAccountId(account.id)} style={[styles.chip, { backgroundColor: accountId === account.id ? c.primary : c.muted, borderRadius: 8 }]}><Text style={[styles.chipText, { color: accountId === account.id ? c.primaryForeground : c.mutedForeground }]}>{account.name}</Text></Pressable>)}
+              </View>
+            </>}
 
             {editTx && onDelete && (
               <Pressable

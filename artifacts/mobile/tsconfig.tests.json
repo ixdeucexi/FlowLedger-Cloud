@@ -17,6 +17,8 @@
     "lib/diagnostics.test.ts",
     "lib/diagnosticPolicy.ts",
     "lib/schedule.ts",
-    "lib/schedule.test.ts"
+    "lib/schedule.test.ts",
+    "lib/accounts.ts",
+    "lib/accounts.test.ts"
   ]
 }

@@ -1,5 +1,5 @@
 export type DiagnosticEventType = "performance" | "save_failure" | "unhandled_error";
-export type DiagnosticOperation = "data_load" | "forecast" | "amount_save" | "settings_save" | "app_error";
+export type DiagnosticOperation = "data_load" | "forecast" | "amount_save" | "settings_save" | "account_save" | "reconciliation" | "statement_import" | "app_error";
 
 const SAFE_CODE = /^[a-z0-9_:-]{1,64}$/i;
 

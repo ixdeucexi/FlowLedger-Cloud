@@ -35,6 +35,7 @@ export default function DashboardScreen() {
     bills, getPaidAmount, getBillMonthlyTotal, selectedYear, setDashboardFilter,
     goals, addGoal, updateGoal, deleteGoal, checkGoalAffordability,
     getCashFlow, getMonthlyIncome, addBill, addTransaction, getDailyBalances, settings,
+    accounts, incomes, forecastConfidence, updateSettings,
   } = useBudget();
 
   const [goalModalVisible, setGoalModalVisible]     = useState(false);
@@ -325,6 +326,27 @@ export default function DashboardScreen() {
     >
       <Text style={[styles.heading,    { color: c.foreground }]}>FlowLedger</Text>
       <Text style={[styles.subheading, { color: c.mutedForeground }]}>{MONTH_FULL[currentMonth]} {selectedYear}</Text>
+
+      {!settings.onboarding_completed && (() => {
+        const steps = [
+          { label: "Add an account", done: accounts.some(account => account.is_active) },
+          { label: "Add income", done: incomes.length > 0 },
+          { label: "Add recurring bills", done: bills.some(bill => bill.is_recurring || bill.is_debt) },
+          { label: "Review safety settings", done: settings.safety_floor >= 0 && settings.forecast_horizon_months > 0 },
+          { label: "See your first forecast", done: accounts.length > 0 && incomes.length > 0 && bills.length > 0 },
+        ];
+        const complete = steps.every(step => step.done);
+        return <View style={[styles.setupCard, { backgroundColor: c.card, borderColor: c.border }]}>
+          <View style={styles.setupHeader}><View style={{ flex: 1 }}><Text style={[styles.setupTitle, { color: c.foreground }]}>Build a forecast you can trust</Text><Text style={[styles.setupDesc, { color: c.mutedForeground }]}>{steps.filter(step => step.done).length} of {steps.length} setup steps complete</Text></View><Pressable onPress={() => void updateSettings({ onboarding_completed: true })}><Feather name="x" size={18} color={c.mutedForeground} /></Pressable></View>
+          {steps.map(step => <View key={step.label} style={styles.setupStep}><Feather name={step.done ? "check-circle" : "circle"} size={15} color={step.done ? c.success : c.mutedForeground} /><Text style={[styles.setupStepText, { color: step.done ? c.mutedForeground : c.foreground }]}>{step.label}</Text></View>)}
+          <Pressable onPress={() => complete ? void updateSettings({ onboarding_completed: true }) : router.push("/(tabs)/more" as any)} style={[styles.setupButton, { backgroundColor: c.primary }]}><Text style={[styles.setupButtonText, { color: c.primaryForeground }]}>{complete ? "Finish Setup" : "Continue in Settings"}</Text></Pressable>
+        </View>;
+      })()}
+
+      <Pressable onPress={() => router.push("/(tabs)/more" as any)} style={[styles.confidenceCard, { backgroundColor: forecastConfidence.level === "high" ? c.success + "12" : forecastConfidence.level === "medium" ? "#f59e0b16" : c.destructive + "10" }]}>
+        <Feather name={forecastConfidence.level === "high" ? "check-circle" : "alert-circle"} size={17} color={forecastConfidence.level === "high" ? c.success : forecastConfidence.level === "medium" ? "#d97706" : c.destructive} />
+        <View style={{ flex: 1 }}><Text style={[styles.confidenceTitle, { color: c.foreground }]}>Forecast confidence: {forecastConfidence.label}</Text><Text style={[styles.confidenceDesc, { color: c.mutedForeground }]}>{forecastConfidence.reasons[0]}</Text></View><Feather name="chevron-right" size={16} color={c.mutedForeground} />
+      </Pressable>
 
       {/* ── HERO: flip card — front = Balance Today, back = Savings ── */}
       {(() => {
@@ -1184,6 +1206,17 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 16 },
   heading:    { fontSize: 28, fontFamily: "Inter_700Bold" },
   subheading: { fontSize: 14, fontFamily: "Inter_400Regular", marginTop: 4, marginBottom: 20 },
+  setupCard: { borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 12 },
+  setupHeader: { flexDirection: "row", alignItems: "flex-start", marginBottom: 8 },
+  setupTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  setupDesc: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  setupStep: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 4 },
+  setupStepText: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  setupButton: { height: 40, borderRadius: 9, alignItems: "center", justifyContent: "center", marginTop: 10 },
+  setupButtonText: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  confidenceCard: { flexDirection: "row", alignItems: "center", gap: 9, padding: 12, borderRadius: 12, marginBottom: 14 },
+  confidenceTitle: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  confidenceDesc: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
 
   // Hero
   heroCard:          { borderRadius: 22, padding: 22, marginBottom: 14, shadowColor: "#1d4ed8", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 8 },
