@@ -52,7 +52,7 @@ export function evaluateDecision(days: DecisionBaselineDay[], scenario: Decision
   const cautionBand = Math.max(100, safetyFloor * 0.5);
   const verdict: DecisionVerdict = lowestBalance < safetyFloor ? "unsafe" : lowestBalance < safetyFloor + cautionBand ? "caution" : "safe";
   const monthlyMultiplier = (scenario.frequency ?? "once") === "weekly" ? 52 / 12 : scenario.frequency === "biweekly" ? 26 / 12 : 1;
-  const monthlyCashFlowChange = scenario.type === "payment_date_change" ? 0 : -expense * monthlyMultiplier;
+  const monthlyCashFlowChange = scenario.type === "recurring_bill" || scenario.type === "income_change" ? -expense * monthlyMultiplier : 0;
   const saferAmount = verdict === "unsafe" ? Math.max(0, Math.abs(scenario.amount) - (safetyFloor - lowestBalance)) : Math.abs(scenario.amount) + headroom;
   const explanation = verdict === "safe" ? `This keeps at least $${lowestBalance.toFixed(0)} available.` : verdict === "caution" ? `This stays above your floor, but leaves only $${headroom.toFixed(0)} of headroom.` : `This falls $${(safetyFloor - lowestBalance).toFixed(0)} below your safety floor.`;
   return { verdict, lowestBalance, lowestBalanceDate, monthlyCashFlowChange, saferAmount, explanation, affectedDates: dates };
