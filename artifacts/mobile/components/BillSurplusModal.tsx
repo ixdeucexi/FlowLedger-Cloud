@@ -1,7 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import React from "react";
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
+import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
 
 interface Props {
@@ -15,13 +16,15 @@ interface Props {
   forecastHorizonMonths?: number;
   paymentDate: string;
   paymentDateValid: boolean;
+  paymentDateMin: string;
+  paymentDateMax: string;
   onPaymentDateChange: (date: string) => void;
   onKeep: () => void;
   onSnowball: () => void;
   onClose: () => void;
 }
 
-export function BillSurplusModal({ visible, billName, budgeted, actual, targetDebt, snowballSafe, safetyFloor = 200, forecastHorizonMonths = 6, paymentDate, paymentDateValid, onPaymentDateChange, onKeep, onSnowball, onClose }: Props) {
+export function BillSurplusModal({ visible, billName, budgeted, actual, targetDebt, snowballSafe, safetyFloor = 200, forecastHorizonMonths = 6, paymentDate, paymentDateValid, paymentDateMin, paymentDateMax, onPaymentDateChange, onKeep, onSnowball, onClose }: Props) {
   const c = useColors();
   const difference = Math.max(0, budgeted - actual);
   return (
@@ -37,14 +40,13 @@ export function BillSurplusModal({ visible, billName, budgeted, actual, targetDe
             <View style={styles.row}><Text style={[styles.rowLabel, { color: c.mutedForeground }]}>Actual</Text><Text style={[styles.rowValue, { color: c.foreground }]}>${actual.toFixed(2)}</Text></View>
             <View style={styles.row}><Text style={[styles.rowLabel, { color: c.success }]}>Available</Text><Text style={[styles.rowValue, { color: c.success }]}>${difference.toFixed(2)}</Text></View>
           </View>
-          <Text style={[styles.dateLabel, { color: c.mutedForeground }]}>Apply leftover on</Text>
-          <TextInput
+          <DatePickerField
+            label="Apply leftover on"
             value={paymentDate}
-            onChangeText={onPaymentDateChange}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={c.mutedForeground}
-            keyboardType="numbers-and-punctuation"
-            style={[styles.dateInput, { backgroundColor: c.card, borderColor: c.border, color: c.foreground }]}
+            onChange={onPaymentDateChange}
+            placeholder="Choose payment date"
+            minDate={paymentDateMin}
+            maxDate={paymentDateMax}
           />
           <Text style={[styles.dateHelp, { color: c.mutedForeground }]}>This date will appear as the extra debt payment on your calendar.</Text>
           {!targetDebt && <Text style={[styles.note, { color: c.mutedForeground }]}>No debt is currently included in your snowball.</Text>}
@@ -67,8 +69,6 @@ const styles = StyleSheet.create({
   handle: { width: 38, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 18 }, iconRow: { alignItems: "center" }, icon: { width: 50, height: 50, borderRadius: 25, alignItems: "center", justifyContent: "center" },
   title: { fontSize: 24, fontFamily: "Inter_700Bold", textAlign: "center", marginTop: 10 }, sub: { fontSize: 13, lineHeight: 18, textAlign: "center", marginTop: 5 },
   breakdown: { borderRadius: 12, padding: 14, gap: 9, marginTop: 16 }, row: { flexDirection: "row", justifyContent: "space-between" }, rowLabel: { fontSize: 13 }, rowValue: { fontSize: 13, fontFamily: "Inter_700Bold" },
-  dateLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", marginTop: 14, marginBottom: 6 },
-  dateInput: { height: 46, borderWidth: 1, borderRadius: 10, paddingHorizontal: 13, fontSize: 15 },
   dateHelp: { fontSize: 11, lineHeight: 16, marginTop: 5 },
   note: { fontSize: 12, lineHeight: 17, textAlign: "center", marginTop: 12 }, primary: { height: 50, borderRadius: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, marginTop: 16 }, primaryText: { fontSize: 14, fontFamily: "Inter_700Bold" }, secondary: { height: 48, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center", marginTop: 10 }, secondaryText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
 });

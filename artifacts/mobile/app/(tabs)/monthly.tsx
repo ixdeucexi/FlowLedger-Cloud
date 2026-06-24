@@ -979,6 +979,8 @@ export default function MonthlyScreen() {
         forecastHorizonMonths={settings.forecast_horizon_months}
         paymentDate={surplusPaymentDate}
         paymentDateValid={surplusSnowballOffer?.dateValid ?? false}
+        paymentDateMin={`${selectedYear}-${String(month + 1).padStart(2, "0")}-01`}
+        paymentDateMax={`${selectedYear}-${String(month + 1).padStart(2, "0")}-${String(new Date(selectedYear, month + 1, 0).getDate()).padStart(2, "0")}`}
         onPaymentDateChange={setSurplusPaymentDate}
         onKeep={keepBillSurplus}
         onSnowball={addBillSurplusToSnowball}

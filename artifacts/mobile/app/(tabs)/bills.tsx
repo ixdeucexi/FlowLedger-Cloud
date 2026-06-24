@@ -14,6 +14,7 @@ import type { Bill } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import type { SnowballProjectionResult } from "@/lib/snowball";
+import { sortDebtsLeastToGreatest } from "@/lib/debtOrder";
 
 const CAT_COLORS: Record<string, string> = {
   Housing: "#0f9b8e", Utilities: "#f0b429", Insurance: "#6366f1",
@@ -39,7 +40,7 @@ export default function BillsScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [editBill, setEditBill]         = useState<Bill | null>(null);
   const [filter, setFilter]             = useState<Filter>("all");
-  const [sortMode, setSortMode]         = useState<SortMode>("priority");
+  const [sortMode, setSortMode]         = useState<SortMode>("balance");
   const [snowballApplied, setSnowballApplied] = useState(false);
   const [snowballModalVisible, setSnowballModalVisible] = useState(false);
   const [snowballAmount, setSnowballAmount] = useState("");
@@ -79,13 +80,14 @@ export default function BillsScreen() {
   const safeSnowballAmount = baseSnowballPreview.safeMaximum;
   const existingSnowball = getExtraPayment(currentMonth, currentYear);
 
-  const debts = bills
-    .filter(b => b.is_debt)
-    .sort((a, b) => {
+  const debts = (() => {
+    const debtBills = bills.filter(b => b.is_debt);
+    if (sortMode === "balance") return sortDebtsLeastToGreatest(debtBills);
+    return debtBills.slice().sort((a, b) => {
       if (sortMode === "priority") return a.priority - b.priority;
-      if (sortMode === "balance")  return b.balance - a.balance;
       return b.interest_rate - a.interest_rate;
     });
+  })();
 
   const totalDebt        = debts.reduce((s, b) => s + b.balance, 0);
   const totalMinPayments = debts

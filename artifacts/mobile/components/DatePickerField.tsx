@@ -29,10 +29,11 @@ interface DatePickerFieldProps {
   placeholder?: string;
   optional?: boolean;      // show "Clear" button
   minDate?: string;        // YYYY-MM-DD — days before this are greyed out
+  maxDate?: string;        // YYYY-MM-DD — days after this are greyed out
   label?: string;
 }
 
-export function DatePickerField({ value, onChange, placeholder = "Pick a date…", optional, minDate, label }: DatePickerFieldProps) {
+export function DatePickerField({ value, onChange, placeholder = "Pick a date…", optional, minDate, maxDate, label }: DatePickerFieldProps) {
   const c = useColors();
 
   const today = new Date();
@@ -53,15 +54,13 @@ export function DatePickerField({ value, onChange, placeholder = "Pick a date…
   );
 
   const minParsed = parseYMD(minDate ?? "");
+  const maxParsed = parseYMD(maxDate ?? "");
 
   const isDisabled = (day: number) => {
-    if (!minParsed) return false;
-    const { y: my, m: mm, d: md } = minParsed;
-    if (pickerYear < my) return true;
-    if (pickerYear > my) return false;
-    if (pickerMonth + 1 < mm) return true;
-    if (pickerMonth + 1 > mm) return false;
-    return day < md;
+    const candidate = pickerYear * 10000 + (pickerMonth + 1) * 100 + day;
+    const minimum = minParsed ? minParsed.y * 10000 + minParsed.m * 100 + minParsed.d : undefined;
+    const maximum = maxParsed ? maxParsed.y * 10000 + maxParsed.m * 100 + maxParsed.d : undefined;
+    return (minimum !== undefined && candidate < minimum) || (maximum !== undefined && candidate > maximum);
   };
 
   const shiftMonth = (dir: number) => {

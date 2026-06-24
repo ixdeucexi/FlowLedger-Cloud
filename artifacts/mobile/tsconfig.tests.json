@@ -24,5 +24,7 @@
     ,"lib/decisions.test.ts"
     ,"lib/flo.test.ts"
     ,"lib/floPolicy.ts"
+    ,"lib/debtOrder.ts"
+    ,"lib/debtOrder.test.ts"
   ]
 }

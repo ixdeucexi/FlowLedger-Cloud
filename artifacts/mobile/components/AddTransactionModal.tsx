@@ -14,11 +14,11 @@ import {
 } from "react-native";
 
 import colors from "@/constants/colors";
+import { DatePickerField } from "@/components/DatePickerField";
 import type { Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
-
-const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+import { sortDebtsLeastToGreatest } from "@/lib/debtOrder";
 
 interface Props {
   visible: boolean;
@@ -39,49 +39,10 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
   const [isExpense, setIsExpense] = useState(true);
   const [accountId, setAccountId] = useState<string | undefined>();
   const [linkedBillId, setLinkedBillId] = useState<string | undefined>();
-  const activeDebts = useMemo(() => bills.filter(bill => bill.is_debt && bill.balance > 0), [bills]);
-
-  // Parse date into parts for the picker
-  const [pickerYear, setPickerYear] = useState(() => {
-    const init = defaultDate ?? new Date().toISOString().split("T")[0];
-    return parseInt(init.split("-")[0], 10);
-  });
-  const [pickerMonth, setPickerMonth] = useState(() => {
-    const init = defaultDate ?? new Date().toISOString().split("T")[0];
-    return parseInt(init.split("-")[1], 10) - 1; // 0-indexed
-  });
-
-  const daysInPickerMonth = useMemo(
-    () => new Date(pickerYear, pickerMonth + 1, 0).getDate(),
-    [pickerYear, pickerMonth]
+  const activeDebts = useMemo(
+    () => sortDebtsLeastToGreatest(bills.filter(bill => bill.is_debt && bill.balance > 0)),
+    [bills],
   );
-
-  const firstDOWInPickerMonth = useMemo(
-    () => new Date(pickerYear, pickerMonth, 1).getDay(),
-    [pickerYear, pickerMonth]
-  );
-
-  // Selected day within the picker month (0 if date is in a different month)
-  const selectedDay = useMemo(() => {
-    const [dy, dm, dd] = date.split("-").map(Number);
-    if (dy === pickerYear && dm - 1 === pickerMonth) return dd;
-    return 0;
-  }, [date, pickerYear, pickerMonth]);
-
-  const pickDay = (day: number) => {
-    Haptics.selectionAsync();
-    const d = `${pickerYear}-${String(pickerMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    setDate(d);
-  };
-
-  const shiftMonth = (delta: number) => {
-    let m = pickerMonth + delta;
-    let y = pickerYear;
-    if (m < 0) { m = 11; y--; }
-    if (m > 11) { m = 0; y++; }
-    setPickerMonth(m);
-    setPickerYear(y);
-  };
 
   useEffect(() => {
     if (editTx) {
@@ -92,9 +53,6 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
       setIsExpense(editTx.amount < 0);
       setAccountId(editTx.account_id);
       setLinkedBillId(editTx.linked_bill_id);
-      const [dy, dm] = editTx.date.split("-").map(Number);
-      setPickerYear(dy);
-      setPickerMonth(dm - 1);
     } else {
       const init = defaultDate ?? new Date().toISOString().split("T")[0];
       setAmount("");
@@ -104,9 +62,6 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
       setIsExpense(true);
       setAccountId(accounts.find(account => account.is_active)?.id);
       setLinkedBillId(undefined);
-      const [dy, dm] = init.split("-").map(Number);
-      setPickerYear(dy);
-      setPickerMonth(dm - 1);
     }
   }, [editTx, visible, defaultDate, accounts]);
 
@@ -158,57 +113,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
             <Text style={labelStyle}>Amount ($)</Text>
             <TextInput style={inputStyle} value={amount} onChangeText={setAmount} placeholder="0.00" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
 
-            <Text style={labelStyle}>Date</Text>
-            {/* Month navigation */}
-            <View style={[styles.monthNav, { backgroundColor: c.muted, borderRadius: 10 }]}>
-              <Pressable onPress={() => shiftMonth(-1)} hitSlop={8} style={styles.monthArrow}>
-                <Feather name="chevron-left" size={18} color={c.foreground} />
-              </Pressable>
-              <Text style={[styles.monthLabel, { color: c.foreground }]}>
-                {MONTH_NAMES[pickerMonth]} {pickerYear}
-              </Text>
-              <Pressable onPress={() => shiftMonth(1)} hitSlop={8} style={styles.monthArrow}>
-                <Feather name="chevron-right" size={18} color={c.foreground} />
-              </Pressable>
-            </View>
-            {/* Day-of-week headers */}
-            <View style={styles.calDowRow}>
-              {["Su","Mo","Tu","We","Th","Fr","Sa"].map(d => (
-                <Text key={d} style={[styles.calDowLabel, { color: c.mutedForeground }]}>{d}</Text>
-              ))}
-            </View>
-            {/* Calendar day grid — days aligned to correct weekday column */}
-            <View style={styles.dayGrid}>
-              {[
-                ...Array(firstDOWInPickerMonth).fill(null),
-                ...Array.from({ length: daysInPickerMonth }, (_, i) => i + 1),
-              ].map((day, idx) =>
-                day === null ? (
-                  <View key={`empty-${idx}`} style={styles.dayBtn} />
-                ) : (
-                  <Pressable
-                    key={day}
-                    onPress={() => pickDay(day)}
-                    style={({ pressed }) => [
-                      styles.dayBtn,
-                      {
-                        backgroundColor: day === selectedDay ? c.primary : c.muted,
-                        opacity: pressed ? 0.7 : 1,
-                        borderRadius: 8,
-                      },
-                    ]}
-                  >
-                    <Text style={[styles.dayBtnText, { color: day === selectedDay ? c.primaryForeground : c.foreground }]}>
-                      {day}
-                    </Text>
-                  </Pressable>
-                )
-              )}
-            </View>
-            {/* Show the selected date */}
-            <Text style={[styles.selectedDateLabel, { color: c.mutedForeground }]}>
-              Selected: {date}
-            </Text>
+            <DatePickerField label="Date" value={date} onChange={setDate} placeholder="Choose transaction date" />
 
             <Text style={labelStyle}>Note</Text>
             <TextInput style={inputStyle} value={note} onChangeText={setNote} placeholder="What was it for?" placeholderTextColor={c.mutedForeground} />
@@ -285,15 +190,6 @@ const styles = StyleSheet.create({
   typeBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   label: { fontSize: 12, fontFamily: "Inter_500Medium", marginBottom: 6, marginTop: 14, textTransform: "uppercase", letterSpacing: 0.5 },
   input: { height: 48, borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, fontSize: 16, fontFamily: "Inter_400Regular" },
-  monthNav: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 10, paddingHorizontal: 14, marginBottom: 8 },
-  monthArrow: { padding: 4 },
-  monthLabel: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
-  calDowRow: { flexDirection: "row", marginBottom: 4 },
-  calDowLabel: { width: "14.285714%", textAlign: "center", fontSize: 11, fontFamily: "Inter_600SemiBold" },
-  dayGrid: { flexDirection: "row", flexWrap: "wrap", marginBottom: 6 },
-  dayBtn: { width: "14.285714%", height: 38, alignItems: "center", justifyContent: "center" },
-  dayBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  selectedDateLabel: { fontSize: 11, fontFamily: "Inter_400Regular", marginBottom: 4, marginTop: 2 },
   helpText: { fontSize: 11, lineHeight: 16, marginBottom: 5 },
   categoryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
   chip: { paddingHorizontal: 12, paddingVertical: 8 },
