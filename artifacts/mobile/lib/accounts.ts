@@ -31,6 +31,17 @@ export function totalForecastBalance(accounts: AccountSnapshot[]): number {
   return accounts.filter(account => account.active).reduce((sum, account) => sum + accountForecastValue(account), 0);
 }
 
+export function openingBalanceForReconciledDay(
+  endOfDayBalance: number,
+  reconciliationDate: string,
+  events: Array<{ date: string; amount: number }>,
+): number {
+  const netThroughReconciliation = events
+    .filter(event => event.date <= reconciliationDate)
+    .reduce((sum, event) => sum + event.amount, 0);
+  return endOfDayBalance - netThroughReconciliation;
+}
+
 export function evaluateForecastConfidence(
   accounts: AccountSnapshot[],
   hasIncome: boolean,

@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays } from "./schedule";
+import { getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isValidDateInMonth } from "./schedule";
 
 describe("bill scheduling", () => {
+  it("validates a selected calendar date inside the intended month", () => {
+    assert.equal(isValidDateInMonth("2026-02-28", 1, 2026), true);
+    assert.equal(isValidDateInMonth("2026-02-31", 1, 2026), false);
+    assert.equal(isValidDateInMonth("2026-03-01", 1, 2026), false);
+  });
   it("clamps monthly bills at month end and honors active dates", () => {
     const bill = { frequency: "monthly" as const, due_day: 31, start_date: "2026-02-01", end_date: "2026-03-31" };
     assert.deepEqual(getBillOccurrenceDays(bill, 1, 2026), [28]);
