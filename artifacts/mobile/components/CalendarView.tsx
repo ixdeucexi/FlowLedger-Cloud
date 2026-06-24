@@ -56,7 +56,7 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
     if (targetYear !== year || targetMonth - 1 !== month || !Number.isFinite(targetDay)) return;
     const target = Number(goal.target_amount) || 0;
     const saved = Math.max(0, Number(goal.current_amount) || 0);
-    const remaining = goal.calendar_marker_only ? 0 : Math.max(0, target - saved);
+    const remaining = goal.calendar_marker_only ? target : Math.max(0, target - saved);
     if (remaining <= 0 && !goal.calendar_marker_only) return;
     if (!goalsByDay[targetDay]) goalsByDay[targetDay] = [];
     goalsByDay[targetDay].push({ id: goal.id, name: goal.name, amount: remaining });
