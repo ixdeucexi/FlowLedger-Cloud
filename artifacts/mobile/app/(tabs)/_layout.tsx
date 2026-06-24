@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Tabs } from "expo-router";
 import React from "react";
-import { Platform, StyleSheet, Text, View, useColorScheme } from "react-native";
+import { Platform, StyleSheet, View, useColorScheme } from "react-native";
 
 import { BudgetProvider } from "@/context/BudgetContext";
 import { SaveStatusBanner } from "@/components/SaveStatusBanner";
@@ -62,12 +62,9 @@ export default function TabLayout() {
             name={tab.name}
             options={{
               title: tab.title,
-              tabBarItemStyle: tab.name === "flo" ? { transform: [{ translateY: -7 }] } : undefined,
-              tabBarIcon: ({ color }) => tab.name === "flo" ? (
-                <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: .2, shadowRadius: 5, elevation: 5 }}>
-                  <Text style={{ color: colors.primaryForeground, fontFamily: "Inter_700Bold", fontSize: 22 }}>F</Text>
-                </View>
-              ) : <Feather name={tab.icon} size={22} color={color} />,
+              tabBarActiveTintColor: tab.name === "flo" ? colors.primary : undefined,
+              tabBarInactiveTintColor: tab.name === "flo" ? colors.primary : undefined,
+              tabBarIcon: ({ color }) => <Feather name={tab.icon} size={22} color={tab.name === "flo" ? colors.primary : color} />,
             }}
           />
         ))}
