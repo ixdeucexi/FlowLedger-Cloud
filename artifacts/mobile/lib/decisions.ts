@@ -54,7 +54,7 @@ export function evaluateDecision(days: DecisionBaselineDay[], scenario: Decision
   const monthlyMultiplier = (scenario.frequency ?? "once") === "weekly" ? 52 / 12 : scenario.frequency === "biweekly" ? 26 / 12 : 1;
   const monthlyCashFlowChange = scenario.type === "recurring_bill" || scenario.type === "income_change" ? -expense * monthlyMultiplier : 0;
   const saferAmount = verdict === "unsafe" ? Math.max(0, Math.abs(scenario.amount) - (safetyFloor - lowestBalance)) : Math.abs(scenario.amount) + headroom;
-  const explanation = verdict === "safe" ? `This keeps at least $${lowestBalance.toFixed(0)} available.` : verdict === "caution" ? `This stays above your floor, but leaves only $${headroom.toFixed(0)} of headroom.` : `This falls $${(safetyFloor - lowestBalance).toFixed(0)} below your safety floor.`;
+  const explanation = verdict === "safe" ? `This keeps at least $${lowestBalance.toFixed(0)} available.` : verdict === "caution" ? `This stays above your floor, but leaves only $${headroom.toFixed(0)} of headroom.` : `This falls $${(safetyFloor - lowestBalance).toFixed(0)} below your safety floor. Try a smaller amount or a later date.`;
   return { verdict, lowestBalance, lowestBalanceDate, monthlyCashFlowChange, saferAmount, explanation, affectedDates: dates };
 }
 export function compareDecisionVariants(days: DecisionBaselineDay[], scenarios: DecisionScenario[], safetyFloor: number) {
