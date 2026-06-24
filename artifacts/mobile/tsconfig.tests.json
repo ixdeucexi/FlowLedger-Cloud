@@ -20,5 +20,7 @@
     "lib/schedule.test.ts",
     "lib/accounts.ts",
     "lib/accounts.test.ts"
+    ,"lib/decisions.ts"
+    ,"lib/decisions.test.ts"
   ]
 }

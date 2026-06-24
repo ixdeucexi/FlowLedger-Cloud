@@ -42,7 +42,7 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Prop
       setName(editGoal.name);
       setTarget(editGoal.target_amount.toString());
       setCurrent(editGoal.current_amount > 0 ? editGoal.current_amount.toString() : "");
-      setGoalMode(editGoal.current_amount < 0 ? "budget" : "savings");
+      setGoalMode(editGoal.goal_type === "planned_expense" ? "budget" : "savings");
       setTargetDate(editGoal.target_date.split("T")[0]);
     } else {
       setName(""); setTarget(""); setCurrent(""); setGoalMode("savings");
@@ -61,6 +61,7 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Prop
       target_amount: t,
       current_amount: goalMode === "budget" ? -1 : (parseFloat(current) || 0),
       target_date: targetDate, // stored as YYYY-MM-DD
+      goal_type: goalMode === "budget" ? "planned_expense" : "savings",
     };
     if (editGoal) onSave({ ...data, id: editGoal.id, created_at: editGoal.created_at });
     else onSave(data);

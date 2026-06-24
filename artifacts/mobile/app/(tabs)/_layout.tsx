@@ -13,6 +13,7 @@ const TABS = [
   { name: "bills",        title: "Bills",        icon: "file-text"       },
   { name: "transactions", title: "Transactions", icon: "repeat"          },
   { name: "monthly",      title: "Monthly",      icon: "calendar"        },
+  { name: "decide",       title: "Decide",       icon: "compass"         },
   { name: "more",         title: "More",         icon: "more-horizontal" },
 ] as const;
 

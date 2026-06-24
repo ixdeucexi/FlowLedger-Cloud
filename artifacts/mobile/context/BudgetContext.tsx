@@ -15,6 +15,7 @@ import { diagnosticErrorCode } from "@/lib/diagnosticPolicy";
 import { recordDiagnostic } from "@/lib/diagnostics";
 import { getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isIncomeActiveForMonth } from "@/lib/schedule";
 import { evaluateForecastConfidence, totalForecastBalance, type AccountSnapshot, type AccountType, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
+import type { DecisionResult, DecisionScenario, DecisionType } from "@/lib/decisions";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -95,6 +96,12 @@ export interface Goal {
   target_date: string;
   current_amount: number;
   created_at: string;
+  goal_type: "savings" | "planned_expense";
+}
+
+export interface DecisionRecord {
+  id: string; name: string; decision_type: DecisionType; scenario: DecisionScenario; result: DecisionResult;
+  status: "saved" | "calendar" | "applied" | "reversed"; calendar_date?: string; applied_change?: Record<string, unknown>; created_at: string;
 }
 
 export interface GoalAffordability {
@@ -181,6 +188,7 @@ interface BudgetContextType {
   categories: string[];
   settings: Settings;
   accounts: Account[];
+  decisions: DecisionRecord[];
   forecastConfidence: ForecastConfidence;
   loading: boolean;
   selectedYear: number;
@@ -192,7 +200,7 @@ interface BudgetContextType {
   retryLastSave: () => Promise<void>;
   clearSaveError: () => void;
 
-  addBill: (bill: Omit<Bill, "id" | "created_at">) => Promise<void>;
+  addBill: (bill: Omit<Bill, "id" | "created_at">) => Promise<string>;
   updateBill: (bill: Bill) => Promise<void>;
   deleteBill: (id: string) => Promise<void>;
   getBillById: (id: string) => Bill | undefined;
@@ -218,12 +226,12 @@ interface BudgetContextType {
   getExtraPayment: (month: number, year: number) => ExtraPayment | undefined;
   deleteExtraPayment: (id: string) => Promise<void>;
 
-  addTransaction: (tx: Omit<Transaction, "id">) => Promise<void>;
+  addTransaction: (tx: Omit<Transaction, "id">) => Promise<string>;
   updateTransaction: (tx: Transaction) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
   getTransactionsForMonth: (month: number, year: number) => Transaction[];
 
-  addIncome: (item: Omit<IncomeItem, "id">) => Promise<void>;
+  addIncome: (item: Omit<IncomeItem, "id">) => Promise<string>;
   updateIncome: (item: IncomeItem) => Promise<void>;
   deleteIncome: (id: string) => Promise<void>;
   getMonthlyIncome: (month?: number, year?: number) => number;
@@ -248,6 +256,9 @@ interface BudgetContextType {
   reconcileAccount: (accountId: string, balance: number, asOfDate: string) => Promise<void>;
   archiveAccount: (accountId: string) => Promise<void>;
   importStatementTransactions: (accountId: string, rows: ImportedTransactionRow[]) => Promise<{ imported: number; duplicates: number }>;
+  saveDecision: (scenario: DecisionScenario, result: DecisionResult, status?: DecisionRecord["status"]) => Promise<DecisionRecord>;
+  updateDecision: (decision: DecisionRecord) => Promise<void>;
+  deleteDecision: (id: string) => Promise<void>;
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -334,6 +345,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [extraPayments, setExtraPayments] = useState<ExtraPayment[]>([]);
   const [categories,    setCategories]    = useState<string[]>([]);
   const [accounts,      setAccounts]      = useState<Account[]>([]);
+  const [decisions,     setDecisions]     = useState<DecisionRecord[]>([]);
   const [settings,      setSettings]      = useState<Settings>(DEFAULT_SETTINGS);
   const [loading,       setLoading]       = useState(true);
   const [selectedYear,  setSelectedYear]  = useState(new Date().getFullYear());
@@ -391,7 +403,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user) {
       setBills([]); setOverrides([]); setTransactions([]); setIncomes([]);
-      setGoals([]); setExtraPayments([]); setCategories([]); setAccounts([]); setSettings(DEFAULT_SETTINGS);
+      setGoals([]); setExtraPayments([]); setCategories([]); setAccounts([]); setDecisions([]); setSettings(DEFAULT_SETTINGS);
       loaded.current = false;
       setLoading(false);
       return;
@@ -412,6 +424,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           supabase.from("settings").select("*").eq("user_id", uid).maybeSingle(),
           supabase.from("categories").select("name").eq("user_id", uid),
           supabase.from("accounts").select("*").eq("user_id", uid).order("created_at"),
+          supabase.from("decisions").select("*").eq("user_id", uid).order("created_at", { ascending: false }),
         ]);
         const failed = results.find(result => result.error);
         if (failed?.error) throw new Error(`Load budget data: ${failed.error.message}`);
@@ -425,6 +438,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           { data: sData },
           { data: cData },
           { data: aData },
+          { data: dData },
         ] = results;
 
         setBills(reorderDebtPriorities((bData ?? []).map((b: any) => ({
@@ -454,6 +468,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           ...g,
           target_amount:  Number(g.target_amount),
           current_amount: Number(g.current_amount),
+          goal_type: g.goal_type ?? (Number(g.current_amount) < 0 ? "planned_expense" : "savings"),
         })));
         setExtraPayments((epData ?? []).map((ep: any) => ({
           ...ep,
@@ -468,6 +483,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           last_reconciled_at: a.last_reconciled_at ?? undefined,
           is_active: a.is_active !== false,
         })));
+        setDecisions((dData ?? []).map((d: any) => ({ ...d, calendar_date: d.calendar_date ?? undefined, applied_change: d.applied_change ?? undefined })));
         if (sData) {
           setSettings({
             paymentMethod:        sData.payment_method as Settings["paymentMethod"],
@@ -494,10 +510,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   // ─── Bills ────────────────────────────────────────────────────────────────────
 
   const addBill = useCallback(async (bill: Omit<Bill, "id" | "created_at">) => {
-    if (!user) return;
+    if (!user) throw new Error("Sign in to add a bill");
     const nb: Bill = { ...bill, id: genId(), created_at: new Date().toISOString() };
     await ensureSaved(supabase.from("bills").insert({ ...nb, user_id: user.id }), "Add bill");
     setBills(prev => reorderDebtPriorities([...prev, nb]));
+    return nb.id;
   }, [user]);
 
   const updateBill = useCallback(async (bill: Bill) => {
@@ -870,10 +887,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   // ─── Transactions ─────────────────────────────────────────────────────────────
 
   const addTransaction = useCallback(async (tx: Omit<Transaction, "id">) => {
-    if (!user) return;
+    if (!user) throw new Error("Sign in to add a transaction");
     const nt: Transaction = { ...tx, id: genId() };
     await ensureSaved(supabase.from("transactions").insert({ ...nt, user_id: user.id }), "Add transaction");
     setTransactions(prev => [...prev, nt]);
+    return nt.id;
   }, [user]);
 
   const updateTransaction = useCallback(async (tx: Transaction) => {
@@ -909,10 +927,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   // ─── Income ───────────────────────────────────────────────────────────────────
 
   const addIncome = useCallback(async (item: Omit<IncomeItem, "id">) => {
-    if (!user) return;
+    if (!user) throw new Error("Sign in to add income");
     const ni: IncomeItem = { ...item, id: genId() };
     await ensureSaved(supabase.from("incomes").insert({ ...ni, amount_history: ni.amount_history ?? [], user_id: user.id }), "Add income");
     setIncomes(prev => [...prev, ni]);
+    return ni.id;
   }, [user]);
 
   const updateIncome = useCallback(async (item: IncomeItem) => {
@@ -1187,6 +1206,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     });
     const goalsByDay: Record<number, GoalExpense[]> = {};
     goals.forEach(g => {
+      if (g.goal_type !== "planned_expense") return;
       if (!g.target_date) return;
       const targetDate = parseGoalTargetDate(g.target_date);
       if (!targetDate || targetDate.year !== year || targetDate.month !== month) return;
@@ -1497,6 +1517,23 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     return { imported: fresh.length, duplicates: rows.length - fresh.length };
   }, [user]);
 
+  const saveDecision = useCallback(async (scenario: DecisionScenario, result: DecisionResult, status: DecisionRecord["status"] = "saved") => {
+    if (!user) throw new Error("Sign in to save a decision");
+    const decision: DecisionRecord = { id: genId(), name: scenario.name, decision_type: scenario.type, scenario, result, status, calendar_date: status === "calendar" ? scenario.date : undefined, created_at: new Date().toISOString() };
+    await ensureSaved(supabase.from("decisions").insert({ ...decision, calendar_date: decision.calendar_date ?? null, user_id: user.id }), "Save decision");
+    setDecisions(previous => [decision, ...previous]); return decision;
+  }, [user]);
+
+  const updateDecision = useCallback(async (decision: DecisionRecord) => {
+    if (!user) return;
+    await ensureSaved(supabase.from("decisions").update({ name: decision.name, scenario: decision.scenario, result: decision.result, status: decision.status, calendar_date: decision.calendar_date ?? null, applied_change: decision.applied_change ?? null, updated_at: new Date().toISOString() }).eq("id", decision.id).eq("user_id", user.id), "Update decision");
+    setDecisions(previous => previous.map(item => item.id === decision.id ? decision : item));
+  }, [user]);
+
+  const deleteDecision = useCallback(async (id: string) => {
+    if (!user) return; await ensureSaved(supabase.from("decisions").delete().eq("id", id).eq("user_id", user.id), "Delete decision"); setDecisions(previous => previous.filter(item => item.id !== id));
+  }, [user]);
+
   const forecastConfidence = useMemo(() => {
     const base = evaluateForecastConfidence(accounts.map(toAccountSnapshot), incomes.length > 0, bills.some(bill => bill.is_recurring || bill.is_debt));
     const cutoff = Date.now() - 60 * 86_400_000;
@@ -1524,7 +1561,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <BudgetContext.Provider value={{
-      bills, overrides, transactions, incomes, goals, extraPayments, categories, settings, accounts, forecastConfidence, loading,
+      bills, overrides, transactions, incomes, goals, extraPayments, categories, settings, accounts, decisions, forecastConfidence, loading,
       saveStatus, saveError, retryLastSave, clearSaveError,
       dashboardFilter, setDashboardFilter,
       addBill, updateBill, deleteBill, getBillById,
@@ -1538,6 +1575,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       addCategory, updateCategory, deleteCategory,
       updateSettings, importBills,
       addAccount, updateAccount, reconcileAccount, archiveAccount, importStatementTransactions,
+      saveDecision, updateDecision, deleteDecision,
       selectedYear, setSelectedYear,
     }}>
       {children}

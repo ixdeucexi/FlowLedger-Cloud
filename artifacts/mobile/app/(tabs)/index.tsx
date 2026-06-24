@@ -192,7 +192,7 @@ export default function DashboardScreen() {
   }, [bills, currentMonth]);
 
   // Budget goals use a negative current amount as a backwards-compatible type marker.
-  const savingsGoals = useMemo(() => goals.filter(goal => goal.current_amount >= 0), [goals]);
+  const savingsGoals = useMemo(() => goals.filter(goal => goal.goal_type === "savings"), [goals]);
 
   // ── Savings summary for back of hero card ──────────────────────────────────
   const savingsData = useMemo(() => {
@@ -837,7 +837,7 @@ export default function DashboardScreen() {
         </View>
       ) : (
         goals.map(goal => {
-          const isBudgetGoal = goal.current_amount < 0;
+          const isBudgetGoal = goal.goal_type === "planned_expense";
           const savedAmount = Math.max(0, goal.current_amount);
           const pct = goal.target_amount > 0 ? Math.min(savedAmount / goal.target_amount, 1) : 0;
           const rawDate   = goal.target_date ?? "";
@@ -1164,7 +1164,7 @@ export default function DashboardScreen() {
                 if (expenseType === "expense") {
                   addTransaction({ amount: -Math.abs(affordResult.amt), category: "Other", note: name, date: affordResult.affordDateStr });
                 } else {
-                  addGoal({ name, target_amount: affordResult.amt, current_amount: 0, target_date: affordResult.affordDateStr });
+                  addGoal({ name, target_amount: affordResult.amt, current_amount: 0, target_date: affordResult.affordDateStr, goal_type: "planned_expense" });
                 }
                 setExpenseNameModal(false);
                 setAddedAsExpense(true);
@@ -1182,7 +1182,7 @@ export default function DashboardScreen() {
                   if (expenseType === "expense") {
                     addTransaction({ amount: -Math.abs(affordResult.amt), category: "Other", note: name, date: affordResult.affordDateStr });
                   } else {
-                    addGoal({ name, target_amount: affordResult.amt, current_amount: 0, target_date: affordResult.affordDateStr });
+                    addGoal({ name, target_amount: affordResult.amt, current_amount: 0, target_date: affordResult.affordDateStr, goal_type: "planned_expense" });
                   }
                   setExpenseNameModal(false);
                   setAddedAsExpense(true);
