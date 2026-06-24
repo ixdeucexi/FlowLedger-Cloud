@@ -7,6 +7,8 @@ export interface FloFacts {
   safetyFloor: number;
   monthlyIncome: number;
   monthlyBills: number;
+  unallocatedSpendingThisMonth: number;
+  unallocatedTransactionCount: number;
   upcoming: { name: string; amount: number; date: string }[];
   activePlans: number;
   forecastConfidence: string;
@@ -87,6 +89,14 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
   }
   if (lower.includes("income") && (lower.includes("add") || lower.includes("enter") || lower.includes("set up"))) {
     return "Open More, choose Income, then tap Add Income. Enter the amount, frequency, and next pay date so FlowLedger can include it in your forecast.";
+  }
+  const asksAboutUnallocated = /unallocated|non[- ]?allocated|none allocated|not allocated|not linked/.test(lower);
+  const asksAboutSpending = /spent|spending|expense|how much/.test(lower);
+  if (asksAboutUnallocated && asksAboutSpending) {
+    const countLabel = `${facts.unallocatedTransactionCount} unallocated expense transaction${facts.unallocatedTransactionCount === 1 ? "" : "s"}`;
+    return facts.unallocatedTransactionCount > 0
+      ? `You have spent $${facts.unallocatedSpendingThisMonth.toFixed(2)} across ${countLabel} this month. These are expenses that are not linked to a bill.`
+      : "You have $0.00 in unallocated spending this month. Every recorded expense is linked to a bill, or there are no expense transactions yet.";
   }
   return null;
 }

@@ -18,6 +18,8 @@ const facts: FloFacts = {
   safetyFloor: 200,
   monthlyIncome: 4000,
   monthlyBills: 2000,
+  unallocatedSpendingThisMonth: 245.75,
+  unallocatedTransactionCount: 3,
   upcoming: [{ name: "Power", amount: 120, date: "2026-06-28" }],
   activePlans: 0,
   forecastConfidence: "high",
@@ -33,6 +35,12 @@ test("all Flo quick prompts work without AI", () => {
   assert.match(localFloAnswer("What bills are due next?", facts, days) ?? "", /Power/);
   assert.match(localFloAnswer("Why does my balance run low?", facts, days) ?? "", /lowest point/);
   assert.match(localFloAnswer("How do I add income?", facts, days) ?? "", /Add Income/);
+});
+
+test("Flo answers unallocated spending questions from verified facts", () => {
+  const answer = localFloAnswer("How much money have I spent on none allocated bills this month?", facts, days) ?? "";
+  assert.match(answer, /\$245\.75/);
+  assert.match(answer, /3 unallocated expense transactions/);
 });
 
 test("chat input appends the user message and Flo response in order", () => {

@@ -38,7 +38,7 @@ export default function FloScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { bills, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow } = useBudget();
+  const { bills, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow } = useBudget();
   const [chat, dispatch] = useReducer(reduceFloChat, initialChat);
   const [input, setInput] = useState("");
   const [summary, setSummary] = useState("");
@@ -93,6 +93,10 @@ export default function FloScreen() {
       baseline[0] ?? { date: today, balance: 0 },
     );
     const cashFlow = getCashFlow(now.getMonth(), now.getFullYear());
+    const currentMonth = today.slice(0, 7);
+    const unallocatedExpenses = transactions.filter(transaction =>
+      transaction.date.startsWith(currentMonth) && transaction.amount < 0 && !transaction.linked_bill_id
+    );
     return {
       balanceToday: baseline[0]?.balance ?? 0,
       lowestBalance: lowest.balance,
@@ -100,11 +104,13 @@ export default function FloScreen() {
       safetyFloor: settings.safety_floor,
       monthlyIncome: getMonthlyIncome(),
       monthlyBills: cashFlow.totalBillsDue,
+      unallocatedSpendingThisMonth: unallocatedExpenses.reduce((sum, transaction) => sum + Math.abs(transaction.amount), 0),
+      unallocatedTransactionCount: unallocatedExpenses.length,
       upcoming,
       activePlans: decisions.filter(decision => decision.status === "planned" || decision.status === "calendar").length,
       forecastConfidence: forecastConfidence.level,
     };
-  }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, upcoming, decisions, forecastConfidence.level]);
+  }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, transactions, upcoming, decisions, forecastConfidence.level]);
 
   const send = async (text = input) => {
     const clean = text.trim();
