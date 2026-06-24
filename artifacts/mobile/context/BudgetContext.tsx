@@ -1079,8 +1079,17 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const monthTxs = transactions.filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === year && tm === month + 1; });
     const netTransactions = monthTxs.reduce((s, t) => s + t.amount, 0);
     const snowballExtra = extraPayments.find(ep => ep.month === month && ep.year === year)?.amount ?? 0;
-    return { monthlyIncome, totalBillsDue, totalPaid, netTransactions, goalAllocations: 0, remaining: monthlyIncome - totalBillsDue - snowballExtra + netTransactions };
-  }, [bills, incomes, transactions, overrides, extraPayments, getBillEffectiveMonthlyTotal]);
+    const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+    const monthEnd = `${monthPrefix}-${String(new Date(year, month + 1, 0).getDate()).padStart(2, "0")}`;
+    const plannedDecisionNet = decisions
+      .filter(d => d.status === "planned" || d.status === "calendar")
+      .reduce((sum, d) => {
+        const occurrences = scenarioDates(d.scenario, monthEnd).filter(date => date.startsWith(monthPrefix)).length;
+        const signedAmount = d.scenario.type === "income_change" ? Math.abs(d.scenario.amount) : -Math.abs(d.scenario.amount);
+        return sum + occurrences * signedAmount;
+      }, 0);
+    return { monthlyIncome, totalBillsDue, totalPaid, netTransactions, goalAllocations: 0, remaining: monthlyIncome - totalBillsDue - snowballExtra + netTransactions + plannedDecisionNet };
+  }, [bills, incomes, transactions, overrides, extraPayments, decisions, getBillEffectiveMonthlyTotal]);
 
   // ─── Daily Balances ───────────────────────────────────────────────────────────
 
