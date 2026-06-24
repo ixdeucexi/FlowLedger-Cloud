@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   AI_USAGE_UNAVAILABLE_MESSAGE,
   localFloAnswer,
+  normalizeFloError,
   normalizeFloReply,
   reduceFloChat,
   sanitizeFloSummary,
@@ -58,6 +59,13 @@ test("AI quota and billing failures use the friendly fallback", () => {
   assert.equal(normalizeFloReply("OpenAI quota exceeded"), AI_USAGE_UNAVAILABLE_MESSAGE);
   assert.equal(normalizeFloReply("AI usage is currently unavailable"), AI_USAGE_UNAVAILABLE_MESSAGE);
   assert.equal(normalizeFloReply(null, 429), AI_USAGE_UNAVAILABLE_MESSAGE);
+});
+
+test("Edge Function failures never leak technical errors into chat", () => {
+  assert.equal(
+    normalizeFloError("Failed to send a request to the Edge Function"),
+    "Flo couldn't connect just now. Your FlowLedger calculations are still available, so please try again.",
+  );
 });
 
 test("Flo memory strips financial and identifying values", () => {

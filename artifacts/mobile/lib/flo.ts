@@ -3,6 +3,7 @@ import type { DecisionBaselineDay } from "@/lib/decisions";
 import {
   FLO_CONNECTION_ERROR_MESSAGE,
   localFloAnswer,
+  normalizeFloError,
   normalizeFloReply,
   sanitizeFloSummary,
   type FloChatMessage,
@@ -17,7 +18,7 @@ export async function askFlo(message: string, facts: FloFacts, summary: string, 
   if (deterministic) return deterministic;
   const { data, error } = await supabase.functions.invoke("flo-chat", { body: { message, facts, summary } });
   const status = (error as { context?: { status?: number } } | null)?.context?.status;
-  if (error) return normalizeFloReply(error.message, status);
+  if (error) return normalizeFloError(error.message, status);
   if (data?.error === "flo_not_connected") return FLO_CONNECTION_ERROR_MESSAGE;
   return normalizeFloReply(data?.reply);
 }

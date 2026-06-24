@@ -43,6 +43,13 @@ export function normalizeFloReply(reply?: string | null, status?: number): strin
   return reply?.trim() || FLO_CONNECTION_ERROR_MESSAGE;
 }
 
+export function normalizeFloError(message?: string | null, status?: number): string {
+  if (status === 429 || (message && /quota|billing|usage.*(?:limit|unavailable)|rate limit/i.test(message))) {
+    return AI_USAGE_UNAVAILABLE_MESSAGE;
+  }
+  return FLO_CONNECTION_ERROR_MESSAGE;
+}
+
 export function sanitizeFloSummary(message: string): string {
   return message
     .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, "[email]")
