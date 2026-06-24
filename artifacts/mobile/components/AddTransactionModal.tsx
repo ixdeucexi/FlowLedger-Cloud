@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -18,7 +18,6 @@ import { DatePickerField } from "@/components/DatePickerField";
 import type { Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
-import { sortDebtsLeastToGreatest } from "@/lib/debtOrder";
 
 interface Props {
   visible: boolean;
@@ -39,10 +38,12 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
   const [isExpense, setIsExpense] = useState(true);
   const [accountId, setAccountId] = useState<string | undefined>();
   const [linkedBillId, setLinkedBillId] = useState<string | undefined>();
-  const activeDebts = useMemo(
-    () => sortDebtsLeastToGreatest(bills.filter(bill => bill.is_debt && bill.balance > 0)),
-    [bills],
-  );
+  const activeDebts = bills
+    .filter(bill => bill.is_debt && Number(bill.balance) > 0)
+    .slice()
+    .sort((left, right) =>
+      Number(left.balance) - Number(right.balance) || left.name.localeCompare(right.name),
+    );
 
   useEffect(() => {
     if (editTx) {
