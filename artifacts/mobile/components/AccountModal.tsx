@@ -8,7 +8,7 @@ import { useColors } from "@/hooks/useColors";
 
 const TYPES: { value: AccountType; label: string }[] = [
   { value: "checking", label: "Checking" }, { value: "savings", label: "Savings" },
-  { value: "cash", label: "Cash" }, { value: "credit_card", label: "Credit Card" },
+  { value: "cash", label: "Cash" },
 ];
 
 export function AccountModal({ visible, account, mode, onClose, onSave, onReconcile }: {
@@ -46,7 +46,7 @@ export function AccountModal({ visible, account, mode, onClose, onSave, onReconc
           <Text style={[styles.label, { color: c.mutedForeground }]}>Type</Text>
           <View style={styles.types}>{TYPES.map(option => <Pressable key={option.value} onPress={() => setType(option.value)} style={[styles.type, { backgroundColor: type === option.value ? c.primary : c.muted }]}><Text style={[styles.typeText, { color: type === option.value ? c.primaryForeground : c.mutedForeground }]}>{option.label}</Text></Pressable>)}</View>
         </>}
-        <Text style={[styles.label, { color: c.mutedForeground }]}>{type === "credit_card" ? "Current amount owed" : "Current balance"}</Text>
+        <Text style={[styles.label, { color: c.mutedForeground }]}>Current balance</Text>
         <TextInput value={balance} onChangeText={setBalance} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={c.mutedForeground} style={[styles.input, { color: c.foreground, backgroundColor: c.card, borderColor: c.border }]} />
         <DatePickerField label="Balance as of" value={date} onChange={setDate} placeholder="Choose date" />
         {mode === "reconcile" && <Text style={[styles.help, { color: c.mutedForeground }]}>Enter the balance shown by your bank today. This becomes the trusted starting point for your forecast.</Text>}

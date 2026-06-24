@@ -5,7 +5,7 @@ create table if not exists accounts (
   household_id uuid references households(id) on delete set null,
   budget_id uuid references budgets(id) on delete set null,
   name text not null,
-  account_type text not null check (account_type in ('checking', 'savings', 'cash', 'credit_card')),
+  account_type text not null check (account_type in ('checking', 'savings', 'cash')),
   current_balance numeric not null default 0,
   balance_as_of date not null default current_date,
   last_reconciled_at timestamptz,

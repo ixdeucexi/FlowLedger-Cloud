@@ -462,7 +462,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           payment_date: ep.payment_date ?? undefined,
           sources: ep.sources ?? [{ type: "manual", amount: Number(ep.amount) }],
         })));
-        setAccounts((aData ?? []).map((a: any) => ({
+        setAccounts((aData ?? []).filter((a: any) => a.account_type !== "credit_card").map((a: any) => ({
           ...a,
           current_balance: Number(a.current_balance),
           last_reconciled_at: a.last_reconciled_at ?? undefined,

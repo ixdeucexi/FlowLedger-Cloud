@@ -4,10 +4,10 @@ import { evaluateForecastConfidence, parseStatementCsv, totalForecastBalance, ty
 
 const accounts: AccountSnapshot[] = [
   { id: "checking", name: "Checking", type: "checking", currentBalance: 1200, balanceAsOf: "2026-06-23", lastReconciledAt: "2026-06-23", active: true },
-  { id: "card", name: "Card", type: "credit_card", currentBalance: 300, balanceAsOf: "2026-06-23", lastReconciledAt: "2026-06-23", active: true },
+  { id: "savings", name: "Savings", type: "savings", currentBalance: 300, balanceAsOf: "2026-06-23", lastReconciledAt: "2026-06-23", active: true },
 ];
 
-test("account total subtracts credit-card debt", () => assert.equal(totalForecastBalance(accounts), 900));
+test("account total combines checking and savings", () => assert.equal(totalForecastBalance(accounts), 1500));
 test("confidence is high when balances and recurring inputs are current", () => {
   assert.equal(evaluateForecastConfidence(accounts, true, true, new Date("2026-06-24T12:00:00Z")).level, "high");
 });

@@ -1,4 +1,4 @@
-export type AccountType = "checking" | "savings" | "cash" | "credit_card";
+export type AccountType = "checking" | "savings" | "cash";
 
 export interface AccountSnapshot {
   id: string;
@@ -24,7 +24,7 @@ export interface ImportedTransactionRow {
 }
 
 export function accountForecastValue(account: Pick<AccountSnapshot, "type" | "currentBalance">): number {
-  return account.type === "credit_card" ? -Math.abs(account.currentBalance) : account.currentBalance;
+  return account.currentBalance;
 }
 
 export function totalForecastBalance(accounts: AccountSnapshot[]): number {
