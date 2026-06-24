@@ -44,7 +44,8 @@ begin
 end;
 $$;
 
-create or replace function sync_due_debt_transactions()
+drop function if exists sync_due_debt_transactions();
+create or replace function sync_due_debt_transactions(p_as_of_date date)
 returns void
 language plpgsql
 security invoker
@@ -75,7 +76,7 @@ begin
     end if;
 
     v_desired := case
-      when v_tx.linked_bill_id is not null and v_tx.amount < 0 and v_tx.date <= current_date
+      when v_tx.linked_bill_id is not null and v_tx.amount < 0 and v_tx.date <= p_as_of_date
         then abs(v_tx.amount)
       else 0
     end;

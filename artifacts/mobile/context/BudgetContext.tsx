@@ -332,6 +332,10 @@ function reorderDebtPriorities(bills: Bill[]): Bill[] {
   return bills.map(b => b.is_debt ? { ...b, priority: priorityMap.get(b.id) ?? 1 } : b);
 }
 
+function localDateString(date = new Date()): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 function normalizeBillRow(bill: any): Bill {
   return {
     ...bill,
@@ -446,7 +450,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const loadStarted = Date.now();
       try {
         const uid = user.id;
-        const dueDebtSync = await supabase.rpc("sync_due_debt_transactions");
+        const dueDebtSync = await supabase.rpc("sync_due_debt_transactions", { p_as_of_date: localDateString() });
         if (dueDebtSync.error) throw new Error(`Sync scheduled debt payments: ${dueDebtSync.error.message}`);
         const results = await Promise.all([
           supabase.from("bills").select("*").eq("user_id", uid),
@@ -919,7 +923,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const syncDebtTransactionsAndRefresh = useCallback(async () => {
     if (!user) return;
-    const synced = await supabase.rpc("sync_due_debt_transactions");
+    const synced = await supabase.rpc("sync_due_debt_transactions", { p_as_of_date: localDateString() });
     if (synced.error) throw new Error(`Sync scheduled debt payments: ${synced.error.message}`);
     const [billRows, transactionRows] = await Promise.all([
       supabase.from("bills").select("*").eq("user_id", user.id),
