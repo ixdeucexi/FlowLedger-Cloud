@@ -103,14 +103,6 @@ export default function MonthlyScreen() {
     });
     return flat.sort((a, b) => a.day - b.day);
   }, [getIncomeOccurrencesInMonth, month, selectedYear]);
-  const calendarGoals = useMemo(() => [
-    ...goals,
-    ...decisions.filter(decision => decision.status === "calendar" || decision.status === "applied").map(decision => ({
-      id: `decision-${decision.id}`, name: decision.name, target_amount: Math.abs(decision.scenario.amount),
-      target_date: decision.calendar_date ?? decision.scenario.date, current_amount: 0,
-      created_at: decision.created_at, goal_type: "planned_expense" as const, calendar_marker_only: true,
-    })),
-  ], [goals, decisions]);
   const txIncome = txList.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
   const txExpense = txList.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
 
@@ -687,7 +679,8 @@ export default function MonthlyScreen() {
               selectedDate={selectedDate}
               onDayPress={(date) => setSelectedDate(prev => prev === date ? null : date)}
                 dailyBalances={dailyBalances}
-              goals={calendarGoals}
+              goals={goals}
+              decisions={decisions}
                 safetyFloor={settings.safety_floor}
             />
 

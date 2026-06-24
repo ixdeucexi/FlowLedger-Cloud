@@ -19,6 +19,7 @@ import { useAuth } from "@/context/AuthContext";
 import { type ThemeMode, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import { parseStatementCsv } from "@/lib/accounts";
+import { resetFloMemory } from "@/lib/flo";
 
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
 
@@ -160,6 +161,13 @@ export default function MoreScreen() {
     Alert.alert("Choose account", "Which account is this statement for?", [
       ...active.slice(0, 4).map(account => ({ text: account.name, onPress: () => void importStatementFor(account) })),
       { text: "Cancel", style: "cancel" as const },
+    ]);
+  };
+  const handleResetFlo = () => {
+    if (!user) return;
+    Alert.alert("Reset Flo Memory", "Remove Flo's saved preference and context summary? Your financial data will not be changed.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Reset", style: "destructive", onPress: () => void resetFloMemory(user.id).then(() => Alert.alert("Flo Memory Reset", "Flo's rolling summary was removed.")) },
     ]);
   };
 
@@ -460,6 +468,7 @@ export default function MoreScreen() {
           { icon: "upload" as const,   label: "Import Bills from CSV", desc: "Name, Amount, Category, Balance, Interest Rate…", onPress: handleImport, color: c.primary },
           { icon: "file-text" as const, label: "Import Bank Statement", desc: "Transactions CSV with automatic duplicate detection", onPress: handleStatementImport, color: c.success },
           { icon: "download" as const, label: "Export Bills (CSV)",    desc: "Bills, transactions, monthly overrides",           onPress: handleExport, color: "#6366f1" },
+          { icon: "refresh-cw" as const, label: "Reset Flo Memory", desc: "Remove Flo's rolling preference summary", onPress: handleResetFlo, color: "#3b82f6" },
         ].map((item, i) => (
           <Pressable
             key={item.label}

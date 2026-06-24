@@ -15,7 +15,7 @@ import { diagnosticErrorCode } from "@/lib/diagnosticPolicy";
 import { recordDiagnostic } from "@/lib/diagnostics";
 import { getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isIncomeActiveForMonth } from "@/lib/schedule";
 import { evaluateForecastConfidence, totalForecastBalance, type AccountSnapshot, type AccountType, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
-import type { DecisionResult, DecisionScenario, DecisionType } from "@/lib/decisions";
+import { scenarioDates, type DecisionResult, type DecisionScenario, type DecisionType } from "@/lib/decisions";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -102,7 +102,8 @@ export interface Goal {
 
 export interface DecisionRecord {
   id: string; name: string; decision_type: DecisionType; scenario: DecisionScenario; result: DecisionResult;
-  status: "saved" | "calendar" | "applied" | "reversed"; calendar_date?: string; applied_change?: Record<string, unknown>; created_at: string;
+  status: "saved" | "planned" | "completed" | "cancelled" | "reversed" | "calendar" | "applied";
+  calendar_date?: string; applied_change?: Record<string, unknown>; actual_amount?: number; remind_at?: string; next_due_date?: string; completed_at?: string; created_at: string;
 }
 
 export interface GoalAffordability {
@@ -1087,7 +1088,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     monthNet: new Map<string, number>(),
     carryover: new Map<string, number>(),
     daily: new Map<string, DailyBalance[]>(),
-  }), [bills, transactions, incomes, goals, overrides, extraPayments, getBillEffectiveMonthlyTotal, settings.starting_balance, settings.starting_balance_date]);
+  }), [bills, transactions, incomes, goals, decisions, overrides, extraPayments, getBillEffectiveMonthlyTotal, settings.starting_balance, settings.starting_balance_date]);
 
   const getDailyBalances = useCallback((month: number, year: number): DailyBalance[] => {
     const dailyKey = `${year}-${month}`;
@@ -1108,13 +1109,20 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         .filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === y && tm === m + 1; })
         .reduce((s, t) => s + t.amount, 0);
       const goalDeductions = goals.reduce((s, g) => {
+        if (g.goal_type !== "planned_expense") return s;
         if (!g.target_date) return s;
         const targetDate = parseGoalTargetDate(g.target_date);
         if (targetDate?.year === y && targetDate.month === m) return s + getGoalRemainingAmount(g);
         return s;
       }, 0);
       const snowball = extraPayments.find(ep => ep.month === m && ep.year === y)?.amount ?? 0;
-      const net = inc + tx - bil - goalDeductions - snowball;
+      const monthEnd = `${y}-${String(m + 1).padStart(2, "0")}-${String(new Date(y, m + 1, 0).getDate()).padStart(2, "0")}`;
+      const decisionNet = decisions.filter(d => d.status === "planned" || d.status === "calendar").reduce((sum, d) => {
+        const count = scenarioDates(d.scenario, monthEnd).filter(date => date.startsWith(`${y}-${String(m + 1).padStart(2, "0")}`)).length;
+        const signed = d.scenario.type === "income_change" ? d.scenario.amount : -Math.abs(d.scenario.amount);
+        return sum + count * signed;
+      }, 0);
+      const net = inc + tx - bil - goalDeductions - snowball + decisionNet;
       balanceComputationCache.monthNet.set(key, net);
       return net;
     };
@@ -1223,6 +1231,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         });
       }
     });
+    const plannedDecisionByDay: Record<number, number> = {};
+    const rangeEnd = `${year}-${String(month + 1).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`;
+    decisions.filter(d => d.status === "planned" || d.status === "calendar").forEach(decision => {
+      scenarioDates(decision.scenario, rangeEnd).filter(date => date.startsWith(`${year}-${String(month + 1).padStart(2, "0")}`)).forEach(date => {
+        const day = Number(date.slice(8, 10));
+        const signed = decision.scenario.type === "income_change" ? decision.scenario.amount : -Math.abs(decision.scenario.amount);
+        plannedDecisionByDay[day] = (plannedDecisionByDay[day] ?? 0) + signed;
+        financialEvents.push({ id: `decision:${decision.id}:${date}`, sourceType: "decision", sourceId: decision.id, date, kind: signed >= 0 ? "scheduled_income" : "transaction_expense", amount: signed, status: "planned", name: decision.name });
+      });
+    });
     const forecastStarted = Date.now();
     const forecast = forecastBalances({
       openingBalance: carryover,
@@ -1242,7 +1260,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const scheduledIncome = incomeByDay[day] ?? 0;
       const txIncome     = dayTxs.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
       const incomeToday  = scheduledIncome + txIncome;
-      const expenseToday = dayTxs.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0) + (debtExtrasByDay[day] ?? 0);
+      const decisionNet = plannedDecisionByDay[day] ?? 0;
+      const expenseToday = dayTxs.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0) + (debtExtrasByDay[day] ?? 0) + Math.max(0, -decisionNet);
       const billsToday   = billsByDay[day] ?? 0;
       const dayGoals     = goalsByDay[day] ?? [];
       const goalTotal    = dayGoals.reduce((s, ge) => s + ge.amount, 0);
@@ -1254,7 +1273,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     balanceComputationCache.daily.set(dailyKey, result);
     return result;
-  }, [bills, transactions, incomes, goals, overrides, extraPayments, getBillEffectiveMonthlyTotal, settings.starting_balance, settings.starting_balance_date, balanceComputationCache, user]);
+  }, [bills, transactions, incomes, goals, decisions, overrides, extraPayments, getBillEffectiveMonthlyTotal, settings.starting_balance, settings.starting_balance_date, balanceComputationCache, user]);
 
   const previewDebtSnowball = useCallback((month: number, year: number, requestedExtra?: number, additionalSafeCredit = 0): SnowballProjectionResult => {
     const debtInputs: SnowballDebtInput[] = bills
@@ -1520,7 +1539,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const saveDecision = useCallback(async (scenario: DecisionScenario, result: DecisionResult, status: DecisionRecord["status"] = "saved") => {
     if (!user) throw new Error("Sign in to save a decision");
-    const decision: DecisionRecord = { id: genId(), name: scenario.name, decision_type: scenario.type, scenario, result, status, calendar_date: status === "calendar" ? scenario.date : undefined, created_at: new Date().toISOString() };
+    const decision: DecisionRecord = { id: genId(), name: scenario.name, decision_type: scenario.type, scenario, result, status, calendar_date: status === "calendar" || status === "planned" ? scenario.date : undefined, next_due_date: status === "planned" ? scenario.date : undefined, created_at: new Date().toISOString() };
     await ensureSaved(supabase.from("decisions").insert({ ...decision, calendar_date: decision.calendar_date ?? null, user_id: user.id }), "Save decision");
     setDecisions(previous => [decision, ...previous]); return decision;
   }, [user]);

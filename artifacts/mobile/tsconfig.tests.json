@@ -22,5 +22,7 @@
     "lib/accounts.test.ts"
     ,"lib/decisions.ts"
     ,"lib/decisions.test.ts"
+    ,"lib/flo.test.ts"
+    ,"lib/floPolicy.ts"
   ]
 }

@@ -1,7 +1,8 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import type { DailyBalance, Goal, GoalExpense, Transaction } from "@/context/BudgetContext";
+import type { DailyBalance, DecisionRecord, Goal, GoalExpense, Transaction } from "@/context/BudgetContext";
+import { scenarioDates } from "@/lib/decisions";
 import { useColors } from "@/hooks/useColors";
 
 const DAY_NAMES = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
@@ -14,6 +15,7 @@ interface CalendarViewProps {
   onDayPress: (date: string) => void;
   dailyBalances?: DailyBalance[];
   goals?: Goal[];
+  decisions?: DecisionRecord[];
   safetyFloor?: number;
 }
 
@@ -23,7 +25,7 @@ function fmt(n: number, compact = true) {
   return abs.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-export function CalendarView({ month, year, transactions, selectedDate, onDayPress, dailyBalances, goals = [], safetyFloor = 200 }: CalendarViewProps) {
+export function CalendarView({ month, year, transactions, selectedDate, onDayPress, dailyBalances, goals = [], decisions = [], safetyFloor = 200 }: CalendarViewProps) {
   const c = useColors();
 
   const firstDay = new Date(year, month, 1).getDay();
@@ -61,6 +63,14 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
     if (!goalsByDay[targetDay]) goalsByDay[targetDay] = [];
     goalsByDay[targetDay].push({ id: goal.id, name: goal.name, amount: remaining });
   });
+  const decisionsByDay: Record<number, number> = {};
+  const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+  const monthEnd = `${monthPrefix}-${String(daysInMonth).padStart(2, "0")}`;
+  decisions.filter(decision => decision.status === "planned" || decision.status === "calendar").forEach(decision => {
+    scenarioDates(decision.scenario, monthEnd).filter(date => date.startsWith(monthPrefix)).forEach(date => {
+      const day = Number(date.slice(8, 10)); decisionsByDay[day] = (decisionsByDay[day] ?? 0) + Math.abs(decision.scenario.amount);
+    });
+  });
 
   const cells: (number | null)[] = [];
   for (let i = 0; i < firstDay; i++) cells.push(null);
@@ -92,7 +102,8 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
           });
           const goalTotal = db ? db.goalExpenses.reduce((s, g) => s + g.amount, 0) : 0;
           const net = (dayData ? dayData.income - dayData.expense : 0) - (db ? db.bills : 0) - goalTotal;
-          const hasActivity = dayData || calendarGoals.length > 0 || (db && (db.bills > 0 || db.scheduledIncome > 0));
+          const decisionAmount = decisionsByDay[day] ?? 0;
+          const hasActivity = dayData || calendarGoals.length > 0 || decisionAmount > 0 || (db && (db.bills > 0 || db.scheduledIncome > 0));
 
           // Risk tint based on projected balance
           const riskBg = db
@@ -158,6 +169,7 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
                       ★{fmt(calendarGoals.reduce((s, g) => s + g.amount, 0))}
                     </Text>
                   )}
+                  {decisionAmount > 0 && <Text style={[styles.amtText, { color: "#3b82f6" }]} numberOfLines={1}>◆{fmt(decisionAmount)}</Text>}
                 </View>
               ) : null}
 
@@ -181,6 +193,7 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
           { color: c.destructive, label: "- expense"  },
           { color: c.warning,     label: "↓ bill due" },
           { color: "#8b5cf6",     label: "★ goal"     },
+          { color: "#3b82f6",     label: "◆ plan"     },
         ].map(l => (
           <View key={l.label} style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: l.color }]} />

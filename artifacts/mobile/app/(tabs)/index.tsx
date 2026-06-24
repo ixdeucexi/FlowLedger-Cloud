@@ -573,6 +573,12 @@ export default function DashboardScreen() {
         </Pressable>
       )}
 
+      <Pressable onPress={() => router.push("/(tabs)/flo" as any)} style={({pressed})=>[styles.whatBtn,{backgroundColor:c.primary+"12",borderColor:c.primary+"45",borderRadius:colors.radius,opacity:pressed?.8:1}]}>
+        <View style={[styles.whatBtnIcon,{backgroundColor:c.primary}]}><Text style={{color:c.primaryForeground,fontFamily:"Inter_700Bold",fontSize:18}}>F</Text></View>
+        <View style={{flex:1}}><Text style={[styles.whatBtnText,{color:c.foreground}]}>What are you considering?</Text><Text style={{color:c.mutedForeground,fontSize:12,marginTop:2}}>Ask Flo before you change the plan.</Text></View><Feather name="chevron-right" size={18} color={c.primary}/>
+      </Pressable>
+
+      {false && <>
       {/* ── WHAT CAN I DO? button ── */}
       <Pressable
         onPress={() => setActionModalVisible(true)}
@@ -624,7 +630,7 @@ export default function DashboardScreen() {
 
         {/* Result */}
         {affordResult && (() => {
-          const { canAfford, isRisky, shortfall, balanceAtDay, balanceAfter, lowestBal, lowestDateLabel } = affordResult;
+          const { canAfford, isRisky, shortfall, balanceAtDay, balanceAfter, lowestBal, lowestDateLabel } = affordResult!;
           const state   = !canAfford ? "red" : isRisky ? "yellow" : "green";
           const bgColor = state === "green" ? c.success + "15" : state === "yellow" ? "#f0b42918" : c.destructive + "15";
           const mainCol = state === "green" ? c.success  : state === "yellow" ? "#f0b429"   : c.destructive;
@@ -667,7 +673,7 @@ export default function DashboardScreen() {
                       </Text>
                       {"\nBalance goes negative on "}
                       <Text style={{ color: c.destructive, fontFamily: "Inter_700Bold" }}>
-                        {affordResult.firstNegAfterLabel}
+                        {affordResult!.firstNegAfterLabel}
                       </Text>
                     </Text>
                   )}
@@ -708,6 +714,7 @@ export default function DashboardScreen() {
         })()}
       </View>
 
+      </>}
       {/* ── Upcoming Bills ── */}
       {upcomingBills.length > 0 && (
         <>
