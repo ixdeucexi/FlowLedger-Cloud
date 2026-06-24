@@ -105,10 +105,10 @@ export default function MonthlyScreen() {
   }, [getIncomeOccurrencesInMonth, month, selectedYear]);
   const calendarGoals = useMemo(() => [
     ...goals,
-    ...decisions.filter(decision => decision.status === "calendar").map(decision => ({
+    ...decisions.filter(decision => decision.status === "calendar" || decision.status === "applied").map(decision => ({
       id: `decision-${decision.id}`, name: decision.name, target_amount: Math.abs(decision.scenario.amount),
       target_date: decision.calendar_date ?? decision.scenario.date, current_amount: 0,
-      created_at: decision.created_at, goal_type: "planned_expense" as const,
+      created_at: decision.created_at, goal_type: "planned_expense" as const, calendar_marker_only: true,
     })),
   ], [goals, decisions]);
   const txIncome = txList.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);

@@ -97,6 +97,7 @@ export interface Goal {
   current_amount: number;
   created_at: string;
   goal_type: "savings" | "planned_expense";
+  calendar_marker_only?: boolean;
 }
 
 export interface DecisionRecord {
