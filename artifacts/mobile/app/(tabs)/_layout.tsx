@@ -12,9 +12,9 @@ import { useColors } from "@/hooks/useColors";
 const TABS = [
   { name: "index",        title: "Dashboard",    icon: "bar-chart-2"     },
   { name: "bills",        title: "Bills",        icon: "file-text"       },
+  { name: "flo",          title: "Flo",          icon: "message-circle"  },
   { name: "transactions", title: "Transactions", icon: "repeat"          },
   { name: "monthly",      title: "Monthly",      icon: "calendar"        },
-  { name: "flo",          title: "Flo",          icon: "message-circle"  },
   { name: "more",         title: "More",         icon: "more-horizontal" },
 ] as const;
 

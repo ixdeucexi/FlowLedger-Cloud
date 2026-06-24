@@ -24,7 +24,8 @@ import {
   type FloChatState,
 } from "@/lib/floPolicy";
 
-const suggestions = [
+const sampleQuestions = [
+  "Ask Flo anything…",
   "Can I afford $500?",
   "What bills are due next?",
   "Why does my balance run low?",
@@ -41,6 +42,7 @@ export default function FloScreen() {
   const [chat, dispatch] = useReducer(reduceFloChat, initialChat);
   const [input, setInput] = useState("");
   const [summary, setSummary] = useState("");
+  const [sampleIndex, setSampleIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
@@ -53,6 +55,11 @@ export default function FloScreen() {
     const timer = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
     return () => clearTimeout(timer);
   }, [chat.messages.length, chat.sending]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setSampleIndex(index => (index + 1) % sampleQuestions.length), 2400);
+    return () => clearInterval(timer);
+  }, []);
 
   const baseline = useMemo(() => {
     const output: { date: string; balance: number }[] = [];
@@ -152,25 +159,6 @@ export default function FloScreen() {
           <Text style={[styles.bubbleText, { color: colors.foreground }]}>Hi, my name&apos;s Flo! Ask me something.</Text>
         </View>
 
-        {chat.messages.length === 0 && (
-          <View style={styles.prompts}>
-            {suggestions.map(prompt => (
-              <Pressable
-                key={prompt}
-                accessibilityRole="button"
-                onPress={() => void send(prompt)}
-                style={({ pressed }) => [
-                  styles.prompt,
-                  { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.75 : 1 },
-                ]}
-              >
-                <Text style={[styles.promptText, { color: colors.foreground }]}>{prompt}</Text>
-                <Feather name="arrow-up-right" size={16} color={colors.primary} />
-              </Pressable>
-            ))}
-          </View>
-        )}
-
         {chat.messages.map(message => (
           <View
             key={message.id}
@@ -203,7 +191,7 @@ export default function FloScreen() {
             value={input}
             onChangeText={setInput}
             onSubmitEditing={() => void send()}
-            placeholder="Ask Flo anything…"
+            placeholder={sampleQuestions[sampleIndex]}
             placeholderTextColor={colors.mutedForeground}
             style={[styles.input, { color: colors.foreground }]}
             returnKeyType="send"
@@ -250,18 +238,6 @@ const styles = StyleSheet.create({
   floBubble: { alignSelf: "flex-start", borderWidth: 1, borderTopLeftRadius: 6 },
   userBubble: { alignSelf: "flex-end", borderTopRightRadius: 6 },
   bubbleText: { fontSize: 15, lineHeight: 21 },
-  prompts: { gap: 8, marginTop: 4 },
-  prompt: {
-    minHeight: 48,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  promptText: { flex: 1, fontSize: 14 },
   loadingBubble: { flexDirection: "row", alignItems: "center", gap: 9 },
   composerArea: { borderTopWidth: 1, paddingHorizontal: 12, paddingTop: 10 },
   composer: {
