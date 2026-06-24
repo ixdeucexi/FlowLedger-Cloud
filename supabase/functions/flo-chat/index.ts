@@ -18,10 +18,8 @@ export default {
     const response = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: Deno.env.get("OPENAI_MODEL") ?? "gpt-5-mini", input: `${instructions}\nROLLING SUMMARY:${String(summary).slice(0, 4000)}\nFINANCIAL FACTS:${JSON.stringify(facts).slice(0, 12000)}\nUSER:${message}`, max_output_tokens: 500 }) });
     if (!response.ok) {
       console.warn("flo_openai_failed", response.status);
-      const reply = response.status === 401
-        ? "My secure OpenAI connection needs a new key before I can answer general questions."
-        : response.status === 429
-          ? "My AI connection is temporarily at its usage limit. Please try again shortly."
+      const reply = response.status === 401 || response.status === 429
+        ? "Flo is connected, but AI usage is currently unavailable. Check OpenAI billing or usage limits."
           : "I couldn't reach my AI connection just now. Please try again.";
       return Response.json({ reply }, { headers: cors });
     }

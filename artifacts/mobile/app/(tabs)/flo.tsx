@@ -1,34 +1,282 @@
 import { Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
-import { askFlo, loadFloMemory, updateFloMemory, type FloFacts, type FloMessage } from "@/lib/flo";
+import { askFlo, loadFloMemory, updateFloMemory, type FloFacts } from "@/lib/flo";
+import {
+  FLO_CONNECTION_ERROR_MESSAGE,
+  reduceFloChat,
+  sanitizeFloSummary,
+  type FloChatState,
+} from "@/lib/floPolicy";
 
-const suggestions=["Can I afford $500?","Why does my balance run low?","What bills are due next?","How do I add income?"];
-export default function FloScreen(){
-  const c=useColors(),insets=useSafeAreaInsets(),router=useRouter(),{user}=useAuth();
-  const {bills,decisions,settings,forecastConfidence,getDailyBalances,getMonthlyIncome,getCashFlow}=useBudget();
-  const [messages,setMessages]=useState<FloMessage[]>([]),[input,setInput]=useState(""),[sending,setSending]=useState(false),[summary,setSummary]=useState("");
-  const scroll=useRef<ScrollView>(null),now=new Date(),today=now.toISOString().slice(0,10);
-  useEffect(()=>{if(user)void loadFloMemory(user.id).then(setSummary)},[user]);
-  const baseline=useMemo(()=>{const out:{date:string;balance:number}[]=[];for(let i=0;i<settings.forecast_horizon_months;i++){const m=(now.getMonth()+i)%12,y=now.getFullYear()+Math.floor((now.getMonth()+i)/12);getDailyBalances(m,y).forEach(d=>out.push({date:`${y}-${String(m+1).padStart(2,"0")}-${String(d.day).padStart(2,"0")}`,balance:d.balance}))}return out.filter(d=>d.date>=today)},[getDailyBalances,settings.forecast_horizon_months,today]);
-  const upcoming=useMemo(()=>bills.filter(b=>b.is_recurring||b.is_debt).map(b=>{let date=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(Math.min(b.due_day,new Date(now.getFullYear(),now.getMonth()+1,0).getDate())).padStart(2,"0")}`;if(date<today){const n=new Date(now.getFullYear(),now.getMonth()+1,1);date=`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(Math.min(b.due_day,new Date(n.getFullYear(),n.getMonth()+1,0).getDate())).padStart(2,"0")}`}return{name:b.name,amount:b.amount,date}}).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,5),[bills,today]);
-  const facts=useMemo<FloFacts>(()=>{const low=baseline.reduce((best,d)=>d.balance<best.balance?d:best,baseline[0]??{date:today,balance:0}),cash=getCashFlow(now.getMonth(),now.getFullYear());return{balanceToday:baseline[0]?.balance??0,lowestBalance:low.balance,lowestBalanceDate:low.date,safetyFloor:settings.safety_floor,monthlyIncome:getMonthlyIncome(),monthlyBills:cash.totalBillsDue,upcoming,activePlans:decisions.filter(d=>d.status==="planned"||d.status==="calendar").length,forecastConfidence:forecastConfidence.level}},[baseline,today,settings.safety_floor,getMonthlyIncome,getCashFlow,upcoming,decisions,forecastConfidence.level]);
-  const send=async(text=input)=>{const clean=text.trim();if(!clean||sending)return;setInput("");setMessages(p=>[...p,{id:`u-${Date.now()}`,role:"user",text:clean}]);setSending(true);try{const reply=await askFlo(clean,facts,summary,baseline);setMessages(p=>[...p,{id:`f-${Date.now()}`,role:"flo",text:reply}]);if(user){await updateFloMemory(user.id,clean);setSummary(`Recent topic: ${clean.replace(/\d/g,"#").slice(0,120)}`)}}finally{setSending(false);setTimeout(()=>scroll.current?.scrollToEnd({animated:true}),50)}};
-  const routeHelp=(text:string)=>{const l=text.toLowerCase();if(l.includes("bill"))router.push("/(tabs)/bills" as any);else if(l.includes("income"))router.push("/(tabs)/more" as any);else if(l.includes("transaction"))router.push("/(tabs)/transactions" as any);else router.push("/(tabs)/monthly" as any)};
-  return <KeyboardAvoidingView style={{flex:1,backgroundColor:c.background}} behavior={Platform.OS==="ios"?"padding":undefined}>
-    <ScrollView ref={scroll} style={{flex:1}} contentContainerStyle={{paddingTop:Platform.OS==="web"?16:insets.top+16,paddingHorizontal:16,paddingBottom:145}} keyboardShouldPersistTaps="handled">
-      <View style={s.heading}><View style={[s.avatar,{backgroundColor:c.primary}]}><Text style={s.avatarText}>F</Text></View><View><Text style={[s.title,{color:c.foreground}]}>Flo</Text><Text style={[s.sub,{color:c.mutedForeground}]}>Your FlowLedger assistant</Text></View></View>
-      <View style={s.metrics}>{[{label:"Balance today",value:`$${facts.balanceToday.toFixed(0)}`},{label:"Lowest forecast",value:`$${facts.lowestBalance.toFixed(0)}`},{label:"Plan confidence",value:forecastConfidence.label}].map(item=><View key={item.label} style={[s.metric,{backgroundColor:c.card}]}><Text style={[s.metricLabel,{color:c.mutedForeground}]}>{item.label}</Text><Text style={[s.metricValue,{color:c.foreground}]}>{item.value}</Text></View>)}</View>
-      {facts.activePlans>0&&<View style={[s.planStrip,{backgroundColor:c.primary+"12"}]}><Feather name="bookmark" size={15} color={c.primary}/><Text style={{color:c.foreground,flex:1}}>{facts.activePlans} active plan{facts.activePlans===1?"":"s"}</Text><Pressable onPress={()=>router.push("/(tabs)/monthly" as any)}><Text style={{color:c.primary,fontFamily:"Inter_700Bold"}}>View</Text></Pressable></View>}
-      {messages.length===0&&<><Text style={[s.intro,{color:c.foreground}]}>What are you considering?</Text><Text style={[s.introSub,{color:c.mutedForeground}]}>Ask about affordability, your forecast, upcoming bills, or how to use FlowLedger. Flo won’t change anything without a FlowLedger confirmation.</Text><View style={s.suggestions}>{suggestions.map(x=><Pressable key={x} onPress={()=>void send(x)} style={[s.suggestion,{backgroundColor:c.card,borderColor:c.border}]}><Text style={{color:c.foreground,fontSize:13}}>{x}</Text></Pressable>)}</View></>}
-      <View style={s.chat}>{messages.map(m=><View key={m.id} style={[s.bubble,m.role==="user"?{alignSelf:"flex-end",backgroundColor:c.primary}:{alignSelf:"flex-start",backgroundColor:c.card}]}><Text style={{color:m.role==="user"?c.primaryForeground:c.foreground,lineHeight:20}}>{m.text}</Text>{m.role==="flo"&&/add|open|go to/i.test(m.text)&&<Pressable onPress={()=>routeHelp(m.text)}><Text style={{color:c.primary,fontFamily:"Inter_700Bold",marginTop:8}}>Open in FlowLedger</Text></Pressable>}</View>)}{sending&&<View style={[s.bubble,{alignSelf:"flex-start",backgroundColor:c.card}]}><ActivityIndicator color={c.primary}/></View>}</View>
-    </ScrollView>
-    <View style={[s.composer,{backgroundColor:c.background,borderColor:c.border,paddingBottom:Math.max(insets.bottom,10)}]}><TextInput value={input} onChangeText={setInput} onSubmitEditing={()=>void send()} placeholder="Ask Flo…" placeholderTextColor={c.mutedForeground} style={[s.input,{backgroundColor:c.card,color:c.foreground,borderColor:c.border}]} returnKeyType="send"/><Pressable onPress={()=>void send()} disabled={!input.trim()||sending} style={[s.send,{backgroundColor:c.primary,opacity:(!input.trim()||sending) ? 0.5 : 1}]}><Feather name="arrow-up" size={19} color={c.primaryForeground}/></Pressable></View>
-  </KeyboardAvoidingView>
+const suggestions = [
+  "Can I afford $500?",
+  "What bills are due next?",
+  "Why does my balance run low?",
+  "How do I add income?",
+];
+
+const initialChat: FloChatState = { messages: [], sending: false };
+
+export default function FloScreen() {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const { bills, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow } = useBudget();
+  const [chat, dispatch] = useReducer(reduceFloChat, initialChat);
+  const [input, setInput] = useState("");
+  const [summary, setSummary] = useState("");
+  const scrollRef = useRef<ScrollView>(null);
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+
+  useEffect(() => {
+    if (user) void loadFloMemory(user.id).then(setSummary);
+  }, [user]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
+    return () => clearTimeout(timer);
+  }, [chat.messages.length, chat.sending]);
+
+  const baseline = useMemo(() => {
+    const output: { date: string; balance: number }[] = [];
+    for (let index = 0; index < settings.forecast_horizon_months; index += 1) {
+      const month = (now.getMonth() + index) % 12;
+      const year = now.getFullYear() + Math.floor((now.getMonth() + index) / 12);
+      getDailyBalances(month, year).forEach(day => output.push({
+        date: `${year}-${String(month + 1).padStart(2, "0")}-${String(day.day).padStart(2, "0")}`,
+        balance: day.balance,
+      }));
+    }
+    return output.filter(day => day.date >= today);
+  }, [getDailyBalances, settings.forecast_horizon_months, today]);
+
+  const upcoming = useMemo(() => bills
+    .filter(bill => bill.is_recurring || bill.is_debt)
+    .map(bill => {
+      let date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(Math.min(bill.due_day, new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate())).padStart(2, "0")}`;
+      if (date < today) {
+        const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        date = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, "0")}-${String(Math.min(bill.due_day, new Date(nextMonth.getFullYear(), nextMonth.getMonth() + 1, 0).getDate())).padStart(2, "0")}`;
+      }
+      return { name: bill.name, amount: bill.amount, date };
+    })
+    .sort((left, right) => left.date.localeCompare(right.date))
+    .slice(0, 5), [bills, today]);
+
+  const facts = useMemo<FloFacts>(() => {
+    const lowest = baseline.reduce(
+      (best, day) => day.balance < best.balance ? day : best,
+      baseline[0] ?? { date: today, balance: 0 },
+    );
+    const cashFlow = getCashFlow(now.getMonth(), now.getFullYear());
+    return {
+      balanceToday: baseline[0]?.balance ?? 0,
+      lowestBalance: lowest.balance,
+      lowestBalanceDate: lowest.date,
+      safetyFloor: settings.safety_floor,
+      monthlyIncome: getMonthlyIncome(),
+      monthlyBills: cashFlow.totalBillsDue,
+      upcoming,
+      activePlans: decisions.filter(decision => decision.status === "planned" || decision.status === "calendar").length,
+      forecastConfidence: forecastConfidence.level,
+    };
+  }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, upcoming, decisions, forecastConfidence.level]);
+
+  const send = async (text = input) => {
+    const clean = text.trim();
+    if (!clean || chat.sending) return;
+    setInput("");
+    dispatch({ type: "submit", id: `u-${Date.now()}`, text: clean });
+    let reply = FLO_CONNECTION_ERROR_MESSAGE;
+    try {
+      reply = await askFlo(clean, facts, summary, baseline);
+    } catch {
+      reply = FLO_CONNECTION_ERROR_MESSAGE;
+    }
+    dispatch({ type: "reply", id: `f-${Date.now()}`, text: reply });
+    if (user) {
+      const nextSummary = `Recent topic: ${sanitizeFloSummary(clean).slice(0, 120)}`;
+      setSummary(nextSummary);
+      void updateFloMemory(user.id, clean);
+    }
+  };
+
+  const composerBottom = Platform.OS === "web" ? 88 : Math.max(insets.bottom, 8) + 54;
+
+  return (
+    <KeyboardAvoidingView
+      style={[styles.screen, { backgroundColor: colors.background }]}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <LinearGradient
+        colors={["#172554", "#083344"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={[styles.header, { paddingTop: Platform.OS === "web" ? 18 : insets.top + 12, borderColor: colors.border }]}
+      >
+        <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
+          <Text style={styles.avatarText}>F</Text>
+        </View>
+        <View style={styles.headerText}>
+          <Text style={[styles.title, { color: colors.foreground }]}>Ask Flo</Text>
+          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Your FlowLedger assistant</Text>
+        </View>
+        <Feather name="message-circle" size={24} color={colors.primaryForeground} />
+      </LinearGradient>
+
+      <ScrollView
+        ref={scrollRef}
+        style={styles.conversation}
+        contentContainerStyle={styles.conversationContent}
+        keyboardShouldPersistTaps="handled"
+        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+      >
+        <View style={[styles.bubble, styles.floBubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.bubbleText, { color: colors.foreground }]}>Hi, my name&apos;s Flo! Ask me something.</Text>
+        </View>
+
+        {chat.messages.length === 0 && (
+          <View style={styles.prompts}>
+            {suggestions.map(prompt => (
+              <Pressable
+                key={prompt}
+                accessibilityRole="button"
+                onPress={() => void send(prompt)}
+                style={({ pressed }) => [
+                  styles.prompt,
+                  { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.75 : 1 },
+                ]}
+              >
+                <Text style={[styles.promptText, { color: colors.foreground }]}>{prompt}</Text>
+                <Feather name="arrow-up-right" size={16} color={colors.primary} />
+              </Pressable>
+            ))}
+          </View>
+        )}
+
+        {chat.messages.map(message => (
+          <View
+            key={message.id}
+            style={[
+              styles.bubble,
+              message.role === "user" ? styles.userBubble : styles.floBubble,
+              message.role === "user"
+                ? { backgroundColor: colors.primary }
+                : { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <Text style={[styles.bubbleText, { color: message.role === "user" ? colors.primaryForeground : colors.foreground }]}>
+              {message.text}
+            </Text>
+          </View>
+        ))}
+
+        {chat.sending && (
+          <View style={[styles.bubble, styles.floBubble, styles.loadingBubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={{ color: colors.mutedForeground }}>Flo is thinking…</Text>
+          </View>
+        )}
+      </ScrollView>
+
+      <View style={[styles.composerArea, { backgroundColor: colors.background, borderColor: colors.border, paddingBottom: composerBottom }]}>
+        <View style={[styles.composer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <TextInput
+            accessibilityLabel="Ask Flo anything"
+            value={input}
+            onChangeText={setInput}
+            onSubmitEditing={() => void send()}
+            placeholder="Ask Flo anything…"
+            placeholderTextColor={colors.mutedForeground}
+            style={[styles.input, { color: colors.foreground }]}
+            returnKeyType="send"
+            multiline
+            blurOnSubmit
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Send message"
+            onPress={() => void send()}
+            disabled={!input.trim() || chat.sending}
+            style={[
+              styles.send,
+              { backgroundColor: colors.primary, opacity: !input.trim() || chat.sending ? 0.45 : 1 },
+            ]}
+          >
+            <Text style={styles.sendText}>Send</Text>
+          </Pressable>
+        </View>
+      </View>
+    </KeyboardAvoidingView>
+  );
 }
-const s=StyleSheet.create({heading:{flexDirection:"row",alignItems:"center",gap:11,marginBottom:16},avatar:{width:46,height:46,borderRadius:23,alignItems:"center",justifyContent:"center"},avatarText:{color:"#fff",fontSize:24,fontFamily:"Inter_700Bold"},title:{fontSize:28,fontFamily:"Inter_700Bold"},sub:{fontSize:12},metrics:{flexDirection:"row",gap:8},metric:{flex:1,padding:11,borderRadius:12},metricLabel:{fontSize:10,textTransform:"uppercase"},metricValue:{fontSize:16,fontFamily:"Inter_700Bold",marginTop:4},planStrip:{flexDirection:"row",alignItems:"center",gap:8,padding:11,borderRadius:10,marginTop:10},intro:{fontSize:20,fontFamily:"Inter_700Bold",marginTop:24},introSub:{fontSize:13,lineHeight:19,marginTop:5},suggestions:{gap:8,marginTop:14},suggestion:{padding:12,borderRadius:11,borderWidth:1},chat:{gap:10,marginTop:20},bubble:{maxWidth:"88%",padding:13,borderRadius:15},composer:{position:"absolute",left:0,right:0,bottom:0,borderTopWidth:1,padding:10,flexDirection:"row",gap:8},input:{flex:1,height:48,borderRadius:24,borderWidth:1,paddingHorizontal:16,fontSize:15},send:{width:48,height:48,borderRadius:24,alignItems:"center",justifyContent:"center"}});
+
+const styles = StyleSheet.create({
+  screen: { flex: 1 },
+  header: {
+    minHeight: 92,
+    paddingHorizontal: 18,
+    paddingBottom: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    gap: 12,
+  },
+  avatar: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
+  avatarText: { color: "#fff", fontSize: 23, fontFamily: "Inter_700Bold" },
+  headerText: { flex: 1 },
+  title: { fontSize: 25, fontFamily: "Inter_700Bold" },
+  subtitle: { fontSize: 12, marginTop: 1 },
+  conversation: { flex: 1 },
+  conversationContent: { padding: 16, paddingBottom: 22, gap: 12 },
+  bubble: { maxWidth: "88%", paddingHorizontal: 15, paddingVertical: 13, borderRadius: 18 },
+  floBubble: { alignSelf: "flex-start", borderWidth: 1, borderTopLeftRadius: 6 },
+  userBubble: { alignSelf: "flex-end", borderTopRightRadius: 6 },
+  bubbleText: { fontSize: 15, lineHeight: 21 },
+  prompts: { gap: 8, marginTop: 4 },
+  prompt: {
+    minHeight: 48,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  promptText: { flex: 1, fontSize: 14 },
+  loadingBubble: { flexDirection: "row", alignItems: "center", gap: 9 },
+  composerArea: { borderTopWidth: 1, paddingHorizontal: 12, paddingTop: 10 },
+  composer: {
+    minHeight: 58,
+    maxHeight: 112,
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingLeft: 15,
+    paddingRight: 7,
+    paddingVertical: 6,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 8,
+  },
+  input: { flex: 1, minHeight: 44, maxHeight: 96, paddingTop: 11, paddingBottom: 10, fontSize: 15 },
+  send: { minWidth: 70, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", paddingHorizontal: 15 },
+  sendText: { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold" },
+});
