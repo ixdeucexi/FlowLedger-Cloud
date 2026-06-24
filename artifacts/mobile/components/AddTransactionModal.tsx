@@ -31,13 +31,15 @@ interface Props {
 
 export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx, defaultDate }: Props) {
   const c = useColors();
-  const { categories, accounts } = useBudget();
+  const { categories, accounts, bills } = useBudget();
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Other");
   const [note, setNote] = useState("");
   const [date, setDate] = useState(defaultDate ?? new Date().toISOString().split("T")[0]);
   const [isExpense, setIsExpense] = useState(true);
   const [accountId, setAccountId] = useState<string | undefined>();
+  const [linkedBillId, setLinkedBillId] = useState<string | undefined>();
+  const activeDebts = useMemo(() => bills.filter(bill => bill.is_debt && bill.balance > 0), [bills]);
 
   // Parse date into parts for the picker
   const [pickerYear, setPickerYear] = useState(() => {
@@ -89,6 +91,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
       setDate(editTx.date);
       setIsExpense(editTx.amount < 0);
       setAccountId(editTx.account_id);
+      setLinkedBillId(editTx.linked_bill_id);
       const [dy, dm] = editTx.date.split("-").map(Number);
       setPickerYear(dy);
       setPickerMonth(dm - 1);
@@ -100,6 +103,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
       setDate(init);
       setIsExpense(true);
       setAccountId(accounts.find(account => account.is_active)?.id);
+      setLinkedBillId(undefined);
       const [dy, dm] = init.split("-").map(Number);
       setPickerYear(dy);
       setPickerMonth(dm - 1);
@@ -116,6 +120,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
       note: note.trim(),
       date,
       account_id: accountId,
+      linked_bill_id: isExpense ? linkedBillId : undefined,
     };
     if (editTx) onSave({ ...data, id: editTx.id });
     else onSave(data);
@@ -221,6 +226,25 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
               ))}
             </View>
 
+            {isExpense && activeDebts.length > 0 && <>
+              <Text style={labelStyle}>Apply Toward Debt (Optional)</Text>
+              <Text style={[styles.helpText, { color: c.mutedForeground }]}>The payment stays on the calendar and reduces the selected debt when this date arrives.</Text>
+              <View style={styles.categoryGrid}>
+                <Pressable onPress={() => setLinkedBillId(undefined)} style={[styles.chip, { backgroundColor: !linkedBillId ? c.primary : c.muted, borderRadius: 8 }]}>
+                  <Text style={[styles.chipText, { color: !linkedBillId ? c.primaryForeground : c.mutedForeground }]}>No debt</Text>
+                </Pressable>
+                {activeDebts.map(debt => (
+                  <Pressable
+                    key={debt.id}
+                    onPress={() => { setLinkedBillId(debt.id); setCategory("Debt"); if (!note.trim()) setNote(debt.name); }}
+                    style={[styles.chip, { backgroundColor: linkedBillId === debt.id ? c.primary : c.muted, borderRadius: 8 }]}
+                  >
+                    <Text style={[styles.chipText, { color: linkedBillId === debt.id ? c.primaryForeground : c.mutedForeground }]}>{debt.name} · ${debt.balance.toFixed(2)}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </>}
+
             {accounts.some(account => account.is_active) && <>
               <Text style={labelStyle}>Account</Text>
               <View style={styles.categoryGrid}>
@@ -270,6 +294,7 @@ const styles = StyleSheet.create({
   dayBtn: { width: "14.285714%", height: 38, alignItems: "center", justifyContent: "center" },
   dayBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   selectedDateLabel: { fontSize: 11, fontFamily: "Inter_400Regular", marginBottom: 4, marginTop: 2 },
+  helpText: { fontSize: 11, lineHeight: 16, marginBottom: 5 },
   categoryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
   chip: { paddingHorizontal: 12, paddingVertical: 8 },
   chipText: { fontSize: 13, fontFamily: "Inter_500Medium" },

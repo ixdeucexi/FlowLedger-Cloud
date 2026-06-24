@@ -88,7 +88,9 @@ export default function BillsScreen() {
     });
 
   const totalDebt        = debts.reduce((s, b) => s + b.balance, 0);
-  const totalMinPayments = debts.reduce((s, b) => s + b.amount, 0);
+  const totalMinPayments = debts
+    .filter(debt => debt.balance > 0.009)
+    .reduce((sum, debt) => sum + debt.amount + Number(debt.snowball_minimum_boost ?? 0), 0);
   const highestAPR       = debts.length ? Math.max(...debts.map(b => b.interest_rate)) : 0;
 
   const priorityColors = ["#22c55e", "#f0b429", "#ef4444", "#8b5cf6", "#ec4899"];
@@ -333,10 +335,11 @@ export default function BillsScreen() {
             }
             renderItem={({ item }) => {
               const priorityColor = priorityColors[Math.min(item.priority - 1, priorityColors.length - 1)] ?? c.primary;
+              const effectiveMinimum = item.amount + Number(item.snowball_minimum_boost ?? 0);
               const originalBalance = item.balance + item.amount * 12;
               const paidPct = originalBalance > 0 ? Math.min(((originalBalance - item.balance) / originalBalance) * 100, 100) : 0;
-              const monthsToPayoff = item.balance > 0 && item.amount > 0
-                ? Math.ceil(item.balance / item.amount)
+              const monthsToPayoff = item.balance > 0 && effectiveMinimum > 0
+                ? Math.ceil(item.balance / effectiveMinimum)
                 : 0;
 
               return (
@@ -366,7 +369,8 @@ export default function BillsScreen() {
                       </View>
                       <View style={styles.cardRight}>
                         <Text style={[styles.balance, { color: c.destructive }]}>${item.balance.toLocaleString(undefined, { maximumFractionDigits: 0 })}</Text>
-                        <Text style={[styles.minPay, { color: c.mutedForeground }]}>${item.amount}/mo min</Text>
+                        <Text style={[styles.minPay, { color: c.mutedForeground }]}>${effectiveMinimum.toFixed(2)}/mo min</Text>
+                        {(item.snowball_minimum_boost ?? 0) > 0 && <Text style={[styles.metaText, { color: c.success }]}>Includes ${Number(item.snowball_minimum_boost).toFixed(2)} rolled over</Text>}
                       </View>
                     </View>
 

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { evaluateForecastConfidence, parseStatementCsv, totalForecastBalance, type AccountSnapshot } from "./accounts";
+import { evaluateForecastConfidence, openingBalanceForReconciledDay, parseStatementCsv, totalForecastBalance, type AccountSnapshot } from "./accounts";
 
 const accounts: AccountSnapshot[] = [
   { id: "checking", name: "Checking", type: "checking", currentBalance: 1200, balanceAsOf: "2026-06-23", lastReconciledAt: "2026-06-23", active: true },
@@ -8,6 +8,15 @@ const accounts: AccountSnapshot[] = [
 ];
 
 test("account total combines checking and savings", () => assert.equal(totalForecastBalance(accounts), 1500));
+test("reconciliation sets the selected day closing balance instead of adding to it", () => {
+  const opening = openingBalanceForReconciledDay(1000, "2026-06-24", [
+    { date: "2026-06-20", amount: 500 },
+    { date: "2026-06-24", amount: -100 },
+    { date: "2026-06-25", amount: -50 },
+  ]);
+  assert.equal(opening, 600);
+  assert.equal(opening + 500 - 100, 1000);
+});
 test("confidence is high when balances and recurring inputs are current", () => {
   assert.equal(evaluateForecastConfidence(accounts, true, true, new Date("2026-06-24T12:00:00Z")).level, "high");
 });

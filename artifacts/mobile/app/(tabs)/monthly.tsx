@@ -19,6 +19,7 @@ import type { Bill, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import type { SnowballProjectionResult } from "@/lib/snowball";
+import { isValidDateInMonth } from "@/lib/schedule";
 
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
@@ -63,6 +64,7 @@ export default function MonthlyScreen() {
   const [snowballModalVisible, setSnowballModalVisible] = useState(false);
   const [snowballPreview, setSnowballPreview] = useState<SnowballProjectionResult | null>(null);
   const [surplusPrompt, setSurplusPrompt] = useState<{ bill: Bill; budgeted: number; actual: number; paidDate: string } | null>(null);
+  const [surplusPaymentDate, setSurplusPaymentDate] = useState("");
 
   useEffect(() => {
     if (dashboardFilter === "paid") { setBillFilter("paid"); setActiveTab("bills"); setDashboardFilter(null); }
@@ -134,9 +136,10 @@ export default function MonthlyScreen() {
     const existing = getExtraPayment(month, selectedYear);
     const previousSource = existing?.sources?.find(source => source.type === "bill_surplus" && source.billId === surplusPrompt.bill.id)?.amount ?? 0;
     const total = Math.max(0, (existing?.amount ?? 0) - previousSource + surplus);
-    const preview = previewDebtSnowball(month, selectedYear, total, surplus - previousSource);
-    return { preview, total, targetDebt: preview.allocations[0]?.billName, safe: preview.selectedExtra + 0.005 >= total };
-  }, [surplusPrompt, getExtraPayment, previewDebtSnowball, month, selectedYear]);
+    const validDate = isValidDateInMonth(surplusPaymentDate, month, selectedYear);
+    const preview = previewDebtSnowball(month, selectedYear, total, surplus - previousSource, validDate ? surplusPaymentDate : undefined);
+    return { preview, total, targetDebt: preview.allocations[0]?.billName, dateValid: validDate, safe: validDate && preview.selectedExtra + 0.005 >= total };
+  }, [surplusPrompt, surplusPaymentDate, getExtraPayment, previewDebtSnowball, month, selectedYear]);
 
   const handlePaidBlur = useCallback(async (billId: string, key: string) => {
     const val = editingPaid[key];
@@ -164,6 +167,7 @@ export default function MonthlyScreen() {
     }
     if (bill && !bill.is_debt && parsed >= 0 && parsed < budgeted) {
       setSurplusPrompt({ bill, budgeted, actual: parsed, paidDate });
+      setSurplusPaymentDate(paidDate);
       setEditingPaid(p => { const n = { ...p }; delete n[key]; return n; });
       return;
     }
@@ -973,6 +977,9 @@ export default function MonthlyScreen() {
         snowballSafe={surplusSnowballOffer?.safe ?? false}
         safetyFloor={settings.safety_floor}
         forecastHorizonMonths={settings.forecast_horizon_months}
+        paymentDate={surplusPaymentDate}
+        paymentDateValid={surplusSnowballOffer?.dateValid ?? false}
+        onPaymentDateChange={setSurplusPaymentDate}
         onKeep={keepBillSurplus}
         onSnowball={addBillSurplusToSnowball}
         onClose={() => setSurplusPrompt(null)}

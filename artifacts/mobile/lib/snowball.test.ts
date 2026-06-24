@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { allocateSnowballExtra, orderDebts, simulateSnowballPayoff, type SnowballDebtInput } from "./snowball";
+import { allocateSnowballExtra, effectiveDebtMinimum, orderDebts, scheduledDebtPaymentAmount, simulateSnowballPayoff, type SnowballDebtInput } from "./snowball";
 
 const debts: SnowballDebtInput[] = [
   { id: "large", name: "Large", balance: 1_000, minimum: 100, apr: 12, dueDay: 15, included: true },
@@ -10,6 +10,14 @@ const debts: SnowballDebtInput[] = [
 ];
 
 describe("debt ordering and allocation", () => {
+  it("adds a closed debt minimum to the new number one debt", () => {
+    assert.equal(effectiveDebtMinimum(75, 25), 100);
+  });
+  it("does not reduce debt until a scheduled transaction date arrives", () => {
+    assert.equal(scheduledDebtPaymentAmount(-100, "2026-06-25", "2026-06-24", 500), 0);
+    assert.equal(scheduledDebtPaymentAmount(-100, "2026-06-25", "2026-06-25", 500), 100);
+    assert.equal(scheduledDebtPaymentAmount(-600, "2026-06-25", "2026-06-26", 500), 500);
+  });
   it("orders snowball and avalanche deterministically", () => {
     assert.deepEqual(orderDebts(debts, "snowball").map(item => item.id), ["excluded", "small", "large"]);
     assert.deepEqual(orderDebts(debts, "avalanche").map(item => item.id), ["excluded", "large", "small"]);

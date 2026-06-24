@@ -14,6 +14,15 @@ export interface ScheduledIncome {
   amount_history?: { effective_from: string; amount: number }[];
 }
 
+export function isValidDateInMonth(date: string, month: number, year: number): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) return false;
+  const parsedYear = Number(match[1]);
+  const parsedMonth = Number(match[2]);
+  const day = Number(match[3]);
+  return parsedYear === year && parsedMonth === month + 1 && day >= 1 && day <= new Date(year, month + 1, 0).getDate();
+}
+
 export function isBillActiveForMonth(bill: ScheduledBill, month: number, year: number): boolean {
   const date = new Date(year, month, 1);
   if (bill.start_date) {
