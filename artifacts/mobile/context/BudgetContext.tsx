@@ -1414,12 +1414,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const day = Number(paymentDate.split("-")[2]);
       if (!Number.isFinite(day) || day < 1 || day > daysInMonth) return;
       const pending = hasPendingSnowballBalanceApply(ep) || paymentDate > localDateString();
-      const targetNames = Array.from(new Set(ep.allocations.map(allocation => allocation.billName).filter(Boolean))).join(", ");
+      const targetNames = Array.from(new Set(ep.allocations
+        .map(allocation => allocation.billName || bills.find(bill => bill.id === allocation.billId)?.name)
+        .filter(Boolean))).join(", ");
       debtExtrasByDay[day] = (debtExtrasByDay[day] ?? 0) + ep.amount;
       financialEvents.push({
         id: `extra:${ep.id}:${year}-${month + 1}-${day}`, sourceType: "extra_payment", sourceId: ep.id,
         date: paymentDate,
-        kind: "debt_payment", amount: -ep.amount, status: pending ? "scheduled" : "applied", name: targetNames ? `Snowball payment to ${targetNames}` : "Snowball debt payment",
+        kind: "debt_payment", amount: -ep.amount, status: pending ? "scheduled" : "applied", name: targetNames ? `${targetNames} debt payment` : "Snowball debt payment",
       });
     });
     const goalsByDay: Record<number, GoalExpense[]> = {};
