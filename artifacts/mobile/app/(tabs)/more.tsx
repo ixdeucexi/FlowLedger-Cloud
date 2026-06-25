@@ -541,10 +541,10 @@ export default function MoreScreen() {
         mode={accountMode}
         onClose={() => setAccountModalVisible(false)}
         onSave={value => {
-          if (selectedAccount) void updateAccount({ ...selectedAccount, name: value.name, account_type: value.account_type });
-          else void addAccount({ ...value, is_active: true });
+          if (selectedAccount) return updateAccount({ ...selectedAccount, name: value.name, account_type: value.account_type });
+          return addAccount({ ...value, is_active: true });
         }}
-        onReconcile={(balance, date) => { if (selectedAccount) void reconcileAccount(selectedAccount.id, balance, date); }}
+        onReconcile={(balance, date) => selectedAccount ? reconcileAccount(selectedAccount.id, balance, date) : Promise.resolve()}
       />
     </ScrollView>
   );
