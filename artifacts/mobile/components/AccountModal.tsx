@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
-import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { DatePickerField } from "@/components/DatePickerField";
 import type { Account } from "@/context/BudgetContext";
 import type { AccountType } from "@/lib/accounts";
@@ -16,25 +16,34 @@ export function AccountModal({ visible, account, mode, onClose, onSave, onReconc
   account?: Account | null;
   mode: "add" | "edit" | "reconcile";
   onClose: () => void;
-  onSave: (value: { name: string; account_type: AccountType; current_balance: number; balance_as_of: string }) => void;
-  onReconcile: (balance: number, asOfDate: string) => void;
+  onSave: (value: { name: string; account_type: AccountType; current_balance: number; balance_as_of: string }) => void | Promise<void>;
+  onReconcile: (balance: number, asOfDate: string) => void | Promise<void>;
 }) {
   const c = useColors();
   const [name, setName] = useState("");
   const [type, setType] = useState<AccountType>("checking");
   const [balance, setBalance] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [saving, setSaving] = useState(false);
   useEffect(() => {
     setName(account?.name ?? ""); setType(account?.account_type ?? "checking");
     setBalance(account ? Math.abs(account.current_balance).toString() : "");
     setDate(account?.balance_as_of ?? new Date().toISOString().slice(0, 10));
   }, [account, visible]);
-  const submit = () => {
+  const submit = async () => {
+    if (saving) return;
     const amount = Number(balance);
     if (!Number.isFinite(amount) || !date || (mode !== "reconcile" && !name.trim())) return;
-    if (mode === "reconcile") onReconcile(amount, date);
-    else onSave({ name: name.trim(), account_type: type, current_balance: amount, balance_as_of: date });
-    onClose();
+    setSaving(true);
+    try {
+      if (mode === "reconcile") await onReconcile(amount, date);
+      else await onSave({ name: name.trim(), account_type: type, current_balance: amount, balance_as_of: date });
+      onClose();
+    } catch (error) {
+      Alert.alert("Couldn’t save", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
   return <Modal visible={visible} animationType="slide" transparent>
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
@@ -50,7 +59,7 @@ export function AccountModal({ visible, account, mode, onClose, onSave, onReconc
         <TextInput value={balance} onChangeText={setBalance} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={c.mutedForeground} style={[styles.input, { color: c.foreground, backgroundColor: c.card, borderColor: c.border }]} />
         <DatePickerField label="Balance as of" value={date} onChange={setDate} placeholder="Choose date" />
         {mode === "reconcile" && <Text style={[styles.help, { color: c.mutedForeground }]}>Enter the balance shown by your bank today. This becomes the trusted starting point for your forecast.</Text>}
-        <Pressable onPress={submit} style={[styles.save, { backgroundColor: c.primary }]}><Text style={[styles.saveText, { color: c.primaryForeground }]}>{mode === "reconcile" ? "Confirm Reconciliation" : "Save Account"}</Text></Pressable>
+        <Pressable disabled={saving} onPress={submit} style={[styles.save, { backgroundColor: c.primary, opacity: saving ? 0.7 : 1 }]}><Text style={[styles.saveText, { color: c.primaryForeground }]}>{saving ? "Saving…" : mode === "reconcile" ? "Confirm Reconciliation" : "Save Account"}</Text></Pressable>
       </View>
     </KeyboardAvoidingView>
   </Modal>;

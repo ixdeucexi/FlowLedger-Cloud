@@ -1928,9 +1928,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       await ensureSaved(supabase.from("accounts").update({
         current_balance: balance, balance_as_of: asOfDate, last_reconciled_at: reconciledAt,
       }).eq("id", accountId).eq("user_id", user.id), "Reconcile account");
-      await ensureSaved(supabase.from("account_balances").insert({
+      const historyResult = await supabase.from("account_balances").insert({
         id: genId(), account_id: accountId, user_id: user.id, balance, as_of_date: asOfDate, source: "reconciliation",
-      }), "Save reconciliation");
+      });
+      if (historyResult.error) {
+        void recordDiagnostic(user.id, {
+          eventType: "save_failure", operation: "reconciliation", platform: diagnosticPlatform(),
+          errorCode: diagnosticErrorCode(historyResult.error),
+        }).catch(() => undefined);
+      }
       await persistAccountAnchor(next, asOfDate);
       markSaveCompleted();
       void recordDiagnostic(user.id, { eventType: "performance", operation: "reconciliation", platform: diagnosticPlatform() }).catch(() => undefined);
