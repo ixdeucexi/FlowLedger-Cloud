@@ -138,7 +138,7 @@ export default function MonthlyScreen() {
     const total = Math.max(0, (existing?.amount ?? 0) - previousSource + surplus);
     const validDate = isValidDateInMonth(surplusPaymentDate, month, selectedYear);
     const preview = previewDebtSnowball(month, selectedYear, total, surplus - previousSource, validDate ? surplusPaymentDate : undefined);
-    return { preview, total, targetDebt: preview.allocations[0]?.billName, dateValid: validDate, safe: validDate && preview.selectedExtra + 0.005 >= total };
+    return { preview, total, targetDebt: preview.months[0]?.targetName ?? preview.allocations[0]?.billName, dateValid: validDate, safe: validDate && preview.selectedExtra + 0.005 >= total };
   }, [surplusPrompt, surplusPaymentDate, getExtraPayment, previewDebtSnowball, month, selectedYear]);
 
   const handlePaidBlur = useCallback(async (billId: string, key: string) => {
