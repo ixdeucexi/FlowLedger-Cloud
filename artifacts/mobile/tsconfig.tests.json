@@ -17,6 +17,8 @@
     "lib/snowball.ts",
     "lib/snowball.test.ts",
     "lib/diagnostics.test.ts",
+    "lib/demoMode.ts",
+    "lib/demoMode.test.ts",
     "lib/diagnosticPolicy.ts",
     "lib/schedule.ts",
     "lib/schedule.test.ts",

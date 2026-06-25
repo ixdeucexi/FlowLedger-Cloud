@@ -1,6 +1,7 @@
 import { Session, User } from "@supabase/supabase-js";
 import React, { createContext, useContext, useEffect, useState } from "react";
 
+import { DEV_DEMO_USER_ID, isDevDemoMode } from "@/lib/demoMode";
 import { supabase } from "@/lib/supabase";
 
 interface AuthContextType {
@@ -15,10 +16,32 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const demoMode = isDevDemoMode();
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (demoMode) {
+      const demoUser = {
+        id: DEV_DEMO_USER_ID,
+        aud: "authenticated",
+        role: "authenticated",
+        email: "demo@flowledger.local",
+        app_metadata: {},
+        user_metadata: { name: "Dev Demo" },
+        created_at: new Date().toISOString(),
+      } as User;
+      setSession({
+        access_token: "dev-demo",
+        refresh_token: "dev-demo",
+        expires_in: 60 * 60 * 24,
+        expires_at: Math.floor(Date.now() / 1000) + 60 * 60 * 24,
+        token_type: "bearer",
+        user: demoUser,
+      } as Session);
+      setLoading(false);
+      return;
+    }
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setLoading(false);
@@ -29,19 +52,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => listener.subscription.unsubscribe();
-  }, []);
+  }, [demoMode]);
 
   const signIn = async (email: string, password: string): Promise<string | null> => {
+    if (demoMode) return null;
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return error?.message ?? null;
   };
 
   const signUp = async (email: string, password: string): Promise<string | null> => {
+    if (demoMode) return null;
     const { error } = await supabase.auth.signUp({ email, password });
     return error?.message ?? null;
   };
 
   const signOut = async () => {
+    if (demoMode) return;
     await supabase.auth.signOut();
   };
 
