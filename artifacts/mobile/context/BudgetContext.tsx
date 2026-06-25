@@ -131,6 +131,7 @@ export interface SnowballFundingSource {
   amount: number;
   billId?: string;
   billName?: string;
+  pendingBalanceApply?: boolean;
 }
 
 export interface ExtraPayment {
@@ -335,6 +336,15 @@ function reorderDebtPriorities(bills: Bill[]): Bill[] {
 function localDateString(date = new Date()): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
+
+const markSnowballSourcesPending = (sources: SnowballFundingSource[]) =>
+  sources.map(source => ({ ...source, pendingBalanceApply: true }));
+
+const clearSnowballSourcesPending = (sources: SnowballFundingSource[]) =>
+  sources.map(({ pendingBalanceApply: _pending, ...source }) => source);
+
+const hasPendingSnowballBalanceApply = (payment: Pick<ExtraPayment, "sources">) =>
+  (payment.sources ?? []).some(source => source.pendingBalanceApply);
 
 function normalizeBillRow(bill: any): Bill {
   return {
@@ -843,6 +853,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const month = monthNumber - 1;
     const existing = extraPayments.find(ep => ep.month === month && ep.year === year);
     const paymentId = existing?.id ?? genId();
+    const isFuturePayment = preview.paymentDate > localDateString();
+    const payloadSources = isFuturePayment
+      ? markSnowballSourcesPending(sources)
+      : clearSnowballSourcesPending(sources);
+
+    if (isFuturePayment) {
+      await saveExtraPayment(month, year, preview.selectedExtra, preview.allocations, preview.paymentDate, payloadSources);
+      return;
+    }
 
     const { data: savedPaymentId, error } = await supabase.rpc("apply_debt_snowball_payment", {
       p_payment_id: paymentId,
@@ -851,7 +870,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       p_amount: preview.selectedExtra,
       p_payment_date: preview.paymentDate,
       p_allocations: preview.allocations,
-      p_sources: sources,
+      p_sources: payloadSources,
     });
     if (error) throw new Error(`Apply debt snowball: ${error.message}`);
     const rollover = await supabase.rpc("recalculate_debt_minimum_boosts");
@@ -877,16 +896,20 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const nextPayment: ExtraPayment = {
       id: String(savedPaymentId ?? paymentId), month, year,
       amount: preview.selectedExtra, allocations: preview.allocations,
-      payment_date: preview.paymentDate, sources,
+      payment_date: preview.paymentDate, sources: payloadSources,
     };
     setExtraPayments(prev => existing
       ? prev.map(ep => ep.id === existing.id ? nextPayment : ep)
       : [...prev, nextPayment]);
-  }, [user, extraPayments]);
+  }, [user, extraPayments, saveExtraPayment]);
 
   const removeDebtSnowballPayment = useCallback(async (month: number, year: number) => {
     const existing = extraPayments.find(ep => ep.month === month && ep.year === year);
     if (!existing || !user) return;
+    if (hasPendingSnowballBalanceApply(existing) && (existing.payment_date ?? "") > localDateString()) {
+      await deleteExtraPayment(existing.id);
+      return;
+    }
     const { error } = await supabase.rpc("remove_debt_snowball_payment", { p_month: month, p_year: year });
     if (error) throw new Error(`Remove debt snowball: ${error.message}`);
     const rollover = await supabase.rpc("recalculate_debt_minimum_boosts");
@@ -908,7 +931,101 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setBills(reorderDebtPriorities((billsResult.data ?? []).map(normalizeBillRow)));
     setOverrides(prev => [...prev.filter(o => o.month !== month || o.year !== year), ...refreshedOverrides]);
     setExtraPayments(prev => prev.filter(ep => ep.id !== existing.id));
-  }, [user, extraPayments]);
+  }, [user, extraPayments, deleteExtraPayment]);
+
+  const syncingDueSnowballPayments = useRef(new Set<string>());
+  useEffect(() => {
+    if (!user) return;
+    const today = localDateString();
+    const duePayments = extraPayments.filter(payment =>
+      hasPendingSnowballBalanceApply(payment) &&
+      (payment.payment_date ?? "") <= today &&
+      payment.allocations.length > 0 &&
+      !syncingDueSnowballPayments.current.has(payment.id)
+    );
+    duePayments.forEach(payment => {
+      syncingDueSnowballPayments.current.add(payment.id);
+      const preview: SnowballProjectionResult = {
+        safeMaximum: payment.amount,
+        selectedExtra: payment.amount,
+        paymentDate: payment.payment_date ?? `${payment.year}-${String(payment.month + 1).padStart(2, "0")}-01`,
+        allocations: payment.allocations.map(allocation => ({
+          ...allocation,
+          paymentDate: allocation.paymentDate ?? payment.payment_date ?? `${payment.year}-${String(payment.month + 1).padStart(2, "0")}-01`,
+        })),
+        months: [],
+        payoffOrder: [],
+        debtFreeDate: null,
+        lowestSixMonthBalance: 0,
+      };
+      void applyDebtSnowballPayment(preview, clearSnowballSourcesPending(payment.sources ?? [{ type: "manual", amount: payment.amount }]))
+        .finally(() => syncingDueSnowballPayments.current.delete(payment.id));
+    });
+  }, [user, extraPayments, applyDebtSnowballPayment]);
+
+  const repairingFutureSnowballPayments = useRef(new Set<string>());
+  useEffect(() => {
+    if (!user) return;
+    const today = localDateString();
+    const futureAppliedPayments = extraPayments.filter(payment =>
+      !hasPendingSnowballBalanceApply(payment) &&
+      (payment.payment_date ?? "") > today &&
+      payment.allocations.length > 0 &&
+      !repairingFutureSnowballPayments.current.has(payment.id)
+    );
+    futureAppliedPayments.forEach(payment => {
+      repairingFutureSnowballPayments.current.add(payment.id);
+      void (async () => {
+        for (const allocation of payment.allocations) {
+          const bill = bills.find(item => item.id === allocation.billId);
+          if (!bill?.is_debt) continue;
+          const nextBalance = Math.max(0, bill.balance + allocation.payment);
+          await ensureSaved(
+            supabase.from("bills").update({ balance: nextBalance }).eq("id", allocation.billId).eq("user_id", user.id),
+            "Defer future snowball balance"
+          );
+          const override = overrides.find(item => item.bill_id === allocation.billId && item.month === payment.month && item.year === payment.year);
+          if (override) {
+            await ensureSaved(
+              supabase.from("monthly_overrides")
+                .update({ paid_amount: Math.max(0, override.paid_amount - allocation.payment) })
+                .eq("id", override.id)
+                .eq("user_id", user.id),
+              "Defer future snowball paid amount"
+            );
+          }
+        }
+        await saveExtraPayment(
+          payment.month,
+          payment.year,
+          payment.amount,
+          payment.allocations,
+          payment.payment_date,
+          markSnowballSourcesPending(payment.sources ?? [{ type: "manual", amount: payment.amount }]),
+        );
+        const [billRows, overrideRows] = await Promise.all([
+          supabase.from("bills").select("*").eq("user_id", user.id),
+          supabase.from("monthly_overrides").select("*").eq("user_id", user.id).eq("month", payment.month).eq("year", payment.year),
+        ]);
+        if (billRows.error) throw new Error(`Refresh deferred debts: ${billRows.error.message}`);
+        if (overrideRows.error) throw new Error(`Refresh deferred overrides: ${overrideRows.error.message}`);
+        setBills(reorderDebtPriorities((billRows.data ?? []).map(normalizeBillRow)));
+        setOverrides(prev => [
+          ...prev.filter(item => item.month !== payment.month || item.year !== payment.year),
+          ...(overrideRows.data ?? []).map((o: any) => ({
+            ...o,
+            paid_amount: Number(o.paid_amount),
+            custom_amount: o.custom_amount !== null ? Number(o.custom_amount) : undefined,
+            custom_due_day: o.custom_due_day !== null ? Number(o.custom_due_day) : undefined,
+            actual_amount: o.actual_amount !== null ? Number(o.actual_amount) : undefined,
+            paid_date: o.paid_date ?? undefined,
+          })),
+        ]);
+      })()
+        .catch(error => markSaveFailed(error, async () => undefined))
+        .finally(() => repairingFutureSnowballPayments.current.delete(payment.id));
+    });
+  }, [user, extraPayments, bills, overrides, saveExtraPayment, markSaveFailed]);
 
   const finalizeBillPayment = useCallback(async (billId: string, month: number, year: number, actualAmount: number, paidDate: string) => {
     const bill = bills.find(b => b.id === billId);
