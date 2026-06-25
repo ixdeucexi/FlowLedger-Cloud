@@ -1367,7 +1367,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           id: `income:${i.id}:${year}-${month + 1}-${d}`,
           sourceType: "income", sourceId: i.id,
           date: `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`,
-          kind: "scheduled_income", amount: amt, status: "planned", name: i.name,
+          kind: "scheduled_income", amount: amt, status: "scheduled", name: i.name,
         });
       });
     });
@@ -1410,12 +1410,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     });
     const debtExtrasByDay: Record<number, number> = {};
     extraPayments.filter(ep => ep.month === month && ep.year === year).forEach(ep => {
-      const day = ep.payment_date ? Number(ep.payment_date.split("-")[2]) : 1;
+      const paymentDate = ep.payment_date ?? `${year}-${String(month + 1).padStart(2, "0")}-01`;
+      const day = Number(paymentDate.split("-")[2]);
+      if (!Number.isFinite(day) || day < 1 || day > daysInMonth) return;
+      const pending = hasPendingSnowballBalanceApply(ep) || paymentDate > localDateString();
+      const targetNames = Array.from(new Set(ep.allocations.map(allocation => allocation.billName).filter(Boolean))).join(", ");
       debtExtrasByDay[day] = (debtExtrasByDay[day] ?? 0) + ep.amount;
       financialEvents.push({
         id: `extra:${ep.id}:${year}-${month + 1}-${day}`, sourceType: "extra_payment", sourceId: ep.id,
-        date: `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
-        kind: "debt_payment", amount: -ep.amount, status: "finalized", name: "Extra debt payment",
+        date: paymentDate,
+        kind: "debt_payment", amount: -ep.amount, status: pending ? "scheduled" : "applied", name: targetNames ? `Snowball payment to ${targetNames}` : "Snowball debt payment",
       });
     });
     const goalsByDay: Record<number, GoalExpense[]> = {};

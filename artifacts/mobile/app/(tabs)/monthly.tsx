@@ -18,6 +18,7 @@ import colors from "@/constants/colors";
 import type { Bill, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
+import { groupForecastEvents } from "@/lib/forecastDisplay";
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { isValidDateInMonth } from "@/lib/schedule";
 
@@ -110,6 +111,10 @@ export default function MonthlyScreen() {
 
   const selectedDay = selectedDate ? parseInt(selectedDate.split("-")[2]) : null;
   const selectedForecastDay = selectedDay === null ? undefined : dailyBalances.find(item => item.day === selectedDay);
+  const selectedForecastGroups = useMemo(
+    () => groupForecastEvents(selectedForecastDay?.events ?? []),
+    [selectedForecastDay]
+  );
 
   const scheduledBillsForDay = useMemo(() => {
     if (selectedDay === null) return [];
@@ -711,10 +716,15 @@ export default function MonthlyScreen() {
                   </View>
                   <Feather name="info" size={16} color={c.primary} />
                 </View>
-                {(selectedForecastDay.events ?? []).map(event => (
-                  <View key={event.id} style={styles.forecastSourceRow}>
-                    <Text numberOfLines={1} style={[styles.forecastSourceName, { color: c.mutedForeground }]}>{event.name ?? event.sourceType} · {event.status}</Text>
-                    <Text style={[styles.forecastSourceAmount, { color: event.amount >= 0 ? c.success : c.foreground }]}>{event.amount >= 0 ? "+" : "-"}${Math.abs(event.amount).toFixed(2)}</Text>
+                {selectedForecastGroups.map(group => (
+                  <View key={group.key} style={styles.forecastGroup}>
+                    <Text style={[styles.forecastGroupTitle, { color: c.foreground }]}>{group.title}</Text>
+                    {group.events.map(item => (
+                      <View key={item.event.id} style={styles.forecastSourceRow}>
+                        <Text numberOfLines={1} style={[styles.forecastSourceName, { color: c.mutedForeground }]}>{item.label} · {item.statusLabel}</Text>
+                        <Text style={[styles.forecastSourceAmount, { color: item.event.amount >= 0 ? c.success : c.foreground }]}>{item.amountLabel}</Text>
+                      </View>
+                    ))}
                   </View>
                 ))}
               </View>
@@ -1058,8 +1068,10 @@ const styles = StyleSheet.create({
   forecastExplanationHeader: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginBottom: 6 },
   forecastExplanationTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   forecastExplanationSub: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
+  forecastGroup: { paddingTop: 6 },
+  forecastGroupTitle: { fontSize: 11, fontFamily: "Inter_700Bold", marginBottom: 2 },
   forecastSourceRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 5 },
-  forecastSourceName: { flex: 1, fontSize: 11, fontFamily: "Inter_400Regular", textTransform: "capitalize" },
+  forecastSourceName: { flex: 1, fontSize: 11, fontFamily: "Inter_400Regular" },
   forecastSourceAmount: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   txListTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   sectionLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.8, marginHorizontal: 16, marginTop: 10, marginBottom: 4 },

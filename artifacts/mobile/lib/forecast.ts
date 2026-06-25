@@ -6,7 +6,7 @@ export type FinancialEventKind =
   | "goal"
   | "debt_payment";
 
-export type FinancialEventStatus = "planned" | "finalized" | "actual";
+export type FinancialEventStatus = "planned" | "scheduled" | "finalized" | "actual" | "applied";
 
 export interface FinancialEvent {
   id: string;

@@ -12,6 +12,7 @@ import colors from "@/constants/colors";
 import type { Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
+import { debtPaymentStatusLabel } from "@/lib/forecastDisplay";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -188,15 +189,17 @@ export default function TransactionsScreen() {
       const date  = ep.payment_date ?? `${ep.year}-${String(ep.month + 1).padStart(2, "0")}-01`;
       const names = ep.allocations.map(a => a.billName).join(", ");
       const funding = (ep.sources ?? []).map(source => source.type === "bill_surplus" ? `${source.billName ?? "bill"} surplus` : "manual safe extra").join(", ");
+      const status = debtPaymentStatusLabel(date, (ep.sources ?? []).some(source => source.pendingBalanceApply));
+      const statusLabel = status === "scheduled" ? "Scheduled" : "Applied";
       items.push({
         id:       `extra-${ep.id}`,
         date,
         amount:   -ep.amount,
-        label:    names || "Extra Debt Payment",
+        label:    `${statusLabel}: ${names || "Extra Debt Payment"}`,
         category: "Debt",
         source:   "extra_payment",
         editable: false,
-        detail:   `$${ep.amount.toFixed(2)} applied to: ${names || "debt accounts"}${funding ? ` · Funded by ${funding}` : ""}`,
+        detail:   `$${ep.amount.toFixed(2)} ${status} ${status === "scheduled" ? "for" : "to"} ${names || "debt accounts"} on ${formatDateLong(date)}${funding ? ` · Funded by ${funding}` : ""}`,
       });
     }
 

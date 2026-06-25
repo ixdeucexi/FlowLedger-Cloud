@@ -11,7 +11,9 @@
   },
   "include": [
     "lib/forecast.ts",
+    "lib/forecastDisplay.ts",
     "lib/forecast.test.ts",
+    "lib/forecastDisplay.test.ts",
     "lib/snowball.ts",
     "lib/snowball.test.ts",
     "lib/diagnostics.test.ts",
