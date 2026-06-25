@@ -530,8 +530,8 @@ export default function MoreScreen() {
         visible={incomeModalVisible}
         onClose={() => { setIncomeModalVisible(false); setEditIncome(null); }}
         onSave={(data) => {
-          if ("id" in data) updateIncome(data as IncomeItem);
-          else addIncome(data);
+          if ("id" in data) return updateIncome(data as IncomeItem);
+          return addIncome(data);
         }}
         editItem={editIncome}
       />

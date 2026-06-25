@@ -961,7 +961,7 @@ export default function DashboardScreen() {
       <AddBillModal
         visible={addBillVisible}
         onClose={() => setAddBillVisible(false)}
-        onSave={(data) => { addBill(data as Omit<Bill, "id" | "created_at">); }}
+        onSave={(data) => addBill(data as Omit<Bill, "id" | "created_at">)}
         onDelete={() => {}}
         editBill={null}
       />
@@ -970,8 +970,8 @@ export default function DashboardScreen() {
         visible={goalModalVisible}
         onClose={() => { setGoalModalVisible(false); setEditGoal(null); }}
         onSave={(data) => {
-          if ("id" in data) updateGoal(data as Goal);
-          else addGoal(data);
+          if ("id" in data) return updateGoal(data as Goal);
+          return addGoal(data);
         }}
         onDelete={deleteGoal}
         editGoal={editGoal}

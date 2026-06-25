@@ -280,8 +280,8 @@ export default function TransactionsScreen() {
   }, [filtered]);
 
   const handleSave = (data: Omit<Transaction, "id"> | Transaction) => {
-    if ("id" in data) updateTransaction(data as Transaction);
-    else addTransaction(data);
+    if ("id" in data) return updateTransaction(data as Transaction);
+    return addTransaction(data);
   };
 
   const handleDelete = (id: string) => {

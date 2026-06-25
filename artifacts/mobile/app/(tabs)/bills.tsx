@@ -99,8 +99,8 @@ export default function BillsScreen() {
 
   // ── Handlers ────────────────────────────────────────────────────
   const handleSave = useCallback((data: Omit<Bill, "id" | "created_at"> | Bill) => {
-    if ("id" in data) updateBill(data as Bill);
-    else addBill(data);
+    if ("id" in data) return updateBill(data as Bill);
+    return addBill(data);
   }, [addBill, updateBill]);
 
   const handleApplySnowball = () => {

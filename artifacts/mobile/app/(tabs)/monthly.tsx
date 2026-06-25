@@ -62,6 +62,7 @@ export default function MonthlyScreen() {
   const [snowballResults, setSnowballResults] = useState<{ name: string; payment: number; paidOff: boolean }[]>([]);
   const [showSnowballResults, setShowSnowballResults] = useState(false);
   const [dueDayPickerBill, setDueDayPickerBill] = useState<Bill | null>(null);
+  const [savingDueDay, setSavingDueDay] = useState(false);
   const [snowballModalVisible, setSnowballModalVisible] = useState(false);
   const [snowballPreview, setSnowballPreview] = useState<SnowballProjectionResult | null>(null);
   const [surplusPrompt, setSurplusPrompt] = useState<{ bill: Bill; budgeted: number; actual: number; paidDate: string } | null>(null);
@@ -224,6 +225,20 @@ export default function MonthlyScreen() {
     setCustomAmount(bill.id, month, selectedYear, isNaN(parsed) || parsed === bill.amount ? undefined : parsed);
     setEditingAmounts(p => { const n = { ...p }; delete n[key]; return n; });
   }, [editingAmounts, setCustomAmount, month, selectedYear]);
+
+  const saveDueDayChange = useCallback(async (bill: Bill, day: number | undefined) => {
+    if (savingDueDay) return;
+    setSavingDueDay(true);
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      await setCustomDueDay(bill.id, month, selectedYear, day);
+      setDueDayPickerBill(null);
+    } catch (error) {
+      Alert.alert("Couldn’t save date", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSavingDueDay(false);
+    }
+  }, [savingDueDay, setCustomDueDay, month, selectedYear]);
 
 
   const handleQuickPaid = useCallback((billId: string, amount: number, isPaid: boolean) => {
@@ -606,7 +621,7 @@ export default function MonthlyScreen() {
                       </Pressable>
                       {customDay !== undefined && (
                         <Pressable
-                          onPress={() => { setCustomDueDay(bill.id, month, selectedYear, undefined); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                          onPress={() => saveDueDayChange(bill, undefined)}
                           style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, marginLeft: 6 })}
                           hitSlop={8}
                         >
@@ -897,15 +912,8 @@ export default function MonthlyScreen() {
                       return (
                         <Pressable
                           key={day}
-                          onPress={() => {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            if (day === dueDayPickerBill.due_day) {
-                              setCustomDueDay(dueDayPickerBill.id, month, selectedYear, undefined);
-                            } else {
-                              setCustomDueDay(dueDayPickerBill.id, month, selectedYear, day);
-                            }
-                            setDueDayPickerBill(null);
-                          }}
+                          disabled={savingDueDay}
+                          onPress={() => saveDueDayChange(dueDayPickerBill, day === dueDayPickerBill.due_day ? undefined : day)}
                           style={({ pressed }) => [
                             styles.pickerDayBtn,
                             {
@@ -928,11 +936,8 @@ export default function MonthlyScreen() {
 
                   {customDay !== undefined && (
                     <Pressable
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setCustomDueDay(dueDayPickerBill.id, month, selectedYear, undefined);
-                        setDueDayPickerBill(null);
-                      }}
+                      disabled={savingDueDay}
+                      onPress={() => saveDueDayChange(dueDayPickerBill, undefined)}
                       style={({ pressed }) => [
                         styles.pickerResetBtn,
                         { backgroundColor: c.muted, opacity: pressed ? 0.7 : 1, borderRadius: colors.radius },
@@ -954,12 +959,12 @@ export default function MonthlyScreen() {
       <AddTransactionModal
         visible={txModalVisible}
         onClose={() => { setTxModalVisible(false); setEditTx(null); }}
-        onSave={(data) => {
+        onSave={async (data) => {
           if (editTx && "id" in data) {
-            updateTransaction(data as Transaction);
+            await updateTransaction(data as Transaction);
           } else {
             const newTx = data as Omit<Transaction, "id">;
-            addTransaction(newTx);
+            await addTransaction(newTx);
             checkForRecurring(newTx);
           }
         }}

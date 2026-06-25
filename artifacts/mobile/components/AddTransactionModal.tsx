@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -22,8 +23,8 @@ import { useColors } from "@/hooks/useColors";
 interface Props {
   visible: boolean;
   onClose: () => void;
-  onSave: (tx: Omit<Transaction, "id"> | Transaction) => void;
-  onDelete?: (id: string) => void;
+  onSave: (tx: Omit<Transaction, "id"> | Transaction) => void | Promise<unknown>;
+  onDelete?: (id: string) => void | Promise<unknown>;
   editTx?: Transaction | null;
   defaultDate?: string;
 }
@@ -38,6 +39,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
   const [isExpense, setIsExpense] = useState(true);
   const [accountId, setAccountId] = useState<string | undefined>();
   const [linkedBillId, setLinkedBillId] = useState<string | undefined>();
+  const [saving, setSaving] = useState(false);
   const activeDebts = bills
     .filter(bill => bill.is_debt && Number(bill.balance) > 0)
     .slice()
@@ -66,7 +68,8 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
     }
   }, [editTx, visible, defaultDate, accounts]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (saving) return;
     const parsed = parseFloat(amount);
     if (isNaN(parsed) || parsed <= 0) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -78,9 +81,16 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
       account_id: accountId,
       linked_bill_id: isExpense ? linkedBillId : undefined,
     };
-    if (editTx) onSave({ ...data, id: editTx.id });
-    else onSave(data);
-    onClose();
+    setSaving(true);
+    try {
+      if (editTx) await onSave({ ...data, id: editTx.id });
+      else await onSave(data);
+      onClose();
+    } catch (error) {
+      Alert.alert("Couldn’t save transaction", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const inputStyle = [styles.input, { backgroundColor: c.card, color: c.foreground, borderColor: c.border }];
@@ -169,10 +179,11 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
             )}
 
             <Pressable
+              disabled={saving}
               onPress={handleSave}
-              style={({ pressed }) => [styles.saveBtn, { backgroundColor: c.primary, borderRadius: colors.radius, opacity: pressed ? 0.85 : 1 }]}
+              style={({ pressed }) => [styles.saveBtn, { backgroundColor: c.primary, borderRadius: colors.radius, opacity: saving ? 0.55 : pressed ? 0.85 : 1 }]}
             >
-              <Text style={[styles.saveBtnText, { color: c.primaryForeground }]}>{editTx ? "Update" : "Add Transaction"}</Text>
+              <Text style={[styles.saveBtnText, { color: c.primaryForeground }]}>{saving ? "Saving…" : editTx ? "Update" : "Add Transaction"}</Text>
             </Pressable>
           </ScrollView>
         </View>

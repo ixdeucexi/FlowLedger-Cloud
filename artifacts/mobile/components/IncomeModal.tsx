@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useEffect, useState } from "react";
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import colors from "@/constants/colors";
 import type { IncomeAmountEntry, IncomeItem } from "@/context/BudgetContext";
@@ -24,7 +24,7 @@ function formatYYMM(ef: string) {
 interface Props {
   visible: boolean;
   onClose: () => void;
-  onSave: (item: Omit<IncomeItem, "id"> | IncomeItem) => void;
+  onSave: (item: Omit<IncomeItem, "id"> | IncomeItem) => void | Promise<unknown>;
   editItem?: IncomeItem | null;
 }
 
@@ -40,6 +40,7 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
   const [showUpdateForm,  setShowUpdateForm]  = useState(false);
   const [raiseAmount,     setRaiseAmount]     = useState("");
   const [raiseDate,       setRaiseDate]       = useState("");
+  const [saving,          setSaving]          = useState(false);
 
   useEffect(() => {
     if (editItem) {
@@ -59,7 +60,8 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
     setRaiseDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`);
   }, [editItem, visible]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (saving) return;
     const a = parseFloat(amount);
     if (!name.trim() || isNaN(a) || a <= 0) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -81,9 +83,16 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
       next_payment_date,
       amount_history: history.length > 0 ? history : undefined,
     };
-    if (editItem) onSave({ ...data, id: editItem.id });
-    else onSave(data);
-    onClose();
+    setSaving(true);
+    try {
+      if (editItem) await onSave({ ...data, id: editItem.id });
+      else await onSave(data);
+      onClose();
+    } catch (error) {
+      Alert.alert("Couldn’t save income", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleAddUpdate = () => {
@@ -303,10 +312,11 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
             </View>
 
             <Pressable
+              disabled={saving}
               onPress={handleSave}
-              style={({ pressed }) => [styles.saveBtn, { backgroundColor: c.primary, borderRadius: colors.radius, opacity: pressed ? 0.85 : 1 }]}
+              style={({ pressed }) => [styles.saveBtn, { backgroundColor: c.primary, borderRadius: colors.radius, opacity: saving ? 0.55 : pressed ? 0.85 : 1 }]}
             >
-              <Text style={[styles.saveBtnText, { color: c.primaryForeground }]}>{editItem ? "Update" : "Add Income"}</Text>
+              <Text style={[styles.saveBtnText, { color: c.primaryForeground }]}>{saving ? "Saving…" : editItem ? "Update" : "Add Income"}</Text>
             </Pressable>
           </ScrollView>
         </View>

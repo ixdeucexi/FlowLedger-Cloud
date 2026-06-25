@@ -20,8 +20,8 @@ function dateToYMD(d: Date) {
 interface Props {
   visible: boolean;
   onClose: () => void;
-  onSave: (goal: Omit<Goal, "id" | "created_at"> | Goal) => void;
-  onDelete?: (id: string) => void;
+  onSave: (goal: Omit<Goal, "id" | "created_at"> | Goal) => void | Promise<unknown>;
+  onDelete?: (id: string) => void | Promise<unknown>;
   editGoal?: Goal | null;
 }
 
@@ -33,6 +33,7 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Prop
   const [current, setCurrent] = useState("");
   const [goalMode, setGoalMode] = useState<"savings" | "budget">("savings");
   const [targetDate, setTargetDate] = useState(""); // YYYY-MM-DD
+  const [saving, setSaving] = useState(false);
 
   const today = new Date();
   const todayYMD = dateToYMD(today);
@@ -52,7 +53,8 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Prop
     }
   }, [editGoal, visible]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (saving) return;
     const t = parseFloat(target);
     if (!name.trim() || isNaN(t) || t <= 0 || !targetDate) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -63,9 +65,16 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Prop
       target_date: targetDate, // stored as YYYY-MM-DD
       goal_type: goalMode === "budget" ? "planned_expense" : "savings",
     };
-    if (editGoal) onSave({ ...data, id: editGoal.id, created_at: editGoal.created_at });
-    else onSave(data);
-    onClose();
+    setSaving(true);
+    try {
+      if (editGoal) await onSave({ ...data, id: editGoal.id, created_at: editGoal.created_at });
+      else await onSave(data);
+      onClose();
+    } catch (error) {
+      Alert.alert("Couldn’t save", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = () => {
@@ -184,14 +193,15 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Prop
 
             {/* ── Save ── */}
             <Pressable
+              disabled={saving}
               onPress={handleSave}
               style={({ pressed }) => [
                 styles.saveBtn,
-                { backgroundColor: c.primary, borderRadius: colors.radius, opacity: pressed ? 0.85 : 1 },
+                { backgroundColor: c.primary, borderRadius: colors.radius, opacity: saving ? 0.55 : pressed ? 0.85 : 1 },
               ]}
             >
               <Text style={[styles.saveBtnText, { color: c.primaryForeground }]}>
-                {editGoal ? "Update Goal" : "Create Goal"}
+                {saving ? "Saving…" : editGoal ? "Update Goal" : "Create Goal"}
               </Text>
             </Pressable>
 

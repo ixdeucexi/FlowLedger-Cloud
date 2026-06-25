@@ -18,8 +18,8 @@ const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 interface AddBillModalProps {
   visible: boolean;
   onClose: () => void;
-  onSave: (bill: Omit<Bill, "id" | "created_at"> | Bill) => void;
-  onDelete?: (id: string) => void;
+  onSave: (bill: Omit<Bill, "id" | "created_at"> | Bill) => void | Promise<unknown>;
+  onDelete?: (id: string) => void | Promise<unknown>;
   editBill?: Bill | null;
   forceDebt?: boolean;
 }
@@ -44,6 +44,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
   const [showDayPicker, setShowDayPicker] = useState(false);
   const [pickerYear,    setPickerYear]    = useState(() => new Date().getFullYear());
   const [pickerMonth,   setPickerMonth]   = useState(() => new Date().getMonth());
+  const [saving,         setSaving]        = useState(false);
 
   const firstDOWInDayPickerMonth = useMemo(
     () => new Date(pickerYear, pickerMonth, 1).getDay(),
@@ -89,7 +90,8 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
 
   const noun = forceDebt || isDebt ? "Debt" : "Bill";
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (saving) return;
     const parsedAmount = parseFloat(amount);
     if (!name.trim() || isNaN(parsedAmount) || parsedAmount <= 0) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -109,9 +111,16 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
       frequency,
       include_in_snowball: isDebt ? includeInSnowball : false,
     };
-    if (editBill) onSave({ ...data, id: editBill.id, created_at: editBill.created_at });
-    else onSave(data);
-    onClose();
+    setSaving(true);
+    try {
+      if (editBill) await onSave({ ...data, id: editBill.id, created_at: editBill.created_at });
+      else await onSave(data);
+      onClose();
+    } catch (error) {
+      Alert.alert("Couldn’t save date", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = () => {
@@ -368,11 +377,11 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
             )}
 
             {/* Save */}
-            <Pressable onPress={handleSave}
-              style={({ pressed }) => [styles.saveBtn, { backgroundColor: c.primary, borderRadius: colors.radius, opacity: pressed ? 0.85 : 1 }]}
+            <Pressable disabled={saving} onPress={handleSave}
+              style={({ pressed }) => [styles.saveBtn, { backgroundColor: c.primary, borderRadius: colors.radius, opacity: saving ? 0.55 : pressed ? 0.85 : 1 }]}
             >
               <Text style={[styles.saveBtnText, { color: c.primaryForeground }]}>
-                {editBill ? `Update ${noun}` : `Add ${noun}`}
+                {saving ? "Saving…" : editBill ? `Update ${noun}` : `Add ${noun}`}
               </Text>
             </Pressable>
 

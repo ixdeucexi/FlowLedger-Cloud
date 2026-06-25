@@ -321,6 +321,16 @@ async function ensureSaved(
   if (error) throw new Error(`${action}: ${error.message}`);
 }
 
+function monthlyOverrideDbPayload(override: MonthlyOverride) {
+  return {
+    ...override,
+    custom_amount: override.custom_amount ?? null,
+    custom_due_day: override.custom_due_day ?? null,
+    actual_amount: override.actual_amount ?? null,
+    paid_date: override.paid_date ?? null,
+  };
+}
+
 function reorderDebtPriorities(bills: Bill[]): Bill[] {
   // Assign priorities based on balance ascending: lowest balance = #1 (snowball order)
   const activeDebts = bills
@@ -815,11 +825,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       try {
         if (existing) {
           await ensureSaved(
-            supabase.from("monthly_overrides").update({ ...updated }).eq("id", existing.id).eq("user_id", user.id),
+            supabase.from("monthly_overrides").update(monthlyOverrideDbPayload(updated)).eq("id", existing.id).eq("user_id", user.id),
             "Update monthly bill"
           );
         } else {
-          await ensureSaved(supabase.from("monthly_overrides").insert({ ...updated, user_id: user.id }), "Create monthly bill");
+          await ensureSaved(supabase.from("monthly_overrides").insert({ ...monthlyOverrideDbPayload(updated), user_id: user.id }), "Create monthly bill");
         }
         markSaveCompleted();
         void recordDiagnostic(user.id, {
