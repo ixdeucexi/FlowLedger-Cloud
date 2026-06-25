@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
@@ -623,7 +623,42 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }).catch(() => undefined);
       }
     })();
-  }, [user]);
+  }, [user, demoMode]);
+
+  useEffect(() => {
+    if (!user || demoMode) return;
+    const refreshAccountsAndSettings = async () => {
+      const uid = user.id;
+      const [accountResult, settingsResult] = await Promise.all([
+        supabase.from("accounts").select("*").eq("user_id", uid).order("created_at"),
+        supabase.from("settings").select("*").eq("user_id", uid).maybeSingle(),
+      ]);
+      if (!accountResult.error) {
+        setAccounts((accountResult.data ?? []).filter((a: any) => a.account_type !== "credit_card").map((a: any) => ({
+          ...a,
+          current_balance: Number(a.current_balance),
+          last_reconciled_at: a.last_reconciled_at ?? undefined,
+          is_active: a.is_active !== false,
+        })));
+      }
+      if (!settingsResult.error && settingsResult.data) {
+        const sData = settingsResult.data;
+        setSettings(prev => ({
+          ...prev,
+          paymentMethod:        sData.payment_method as Settings["paymentMethod"],
+          starting_balance:     Number(sData.starting_balance),
+          starting_balance_date: sData.starting_balance_date ?? undefined,
+          safety_floor:         Number(sData.safety_floor ?? 200),
+          forecast_horizon_months: Math.min(24, Math.max(1, Number(sData.forecast_horizon_months ?? 6))),
+          onboarding_completed: Boolean(sData.onboarding_completed),
+        }));
+      }
+    };
+    const subscription = AppState.addEventListener("change", state => {
+      if (state === "active") void refreshAccountsAndSettings();
+    });
+    return () => subscription.remove();
+  }, [user, demoMode]);
 
   // ─── Bills ────────────────────────────────────────────────────────────────────
 
@@ -1901,9 +1936,20 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     markSaveStarted();
     try {
       await ensureSaved(supabase.from("accounts").update({
-        name: account.name, account_type: account.account_type, is_active: account.is_active,
+        name: account.name,
+        account_type: account.account_type,
+        current_balance: account.current_balance,
+        balance_as_of: account.balance_as_of,
+        is_active: account.is_active,
       }).eq("id", account.id).eq("user_id", user.id), "Update account");
-      await persistAccountAnchor(next, account.balance_as_of);
+      try {
+        await persistAccountAnchor(next, account.balance_as_of);
+      } catch (anchorError) {
+        void recordDiagnostic(user.id, {
+          eventType: "save_failure", operation: "account_save", platform: diagnosticPlatform(),
+          errorCode: diagnosticErrorCode(anchorError),
+        }).catch(() => undefined);
+      }
       markSaveCompleted();
     } catch (error) {
       if (previous) setAccounts(current => current.map(item => item.id === previous.id ? previous : item));

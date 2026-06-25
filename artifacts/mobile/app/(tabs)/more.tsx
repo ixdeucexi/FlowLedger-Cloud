@@ -541,7 +541,13 @@ export default function MoreScreen() {
         mode={accountMode}
         onClose={() => setAccountModalVisible(false)}
         onSave={value => {
-          if (selectedAccount) return updateAccount({ ...selectedAccount, name: value.name, account_type: value.account_type });
+          if (selectedAccount) return updateAccount({
+            ...selectedAccount,
+            name: value.name,
+            account_type: value.account_type,
+            current_balance: value.current_balance,
+            balance_as_of: value.balance_as_of,
+          });
           return addAccount({ ...value, is_active: true });
         }}
         onReconcile={(balance, date) => selectedAccount ? reconcileAccount(selectedAccount.id, balance, date) : Promise.resolve()}
