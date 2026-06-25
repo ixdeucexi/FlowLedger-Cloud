@@ -1937,7 +1937,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           errorCode: diagnosticErrorCode(historyResult.error),
         }).catch(() => undefined);
       }
-      await persistAccountAnchor(next, asOfDate);
+      try {
+        await persistAccountAnchor(next, asOfDate);
+      } catch (anchorError) {
+        void recordDiagnostic(user.id, {
+          eventType: "save_failure", operation: "reconciliation", platform: diagnosticPlatform(),
+          errorCode: diagnosticErrorCode(anchorError),
+        }).catch(() => undefined);
+      }
       markSaveCompleted();
       void recordDiagnostic(user.id, { eventType: "performance", operation: "reconciliation", platform: diagnosticPlatform() }).catch(() => undefined);
     } catch (error) {
