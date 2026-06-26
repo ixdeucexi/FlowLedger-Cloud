@@ -2,9 +2,9 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Tabs } from "expo-router";
 import React from "react";
-import { Platform, StyleSheet, View, useColorScheme } from "react-native";
+import { Platform, StyleSheet, Text, View, useColorScheme } from "react-native";
 
-import { BudgetProvider } from "@/context/BudgetContext";
+import { BudgetProvider, useBudget } from "@/context/BudgetContext";
 import { SaveStatusBanner } from "@/components/SaveStatusBanner";
 import { DecisionDueModal } from "@/components/DecisionDueModal";
 import { useColors } from "@/hooks/useColors";
@@ -18,15 +18,31 @@ const TABS = [
   { name: "more",         title: "More",         icon: "more-horizontal" },
 ] as const;
 
-export default function TabLayout() {
+function BudgetLoadingScreen() {
   const colors = useColors();
+  return (
+    <View style={[styles.loadingScreen, { backgroundColor: colors.background }]}>
+      <View style={styles.loadingMark}>
+        <Text style={styles.loadingMarkText}>F</Text>
+      </View>
+      <Text style={[styles.loadingTitle, { color: colors.foreground }]}>FlowLedger</Text>
+      <Text style={[styles.loadingSub, { color: colors.mutedForeground }]}>Loading your plan…</Text>
+    </View>
+  );
+}
+
+function TabContent() {
+  const colors = useColors();
+  const { loading } = useBudget();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
 
+  if (loading) return <BudgetLoadingScreen />;
+
   return (
-    <BudgetProvider>
+    <>
       <Tabs
         detachInactiveScreens={false}
         screenOptions={{
@@ -71,6 +87,46 @@ export default function TabLayout() {
       </Tabs>
       <SaveStatusBanner />
       <DecisionDueModal />
+    </>
+  );
+}
+
+export default function TabLayout() {
+  return (
+    <BudgetProvider>
+      <TabContent />
     </BudgetProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingScreen: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingMark: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(37,99,235,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(37,99,235,0.35)",
+    marginBottom: 12,
+  },
+  loadingMarkText: {
+    color: "#2563eb",
+    fontSize: 28,
+    fontWeight: "800",
+  },
+  loadingTitle: {
+    fontSize: 28,
+    fontWeight: "800",
+  },
+  loadingSub: {
+    fontSize: 14,
+    marginTop: 4,
+  },
+});
