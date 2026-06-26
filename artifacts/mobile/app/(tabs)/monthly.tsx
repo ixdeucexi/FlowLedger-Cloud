@@ -197,8 +197,34 @@ export default function MonthlyScreen() {
     setSurplusPrompt(null);
   };
 
+  const askToMatchBillAmountToPaid = (prompt: { bill: Bill; budgeted: number; actual: number }) => {
+    const { bill, budgeted, actual } = prompt;
+    if (bill.is_debt || bill.frequency === "weekly" || Math.abs(budgeted - actual) < 0.005) return;
+    const currentMonthLabel = `${MONTH_FULL[month]} ${selectedYear}`;
+    const showPrompt = () => Alert.alert(
+      "Update bill amount?",
+      `${bill.name} was paid at $${actual.toFixed(2)}. Update ${currentMonthLabel}'s bill amount to $${actual.toFixed(2)} so it shows paid with $0 left?`,
+      [
+        { text: `Keep $${budgeted.toFixed(2)}`, style: "cancel" },
+        {
+          text: `Update to $${actual.toFixed(2)}`,
+          onPress: async () => {
+            try {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              await setCustomAmount(bill.id, month, selectedYear, Math.abs(actual - bill.amount) < 0.005 ? undefined : actual);
+            } catch (error) {
+              Alert.alert("Couldn’t update amount", error instanceof Error ? error.message : "Please try again.");
+            }
+          },
+        },
+      ],
+    );
+    setTimeout(showPrompt, Platform.OS === "web" ? 0 : 250);
+  };
+
   const addBillSurplusToSnowball = async () => {
     if (!surplusPrompt || !surplusSnowballOffer) return;
+    const prompt = surplusPrompt;
     const surplus = surplusPrompt.budgeted - surplusPrompt.actual;
     const existing = getExtraPayment(month, selectedYear);
     const otherSources = (existing?.sources ?? [{ type: "manual" as const, amount: existing?.amount ?? 0 }])
@@ -207,8 +233,10 @@ export default function MonthlyScreen() {
       .filter(source => source.amount > 0.005);
     if (!surplusSnowballOffer.safe || !surplusSnowballOffer.preview.allocations.length) return;
     await finalizeBillPayment(surplusPrompt.bill.id, month, selectedYear, surplusPrompt.actual, surplusPrompt.paidDate);
+    let surplusApplied = false;
     try {
       await applyDebtSnowballPayment(surplusSnowballOffer.preview, sources);
+      surplusApplied = true;
     } catch {
       Alert.alert(
         "Bill Finalized",
@@ -216,6 +244,7 @@ export default function MonthlyScreen() {
       );
     }
     setSurplusPrompt(null);
+    if (surplusApplied) askToMatchBillAmountToPaid(prompt);
   };
 
   const handleAmtBlur = useCallback((bill: { id: string; amount: number }, key: string) => {
