@@ -6,24 +6,36 @@ export type ThemeMode = "auto" | "dark" | "light";
 interface ThemeContextValue {
   themeMode: ThemeMode;
   setThemeMode: (m: ThemeMode) => void;
+  ready: boolean;
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
   themeMode: "dark",
   setThemeMode: () => {},
+  ready: false,
 });
 
 const STORAGE_KEY = "@app_theme_v1";
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [themeMode, setThemeModeState] = useState<ThemeMode>("dark");
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then(val => {
-      if (val === "auto" || val === "dark" || val === "light") {
-        setThemeModeState(val);
-      }
-    });
+    let mounted = true;
+    AsyncStorage.getItem(STORAGE_KEY)
+      .then(val => {
+        if (!mounted) return;
+        if (val === "auto" || val === "dark" || val === "light") {
+          setThemeModeState(val);
+        }
+      })
+      .finally(() => {
+        if (mounted) setReady(true);
+      });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const setThemeMode = (m: ThemeMode) => {
@@ -32,7 +44,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <ThemeContext.Provider value={{ themeMode, setThemeMode }}>
+    <ThemeContext.Provider value={{ themeMode, setThemeMode, ready }}>
       {children}
     </ThemeContext.Provider>
   );

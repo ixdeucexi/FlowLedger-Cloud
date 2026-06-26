@@ -1,51 +1,49 @@
-import { useRouter } from "expo-router";
-import React, { useEffect } from "react";
-import { Image, StatusBar, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import React from "react";
+import { StyleSheet, Text, View } from "react-native";
 
-export default function SplashScreen() {
-  const router = useRouter();
-
-  useEffect(() => {
-    const t = setTimeout(() => router.replace("/(tabs)"), 2000);
-    return () => clearTimeout(t);
-  }, []);
-
+export default function StartupRoute() {
   return (
-    <SafeAreaView style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#0a0e1a" />
-      <View style={styles.center}>
-        <Image
-          source={require("@/assets/images/logo_cropped.png")}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-        <Text style={styles.tagline}>Your money, clearly.</Text>
+    <View style={styles.root}>
+      <View style={styles.logoRing}>
+        <Text style={styles.logoMark}>F</Text>
       </View>
-    </SafeAreaView>
+      <Text style={styles.appName}>FlowLedger</Text>
+      <Text style={styles.tagline}>Your money, clearly.</Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#0a0e1a",
-  },
-  center: {
-    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 16,
-    paddingHorizontal: 24,
+    backgroundColor: "#0a0e1a",
   },
-  logo: {
-    width: "100%",
-    height: 90,
+  logoRing: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(34,197,94,0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(34,197,94,0.3)",
+    marginBottom: 14,
+  },
+  logoMark: {
+    color: "#22c55e",
+    fontSize: 30,
+    fontWeight: "800",
+  },
+  appName: {
+    color: "#f8fafc",
+    fontSize: 30,
+    fontWeight: "800",
   },
   tagline: {
-    color: "#475569",
-    fontSize: 15,
-    fontWeight: "500",
-    letterSpacing: 0.3,
+    color: "#64748b",
+    fontSize: 14,
+    marginTop: 4,
   },
 });
