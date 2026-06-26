@@ -331,6 +331,12 @@ function monthlyOverrideDbPayload(override: MonthlyOverride) {
   };
 }
 
+function endOfCurrentMonthYMD() {
+  const now = new Date();
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  return `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
+}
+
 function reorderDebtPriorities(bills: Bill[]): Bill[] {
   // Assign priorities based on balance ascending: lowest balance = #1 (snowball order)
   const activeDebts = bills
@@ -758,19 +764,34 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const deleteBill = useCallback(async (id: string) => {
     if (!user) return;
     const deletedBill = bills.find(bill => bill.id === id);
+    const shouldEndForwardOnly = !!deletedBill && (deletedBill.is_recurring || deletedBill.is_debt);
+    const forwardEndDate = endOfCurrentMonthYMD();
     if (demoMode) {
-      setBills(prev => reorderDebtPriorities(prev.filter(b => b.id !== id)));
-      setOverrides(prev => prev.filter(o => o.bill_id !== id));
+      if (shouldEndForwardOnly) {
+        setBills(prev => reorderDebtPriorities(prev.map(b => b.id === id ? { ...b, end_date: forwardEndDate } : b)));
+      } else {
+        setBills(prev => reorderDebtPriorities(prev.filter(b => b.id !== id)));
+        setOverrides(prev => prev.filter(o => o.bill_id !== id));
+      }
       return;
     }
-    const results = await Promise.all([
-      supabase.from("bills").delete().eq("id", id).eq("user_id", user.id),
-      supabase.from("monthly_overrides").delete().eq("bill_id", id).eq("user_id", user.id),
-    ]);
-    const failed = results.find(result => result.error);
-    if (failed?.error) throw new Error(`Delete bill: ${failed.error.message}`);
-    setBills(prev => reorderDebtPriorities(prev.filter(b => b.id !== id)));
-    setOverrides(prev => prev.filter(o => o.bill_id !== id));
+    if (shouldEndForwardOnly && deletedBill) {
+      const endedBill = { ...deletedBill, end_date: forwardEndDate };
+      await ensureSaved(
+        supabase.from("bills").update({ end_date: forwardEndDate, last_reviewed_at: new Date().toISOString() }).eq("id", id).eq("user_id", user.id),
+        "Stop future bill"
+      );
+      setBills(prev => reorderDebtPriorities(prev.map(b => b.id === id ? endedBill : b)));
+    } else {
+      const results = await Promise.all([
+        supabase.from("bills").delete().eq("id", id).eq("user_id", user.id),
+        supabase.from("monthly_overrides").delete().eq("bill_id", id).eq("user_id", user.id),
+      ]);
+      const failed = results.find(result => result.error);
+      if (failed?.error) throw new Error(`Delete bill: ${failed.error.message}`);
+      setBills(prev => reorderDebtPriorities(prev.filter(b => b.id !== id)));
+      setOverrides(prev => prev.filter(o => o.bill_id !== id));
+    }
     if (deletedBill?.is_debt) {
       const rollover = await supabase.rpc("recalculate_debt_minimum_boosts");
       if (rollover.error) throw new Error(`Recalculate debt minimum: ${rollover.error.message}`);

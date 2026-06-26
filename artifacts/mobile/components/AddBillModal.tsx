@@ -125,16 +125,31 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
 
   const handleDelete = () => {
     if (!editBill || !onDelete) return;
-    const doDelete = () => {
+    const doDelete = async () => {
+      if (saving) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      onDelete(editBill.id);
-      onClose();
+      setSaving(true);
+      try {
+        await onDelete(editBill.id);
+        onClose();
+      } catch (error) {
+        Alert.alert("Couldn’t delete", error instanceof Error ? error.message : "Please try again.");
+      } finally {
+        setSaving(false);
+      }
     };
     if (Platform.OS === "web") { doDelete(); return; }
-    Alert.alert(`Delete ${noun}`, `Delete "${editBill.name}"? All monthly data will be removed.`, [
+    const forwardOnly = editBill.is_recurring || editBill.is_debt;
+    Alert.alert(
+      forwardOnly ? `Stop Future ${noun}` : `Delete ${noun}`,
+      forwardOnly
+        ? `Stop "${editBill.name}" after this month? Past months and saved monthly details will stay unchanged.`
+        : `Delete "${editBill.name}"? This removes the bill and its monthly data.`,
+      [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: doDelete },
-    ]);
+      { text: forwardOnly ? "Stop Future" : "Delete", style: "destructive", onPress: doDelete },
+      ],
+    );
   };
 
   const nonDebtCategories = categories.filter(c => c !== "Debt");
@@ -388,10 +403,13 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
             {/* Delete */}
             {editBill && onDelete && (
               <Pressable onPress={handleDelete}
-                style={({ pressed }) => [styles.deleteBtn, { borderColor: c.destructive, opacity: pressed ? 0.7 : 1 }]}
+                disabled={saving}
+                style={({ pressed }) => [styles.deleteBtn, { borderColor: c.destructive, opacity: saving ? 0.55 : pressed ? 0.7 : 1 }]}
               >
                 <Feather name="trash-2" size={16} color={c.destructive} />
-                <Text style={[styles.deleteBtnText, { color: c.destructive }]}>Delete {noun}</Text>
+                <Text style={[styles.deleteBtnText, { color: c.destructive }]}>
+                  {(editBill.is_recurring || editBill.is_debt) ? `Stop Future ${noun}` : `Delete ${noun}`}
+                </Text>
               </Pressable>
             )}
 

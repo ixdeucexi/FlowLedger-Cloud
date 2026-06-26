@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isValidDateInMonth } from "./schedule";
+import { getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isValidDateInMonth } from "./schedule";
 
 describe("bill scheduling", () => {
   it("validates a selected calendar date inside the intended month", () => {
@@ -13,6 +13,13 @@ describe("bill scheduling", () => {
     const bill = { frequency: "monthly" as const, due_day: 31, start_date: "2026-02-01", end_date: "2026-03-31" };
     assert.deepEqual(getBillOccurrenceDays(bill, 1, 2026), [28]);
     assert.deepEqual(getBillOccurrenceDays(bill, 3, 2026), []);
+  });
+
+  it("keeps historical months active when a recurring bill is stopped going forward", () => {
+    const stoppedBill = { frequency: "monthly" as const, due_day: 15, start_date: "2026-01-01", end_date: "2026-06-30" };
+    assert.equal(isBillActiveForMonth(stoppedBill, 4, 2026), true);
+    assert.equal(isBillActiveForMonth(stoppedBill, 5, 2026), true);
+    assert.equal(isBillActiveForMonth(stoppedBill, 6, 2026), false);
   });
 
   it("finds every weekly occurrence including overlapping month boundaries", () => {
