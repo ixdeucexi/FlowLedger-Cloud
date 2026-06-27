@@ -363,7 +363,7 @@ export default function MonthlyScreen() {
 
   const displayedTxs = selectedDate
     ? txList.filter(t => t.date === selectedDate)
-    : txList.slice().sort((a, b) => b.date.localeCompare(a.date));
+    : [];
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
 
@@ -737,6 +737,7 @@ export default function MonthlyScreen() {
                 safetyFloor={settings.safety_floor}
             />
 
+            {selectedDate && (
             <View style={styles.txListHeader}>
               <Text style={[styles.txListTitle, { color: c.foreground }]}>
                 {selectedDate
@@ -750,6 +751,7 @@ export default function MonthlyScreen() {
                 <Feather name="plus" size={16} color={c.primaryForeground} />
               </Pressable>
             </View>
+            )}
 
             {selectedForecastDay && (
               <View style={[styles.forecastExplanation, { backgroundColor: c.card, borderColor: c.border }]}>
@@ -851,8 +853,8 @@ export default function MonthlyScreen() {
             )}
 
             {/* Manual transactions */}
-            {displayedTxs.length === 0 && scheduledBillsForDay.length === 0 && goalsForSelectedDay.length === 0 ? (
-              <EmptyState icon="credit-card" title="No Activity" message={selectedDate ? "Tap + to log a transaction for this day." : "Tap a day or use + to add transactions."} />
+            {selectedDate && displayedTxs.length === 0 && scheduledBillsForDay.length === 0 && goalsForSelectedDay.length === 0 ? (
+              <EmptyState icon="credit-card" title="No Activity" message="Tap + to log a transaction for this day." />
             ) : displayedTxs.length > 0 ? (
               <>
                 {(scheduledBillsForDay.length > 0 || goalsForSelectedDay.length > 0) && (
