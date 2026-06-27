@@ -32,7 +32,7 @@ export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const {
-    bills, getPaidAmount, getBillMonthlyTotal, selectedYear, setDashboardFilter,
+    bills, getPaidAmount, getBillMonthlyTotal, getMonthlyBills, selectedYear, setDashboardFilter,
     goals, addGoal, updateGoal, deleteGoal, checkGoalAffordability,
     getCashFlow, getMonthlyIncome, addBill, addTransaction, getDailyBalances, settings,
     accounts, incomes, forecastConfidence, updateSettings,
@@ -146,7 +146,8 @@ export default function DashboardScreen() {
   const firstYearNegEntry = yearNegSchedule.find(e => e.firstNegDay !== null) ?? null;
 
   const stats = useMemo(() => {
-    const monthBills = bills.filter(b => b.is_recurring || b.is_debt);
+    const monthBills = getMonthlyBills(currentMonth, selectedYear)
+      .filter(b => getBillMonthlyTotal(b, currentMonth, selectedYear) > 0);
     let totalDue = 0, totalPaid = 0, paidCount = 0;
     monthBills.forEach(b => {
       const amt  = getBillMonthlyTotal(b, currentMonth, selectedYear);
@@ -157,8 +158,9 @@ export default function DashboardScreen() {
     });
     const totalDebt  = bills.filter(b => b.is_debt).reduce((s, b) => s + b.balance, 0);
     const unpaidCount = monthBills.length - paidCount;
-    return { totalDue, totalPaid, remaining: totalDue - totalPaid, paidCount, unpaidCount, billCount: monthBills.length, totalDebt };
-  }, [bills, getBillMonthlyTotal, getPaidAmount, currentMonth, selectedYear]);
+    const billProgressPercent = monthBills.length > 0 ? Math.round((paidCount / monthBills.length) * 100) : 0;
+    return { totalDue, totalPaid, remaining: totalDue - totalPaid, paidCount, unpaidCount, billCount: monthBills.length, billProgressPercent, totalDebt };
+  }, [bills, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, currentMonth, selectedYear]);
 
   const upcomingBills = useMemo(() => {
     const sevenDaysLater = today + 7;
@@ -427,11 +429,12 @@ export default function DashboardScreen() {
                         colors={["rgba(255,255,255,0.6)", "rgba(255,255,255,0.95)"]}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 0 }}
-                        style={[styles.heroProgressFill, { width: `${Math.min((stats.totalPaid / stats.totalDue) * 100, 100)}%` as any }]}
+                        style={[styles.heroProgressFill, { width: `${Math.min(stats.billProgressPercent, 100)}%` as any }]}
                       />
                     </View>
                     <Text style={styles.heroProgressLabel}>
-                      {Math.round((stats.totalPaid / stats.totalDue) * 100)}% of bills paid this month
+                      {stats.paidCount} of {stats.billCount} bills paid this month
+                      {stats.unpaidCount > 0 ? ` • ${stats.unpaidCount} left` : ""}
                     </Text>
                   </View>
                 )}
