@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -14,7 +15,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
-import { useBudget } from "@/context/BudgetContext";
+import { useBudget, type DecisionRecord } from "@/context/BudgetContext";
+import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
 import { askFlo, loadFloMemory, updateFloMemory, type FloFacts } from "@/lib/flo";
 import {
@@ -49,7 +51,7 @@ export default function FloScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { bills, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, saveDecision, getTransactionsForMonth, categories } = useBudget();
+  const { bills, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, saveDecision, updateDecision, getTransactionsForMonth, categories } = useBudget();
   const [chat, dispatch] = useReducer(reduceFloChat, initialChat);
   const [cardsByMessageId, setCardsByMessageId] = useState<Record<string, FloResponseCard[]>>({});
   const [decisionByMessageId, setDecisionByMessageId] = useState<Record<string, { scenario: DecisionScenario; result: DecisionResult }>>({});
@@ -61,6 +63,11 @@ export default function FloScreen() {
   const [input, setInput] = useState("");
   const [summary, setSummary] = useState("");
   const [sampleIndex, setSampleIndex] = useState(0);
+  const [completePlan, setCompletePlan] = useState<DecisionRecord | null>(null);
+  const [completeActual, setCompleteActual] = useState("");
+  const [postponePlan, setPostponePlan] = useState<DecisionRecord | null>(null);
+  const [postponeDate, setPostponeDate] = useState("");
+  const [historyActionState, setHistoryActionState] = useState<Record<string, "saving" | "failed">>({});
   const scrollRef = useRef<ScrollView>(null);
   const now = useMemo(() => new Date(), []);
   const today = now.toISOString().slice(0, 10);
@@ -309,6 +316,89 @@ export default function FloScreen() {
     }
   };
 
+  const findDecision = (id: string) => decisions.find(decision => decision.id === id) ?? null;
+
+  const openCompletePlan = (id: string) => {
+    const decision = findDecision(id);
+    if (!decision) return;
+    setCompletePlan(decision);
+    setCompleteActual(String(Math.abs(decision.actual_amount ?? decision.scenario.amount)));
+  };
+
+  const completeSelectedPlan = async () => {
+    if (!completePlan) return;
+    const actual = Math.abs(Number(completeActual));
+    if (!Number.isFinite(actual)) return;
+    setHistoryActionState(previous => ({ ...previous, [completePlan.id]: "saving" }));
+    try {
+      await updateDecision({
+        ...completePlan,
+        status: "completed",
+        actual_amount: actual,
+        completed_at: new Date().toISOString(),
+        applied_change: { ...(completePlan.applied_change ?? {}), kind: "decision_follow_through", actualAmount: actual },
+      });
+      setCompletePlan(null);
+      setCompleteActual("");
+      setHistoryActionState(previous => {
+        const next = { ...previous };
+        delete next[completePlan.id];
+        return next;
+      });
+    } catch {
+      setHistoryActionState(previous => ({ ...previous, [completePlan.id]: "failed" }));
+    }
+  };
+
+  const openPostponePlan = (id: string) => {
+    const decision = findDecision(id);
+    if (!decision) return;
+    const currentDate = decision.next_due_date ?? decision.calendar_date ?? decision.scenario.date ?? today;
+    setPostponePlan(decision);
+    setPostponeDate(currentDate > today ? currentDate : today);
+  };
+
+  const postponeSelectedPlan = async () => {
+    if (!postponePlan || !postponeDate) return;
+    setHistoryActionState(previous => ({ ...previous, [postponePlan.id]: "saving" }));
+    try {
+      const scenario = { ...postponePlan.scenario, date: postponeDate };
+      await updateDecision({
+        ...postponePlan,
+        scenario,
+        status: "planned",
+        calendar_date: postponeDate,
+        next_due_date: postponeDate,
+        remind_at: `${postponeDate}T12:00:00.000Z`,
+      });
+      setPostponePlan(null);
+      setPostponeDate("");
+      setHistoryActionState(previous => {
+        const next = { ...previous };
+        delete next[postponePlan.id];
+        return next;
+      });
+    } catch {
+      setHistoryActionState(previous => ({ ...previous, [postponePlan.id]: "failed" }));
+    }
+  };
+
+  const cancelPlan = async (id: string) => {
+    const decision = findDecision(id);
+    if (!decision || historyActionState[id] === "saving") return;
+    setHistoryActionState(previous => ({ ...previous, [id]: "saving" }));
+    try {
+      await updateDecision({ ...decision, status: "cancelled" });
+      setHistoryActionState(previous => {
+        const next = { ...previous };
+        delete next[id];
+        return next;
+      });
+    } catch {
+      setHistoryActionState(previous => ({ ...previous, [id]: "failed" }));
+    }
+  };
+
   const applyCategoryMoveFromFlo = (messageId: string) => {
     const move = categoryMoveByMessageId[messageId];
     if (!move || categoryMoveState[messageId] === "saving" || categoryMoveState[messageId] === "saved") return;
@@ -373,15 +463,17 @@ export default function FloScreen() {
             </View>
           </View>
           <View style={styles.historyStats}>
+            <HistoryStat label="Review" value={decisionHistory.due.length} color={colors.warning} />
             <HistoryStat label="Upcoming" value={decisionHistory.upcoming.length} color={colors.primary} />
             <HistoryStat label="Completed" value={decisionHistory.completed.length} color={colors.success} />
             <HistoryStat label="Changed" value={decisionHistory.changed.length} color={colors.warning} />
           </View>
-          {decisionHistory.upcoming.length + decisionHistory.completed.length + decisionHistory.changed.length === 0 ? (
+          {decisionHistory.due.length + decisionHistory.upcoming.length + decisionHistory.completed.length + decisionHistory.changed.length === 0 ? (
             <Text style={[styles.historyEmpty, { color: colors.mutedForeground }]}>Ask Flo if you can afford something, then save it to start tracking decisions here.</Text>
           ) : (
             <View style={styles.historySections}>
-              <DecisionHistorySection title="Upcoming planned" items={decisionHistory.upcoming.slice(0, 4)} colors={colors} />
+              <DecisionHistorySection title="Needs review" items={decisionHistory.due.slice(0, 4)} colors={colors} actionState={historyActionState} onComplete={openCompletePlan} onPostpone={openPostponePlan} onCancel={(id) => void cancelPlan(id)} />
+              <DecisionHistorySection title="Upcoming planned" items={decisionHistory.upcoming.slice(0, 4)} colors={colors} actionState={historyActionState} onComplete={openCompletePlan} onPostpone={openPostponePlan} onCancel={(id) => void cancelPlan(id)} />
               <DecisionHistorySection title="Completed" items={decisionHistory.completed.slice(0, 3)} colors={colors} />
               <DecisionHistorySection title="Postponed / Cancelled" items={decisionHistory.changed.slice(0, 3)} colors={colors} />
             </View>
@@ -494,6 +586,64 @@ export default function FloScreen() {
         )}
       </ScrollView>
 
+      <Modal visible={!!completePlan} transparent animationType="slide" onRequestClose={() => setCompletePlan(null)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setCompletePlan(null)}>
+          <Pressable style={[styles.followSheet, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => {}}>
+            <View style={[styles.sheetHandle, { backgroundColor: colors.mutedForeground }]} />
+            <Text style={[styles.followTitle, { color: colors.foreground }]}>Mark completed</Text>
+            <Text style={[styles.followSub, { color: colors.mutedForeground }]}>
+              What was the actual amount for {completePlan?.name ?? "this plan"}?
+            </Text>
+            <View style={[styles.actualInputWrap, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+              <Text style={[styles.actualPrefix, { color: colors.mutedForeground }]}>$</Text>
+              <TextInput
+                value={completeActual}
+                onChangeText={setCompleteActual}
+                keyboardType="decimal-pad"
+                placeholder="0.00"
+                placeholderTextColor={colors.mutedForeground}
+                style={[styles.actualInput, { color: colors.foreground }]}
+              />
+            </View>
+            {completePlan && historyActionState[completePlan.id] === "failed" ? (
+              <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t update this plan. Try again.</Text>
+            ) : null}
+            <View style={styles.followActions}>
+              <Pressable onPress={() => setCompletePlan(null)} style={[styles.followButton, { backgroundColor: colors.muted }]}>
+                <Text style={[styles.followButtonText, { color: colors.mutedForeground }]}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={() => void completeSelectedPlan()} style={[styles.followButton, { backgroundColor: colors.success }]}>
+                <Text style={styles.followPrimaryText}>Save actual</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={!!postponePlan} transparent animationType="slide" onRequestClose={() => setPostponePlan(null)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setPostponePlan(null)}>
+          <Pressable style={[styles.followSheet, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => {}}>
+            <View style={[styles.sheetHandle, { backgroundColor: colors.mutedForeground }]} />
+            <Text style={[styles.followTitle, { color: colors.foreground }]}>Postpone plan</Text>
+            <Text style={[styles.followSub, { color: colors.mutedForeground }]}>
+              Pick the new date for {postponePlan?.name ?? "this plan"}.
+            </Text>
+            <DatePickerField value={postponeDate} onChange={setPostponeDate} minDate={today} label="New planned date" />
+            {postponePlan && historyActionState[postponePlan.id] === "failed" ? (
+              <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t postpone this plan. Try again.</Text>
+            ) : null}
+            <View style={styles.followActions}>
+              <Pressable onPress={() => setPostponePlan(null)} style={[styles.followButton, { backgroundColor: colors.muted }]}>
+                <Text style={[styles.followButtonText, { color: colors.mutedForeground }]}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={() => void postponeSelectedPlan()} style={[styles.followButton, { backgroundColor: colors.primary }]}>
+                <Text style={styles.followPrimaryText}>Save date</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <View style={[styles.composerArea, { backgroundColor: colors.background, borderColor: colors.border, paddingBottom: composerBottom }]}>
         <ScrollView
           horizontal
@@ -568,28 +718,64 @@ function HistoryStat({ label, value, color }: { label: string; value: number; co
   );
 }
 
-function DecisionHistorySection({ title, items, colors }: { title: string; items: DecisionHistoryItem[]; colors: ReturnType<typeof useColors> }) {
+function DecisionHistorySection({
+  title,
+  items,
+  colors,
+  actionState = {},
+  onComplete,
+  onPostpone,
+  onCancel,
+}: {
+  title: string;
+  items: DecisionHistoryItem[];
+  colors: ReturnType<typeof useColors>;
+  actionState?: Record<string, "saving" | "failed">;
+  onComplete?: (id: string) => void;
+  onPostpone?: (id: string) => void;
+  onCancel?: (id: string) => void;
+}) {
   if (!items.length) return null;
   return (
     <View style={styles.historySection}>
       <Text style={[styles.historySectionTitle, { color: colors.mutedForeground }]}>{title}</Text>
-      {items.map(item => (
-        <View key={item.id} style={[styles.historyRow, { borderColor: colors.border }]}>
-          <View style={[styles.historyStatusDot, { backgroundColor: statusColor(item.status, colors) }]} />
-          <View style={styles.historyRowBody}>
-            <View style={styles.historyRowTop}>
-              <Text numberOfLines={1} style={[styles.historyRowName, { color: colors.foreground }]}>{item.name}</Text>
-              <Text style={[styles.historyDate, { color: colors.mutedForeground }]}>{formatDisplayDate(item.date)}</Text>
+      {items.map(item => {
+        const canFollowUp = (item.status === "due" || item.status === "upcoming" || item.status === "saved") && onComplete && onPostpone && onCancel;
+        const busy = actionState[item.id] === "saving";
+        return (
+          <View key={item.id} style={[styles.historyRow, { borderColor: colors.border }]}>
+            <View style={[styles.historyStatusDot, { backgroundColor: statusColor(item.status, colors) }]} />
+            <View style={styles.historyRowBody}>
+              <View style={styles.historyRowTop}>
+                <Text numberOfLines={1} style={[styles.historyRowName, { color: colors.foreground }]}>{item.name}</Text>
+                <Text style={[styles.historyDate, { color: colors.mutedForeground }]}>{formatDisplayDate(item.date)}</Text>
+              </View>
+              <Text style={[styles.historyAmount, { color: colors.mutedForeground }]}>{item.amountLabel}</Text>
+              {item.varianceLabel ? (
+                <Text style={[styles.historyVariance, { color: item.varianceLabel.startsWith("+") ? colors.warning : colors.success }]}>
+                  {item.varianceLabel}
+                </Text>
+              ) : null}
+              {canFollowUp ? (
+                <View style={styles.historyActions}>
+                  <Pressable disabled={busy} onPress={() => onComplete(item.id)} style={[styles.historyActionButton, { backgroundColor: colors.success + "18", opacity: busy ? 0.55 : 1 }]}>
+                    <Text style={[styles.historyActionText, { color: colors.success }]}>Complete</Text>
+                  </Pressable>
+                  <Pressable disabled={busy} onPress={() => onPostpone(item.id)} style={[styles.historyActionButton, { backgroundColor: colors.primary + "18", opacity: busy ? 0.55 : 1 }]}>
+                    <Text style={[styles.historyActionText, { color: colors.primary }]}>Postpone</Text>
+                  </Pressable>
+                  <Pressable disabled={busy} onPress={() => onCancel(item.id)} style={[styles.historyActionButton, { backgroundColor: colors.destructive + "14", opacity: busy ? 0.55 : 1 }]}>
+                    <Text style={[styles.historyActionText, { color: colors.destructive }]}>{busy ? "Saving" : "Cancel"}</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+              {actionState[item.id] === "failed" ? (
+                <Text style={[styles.saveDecisionError, { color: colors.destructive, textAlign: "left" }]}>Couldn&apos;t update this decision. Try again.</Text>
+              ) : null}
             </View>
-            <Text style={[styles.historyAmount, { color: colors.mutedForeground }]}>{item.amountLabel}</Text>
-            {item.varianceLabel ? (
-              <Text style={[styles.historyVariance, { color: item.varianceLabel.startsWith("+") ? colors.warning : colors.success }]}>
-                {item.varianceLabel}
-              </Text>
-            ) : null}
           </View>
-        </View>
-      ))}
+        );
+      })}
     </View>
   );
 }
@@ -666,6 +852,21 @@ const styles = StyleSheet.create({
   historyDate: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   historyAmount: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_400Regular", marginTop: 2 },
   historyVariance: { fontSize: 11, fontFamily: "Inter_700Bold", marginTop: 1 },
+  historyActions: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 9 },
+  historyActionButton: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
+  historyActionText: { fontSize: 11, fontFamily: "Inter_700Bold" },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(2,6,23,0.68)", justifyContent: "flex-end" },
+  followSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, padding: 18, gap: 12 },
+  sheetHandle: { alignSelf: "center", width: 48, height: 4, borderRadius: 999, opacity: 0.5, marginBottom: 4 },
+  followTitle: { fontSize: 20, fontFamily: "Inter_700Bold", textAlign: "center" },
+  followSub: { fontSize: 13, lineHeight: 18, fontFamily: "Inter_400Regular", textAlign: "center" },
+  actualInputWrap: { height: 52, borderRadius: 14, borderWidth: 1, flexDirection: "row", alignItems: "center", paddingHorizontal: 14 },
+  actualPrefix: { fontSize: 17, fontFamily: "Inter_700Bold", marginRight: 8 },
+  actualInput: { flex: 1, fontSize: 18, fontFamily: "Inter_700Bold" },
+  followActions: { flexDirection: "row", gap: 10, marginTop: 4 },
+  followButton: { flex: 1, minHeight: 46, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  followButtonText: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  followPrimaryText: { color: "#fff", fontSize: 14, fontFamily: "Inter_700Bold" },
   bubble: { maxWidth: "88%", paddingHorizontal: 15, paddingVertical: 13, borderRadius: 18 },
   floBubble: { alignSelf: "flex-start", borderWidth: 1, borderTopLeftRadius: 6 },
   userBubble: { alignSelf: "flex-end", borderTopRightRadius: 6 },

@@ -14,6 +14,16 @@ test("groups upcoming planned decisions", () => {
   assert.equal(history.upcoming[0]?.status, "upcoming");
   assert.equal(history.upcoming[0]?.amountLabel, "Planned $100.00");
   assert.equal(history.upcoming[0]?.actualAmount, undefined);
+  assert.equal(history.due.length, 0);
+});
+
+test("separates overdue planned decisions into needs review", () => {
+  const history = buildDecisionHistory([
+    { ...base, id: "review", name: "Past plan", status: "planned", actual_amount: null } as DecisionHistoryInput,
+  ], "2026-07-20", "2026-07-20T12:00:00.000Z");
+
+  assert.equal(history.due[0]?.status, "due");
+  assert.equal(history.upcoming.length, 0);
 });
 
 test("shows completed decisions with actual versus planned", () => {

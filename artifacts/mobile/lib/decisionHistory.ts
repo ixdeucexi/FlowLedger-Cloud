@@ -23,6 +23,7 @@ export interface DecisionHistoryItem {
 }
 
 export interface DecisionHistoryGroups {
+  due: DecisionHistoryItem[];
   upcoming: DecisionHistoryItem[];
   completed: DecisionHistoryItem[];
   changed: DecisionHistoryItem[];
@@ -34,7 +35,8 @@ export function buildDecisionHistory(decisions: DecisionHistoryInput[], today: s
     return dateCompare || left.name.localeCompare(right.name);
   });
   return {
-    upcoming: items.filter(item => item.status === "due" || item.status === "upcoming" || item.status === "saved"),
+    due: items.filter(item => item.status === "due"),
+    upcoming: items.filter(item => item.status === "upcoming" || item.status === "saved"),
     completed: items.filter(item => item.status === "completed"),
     changed: items.filter(item => item.status === "postponed" || item.status === "cancelled"),
   };
