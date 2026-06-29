@@ -30,3 +30,17 @@ test("watch status starts when category is mostly used", () => {
   const rows = buildCategoryPlan(["Gas"], [{ category: "Gas", amount: 100 }], [{ category: "Gas", amount: -90 }]);
   assert.equal(rows[0]?.status, "watch");
 });
+
+test("explicit category budgets override bill-derived budgets", () => {
+  const rows = buildCategoryPlan(
+    ["Food"],
+    [{ category: "Food", amount: 500 }],
+    [{ category: "Food", amount: -125 }],
+    [{ category: "Food", amount: 600 }],
+  );
+
+  assert.equal(rows[0]?.category, "Food");
+  assert.equal(rows[0]?.budgeted, 600);
+  assert.equal(rows[0]?.remaining, 475);
+  assert.equal(rows[0]?.percentUsed, 21);
+});

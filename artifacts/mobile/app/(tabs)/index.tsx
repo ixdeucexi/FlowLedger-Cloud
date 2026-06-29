@@ -54,6 +54,9 @@ export default function DashboardScreen() {
   const [savingsModalVisible, setSavingsModalVisible] = useState(false);
   const [savingsGoalId, setSavingsGoalId]             = useState("");
   const [savingsAmount, setSavingsAmount]             = useState("");
+  const [categoryBudgetModalVisible, setCategoryBudgetModalVisible] = useState(false);
+  const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
+  const [categoryBudgetDrafts, setCategoryBudgetDrafts] = useState<Record<string, string>>({});
 
   useFocusEffect(useCallback(() => {
     setIsFocused(true);
@@ -176,6 +179,30 @@ export default function DashboardScreen() {
     return Object.entries(map).map(([label, value]) => ({ label, value, color: CAT_COLORS[label] ?? "#94a3b8" })).sort((a, b) => b.value - a.value);
   }, [bills]);
 
+  const categoryBudgetKey = useMemo(
+    () => `flowledger-category-budgets-${selectedYear}-${String(currentMonth + 1).padStart(2, "0")}`,
+    [selectedYear, currentMonth],
+  );
+
+  useEffect(() => {
+    if (Platform.OS !== "web") {
+      setCategoryBudgets({});
+      return;
+    }
+    try {
+      const raw = globalThis.localStorage?.getItem(categoryBudgetKey);
+      const parsed = raw ? JSON.parse(raw) as Record<string, unknown> : {};
+      const next: Record<string, number> = {};
+      Object.entries(parsed).forEach(([category, amount]) => {
+        const value = Number(amount);
+        if (category && Number.isFinite(value) && value >= 0) next[category] = value;
+      });
+      setCategoryBudgets(next);
+    } catch {
+      setCategoryBudgets({});
+    }
+  }, [categoryBudgetKey]);
+
   const categoryPlan = useMemo(() => {
     const monthBills = getMonthlyBills(currentMonth, selectedYear)
       .filter(bill => !bill.is_debt)
@@ -186,14 +213,53 @@ export default function DashboardScreen() {
     const monthTransactions = getTransactionsForMonth(currentMonth, selectedYear)
       .filter(transaction => transaction.category !== "Debt" && transaction.category !== "Income")
       .map(transaction => ({ category: transaction.category || "Other", amount: transaction.amount }));
-    return buildCategoryPlan(categories.filter(category => category !== "Debt"), monthBills, monthTransactions);
-  }, [categories, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, currentMonth, selectedYear]);
+    const budgetLimits = Object.entries(categoryBudgets).map(([category, amount]) => ({ category, amount }));
+    return buildCategoryPlan(categories.filter(category => category !== "Debt"), monthBills, monthTransactions, budgetLimits);
+  }, [categories, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, currentMonth, selectedYear]);
+
+  const budgetEditableCategories = useMemo(() => {
+    const names = new Set<string>();
+    categories.filter(category => category !== "Debt").forEach(category => names.add(category));
+    categoryPlan.forEach(row => names.add(row.category));
+    return Array.from(names).sort((left, right) => left.localeCompare(right));
+  }, [categories, categoryPlan]);
 
   const categoryPlanTotals = useMemo(() => categoryPlan.reduce((totals, row) => ({
     budgeted: totals.budgeted + row.budgeted,
     spent: totals.spent + row.spent,
     remaining: totals.remaining + row.remaining,
   }), { budgeted: 0, spent: 0, remaining: 0 }), [categoryPlan]);
+
+  const openCategoryBudgetEditor = () => {
+    const drafts: Record<string, string> = {};
+    budgetEditableCategories.forEach(category => {
+      drafts[category] = categoryBudgets[category] === undefined ? "" : String(categoryBudgets[category]);
+    });
+    setCategoryBudgetDrafts(drafts);
+    setCategoryBudgetModalVisible(true);
+  };
+
+  const saveCategoryBudgets = () => {
+    const next: Record<string, number> = {};
+    Object.entries(categoryBudgetDrafts).forEach(([category, value]) => {
+      const amount = Number.parseFloat(value);
+      if (category && Number.isFinite(amount) && amount >= 0) next[category] = amount;
+    });
+    setCategoryBudgets(next);
+    if (Platform.OS === "web") {
+      globalThis.localStorage?.setItem(categoryBudgetKey, JSON.stringify(next));
+    }
+    setCategoryBudgetModalVisible(false);
+  };
+
+  const clearCategoryBudgets = () => {
+    setCategoryBudgets({});
+    setCategoryBudgetDrafts({});
+    if (Platform.OS === "web") {
+      globalThis.localStorage?.removeItem(categoryBudgetKey);
+    }
+    setCategoryBudgetModalVisible(false);
+  };
 
   const debtPayoffData = useMemo(() => {
     const debts = bills.filter(b => b.is_debt && b.balance > 0);
@@ -605,15 +671,24 @@ export default function DashboardScreen() {
                 ${categoryPlanTotals.spent.toFixed(0)} spent · ${Math.max(0, categoryPlanTotals.remaining).toFixed(0)} left
               </Text>
             </View>
-            {categoryPlanTotals.remaining < -0.005 ? (
-              <View style={[styles.categoryPlanBadge, { backgroundColor: c.destructive + "18" }]}>
-                <Text style={[styles.categoryPlanBadgeText, { color: c.destructive }]}>OVER</Text>
-              </View>
-            ) : (
-              <View style={[styles.categoryPlanBadge, { backgroundColor: c.success + "18" }]}>
-                <Text style={[styles.categoryPlanBadgeText, { color: c.success }]}>ON PLAN</Text>
-              </View>
-            )}
+            <View style={styles.categoryPlanHeaderActions}>
+              <Pressable
+                onPress={openCategoryBudgetEditor}
+                style={({ pressed }) => [styles.categoryBudgetEdit, { backgroundColor: c.primary + "18", opacity: pressed ? 0.75 : 1 }]}
+              >
+                <Feather name="edit-3" size={12} color={c.primary} />
+                <Text style={[styles.categoryBudgetEditText, { color: c.primary }]}>Edit</Text>
+              </Pressable>
+              {categoryPlanTotals.remaining < -0.005 ? (
+                <View style={[styles.categoryPlanBadge, { backgroundColor: c.destructive + "18" }]}>
+                  <Text style={[styles.categoryPlanBadgeText, { color: c.destructive }]}>OVER</Text>
+                </View>
+              ) : (
+                <View style={[styles.categoryPlanBadge, { backgroundColor: c.success + "18" }]}>
+                  <Text style={[styles.categoryPlanBadgeText, { color: c.success }]}>ON PLAN</Text>
+                </View>
+              )}
+            </View>
           </View>
           <View style={[styles.categoryPlanCard, { backgroundColor: c.card, borderRadius: colors.radius }]}>
             {categoryPlan.slice(0, 5).map((row, index) => {
@@ -1032,6 +1107,56 @@ export default function DashboardScreen() {
         </Pressable>
       </Modal>
 
+      <Modal
+        visible={categoryBudgetModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setCategoryBudgetModalVisible(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => { Keyboard.dismiss(); setCategoryBudgetModalVisible(false); }}>
+          <Pressable style={[styles.actionSheet, { backgroundColor: c.card }]} onPress={() => {}}>
+            <View style={[styles.sheetHandle, { backgroundColor: c.muted }]} />
+            <Text style={[styles.sheetTitle, { color: c.foreground }]}>Monthly Category Budgets</Text>
+            <Text style={[styles.sheetSub, { color: c.mutedForeground }]}>
+              {MONTH_FULL[currentMonth]} {selectedYear} · leave blank to use planned bills.
+            </Text>
+
+            <ScrollView style={styles.categoryBudgetList} keyboardShouldPersistTaps="handled">
+              {budgetEditableCategories.map(category => (
+                <View key={category} style={[styles.categoryBudgetRow, { borderTopColor: c.border }]}>
+                  <View style={styles.categoryBudgetCopy}>
+                    <Text style={[styles.categoryBudgetName, { color: c.foreground }]}>{category}</Text>
+                    <Text style={[styles.categoryBudgetHint, { color: c.mutedForeground }]}>
+                      Blank = auto from bills
+                    </Text>
+                  </View>
+                  <View style={[styles.categoryBudgetInputWrap, { backgroundColor: c.muted }]}>
+                    <Text style={[styles.categoryBudgetDollar, { color: c.mutedForeground }]}>$</Text>
+                    <TextInput
+                      value={categoryBudgetDrafts[category] ?? ""}
+                      onChangeText={(value) => setCategoryBudgetDrafts(previous => ({ ...previous, [category]: value }))}
+                      placeholder="Auto"
+                      placeholderTextColor={c.mutedForeground}
+                      keyboardType="decimal-pad"
+                      style={[styles.categoryBudgetInput, { color: c.foreground }]}
+                    />
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+
+            <View style={styles.expenseBtns}>
+              <Pressable onPress={clearCategoryBudgets} style={[styles.expenseBtn, { backgroundColor: c.muted }]}>
+                <Text style={[styles.expenseBtnText, { color: c.mutedForeground }]}>Clear</Text>
+              </Pressable>
+              <Pressable onPress={saveCategoryBudgets} style={[styles.expenseBtn, { backgroundColor: c.primary }]}>
+                <Text style={[styles.expenseBtnText, { color: c.primaryForeground }]}>Save</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <AddBillModal
         visible={addBillVisible}
         onClose={() => setAddBillVisible(false)}
@@ -1351,6 +1476,9 @@ const styles = StyleSheet.create({
   // Phase 4 category planning
   categoryPlanHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 },
   categoryPlanSub: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  categoryPlanHeaderActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  categoryBudgetEdit: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
+  categoryBudgetEditText: { fontSize: 10, fontFamily: "Inter_700Bold" },
   categoryPlanBadge: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
   categoryPlanBadgeText: { fontSize: 10, fontFamily: "Inter_700Bold", letterSpacing: 0.5 },
   categoryPlanCard: { overflow: "hidden", shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
@@ -1363,6 +1491,14 @@ const styles = StyleSheet.create({
   categoryPlanTrack: { height: 6, borderRadius: 3, overflow: "hidden", marginBottom: 5 },
   categoryPlanFill: { height: 6, borderRadius: 3 },
   categoryPlanDetail: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  categoryBudgetList: { maxHeight: 420, marginBottom: 14 },
+  categoryBudgetRow: { flexDirection: "row", alignItems: "center", gap: 12, borderTopWidth: 1, paddingVertical: 12 },
+  categoryBudgetCopy: { flex: 1 },
+  categoryBudgetName: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  categoryBudgetHint: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
+  categoryBudgetInputWrap: { flexDirection: "row", alignItems: "center", minWidth: 118, borderRadius: 12, paddingHorizontal: 10 },
+  categoryBudgetDollar: { fontSize: 14, fontFamily: "Inter_600SemiBold", marginRight: 2 },
+  categoryBudgetInput: { flex: 1, minHeight: 44, fontSize: 15, fontFamily: "Inter_600SemiBold", textAlign: "right" },
 
   // Affordability card
   affordCard:           { padding: 16, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
