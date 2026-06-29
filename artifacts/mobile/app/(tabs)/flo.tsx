@@ -390,9 +390,10 @@ function statusColor(status: DecisionHistoryItem["status"], colors: ReturnType<t
   return colors.primary;
 }
 
-function decisionStillHasSource(decision: { status: string; scenario: { type?: string }; applied_change?: Record<string, unknown> }, transactions: { id: string }[]) {
+function decisionStillHasSource(decision: { status: string; scenario: { type?: string }; applied_change?: Record<string, unknown> | null; actual_amount?: number | null }, transactions: { id: string }[]) {
   if (decision.status !== "completed" && decision.status !== "applied") return true;
   const applied = decision.applied_change ?? {};
+  const hasActualAmount = decision.actual_amount !== undefined && decision.actual_amount !== null;
   const linkedTransactionId = typeof applied.id === "string"
     ? applied.id
     : typeof applied.transactionId === "string"
@@ -403,7 +404,7 @@ function decisionStillHasSource(decision: { status: string; scenario: { type?: s
     || decision.scenario.type === "recurring_bill"
     || applied.kind === "transaction"
     || applied.kind === "recurring";
-  if (!expectsTransaction) return true;
+  if (!expectsTransaction) return hasActualAmount || Object.keys(applied).length > 0;
   return !!linkedTransactionId && transactions.some(transaction => transaction.id === linkedTransactionId);
 }
 
