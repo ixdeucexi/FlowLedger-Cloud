@@ -29,6 +29,7 @@ import {
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { evaluateDecision, type DecisionResult, type DecisionScenario } from "@/lib/decisions";
 import { buildDecisionHistory, type DecisionHistoryItem } from "@/lib/decisionHistory";
+import { buildCategoryPlan } from "@/lib/categoryPlanning";
 
 const sampleQuestions = [
   "Ask Flo anything…",
@@ -44,7 +45,7 @@ export default function FloScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { bills, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, saveDecision } = useBudget();
+  const { bills, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, saveDecision, getTransactionsForMonth, categories } = useBudget();
   const [chat, dispatch] = useReducer(reduceFloChat, initialChat);
   const [cardsByMessageId, setCardsByMessageId] = useState<Record<string, FloResponseCard[]>>({});
   const [decisionByMessageId, setDecisionByMessageId] = useState<Record<string, { scenario: DecisionScenario; result: DecisionResult }>>({});
@@ -96,6 +97,60 @@ export default function FloScreen() {
     .sort((left, right) => left.date.localeCompare(right.date))
     .slice(0, 5), [bills, today]);
 
+  const categoryPlan = useMemo(() => {
+    const month = now.getMonth();
+    const year = now.getFullYear();
+    const budgetKey = `flowledger-category-budgets-${year}-${String(month + 1).padStart(2, "0")}`;
+    let categoryBudgets: Record<string, number> = {};
+    if (Platform.OS === "web") {
+      try {
+        const raw = globalThis.localStorage?.getItem(budgetKey);
+        const parsed = raw ? JSON.parse(raw) as Record<string, unknown> : {};
+        Object.entries(parsed).forEach(([category, amount]) => {
+          const value = Number(amount);
+          if (category && Number.isFinite(value) && value >= 0) categoryBudgets[category] = value;
+        });
+      } catch {
+        categoryBudgets = {};
+      }
+    }
+    const monthBills = getMonthlyBills(month, year)
+      .filter(bill => !bill.is_debt)
+      .map(bill => ({
+        category: bill.category || "Other",
+        amount: getBillMonthlyTotal(bill, month, year),
+      }));
+    const monthTransactions = getTransactionsForMonth(month, year)
+      .filter(transaction => transaction.category !== "Debt" && transaction.category !== "Income")
+      .map(transaction => ({ category: transaction.category || "Other", amount: transaction.amount }));
+    const rows = buildCategoryPlan(
+      categories.filter(category => category !== "Debt"),
+      monthBills,
+      monthTransactions,
+      Object.entries(categoryBudgets).map(([category, amount]) => ({ category, amount })),
+    );
+    const transactionDetails = getTransactionsForMonth(month, year)
+      .filter(transaction => transaction.amount < 0 && transaction.category !== "Debt" && transaction.category !== "Income");
+    return rows.map(row => {
+      const topTransaction = transactionDetails
+        .filter(transaction => (transaction.category || "Other") === row.category)
+        .sort((left, right) => Math.abs(right.amount) - Math.abs(left.amount))[0];
+      return {
+        category: row.category,
+        budgeted: row.budgeted,
+        spent: row.spent,
+        remaining: row.remaining,
+        status: row.status,
+        percentUsed: row.percentUsed,
+        topTransaction: topTransaction ? {
+          name: topTransaction.note?.trim() || row.category,
+          amount: topTransaction.amount,
+          date: topTransaction.date,
+        } : undefined,
+      };
+    });
+  }, [categories, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, now]);
+
   const facts = useMemo<FloFacts>(() => {
     const lowest = baseline.reduce(
       (best, day) => day.balance < best.balance ? day : best,
@@ -133,8 +188,9 @@ export default function FloScreen() {
       activePlans: decisions.filter(decision => decision.status === "planned" || decision.status === "calendar").length,
       forecastConfidence: forecastConfidence.level,
       sourceTypes: ["forecast", "bill", "transaction", "account", "debt", "goal", "decision"],
+      categoryPlan,
     };
-  }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, transactions, upcoming, decisions, forecastConfidence.level]);
+  }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, transactions, upcoming, decisions, forecastConfidence.level, categoryPlan]);
 
   const decisionHistory = useMemo(
     () => buildDecisionHistory(decisions.filter(decision => decisionStillHasSource(decision, transactions)), today, now.toISOString()),

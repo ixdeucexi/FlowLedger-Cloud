@@ -36,6 +36,11 @@ const facts: FloFacts = {
   activePlans: 0,
   forecastConfidence: "high",
   sourceTypes: ["forecast", "bill", "transaction", "account", "debt", "goal", "decision"],
+  categoryPlan: [
+    { category: "Food", budgeted: 500, spent: 560, remaining: -60, status: "over", percentUsed: 112, topTransaction: { name: "Groceries", amount: -180, date: "2026-06-20" } },
+    { category: "Entertainment", budgeted: 200, spent: 50, remaining: 150, status: "available", percentUsed: 25 },
+    { category: "Utilities", budgeted: 300, spent: 260, remaining: 40, status: "watch", percentUsed: 87 },
+  ],
 };
 const days = [{ date: "2026-06-24", balance: 1000 }, { date: "2026-07-01", balance: 800 }];
 
@@ -63,6 +68,18 @@ test("Flo answers phase 2 planning questions without AI", () => {
   assert.match(localFloAnswer("How do I fix this forecast?", { ...facts, forecastConfidence: "low" }, days) ?? "", /reconciliation/i);
 });
 
+test("Flo answers category budget questions from verified facts", () => {
+  assert.match(localFloAnswer("Why is Food over?", facts, days) ?? "", /Food is over by \$60\.00/);
+  assert.match(localFloAnswer("How much do I have left for Utilities?", facts, days) ?? "", /Utilities has \$40\.00 left/);
+  assert.match(localFloAnswer("Which categories need attention?", facts, days) ?? "", /Food/);
+  assert.match(localFloAnswer("What category has the most room left?", facts, days) ?? "", /Entertainment/);
+});
+
+test("Flo evaluates category budget moves from verified facts", () => {
+  assert.match(localFloAnswer("Can I move $50 from Entertainment to Food?", facts, days) ?? "", /Yes/);
+  assert.match(localFloAnswer("Can I move $500 from Entertainment to Food?", facts, days) ?? "", /only has \$150\.00 left/);
+});
+
 test("Flo creates deterministic response cards for supported finance questions", () => {
   const affordabilityCards = floResponseCards("Can I afford $500?", facts, days);
   assert.equal(affordabilityCards[0]?.title, "Purchase Decision");
@@ -71,6 +88,10 @@ test("Flo creates deterministic response cards for supported finance questions",
   const billsLeftCards = floResponseCards("What bills are left?", facts, days);
   assert.equal(billsLeftCards[0]?.title, "Bills Left");
   assert.equal(billsLeftCards[0]?.value, "2");
+
+  const categoryCards = floResponseCards("Why is Food over?", facts, days);
+  assert.equal(categoryCards[0]?.title, "Category Status");
+  assert.equal(categoryCards[0]?.value, "OVER");
 });
 
 test("Flo builds saveable planned decisions from natural affordability questions", () => {
@@ -147,4 +168,6 @@ test("Flo fact payload is allowlisted before AI", () => {
   assert.equal(clean.upcoming.length, 8);
   assert.equal(clean.forecastConfidence, "low");
   assert.deepEqual(clean.sourceTypes, ["forecast", "bill"]);
+  assert.equal(clean.categoryPlan?.[0]?.category, "Food");
+  assert.equal(clean.categoryPlan?.[0]?.topTransaction?.name, "Groceries");
 });

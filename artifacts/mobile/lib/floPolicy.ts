@@ -20,6 +20,17 @@ export interface FloFacts {
   activePlans: number;
   forecastConfidence: string;
   sourceTypes: string[];
+  categoryPlan?: FloCategoryFact[];
+}
+
+export interface FloCategoryFact {
+  category: string;
+  budgeted: number;
+  spent: number;
+  remaining: number;
+  status: "available" | "watch" | "over";
+  percentUsed: number;
+  topTransaction?: { name: string; amount: number; date: string };
 }
 
 export type FloChatMessage = { id: string; role: "user" | "flo"; text: string };
@@ -125,6 +136,19 @@ export function sanitizeFloFacts(facts: FloFacts): FloFacts {
     activePlans: Math.max(0, Math.round(num(facts.activePlans))),
     forecastConfidence: ["high", "medium", "low"].includes(String(facts.forecastConfidence)) ? String(facts.forecastConfidence) : "low",
     sourceTypes: Array.from(new Set((facts.sourceTypes ?? []).map(source => String(source)).filter(source => ALLOWED_SOURCE_TYPES.has(source)))).slice(0, 12),
+    categoryPlan: (facts.categoryPlan ?? []).slice(0, 20).map(item => ({
+      category: String(item.category ?? "Other").slice(0, 50),
+      budgeted: num(item.budgeted),
+      spent: num(item.spent),
+      remaining: num(item.remaining),
+      status: item.status === "over" || item.status === "watch" || item.status === "available" ? item.status : "available",
+      percentUsed: Math.max(0, Math.min(999, Math.round(num(item.percentUsed)))),
+      topTransaction: item.topTransaction ? {
+        name: String(item.topTransaction.name ?? "Transaction").slice(0, 80),
+        amount: num(item.topTransaction.amount),
+        date: String(item.topTransaction.date ?? "").slice(0, 10),
+      } : undefined,
+    })),
   };
 }
 
@@ -141,6 +165,8 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
         : "Not safely.";
     return `${lead} ${result.explanation} Your lowest projected balance would be $${result.lowestBalance.toFixed(0)} on ${result.lowestBalanceDate}.`;
   }
+  const categoryAnswer = localCategoryAnswer(message, facts);
+  if (categoryAnswer) return categoryAnswer;
   if (lower.includes("why") && (lower.includes("negative") || lower.includes("balance"))) {
     return `Your current forecast reaches its lowest point at $${facts.lowestBalance.toFixed(0)} on ${facts.lowestBalanceDate}. The largest near-term obligations are ${facts.upcoming.slice(0, 3).map(i => `${i.name} ($${i.amount.toFixed(0)})`).join(", ") || "not yet available"}.`;
   }
@@ -186,6 +212,94 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
   return null;
 }
 
+function localCategoryAnswer(message: string, facts: FloFacts): string | null {
+  const lower = message.toLowerCase();
+  const categories = facts.categoryPlan ?? [];
+  if (/unallocated|non[- ]?allocated|none allocated|not allocated|not linked/.test(lower)) return null;
+  if (/leftover|extra money|money left|available money|what should i do with/i.test(lower) && !/(categor|budget)/i.test(lower)) return null;
+  if (!categories.length || !/(categor|budget|spend|spending|spent|over|left|remaining|move|room)/i.test(lower)) return null;
+
+  const named = findMentionedCategory(message, categories);
+  const move = parseCategoryMove(message, categories);
+  if (move) {
+    const source = categories.find(item => item.category === move.from);
+    const target = categories.find(item => item.category === move.to);
+    if (!source || !target) return null;
+    if (move.amount > source.remaining + 0.005) {
+      return `Not from ${source.category}. It only has $${Math.max(0, source.remaining).toFixed(2)} left, so moving $${move.amount.toFixed(2)} would put that category over plan.`;
+    }
+    return `Yes. You can move $${move.amount.toFixed(2)} from ${source.category} to ${target.category}. ${source.category} would have $${(source.remaining - move.amount).toFixed(2)} left, and ${target.category} would improve to $${(target.remaining + move.amount).toFixed(2)} left.`;
+  }
+
+  if (/(need attention|attention|problem|over|overspend|overspending|watch)/i.test(lower) && !named) {
+    const attention = categories
+      .filter(item => item.status === "over" || item.status === "watch")
+      .sort((left, right) => statusPriority(right.status) - statusPriority(left.status) || left.remaining - right.remaining)
+      .slice(0, 3);
+    return attention.length
+      ? `The categories needing attention are ${attention.map(item => `${item.category} (${item.status === "over" ? `$${Math.abs(item.remaining).toFixed(2)} over` : `${item.percentUsed}% used`})`).join(", ")}.`
+      : "Your categories look on plan right now. I don't see an over-budget or watch category this month.";
+  }
+
+  if (/(most room|most left|room left|available category|where.*room)/i.test(lower)) {
+    const best = categories
+      .filter(item => item.remaining > 0)
+      .sort((left, right) => right.remaining - left.remaining)[0];
+    return best
+      ? `${best.category} has the most room left with $${best.remaining.toFixed(2)} available.`
+      : "I don't see any category with money left right now.";
+  }
+
+  if (named && /(why|over|overspend|overspending)/i.test(lower)) {
+    if (named.remaining >= 0) {
+      return `${named.category} is not over. You have $${named.remaining.toFixed(2)} left after spending $${named.spent.toFixed(2)} of $${named.budgeted.toFixed(2)}.`;
+    }
+    const top = named.topTransaction
+      ? ` The biggest transaction I see is ${named.topTransaction.name} for $${Math.abs(named.topTransaction.amount).toFixed(2)} on ${named.topTransaction.date}.`
+      : "";
+    return `${named.category} is over by $${Math.abs(named.remaining).toFixed(2)}. You've spent $${named.spent.toFixed(2)} against a $${named.budgeted.toFixed(2)} plan.${top}`;
+  }
+
+  if (named && /(left|remaining|how much|available|budget)/i.test(lower)) {
+    return named.remaining >= 0
+      ? `${named.category} has $${named.remaining.toFixed(2)} left. You've spent $${named.spent.toFixed(2)} of $${named.budgeted.toFixed(2)}.`
+      : `${named.category} is $${Math.abs(named.remaining).toFixed(2)} over plan. You've spent $${named.spent.toFixed(2)} against $${named.budgeted.toFixed(2)}.`;
+  }
+
+  if (/(where.*spend|spending|spent|categories)/i.test(lower)) {
+    const top = [...categories].sort((left, right) => right.spent - left.spent).slice(0, 3);
+    return top.length
+      ? `Your top spending categories this month are ${top.map(item => `${item.category} ($${item.spent.toFixed(2)})`).join(", ")}.`
+      : "I don't see category spending yet this month.";
+  }
+
+  return null;
+}
+
+function findMentionedCategory(message: string, categories: FloCategoryFact[]): FloCategoryFact | null {
+  const lower = message.toLowerCase();
+  return [...categories]
+    .sort((left, right) => right.category.length - left.category.length)
+    .find(item => lower.includes(item.category.toLowerCase())) ?? null;
+}
+
+function parseCategoryMove(message: string, categories: FloCategoryFact[]) {
+  if (!/\bmove\b/i.test(message)) return null;
+  const amount = Number(message.match(/\$?\s*([\d,]+(?:\.\d{1,2})?)/)?.[1]?.replace(/,/g, "") ?? 0);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  const lower = message.toLowerCase();
+  const from = categories.find(item => lower.includes(`from ${item.category.toLowerCase()}`))?.category;
+  const to = categories.find(item => lower.includes(`to ${item.category.toLowerCase()}`))?.category;
+  if (!from || !to || from === to) return null;
+  return { amount, from, to };
+}
+
+function statusPriority(status: FloCategoryFact["status"]) {
+  if (status === "over") return 3;
+  if (status === "watch") return 2;
+  return 1;
+}
+
 function formatSignedDollars(amount: number): string {
   const sign = amount >= 0 ? "+" : "-";
   return `${sign}$${Math.abs(amount).toFixed(2)}`;
@@ -202,6 +316,8 @@ export function floResponseCards(message: string, facts: FloFacts, days: Decisio
       { title: "Safer Amount", value: `$${result.saferAmount.toFixed(0)}`, detail: "Based on your safety floor", tone: "info" },
     ];
   }
+  const categoryCards = floCategoryCards(message, facts);
+  if (categoryCards.length) return categoryCards;
   if (lower.includes("why") && (lower.includes("negative") || lower.includes("balance"))) {
     return [
       { title: "Lowest Forecast", value: `$${facts.lowestBalance.toFixed(0)}`, detail: facts.lowestBalanceDate, tone: facts.lowestBalance < facts.safetyFloor ? "risk" : "caution" },
@@ -224,6 +340,28 @@ export function floResponseCards(message: string, facts: FloFacts, days: Decisio
     return [
       { title: "Forecast Confidence", value: facts.forecastConfidence.toUpperCase(), detail: "Uses accounts, income, and bills", tone: facts.forecastConfidence === "high" ? "safe" : facts.forecastConfidence === "medium" ? "caution" : "risk" },
       { title: "Best First Step", value: "Reconcile", detail: "Then review income and recurring bills", tone: "info" },
+    ];
+  }
+  return [];
+}
+
+function floCategoryCards(message: string, facts: FloFacts): FloResponseCard[] {
+  const categories = facts.categoryPlan ?? [];
+  if (!categories.length) return [];
+  const named = findMentionedCategory(message, categories);
+  const lower = message.toLowerCase();
+  if (named && /(categor|budget|spend|spending|spent|over|left|remaining)/i.test(lower)) {
+    return [
+      { title: "Category Status", value: named.status.toUpperCase(), detail: `${named.percentUsed}% used`, tone: named.status === "over" ? "risk" : named.status === "watch" ? "caution" : "safe" },
+      { title: "Remaining", value: `${formatSignedDollars(named.remaining)}`, detail: `$${named.spent.toFixed(2)} spent of $${named.budgeted.toFixed(2)}`, tone: named.remaining < 0 ? "risk" : "safe" },
+    ];
+  }
+  if (/(need attention|attention|problem|over|overspend|watch|most room|most left)/i.test(lower)) {
+    const overCount = categories.filter(item => item.status === "over").length;
+    const best = categories.filter(item => item.remaining > 0).sort((left, right) => right.remaining - left.remaining)[0];
+    return [
+      { title: "Categories Over", value: String(overCount), detail: "Current month category plan", tone: overCount ? "risk" : "safe" },
+      { title: "Most Room", value: best ? best.category : "None", detail: best ? `$${best.remaining.toFixed(2)} left` : "No category has room left", tone: best ? "info" : "caution" },
     ];
   }
   return [];
