@@ -1,7 +1,7 @@
 import { Session, User } from "@supabase/supabase-js";
 import React, { createContext, useContext, useEffect, useState } from "react";
 
-import { DEV_DEMO_USER_ID, isDevDemoMode } from "@/lib/demoMode";
+import { DEV_DEMO_USER_ID, disableDevDemoMode, isDevDemoMode } from "@/lib/demoMode";
 import { supabase } from "@/lib/supabase";
 
 interface AuthContextType {
@@ -16,7 +16,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const demoMode = isDevDemoMode();
+  const [demoMode, setDemoMode] = useState(isDevDemoMode());
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -67,8 +67,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    if (demoMode) return;
     setSession(null);
+    if (demoMode) {
+      disableDevDemoMode();
+      setDemoMode(false);
+      return;
+    }
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
   };
