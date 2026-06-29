@@ -24,6 +24,8 @@
     "lib/schedule.test.ts",
     "lib/accounts.ts",
     "lib/accounts.test.ts"
+    ,"lib/categoryPlanning.ts"
+    ,"lib/categoryPlanning.test.ts"
     ,"lib/decisionPersistence.ts"
     ,"lib/decisionPersistence.test.ts"
     ,"lib/monthlySummary.ts"

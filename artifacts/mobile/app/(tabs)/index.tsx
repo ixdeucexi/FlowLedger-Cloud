@@ -16,6 +16,7 @@ import colors from "@/constants/colors";
 import type { Bill, DashboardFilter, Goal } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
+import { buildCategoryPlan } from "@/lib/categoryPlanning";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -35,8 +36,9 @@ export default function DashboardScreen() {
   const {
     bills, getPaidAmount, getBillMonthlyTotal, getMonthlyBills, selectedYear, setDashboardFilter,
     goals, addGoal, updateGoal, deleteGoal, checkGoalAffordability,
-    getCashFlow, getMonthlyIncome, addBill, addTransaction, getDailyBalances, settings,
+    getCashFlow, getMonthlyIncome, addBill, addTransaction, getDailyBalances, getTransactionsForMonth, settings,
     accounts, incomes, forecastConfidence, updateSettings,
+    categories,
   } = useBudget();
 
   const [goalModalVisible, setGoalModalVisible]     = useState(false);
@@ -173,6 +175,25 @@ export default function DashboardScreen() {
     bills.forEach(b => { const cat = b.category || "Other"; map[cat] = (map[cat] || 0) + b.amount; });
     return Object.entries(map).map(([label, value]) => ({ label, value, color: CAT_COLORS[label] ?? "#94a3b8" })).sort((a, b) => b.value - a.value);
   }, [bills]);
+
+  const categoryPlan = useMemo(() => {
+    const monthBills = getMonthlyBills(currentMonth, selectedYear)
+      .filter(bill => !bill.is_debt)
+      .map(bill => ({
+        category: bill.category || "Other",
+        amount: getBillMonthlyTotal(bill, currentMonth, selectedYear),
+      }));
+    const monthTransactions = getTransactionsForMonth(currentMonth, selectedYear)
+      .filter(transaction => transaction.category !== "Debt" && transaction.category !== "Income")
+      .map(transaction => ({ category: transaction.category || "Other", amount: transaction.amount }));
+    return buildCategoryPlan(categories.filter(category => category !== "Debt"), monthBills, monthTransactions);
+  }, [categories, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, currentMonth, selectedYear]);
+
+  const categoryPlanTotals = useMemo(() => categoryPlan.reduce((totals, row) => ({
+    budgeted: totals.budgeted + row.budgeted,
+    spent: totals.spent + row.spent,
+    remaining: totals.remaining + row.remaining,
+  }), { budgeted: 0, spent: 0, remaining: 0 }), [categoryPlan]);
 
   const debtPayoffData = useMemo(() => {
     const debts = bills.filter(b => b.is_debt && b.balance > 0);
@@ -574,6 +595,62 @@ export default function DashboardScreen() {
         <View style={[styles.whatBtnIcon,{backgroundColor:c.primary}]}><Text style={{color:c.primaryForeground,fontFamily:"Inter_700Bold",fontSize:18}}>F</Text></View>
         <View style={{flex:1}}><Text style={[styles.whatBtnText,{color:c.foreground}]}>What are you considering?</Text><Text style={{color:c.mutedForeground,fontSize:12,marginTop:2}}>Ask Flo before you change the plan.</Text></View><Feather name="chevron-right" size={18} color={c.primary}/>
       </Pressable>
+
+      {categoryPlan.length > 0 && (
+        <View style={{ marginBottom: 14 }}>
+          <View style={styles.categoryPlanHeader}>
+            <View>
+              <Text style={[styles.sectionTitle, { color: c.foreground, marginBottom: 2 }]}>Category Plan</Text>
+              <Text style={[styles.categoryPlanSub, { color: c.mutedForeground }]}>
+                ${categoryPlanTotals.spent.toFixed(0)} spent · ${Math.max(0, categoryPlanTotals.remaining).toFixed(0)} left
+              </Text>
+            </View>
+            {categoryPlanTotals.remaining < -0.005 ? (
+              <View style={[styles.categoryPlanBadge, { backgroundColor: c.destructive + "18" }]}>
+                <Text style={[styles.categoryPlanBadgeText, { color: c.destructive }]}>OVER</Text>
+              </View>
+            ) : (
+              <View style={[styles.categoryPlanBadge, { backgroundColor: c.success + "18" }]}>
+                <Text style={[styles.categoryPlanBadgeText, { color: c.success }]}>ON PLAN</Text>
+              </View>
+            )}
+          </View>
+          <View style={[styles.categoryPlanCard, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+            {categoryPlan.slice(0, 5).map((row, index) => {
+              const color = row.status === "over" ? c.destructive : row.status === "watch" ? c.warning : CAT_COLORS[row.category] ?? c.primary;
+              const trackWidth = `${Math.min(100, row.percentUsed)}%` as any;
+              return (
+                <Pressable
+                  key={row.category}
+                  onPress={() => router.push("/(tabs)/transactions" as any)}
+                  style={({ pressed }) => [
+                    styles.categoryPlanRow,
+                    { borderTopColor: c.border, borderTopWidth: index > 0 ? 1 : 0, opacity: pressed ? 0.75 : 1 },
+                  ]}
+                >
+                  <View style={[styles.categoryPlanIcon, { backgroundColor: color + "18" }]}>
+                    <Feather name={row.status === "over" ? "alert-triangle" : row.status === "watch" ? "eye" : "tag"} size={14} color={color} />
+                  </View>
+                  <View style={styles.categoryPlanBody}>
+                    <View style={styles.categoryPlanTop}>
+                      <Text numberOfLines={1} style={[styles.categoryPlanName, { color: c.foreground }]}>{row.category}</Text>
+                      <Text style={[styles.categoryPlanAmount, { color }]}>
+                        {row.remaining < 0 ? "-" : ""}${Math.abs(row.remaining).toFixed(0)}
+                      </Text>
+                    </View>
+                    <View style={[styles.categoryPlanTrack, { backgroundColor: c.muted }]}>
+                      <View style={[styles.categoryPlanFill, { backgroundColor: color, width: trackWidth }]} />
+                    </View>
+                    <Text style={[styles.categoryPlanDetail, { color: c.mutedForeground }]}>
+                      ${row.spent.toFixed(0)} spent of ${row.budgeted.toFixed(0)} planned
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      )}
 
       {false && <>
       {/* ── WHAT CAN I DO? button ── */}
@@ -1270,6 +1347,22 @@ const styles = StyleSheet.create({
   whatBtn:     { flexDirection: "row", alignItems: "center", gap: 12, padding: 16, marginBottom: 14, borderWidth: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
   whatBtnIcon: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   whatBtnText: { flex: 1, fontSize: 16, fontFamily: "Inter_700Bold" },
+
+  // Phase 4 category planning
+  categoryPlanHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 },
+  categoryPlanSub: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  categoryPlanBadge: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
+  categoryPlanBadgeText: { fontSize: 10, fontFamily: "Inter_700Bold", letterSpacing: 0.5 },
+  categoryPlanCard: { overflow: "hidden", shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
+  categoryPlanRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12 },
+  categoryPlanIcon: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  categoryPlanBody: { flex: 1 },
+  categoryPlanTop: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 7 },
+  categoryPlanName: { flex: 1, fontSize: 14, fontFamily: "Inter_700Bold" },
+  categoryPlanAmount: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  categoryPlanTrack: { height: 6, borderRadius: 3, overflow: "hidden", marginBottom: 5 },
+  categoryPlanFill: { height: 6, borderRadius: 3 },
+  categoryPlanDetail: { fontSize: 11, fontFamily: "Inter_400Regular" },
 
   // Affordability card
   affordCard:           { padding: 16, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
