@@ -57,6 +57,7 @@ export default function DashboardScreen() {
   const [categoryBudgetModalVisible, setCategoryBudgetModalVisible] = useState(false);
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
   const [categoryBudgetDrafts, setCategoryBudgetDrafts] = useState<Record<string, string>>({});
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   useFocusEffect(useCallback(() => {
     setIsFocused(true);
@@ -217,6 +218,49 @@ export default function DashboardScreen() {
     return buildCategoryPlan(categories.filter(category => category !== "Debt"), monthBills, monthTransactions, budgetLimits);
   }, [categories, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, currentMonth, selectedYear]);
 
+  const categoryDetail = useMemo(() => {
+    if (!selectedCategory) return null;
+    const row = categoryPlan.find(item => item.category === selectedCategory);
+    if (!row) return null;
+
+    const categoryBills = getMonthlyBills(currentMonth, selectedYear)
+      .filter(bill => !bill.is_debt && (bill.category || "Other") === selectedCategory)
+      .map(bill => ({
+        id: bill.id,
+        name: bill.name,
+        amount: getBillMonthlyTotal(bill, currentMonth, selectedYear),
+        paid: getPaidAmount(bill.id, currentMonth, selectedYear),
+        dueDay: bill.due_day,
+      }))
+      .sort((left, right) => left.dueDay - right.dueDay || left.name.localeCompare(right.name));
+
+    const categoryTransactions = getTransactionsForMonth(currentMonth, selectedYear)
+      .filter(transaction => (transaction.category || "Other") === selectedCategory && transaction.category !== "Income")
+      .sort((left, right) => right.date.localeCompare(left.date))
+      .map(transaction => ({
+        id: transaction.id,
+        name: transaction.note?.trim() || selectedCategory,
+        amount: transaction.amount,
+        date: transaction.date,
+      }));
+
+    const largestTransaction = categoryTransactions
+      .filter(transaction => transaction.amount < 0)
+      .sort((left, right) => Math.abs(right.amount) - Math.abs(left.amount))[0];
+    const billTotal = categoryBills.reduce((sum, bill) => sum + bill.amount, 0);
+    const actualSpending = categoryTransactions
+      .filter(transaction => transaction.amount < 0)
+      .reduce((sum, transaction) => sum + Math.abs(transaction.amount), 0);
+    const hasCustomBudget = categoryBudgets[selectedCategory] !== undefined;
+    const explanation = row.remaining < -0.005
+      ? `${selectedCategory} is over by $${Math.abs(row.remaining).toFixed(0)}. ${largestTransaction ? `The biggest transaction is ${largestTransaction.name} at $${Math.abs(largestTransaction.amount).toFixed(0)}.` : "Your actual spending is above the monthly plan."}`
+      : row.status === "watch"
+      ? `${selectedCategory} is getting close. You've used ${row.percentUsed}% of the monthly plan.`
+      : `${selectedCategory} is on plan with $${Math.max(0, row.remaining).toFixed(0)} left.`;
+
+    return { row, categoryBills, categoryTransactions, billTotal, actualSpending, hasCustomBudget, explanation };
+  }, [selectedCategory, categoryPlan, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, getTransactionsForMonth, currentMonth, selectedYear]);
+
   const budgetEditableCategories = useMemo(() => {
     const names = new Set<string>();
     categories.filter(category => category !== "Debt").forEach(category => names.add(category));
@@ -236,6 +280,17 @@ export default function DashboardScreen() {
       drafts[category] = categoryBudgets[category] === undefined ? "" : String(categoryBudgets[category]);
     });
     setCategoryBudgetDrafts(drafts);
+    setCategoryBudgetModalVisible(true);
+  };
+
+  const openCategoryBudgetEditorForCategory = (category: string) => {
+    const drafts: Record<string, string> = {};
+    budgetEditableCategories.forEach(item => {
+      drafts[item] = categoryBudgets[item] === undefined ? "" : String(categoryBudgets[item]);
+    });
+    if (!drafts[category]) drafts[category] = categoryBudgets[category] === undefined ? "" : String(categoryBudgets[category]);
+    setCategoryBudgetDrafts(drafts);
+    setSelectedCategory(null);
     setCategoryBudgetModalVisible(true);
   };
 
@@ -697,7 +752,7 @@ export default function DashboardScreen() {
               return (
                 <Pressable
                   key={row.category}
-                  onPress={() => router.push("/(tabs)/transactions" as any)}
+                  onPress={() => setSelectedCategory(row.category)}
                   style={({ pressed }) => [
                     styles.categoryPlanRow,
                     { borderTopColor: c.border, borderTopWidth: index > 0 ? 1 : 0, opacity: pressed ? 0.75 : 1 },
@@ -1157,6 +1212,124 @@ export default function DashboardScreen() {
         </Pressable>
       </Modal>
 
+      <Modal
+        visible={!!selectedCategory}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSelectedCategory(null)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setSelectedCategory(null)}>
+          <Pressable style={[styles.actionSheet, { backgroundColor: c.card }]} onPress={() => {}}>
+            <View style={[styles.sheetHandle, { backgroundColor: c.muted }]} />
+            {categoryDetail && (
+              <>
+                <View style={styles.categoryDetailHeader}>
+                  <View style={[styles.categoryPlanIcon, { backgroundColor: (CAT_COLORS[categoryDetail.row.category] ?? c.primary) + "18" }]}>
+                    <Feather
+                      name={categoryDetail.row.status === "over" ? "alert-triangle" : categoryDetail.row.status === "watch" ? "eye" : "tag"}
+                      size={16}
+                      color={categoryDetail.row.status === "over" ? c.destructive : categoryDetail.row.status === "watch" ? c.warning : CAT_COLORS[categoryDetail.row.category] ?? c.primary}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.sheetTitle, { color: c.foreground, marginBottom: 0 }]}>{categoryDetail.row.category}</Text>
+                    <Text style={[styles.sheetSub, { color: c.mutedForeground, marginBottom: 0 }]}>
+                      {MONTH_FULL[currentMonth]} {selectedYear} category detail
+                    </Text>
+                  </View>
+                  <Pressable onPress={() => setSelectedCategory(null)} style={[styles.categoryDetailClose, { backgroundColor: c.muted }]}>
+                    <Feather name="x" size={17} color={c.mutedForeground} />
+                  </Pressable>
+                </View>
+
+                <View style={styles.categoryDetailStats}>
+                  <View style={[styles.categoryDetailStat, { backgroundColor: c.muted }]}>
+                    <Text style={[styles.categoryDetailStatLabel, { color: c.mutedForeground }]}>Planned</Text>
+                    <Text style={[styles.categoryDetailStatValue, { color: c.foreground }]}>${categoryDetail.row.budgeted.toFixed(0)}</Text>
+                  </View>
+                  <View style={[styles.categoryDetailStat, { backgroundColor: c.muted }]}>
+                    <Text style={[styles.categoryDetailStatLabel, { color: c.mutedForeground }]}>Spent</Text>
+                    <Text style={[styles.categoryDetailStatValue, { color: c.destructive }]}>${categoryDetail.row.spent.toFixed(0)}</Text>
+                  </View>
+                  <View style={[styles.categoryDetailStat, { backgroundColor: c.muted }]}>
+                    <Text style={[styles.categoryDetailStatLabel, { color: c.mutedForeground }]}>Left</Text>
+                    <Text style={[styles.categoryDetailStatValue, { color: categoryDetail.row.remaining < 0 ? c.destructive : c.success }]}>
+                      {categoryDetail.row.remaining < 0 ? "-" : ""}${Math.abs(categoryDetail.row.remaining).toFixed(0)}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={[styles.categoryInsightBox, { backgroundColor: c.primary + "10", borderColor: c.primary + "30" }]}>
+                  <Feather name="info" size={15} color={c.primary} />
+                  <Text style={[styles.categoryInsightText, { color: c.foreground }]}>{categoryDetail.explanation}</Text>
+                </View>
+
+                <ScrollView style={styles.categoryDetailList} keyboardShouldPersistTaps="handled">
+                  <Text style={[styles.categoryDetailSectionTitle, { color: c.mutedForeground }]}>Planned bills</Text>
+                  {categoryDetail.categoryBills.length ? categoryDetail.categoryBills.map(bill => (
+                    <View key={bill.id} style={[styles.categoryDetailItem, { borderTopColor: c.border }]}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.categoryDetailItemName, { color: c.foreground }]}>{bill.name}</Text>
+                        <Text style={[styles.categoryDetailItemMeta, { color: c.mutedForeground }]}>
+                          Due day {bill.dueDay}{bill.paid > 0 ? ` · $${bill.paid.toFixed(0)} paid` : ""}
+                        </Text>
+                      </View>
+                      <Text style={[styles.categoryDetailItemAmount, { color: c.foreground }]}>${bill.amount.toFixed(0)}</Text>
+                    </View>
+                  )) : (
+                    <Text style={[styles.categoryDetailEmpty, { color: c.mutedForeground }]}>No planned bills in this category.</Text>
+                  )}
+
+                  <Text style={[styles.categoryDetailSectionTitle, { color: c.mutedForeground, marginTop: 14 }]}>Transactions</Text>
+                  {categoryDetail.categoryTransactions.length ? categoryDetail.categoryTransactions.slice(0, 6).map(transaction => (
+                    <View key={transaction.id} style={[styles.categoryDetailItem, { borderTopColor: c.border }]}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.categoryDetailItemName, { color: c.foreground }]}>{transaction.name}</Text>
+                        <Text style={[styles.categoryDetailItemMeta, { color: c.mutedForeground }]}>{transaction.date}</Text>
+                      </View>
+                      <Text style={[styles.categoryDetailItemAmount, { color: transaction.amount < 0 ? c.destructive : c.success }]}>
+                        {transaction.amount < 0 ? "-" : "+"}${Math.abs(transaction.amount).toFixed(0)}
+                      </Text>
+                    </View>
+                  )) : (
+                    <Text style={[styles.categoryDetailEmpty, { color: c.mutedForeground }]}>No transactions in this category yet.</Text>
+                  )}
+                </ScrollView>
+
+                <View style={styles.categoryDetailActions}>
+                  <Pressable
+                    onPress={() => openCategoryBudgetEditorForCategory(categoryDetail.row.category)}
+                    style={({ pressed }) => [styles.categoryDetailAction, { backgroundColor: c.primary, opacity: pressed ? 0.75 : 1 }]}
+                  >
+                    <Feather name="edit-3" size={14} color={c.primaryForeground} />
+                    <Text style={[styles.categoryDetailActionText, { color: c.primaryForeground }]}>Edit budget</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => {
+                      setSelectedCategory(null);
+                      router.push("/(tabs)/transactions" as any);
+                    }}
+                    style={({ pressed }) => [styles.categoryDetailAction, { backgroundColor: c.muted, opacity: pressed ? 0.75 : 1 }]}
+                  >
+                    <Feather name="list" size={14} color={c.foreground} />
+                    <Text style={[styles.categoryDetailActionText, { color: c.foreground }]}>Transactions</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => {
+                      setSelectedCategory(null);
+                      router.push("/(tabs)/flo" as any);
+                    }}
+                    style={({ pressed }) => [styles.categoryDetailAction, { backgroundColor: c.primary + "18", opacity: pressed ? 0.75 : 1 }]}
+                  >
+                    <Text style={[styles.categoryDetailActionText, { color: c.primary }]}>Ask Flo</Text>
+                  </Pressable>
+                </View>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <AddBillModal
         visible={addBillVisible}
         onClose={() => setAddBillVisible(false)}
@@ -1499,6 +1672,24 @@ const styles = StyleSheet.create({
   categoryBudgetInputWrap: { flexDirection: "row", alignItems: "center", minWidth: 118, borderRadius: 12, paddingHorizontal: 10 },
   categoryBudgetDollar: { fontSize: 14, fontFamily: "Inter_600SemiBold", marginRight: 2 },
   categoryBudgetInput: { flex: 1, minHeight: 44, fontSize: 15, fontFamily: "Inter_600SemiBold", textAlign: "right" },
+  categoryDetailHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
+  categoryDetailClose: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  categoryDetailStats: { flexDirection: "row", gap: 8, marginBottom: 12 },
+  categoryDetailStat: { flex: 1, borderRadius: 14, paddingVertical: 10, paddingHorizontal: 10 },
+  categoryDetailStatLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 3 },
+  categoryDetailStatValue: { fontSize: 18, fontFamily: "Inter_700Bold" },
+  categoryInsightBox: { flexDirection: "row", gap: 9, borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 12 },
+  categoryInsightText: { flex: 1, fontSize: 13, lineHeight: 18, fontFamily: "Inter_500Medium" },
+  categoryDetailList: { maxHeight: 340, marginBottom: 14 },
+  categoryDetailSectionTitle: { fontSize: 11, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 4 },
+  categoryDetailItem: { flexDirection: "row", alignItems: "center", gap: 10, borderTopWidth: 1, paddingVertical: 10 },
+  categoryDetailItemName: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  categoryDetailItemMeta: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
+  categoryDetailItemAmount: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  categoryDetailEmpty: { fontSize: 12, fontFamily: "Inter_400Regular", paddingVertical: 10 },
+  categoryDetailActions: { flexDirection: "row", gap: 8 },
+  categoryDetailAction: { flex: 1, minHeight: 44, borderRadius: 13, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 6, paddingHorizontal: 8 },
+  categoryDetailActionText: { fontSize: 12, fontFamily: "Inter_700Bold" },
 
   // Affordability card
   affordCard:           { padding: 16, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
