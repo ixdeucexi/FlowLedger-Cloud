@@ -28,6 +28,7 @@ import {
 } from "@/lib/floPolicy";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { evaluateDecision, type DecisionResult, type DecisionScenario } from "@/lib/decisions";
+import { buildDecisionHistory, type DecisionHistoryItem } from "@/lib/decisionHistory";
 
 const sampleQuestions = [
   "Ask Flo anything…",
@@ -135,6 +136,11 @@ export default function FloScreen() {
     };
   }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, transactions, upcoming, decisions, forecastConfidence.level]);
 
+  const decisionHistory = useMemo(
+    () => buildDecisionHistory(decisions, today, now.toISOString()),
+    [decisions, today],
+  );
+
   const send = async (text = input) => {
     const clean = text.trim();
     if (!clean || chat.sending) return;
@@ -204,6 +210,32 @@ export default function FloScreen() {
         keyboardShouldPersistTaps="handled"
         onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
       >
+        <View style={[styles.historyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.historyHeader}>
+            <View style={[styles.historyIcon, { backgroundColor: colors.primary + "18" }]}>
+              <Feather name="clock" size={17} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.historyTitle, { color: colors.foreground }]}>Decision History</Text>
+              <Text style={[styles.historySub, { color: colors.mutedForeground }]}>Planned decisions, follow-through, and actuals.</Text>
+            </View>
+          </View>
+          <View style={styles.historyStats}>
+            <HistoryStat label="Upcoming" value={decisionHistory.upcoming.length} color={colors.primary} />
+            <HistoryStat label="Completed" value={decisionHistory.completed.length} color={colors.success} />
+            <HistoryStat label="Changed" value={decisionHistory.changed.length} color={colors.warning} />
+          </View>
+          {decisionHistory.upcoming.length + decisionHistory.completed.length + decisionHistory.changed.length === 0 ? (
+            <Text style={[styles.historyEmpty, { color: colors.mutedForeground }]}>Ask Flo if you can afford something, then save it to start tracking decisions here.</Text>
+          ) : (
+            <View style={styles.historySections}>
+              <DecisionHistorySection title="Upcoming planned" items={decisionHistory.upcoming.slice(0, 4)} colors={colors} />
+              <DecisionHistorySection title="Completed" items={decisionHistory.completed.slice(0, 3)} colors={colors} />
+              <DecisionHistorySection title="Postponed / Cancelled" items={decisionHistory.changed.slice(0, 3)} colors={colors} />
+            </View>
+          )}
+        </View>
+
         <View style={[styles.bubble, styles.floBubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.bubbleText, { color: colors.foreground }]}>Hi, my name&apos;s Flo! Ask me something.</Text>
         </View>
@@ -315,6 +347,49 @@ function formatDisplayDate(date: string): string {
   return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function HistoryStat({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <View style={styles.historyStat}>
+      <Text style={[styles.historyStatValue, { color }]}>{value}</Text>
+      <Text style={styles.historyStatLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function DecisionHistorySection({ title, items, colors }: { title: string; items: DecisionHistoryItem[]; colors: ReturnType<typeof useColors> }) {
+  if (!items.length) return null;
+  return (
+    <View style={styles.historySection}>
+      <Text style={[styles.historySectionTitle, { color: colors.mutedForeground }]}>{title}</Text>
+      {items.map(item => (
+        <View key={item.id} style={[styles.historyRow, { borderColor: colors.border }]}>
+          <View style={[styles.historyStatusDot, { backgroundColor: statusColor(item.status, colors) }]} />
+          <View style={styles.historyRowBody}>
+            <View style={styles.historyRowTop}>
+              <Text numberOfLines={1} style={[styles.historyRowName, { color: colors.foreground }]}>{item.name}</Text>
+              <Text style={[styles.historyDate, { color: colors.mutedForeground }]}>{formatDisplayDate(item.date)}</Text>
+            </View>
+            <Text style={[styles.historyAmount, { color: colors.mutedForeground }]}>{item.amountLabel}</Text>
+            {item.varianceLabel ? (
+              <Text style={[styles.historyVariance, { color: item.varianceLabel.startsWith("+") ? colors.warning : colors.success }]}>
+                {item.varianceLabel}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function statusColor(status: DecisionHistoryItem["status"], colors: ReturnType<typeof useColors>) {
+  if (status === "completed") return colors.success;
+  if (status === "cancelled") return colors.destructive;
+  if (status === "postponed") return colors.warning;
+  if (status === "due") return colors.warning;
+  return colors.primary;
+}
+
 function toneColor(tone: FloResponseCard["tone"], colors: ReturnType<typeof useColors>) {
   if (tone === "safe") return colors.success;
   if (tone === "caution") return colors.warning;
@@ -340,6 +415,27 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 12, marginTop: 1 },
   conversation: { flex: 1 },
   conversationContent: { padding: 16, paddingBottom: 22, gap: 12 },
+  historyCard: { borderWidth: 1, borderRadius: 20, padding: 14, gap: 12 },
+  historyHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  historyIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  historyTitle: { fontSize: 17, fontFamily: "Inter_700Bold" },
+  historySub: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
+  historyStats: { flexDirection: "row", gap: 8 },
+  historyStat: { flex: 1, borderRadius: 12, backgroundColor: "rgba(148,163,184,0.10)", paddingVertical: 9, alignItems: "center" },
+  historyStatValue: { fontSize: 17, fontFamily: "Inter_700Bold" },
+  historyStatLabel: { color: "#94a3b8", fontSize: 10, fontFamily: "Inter_600SemiBold", marginTop: 2 },
+  historyEmpty: { fontSize: 12, lineHeight: 17, fontFamily: "Inter_400Regular" },
+  historySections: { gap: 10 },
+  historySection: { gap: 7 },
+  historySectionTitle: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.7 },
+  historyRow: { borderWidth: 1, borderRadius: 14, padding: 10, flexDirection: "row", gap: 9 },
+  historyStatusDot: { width: 9, height: 9, borderRadius: 5, marginTop: 5 },
+  historyRowBody: { flex: 1 },
+  historyRowTop: { flexDirection: "row", alignItems: "center", gap: 8 },
+  historyRowName: { flex: 1, fontSize: 13, fontFamily: "Inter_700Bold" },
+  historyDate: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  historyAmount: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_400Regular", marginTop: 2 },
+  historyVariance: { fontSize: 11, fontFamily: "Inter_700Bold", marginTop: 1 },
   bubble: { maxWidth: "88%", paddingHorizontal: 15, paddingVertical: 13, borderRadius: 18 },
   floBubble: { alignSelf: "flex-start", borderWidth: 1, borderTopLeftRadius: 6 },
   userBubble: { alignSelf: "flex-end", borderTopRightRadius: 6 },

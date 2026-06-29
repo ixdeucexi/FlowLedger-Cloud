@@ -30,6 +30,8 @@
     ,"lib/monthlySummary.test.ts"
     ,"lib/decisions.ts"
     ,"lib/decisions.test.ts"
+    ,"lib/decisionHistory.ts"
+    ,"lib/decisionHistory.test.ts"
     ,"lib/flo.test.ts"
     ,"lib/floPolicy.ts"
     ,"lib/debtOrder.ts"
