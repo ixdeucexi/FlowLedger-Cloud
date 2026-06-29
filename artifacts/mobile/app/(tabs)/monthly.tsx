@@ -15,9 +15,10 @@ import { EmptyState } from "@/components/EmptyState";
 import { MonthPicker } from "@/components/MonthPicker";
 import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
 import colors from "@/constants/colors";
-import type { Bill, Transaction } from "@/context/BudgetContext";
+import type { Bill, DecisionRecord, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
+import { scenarioDates } from "@/lib/decisions";
 import { groupForecastEvents } from "@/lib/forecastDisplay";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import type { SnowballProjectionResult } from "@/lib/snowball";
@@ -49,6 +50,7 @@ export default function MonthlyScreen() {
     getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill,
     getCashFlow, getMonthlyIncome, getDailyBalances, getIncomeOccurrencesInMonth,
     previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, finalizeBillPayment, getExtraPayment,
+    deleteDecision,
   } = useBudget();
 
   const [month, setMonth] = useState(new Date().getMonth());
@@ -133,6 +135,15 @@ export default function MonthlyScreen() {
     const db = dailyBalances.find(d => d.day === selectedDay);
     return db ? db.goalExpenses : [];
   }, [selectedDay, dailyBalances]);
+
+  const plansForSelectedDay = useMemo(() => {
+    if (!selectedDate) return [];
+    const monthEnd = `${selectedYear}-${String(month + 1).padStart(2, "0")}-${String(new Date(selectedYear, month + 1, 0).getDate()).padStart(2, "0")}`;
+    return decisions
+      .filter(decision => decision.status === "planned" || decision.status === "calendar")
+      .filter(decision => scenarioDates(decision.scenario, monthEnd).includes(selectedDate))
+      .sort((left, right) => left.name.localeCompare(right.name));
+  }, [decisions, selectedDate, month, selectedYear]);
 
   const isFuture = useMemo(() => {
     const now = new Date();
@@ -317,6 +328,15 @@ export default function MonthlyScreen() {
     ]);
   };
 
+  const handleDeletePlan = (decision: DecisionRecord) => {
+    const doDelete = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); void deleteDecision(decision.id); };
+    if (Platform.OS === "web") { doDelete(); return; }
+    Alert.alert("Remove Plan", `Remove "${decision.name}" from your calendar and forecast?`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Remove", style: "destructive", onPress: doDelete },
+    ]);
+  };
+
   const checkForRecurring = useCallback((newTx: Omit<Transaction, "id">) => {
     // Only check expenses with a non-trivial note
     if (newTx.amount >= 0) return;
@@ -370,6 +390,7 @@ export default function MonthlyScreen() {
   const displayedTxs = selectedDate
     ? txList.filter(t => t.date === selectedDate)
     : [];
+  const selectedDayItemCount = scheduledBillsForDay.length + displayedTxs.length + goalsForSelectedDay.length + plansForSelectedDay.length;
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
 
@@ -858,12 +879,47 @@ export default function MonthlyScreen() {
               </>
             )}
 
+            {/* Saved plans due on selected day */}
+            {plansForSelectedDay.length > 0 && (
+              <>
+                <Text style={[styles.sectionLabel, { color: c.mutedForeground }]}>Saved Plans</Text>
+                {plansForSelectedDay.map(plan => {
+                  const isIncome = plan.scenario.type === "income_change";
+                  const amount = isIncome ? Math.abs(plan.scenario.amount) : -Math.abs(plan.scenario.amount);
+                  return (
+                    <View
+                      key={`plan-${plan.id}`}
+                      style={[styles.txRow, { backgroundColor: c.card, borderRadius: colors.radius }]}
+                    >
+                      <View style={styles.txMain}>
+                        <View style={[styles.txIcon, { backgroundColor: "#3b82f620" }]}>
+                          <Feather name="calendar" size={15} color="#3b82f6" />
+                        </View>
+                        <View style={styles.txBody}>
+                          <Text style={[styles.txNote, { color: c.foreground }]}>{plan.name}</Text>
+                          <Text style={[styles.txDate, { color: c.mutedForeground }]}>
+                            Planned decision · {plan.result.verdict}
+                          </Text>
+                        </View>
+                        <Text style={[styles.txAmt, { color: amount >= 0 ? c.success : "#3b82f6" }]}>
+                          {amount >= 0 ? "+" : "-"}${Math.abs(amount).toFixed(2)}
+                        </Text>
+                      </View>
+                      <Pressable onPress={() => handleDeletePlan(plan)} hitSlop={8} style={styles.txDelete}>
+                        <Feather name="trash-2" size={14} color={c.destructive} />
+                      </Pressable>
+                    </View>
+                  );
+                })}
+              </>
+            )}
+
             {/* Manual transactions */}
-            {selectedDate && displayedTxs.length === 0 && scheduledBillsForDay.length === 0 && goalsForSelectedDay.length === 0 ? (
+            {selectedDate && displayedTxs.length === 0 && scheduledBillsForDay.length === 0 && goalsForSelectedDay.length === 0 && plansForSelectedDay.length === 0 ? (
               <EmptyState icon="credit-card" title="No Activity" message="Tap + to log a transaction for this day." />
             ) : displayedTxs.length > 0 ? (
               <>
-                {(scheduledBillsForDay.length > 0 || goalsForSelectedDay.length > 0) && (
+                {(scheduledBillsForDay.length > 0 || goalsForSelectedDay.length > 0 || plansForSelectedDay.length > 0) && (
                   <Text style={[styles.sectionLabel, { color: c.mutedForeground }]}>Transactions</Text>
                 )}
                 {displayedTxs.map(tx => (
