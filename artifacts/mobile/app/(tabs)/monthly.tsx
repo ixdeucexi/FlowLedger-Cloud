@@ -19,6 +19,7 @@ import type { Bill, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { groupForecastEvents } from "@/lib/forecastDisplay";
+import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { isValidDateInMonth } from "@/lib/schedule";
 
@@ -94,8 +95,13 @@ export default function MonthlyScreen() {
     .sort((a, b) => a.bill.due_day - b.bill.due_day);
   }, [monthBills, getAmount, getPaidAmount, month, selectedYear, billFilter]);
 
-  const totalDue = useMemo(() => monthBills.reduce((s, b) => s + getBillMonthlyTotal(b, month, selectedYear), 0), [monthBills, getBillMonthlyTotal, month, selectedYear]);
-  const totalPaid = useMemo(() => monthBills.reduce((s, b) => s + Math.min(getPaidAmount(b.id, month, selectedYear), getBillMonthlyTotal(b, month, selectedYear)), 0), [monthBills, getPaidAmount, getBillMonthlyTotal, month, selectedYear]);
+  const billSummary = useMemo(() => summarizeMonthlyBills(
+    monthBills,
+    bill => getBillMonthlyTotal(bill, month, selectedYear),
+    bill => getPaidAmount(bill.id, month, selectedYear),
+  ), [monthBills, getPaidAmount, getBillMonthlyTotal, month, selectedYear]);
+  const totalDue = billSummary.totalDue;
+  const totalPaid = billSummary.totalPaid;
 
   const txList = useMemo(() => getTransactionsForMonth(month, selectedYear), [getTransactionsForMonth, month, selectedYear]);
   const dailyBalances = useMemo(() => getDailyBalances(month, selectedYear), [getDailyBalances, month, selectedYear]);

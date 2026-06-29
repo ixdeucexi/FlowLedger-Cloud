@@ -24,6 +24,8 @@
     "lib/schedule.test.ts",
     "lib/accounts.ts",
     "lib/accounts.test.ts"
+    ,"lib/monthlySummary.ts"
+    ,"lib/monthlySummary.test.ts"
     ,"lib/decisions.ts"
     ,"lib/decisions.test.ts"
     ,"lib/flo.test.ts"

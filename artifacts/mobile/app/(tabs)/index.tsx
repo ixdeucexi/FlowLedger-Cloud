@@ -16,6 +16,7 @@ import colors from "@/constants/colors";
 import type { Bill, DashboardFilter, Goal } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
+import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const MONTH_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -146,20 +147,13 @@ export default function DashboardScreen() {
   const firstYearNegEntry = yearNegSchedule.find(e => e.firstNegDay !== null) ?? null;
 
   const stats = useMemo(() => {
-    const monthBills = getMonthlyBills(currentMonth, selectedYear)
-      .filter(b => getBillMonthlyTotal(b, currentMonth, selectedYear) > 0);
-    let totalDue = 0, totalPaid = 0, paidCount = 0;
-    monthBills.forEach(b => {
-      const amt  = getBillMonthlyTotal(b, currentMonth, selectedYear);
-      const paid = getPaidAmount(b.id, currentMonth, selectedYear);
-      totalDue  += amt;
-      totalPaid += Math.min(paid, amt);
-      if (paid >= amt && amt > 0) paidCount++;
-    });
+    const billSummary = summarizeMonthlyBills(
+      getMonthlyBills(currentMonth, selectedYear),
+      bill => getBillMonthlyTotal(bill, currentMonth, selectedYear),
+      bill => getPaidAmount(bill.id, currentMonth, selectedYear),
+    );
     const totalDebt  = bills.filter(b => b.is_debt).reduce((s, b) => s + b.balance, 0);
-    const unpaidCount = monthBills.length - paidCount;
-    const billProgressPercent = monthBills.length > 0 ? Math.round((paidCount / monthBills.length) * 100) : 0;
-    return { totalDue, totalPaid, remaining: totalDue - totalPaid, paidCount, unpaidCount, billCount: monthBills.length, billProgressPercent, totalDebt };
+    return { ...billSummary, totalDebt };
   }, [bills, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, currentMonth, selectedYear]);
 
   const upcomingBills = useMemo(() => {
