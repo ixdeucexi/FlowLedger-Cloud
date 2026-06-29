@@ -18,7 +18,7 @@ import colors from "@/constants/colors";
 import type { Bill, DecisionRecord, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
-import { scenarioDates } from "@/lib/decisions";
+import { evaluateDecision, scenarioDates } from "@/lib/decisions";
 import { groupForecastEvents } from "@/lib/forecastDisplay";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import type { SnowballProjectionResult } from "@/lib/snowball";
@@ -50,7 +50,7 @@ export default function MonthlyScreen() {
     getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill,
     getCashFlow, getMonthlyIncome, getDailyBalances, getIncomeOccurrencesInMonth,
     previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, finalizeBillPayment, getExtraPayment,
-    deleteDecision,
+    updateDecision, deleteDecision,
   } = useBudget();
 
   const [month, setMonth] = useState(new Date().getMonth());
@@ -70,6 +70,10 @@ export default function MonthlyScreen() {
   const [snowballPreview, setSnowballPreview] = useState<SnowballProjectionResult | null>(null);
   const [surplusPrompt, setSurplusPrompt] = useState<{ bill: Bill; budgeted: number; actual: number; paidDate: string } | null>(null);
   const [surplusPaymentDate, setSurplusPaymentDate] = useState("");
+  const [editPlan, setEditPlan] = useState<DecisionRecord | null>(null);
+  const [editPlanName, setEditPlanName] = useState("");
+  const [editPlanAmount, setEditPlanAmount] = useState("");
+  const [savingPlan, setSavingPlan] = useState(false);
 
   useEffect(() => {
     if (dashboardFilter === "paid") { setBillFilter("paid"); setActiveTab("bills"); setDashboardFilter(null); }
@@ -335,6 +339,40 @@ export default function MonthlyScreen() {
       { text: "Cancel", style: "cancel" },
       { text: "Remove", style: "destructive", onPress: doDelete },
     ]);
+  };
+
+  const openEditPlan = (plan: DecisionRecord) => {
+    setEditPlan(plan);
+    setEditPlanName(plan.name);
+    setEditPlanAmount(String(Math.abs(plan.scenario.amount)));
+  };
+
+  const saveEditedPlan = async () => {
+    if (!editPlan || savingPlan) return;
+    const amount = Number.parseFloat(editPlanAmount);
+    const name = editPlanName.trim() || editPlan.name;
+    if (!Number.isFinite(amount) || amount <= 0) {
+      Alert.alert("Amount needed", "Enter an amount greater than $0.");
+      return;
+    }
+    setSavingPlan(true);
+    try {
+      const baseline = dailyBalances
+        .map(day => ({
+          date: `${selectedYear}-${String(month + 1).padStart(2, "0")}-${String(day.day).padStart(2, "0")}`,
+          balance: day.balance,
+        }))
+        .filter(day => day.date >= (selectedDate ?? editPlan.scenario.date));
+      const scenario = { ...editPlan.scenario, name, amount };
+      const result = evaluateDecision(baseline.length ? baseline : [{ date: scenario.date, balance: 0 }], scenario, settings.safety_floor);
+      await updateDecision({ ...editPlan, name, scenario, result });
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setEditPlan(null);
+    } catch (error) {
+      Alert.alert("Couldn't save plan", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSavingPlan(false);
+    }
   };
 
   const checkForRecurring = useCallback((newTx: Omit<Transaction, "id">) => {
@@ -891,20 +929,20 @@ export default function MonthlyScreen() {
                       key={`plan-${plan.id}`}
                       style={[styles.txRow, { backgroundColor: c.card, borderRadius: colors.radius }]}
                     >
-                      <View style={styles.txMain}>
+                      <Pressable onPress={() => openEditPlan(plan)} style={styles.txMain}>
                         <View style={[styles.txIcon, { backgroundColor: "#3b82f620" }]}>
                           <Feather name="calendar" size={15} color="#3b82f6" />
                         </View>
                         <View style={styles.txBody}>
                           <Text style={[styles.txNote, { color: c.foreground }]}>{plan.name}</Text>
                           <Text style={[styles.txDate, { color: c.mutedForeground }]}>
-                            Planned decision · {plan.result.verdict}
+                            Planned decision · {plan.result.verdict} · tap to edit
                           </Text>
                         </View>
                         <Text style={[styles.txAmt, { color: amount >= 0 ? c.success : "#3b82f6" }]}>
                           {amount >= 0 ? "+" : "-"}${Math.abs(amount).toFixed(2)}
                         </Text>
-                      </View>
+                      </Pressable>
                       <Pressable onPress={() => handleDeletePlan(plan)} hitSlop={8} style={styles.txDelete}>
                         <Feather name="trash-2" size={14} color={c.destructive} />
                       </Pressable>
@@ -1064,6 +1102,61 @@ export default function MonthlyScreen() {
         editTx={editTx}
         defaultDate={selectedDate ?? undefined}
       />
+      <Modal
+        visible={editPlan !== null}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setEditPlan(null)}
+      >
+        <Pressable style={styles.pickerOverlay} onPress={() => setEditPlan(null)}>
+          <Pressable style={[styles.pickerSheet, { backgroundColor: c.background }]} onPress={e => e.stopPropagation()}>
+            <View style={styles.pickerHandle} />
+            <View style={styles.pickerHeader}>
+              <View>
+                <Text style={[styles.pickerTitle, { color: c.foreground }]}>Edit Plan</Text>
+                <Text style={[styles.pickerSub, { color: c.mutedForeground }]}>
+                  {editPlan?.scenario.date} · updates your forecast
+                </Text>
+              </View>
+              <Pressable onPress={() => setEditPlan(null)} hitSlop={8}>
+                <Feather name="x" size={20} color={c.mutedForeground} />
+              </Pressable>
+            </View>
+
+            <Text style={[styles.pickerLabel, { color: c.mutedForeground }]}>Name</Text>
+            <TextInput
+              value={editPlanName}
+              onChangeText={setEditPlanName}
+              placeholder="Plan name"
+              placeholderTextColor={c.mutedForeground}
+              style={[styles.planInput, { backgroundColor: c.card, color: c.foreground, borderColor: c.border }]}
+            />
+
+            <Text style={[styles.pickerLabel, { color: c.mutedForeground }]}>Amount</Text>
+            <TextInput
+              value={editPlanAmount}
+              onChangeText={setEditPlanAmount}
+              keyboardType="decimal-pad"
+              placeholder="0.00"
+              placeholderTextColor={c.mutedForeground}
+              style={[styles.planInput, { backgroundColor: c.card, color: c.foreground, borderColor: c.border }]}
+            />
+
+            <Pressable
+              disabled={savingPlan}
+              onPress={saveEditedPlan}
+              style={({ pressed }) => [
+                styles.planSaveBtn,
+                { backgroundColor: c.primary, opacity: pressed || savingPlan ? 0.75 : 1 },
+              ]}
+            >
+              <Text style={[styles.planSaveText, { color: c.primaryForeground }]}>
+                {savingPlan ? "Saving..." : "Save Plan"}
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
       <SnowballPreviewModal
         visible={snowballModalVisible}
         preview={snowballPreview}
@@ -1196,6 +1289,9 @@ const styles = StyleSheet.create({
   pickerDayText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   pickerResetBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 14 },
   pickerResetText: { fontSize: 14, fontFamily: "Inter_500Medium" },
+  planInput: { height: 48, borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, fontSize: 16, fontFamily: "Inter_600SemiBold", marginBottom: 14 },
+  planSaveBtn: { height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center", marginTop: 4 },
+  planSaveText: { fontSize: 15, fontFamily: "Inter_700Bold" },
   incomeCard: { paddingTop: 12, paddingBottom: 4, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
   incomeHeader: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, marginBottom: 10 },
   incomeTitle: { flex: 1, fontSize: 13, fontFamily: "Inter_600SemiBold" },
