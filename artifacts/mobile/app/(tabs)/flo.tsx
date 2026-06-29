@@ -137,8 +137,8 @@ export default function FloScreen() {
   }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, transactions, upcoming, decisions, forecastConfidence.level]);
 
   const decisionHistory = useMemo(
-    () => buildDecisionHistory(decisions, today, now.toISOString()),
-    [decisions, today],
+    () => buildDecisionHistory(decisions.filter(decision => decisionStillHasSource(decision, transactions)), today, now.toISOString()),
+    [decisions, transactions, today],
   );
 
   const send = async (text = input) => {
@@ -388,6 +388,23 @@ function statusColor(status: DecisionHistoryItem["status"], colors: ReturnType<t
   if (status === "postponed") return colors.warning;
   if (status === "due") return colors.warning;
   return colors.primary;
+}
+
+function decisionStillHasSource(decision: { status: string; scenario: { type?: string }; applied_change?: Record<string, unknown> }, transactions: { id: string }[]) {
+  if (decision.status !== "completed" && decision.status !== "applied") return true;
+  const applied = decision.applied_change ?? {};
+  const linkedTransactionId = typeof applied.id === "string"
+    ? applied.id
+    : typeof applied.transactionId === "string"
+      ? applied.transactionId
+      : null;
+  const expectsTransaction = decision.scenario.type === "one_time_purchase"
+    || decision.scenario.type === "savings_contribution"
+    || decision.scenario.type === "recurring_bill"
+    || applied.kind === "transaction"
+    || applied.kind === "recurring";
+  if (!expectsTransaction) return true;
+  return !!linkedTransactionId && transactions.some(transaction => transaction.id === linkedTransactionId);
 }
 
 function toneColor(tone: FloResponseCard["tone"], colors: ReturnType<typeof useColors>) {

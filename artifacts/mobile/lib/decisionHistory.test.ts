@@ -8,11 +8,12 @@ const base = {
 
 test("groups upcoming planned decisions", () => {
   const history = buildDecisionHistory([
-    { ...base, id: "plan", name: "Trip", status: "planned" } as DecisionHistoryInput,
+    { ...base, id: "plan", name: "Trip", status: "planned", actual_amount: null } as DecisionHistoryInput,
   ], "2026-07-01", "2026-07-01T12:00:00.000Z");
 
   assert.equal(history.upcoming[0]?.status, "upcoming");
   assert.equal(history.upcoming[0]?.amountLabel, "Planned $100.00");
+  assert.equal(history.upcoming[0]?.actualAmount, undefined);
 });
 
 test("shows completed decisions with actual versus planned", () => {

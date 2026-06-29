@@ -5,7 +5,7 @@ export interface DecisionHistoryInput {
   name: string;
   status: "saved" | "planned" | "completed" | "cancelled" | "reversed" | "calendar" | "applied";
   scenario: { amount: number; date: string; type?: string };
-  actual_amount?: number;
+  actual_amount?: number | null;
   remind_at?: string;
   completed_at?: string;
   next_due_date?: string;
@@ -41,7 +41,9 @@ export function buildDecisionHistory(decisions: DecisionHistoryInput[], today: s
 
   function decisionHistoryItem(decision: DecisionHistoryInput): DecisionHistoryItem {
     const plannedAmount = Math.abs(Number(decision.scenario.amount) || 0);
-    const actualAmount = decision.actual_amount === undefined ? undefined : Math.abs(Number(decision.actual_amount) || 0);
+    const actualAmount = decision.actual_amount === undefined || decision.actual_amount === null
+      ? undefined
+      : Math.abs(Number(decision.actual_amount) || 0);
     const status = historyStatus(decision, today, nowIso);
     const variance = actualAmount === undefined ? null : actualAmount - plannedAmount;
     return {
