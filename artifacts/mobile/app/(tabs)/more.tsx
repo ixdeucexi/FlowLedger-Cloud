@@ -20,6 +20,7 @@ import { useAuth } from "@/context/AuthContext";
 import { type ThemeMode, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import { parseStatementCsv } from "@/lib/accounts";
+import { readDecisionHubSettings, writeDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { resetFloMemory } from "@/lib/flo";
 
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
@@ -53,6 +54,7 @@ export default function MoreScreen() {
   const [renameValue, setRenameValue] = useState("");
   const [safetyFloorText, setSafetyFloorText] = useState(settings.safety_floor.toString());
   const [forecastHorizonText, setForecastHorizonText] = useState(settings.forecast_horizon_months.toString());
+  const [decisionHubSettings, setDecisionHubSettings] = useState<DecisionHubSettings>(() => readDecisionHubSettings());
   const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
@@ -66,6 +68,13 @@ export default function MoreScreen() {
     setSafetyFloorText(floor.toString());
     setForecastHorizonText(horizon.toString());
     updateSettings({ safety_floor: floor, forecast_horizon_months: horizon });
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const updateDecisionHubSetting = (next: Partial<DecisionHubSettings>) => {
+    const merged = { ...decisionHubSettings, ...next };
+    setDecisionHubSettings(merged);
+    writeDecisionHubSettings(merged);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
@@ -261,6 +270,35 @@ export default function MoreScreen() {
       </View>
 
       {/* ── Accounts and reconciliation ── */}
+      <SLabel c={c} text="Decision Hub" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <Pressable
+          onPress={() => updateDecisionHubSetting({ categoryRolloverEnabled: !decisionHubSettings.categoryRolloverEnabled })}
+          style={({ pressed }) => [styles.decisionSettingRow, { opacity: pressed ? 0.75 : 1 }]}
+        >
+          <View style={[styles.dataIcon, { backgroundColor: c.primary + "18" }]}>
+            <Feather name="repeat" size={17} color={c.primary} />
+          </View>
+          <View style={styles.switchInfo}>
+            <Text style={[styles.switchLabel, { color: c.foreground }]}>Category rollover</Text>
+            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>
+              Carry last month's leftover or overage into this month's Category Plan.
+            </Text>
+          </View>
+          <View style={[styles.toggleTrack, { backgroundColor: decisionHubSettings.categoryRolloverEnabled ? c.primary : c.muted }]}>
+            <View style={[styles.toggleKnob, { backgroundColor: "#fff", alignSelf: decisionHubSettings.categoryRolloverEnabled ? "flex-end" : "flex-start" }]} />
+          </View>
+        </Pressable>
+        <View style={[styles.priorityNote, { backgroundColor: decisionHubSettings.categoryRolloverEnabled ? c.success + "12" : c.muted, borderRadius: 8 }]}>
+          <Feather name="info" size={12} color={decisionHubSettings.categoryRolloverEnabled ? c.success : c.mutedForeground} />
+          <Text style={[styles.priorityNoteText, { color: c.mutedForeground }]}>
+            {decisionHubSettings.categoryRolloverEnabled
+              ? "Rollover is on. Positive balances build up; negative balances reduce next month."
+              : "Rollover is off. Category budgets reset to this month's plan."}
+          </Text>
+        </View>
+      </View>
+
       <SLabel c={c} text="Accounts" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View style={[styles.confidenceBox, { backgroundColor: forecastConfidence.level === "high" ? c.success + "14" : forecastConfidence.level === "medium" ? "#f59e0b18" : c.destructive + "12" }]}>
@@ -643,6 +681,9 @@ const styles = StyleSheet.create({
   switchInfo: { flex: 1, marginRight: 12 },
   switchLabel: { fontSize: 15, fontFamily: "Inter_500Medium" },
   switchDesc: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  decisionSettingRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  toggleTrack: { width: 48, height: 28, borderRadius: 999, padding: 3, justifyContent: "center" },
+  toggleKnob: { width: 22, height: 22, borderRadius: 11 },
   balanceDivider: { borderTopWidth: 1, marginTop: 14, paddingTop: 14 },
   balanceHeader: { marginBottom: 10 },
   balanceFieldLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 6 },

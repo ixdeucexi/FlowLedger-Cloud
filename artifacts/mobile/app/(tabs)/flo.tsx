@@ -32,7 +32,8 @@ import {
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { evaluateDecision, type DecisionResult, type DecisionScenario } from "@/lib/decisions";
 import { buildDecisionHistory, type DecisionHistoryItem } from "@/lib/decisionHistory";
-import { applyCategoryBudgetMove, buildCategoryPlan } from "@/lib/categoryPlanning";
+import { applyCategoryBudgetMove, buildCategoryPlan, buildCategoryRolloverAdjustments } from "@/lib/categoryPlanning";
+import { DECISION_HUB_SETTINGS_EVENT, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 
 const sampleQuestions = [
   "Ask Flo anything…",
@@ -56,6 +57,7 @@ export default function FloScreen() {
   const [categoryMoveByMessageId, setCategoryMoveByMessageId] = useState<Record<string, FloCategoryMoveResult>>({});
   const [categoryMoveState, setCategoryMoveState] = useState<Record<string, "idle" | "saving" | "saved" | "failed">>({});
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
+  const [decisionHubSettings, setDecisionHubSettings] = useState<DecisionHubSettings>(() => readDecisionHubSettings());
   const [input, setInput] = useState("");
   const [summary, setSummary] = useState("");
   const [sampleIndex, setSampleIndex] = useState(0);
@@ -109,10 +111,10 @@ export default function FloScreen() {
     return `flowledger-category-budgets-${year}-${String(month + 1).padStart(2, "0")}`;
   }, [today]);
 
-  const readCategoryBudgetsFromStorage = () => {
+  const readCategoryBudgetsFromStorage = (key = categoryBudgetKey) => {
     if (Platform.OS !== "web") return {};
     try {
-      const raw = globalThis.localStorage?.getItem(categoryBudgetKey);
+      const raw = globalThis.localStorage?.getItem(key);
       const parsed = raw ? JSON.parse(raw) as Record<string, unknown> : {};
       const next: Record<string, number> = {};
       Object.entries(parsed).forEach(([category, amount]) => {
@@ -129,6 +131,14 @@ export default function FloScreen() {
     setCategoryBudgets(readCategoryBudgetsFromStorage());
   }, [categoryBudgetKey]);
 
+  useEffect(() => {
+    const loadDecisionHubSettings = () => setDecisionHubSettings(readDecisionHubSettings());
+    loadDecisionHubSettings();
+    if (Platform.OS !== "web") return;
+    globalThis.addEventListener?.(DECISION_HUB_SETTINGS_EVENT, loadDecisionHubSettings);
+    return () => globalThis.removeEventListener?.(DECISION_HUB_SETTINGS_EVENT, loadDecisionHubSettings);
+  }, []);
+
   const writeCategoryBudgets = (budgets: Record<string, number>) => {
     setCategoryBudgets(budgets);
     if (Platform.OS === "web") {
@@ -140,6 +150,26 @@ export default function FloScreen() {
   const categoryPlan = useMemo(() => {
     const month = now.getMonth();
     const year = now.getFullYear();
+    const previousDate = new Date(year, month - 1, 1);
+    const previousMonth = previousDate.getMonth();
+    const previousYear = previousDate.getFullYear();
+    const previousBudgetKey = `flowledger-category-budgets-${previousYear}-${String(previousMonth + 1).padStart(2, "0")}`;
+    const previousBills = getMonthlyBills(previousMonth, previousYear)
+      .filter(bill => !bill.is_debt)
+      .map(bill => ({
+        category: bill.category || "Other",
+        amount: getBillMonthlyTotal(bill, previousMonth, previousYear),
+      }));
+    const previousTransactions = getTransactionsForMonth(previousMonth, previousYear)
+      .filter(transaction => transaction.category !== "Debt" && transaction.category !== "Income")
+      .map(transaction => ({ category: transaction.category || "Other", amount: transaction.amount }));
+    const previousRows = buildCategoryPlan(
+      categories.filter(category => category !== "Debt"),
+      previousBills,
+      previousTransactions,
+      Object.entries(readCategoryBudgetsFromStorage(previousBudgetKey)).map(([category, amount]) => ({ category, amount })),
+    );
+    const rollovers = buildCategoryRolloverAdjustments(previousRows, decisionHubSettings.categoryRolloverEnabled);
     const monthBills = getMonthlyBills(month, year)
       .filter(bill => !bill.is_debt)
       .map(bill => ({
@@ -154,6 +184,7 @@ export default function FloScreen() {
       monthBills,
       monthTransactions,
       Object.entries(categoryBudgets).map(([category, amount]) => ({ category, amount })),
+      rollovers,
     );
     const transactionDetails = getTransactionsForMonth(month, year)
       .filter(transaction => transaction.amount < 0 && transaction.category !== "Debt" && transaction.category !== "Income");
@@ -166,6 +197,7 @@ export default function FloScreen() {
         budgeted: row.budgeted,
         spent: row.spent,
         remaining: row.remaining,
+        rollover: row.rollover,
         status: row.status,
         percentUsed: row.percentUsed,
         topTransaction: topTransaction ? {
@@ -175,7 +207,7 @@ export default function FloScreen() {
         } : undefined,
       };
     });
-  }, [categories, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, now]);
+  }, [categories, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, now, decisionHubSettings.categoryRolloverEnabled]);
 
   const facts = useMemo<FloFacts>(() => {
     const lowest = baseline.reduce(
@@ -288,6 +320,7 @@ export default function FloScreen() {
         budgeted: row.budgeted,
         spent: row.spent,
         remaining: row.remaining,
+        rollover: row.rollover ?? 0,
         status: row.status,
         percentUsed: row.percentUsed,
       }));

@@ -16,7 +16,8 @@ import colors from "@/constants/colors";
 import type { Bill, DashboardFilter, Goal } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
-import { applyCategoryBudgetMove, buildCategoryPlan } from "@/lib/categoryPlanning";
+import { applyCategoryBudgetMove, buildCategoryPlan, buildCategoryRolloverAdjustments } from "@/lib/categoryPlanning";
+import { DECISION_HUB_SETTINGS_EVENT, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -58,6 +59,7 @@ export default function DashboardScreen() {
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
   const [categoryBudgetDrafts, setCategoryBudgetDrafts] = useState<Record<string, string>>({});
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [decisionHubSettings, setDecisionHubSettings] = useState<DecisionHubSettings>(() => readDecisionHubSettings());
   const [moveMoneyVisible, setMoveMoneyVisible] = useState(false);
   const [moveTargetCategory, setMoveTargetCategory] = useState<string | null>(null);
   const [moveSourceCategory, setMoveSourceCategory] = useState("");
@@ -215,6 +217,48 @@ export default function DashboardScreen() {
     return () => globalThis.removeEventListener?.("flowledger-category-budgets-updated", loadCategoryBudgets);
   }, [categoryBudgetKey]);
 
+  useEffect(() => {
+    const loadDecisionHubSettings = () => setDecisionHubSettings(readDecisionHubSettings());
+    loadDecisionHubSettings();
+    if (Platform.OS !== "web") return;
+    globalThis.addEventListener?.(DECISION_HUB_SETTINGS_EVENT, loadDecisionHubSettings);
+    return () => globalThis.removeEventListener?.(DECISION_HUB_SETTINGS_EVENT, loadDecisionHubSettings);
+  }, []);
+
+  const readCategoryBudgetMap = useCallback((month: number, year: number) => {
+    if (Platform.OS !== "web") return {};
+    try {
+      const key = `flowledger-category-budgets-${year}-${String(month + 1).padStart(2, "0")}`;
+      const raw = globalThis.localStorage?.getItem(key);
+      const parsed = raw ? JSON.parse(raw) as Record<string, unknown> : {};
+      const next: Record<string, number> = {};
+      Object.entries(parsed).forEach(([category, amount]) => {
+        const value = Number(amount);
+        if (category && Number.isFinite(value) && value >= 0) next[category] = value;
+      });
+      return next;
+    } catch {
+      return {};
+    }
+  }, []);
+
+  const previousCategoryPlan = useMemo(() => {
+    const previousDate = new Date(selectedYear, currentMonth - 1, 1);
+    const month = previousDate.getMonth();
+    const year = previousDate.getFullYear();
+    const monthBills = getMonthlyBills(month, year)
+      .filter(bill => !bill.is_debt)
+      .map(bill => ({
+        category: bill.category || "Other",
+        amount: getBillMonthlyTotal(bill, month, year),
+      }));
+    const monthTransactions = getTransactionsForMonth(month, year)
+      .filter(transaction => transaction.category !== "Debt" && transaction.category !== "Income")
+      .map(transaction => ({ category: transaction.category || "Other", amount: transaction.amount }));
+    const budgetLimits = Object.entries(readCategoryBudgetMap(month, year)).map(([category, amount]) => ({ category, amount }));
+    return buildCategoryPlan(categories.filter(category => category !== "Debt"), monthBills, monthTransactions, budgetLimits);
+  }, [categories, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, readCategoryBudgetMap, currentMonth, selectedYear]);
+
   const categoryPlan = useMemo(() => {
     const monthBills = getMonthlyBills(currentMonth, selectedYear)
       .filter(bill => !bill.is_debt)
@@ -226,8 +270,9 @@ export default function DashboardScreen() {
       .filter(transaction => transaction.category !== "Debt" && transaction.category !== "Income")
       .map(transaction => ({ category: transaction.category || "Other", amount: transaction.amount }));
     const budgetLimits = Object.entries(categoryBudgets).map(([category, amount]) => ({ category, amount }));
-    return buildCategoryPlan(categories.filter(category => category !== "Debt"), monthBills, monthTransactions, budgetLimits);
-  }, [categories, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, currentMonth, selectedYear]);
+    const rollovers = buildCategoryRolloverAdjustments(previousCategoryPlan, decisionHubSettings.categoryRolloverEnabled);
+    return buildCategoryPlan(categories.filter(category => category !== "Debt"), monthBills, monthTransactions, budgetLimits, rollovers);
+  }, [categories, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, currentMonth, selectedYear, previousCategoryPlan, decisionHubSettings.categoryRolloverEnabled]);
 
   const categoryDetail = useMemo(() => {
     if (!selectedCategory) return null;
@@ -834,6 +879,7 @@ export default function DashboardScreen() {
                     </View>
                     <Text style={[styles.categoryPlanDetail, { color: c.mutedForeground }]}>
                       ${row.spent.toFixed(0)} spent of ${row.budgeted.toFixed(0)} planned
+                      {row.rollover ? ` · ${row.rollover > 0 ? "+" : "-"}$${Math.abs(row.rollover).toFixed(0)} rollover` : ""}
                     </Text>
                   </View>
                 </Pressable>
@@ -1318,6 +1364,14 @@ export default function DashboardScreen() {
                       {categoryDetail.row.remaining < 0 ? "-" : ""}${Math.abs(categoryDetail.row.remaining).toFixed(0)}
                     </Text>
                   </View>
+                  {categoryDetail.row.rollover ? (
+                    <View style={[styles.categoryDetailStat, { backgroundColor: c.muted }]}>
+                      <Text style={[styles.categoryDetailStatLabel, { color: c.mutedForeground }]}>Rollover</Text>
+                      <Text style={[styles.categoryDetailStatValue, { color: categoryDetail.row.rollover < 0 ? c.destructive : c.success }]}>
+                        {categoryDetail.row.rollover < 0 ? "-" : "+"}${Math.abs(categoryDetail.row.rollover).toFixed(0)}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
 
                 <View style={[styles.categoryInsightBox, { backgroundColor: c.primary + "10", borderColor: c.primary + "30" }]}>

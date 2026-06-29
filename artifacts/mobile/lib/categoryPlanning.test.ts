@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyCategoryBudgetMove, buildCategoryPlan } from "./categoryPlanning";
+import { applyCategoryBudgetMove, buildCategoryPlan, buildCategoryRolloverAdjustments } from "./categoryPlanning";
 
 test("builds category plan from budgeted bills and actual spending", () => {
   const rows = buildCategoryPlan(
@@ -62,4 +62,30 @@ test("ignores invalid category budget moves", () => {
   const rows = buildCategoryPlan(["Food"], [{ category: "Food", amount: 500 }], []);
   assert.deepEqual(applyCategoryBudgetMove({ Food: 500 }, rows, "Food", "Food", 50), { Food: 500 });
   assert.deepEqual(applyCategoryBudgetMove({ Food: 500 }, rows, "Food", "Other", -10), { Food: 500 });
+});
+
+test("rolls previous category remaining into the next plan when enabled", () => {
+  const previous = buildCategoryPlan(
+    ["Food", "Car Repairs"],
+    [{ category: "Food", amount: 500 }, { category: "Car Repairs", amount: 100 }],
+    [{ category: "Food", amount: -540 }, { category: "Car Repairs", amount: -25 }],
+  );
+  const rollovers = buildCategoryRolloverAdjustments(previous, true);
+  const current = buildCategoryPlan(
+    ["Food", "Car Repairs"],
+    [{ category: "Food", amount: 500 }, { category: "Car Repairs", amount: 100 }],
+    [],
+    [],
+    rollovers,
+  );
+
+  assert.equal(current.find(row => row.category === "Food")?.rollover, -40);
+  assert.equal(current.find(row => row.category === "Food")?.budgeted, 460);
+  assert.equal(current.find(row => row.category === "Car Repairs")?.rollover, 75);
+  assert.equal(current.find(row => row.category === "Car Repairs")?.budgeted, 175);
+});
+
+test("does not roll category remaining when rollover is disabled", () => {
+  const previous = buildCategoryPlan(["Food"], [{ category: "Food", amount: 500 }], [{ category: "Food", amount: -400 }]);
+  assert.deepEqual(buildCategoryRolloverAdjustments(previous, false), []);
 });
