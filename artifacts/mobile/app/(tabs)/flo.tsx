@@ -19,6 +19,7 @@ import { useColors } from "@/hooks/useColors";
 import { askFlo, loadFloMemory, updateFloMemory, type FloFacts } from "@/lib/flo";
 import {
   FLO_CONNECTION_ERROR_MESSAGE,
+  buildFloCategoryQuickPrompts,
   buildFloDecisionScenario,
   evaluateFloCategoryMove,
   floResponseCards,
@@ -216,6 +217,16 @@ export default function FloScreen() {
       categoryPlan,
     };
   }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, transactions, upcoming, decisions, forecastConfidence.level, categoryPlan]);
+
+  const quickPrompts = useMemo(() => {
+    const categoryPrompts = buildFloCategoryQuickPrompts(categoryPlan);
+    return [
+      ...categoryPrompts,
+      "Can I afford $500?",
+      "What bills are due next?",
+      "Why does my balance run low?",
+    ].slice(0, 8);
+  }, [categoryPlan]);
 
   const decisionHistory = useMemo(
     () => buildDecisionHistory(decisions.filter(decision => decisionStillHasSource(decision, transactions)), today, now.toISOString()),
@@ -451,6 +462,33 @@ export default function FloScreen() {
       </ScrollView>
 
       <View style={[styles.composerArea, { backgroundColor: colors.background, borderColor: colors.border, paddingBottom: composerBottom }]}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.quickPromptScroller}
+          contentContainerStyle={styles.quickPromptContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {quickPrompts.map(prompt => (
+            <Pressable
+              key={prompt}
+              accessibilityRole="button"
+              accessibilityLabel={`Ask Flo: ${prompt}`}
+              disabled={chat.sending}
+              onPress={() => void send(prompt)}
+              style={({ pressed }) => [
+                styles.quickPromptChip,
+                {
+                  backgroundColor: colors.primary + "14",
+                  borderColor: colors.primary + "40",
+                  opacity: pressed || chat.sending ? 0.65 : 1,
+                },
+              ]}
+            >
+              <Text style={[styles.quickPromptText, { color: colors.primary }]}>{prompt}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
         <View style={[styles.composer, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <TextInput
             accessibilityLabel="Ask Flo anything"
@@ -611,6 +649,10 @@ const styles = StyleSheet.create({
   saveDecisionError: { fontSize: 11, fontFamily: "Inter_600SemiBold", textAlign: "center" },
   loadingBubble: { flexDirection: "row", alignItems: "center", gap: 9 },
   composerArea: { borderTopWidth: 1, paddingHorizontal: 12, paddingTop: 10 },
+  quickPromptScroller: { marginBottom: 8, maxHeight: 38 },
+  quickPromptContent: { gap: 8, paddingRight: 12 },
+  quickPromptChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
+  quickPromptText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   composer: {
     minHeight: 58,
     maxHeight: 112,

@@ -47,6 +47,30 @@ export interface FloCategoryMoveResult {
   allowed: boolean;
   reason: string;
 }
+
+export function buildFloCategoryQuickPrompts(categories: FloCategoryFact[]): string[] {
+  const rows = [...(categories ?? [])];
+  const prompts = ["Which categories need attention?", "What category has the most room left?", "Where am I spending the most?"];
+  const worst = rows
+    .filter(item => item.status === "over" || item.status === "watch")
+    .sort((left, right) => statusPriority(right.status) - statusPriority(left.status) || left.remaining - right.remaining)[0];
+  if (worst) {
+    prompts.unshift(worst.status === "over" ? `Why is ${worst.category} over?` : `How much do I have left for ${worst.category}?`);
+  }
+
+  const target = rows
+    .filter(item => item.remaining < 0)
+    .sort((left, right) => left.remaining - right.remaining)[0];
+  const source = rows
+    .filter(item => item.remaining > 0)
+    .sort((left, right) => right.remaining - left.remaining)[0];
+  if (target && source && target.category !== source.category) {
+    const amount = Math.max(1, Math.min(Math.abs(target.remaining), source.remaining));
+    prompts.unshift(`Can I move $${amount.toFixed(0)} from ${source.category} to ${target.category}?`);
+  }
+
+  return Array.from(new Set(prompts)).slice(0, 6);
+}
 export type FloChatState = { messages: FloChatMessage[]; sending: boolean };
 export type FloChatAction =
   | { type: "submit"; id: string; text: string }

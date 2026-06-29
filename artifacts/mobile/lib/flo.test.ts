@@ -4,6 +4,7 @@ import {
   AI_USAGE_UNAVAILABLE_MESSAGE,
   FLO_SECURITY_REFUSAL_MESSAGE,
   buildFloDecisionScenario,
+  buildFloCategoryQuickPrompts,
   evaluateFloCategoryMove,
   floResponseCards,
   isUnsafeFloRequest,
@@ -85,6 +86,13 @@ test("Flo evaluates category budget moves from verified facts", () => {
   assert.equal(move?.from, "Entertainment");
   assert.equal(move?.to, "Food");
   assert.equal(move?.amount, 50);
+});
+
+test("Flo builds dynamic category quick prompts", () => {
+  const prompts = buildFloCategoryQuickPrompts(facts.categoryPlan ?? []);
+  assert.equal(prompts[0], "Can I move $60 from Entertainment to Food?");
+  assert.equal(prompts.includes("Why is Food over?"), true);
+  assert.equal(prompts.includes("What category has the most room left?"), true);
 });
 
 test("Flo does not fall through to AI when category move facts are missing", () => {
