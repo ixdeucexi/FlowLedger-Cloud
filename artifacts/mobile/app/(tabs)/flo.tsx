@@ -19,6 +19,7 @@ import { useColors } from "@/hooks/useColors";
 import { askFlo, loadFloMemory, updateFloMemory, type FloFacts } from "@/lib/flo";
 import {
   FLO_CONNECTION_ERROR_MESSAGE,
+  buildFloDecisionScenario,
   floResponseCards,
   reduceFloChat,
   sanitizeFloSummary,
@@ -26,6 +27,7 @@ import {
   type FloChatState,
 } from "@/lib/floPolicy";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
+import { evaluateDecision, type DecisionResult, type DecisionScenario } from "@/lib/decisions";
 
 const sampleQuestions = [
   "Ask Flo anything…",
@@ -41,9 +43,11 @@ export default function FloScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { bills, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount } = useBudget();
+  const { bills, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, saveDecision } = useBudget();
   const [chat, dispatch] = useReducer(reduceFloChat, initialChat);
   const [cardsByMessageId, setCardsByMessageId] = useState<Record<string, FloResponseCard[]>>({});
+  const [decisionByMessageId, setDecisionByMessageId] = useState<Record<string, { scenario: DecisionScenario; result: DecisionResult }>>({});
+  const [decisionSaveState, setDecisionSaveState] = useState<Record<string, "saving" | "saved" | "failed">>({});
   const [input, setInput] = useState("");
   const [summary, setSummary] = useState("");
   const [sampleIndex, setSampleIndex] = useState(0);
@@ -146,10 +150,27 @@ export default function FloScreen() {
     dispatch({ type: "reply", id: replyId, text: reply });
     const cards = floResponseCards(clean, facts, baseline);
     if (cards.length) setCardsByMessageId(previous => ({ ...previous, [replyId]: cards }));
+    const scenario = buildFloDecisionScenario(clean, today);
+    if (scenario) {
+      const result = evaluateDecision(baseline, scenario, settings.safety_floor);
+      setDecisionByMessageId(previous => ({ ...previous, [replyId]: { scenario, result } }));
+    }
     if (user) {
       const nextSummary = `Recent topic: ${sanitizeFloSummary(clean).slice(0, 120)}`;
       setSummary(nextSummary);
       void updateFloMemory(user.id, clean);
+    }
+  };
+
+  const addDecisionToCalendar = async (messageId: string) => {
+    const decision = decisionByMessageId[messageId];
+    if (!decision || decisionSaveState[messageId] === "saving" || decisionSaveState[messageId] === "saved") return;
+    setDecisionSaveState(previous => ({ ...previous, [messageId]: "saving" }));
+    try {
+      await saveDecision(decision.scenario, decision.result, "planned");
+      setDecisionSaveState(previous => ({ ...previous, [messageId]: "saved" }));
+    } catch {
+      setDecisionSaveState(previous => ({ ...previous, [messageId]: "failed" }));
     }
   };
 
@@ -210,6 +231,36 @@ export default function FloScreen() {
                     <Text style={[styles.insightDetail, { color: colors.mutedForeground }]}>{card.detail}</Text>
                   </View>
                 ))}
+                {decisionByMessageId[message.id] ? (
+                  <View style={styles.decisionActions}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Add Flo decision to calendar"
+                      disabled={decisionSaveState[message.id] === "saving" || decisionSaveState[message.id] === "saved"}
+                      onPress={() => void addDecisionToCalendar(message.id)}
+                      style={[
+                        styles.saveDecisionButton,
+                        { backgroundColor: colors.primary, opacity: decisionSaveState[message.id] === "saved" ? 0.7 : 1 },
+                      ]}
+                    >
+                      <Feather
+                        name={decisionSaveState[message.id] === "saved" ? "check-circle" : "calendar"}
+                        size={16}
+                        color="#fff"
+                      />
+                      <Text style={styles.saveDecisionText}>
+                        {decisionSaveState[message.id] === "saving"
+                          ? "Saving..."
+                          : decisionSaveState[message.id] === "saved"
+                            ? `Saved for ${formatDisplayDate(decisionByMessageId[message.id].scenario.date)}`
+                            : `Add to calendar for ${formatDisplayDate(decisionByMessageId[message.id].scenario.date)}`}
+                      </Text>
+                    </Pressable>
+                    {decisionSaveState[message.id] === "failed" ? (
+                      <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t save this plan. Try again.</Text>
+                    ) : null}
+                  </View>
+                ) : null}
               </View>
             ) : null}
           </View>
@@ -255,6 +306,12 @@ export default function FloScreen() {
   );
 }
 
+function formatDisplayDate(date: string): string {
+  const parsed = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return date;
+  return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 function toneColor(tone: FloResponseCard["tone"], colors: ReturnType<typeof useColors>) {
   if (tone === "safe") return colors.success;
   if (tone === "caution") return colors.warning;
@@ -289,6 +346,10 @@ const styles = StyleSheet.create({
   insightTitle: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.5 },
   insightValue: { fontSize: 18, fontFamily: "Inter_700Bold", marginTop: 3 },
   insightDetail: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2, lineHeight: 15 },
+  decisionActions: { gap: 6, marginTop: 2 },
+  saveDecisionButton: { minHeight: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, paddingHorizontal: 12 },
+  saveDecisionText: { color: "#fff", fontSize: 13, fontFamily: "Inter_700Bold" },
+  saveDecisionError: { fontSize: 11, fontFamily: "Inter_600SemiBold", textAlign: "center" },
   loadingBubble: { flexDirection: "row", alignItems: "center", gap: 9 },
   composerArea: { borderTopWidth: 1, paddingHorizontal: 12, paddingTop: 10 },
   composer: {

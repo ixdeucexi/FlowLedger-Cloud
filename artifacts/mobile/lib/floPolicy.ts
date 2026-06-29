@@ -1,4 +1,4 @@
-import { evaluateDecision, type DecisionBaselineDay } from "./decisions";
+import { evaluateDecision, type DecisionBaselineDay, type DecisionScenario } from "./decisions";
 
 export interface FloFacts {
   balanceToday: number;
@@ -43,6 +43,20 @@ export const FLO_SECURITY_REFUSAL_MESSAGE =
 
 const FORBIDDEN_FLO_REQUEST = /\b(api[_ -]?key|secret|service[_ -]?role|env(?:ironment)?(?: variable)?|source code|repo(?:sitory)?|admin|database password|jwt|token|other users?|all users|rls|bypass|ignore (?:previous|system)|system prompt|developer message|supabase key)\b/i;
 const ALLOWED_SOURCE_TYPES = new Set(["forecast", "bill", "transaction", "account", "debt", "goal", "decision"]);
+const MONTHS: Record<string, number> = {
+  jan: 1, january: 1,
+  feb: 2, february: 2,
+  mar: 3, march: 3,
+  apr: 4, april: 4,
+  may: 5,
+  jun: 6, june: 6,
+  jul: 7, july: 7,
+  aug: 8, august: 8,
+  sep: 9, sept: 9, september: 9,
+  oct: 10, october: 10,
+  nov: 11, november: 11,
+  dec: 12, december: 12,
+};
 
 export function reduceFloChat(state: FloChatState, action: FloChatAction): FloChatState {
   if (action.type === "submit") {
@@ -117,17 +131,9 @@ export function sanitizeFloFacts(facts: FloFacts): FloFacts {
 export function localFloAnswer(message: string, facts: FloFacts, days: DecisionBaselineDay[]): string | null {
   if (isUnsafeFloRequest(message)) return FLO_SECURITY_REFUSAL_MESSAGE;
   const lower = message.toLowerCase();
-  const match = message.match(/\$?\s*([\d,]+(?:\.\d{1,2})?)/);
-  if ((lower.includes("afford") || lower.includes("buy") || lower.includes("spend")) && match) {
-    const amount = Number(match[1].replace(/,/g, ""));
-    const date = message.match(/\b(20\d{2}-\d{2}-\d{2})\b/)?.[1] ?? new Date().toISOString().slice(0, 10);
-    const result = evaluateDecision(days, {
-      type: "one_time_purchase",
-      name: "Flo affordability question",
-      amount,
-      date,
-      frequency: "once",
-    }, facts.safetyFloor);
+  const scenario = buildFloDecisionScenario(message);
+  if (scenario) {
+    const result = evaluateDecision(days, scenario, facts.safetyFloor);
     const lead = result.verdict === "safe"
       ? "Yes."
       : result.verdict === "caution"
@@ -187,11 +193,9 @@ function formatSignedDollars(amount: number): string {
 
 export function floResponseCards(message: string, facts: FloFacts, days: DecisionBaselineDay[]): FloResponseCard[] {
   const lower = message.toLowerCase();
-  const match = message.match(/\$?\s*([\d,]+(?:\.\d{1,2})?)/);
-  if ((lower.includes("afford") || lower.includes("buy") || lower.includes("spend")) && match) {
-    const amount = Number(match[1].replace(/,/g, ""));
-    const date = message.match(/\b(20\d{2}-\d{2}-\d{2})\b/)?.[1] ?? new Date().toISOString().slice(0, 10);
-    const result = evaluateDecision(days, { type: "one_time_purchase", name: "Flo affordability question", amount, date, frequency: "once" }, facts.safetyFloor);
+  const scenario = buildFloDecisionScenario(message);
+  if (scenario) {
+    const result = evaluateDecision(days, scenario, facts.safetyFloor);
     return [
       { title: "Purchase Decision", value: result.verdict.toUpperCase(), detail: result.explanation, tone: result.verdict === "safe" ? "safe" : result.verdict === "caution" ? "caution" : "risk" },
       { title: "Lowest Balance", value: `$${result.lowestBalance.toFixed(0)}`, detail: result.lowestBalanceDate, tone: result.lowestBalance < facts.safetyFloor ? "risk" : "info" },
@@ -223,4 +227,52 @@ export function floResponseCards(message: string, facts: FloFacts, days: Decisio
     ];
   }
   return [];
+}
+
+export function buildFloDecisionScenario(message: string, today = new Date().toISOString().slice(0, 10)): DecisionScenario | null {
+  const lower = message.toLowerCase();
+  const match = message.match(/\$?\s*([\d,]+(?:\.\d{1,2})?)/);
+  if (!(lower.includes("afford") || lower.includes("buy") || lower.includes("spend")) || !match) return null;
+  const amount = Number(match[1].replace(/,/g, ""));
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  return {
+    type: "one_time_purchase",
+    name: `Flo plan: $${amount.toFixed(amount % 1 === 0 ? 0 : 2)}`,
+    amount,
+    date: parseFloDate(message, today),
+    frequency: "once",
+  };
+}
+
+function parseFloDate(message: string, today: string): string {
+  const iso = message.match(/\b(20\d{2}-\d{2}-\d{2})\b/)?.[1];
+  if (iso) return iso;
+  const base = new Date(`${today}T00:00:00Z`);
+  const monthMatch = message.match(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,\s*(20\d{2}))?\b/i);
+  if (monthMatch) {
+    const month = MONTHS[monthMatch[1].toLowerCase().replace(".", "")];
+    const day = Number(monthMatch[2]);
+    let year = monthMatch[3] ? Number(monthMatch[3]) : base.getUTCFullYear();
+    const candidate = clampDate(year, month, day);
+    if (!monthMatch[3] && candidate < today) year += 1;
+    return clampDate(year, month, day);
+  }
+  const slashMatch = message.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(20\d{2}|\d{2}))?\b/);
+  if (slashMatch) {
+    const month = Number(slashMatch[1]);
+    const day = Number(slashMatch[2]);
+    let year = slashMatch[3] ? Number(slashMatch[3]) : base.getUTCFullYear();
+    if (year < 100) year += 2000;
+    const candidate = clampDate(year, month, day);
+    if (!slashMatch[3] && candidate < today) year += 1;
+    return clampDate(year, month, day);
+  }
+  return today;
+}
+
+function clampDate(year: number, month: number, day: number): string {
+  const safeMonth = Math.max(1, Math.min(12, month));
+  const lastDay = new Date(Date.UTC(year, safeMonth, 0)).getUTCDate();
+  const safeDay = Math.max(1, Math.min(lastDay, day));
+  return `${year}-${String(safeMonth).padStart(2, "0")}-${String(safeDay).padStart(2, "0")}`;
 }

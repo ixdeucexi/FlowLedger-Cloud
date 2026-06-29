@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   AI_USAGE_UNAVAILABLE_MESSAGE,
   FLO_SECURITY_REFUSAL_MESSAGE,
+  buildFloDecisionScenario,
   floResponseCards,
   isUnsafeFloRequest,
   localFloAnswer,
@@ -70,6 +71,19 @@ test("Flo creates deterministic response cards for supported finance questions",
   const billsLeftCards = floResponseCards("What bills are left?", facts, days);
   assert.equal(billsLeftCards[0]?.title, "Bills Left");
   assert.equal(billsLeftCards[0]?.value, "2");
+});
+
+test("Flo builds saveable planned decisions from natural affordability questions", () => {
+  const scenario = buildFloDecisionScenario("Can I afford $500 on July 15?", "2026-06-29");
+  assert.equal(scenario?.type, "one_time_purchase");
+  assert.equal(scenario?.amount, 500);
+  assert.equal(scenario?.date, "2026-07-15");
+  assert.equal(scenario?.frequency, "once");
+});
+
+test("Flo rolls natural decision dates into next year when the date already passed", () => {
+  const scenario = buildFloDecisionScenario("Can I buy something for $75 on June 15?", "2026-06-29");
+  assert.equal(scenario?.date, "2027-06-15");
 });
 
 test("chat input appends the user message and Flo response in order", () => {
