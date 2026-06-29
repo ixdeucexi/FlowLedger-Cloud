@@ -3,7 +3,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -45,7 +44,7 @@ export default function FloScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { bills, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, saveDecision, deleteDecision } = useBudget();
+  const { bills, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, saveDecision } = useBudget();
   const [chat, dispatch] = useReducer(reduceFloChat, initialChat);
   const [cardsByMessageId, setCardsByMessageId] = useState<Record<string, FloResponseCard[]>>({});
   const [decisionByMessageId, setDecisionByMessageId] = useState<Record<string, { scenario: DecisionScenario; result: DecisionResult }>>({});
@@ -181,15 +180,6 @@ export default function FloScreen() {
     }
   };
 
-  const removeHistoryDecision = (item: DecisionHistoryItem) => {
-    const remove = () => void deleteDecision(item.id);
-    if (Platform.OS === "web") { remove(); return; }
-    Alert.alert("Remove Decision", `Remove "${item.name}" from Flo history?`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Remove", style: "destructive", onPress: remove },
-    ]);
-  };
-
   const composerBottom = Platform.OS === "web" ? 88 : Math.max(insets.bottom, 8) + 54;
 
   return (
@@ -239,9 +229,9 @@ export default function FloScreen() {
             <Text style={[styles.historyEmpty, { color: colors.mutedForeground }]}>Ask Flo if you can afford something, then save it to start tracking decisions here.</Text>
           ) : (
             <View style={styles.historySections}>
-              <DecisionHistorySection title="Upcoming planned" items={decisionHistory.upcoming.slice(0, 4)} colors={colors} onRemove={removeHistoryDecision} />
-              <DecisionHistorySection title="Completed" items={decisionHistory.completed.slice(0, 3)} colors={colors} onRemove={removeHistoryDecision} />
-              <DecisionHistorySection title="Postponed / Cancelled" items={decisionHistory.changed.slice(0, 3)} colors={colors} onRemove={removeHistoryDecision} />
+              <DecisionHistorySection title="Upcoming planned" items={decisionHistory.upcoming.slice(0, 4)} colors={colors} />
+              <DecisionHistorySection title="Completed" items={decisionHistory.completed.slice(0, 3)} colors={colors} />
+              <DecisionHistorySection title="Postponed / Cancelled" items={decisionHistory.changed.slice(0, 3)} colors={colors} />
             </View>
           )}
         </View>
@@ -366,7 +356,7 @@ function HistoryStat({ label, value, color }: { label: string; value: number; co
   );
 }
 
-function DecisionHistorySection({ title, items, colors, onRemove }: { title: string; items: DecisionHistoryItem[]; colors: ReturnType<typeof useColors>; onRemove: (item: DecisionHistoryItem) => void }) {
+function DecisionHistorySection({ title, items, colors }: { title: string; items: DecisionHistoryItem[]; colors: ReturnType<typeof useColors> }) {
   if (!items.length) return null;
   return (
     <View style={styles.historySection}>
@@ -386,9 +376,6 @@ function DecisionHistorySection({ title, items, colors, onRemove }: { title: str
               </Text>
             ) : null}
           </View>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${item.name}`} onPress={() => onRemove(item)} hitSlop={8} style={styles.historyRemove}>
-            <Feather name="trash-2" size={14} color={colors.destructive} />
-          </Pressable>
         </View>
       ))}
     </View>
@@ -467,7 +454,6 @@ const styles = StyleSheet.create({
   historyDate: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   historyAmount: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_400Regular", marginTop: 2 },
   historyVariance: { fontSize: 11, fontFamily: "Inter_700Bold", marginTop: 1 },
-  historyRemove: { paddingLeft: 8, paddingVertical: 4, alignSelf: "center" },
   bubble: { maxWidth: "88%", paddingHorizontal: 15, paddingVertical: 13, borderRadius: 18 },
   floBubble: { alignSelf: "flex-start", borderWidth: 1, borderTopLeftRadius: 6 },
   userBubble: { alignSelf: "flex-end", borderTopRightRadius: 6 },
