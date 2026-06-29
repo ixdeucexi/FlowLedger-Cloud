@@ -80,6 +80,14 @@ test("Flo evaluates category budget moves from verified facts", () => {
   assert.match(localFloAnswer("Can I move $500 from Entertainment to Food?", facts, days) ?? "", /only has \$150\.00 left/);
 });
 
+test("Flo does not fall through to AI when category move facts are missing", () => {
+  const answer = localFloAnswer("Can I move $50 from Entertainment to Food?", { ...facts, categoryPlan: [] }, days) ?? "";
+  assert.match(answer, /don't see category budget data/i);
+
+  const missingSource = localFloAnswer("Can I move $50 from Gas to Food?", facts, days) ?? "";
+  assert.match(missingSource, /don't see Gas/i);
+});
+
 test("Flo creates deterministic response cards for supported finance questions", () => {
   const affordabilityCards = floResponseCards("Can I afford $500?", facts, days);
   assert.equal(affordabilityCards[0]?.title, "Purchase Decision");

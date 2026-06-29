@@ -217,10 +217,24 @@ function localCategoryAnswer(message: string, facts: FloFacts): string | null {
   const categories = facts.categoryPlan ?? [];
   if (/unallocated|non[- ]?allocated|none allocated|not allocated|not linked/.test(lower)) return null;
   if (/leftover|extra money|money left|available money|what should i do with/i.test(lower) && !/(categor|budget)/i.test(lower)) return null;
-  if (!categories.length || !/(categor|budget|spend|spending|spent|over|left|remaining|move|room)/i.test(lower)) return null;
+  const requestedMove = parseRequestedCategoryMove(message);
+  const categoryIntent = /(categor|budget|spend|spending|spent|over|left|remaining|move|room)/i.test(lower);
+  if (!categoryIntent) return null;
+  if (!categories.length) {
+    return requestedMove
+      ? "I don't see category budget data for this month yet, so I can't safely move money between categories."
+      : "I don't see category budget data for this month yet. Add category budgets or transactions first, then I can explain the category plan.";
+  }
 
   const named = findMentionedCategory(message, categories);
   const move = parseCategoryMove(message, categories);
+  if (requestedMove && !move) {
+    const source = findCategoryByName(requestedMove.from, categories);
+    const target = findCategoryByName(requestedMove.to, categories);
+    if (!source) return `I don't see ${requestedMove.from} with available category budget this month, so I can't safely move money from it.`;
+    if (!target) return `I don't see ${requestedMove.to} in this month's category plan yet. Add a budget or transaction for that category first.`;
+    return "I couldn't read both categories clearly. Try wording it like: Can I move $50 from Entertainment to Food?";
+  }
   if (move) {
     const source = categories.find(item => item.category === move.from);
     const target = categories.find(item => item.category === move.to);
@@ -284,14 +298,34 @@ function findMentionedCategory(message: string, categories: FloCategoryFact[]): 
 }
 
 function parseCategoryMove(message: string, categories: FloCategoryFact[]) {
+  const requested = parseRequestedCategoryMove(message);
+  if (!requested) return null;
+  const from = findCategoryByName(requested.from, categories)?.category;
+  const to = findCategoryByName(requested.to, categories)?.category;
+  if (!from || !to || from === to) return null;
+  return { amount: requested.amount, from, to };
+}
+
+function parseRequestedCategoryMove(message: string) {
   if (!/\bmove\b/i.test(message)) return null;
   const amount = Number(message.match(/\$?\s*([\d,]+(?:\.\d{1,2})?)/)?.[1]?.replace(/,/g, "") ?? 0);
   if (!Number.isFinite(amount) || amount <= 0) return null;
-  const lower = message.toLowerCase();
-  const from = categories.find(item => lower.includes(`from ${item.category.toLowerCase()}`))?.category;
-  const to = categories.find(item => lower.includes(`to ${item.category.toLowerCase()}`))?.category;
-  if (!from || !to || from === to) return null;
+  const match = message.match(/\bfrom\s+(.+?)\s+to\s+(.+?)(?:[?.!]|$)/i);
+  if (!match) return null;
+  const from = cleanupCategoryName(match[1]);
+  const to = cleanupCategoryName(match[2]);
+  if (!from || !to || from.toLowerCase() === to.toLowerCase()) return null;
   return { amount, from, to };
+}
+
+function findCategoryByName(name: string, categories: FloCategoryFact[]) {
+  const normalized = cleanupCategoryName(name).toLowerCase();
+  return categories.find(item => item.category.toLowerCase() === normalized)
+    ?? categories.find(item => item.category.toLowerCase().includes(normalized) || normalized.includes(item.category.toLowerCase()));
+}
+
+function cleanupCategoryName(value: string) {
+  return value.replace(/\$?\s*[\d,]+(?:\.\d{1,2})?/g, "").replace(/\bcategory\b/gi, "").trim();
 }
 
 function statusPriority(status: FloCategoryFact["status"]) {
