@@ -53,6 +53,7 @@ export default function MoreScreen() {
   const [renameValue, setRenameValue] = useState("");
   const [safetyFloorText, setSafetyFloorText] = useState(settings.safety_floor.toString());
   const [forecastHorizonText, setForecastHorizonText] = useState(settings.forecast_horizon_months.toString());
+  const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
     setSafetyFloorText(settings.safety_floor.toString());
@@ -174,10 +175,17 @@ export default function MoreScreen() {
   };
 
   const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
     try {
       await signOut();
     } finally {
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        window.location.assign("/login");
+        return;
+      }
       router.replace("/login");
+      setSigningOut(false);
     }
   };
 
@@ -526,9 +534,7 @@ export default function MoreScreen() {
           <Pressable
             onPress={() => {
               if (Platform.OS === "web") {
-                if (typeof window === "undefined" || window.confirm("Sign out of FlowLedger?")) {
-                  void handleSignOut();
-                }
+                void handleSignOut();
                 return;
               }
               Alert.alert("Sign Out", "Sign out of FlowLedger?", [
@@ -536,10 +542,11 @@ export default function MoreScreen() {
                 { text: "Sign Out", style: "destructive", onPress: () => void handleSignOut() },
               ]);
             }}
-            style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 10, opacity: pressed ? 0.7 : 1 })}
+            disabled={signingOut}
+            style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 10, opacity: pressed || signingOut ? 0.7 : 1 })}
           >
             <Feather name="log-out" size={18} color={c.destructive} />
-            <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: c.destructive }}>Sign Out</Text>
+            <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: c.destructive }}>{signingOut ? "Signing Out…" : "Sign Out"}</Text>
           </Pressable>
         </View>
       </View>

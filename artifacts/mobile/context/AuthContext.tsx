@@ -71,7 +71,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (demoMode) {
       disableDevDemoMode();
       setDemoMode(false);
-      return;
     }
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
