@@ -73,6 +73,7 @@ export default function MonthlyScreen() {
   const [editPlan, setEditPlan] = useState<DecisionRecord | null>(null);
   const [editPlanName, setEditPlanName] = useState("");
   const [editPlanAmount, setEditPlanAmount] = useState("");
+  const [editPlanDate, setEditPlanDate] = useState("");
   const [savingPlan, setSavingPlan] = useState(false);
 
   useEffect(() => {
@@ -345,6 +346,7 @@ export default function MonthlyScreen() {
     setEditPlan(plan);
     setEditPlanName(plan.name);
     setEditPlanAmount(String(Math.abs(plan.scenario.amount)));
+    setEditPlanDate(plan.scenario.date);
   };
 
   const saveEditedPlan = async () => {
@@ -362,11 +364,12 @@ export default function MonthlyScreen() {
           date: `${selectedYear}-${String(month + 1).padStart(2, "0")}-${String(day.day).padStart(2, "0")}`,
           balance: day.balance,
         }))
-        .filter(day => day.date >= (selectedDate ?? editPlan.scenario.date));
-      const scenario = { ...editPlan.scenario, name, amount };
+        .filter(day => day.date >= editPlanDate);
+      const scenario = { ...editPlan.scenario, name, amount, date: editPlanDate };
       const result = evaluateDecision(baseline.length ? baseline : [{ date: scenario.date, balance: 0 }], scenario, settings.safety_floor);
-      await updateDecision({ ...editPlan, name, scenario, result });
+      await updateDecision({ ...editPlan, name, scenario, result, calendar_date: editPlanDate, next_due_date: editPlanDate });
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setSelectedDate(editPlanDate);
       setEditPlan(null);
     } catch (error) {
       Alert.alert("Couldn't save plan", error instanceof Error ? error.message : "Please try again.");
@@ -1115,7 +1118,7 @@ export default function MonthlyScreen() {
               <View>
                 <Text style={[styles.pickerTitle, { color: c.foreground }]}>Edit Plan</Text>
                 <Text style={[styles.pickerSub, { color: c.mutedForeground }]}>
-                  {editPlan?.scenario.date} · updates your forecast
+                  {editPlanDate} · updates your forecast
                 </Text>
               </View>
               <Pressable onPress={() => setEditPlan(null)} hitSlop={8}>
@@ -1131,6 +1134,44 @@ export default function MonthlyScreen() {
               placeholderTextColor={c.mutedForeground}
               style={[styles.planInput, { backgroundColor: c.card, color: c.foreground, borderColor: c.border }]}
             />
+
+            <Text style={[styles.pickerLabel, { color: c.mutedForeground }]}>Plan Date</Text>
+            <View style={styles.pickerCalDowRow}>
+              {["Su","Mo","Tu","We","Th","Fr","Sa"].map(d => (
+                <Text key={d} style={[styles.pickerCalDowLabel, { color: c.mutedForeground }]}>{d}</Text>
+              ))}
+            </View>
+            <View style={styles.pickerDayGrid}>
+              {[
+                ...Array(new Date(selectedYear, month, 1).getDay()).fill(null),
+                ...Array.from({ length: new Date(selectedYear, month + 1, 0).getDate() }, (_, i) => i + 1),
+              ].map((day, idx) => {
+                if (day === null) return <View key={`plan-empty-${idx}`} style={styles.pickerDayBtn} />;
+                const date = `${selectedYear}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                const isSelectedPlanDate = editPlanDate === date;
+                return (
+                  <Pressable
+                    key={`plan-day-${day}`}
+                    onPress={() => setEditPlanDate(date)}
+                    style={({ pressed }) => [
+                      styles.pickerDayBtn,
+                      {
+                        backgroundColor: isSelectedPlanDate ? c.primary : c.muted,
+                        opacity: pressed ? 0.7 : 1,
+                        borderRadius: 8,
+                      },
+                    ]}
+                  >
+                    <Text style={[
+                      styles.pickerDayText,
+                      { color: isSelectedPlanDate ? c.primaryForeground : c.foreground },
+                    ]}>
+                      {day}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
 
             <Text style={[styles.pickerLabel, { color: c.mutedForeground }]}>Amount</Text>
             <TextInput
