@@ -29,8 +29,9 @@ function AuthObserver() {
 
   useEffect(() => {
     if (loading) return;
-    const inAuth = segments[0] === "login";
-    const atRoot = !segments[0] || segments[0] === "index";
+    const firstSegment = segments[0] as string | undefined;
+    const inAuth = firstSegment === "login";
+    const atRoot = !firstSegment || firstSegment === "index";
     if (!session && !inAuth) {
       router.replace("/login");
     } else if (session && (inAuth || atRoot)) {

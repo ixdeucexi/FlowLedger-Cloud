@@ -3,6 +3,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
 import * as Sharing from "expo-sharing";
+import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   Alert, Platform, Pressable, ScrollView, StyleSheet,
@@ -32,6 +33,7 @@ const THEME_OPTIONS: { label: string; value: ThemeMode; icon: string }[] = [
 export default function MoreScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { themeMode, setThemeMode } = useThemeMode();
   const { signOut, user } = useAuth();
   const {
@@ -169,6 +171,14 @@ export default function MoreScreen() {
       { text: "Cancel", style: "cancel" },
       { text: "Reset", style: "destructive", onPress: () => void resetFloMemory(user.id).then(() => Alert.alert("Flo Memory Reset", "Flo's rolling summary was removed.")) },
     ]);
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } finally {
+      router.replace("/login");
+    }
   };
 
 
@@ -514,10 +524,18 @@ export default function MoreScreen() {
             <Text style={{ flex: 1, fontSize: 14, fontFamily: "Inter_500Medium", color: c.mutedForeground }} numberOfLines={1}>{user?.email}</Text>
           </View>
           <Pressable
-            onPress={() => Alert.alert("Sign Out", "Sign out of FlowLedger?", [
-              { text: "Cancel", style: "cancel" },
-              { text: "Sign Out", style: "destructive", onPress: () => signOut() },
-            ])}
+            onPress={() => {
+              if (Platform.OS === "web") {
+                if (typeof window === "undefined" || window.confirm("Sign out of FlowLedger?")) {
+                  void handleSignOut();
+                }
+                return;
+              }
+              Alert.alert("Sign Out", "Sign out of FlowLedger?", [
+                { text: "Cancel", style: "cancel" },
+                { text: "Sign Out", style: "destructive", onPress: () => void handleSignOut() },
+              ]);
+            }}
             style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 10, opacity: pressed ? 0.7 : 1 })}
           >
             <Feather name="log-out" size={18} color={c.destructive} />
