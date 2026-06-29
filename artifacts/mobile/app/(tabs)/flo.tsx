@@ -231,35 +231,38 @@ export default function FloScreen() {
                     <Text style={[styles.insightDetail, { color: colors.mutedForeground }]}>{card.detail}</Text>
                   </View>
                 ))}
-                {decisionByMessageId[message.id] ? (
-                  <View style={styles.decisionActions}>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Add Flo decision to calendar"
-                      disabled={decisionSaveState[message.id] === "saving" || decisionSaveState[message.id] === "saved"}
-                      onPress={() => void addDecisionToCalendar(message.id)}
-                      style={[
-                        styles.saveDecisionButton,
-                        { backgroundColor: colors.primary, opacity: decisionSaveState[message.id] === "saved" ? 0.7 : 1 },
-                      ]}
-                    >
-                      <Feather
-                        name={decisionSaveState[message.id] === "saved" ? "check-circle" : "calendar"}
-                        size={16}
-                        color="#fff"
-                      />
-                      <Text style={styles.saveDecisionText}>
-                        {decisionSaveState[message.id] === "saving"
-                          ? "Saving..."
-                          : decisionSaveState[message.id] === "saved"
-                            ? `Saved for ${formatDisplayDate(decisionByMessageId[message.id].scenario.date)}`
-                            : `Add to calendar for ${formatDisplayDate(decisionByMessageId[message.id].scenario.date)}`}
-                      </Text>
-                    </Pressable>
-                    {decisionSaveState[message.id] === "failed" ? (
-                      <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t save this plan. Try again.</Text>
-                    ) : null}
-                  </View>
+              </View>
+            ) : null}
+            {message.role === "flo" && decisionByMessageId[message.id] ? (
+              <View style={styles.decisionActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Save this Flo plan to calendar"
+                  disabled={decisionSaveState[message.id] === "saving" || decisionSaveState[message.id] === "saved"}
+                  onPress={() => void addDecisionToCalendar(message.id)}
+                  style={[
+                    styles.saveDecisionButton,
+                    { backgroundColor: colors.primary, opacity: decisionSaveState[message.id] === "saved" ? 0.7 : 1 },
+                  ]}
+                >
+                  <Feather
+                    name={decisionSaveState[message.id] === "saved" ? "check-circle" : "calendar"}
+                    size={16}
+                    color="#fff"
+                  />
+                  <Text style={styles.saveDecisionText}>
+                    {decisionSaveState[message.id] === "saving"
+                      ? "Saving..."
+                      : decisionSaveState[message.id] === "saved"
+                        ? `Saved for ${formatDisplayDate(decisionByMessageId[message.id].scenario.date)}`
+                        : `Save this plan · ${formatDisplayDate(decisionByMessageId[message.id].scenario.date)}`}
+                  </Text>
+                </Pressable>
+                <Text style={[styles.saveDecisionHint, { color: colors.mutedForeground }]}>
+                  Saves to your calendar as a planned decision.
+                </Text>
+                {decisionSaveState[message.id] === "failed" ? (
+                  <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t save this plan. Try again.</Text>
                 ) : null}
               </View>
             ) : null}
@@ -349,6 +352,7 @@ const styles = StyleSheet.create({
   decisionActions: { gap: 6, marginTop: 2 },
   saveDecisionButton: { minHeight: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, paddingHorizontal: 12 },
   saveDecisionText: { color: "#fff", fontSize: 13, fontFamily: "Inter_700Bold" },
+  saveDecisionHint: { fontSize: 11, lineHeight: 15, textAlign: "center" },
   saveDecisionError: { fontSize: 11, fontFamily: "Inter_600SemiBold", textAlign: "center" },
   loadingBubble: { flexDirection: "row", alignItems: "center", gap: 9 },
   composerArea: { borderTopWidth: 1, paddingHorizontal: 12, paddingTop: 10 },
