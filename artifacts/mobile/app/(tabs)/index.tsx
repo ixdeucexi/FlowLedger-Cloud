@@ -191,22 +191,28 @@ export default function DashboardScreen() {
   );
 
   useEffect(() => {
-    if (Platform.OS !== "web") {
-      setCategoryBudgets({});
-      return;
-    }
-    try {
-      const raw = globalThis.localStorage?.getItem(categoryBudgetKey);
-      const parsed = raw ? JSON.parse(raw) as Record<string, unknown> : {};
-      const next: Record<string, number> = {};
-      Object.entries(parsed).forEach(([category, amount]) => {
-        const value = Number(amount);
-        if (category && Number.isFinite(value) && value >= 0) next[category] = value;
-      });
-      setCategoryBudgets(next);
-    } catch {
-      setCategoryBudgets({});
-    }
+    const loadCategoryBudgets = () => {
+      if (Platform.OS !== "web") {
+        setCategoryBudgets({});
+        return;
+      }
+      try {
+        const raw = globalThis.localStorage?.getItem(categoryBudgetKey);
+        const parsed = raw ? JSON.parse(raw) as Record<string, unknown> : {};
+        const next: Record<string, number> = {};
+        Object.entries(parsed).forEach(([category, amount]) => {
+          const value = Number(amount);
+          if (category && Number.isFinite(value) && value >= 0) next[category] = value;
+        });
+        setCategoryBudgets(next);
+      } catch {
+        setCategoryBudgets({});
+      }
+    };
+    loadCategoryBudgets();
+    if (Platform.OS !== "web") return;
+    globalThis.addEventListener?.("flowledger-category-budgets-updated", loadCategoryBudgets);
+    return () => globalThis.removeEventListener?.("flowledger-category-budgets-updated", loadCategoryBudgets);
   }, [categoryBudgetKey]);
 
   const categoryPlan = useMemo(() => {

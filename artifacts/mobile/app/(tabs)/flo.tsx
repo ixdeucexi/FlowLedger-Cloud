@@ -54,12 +54,12 @@ export default function FloScreen() {
   const [decisionSaveState, setDecisionSaveState] = useState<Record<string, "saving" | "saved" | "failed">>({});
   const [categoryMoveByMessageId, setCategoryMoveByMessageId] = useState<Record<string, FloCategoryMoveResult>>({});
   const [categoryMoveState, setCategoryMoveState] = useState<Record<string, "idle" | "saving" | "saved" | "failed">>({});
-  const [categoryBudgetRevision, setCategoryBudgetRevision] = useState(0);
+  const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
   const [input, setInput] = useState("");
   const [summary, setSummary] = useState("");
   const [sampleIndex, setSampleIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
-  const now = new Date();
+  const now = useMemo(() => new Date(), []);
   const today = now.toISOString().slice(0, 10);
 
   useEffect(() => {
@@ -108,7 +108,7 @@ export default function FloScreen() {
     return `flowledger-category-budgets-${year}-${String(month + 1).padStart(2, "0")}`;
   }, [today]);
 
-  const readCategoryBudgets = () => {
+  const readCategoryBudgetsFromStorage = () => {
     if (Platform.OS !== "web") return {};
     try {
       const raw = globalThis.localStorage?.getItem(categoryBudgetKey);
@@ -124,17 +124,21 @@ export default function FloScreen() {
     }
   };
 
+  useEffect(() => {
+    setCategoryBudgets(readCategoryBudgetsFromStorage());
+  }, [categoryBudgetKey]);
+
   const writeCategoryBudgets = (budgets: Record<string, number>) => {
+    setCategoryBudgets(budgets);
     if (Platform.OS === "web") {
       globalThis.localStorage?.setItem(categoryBudgetKey, JSON.stringify(budgets));
+      globalThis.dispatchEvent?.(new Event("flowledger-category-budgets-updated"));
     }
-    setCategoryBudgetRevision(value => value + 1);
   };
 
   const categoryPlan = useMemo(() => {
     const month = now.getMonth();
     const year = now.getFullYear();
-    const categoryBudgets = readCategoryBudgets();
     const monthBills = getMonthlyBills(month, year)
       .filter(bill => !bill.is_debt)
       .map(bill => ({
@@ -170,7 +174,7 @@ export default function FloScreen() {
         } : undefined,
       };
     });
-  }, [categories, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, now, categoryBudgetRevision]);
+  }, [categories, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, now]);
 
   const facts = useMemo<FloFacts>(() => {
     const lowest = baseline.reduce(
@@ -267,7 +271,7 @@ export default function FloScreen() {
     if (!move || categoryMoveState[messageId] === "saving" || categoryMoveState[messageId] === "saved") return;
     setCategoryMoveState(previous => ({ ...previous, [messageId]: "saving" }));
     try {
-      const currentBudgets = readCategoryBudgets();
+      const currentBudgets = categoryBudgets;
       const rows = categoryPlan.map(row => ({
         category: row.category,
         budgeted: row.budgeted,
