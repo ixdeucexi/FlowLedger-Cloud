@@ -19,10 +19,13 @@ import { useColors } from "@/hooks/useColors";
 import { askFlo, loadFloMemory, updateFloMemory, type FloFacts } from "@/lib/flo";
 import {
   FLO_CONNECTION_ERROR_MESSAGE,
+  floResponseCards,
   reduceFloChat,
   sanitizeFloSummary,
+  type FloResponseCard,
   type FloChatState,
 } from "@/lib/floPolicy";
+import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 
 const sampleQuestions = [
   "Ask Flo anything…",
@@ -38,8 +41,9 @@ export default function FloScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { bills, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow } = useBudget();
+  const { bills, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount } = useBudget();
   const [chat, dispatch] = useReducer(reduceFloChat, initialChat);
+  const [cardsByMessageId, setCardsByMessageId] = useState<Record<string, FloResponseCard[]>>({});
   const [input, setInput] = useState("");
   const [summary, setSummary] = useState("");
   const [sampleIndex, setSampleIndex] = useState(0);
@@ -93,6 +97,13 @@ export default function FloScreen() {
       baseline[0] ?? { date: today, balance: 0 },
     );
     const cashFlow = getCashFlow(now.getMonth(), now.getFullYear());
+    const previousMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const previousCashFlow = getCashFlow(previousMonthDate.getMonth(), previousMonthDate.getFullYear());
+    const billSummary = summarizeMonthlyBills(
+      getMonthlyBills(now.getMonth(), now.getFullYear()),
+      bill => getBillMonthlyTotal(bill, now.getMonth(), now.getFullYear()),
+      bill => getPaidAmount(bill.id, now.getMonth(), now.getFullYear()),
+    );
     const currentMonth = today.slice(0, 7);
     const unallocatedExpenses = transactions.filter(transaction =>
       transaction.date.startsWith(currentMonth) && transaction.amount < 0 && !transaction.linked_bill_id
@@ -104,13 +115,20 @@ export default function FloScreen() {
       safetyFloor: settings.safety_floor,
       monthlyIncome: getMonthlyIncome(),
       monthlyBills: cashFlow.totalBillsDue,
+      monthlyRemaining: cashFlow.remaining,
+      billsLeftAmount: billSummary.remaining,
+      billsLeftCount: billSummary.unpaidCount,
+      billProgressPercent: billSummary.billProgressPercent,
+      previousMonthIncome: previousCashFlow.monthlyIncome,
+      previousMonthBills: previousCashFlow.totalBillsDue,
+      previousMonthRemaining: previousCashFlow.remaining,
       unallocatedSpendingThisMonth: unallocatedExpenses.reduce((sum, transaction) => sum + Math.abs(transaction.amount), 0),
       unallocatedTransactionCount: unallocatedExpenses.length,
       upcoming,
       activePlans: decisions.filter(decision => decision.status === "planned" || decision.status === "calendar").length,
       forecastConfidence: forecastConfidence.level,
     };
-  }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, transactions, upcoming, decisions, forecastConfidence.level]);
+  }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, transactions, upcoming, decisions, forecastConfidence.level]);
 
   const send = async (text = input) => {
     const clean = text.trim();
@@ -123,7 +141,10 @@ export default function FloScreen() {
     } catch {
       reply = FLO_CONNECTION_ERROR_MESSAGE;
     }
-    dispatch({ type: "reply", id: `f-${Date.now()}`, text: reply });
+    const replyId = `f-${Date.now()}`;
+    dispatch({ type: "reply", id: replyId, text: reply });
+    const cards = floResponseCards(clean, facts, baseline);
+    if (cards.length) setCardsByMessageId(previous => ({ ...previous, [replyId]: cards }));
     if (user) {
       const nextSummary = `Recent topic: ${sanitizeFloSummary(clean).slice(0, 120)}`;
       setSummary(nextSummary);
@@ -179,6 +200,17 @@ export default function FloScreen() {
             <Text style={[styles.bubbleText, { color: message.role === "user" ? colors.primaryForeground : colors.foreground }]}>
               {message.text}
             </Text>
+            {message.role === "flo" && cardsByMessageId[message.id]?.length ? (
+              <View style={styles.cardGrid}>
+                {cardsByMessageId[message.id].map(card => (
+                  <View key={`${message.id}-${card.title}`} style={[styles.insightCard, { borderColor: toneColor(card.tone, colors), backgroundColor: toneColor(card.tone, colors) + "12" }]}>
+                    <Text style={[styles.insightTitle, { color: colors.mutedForeground }]}>{card.title}</Text>
+                    <Text style={[styles.insightValue, { color: toneColor(card.tone, colors) }]}>{card.value}</Text>
+                    <Text style={[styles.insightDetail, { color: colors.mutedForeground }]}>{card.detail}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
           </View>
         ))}
 
@@ -222,6 +254,13 @@ export default function FloScreen() {
   );
 }
 
+function toneColor(tone: FloResponseCard["tone"], colors: ReturnType<typeof useColors>) {
+  if (tone === "safe") return colors.success;
+  if (tone === "caution") return colors.warning;
+  if (tone === "risk") return colors.destructive;
+  return colors.primary;
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   header: {
@@ -244,6 +283,11 @@ const styles = StyleSheet.create({
   floBubble: { alignSelf: "flex-start", borderWidth: 1, borderTopLeftRadius: 6 },
   userBubble: { alignSelf: "flex-end", borderTopRightRadius: 6 },
   bubbleText: { fontSize: 15, lineHeight: 21 },
+  cardGrid: { marginTop: 10, gap: 8 },
+  insightCard: { borderWidth: 1, borderRadius: 12, padding: 10 },
+  insightTitle: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.5 },
+  insightValue: { fontSize: 18, fontFamily: "Inter_700Bold", marginTop: 3 },
+  insightDetail: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2, lineHeight: 15 },
   loadingBubble: { flexDirection: "row", alignItems: "center", gap: 9 },
   composerArea: { borderTopWidth: 1, paddingHorizontal: 12, paddingTop: 10 },
   composer: {

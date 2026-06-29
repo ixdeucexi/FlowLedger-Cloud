@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   AI_USAGE_UNAVAILABLE_MESSAGE,
+  floResponseCards,
   localFloAnswer,
   normalizeFloError,
   normalizeFloReply,
@@ -18,6 +19,13 @@ const facts: FloFacts = {
   safetyFloor: 200,
   monthlyIncome: 4000,
   monthlyBills: 2000,
+  monthlyRemaining: 750,
+  billsLeftAmount: 320,
+  billsLeftCount: 2,
+  billProgressPercent: 67,
+  previousMonthIncome: 3800,
+  previousMonthBills: 1900,
+  previousMonthRemaining: 600,
   unallocatedSpendingThisMonth: 245.75,
   unallocatedTransactionCount: 3,
   upcoming: [{ name: "Power", amount: 120, date: "2026-06-28" }],
@@ -41,6 +49,23 @@ test("Flo answers unallocated spending questions from verified facts", () => {
   const answer = localFloAnswer("How much money have I spent on none allocated bills this month?", facts, days) ?? "";
   assert.match(answer, /\$245\.75/);
   assert.match(answer, /3 unallocated expense transactions/);
+});
+
+test("Flo answers phase 2 planning questions without AI", () => {
+  assert.match(localFloAnswer("What bills are left?", facts, days) ?? "", /2 bills left/);
+  assert.match(localFloAnswer("What changed since last month?", facts, days) ?? "", /income changed by \+\$200\.00/);
+  assert.match(localFloAnswer("What should I do with leftover money?", facts, days) ?? "", /\$750\.00 left/);
+  assert.match(localFloAnswer("How do I fix this forecast?", { ...facts, forecastConfidence: "low" }, days) ?? "", /reconciliation/i);
+});
+
+test("Flo creates deterministic response cards for supported finance questions", () => {
+  const affordabilityCards = floResponseCards("Can I afford $500?", facts, days);
+  assert.equal(affordabilityCards[0]?.title, "Purchase Decision");
+  assert.equal(affordabilityCards.length, 3);
+
+  const billsLeftCards = floResponseCards("What bills are left?", facts, days);
+  assert.equal(billsLeftCards[0]?.title, "Bills Left");
+  assert.equal(billsLeftCards[0]?.value, "2");
 });
 
 test("chat input appends the user message and Flo response in order", () => {

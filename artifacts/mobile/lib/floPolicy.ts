@@ -7,6 +7,13 @@ export interface FloFacts {
   safetyFloor: number;
   monthlyIncome: number;
   monthlyBills: number;
+  monthlyRemaining: number;
+  billsLeftAmount: number;
+  billsLeftCount: number;
+  billProgressPercent: number;
+  previousMonthIncome: number;
+  previousMonthBills: number;
+  previousMonthRemaining: number;
   unallocatedSpendingThisMonth: number;
   unallocatedTransactionCount: number;
   upcoming: { name: string; amount: number; date: string }[];
@@ -15,6 +22,12 @@ export interface FloFacts {
 }
 
 export type FloChatMessage = { id: string; role: "user" | "flo"; text: string };
+export interface FloResponseCard {
+  title: string;
+  value: string;
+  detail: string;
+  tone: "safe" | "caution" | "risk" | "info";
+}
 export type FloChatState = { messages: FloChatMessage[]; sending: boolean };
 export type FloChatAction =
   | { type: "submit"; id: string; text: string }
@@ -82,10 +95,33 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
   if (lower.includes("why") && (lower.includes("negative") || lower.includes("balance"))) {
     return `Your current forecast reaches its lowest point at $${facts.lowestBalance.toFixed(0)} on ${facts.lowestBalanceDate}. The largest near-term obligations are ${facts.upcoming.slice(0, 3).map(i => `${i.name} ($${i.amount.toFixed(0)})`).join(", ") || "not yet available"}.`;
   }
+  if ((lower.includes("left") || lower.includes("remaining")) && lower.includes("bill")) {
+    return facts.billsLeftCount > 0
+      ? `You have ${facts.billsLeftCount} bill${facts.billsLeftCount === 1 ? "" : "s"} left this month, totaling $${facts.billsLeftAmount.toFixed(2)}. Your bill progress is ${facts.billProgressPercent}%.`
+      : `I don't see any bills left this month. Your bill progress is ${facts.billProgressPercent}%.`;
+  }
   if (lower.includes("next") && (lower.includes("bill") || lower.includes("due"))) {
     return facts.upcoming.length
       ? `Your next obligations are ${facts.upcoming.slice(0, 3).map(i => `${i.name} for $${i.amount.toFixed(0)} on ${i.date}`).join(", ")}.`
       : "I don't see any upcoming bills in the current forecast.";
+  }
+  if (lower.includes("changed") && lower.includes("last month")) {
+    const incomeDelta = facts.monthlyIncome - facts.previousMonthIncome;
+    const billsDelta = facts.monthlyBills - facts.previousMonthBills;
+    const remainingDelta = facts.monthlyRemaining - facts.previousMonthRemaining;
+    return `Compared with last month, income changed by ${formatSignedDollars(incomeDelta)}, bills changed by ${formatSignedDollars(billsDelta)}, and projected leftover changed by ${formatSignedDollars(remainingDelta)}.`;
+  }
+  if (/leftover|extra money|money left|available money|what should i do with/i.test(lower)) {
+    if (facts.monthlyRemaining <= 0) return `I don't see extra money this month. Your current monthly plan is short by $${Math.abs(facts.monthlyRemaining).toFixed(2)}, so I would protect the forecast before adding new spending.`;
+    const cushion = facts.lowestBalance - facts.safetyFloor;
+    return cushion > 0
+      ? `You have about $${facts.monthlyRemaining.toFixed(2)} left in this month's plan. Since your lowest forecast stays $${cushion.toFixed(2)} above the safety floor, the safest choices are savings, the next snowball debt, or keeping it available for upcoming bills.`
+      : `You show $${facts.monthlyRemaining.toFixed(2)} left this month, but your forecast is too close to the safety floor. I would keep it available until the low-balance date passes.`;
+  }
+  if (lower.includes("fix") && lower.includes("forecast")) {
+    return facts.forecastConfidence === "high"
+      ? "Your forecast confidence is high. To keep it strong, reconcile accounts regularly and make sure bills, income, and one-time transactions are current."
+      : "To fix the forecast, start with the oldest account reconciliation, then confirm income dates, recurring bills, and any manual transactions. Forecast confidence improves when those facts are current.";
   }
   if (lower.includes("income") && (lower.includes("add") || lower.includes("enter") || lower.includes("set up"))) {
     return "Open More, choose Income, then tap Add Income. Enter the amount, frequency, and next pay date so FlowLedger can include it in your forecast.";
@@ -99,4 +135,49 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
       : "You have $0.00 in unallocated spending this month. Every recorded expense is linked to a bill, or there are no expense transactions yet.";
   }
   return null;
+}
+
+function formatSignedDollars(amount: number): string {
+  const sign = amount >= 0 ? "+" : "-";
+  return `${sign}$${Math.abs(amount).toFixed(2)}`;
+}
+
+export function floResponseCards(message: string, facts: FloFacts, days: DecisionBaselineDay[]): FloResponseCard[] {
+  const lower = message.toLowerCase();
+  const match = message.match(/\$?\s*([\d,]+(?:\.\d{1,2})?)/);
+  if ((lower.includes("afford") || lower.includes("buy") || lower.includes("spend")) && match) {
+    const amount = Number(match[1].replace(/,/g, ""));
+    const date = message.match(/\b(20\d{2}-\d{2}-\d{2})\b/)?.[1] ?? new Date().toISOString().slice(0, 10);
+    const result = evaluateDecision(days, { type: "one_time_purchase", name: "Flo affordability question", amount, date, frequency: "once" }, facts.safetyFloor);
+    return [
+      { title: "Purchase Decision", value: result.verdict.toUpperCase(), detail: result.explanation, tone: result.verdict === "safe" ? "safe" : result.verdict === "caution" ? "caution" : "risk" },
+      { title: "Lowest Balance", value: `$${result.lowestBalance.toFixed(0)}`, detail: result.lowestBalanceDate, tone: result.lowestBalance < facts.safetyFloor ? "risk" : "info" },
+      { title: "Safer Amount", value: `$${result.saferAmount.toFixed(0)}`, detail: "Based on your safety floor", tone: "info" },
+    ];
+  }
+  if (lower.includes("why") && (lower.includes("negative") || lower.includes("balance"))) {
+    return [
+      { title: "Lowest Forecast", value: `$${facts.lowestBalance.toFixed(0)}`, detail: facts.lowestBalanceDate, tone: facts.lowestBalance < facts.safetyFloor ? "risk" : "caution" },
+      { title: "Safe Cushion", value: `$${(facts.lowestBalance - facts.safetyFloor).toFixed(0)}`, detail: `Safety floor: $${facts.safetyFloor.toFixed(0)}`, tone: facts.lowestBalance < facts.safetyFloor ? "risk" : "safe" },
+    ];
+  }
+  if ((lower.includes("left") || lower.includes("remaining")) && lower.includes("bill")) {
+    return [
+      { title: "Bills Left", value: String(facts.billsLeftCount), detail: `$${facts.billsLeftAmount.toFixed(2)} remaining`, tone: facts.billsLeftCount > 0 ? "caution" : "safe" },
+      { title: "Bill Progress", value: `${facts.billProgressPercent}%`, detail: "Based on bill count", tone: facts.billProgressPercent >= 80 ? "safe" : "info" },
+    ];
+  }
+  if (/leftover|extra money|money left|available money|what should i do with/i.test(lower)) {
+    return [
+      { title: "Monthly Leftover", value: `${formatSignedDollars(facts.monthlyRemaining)}`, detail: "Income minus bills, plans, and transactions", tone: facts.monthlyRemaining >= 0 ? "safe" : "risk" },
+      { title: "Recommended Next Step", value: facts.monthlyRemaining > 0 ? "Protect plan" : "Hold spending", detail: facts.monthlyRemaining > 0 ? "Savings, debt, or keep available" : "Fix the shortfall first", tone: facts.monthlyRemaining > 0 ? "info" : "risk" },
+    ];
+  }
+  if (lower.includes("fix") && lower.includes("forecast")) {
+    return [
+      { title: "Forecast Confidence", value: facts.forecastConfidence.toUpperCase(), detail: "Uses accounts, income, and bills", tone: facts.forecastConfidence === "high" ? "safe" : facts.forecastConfidence === "medium" ? "caution" : "risk" },
+      { title: "Best First Step", value: "Reconcile", detail: "Then review income and recurring bills", tone: "info" },
+    ];
+  }
+  return [];
 }
