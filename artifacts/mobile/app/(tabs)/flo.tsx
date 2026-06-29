@@ -20,16 +20,18 @@ import { askFlo, loadFloMemory, updateFloMemory, type FloFacts } from "@/lib/flo
 import {
   FLO_CONNECTION_ERROR_MESSAGE,
   buildFloDecisionScenario,
+  evaluateFloCategoryMove,
   floResponseCards,
   reduceFloChat,
   sanitizeFloSummary,
+  type FloCategoryMoveResult,
   type FloResponseCard,
   type FloChatState,
 } from "@/lib/floPolicy";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { evaluateDecision, type DecisionResult, type DecisionScenario } from "@/lib/decisions";
 import { buildDecisionHistory, type DecisionHistoryItem } from "@/lib/decisionHistory";
-import { buildCategoryPlan } from "@/lib/categoryPlanning";
+import { applyCategoryBudgetMove, buildCategoryPlan } from "@/lib/categoryPlanning";
 
 const sampleQuestions = [
   "Ask Flo anything…",
@@ -50,6 +52,9 @@ export default function FloScreen() {
   const [cardsByMessageId, setCardsByMessageId] = useState<Record<string, FloResponseCard[]>>({});
   const [decisionByMessageId, setDecisionByMessageId] = useState<Record<string, { scenario: DecisionScenario; result: DecisionResult }>>({});
   const [decisionSaveState, setDecisionSaveState] = useState<Record<string, "saving" | "saved" | "failed">>({});
+  const [categoryMoveByMessageId, setCategoryMoveByMessageId] = useState<Record<string, FloCategoryMoveResult>>({});
+  const [categoryMoveState, setCategoryMoveState] = useState<Record<string, "idle" | "saving" | "saved" | "failed">>({});
+  const [categoryBudgetRevision, setCategoryBudgetRevision] = useState(0);
   const [input, setInput] = useState("");
   const [summary, setSummary] = useState("");
   const [sampleIndex, setSampleIndex] = useState(0);
@@ -97,23 +102,39 @@ export default function FloScreen() {
     .sort((left, right) => left.date.localeCompare(right.date))
     .slice(0, 5), [bills, today]);
 
+  const categoryBudgetKey = useMemo(() => {
+    const month = now.getMonth();
+    const year = now.getFullYear();
+    return `flowledger-category-budgets-${year}-${String(month + 1).padStart(2, "0")}`;
+  }, [today]);
+
+  const readCategoryBudgets = () => {
+    if (Platform.OS !== "web") return {};
+    try {
+      const raw = globalThis.localStorage?.getItem(categoryBudgetKey);
+      const parsed = raw ? JSON.parse(raw) as Record<string, unknown> : {};
+      const next: Record<string, number> = {};
+      Object.entries(parsed).forEach(([category, amount]) => {
+        const value = Number(amount);
+        if (category && Number.isFinite(value) && value >= 0) next[category] = value;
+      });
+      return next;
+    } catch {
+      return {};
+    }
+  };
+
+  const writeCategoryBudgets = (budgets: Record<string, number>) => {
+    if (Platform.OS === "web") {
+      globalThis.localStorage?.setItem(categoryBudgetKey, JSON.stringify(budgets));
+    }
+    setCategoryBudgetRevision(value => value + 1);
+  };
+
   const categoryPlan = useMemo(() => {
     const month = now.getMonth();
     const year = now.getFullYear();
-    const budgetKey = `flowledger-category-budgets-${year}-${String(month + 1).padStart(2, "0")}`;
-    let categoryBudgets: Record<string, number> = {};
-    if (Platform.OS === "web") {
-      try {
-        const raw = globalThis.localStorage?.getItem(budgetKey);
-        const parsed = raw ? JSON.parse(raw) as Record<string, unknown> : {};
-        Object.entries(parsed).forEach(([category, amount]) => {
-          const value = Number(amount);
-          if (category && Number.isFinite(value) && value >= 0) categoryBudgets[category] = value;
-        });
-      } catch {
-        categoryBudgets = {};
-      }
-    }
+    const categoryBudgets = readCategoryBudgets();
     const monthBills = getMonthlyBills(month, year)
       .filter(bill => !bill.is_debt)
       .map(bill => ({
@@ -149,7 +170,7 @@ export default function FloScreen() {
         } : undefined,
       };
     });
-  }, [categories, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, now]);
+  }, [categories, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, now, categoryBudgetRevision]);
 
   const facts = useMemo<FloFacts>(() => {
     const lowest = baseline.reduce(
@@ -217,6 +238,11 @@ export default function FloScreen() {
       const result = evaluateDecision(baseline, scenario, settings.safety_floor);
       setDecisionByMessageId(previous => ({ ...previous, [replyId]: { scenario, result } }));
     }
+    const categoryMove = evaluateFloCategoryMove(clean, facts);
+    if (categoryMove?.allowed) {
+      setCategoryMoveByMessageId(previous => ({ ...previous, [replyId]: categoryMove }));
+      setCategoryMoveState(previous => ({ ...previous, [replyId]: "idle" }));
+    }
     if (user) {
       const nextSummary = `Recent topic: ${sanitizeFloSummary(clean).slice(0, 120)}`;
       setSummary(nextSummary);
@@ -233,6 +259,28 @@ export default function FloScreen() {
       setDecisionSaveState(previous => ({ ...previous, [messageId]: "saved" }));
     } catch {
       setDecisionSaveState(previous => ({ ...previous, [messageId]: "failed" }));
+    }
+  };
+
+  const applyCategoryMoveFromFlo = (messageId: string) => {
+    const move = categoryMoveByMessageId[messageId];
+    if (!move || categoryMoveState[messageId] === "saving" || categoryMoveState[messageId] === "saved") return;
+    setCategoryMoveState(previous => ({ ...previous, [messageId]: "saving" }));
+    try {
+      const currentBudgets = readCategoryBudgets();
+      const rows = categoryPlan.map(row => ({
+        category: row.category,
+        budgeted: row.budgeted,
+        spent: row.spent,
+        remaining: row.remaining,
+        status: row.status,
+        percentUsed: row.percentUsed,
+      }));
+      const next = applyCategoryBudgetMove(currentBudgets, rows, move.from, move.to, move.amount);
+      writeCategoryBudgets(next);
+      setCategoryMoveState(previous => ({ ...previous, [messageId]: "saved" }));
+    } catch {
+      setCategoryMoveState(previous => ({ ...previous, [messageId]: "failed" }));
     }
   };
 
@@ -351,6 +399,39 @@ export default function FloScreen() {
                 </Text>
                 {decisionSaveState[message.id] === "failed" ? (
                   <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t save this plan. Try again.</Text>
+                ) : null}
+              </View>
+            ) : null}
+            {message.role === "flo" && categoryMoveByMessageId[message.id] ? (
+              <View style={styles.decisionActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Apply this category budget move"
+                  disabled={categoryMoveState[message.id] === "saving" || categoryMoveState[message.id] === "saved"}
+                  onPress={() => applyCategoryMoveFromFlo(message.id)}
+                  style={[
+                    styles.saveDecisionButton,
+                    { backgroundColor: colors.success, opacity: categoryMoveState[message.id] === "saved" ? 0.7 : 1 },
+                  ]}
+                >
+                  <Feather
+                    name={categoryMoveState[message.id] === "saved" ? "check-circle" : "repeat"}
+                    size={16}
+                    color="#fff"
+                  />
+                  <Text style={styles.saveDecisionText}>
+                    {categoryMoveState[message.id] === "saving"
+                      ? "Applying..."
+                      : categoryMoveState[message.id] === "saved"
+                        ? "Move applied"
+                        : `Apply $${categoryMoveByMessageId[message.id].amount.toFixed(2)} move`}
+                  </Text>
+                </Pressable>
+                <Text style={[styles.saveDecisionHint, { color: colors.mutedForeground }]}>
+                  Moves budget from {categoryMoveByMessageId[message.id].from} to {categoryMoveByMessageId[message.id].to} for this month.
+                </Text>
+                {categoryMoveState[message.id] === "failed" ? (
+                  <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t apply this move. Try again.</Text>
                 ) : null}
               </View>
             ) : null}

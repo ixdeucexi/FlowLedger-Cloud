@@ -40,6 +40,13 @@ export interface FloResponseCard {
   detail: string;
   tone: "safe" | "caution" | "risk" | "info";
 }
+export interface FloCategoryMoveResult {
+  amount: number;
+  from: string;
+  to: string;
+  allowed: boolean;
+  reason: string;
+}
 export type FloChatState = { messages: FloChatMessage[]; sending: boolean };
 export type FloChatAction =
   | { type: "submit"; id: string; text: string }
@@ -227,22 +234,9 @@ function localCategoryAnswer(message: string, facts: FloFacts): string | null {
   }
 
   const named = findMentionedCategory(message, categories);
-  const move = parseCategoryMove(message, categories);
-  if (requestedMove && !move) {
-    const source = findCategoryByName(requestedMove.from, categories);
-    const target = findCategoryByName(requestedMove.to, categories);
-    if (!source) return `I don't see ${requestedMove.from} with available category budget this month, so I can't safely move money from it.`;
-    if (!target) return `I don't see ${requestedMove.to} in this month's category plan yet. Add a budget or transaction for that category first.`;
-    return "I couldn't read both categories clearly. Try wording it like: Can I move $50 from Entertainment to Food?";
-  }
-  if (move) {
-    const source = categories.find(item => item.category === move.from);
-    const target = categories.find(item => item.category === move.to);
-    if (!source || !target) return null;
-    if (move.amount > source.remaining + 0.005) {
-      return `Not from ${source.category}. It only has $${Math.max(0, source.remaining).toFixed(2)} left, so moving $${move.amount.toFixed(2)} would put that category over plan.`;
-    }
-    return `Yes. You can move $${move.amount.toFixed(2)} from ${source.category} to ${target.category}. ${source.category} would have $${(source.remaining - move.amount).toFixed(2)} left, and ${target.category} would improve to $${(target.remaining + move.amount).toFixed(2)} left.`;
+  const move = evaluateFloCategoryMove(message, facts);
+  if (requestedMove && move) {
+    return move.reason;
   }
 
   if (/(need attention|attention|problem|over|overspend|overspending|watch)/i.test(lower) && !named) {
@@ -297,13 +291,55 @@ function findMentionedCategory(message: string, categories: FloCategoryFact[]): 
     .find(item => lower.includes(item.category.toLowerCase())) ?? null;
 }
 
-function parseCategoryMove(message: string, categories: FloCategoryFact[]) {
+export function evaluateFloCategoryMove(message: string, facts: FloFacts): FloCategoryMoveResult | null {
   const requested = parseRequestedCategoryMove(message);
   if (!requested) return null;
-  const from = findCategoryByName(requested.from, categories)?.category;
-  const to = findCategoryByName(requested.to, categories)?.category;
-  if (!from || !to || from === to) return null;
-  return { amount: requested.amount, from, to };
+  const categories = facts.categoryPlan ?? [];
+  if (!categories.length) {
+    return {
+      amount: requested.amount,
+      from: requested.from,
+      to: requested.to,
+      allowed: false,
+      reason: "I don't see category budget data for this month yet, so I can't safely move money between categories.",
+    };
+  }
+  const source = findCategoryByName(requested.from, categories);
+  const target = findCategoryByName(requested.to, categories);
+  if (!source) {
+    return {
+      amount: requested.amount,
+      from: requested.from,
+      to: requested.to,
+      allowed: false,
+      reason: `I don't see ${requested.from} with available category budget this month, so I can't safely move money from it.`,
+    };
+  }
+  if (!target) {
+    return {
+      amount: requested.amount,
+      from: source.category,
+      to: requested.to,
+      allowed: false,
+      reason: `I don't see ${requested.to} in this month's category plan yet. Add a budget or transaction for that category first.`,
+    };
+  }
+  if (requested.amount > source.remaining + 0.005) {
+    return {
+      amount: requested.amount,
+      from: source.category,
+      to: target.category,
+      allowed: false,
+      reason: `Not from ${source.category}. It only has $${Math.max(0, source.remaining).toFixed(2)} left, so moving $${requested.amount.toFixed(2)} would put that category over plan.`,
+    };
+  }
+  return {
+    amount: requested.amount,
+    from: source.category,
+    to: target.category,
+    allowed: true,
+    reason: `Yes. You can move $${requested.amount.toFixed(2)} from ${source.category} to ${target.category}. ${source.category} would have $${(source.remaining - requested.amount).toFixed(2)} left, and ${target.category} would improve to $${(target.remaining + requested.amount).toFixed(2)} left.`,
+  };
 }
 
 function parseRequestedCategoryMove(message: string) {

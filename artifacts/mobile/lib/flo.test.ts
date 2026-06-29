@@ -4,6 +4,7 @@ import {
   AI_USAGE_UNAVAILABLE_MESSAGE,
   FLO_SECURITY_REFUSAL_MESSAGE,
   buildFloDecisionScenario,
+  evaluateFloCategoryMove,
   floResponseCards,
   isUnsafeFloRequest,
   localFloAnswer,
@@ -78,6 +79,12 @@ test("Flo answers category budget questions from verified facts", () => {
 test("Flo evaluates category budget moves from verified facts", () => {
   assert.match(localFloAnswer("Can I move $50 from Entertainment to Food?", facts, days) ?? "", /Yes/);
   assert.match(localFloAnswer("Can I move $500 from Entertainment to Food?", facts, days) ?? "", /only has \$150\.00 left/);
+
+  const move = evaluateFloCategoryMove("Can I move $50 from Entertainment to Food?", facts);
+  assert.equal(move?.allowed, true);
+  assert.equal(move?.from, "Entertainment");
+  assert.equal(move?.to, "Food");
+  assert.equal(move?.amount, 50);
 });
 
 test("Flo does not fall through to AI when category move facts are missing", () => {
