@@ -127,6 +127,7 @@ export default function FloScreen() {
       upcoming,
       activePlans: decisions.filter(decision => decision.status === "planned" || decision.status === "calendar").length,
       forecastConfidence: forecastConfidence.level,
+      sourceTypes: ["forecast", "bill", "transaction", "account", "debt", "goal", "decision"],
     };
   }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, transactions, upcoming, decisions, forecastConfidence.level]);
 

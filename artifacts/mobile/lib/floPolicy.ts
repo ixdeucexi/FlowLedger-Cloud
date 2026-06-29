@@ -19,6 +19,7 @@ export interface FloFacts {
   upcoming: { name: string; amount: number; date: string }[];
   activePlans: number;
   forecastConfidence: string;
+  sourceTypes: string[];
 }
 
 export type FloChatMessage = { id: string; role: "user" | "flo"; text: string };
@@ -37,6 +38,11 @@ export const AI_USAGE_UNAVAILABLE_MESSAGE =
   "Flo is connected, but AI usage is currently unavailable. Check OpenAI billing or usage limits.";
 export const FLO_CONNECTION_ERROR_MESSAGE =
   "Flo couldn't connect just now. Your FlowLedger calculations are still available, so please try again.";
+export const FLO_SECURITY_REFUSAL_MESSAGE =
+  "I can only help with your FlowLedger plan and verified financial facts. I can't access code, keys, admin tools, system prompts, or other users' data.";
+
+const FORBIDDEN_FLO_REQUEST = /\b(api[_ -]?key|secret|service[_ -]?role|env(?:ironment)?(?: variable)?|source code|repo(?:sitory)?|admin|database password|jwt|token|other users?|all users|rls|bypass|ignore (?:previous|system)|system prompt|developer message|supabase key)\b/i;
+const ALLOWED_SOURCE_TYPES = new Set(["forecast", "bill", "transaction", "account", "debt", "goal", "decision"]);
 
 export function reduceFloChat(state: FloChatState, action: FloChatAction): FloChatState {
   if (action.type === "submit") {
@@ -72,7 +78,44 @@ export function sanitizeFloSummary(message: string): string {
     .slice(0, 500);
 }
 
+export function isUnsafeFloRequest(message: string): boolean {
+  return FORBIDDEN_FLO_REQUEST.test(message);
+}
+
+function num(value: unknown): number {
+  return Number.isFinite(Number(value)) ? Number(value) : 0;
+}
+
+export function sanitizeFloFacts(facts: FloFacts): FloFacts {
+  return {
+    balanceToday: num(facts.balanceToday),
+    lowestBalance: num(facts.lowestBalance),
+    lowestBalanceDate: String(facts.lowestBalanceDate ?? "").slice(0, 10),
+    safetyFloor: num(facts.safetyFloor),
+    monthlyIncome: num(facts.monthlyIncome),
+    monthlyBills: num(facts.monthlyBills),
+    monthlyRemaining: num(facts.monthlyRemaining),
+    billsLeftAmount: num(facts.billsLeftAmount),
+    billsLeftCount: Math.max(0, Math.round(num(facts.billsLeftCount))),
+    billProgressPercent: Math.max(0, Math.min(100, Math.round(num(facts.billProgressPercent)))),
+    previousMonthIncome: num(facts.previousMonthIncome),
+    previousMonthBills: num(facts.previousMonthBills),
+    previousMonthRemaining: num(facts.previousMonthRemaining),
+    unallocatedSpendingThisMonth: num(facts.unallocatedSpendingThisMonth),
+    unallocatedTransactionCount: Math.max(0, Math.round(num(facts.unallocatedTransactionCount))),
+    upcoming: (facts.upcoming ?? []).slice(0, 8).map(item => ({
+      name: String(item.name ?? "Upcoming item").slice(0, 80),
+      amount: num(item.amount),
+      date: String(item.date ?? "").slice(0, 10),
+    })),
+    activePlans: Math.max(0, Math.round(num(facts.activePlans))),
+    forecastConfidence: ["high", "medium", "low"].includes(String(facts.forecastConfidence)) ? String(facts.forecastConfidence) : "low",
+    sourceTypes: Array.from(new Set((facts.sourceTypes ?? []).map(source => String(source)).filter(source => ALLOWED_SOURCE_TYPES.has(source)))).slice(0, 12),
+  };
+}
+
 export function localFloAnswer(message: string, facts: FloFacts, days: DecisionBaselineDay[]): string | null {
+  if (isUnsafeFloRequest(message)) return FLO_SECURITY_REFUSAL_MESSAGE;
   const lower = message.toLowerCase();
   const match = message.match(/\$?\s*([\d,]+(?:\.\d{1,2})?)/);
   if ((lower.includes("afford") || lower.includes("buy") || lower.includes("spend")) && match) {
