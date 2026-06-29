@@ -23,6 +23,30 @@ export interface CategoryPlanRow {
   percentUsed: number;
 }
 
+export function applyCategoryBudgetMove(
+  currentBudgets: Record<string, number>,
+  rows: CategoryPlanRow[],
+  fromCategory: string,
+  toCategory: string,
+  amount: number,
+): Record<string, number> {
+  const transfer = Math.max(0, Number(amount) || 0);
+  if (!fromCategory || !toCategory || fromCategory === toCategory || transfer <= 0) {
+    return { ...currentBudgets };
+  }
+
+  const fromRow = rows.find(row => row.category === fromCategory);
+  const toRow = rows.find(row => row.category === toCategory);
+  const fromBudget = currentBudgets[fromCategory] ?? fromRow?.budgeted ?? 0;
+  const toBudget = currentBudgets[toCategory] ?? toRow?.budgeted ?? 0;
+
+  return {
+    ...currentBudgets,
+    [fromCategory]: Math.max(0, roundCurrency(fromBudget - transfer)),
+    [toCategory]: roundCurrency(toBudget + transfer),
+  };
+}
+
 export function buildCategoryPlan(categories: string[], bills: CategoryPlanBill[], transactions: CategoryPlanTransaction[], budgets: CategoryBudgetLimit[] = []): CategoryPlanRow[] {
   const names = new Set(categories.length ? categories : ["Other"]);
   bills.forEach(bill => names.add(bill.category || "Other"));
@@ -57,6 +81,10 @@ export function buildCategoryPlan(categories: string[], bills: CategoryPlanBill[
       if (pressure) return pressure;
       return (right.spent + right.budgeted) - (left.spent + left.budgeted);
     });
+}
+
+function roundCurrency(value: number) {
+  return Math.round(value * 100) / 100;
 }
 
 function statusWeight(status: CategoryPlanRow["status"]) {

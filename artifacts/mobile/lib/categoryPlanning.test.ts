@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCategoryPlan } from "./categoryPlanning";
+import { applyCategoryBudgetMove, buildCategoryPlan } from "./categoryPlanning";
 
 test("builds category plan from budgeted bills and actual spending", () => {
   const rows = buildCategoryPlan(
@@ -43,4 +43,23 @@ test("explicit category budgets override bill-derived budgets", () => {
   assert.equal(rows[0]?.budgeted, 600);
   assert.equal(rows[0]?.remaining, 475);
   assert.equal(rows[0]?.percentUsed, 21);
+});
+
+test("moves budget money between categories using current plan as the baseline", () => {
+  const rows = buildCategoryPlan(
+    ["Food", "Entertainment"],
+    [{ category: "Food", amount: 500 }, { category: "Entertainment", amount: 100 }],
+    [],
+  );
+
+  const budgets = applyCategoryBudgetMove({}, rows, "Food", "Entertainment", 50);
+
+  assert.equal(budgets.Food, 450);
+  assert.equal(budgets.Entertainment, 150);
+});
+
+test("ignores invalid category budget moves", () => {
+  const rows = buildCategoryPlan(["Food"], [{ category: "Food", amount: 500 }], []);
+  assert.deepEqual(applyCategoryBudgetMove({ Food: 500 }, rows, "Food", "Food", 50), { Food: 500 });
+  assert.deepEqual(applyCategoryBudgetMove({ Food: 500 }, rows, "Food", "Other", -10), { Food: 500 });
 });

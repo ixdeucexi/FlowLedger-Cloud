@@ -16,7 +16,7 @@ import colors from "@/constants/colors";
 import type { Bill, DashboardFilter, Goal } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
-import { buildCategoryPlan } from "@/lib/categoryPlanning";
+import { applyCategoryBudgetMove, buildCategoryPlan } from "@/lib/categoryPlanning";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -58,6 +58,11 @@ export default function DashboardScreen() {
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
   const [categoryBudgetDrafts, setCategoryBudgetDrafts] = useState<Record<string, string>>({});
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [moveMoneyVisible, setMoveMoneyVisible] = useState(false);
+  const [moveTargetCategory, setMoveTargetCategory] = useState<string | null>(null);
+  const [moveSourceCategory, setMoveSourceCategory] = useState("");
+  const [moveAmount, setMoveAmount] = useState("");
+  const [moveError, setMoveError] = useState("");
 
   useFocusEffect(useCallback(() => {
     setIsFocused(true);
@@ -268,6 +273,13 @@ export default function DashboardScreen() {
     return Array.from(names).sort((left, right) => left.localeCompare(right));
   }, [categories, categoryPlan]);
 
+  const moveSourceOptions = useMemo(() => {
+    if (!moveTargetCategory) return [];
+    return categoryPlan
+      .filter(row => row.category !== moveTargetCategory && row.remaining > 0.005)
+      .sort((left, right) => right.remaining - left.remaining);
+  }, [categoryPlan, moveTargetCategory]);
+
   const categoryPlanTotals = useMemo(() => categoryPlan.reduce((totals, row) => ({
     budgeted: totals.budgeted + row.budgeted,
     spent: totals.spent + row.spent,
@@ -283,6 +295,13 @@ export default function DashboardScreen() {
     setCategoryBudgetModalVisible(true);
   };
 
+  const persistCategoryBudgets = (next: Record<string, number>) => {
+    setCategoryBudgets(next);
+    if (Platform.OS === "web") {
+      globalThis.localStorage?.setItem(categoryBudgetKey, JSON.stringify(next));
+    }
+  };
+
   const openCategoryBudgetEditorForCategory = (category: string) => {
     const drafts: Record<string, string> = {};
     budgetEditableCategories.forEach(item => {
@@ -294,16 +313,52 @@ export default function DashboardScreen() {
     setCategoryBudgetModalVisible(true);
   };
 
+  const openMoveMoney = (targetCategory: string) => {
+    const source = categoryPlan
+      .filter(row => row.category !== targetCategory && row.remaining > 0.005)
+      .sort((left, right) => right.remaining - left.remaining)[0];
+    setMoveTargetCategory(targetCategory);
+    setMoveSourceCategory(source?.category ?? "");
+    setMoveAmount("");
+    setMoveError("");
+    setSelectedCategory(null);
+    setMoveMoneyVisible(true);
+  };
+
+  const applyMoveMoney = () => {
+    const targetCategory = moveTargetCategory;
+    const sourceCategory = moveSourceCategory;
+    const amount = Number.parseFloat(moveAmount);
+    const sourceRow = categoryPlan.find(row => row.category === sourceCategory);
+    if (!targetCategory || !sourceCategory) {
+      setMoveError("Choose a category to move money from.");
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setMoveError("Enter an amount to move.");
+      return;
+    }
+    if (!sourceRow || amount > sourceRow.remaining + 0.005) {
+      setMoveError(`You can move up to $${Math.max(0, sourceRow?.remaining ?? 0).toFixed(0)} from ${sourceCategory}.`);
+      return;
+    }
+
+    const next = applyCategoryBudgetMove(categoryBudgets, categoryPlan, sourceCategory, targetCategory, amount);
+    persistCategoryBudgets(next);
+    setMoveMoneyVisible(false);
+    setMoveTargetCategory(null);
+    setMoveSourceCategory("");
+    setMoveAmount("");
+    setMoveError("");
+  };
+
   const saveCategoryBudgets = () => {
     const next: Record<string, number> = {};
     Object.entries(categoryBudgetDrafts).forEach(([category, value]) => {
       const amount = Number.parseFloat(value);
       if (category && Number.isFinite(amount) && amount >= 0) next[category] = amount;
     });
-    setCategoryBudgets(next);
-    if (Platform.OS === "web") {
-      globalThis.localStorage?.setItem(categoryBudgetKey, JSON.stringify(next));
-    }
+    persistCategoryBudgets(next);
     setCategoryBudgetModalVisible(false);
   };
 
@@ -1305,6 +1360,13 @@ export default function DashboardScreen() {
                     <Text style={[styles.categoryDetailActionText, { color: c.primaryForeground }]}>Edit budget</Text>
                   </Pressable>
                   <Pressable
+                    onPress={() => openMoveMoney(categoryDetail.row.category)}
+                    style={({ pressed }) => [styles.categoryDetailAction, { backgroundColor: c.success + "20", opacity: pressed ? 0.75 : 1 }]}
+                  >
+                    <Feather name="repeat" size={14} color={c.success} />
+                    <Text style={[styles.categoryDetailActionText, { color: c.success }]}>Move money</Text>
+                  </Pressable>
+                  <Pressable
                     onPress={() => {
                       setSelectedCategory(null);
                       router.push("/(tabs)/transactions" as any);
@@ -1326,6 +1388,95 @@ export default function DashboardScreen() {
                 </View>
               </>
             )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={moveMoneyVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setMoveMoneyVisible(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => { Keyboard.dismiss(); setMoveMoneyVisible(false); }}>
+          <Pressable style={[styles.actionSheet, { backgroundColor: c.card }]} onPress={() => {}}>
+            <View style={[styles.sheetHandle, { backgroundColor: c.muted }]} />
+            <Text style={[styles.sheetTitle, { color: c.foreground }]}>Move money</Text>
+            <Text style={[styles.sheetSub, { color: c.mutedForeground }]}>
+              Add budget to {moveTargetCategory ?? "this category"} by taking available money from another category.
+            </Text>
+
+            <Text style={[styles.categoryDetailSectionTitle, { color: c.mutedForeground }]}>Move from</Text>
+            {moveSourceOptions.length ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.moveCategoryScroller}>
+                {moveSourceOptions.map(row => {
+                  const selected = moveSourceCategory === row.category;
+                  return (
+                    <Pressable
+                      key={row.category}
+                      onPress={() => {
+                        setMoveSourceCategory(row.category);
+                        setMoveError("");
+                      }}
+                      style={[
+                        styles.moveCategoryChip,
+                        {
+                          backgroundColor: selected ? c.primary : c.muted,
+                          borderColor: selected ? c.primary : c.border,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.moveCategoryChipName, { color: selected ? c.primaryForeground : c.foreground }]}>
+                        {row.category}
+                      </Text>
+                      <Text style={[styles.moveCategoryChipMeta, { color: selected ? c.primaryForeground : c.mutedForeground }]}>
+                        ${row.remaining.toFixed(0)} left
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            ) : (
+              <View style={[styles.categoryInsightBox, { backgroundColor: c.warning + "12", borderColor: c.warning + "35" }]}>
+                <Feather name="alert-circle" size={15} color={c.warning} />
+                <Text style={[styles.categoryInsightText, { color: c.foreground }]}>
+                  No other category has available money to move right now.
+                </Text>
+              </View>
+            )}
+
+            <Text style={[styles.categoryDetailSectionTitle, { color: c.mutedForeground, marginTop: 10 }]}>Amount</Text>
+            <View style={[styles.moveAmountInputWrap, { backgroundColor: c.muted }]}>
+              <Text style={[styles.categoryBudgetDollar, { color: c.mutedForeground }]}>$</Text>
+              <TextInput
+                value={moveAmount}
+                onChangeText={(value) => {
+                  setMoveAmount(value);
+                  setMoveError("");
+                }}
+                placeholder="0.00"
+                placeholderTextColor={c.mutedForeground}
+                keyboardType="decimal-pad"
+                style={[styles.moveAmountInput, { color: c.foreground }]}
+              />
+            </View>
+            {moveError ? <Text style={[styles.moveErrorText, { color: c.destructive }]}>{moveError}</Text> : null}
+
+            <View style={styles.expenseBtns}>
+              <Pressable
+                onPress={() => setMoveMoneyVisible(false)}
+                style={[styles.expenseBtn, { backgroundColor: c.muted }]}
+              >
+                <Text style={[styles.expenseBtnText, { color: c.mutedForeground }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                disabled={!moveSourceOptions.length}
+                onPress={applyMoveMoney}
+                style={[styles.expenseBtn, { backgroundColor: moveSourceOptions.length ? c.primary : c.muted, opacity: moveSourceOptions.length ? 1 : 0.6 }]}
+              >
+                <Text style={[styles.expenseBtnText, { color: moveSourceOptions.length ? c.primaryForeground : c.mutedForeground }]}>Move</Text>
+              </Pressable>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1687,9 +1838,16 @@ const styles = StyleSheet.create({
   categoryDetailItemMeta: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
   categoryDetailItemAmount: { fontSize: 14, fontFamily: "Inter_700Bold" },
   categoryDetailEmpty: { fontSize: 12, fontFamily: "Inter_400Regular", paddingVertical: 10 },
-  categoryDetailActions: { flexDirection: "row", gap: 8 },
+  categoryDetailActions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   categoryDetailAction: { flex: 1, minHeight: 44, borderRadius: 13, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 6, paddingHorizontal: 8 },
   categoryDetailActionText: { fontSize: 12, fontFamily: "Inter_700Bold" },
+  moveCategoryScroller: { marginBottom: 14 },
+  moveCategoryChip: { minWidth: 130, borderWidth: 1, borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12, marginRight: 8 },
+  moveCategoryChipName: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  moveCategoryChipMeta: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 3 },
+  moveAmountInputWrap: { flexDirection: "row", alignItems: "center", borderRadius: 14, paddingHorizontal: 12, marginBottom: 8 },
+  moveAmountInput: { flex: 1, minHeight: 48, fontSize: 18, fontFamily: "Inter_700Bold" },
+  moveErrorText: { fontSize: 12, fontFamily: "Inter_600SemiBold", marginBottom: 10 },
 
   // Affordability card
   affordCard:           { padding: 16, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
