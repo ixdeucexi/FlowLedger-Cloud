@@ -62,10 +62,10 @@ export function buildFloCategoryQuickPrompts(categories: FloCategoryFact[]): str
     .filter(item => item.remaining < 0)
     .sort((left, right) => left.remaining - right.remaining)[0];
   const source = rows
-    .filter(item => item.remaining > 0)
+    .filter(item => target ? item.remaining >= Math.abs(target.remaining) : item.remaining > 0)
     .sort((left, right) => right.remaining - left.remaining)[0];
   if (target && source && target.category !== source.category) {
-    const amount = Math.max(1, Math.min(Math.abs(target.remaining), source.remaining));
+    const amount = Math.abs(target.remaining);
     prompts.unshift(`Can I move $${amount.toFixed(0)} from ${source.category} to ${target.category}?`);
   }
 
@@ -355,6 +355,16 @@ export function evaluateFloCategoryMove(message: string, facts: FloFacts): FloCa
       to: target.category,
       allowed: false,
       reason: `Not from ${source.category}. It only has $${Math.max(0, source.remaining).toFixed(2)} left, so moving $${requested.amount.toFixed(2)} would put that category over plan.`,
+    };
+  }
+  if (target.remaining + requested.amount < -0.005) {
+    const remainingShort = Math.abs(target.remaining + requested.amount);
+    return {
+      amount: requested.amount,
+      from: source.category,
+      to: target.category,
+      allowed: false,
+      reason: `That would help, but it would still leave ${target.category} $${remainingShort.toFixed(2)} over plan. I won't apply a move that leaves the target category negative. Try moving at least $${Math.abs(target.remaining).toFixed(2)}, or adjust the budget manually if no category has enough room.`,
     };
   }
   return {

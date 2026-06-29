@@ -78,14 +78,15 @@ test("Flo answers category budget questions from verified facts", () => {
 });
 
 test("Flo evaluates category budget moves from verified facts", () => {
-  assert.match(localFloAnswer("Can I move $50 from Entertainment to Food?", facts, days) ?? "", /Yes/);
+  assert.match(localFloAnswer("Can I move $60 from Entertainment to Food?", facts, days) ?? "", /Yes/);
+  assert.match(localFloAnswer("Can I move $50 from Entertainment to Food?", facts, days) ?? "", /still leave Food \$10\.00 over plan/);
   assert.match(localFloAnswer("Can I move $500 from Entertainment to Food?", facts, days) ?? "", /only has \$150\.00 left/);
 
-  const move = evaluateFloCategoryMove("Can I move $50 from Entertainment to Food?", facts);
+  const move = evaluateFloCategoryMove("Can I move $60 from Entertainment to Food?", facts);
   assert.equal(move?.allowed, true);
   assert.equal(move?.from, "Entertainment");
   assert.equal(move?.to, "Food");
-  assert.equal(move?.amount, 50);
+  assert.equal(move?.amount, 60);
 });
 
 test("Flo builds dynamic category quick prompts", () => {
@@ -101,6 +102,21 @@ test("Flo does not fall through to AI when category move facts are missing", () 
 
   const missingSource = localFloAnswer("Can I move $50 from Gas to Food?", facts, days) ?? "";
   assert.match(missingSource, /don't see Gas/i);
+});
+
+test("Flo does not recommend partial moves that leave the target category negative", () => {
+  const partialFacts: FloFacts = {
+    ...facts,
+    categoryPlan: [
+      { category: "Other", budgeted: 100, spent: 768.62, remaining: -668.62, status: "over", percentUsed: 769 },
+      { category: "Insurance", budgeted: 300, spent: 8.61, remaining: 291.39, status: "available", percentUsed: 3 },
+    ],
+  };
+
+  const move = evaluateFloCategoryMove("Can I move $291 from Insurance to Other?", partialFacts);
+  assert.equal(move?.allowed, false);
+  assert.match(move?.reason ?? "", /still leave Other \$377\.62 over plan/);
+  assert.equal(buildFloCategoryQuickPrompts(partialFacts.categoryPlan ?? []).includes("Can I move $669 from Insurance to Other?"), false);
 });
 
 test("Flo creates deterministic response cards for supported finance questions", () => {
