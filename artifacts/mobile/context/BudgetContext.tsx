@@ -13,6 +13,7 @@ import {
 } from "@/lib/snowball";
 import { forecastBalances, type FinancialEvent } from "@/lib/forecast";
 import { diagnosticErrorCode } from "@/lib/diagnosticPolicy";
+import { decisionDbPayload } from "@/lib/decisionPersistence";
 import { recordDiagnostic } from "@/lib/diagnostics";
 import { isDevDemoMode } from "@/lib/demoMode";
 import { getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isIncomeActiveForMonth } from "@/lib/schedule";
@@ -2075,7 +2076,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setDecisions(previous => [decision, ...previous]);
       return decision;
     }
-    await ensureSaved(supabase.from("decisions").insert({ ...decision, calendar_date: decision.calendar_date ?? null, user_id: user.id }), "Save decision");
+    await ensureSaved(supabase.from("decisions").insert({ id: decision.id, user_id: user.id, created_at: decision.created_at, ...decisionDbPayload(decision) }), "Save decision");
     setDecisions(previous => [decision, ...previous]); return decision;
   }, [user, demoMode]);
 
@@ -2085,7 +2086,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setDecisions(previous => previous.map(item => item.id === decision.id ? decision : item));
       return;
     }
-    await ensureSaved(supabase.from("decisions").update({ name: decision.name, scenario: decision.scenario, result: decision.result, status: decision.status, calendar_date: decision.calendar_date ?? null, applied_change: decision.applied_change ?? null, updated_at: new Date().toISOString() }).eq("id", decision.id).eq("user_id", user.id), "Update decision");
+    await ensureSaved(supabase.from("decisions").update({ ...decisionDbPayload(decision), updated_at: new Date().toISOString() }).eq("id", decision.id).eq("user_id", user.id), "Update decision");
     setDecisions(previous => previous.map(item => item.id === decision.id ? decision : item));
   }, [user, demoMode]);
 
