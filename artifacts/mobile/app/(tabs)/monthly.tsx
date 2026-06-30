@@ -15,7 +15,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { MonthPicker } from "@/components/MonthPicker";
 import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
 import colors from "@/constants/colors";
-import type { Bill, DecisionRecord, Transaction } from "@/context/BudgetContext";
+import type { Bill, BillDateMove, DecisionRecord, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
@@ -27,6 +27,12 @@ import { isValidDateInMonth } from "@/lib/schedule";
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 type TabView = "bills" | "calendar";
+
+function formatShortDate(date: string) {
+  const parsed = new Date(`${date}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return date;
+  return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
 
 function PayStatus({ paid, partial }: { paid: boolean; partial: boolean }) {
   const c = useColors();
@@ -43,8 +49,9 @@ export default function MonthlyScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const {
-    bills, overrides, transactions, goals, decisions, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
+    bills, overrides, billDateMoves, transactions, goals, decisions, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
     getCustomDueDay, setCustomDueDay,
+    removeBillOccurrenceMove, getBillDateMoveForOccurrence,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, settings,
     selectedYear, setSelectedYear, dashboardFilter, setDashboardFilter,
     getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill,
@@ -134,6 +141,23 @@ export default function MonthlyScreen() {
     if (selectedDay === null) return [];
     return monthBills.filter(b => getBillOccurrencesInMonth(b, month, selectedYear).includes(selectedDay));
   }, [monthBills, getBillOccurrencesInMonth, selectedDay, month, selectedYear]);
+
+  const selectedMovedAwayBills = useMemo(() => {
+    if (!selectedDate) return [];
+    return billDateMoves
+      .filter(move => move.from_date === selectedDate)
+      .map(move => ({ move, bill: bills.find(bill => bill.id === move.bill_id) }))
+      .filter((item): item is { move: BillDateMove; bill: Bill } => Boolean(item.bill));
+  }, [billDateMoves, bills, selectedDate]);
+
+  const movedInByBillId = useMemo(() => {
+    if (!selectedDate) return new Map<string, BillDateMove>();
+    return new Map(
+      billDateMoves
+        .filter(move => move.to_date === selectedDate)
+        .map(move => [move.bill_id, move] as const),
+    );
+  }, [billDateMoves, selectedDate]);
 
   const goalsForSelectedDay = useMemo(() => {
     if (selectedDay === null) return [];
@@ -431,7 +455,7 @@ export default function MonthlyScreen() {
   const displayedTxs = selectedDate
     ? txList.filter(t => t.date === selectedDate)
     : [];
-  const selectedDayItemCount = scheduledBillsForDay.length + displayedTxs.length + goalsForSelectedDay.length + plansForSelectedDay.length;
+  const selectedDayItemCount = scheduledBillsForDay.length + selectedMovedAwayBills.length + displayedTxs.length + goalsForSelectedDay.length + plansForSelectedDay.length;
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
 
@@ -809,7 +833,7 @@ export default function MonthlyScreen() {
             <View style={styles.txListHeader}>
               <Text style={[styles.txListTitle, { color: c.foreground }]}>
                 {selectedDate
-                  ? `${selectedDate}${scheduledBillsForDay.length + displayedTxs.length + goalsForSelectedDay.length > 0 ? ` · ${scheduledBillsForDay.length + displayedTxs.length + goalsForSelectedDay.length} item${scheduledBillsForDay.length + displayedTxs.length + goalsForSelectedDay.length !== 1 ? "s" : ""}` : ""}`
+                  ? `${selectedDate}${selectedDayItemCount > 0 ? ` · ${selectedDayItemCount} item${selectedDayItemCount !== 1 ? "s" : ""}` : ""}`
                   : `All Transactions (${txList.length})`}
               </Text>
               <Pressable
@@ -857,6 +881,7 @@ export default function MonthlyScreen() {
                   const iconName = isDebt ? "credit-card" : "file-text";
                   const canReschedule = b.frequency === "monthly";
                   const hasCustomDay = getCustomDueDay(b.id, month, selectedYear) !== undefined;
+                  const movedIn = movedInByBillId.get(b.id);
                   return (
                     <Pressable
                       key={`sched-${b.id}`}
@@ -878,6 +903,11 @@ export default function MonthlyScreen() {
                             {isPaid ? " · paid" : paid > 0 ? ` · $${paid.toFixed(2)} paid` : ""}
                             {hasCustomDay ? " · rescheduled" : ""}
                           </Text>
+                          {movedIn && (
+                            <Text style={[styles.txMovedHint, { color: c.primary }]}>
+                              Moved from {formatShortDate(movedIn.from_date)}
+                            </Text>
+                          )}
                           {canReschedule && (
                             <Text style={[styles.txRescheduleHint, { color: c.primary }]}>
                               Tap to change due day this month
@@ -891,6 +921,36 @@ export default function MonthlyScreen() {
                     </Pressable>
                   );
                 })}
+              </>
+            )}
+
+            {selectedMovedAwayBills.length > 0 && (
+              <>
+                <Text style={[styles.sectionLabel, { color: c.mutedForeground }]}>Moved Away</Text>
+                {selectedMovedAwayBills.map(({ move, bill }) => (
+                  <View
+                    key={`moved-away-${move.id}`}
+                    style={[styles.txRow, { backgroundColor: c.card, borderRadius: colors.radius }]}
+                  >
+                    <View style={styles.txMain}>
+                      <View style={[styles.txIcon, { backgroundColor: c.primary + "20" }]}>
+                        <Feather name="corner-up-right" size={15} color={c.primary} />
+                      </View>
+                      <View style={styles.txBody}>
+                        <Text style={[styles.txNote, { color: c.foreground }]}>{bill.name}</Text>
+                        <Text style={[styles.txDate, { color: c.mutedForeground }]}>
+                          Moved to {formatShortDate(move.to_date)} · one-time bill move
+                        </Text>
+                      </View>
+                      <Pressable
+                        onPress={() => void removeBillOccurrenceMove(move.id)}
+                        style={({ pressed }) => [styles.restoreMoveButton, { backgroundColor: c.primary + "16", opacity: pressed ? 0.7 : 1 }]}
+                      >
+                        <Text style={[styles.restoreMoveText, { color: c.primary }]}>Restore</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ))}
               </>
             )}
 
@@ -956,11 +1016,11 @@ export default function MonthlyScreen() {
             )}
 
             {/* Manual transactions */}
-            {selectedDate && displayedTxs.length === 0 && scheduledBillsForDay.length === 0 && goalsForSelectedDay.length === 0 && plansForSelectedDay.length === 0 ? (
+            {selectedDate && displayedTxs.length === 0 && scheduledBillsForDay.length === 0 && selectedMovedAwayBills.length === 0 && goalsForSelectedDay.length === 0 && plansForSelectedDay.length === 0 ? (
               <EmptyState icon="credit-card" title="No Activity" message="Tap + to log a transaction for this day." />
             ) : displayedTxs.length > 0 ? (
               <>
-                {(scheduledBillsForDay.length > 0 || goalsForSelectedDay.length > 0 || plansForSelectedDay.length > 0) && (
+                {(scheduledBillsForDay.length > 0 || selectedMovedAwayBills.length > 0 || goalsForSelectedDay.length > 0 || plansForSelectedDay.length > 0) && (
                   <Text style={[styles.sectionLabel, { color: c.mutedForeground }]}>Transactions</Text>
                 )}
                 {displayedTxs.map(tx => (
@@ -1314,8 +1374,11 @@ const styles = StyleSheet.create({
   txNote: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   txDate: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
   txRescheduleHint: { fontSize: 10, fontFamily: "Inter_400Regular", marginTop: 2 },
+  txMovedHint: { fontSize: 10, fontFamily: "Inter_700Bold", marginTop: 2 },
   txAmt: { fontSize: 14, fontFamily: "Inter_700Bold", marginLeft: 8 },
   txDelete: { paddingHorizontal: 14, paddingVertical: 11 },
+  restoreMoveButton: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7, marginLeft: 8 },
+  restoreMoveText: { fontSize: 11, fontFamily: "Inter_700Bold" },
   pickerOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.55)" },
   pickerSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 36 },
   pickerHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#555", alignSelf: "center", marginBottom: 16 },

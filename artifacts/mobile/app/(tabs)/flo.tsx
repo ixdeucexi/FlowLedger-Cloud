@@ -24,6 +24,7 @@ import {
   buildFloCategoryQuickPrompts,
   buildFloDecisionScenario,
   evaluateFloBillDateMove,
+  evaluateFloBillMoveUndo,
   evaluateFloCategoryMove,
   floResponseCards,
   isFloPlanCreateCommand,
@@ -31,6 +32,7 @@ import {
   sanitizeFloSummary,
   type FloCategoryMoveResult,
   type FloBillDateMoveResult,
+  type FloBillMoveFact,
   type FloResponseCard,
   type FloChatState,
 } from "@/lib/floPolicy";
@@ -56,7 +58,7 @@ export default function FloScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { bills, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getPaidAmount, moveBillOccurrence, saveDecision, updateDecision, getTransactionsForMonth, categories } = useBudget();
+  const { bills, billDateMoves, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getPaidAmount, moveBillOccurrence, removeBillOccurrenceMove, saveDecision, updateDecision, getTransactionsForMonth, categories } = useBudget();
   const [chat, dispatch] = useReducer(reduceFloChat, initialChat);
   const [cardsByMessageId, setCardsByMessageId] = useState<Record<string, FloResponseCard[]>>({});
   const [decisionByMessageId, setDecisionByMessageId] = useState<Record<string, { scenario: DecisionScenario; result: DecisionResult }>>({});
@@ -65,6 +67,8 @@ export default function FloScreen() {
   const [categoryMoveState, setCategoryMoveState] = useState<Record<string, "idle" | "saving" | "saved" | "failed">>({});
   const [billDateMoveByMessageId, setBillDateMoveByMessageId] = useState<Record<string, FloBillDateMoveResult>>({});
   const [billDateMoveState, setBillDateMoveState] = useState<Record<string, "idle" | "saving" | "saved" | "failed">>({});
+  const [billMoveUndoByMessageId, setBillMoveUndoByMessageId] = useState<Record<string, FloBillMoveFact>>({});
+  const [billMoveUndoState, setBillMoveUndoState] = useState<Record<string, "idle" | "saving" | "saved" | "failed">>({});
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
   const [decisionHubSettings, setDecisionHubSettings] = useState<DecisionHubSettings>(() => readDecisionHubSettings());
   const [input, setInput] = useState("");
@@ -329,6 +333,13 @@ export default function FloScreen() {
       sourceTypes: ["forecast", "bill", "transaction", "account", "debt", "goal", "decision"],
       categoryPlan,
       paycheckPlan,
+      billDateMoves: billDateMoves.map(move => ({
+        id: move.id,
+        billId: move.bill_id,
+        billName: bills.find(bill => bill.id === move.bill_id)?.name ?? "Bill",
+        fromDate: move.from_date,
+        toDate: move.to_date,
+      })),
       decisionHistory: {
         due: decisionHistory.due,
         upcoming: decisionHistory.upcoming,
@@ -343,7 +354,7 @@ export default function FloScreen() {
         })),
       },
     };
-  }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, transactions, upcoming, decisions, forecastConfidence.level, categoryPlan, paycheckPlan, decisionHistory, decisionRiskAlerts]);
+  }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, transactions, upcoming, decisions, forecastConfidence.level, categoryPlan, paycheckPlan, billDateMoves, bills, decisionHistory, decisionRiskAlerts]);
 
   const quickPrompts = useMemo(() => {
     const categoryPrompts = buildFloCategoryQuickPrompts(categoryPlan);
@@ -398,6 +409,11 @@ export default function FloScreen() {
     if (billDateMove?.allowed) {
       setBillDateMoveByMessageId(previous => ({ ...previous, [replyId]: billDateMove }));
       setBillDateMoveState(previous => ({ ...previous, [replyId]: "idle" }));
+    }
+    const undoBillMove = evaluateFloBillMoveUndo(clean, facts);
+    if (undoBillMove) {
+      setBillMoveUndoByMessageId(previous => ({ ...previous, [replyId]: undoBillMove }));
+      setBillMoveUndoState(previous => ({ ...previous, [replyId]: "idle" }));
     }
     if (user) {
       const nextSummary = `Recent topic: ${sanitizeFloSummary(clean).slice(0, 120)}`;
@@ -533,6 +549,18 @@ export default function FloScreen() {
       setBillDateMoveState(previous => ({ ...previous, [messageId]: "saved" }));
     } catch {
       setBillDateMoveState(previous => ({ ...previous, [messageId]: "failed" }));
+    }
+  };
+
+  const undoBillMoveFromFlo = async (messageId: string) => {
+    const move = billMoveUndoByMessageId[messageId];
+    if (!move || billMoveUndoState[messageId] === "saving" || billMoveUndoState[messageId] === "saved") return;
+    setBillMoveUndoState(previous => ({ ...previous, [messageId]: "saving" }));
+    try {
+      await removeBillOccurrenceMove(move.id);
+      setBillMoveUndoState(previous => ({ ...previous, [messageId]: "saved" }));
+    } catch {
+      setBillMoveUndoState(previous => ({ ...previous, [messageId]: "failed" }));
     }
   };
 
@@ -720,6 +748,39 @@ export default function FloScreen() {
                 </Text>
                 {billDateMoveState[message.id] === "failed" ? (
                   <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t move this bill. Try again.</Text>
+                ) : null}
+              </View>
+            ) : null}
+            {message.role === "flo" && billMoveUndoByMessageId[message.id] ? (
+              <View style={styles.decisionActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Undo this bill move"
+                  disabled={billMoveUndoState[message.id] === "saving" || billMoveUndoState[message.id] === "saved"}
+                  onPress={() => void undoBillMoveFromFlo(message.id)}
+                  style={[
+                    styles.saveDecisionButton,
+                    { backgroundColor: colors.warning, opacity: billMoveUndoState[message.id] === "saved" ? 0.7 : 1 },
+                  ]}
+                >
+                  <Feather
+                    name={billMoveUndoState[message.id] === "saved" ? "check-circle" : "rotate-ccw"}
+                    size={16}
+                    color="#fff"
+                  />
+                  <Text style={styles.saveDecisionText}>
+                    {billMoveUndoState[message.id] === "saving"
+                      ? "Restoring..."
+                      : billMoveUndoState[message.id] === "saved"
+                        ? "Move restored"
+                        : `Undo ${billMoveUndoByMessageId[message.id].billName} move`}
+                  </Text>
+                </Pressable>
+                <Text style={[styles.saveDecisionHint, { color: colors.mutedForeground }]}>
+                  Restores this bill from {formatDisplayDate(billMoveUndoByMessageId[message.id].toDate)} back to {formatDisplayDate(billMoveUndoByMessageId[message.id].fromDate)}.
+                </Text>
+                {billMoveUndoState[message.id] === "failed" ? (
+                  <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t restore this bill. Try again.</Text>
                 ) : null}
               </View>
             ) : null}

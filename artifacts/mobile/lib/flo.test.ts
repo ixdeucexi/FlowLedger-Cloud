@@ -6,6 +6,7 @@ import {
   buildFloDecisionScenario,
   buildFloCategoryQuickPrompts,
   evaluateFloBillDateMove,
+  evaluateFloBillMoveUndo,
   evaluateFloCategoryMove,
   floResponseCards,
   isFloPlanCreateCommand,
@@ -66,6 +67,9 @@ const facts: FloFacts = {
     lowestBalanceDate: "2026-07-01",
     status: "safe",
   },
+  billDateMoves: [
+    { id: "move-1", billId: "power", billName: "Power", fromDate: "2026-06-28", toDate: "2026-07-03" },
+  ],
 };
 const days = [{ date: "2026-06-24", balance: 1000 }, { date: "2026-07-01", balance: 800 }];
 
@@ -131,6 +135,13 @@ test("Flo recommends and parses bill date moves from paycheck facts", () => {
   const afterPay = evaluateFloBillDateMove("Move Phone to after payday", facts, "2026-06-24");
   assert.equal(afterPay?.allowed, true);
   assert.equal(afterPay?.toDate, "2026-06-29");
+});
+
+test("Flo shows and can undo moved bill facts", () => {
+  assert.match(localFloAnswer("Show moved bills", facts, days) ?? "", /Power from 2026-06-28 to 2026-07-03/);
+  const undo = evaluateFloBillMoveUndo("Undo Power bill move", facts);
+  assert.equal(undo?.id, "move-1");
+  assert.match(localFloAnswer("Undo Power bill move", facts, days) ?? "", /restore Power/);
 });
 
 test("Flo evaluates category budget moves from verified facts", () => {
@@ -279,4 +290,5 @@ test("Flo fact payload is allowlisted before AI", () => {
   assert.equal(clean.categoryPlan?.[0]?.topTransaction?.name, "Groceries");
   assert.equal(clean.paycheckPlan?.nextPaycheck?.name, "Main Paycheck");
   assert.equal(clean.paycheckPlan?.billsDue.length, 2);
+  assert.equal(clean.billDateMoves?.[0]?.billName, "Power");
 });

@@ -1,6 +1,14 @@
 import { evaluateDecision, type DecisionBaselineDay, type DecisionScenario } from "./decisions";
 import type { PaycheckPlanResult } from "./paycheckPlanning";
 
+export interface FloBillMoveFact {
+  id: string;
+  billId: string;
+  billName: string;
+  fromDate: string;
+  toDate: string;
+}
+
 export interface FloFacts {
   balanceToday: number;
   lowestBalance: number;
@@ -24,6 +32,7 @@ export interface FloFacts {
   categoryPlan?: FloCategoryFact[];
   decisionHistory?: FloDecisionHistoryFacts;
   paycheckPlan?: PaycheckPlanResult;
+  billDateMoves?: FloBillMoveFact[];
 }
 
 export interface FloDecisionHistoryFact {
@@ -213,6 +222,7 @@ export function sanitizeFloFacts(facts: FloFacts): FloFacts {
     })),
     decisionHistory: sanitizeDecisionHistoryFacts(facts.decisionHistory),
     paycheckPlan: facts.paycheckPlan ? sanitizePaycheckPlan(facts.paycheckPlan) : undefined,
+    billDateMoves: sanitizeBillMoveFacts(facts.billDateMoves),
   };
 }
 
@@ -231,6 +241,8 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
   }
   const decisionHistoryAnswer = localDecisionHistoryAnswer(message, facts);
   if (decisionHistoryAnswer) return decisionHistoryAnswer;
+  const movedBillAnswer = localMovedBillAnswer(message, facts);
+  if (movedBillAnswer) return movedBillAnswer;
   const billMove = evaluateFloBillDateMove(message, facts);
   if (billMove) return billMove.reason;
   const paycheckAnswer = localPaycheckAnswer(message, facts);
@@ -280,6 +292,37 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
       : "You have $0.00 in unallocated spending this month. Every recorded expense is linked to a bill, or there are no expense transactions yet.";
   }
   return null;
+}
+
+function sanitizeBillMoveFacts(moves?: FloBillMoveFact[]): FloBillMoveFact[] {
+  return (moves ?? []).slice(0, 12).map(move => ({
+    id: String(move.id ?? "").slice(0, 80),
+    billId: String(move.billId ?? "").slice(0, 80),
+    billName: String(move.billName ?? "Bill").slice(0, 80),
+    fromDate: String(move.fromDate ?? "").slice(0, 10),
+    toDate: String(move.toDate ?? "").slice(0, 10),
+  })).filter(move => move.id && move.billId && move.fromDate && move.toDate);
+}
+
+export function evaluateFloBillMoveUndo(message: string, facts: FloFacts): FloBillMoveFact | null {
+  const lower = message.toLowerCase();
+  if (!/\b(undo|restore|move back|put back|reverse)\b/.test(lower) || !/\b(bill|move|moved|due)\b/.test(lower)) return null;
+  const moves = sanitizeBillMoveFacts(facts.billDateMoves);
+  if (!moves.length) return null;
+  const named = [...moves].sort((a, b) => b.billName.length - a.billName.length).find(move => lower.includes(move.billName.toLowerCase()));
+  return named ?? moves[0];
+}
+
+function localMovedBillAnswer(message: string, facts: FloFacts): string | null {
+  const lower = message.toLowerCase();
+  const asksMovedBills = /\b(show|what|which|list|any)\b/.test(lower) && /\b(moved|rescheduled|bill moves|bill move)\b/.test(lower);
+  const undo = evaluateFloBillMoveUndo(message, facts);
+  if (undo) return `I can restore ${undo.billName} back to ${undo.fromDate}. Tap Undo to remove the one-time move from ${undo.fromDate} to ${undo.toDate}.`;
+  if (!asksMovedBills) return null;
+  const moves = sanitizeBillMoveFacts(facts.billDateMoves);
+  return moves.length
+    ? `Moved bills: ${moves.slice(0, 5).map(move => `${move.billName} from ${move.fromDate} to ${move.toDate}`).join("; ")}.`
+    : "I don't see any one-time moved bills right now.";
 }
 
 export function evaluateFloBillDateMove(message: string, facts: FloFacts, today = new Date().toISOString().slice(0, 10)): FloBillDateMoveResult | null {
