@@ -1159,11 +1159,11 @@ export default function DashboardScreen() {
             </View>
             <View style={styles.categoryPlanHeaderActions}>
               <Pressable
-                onPress={openCategoryBudgetEditor}
+                onPress={() => router.push("/(tabs)/category-budget" as any)}
                 style={({ pressed }) => [styles.categoryBudgetEdit, { backgroundColor: c.primary + "18", opacity: pressed ? 0.75 : 1 }]}
               >
-                <Feather name="edit-3" size={12} color={c.primary} />
-                <Text style={[styles.categoryBudgetEditText, { color: c.primary }]}>Edit</Text>
+                <Feather name="grid" size={12} color={c.primary} />
+                <Text style={[styles.categoryBudgetEditText, { color: c.primary }]}>Manage</Text>
               </Pressable>
               {categoryPlanTotals.remaining < -0.005 ? (
                 <View style={[styles.categoryPlanBadge, { backgroundColor: c.destructive + "18" }]}>

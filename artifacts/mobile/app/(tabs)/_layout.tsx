@@ -130,6 +130,7 @@ function TabContent() {
             }}
           />
         ))}
+        <Tabs.Screen name="category-budget" options={{ href: null }} />
       </Tabs>
       <SaveStatusBanner />
       <DecisionDueModal />

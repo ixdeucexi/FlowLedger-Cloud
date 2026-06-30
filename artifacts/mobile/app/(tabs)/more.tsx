@@ -493,6 +493,19 @@ export default function MoreScreen() {
       {/* ── Categories ── */}
       <SLabel c={c} text="Categories" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <Pressable
+          onPress={() => router.push("/(tabs)/category-budget" as any)}
+          style={({ pressed }) => [styles.categoryBudgetLink, { backgroundColor: c.primary + "18", borderColor: c.primary + "30", opacity: pressed ? 0.75 : 1 }]}
+        >
+          <View style={[styles.dataIcon, { backgroundColor: c.primary + "18" }]}>
+            <Feather name="grid" size={16} color={c.primary} />
+          </View>
+          <View style={styles.switchInfo}>
+            <Text style={[styles.switchLabel, { color: c.foreground }]}>Open Category Budget</Text>
+            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Edit budgets, move money, and ask Flo by category.</Text>
+          </View>
+          <Feather name="chevron-right" size={18} color={c.primary} />
+        </Pressable>
         {categories.map((cat, i) => (
           <View
             key={cat}
@@ -778,6 +791,7 @@ const styles = StyleSheet.create({
   accountRight: { alignItems: "flex-end", gap: 3 },
   reconcileText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
 
+  categoryBudgetLink: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 10 },
   categoryRow: { flexDirection: "row", alignItems: "center", paddingVertical: 11 },
   catDot: { width: 8, height: 8, borderRadius: 4, marginRight: 10 },
   catName: { flex: 1, fontSize: 14, fontFamily: "Inter_500Medium" },
