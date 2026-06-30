@@ -30,6 +30,9 @@ type Filter = "all" | "must" | "flexible" | "optional" | "recurring" | "one-time
 type SortMode = "priority" | "balance" | "interest";
 
 function getSmartBillPriority(bill: Bill): { level: "must" | "flexible" | "optional"; label: string; icon: keyof typeof Feather.glyphMap } {
+  if (bill.smart_priority === "must") return { level: "must", label: "Must-pay", icon: "shield" };
+  if (bill.smart_priority === "flexible") return { level: "flexible", label: "Flexible", icon: "shuffle" };
+  if (bill.smart_priority === "optional") return { level: "optional", label: "Optional", icon: "sliders" };
   const category = (bill.category || "Other").toLowerCase();
   const name = bill.name.toLowerCase();
   const essentialCategory = /(housing|rent|utilities|insurance|transportation|health)/i.test(category);

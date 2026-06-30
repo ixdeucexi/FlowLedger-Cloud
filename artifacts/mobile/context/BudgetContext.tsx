@@ -38,6 +38,7 @@ export interface Bill {
   is_recurring: boolean;
   frequency: "monthly" | "weekly";
   created_at: string;
+  smart_priority?: "must" | "flexible" | "optional" | null;
   include_in_snowball?: boolean;
   snowball_minimum_boost?: number;
   last_reviewed_at?: string;
@@ -498,6 +499,7 @@ function normalizeBillRow(bill: any): Bill {
     amount: Number(bill.amount),
     balance: Number(bill.balance),
     interest_rate: Number(bill.interest_rate),
+    smart_priority: ["must", "flexible", "optional"].includes(bill.smart_priority) ? bill.smart_priority : null,
     include_in_snowball: bill.include_in_snowball !== false,
     snowball_minimum_boost: Number(bill.snowball_minimum_boost ?? 0),
   };

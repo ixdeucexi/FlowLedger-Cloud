@@ -14,6 +14,13 @@ import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
 
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+type SmartPriorityChoice = NonNullable<Bill["smart_priority"]> | "auto";
+const SMART_PRIORITY_OPTIONS: { value: SmartPriorityChoice; label: string; description: string; icon: keyof typeof Feather.glyphMap }[] = [
+  { value: "auto", label: "Auto", description: "Let FlowLedger decide", icon: "zap" },
+  { value: "must", label: "Must-pay", description: "Protect this bill first", icon: "shield" },
+  { value: "flexible", label: "Flexible", description: "Can move if needed", icon: "shuffle" },
+  { value: "optional", label: "Optional", description: "Lowest priority", icon: "sliders" },
+];
 
 interface AddBillModalProps {
   visible: boolean;
@@ -41,6 +48,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
   const [frequency,     setFrequency]     = useState<Bill["frequency"]>("monthly");
   const [billStartDate, setBillStartDate] = useState("");     // YYYY-MM-DD
   const [billEndDate,   setBillEndDate]   = useState("");     // YYYY-MM-DD
+  const [smartPriority, setSmartPriority]  = useState<SmartPriorityChoice>("auto");
   const [showDayPicker, setShowDayPicker] = useState(false);
   const [pickerYear,    setPickerYear]    = useState(() => new Date().getFullYear());
   const [pickerMonth,   setPickerMonth]   = useState(() => new Date().getMonth());
@@ -80,11 +88,13 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
       setFrequency(editBill.frequency ?? "monthly");
       setBillStartDate(editBill.start_date ?? "");
       setBillEndDate(editBill.end_date ?? "");
+      setSmartPriority(editBill.smart_priority ?? "auto");
     } else {
       setName(""); setAmount(""); setCategory("Other");
       setIsDebt(forceDebt ?? false); setBalance(""); setInterestRate(""); setIncludeInSnowball(true);
       setDueDay("1"); setDayOfWeek(0); setIsRecurring(true);
       setFrequency("monthly"); setBillStartDate(""); setBillEndDate("");
+      setSmartPriority("auto");
     }
   }, [editBill, visible, forceDebt]);
 
@@ -109,6 +119,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
       end_date: billEndDate.trim() || undefined,
       is_recurring: isDebt ? true : isRecurring,
       frequency,
+      smart_priority: isDebt ? null : smartPriority === "auto" ? null : smartPriority,
       include_in_snowball: isDebt ? includeInSnowball : false,
     };
     setSaving(true);
@@ -296,6 +307,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
                     Bill repeats every {WEEKDAYS[dayOfWeek]} of the month — typically 4–5 times.
                   </Text>
                 </View>
+
               </>
             )}
 
@@ -376,6 +388,39 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
                     </Pressable>
                   ))}
                 </View>
+                <Text style={lbl}>Smart bill priority</Text>
+                <View style={styles.priorityGrid}>
+                  {SMART_PRIORITY_OPTIONS.map(option => {
+                    const selected = smartPriority === option.value;
+                    return (
+                      <Pressable
+                        key={option.value}
+                        onPress={() => setSmartPriority(option.value)}
+                        style={[
+                          styles.priorityOption,
+                          {
+                            backgroundColor: selected ? c.primary : c.muted,
+                            borderColor: selected ? c.primary : c.border,
+                          },
+                        ]}
+                      >
+                        <View style={styles.priorityOptionTop}>
+                          <Feather
+                            name={option.icon}
+                            size={13}
+                            color={selected ? c.primaryForeground : c.mutedForeground}
+                          />
+                          <Text style={[styles.priorityLabel, { color: selected ? c.primaryForeground : c.foreground }]}>
+                            {option.label}
+                          </Text>
+                        </View>
+                        <Text style={[styles.priorityDescription, { color: selected ? c.primaryForeground : c.mutedForeground }]}>
+                          {option.description}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
               </>
             )}
 
@@ -442,6 +487,11 @@ const styles = StyleSheet.create({
   categoryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
   chip: { paddingHorizontal: 12, paddingVertical: 8 },
   chipText: { fontSize: 13, fontFamily: "Inter_500Medium" },
+  priorityGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
+  priorityOption: { width: "48%", borderRadius: 12, borderWidth: 1, padding: 10, minHeight: 72 },
+  priorityOptionTop: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 5 },
+  priorityLabel: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  priorityDescription: { fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 15 },
   dayPickerBtn: { flexDirection: "row", alignItems: "center", gap: 10, height: 48, borderRadius: 10, paddingHorizontal: 14, borderWidth: 1.5 },
   dayPickerBtnText: { flex: 1, fontSize: 15, fontFamily: "Inter_600SemiBold" },
   dayPickerPanel: { borderRadius: 12, borderWidth: 1, padding: 12, marginBottom: 8 },
