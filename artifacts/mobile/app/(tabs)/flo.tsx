@@ -582,7 +582,7 @@ export default function FloScreen() {
         </View>
         <View style={styles.headerText}>
           <Text style={[styles.title, { color: colors.foreground }]}>Ask Flo</Text>
-          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Your FlowLedger assistant</Text>
+          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Decision checks, plan actions, and history</Text>
         </View>
         <Feather name="message-circle" size={24} color={colors.primaryForeground} />
       </LinearGradient>
@@ -601,7 +601,7 @@ export default function FloScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.historyTitle, { color: colors.foreground }]}>Decision History</Text>
-              <Text style={[styles.historySub, { color: colors.mutedForeground }]}>Planned decisions, follow-through, and actuals.</Text>
+              <Text style={[styles.historySub, { color: colors.mutedForeground }]}>The clean path for upcoming, risky, completed, and changed plans.</Text>
             </View>
           </View>
           <View style={styles.historyStats}>

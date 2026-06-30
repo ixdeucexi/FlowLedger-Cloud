@@ -654,8 +654,8 @@ export default function DashboardScreen() {
     const recentCompleted = [...decisionHistory.completed].sort((left, right) => right.date.localeCompare(left.date))[0];
     const reviewCount = decisionHistory.due.length;
     const totalTracked = reviewCount + decisionHistory.upcoming.length + decisionHistory.completed.length + decisionHistory.changed.length;
-    let title = "Decision Hub";
-    let detail = "Ask Flo before you change the plan.";
+    let title = "Ask Flo before you change the plan";
+    let detail = "Flo is your one place to check, save, and apply money decisions.";
     let tone: "risk" | "review" | "upcoming" | "completed" | "empty" = "empty";
     if (decisionRiskAlerts.length > 0) {
       const alert = decisionRiskAlerts[0];
@@ -958,7 +958,7 @@ export default function DashboardScreen() {
           />
         </View>
         <View style={styles.decisionHubBody}>
-          <Text style={[styles.decisionHubEyebrow, { color: c.mutedForeground }]}>Decision Hub</Text>
+          <Text style={[styles.decisionHubEyebrow, { color: c.mutedForeground }]}>Flo Decision Center</Text>
           <Text style={[styles.decisionHubTitle, { color: c.foreground }]}>{decisionAlert.title}</Text>
           <Text style={[styles.decisionHubDesc, { color: c.mutedForeground }]}>{decisionAlert.detail}</Text>
           <View style={styles.decisionHubStats}>
@@ -1645,15 +1645,6 @@ export default function DashboardScreen() {
                   >
                     <Feather name="list" size={14} color={c.foreground} />
                     <Text style={[styles.categoryDetailActionText, { color: c.foreground }]}>Transactions</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => {
-                      setSelectedCategory(null);
-                      router.push("/(tabs)/flo" as any);
-                    }}
-                    style={({ pressed }) => [styles.categoryDetailAction, { backgroundColor: c.primary + "18", opacity: pressed ? 0.75 : 1 }]}
-                  >
-                    <Text style={[styles.categoryDetailActionText, { color: c.primary }]}>Ask Flo</Text>
                   </Pressable>
                 </View>
               </>

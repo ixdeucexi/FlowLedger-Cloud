@@ -270,7 +270,7 @@ export default function MoreScreen() {
       </View>
 
       {/* ── Accounts and reconciliation ── */}
-      <SLabel c={c} text="Decision Hub" />
+      <SLabel c={c} text="Flo Decision Center" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <Pressable
           onPress={() => updateDecisionHubSetting({ categoryRolloverEnabled: !decisionHubSettings.categoryRolloverEnabled })}
@@ -313,7 +313,7 @@ export default function MoreScreen() {
               ? "Paycheck planning is on. Dashboard will show what is due before the next payday."
               : decisionHubSettings.categoryRolloverEnabled
                 ? "Rollover is on. Positive balances build up; negative balances reduce next month."
-                : "Decision Hub extras are optional. Turn on the planning tools you want to see."}
+                : "Flo decision extras are optional. Turn on the planning tools you want to see."}
           </Text>
         </View>
       </View>
