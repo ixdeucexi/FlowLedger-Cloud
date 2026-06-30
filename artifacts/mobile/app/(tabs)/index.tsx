@@ -883,11 +883,6 @@ export default function DashboardScreen() {
         <Feather name="chevron-right" size={18} color={c.mutedForeground} />
       </Pressable>
 
-      <Pressable onPress={() => router.push("/(tabs)/flo" as any)} style={({pressed})=>[styles.whatBtn,{backgroundColor:c.primary+"12",borderColor:c.primary+"45",borderRadius:colors.radius,opacity:pressed?.8:1}]}>
-        <View style={[styles.whatBtnIcon,{backgroundColor:c.primary}]}><Text style={{color:c.primaryForeground,fontFamily:"Inter_700Bold",fontSize:18}}>F</Text></View>
-        <View style={{flex:1}}><Text style={[styles.whatBtnText,{color:c.foreground}]}>What are you considering?</Text><Text style={{color:c.mutedForeground,fontSize:12,marginTop:2}}>Ask Flo before you change the plan.</Text></View><Feather name="chevron-right" size={18} color={c.primary}/>
-      </Pressable>
-
       {categoryPlan.length > 0 && (
         <View style={{ marginBottom: 14 }}>
           <View style={styles.categoryPlanHeader}>
