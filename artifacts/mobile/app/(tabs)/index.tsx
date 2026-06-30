@@ -720,6 +720,41 @@ export default function DashboardScreen() {
     }
     return { title, detail, riskCount: decisionHubSettings.plannedDecisionReviewAlertsEnabled ? decisionRiskAlerts.length : 0, reviewCount, upcomingCount: decisionHistory.upcoming.length, completedCount: decisionHistory.completed.length, tone };
   }, [decisionHistory, decisionRiskAlerts, decisionHubSettings.plannedDecisionReviewAlertsEnabled, now, todayIso]);
+  const monthlyReview = useMemo(() => {
+    const overCategory = [...categoryPlan]
+      .filter(row => row.remaining < -0.005)
+      .sort((left, right) => left.remaining - right.remaining)[0];
+    const bestCategory = [...categoryPlan]
+      .filter(row => row.remaining > 0.005 && row.budgeted > 0)
+      .sort((left, right) => right.remaining - left.remaining)[0];
+    const totalDebtMinimums = bills
+      .filter(bill => bill.is_debt && bill.balance > 0)
+      .reduce((sum, bill) => sum + bill.amount + Number(bill.snowball_minimum_boost ?? 0), 0);
+    const savingsPct = savingsData.totalTarget > 0
+      ? Math.min(100, (savingsData.totalSaved / savingsData.totalTarget) * 100)
+      : 0;
+    const billDelta = stats.totalDue - stats.totalPaid;
+    const headline = billDelta <= 0.005
+      ? "Bills are covered"
+      : `${stats.unpaidCount} bill${stats.unpaidCount === 1 ? "" : "s"} still open`;
+    const nextStep = overCategory
+      ? `Review ${overCategory.category}; it is over by $${Math.abs(overCategory.remaining).toFixed(0)}.`
+      : bestCategory
+        ? `${bestCategory.category} has the best cushion at $${bestCategory.remaining.toFixed(0)} left.`
+        : "Keep reviewing actuals as they come in.";
+    return {
+      headline,
+      billDelta,
+      overCategory,
+      bestCategory,
+      completed: decisionHistory.completed.length,
+      changed: decisionHistory.changed.length + decisionHistory.due.length,
+      totalDebtMinimums,
+      savingsPct,
+      nextStep,
+      prompt: "What should I improve next month?",
+    };
+  }, [bills, categoryPlan, decisionHistory, savingsData.totalSaved, savingsData.totalTarget, stats.totalDue, stats.totalPaid, stats.unpaidCount]);
   const nextWeekRisk = useMemo(() => {
     if (!decisionHubSettings.lowBalanceAlertsEnabled) return null;
     const weekEndDate = new Date(now);
@@ -1129,6 +1164,43 @@ export default function DashboardScreen() {
         </View>
         <Feather name="chevron-right" size={18} color={c.mutedForeground} />
       </Pressable>
+
+      <View style={[styles.monthlyReviewCard, { backgroundColor: c.card, borderColor: c.border }]}>
+        <View style={styles.monthlyReviewHeader}>
+          <View style={[styles.monthlyReviewIcon, { backgroundColor: c.success + "18" }]}>
+            <Feather name="bar-chart-2" size={17} color={c.success} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.decisionHubEyebrow, { color: c.mutedForeground }]}>Monthly Review</Text>
+            <Text style={[styles.monthlyReviewTitle, { color: c.foreground }]}>{monthlyReview.headline}</Text>
+            <Text style={[styles.monthlyReviewDesc, { color: c.mutedForeground }]}>{monthlyReview.nextStep}</Text>
+          </View>
+          <Pressable
+            onPress={() => openFloWithPrompt(monthlyReview.prompt)}
+            style={({ pressed }) => [styles.monthlyReviewAsk, { backgroundColor: c.primary + "18", opacity: pressed ? 0.75 : 1 }]}
+          >
+            <Text style={[styles.monthlyReviewAskText, { color: c.primary }]}>Ask Flo</Text>
+          </Pressable>
+        </View>
+        <View style={styles.monthlyReviewGrid}>
+          <View style={[styles.monthlyReviewMetric, { backgroundColor: c.muted }]}>
+            <Text style={[styles.monthlyReviewLabel, { color: c.mutedForeground }]}>Bills left</Text>
+            <Text style={[styles.monthlyReviewValue, { color: monthlyReview.billDelta > 0 ? c.warning : c.success }]}>${Math.max(0, monthlyReview.billDelta).toFixed(0)}</Text>
+          </View>
+          <View style={[styles.monthlyReviewMetric, { backgroundColor: c.muted }]}>
+            <Text style={[styles.monthlyReviewLabel, { color: c.mutedForeground }]}>Decisions</Text>
+            <Text style={[styles.monthlyReviewValue, { color: monthlyReview.changed > 0 ? c.warning : c.success }]}>{monthlyReview.completed}/{monthlyReview.changed + monthlyReview.completed}</Text>
+          </View>
+          <View style={[styles.monthlyReviewMetric, { backgroundColor: c.muted }]}>
+            <Text style={[styles.monthlyReviewLabel, { color: c.mutedForeground }]}>Debt mins</Text>
+            <Text style={[styles.monthlyReviewValue, { color: c.destructive }]}>${monthlyReview.totalDebtMinimums.toFixed(0)}</Text>
+          </View>
+          <View style={[styles.monthlyReviewMetric, { backgroundColor: c.muted }]}>
+            <Text style={[styles.monthlyReviewLabel, { color: c.mutedForeground }]}>Savings</Text>
+            <Text style={[styles.monthlyReviewValue, { color: c.success }]}>{monthlyReview.savingsPct.toFixed(0)}%</Text>
+          </View>
+        </View>
+      </View>
 
       {paycheckPlan && (
         <View style={[styles.paycheckPlanCard, { backgroundColor: c.card, borderColor: paycheckPlan.status === "risk" ? c.destructive + "80" : paycheckPlan.status === "tight" ? c.warning + "80" : c.border }]}>
@@ -2272,6 +2344,17 @@ const styles = StyleSheet.create({
   decisionHubDesc: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 2 },
   decisionHubStats: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
   decisionHubStat: { fontSize: 11, fontFamily: "Inter_700Bold" },
+  monthlyReviewCard: { borderWidth: 1, borderRadius: 16, padding: 14, marginBottom: 14 },
+  monthlyReviewHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  monthlyReviewIcon: { width: 40, height: 40, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  monthlyReviewTitle: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
+  monthlyReviewDesc: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 2 },
+  monthlyReviewAsk: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
+  monthlyReviewAskText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
+  monthlyReviewGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
+  monthlyReviewMetric: { flexBasis: "48%", flexGrow: 1, borderRadius: 12, padding: 10 },
+  monthlyReviewLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", marginBottom: 4 },
+  monthlyReviewValue: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
   paycheckPlanCard: { borderWidth: 1, borderRadius: 16, padding: 14, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
   paycheckPlanHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
   paycheckPlanIcon: { width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center" },

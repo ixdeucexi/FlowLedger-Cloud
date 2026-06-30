@@ -300,6 +300,8 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
   if (billMove) return billMove.reason;
   const paycheckAnswer = localPaycheckAnswer(message, facts);
   if (paycheckAnswer) return paycheckAnswer;
+  const monthlyReviewAnswer = localMonthlyReviewAnswer(message, facts);
+  if (monthlyReviewAnswer) return monthlyReviewAnswer;
   const categoryAnswer = localCategoryAnswer(message, facts);
   if (categoryAnswer) return categoryAnswer;
   if (lower.includes("why") && (lower.includes("negative") || lower.includes("balance"))) {
@@ -543,6 +545,33 @@ function localPaycheckAnswer(message: string, facts: FloFacts): string | null {
     return `Yes, but tight. You can spend about $${plan.safeToSpend.toFixed(2)} before your next paycheck on ${nextPayDate}. Your lowest balance in that window is $${plan.lowestBalance.toFixed(2)} on ${plan.lowestBalanceDate}.`;
   }
   return `You can spend about $${plan.safeToSpend.toFixed(2)} before your next paycheck on ${nextPayDate}. I see ${plan.billsDue.length} bill${plan.billsDue.length === 1 ? "" : "s"} due before then totaling $${plan.billsTotal.toFixed(2)}, and your lowest balance should be $${plan.lowestBalance.toFixed(2)} on ${plan.lowestBalanceDate}.`;
+}
+
+function localMonthlyReviewAnswer(message: string, facts: FloFacts): string | null {
+  const lower = message.toLowerCase();
+  if (!/(monthly review|review.*month|improve next month|next month|what should i improve|biggest leak|best win)/i.test(lower)) return null;
+  const categories = facts.categoryPlan ?? [];
+  const over = [...categories].filter(item => item.remaining < 0).sort((left, right) => left.remaining - right.remaining)[0];
+  const best = [...categories].filter(item => item.remaining > 0).sort((left, right) => right.remaining - left.remaining)[0];
+  const history = sanitizeDecisionHistoryFacts(facts.decisionHistory);
+  const reviewCount = history.due.length + (history.risky?.length ?? 0);
+  const billText = facts.billsLeftCount > 0
+    ? `You still have ${facts.billsLeftCount} bill${facts.billsLeftCount === 1 ? "" : "s"} left totaling $${facts.billsLeftAmount.toFixed(2)}.`
+    : "Your bill checklist looks caught up.";
+  const categoryText = over
+    ? `Biggest leak: ${over.category} is $${Math.abs(over.remaining).toFixed(2)} over plan.`
+    : best
+      ? `Best cushion: ${best.category} has $${best.remaining.toFixed(2)} left.`
+      : "I don't see category budget data yet.";
+  const decisionText = reviewCount > 0
+    ? `${reviewCount} planned decision${reviewCount === 1 ? " needs" : "s need"} review before you trust next month.`
+    : `${history.completed.length} decision${history.completed.length === 1 ? "" : "s"} completed and no planned decisions need review right now.`;
+  const improvement = over
+    ? `For next month, tighten ${over.category}, move money into it from a category with room, or lower spending before it repeats.`
+    : facts.monthlyRemaining < 0
+      ? "For next month, fix the monthly shortfall first before adding new plans."
+      : "For next month, keep the cushion protected and decide whether leftover money should go to savings, debt, or upcoming bills.";
+  return `${billText} ${categoryText} ${decisionText} ${improvement}`;
 }
 
 function sanitizeDecisionHistoryFacts(history?: FloDecisionHistoryFacts): FloDecisionHistoryFacts {
