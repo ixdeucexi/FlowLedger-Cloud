@@ -120,6 +120,8 @@ test("Flo answers decision history questions from verified facts", () => {
   assert.match(localFloAnswer("How did my last decision go?", facts, days) ?? "", /Dinner/);
   assert.match(localFloAnswer("Show my cancelled decisions", facts, days) ?? "", /Trip/);
   assert.match(localFloAnswer("Are any planned decisions no longer safe?", facts, days) ?? "", /Concert/);
+  assert.match(localFloAnswer("Which planned decisions should I reduce or postpone?", facts, days) ?? "", /Fireworks/);
+  assert.match(localFloAnswer("Reduce planned spending", facts, days) ?? "", /postpone it, lower the amount, or cancel it/i);
 });
 
 test("Flo answers paycheck planning questions from verified facts", () => {

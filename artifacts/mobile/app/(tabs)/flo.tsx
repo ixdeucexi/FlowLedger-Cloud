@@ -90,7 +90,10 @@ export default function FloScreen() {
   const [completeActual, setCompleteActual] = useState("");
   const [postponePlan, setPostponePlan] = useState<DecisionRecord | null>(null);
   const [postponeDate, setPostponeDate] = useState("");
+  const [lowerPlan, setLowerPlan] = useState<DecisionRecord | null>(null);
+  const [lowerAmount, setLowerAmount] = useState("");
   const [historyActionState, setHistoryActionState] = useState<Record<string, "saving" | "failed">>({});
+  const [reducePlanByMessageId, setReducePlanByMessageId] = useState<Record<string, DecisionHistoryItem>>({});
   const scrollRef = useRef<ScrollView>(null);
   const handledPromptRef = useRef<string | null>(null);
   const now = useMemo(() => new Date(), []);
@@ -460,6 +463,10 @@ export default function FloScreen() {
       setBillMoveUndoByMessageId(previous => ({ ...previous, [replyId]: undoBillMove }));
       setBillMoveUndoState(previous => ({ ...previous, [replyId]: "idle" }));
     }
+    const reductionTarget = pickReductionTarget(clean);
+    if (reductionTarget) {
+      setReducePlanByMessageId(previous => ({ ...previous, [replyId]: reductionTarget }));
+    }
     if (user) {
       const nextSummary = `Recent topic: ${sanitizeFloSummary(clean).slice(0, 120)}`;
       setSummary(nextSummary);
@@ -529,6 +536,43 @@ export default function FloScreen() {
     setPostponeDate(currentDate > today ? currentDate : today);
   };
 
+  const openLowerPlan = (id: string) => {
+    const decision = findDecision(id);
+    if (!decision) return;
+    setLowerPlan(decision);
+    setLowerAmount(String(Math.abs(decision.scenario.amount)));
+  };
+
+  const saveLowerPlanAmount = async () => {
+    if (!lowerPlan) return;
+    const amount = Math.abs(Number(lowerAmount));
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    setHistoryActionState(previous => ({ ...previous, [lowerPlan.id]: "saving" }));
+    try {
+      const scenario = { ...lowerPlan.scenario, amount };
+      const scenarioDate = scenario.date ?? lowerPlan.calendar_date ?? today;
+      const forecast = baseline.filter(day => day.date >= scenarioDate);
+      const result = evaluateDecision(forecast.length ? forecast : [{ date: scenarioDate, balance: 0 }], scenario, settings.safety_floor);
+      await updateDecision({
+        ...lowerPlan,
+        scenario,
+        result,
+        calendar_date: scenarioDate,
+        next_due_date: scenarioDate,
+        applied_change: { ...(lowerPlan.applied_change ?? {}), kind: "decision_amount_reduced", amount },
+      });
+      setLowerPlan(null);
+      setLowerAmount("");
+      setHistoryActionState(previous => {
+        const next = { ...previous };
+        delete next[lowerPlan.id];
+        return next;
+      });
+    } catch {
+      setHistoryActionState(previous => ({ ...previous, [lowerPlan.id]: "failed" }));
+    }
+  };
+
   const postponeSelectedPlan = async () => {
     if (!postponePlan || !postponeDate) return;
     setHistoryActionState(previous => ({ ...previous, [postponePlan.id]: "saving" }));
@@ -568,6 +612,18 @@ export default function FloScreen() {
     } catch {
       setHistoryActionState(previous => ({ ...previous, [id]: "failed" }));
     }
+  };
+
+  const pickReductionTarget = (message: string): DecisionHistoryItem | null => {
+    if (!/(reduce|lower|cut|postpone|planned spending|spending)/i.test(message) || !/(plan|planned|decision|spending)/i.test(message)) return null;
+    const candidates = [
+      ...riskyDecisionItems,
+      ...decisionHistory.due,
+      ...decisionHistory.upcoming,
+    ];
+    return candidates
+      .filter(item => item.status === "upcoming" || item.status === "due" || item.status === "saved")
+      .sort((left, right) => right.plannedAmount - left.plannedAmount || left.date.localeCompare(right.date))[0] ?? null;
   };
 
   const applyCategoryMoveFromFlo = (messageId: string) => {
@@ -947,6 +1003,42 @@ export default function FloScreen() {
                 ) : null}
               </View>
             ) : null}
+            {message.role === "flo" && reducePlanByMessageId[message.id] ? (
+              <View style={styles.decisionActions}>
+                <View style={[styles.reductionTargetCard, { borderColor: colors.border, backgroundColor: colors.muted }]}>
+                  <Text style={[styles.reductionTargetLabel, { color: colors.mutedForeground }]}>Recommended plan to adjust</Text>
+                  <Text style={[styles.reductionTargetName, { color: colors.foreground }]} numberOfLines={1}>{reducePlanByMessageId[message.id].name}</Text>
+                  <Text style={[styles.reductionTargetMeta, { color: colors.mutedForeground }]}>
+                    {reducePlanByMessageId[message.id].amountLabel} · {formatDisplayDate(reducePlanByMessageId[message.id].date)}
+                  </Text>
+                </View>
+                <View style={styles.reductionActions}>
+                  <Pressable
+                    onPress={() => openPostponePlan(reducePlanByMessageId[message.id].id)}
+                    style={({ pressed }) => [styles.reductionButton, { backgroundColor: colors.primary + "18", opacity: pressed ? 0.75 : 1 }]}
+                  >
+                    <Text style={[styles.reductionButtonText, { color: colors.primary }]}>Postpone</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => openLowerPlan(reducePlanByMessageId[message.id].id)}
+                    style={({ pressed }) => [styles.reductionButton, { backgroundColor: colors.warning + "18", opacity: pressed ? 0.75 : 1 }]}
+                  >
+                    <Text style={[styles.reductionButtonText, { color: colors.warning }]}>Lower amount</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => void cancelPlan(reducePlanByMessageId[message.id].id)}
+                    style={({ pressed }) => [styles.reductionButton, { backgroundColor: colors.destructive + "14", opacity: pressed ? 0.75 : 1 }]}
+                  >
+                    <Text style={[styles.reductionButtonText, { color: colors.destructive }]}>
+                      {historyActionState[reducePlanByMessageId[message.id].id] === "saving" ? "Saving" : "Cancel plan"}
+                    </Text>
+                  </Pressable>
+                </View>
+                <Text style={[styles.saveDecisionHint, { color: colors.mutedForeground }]}>
+                  Each option updates the saved plan and recalculates the forecast.
+                </Text>
+              </View>
+            ) : null}
           </View>
         ))}
 
@@ -1010,6 +1102,40 @@ export default function FloScreen() {
               </Pressable>
               <Pressable onPress={() => void postponeSelectedPlan()} style={[styles.followButton, { backgroundColor: colors.primary }]}>
                 <Text style={styles.followPrimaryText}>Save date</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={!!lowerPlan} transparent animationType="slide" onRequestClose={() => setLowerPlan(null)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setLowerPlan(null)}>
+          <Pressable style={[styles.followSheet, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => {}}>
+            <View style={[styles.sheetHandle, { backgroundColor: colors.mutedForeground }]} />
+            <Text style={[styles.followTitle, { color: colors.foreground }]}>Lower planned amount</Text>
+            <Text style={[styles.followSub, { color: colors.mutedForeground }]}>
+              Enter the new amount for {lowerPlan?.name ?? "this plan"}. Flo will recalculate the forecast before saving.
+            </Text>
+            <View style={[styles.actualInputWrap, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+              <Text style={[styles.actualPrefix, { color: colors.mutedForeground }]}>$</Text>
+              <TextInput
+                value={lowerAmount}
+                onChangeText={setLowerAmount}
+                keyboardType="decimal-pad"
+                placeholder="0.00"
+                placeholderTextColor={colors.mutedForeground}
+                style={[styles.actualInput, { color: colors.foreground }]}
+              />
+            </View>
+            {lowerPlan && historyActionState[lowerPlan.id] === "failed" ? (
+              <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t lower this plan. Try again.</Text>
+            ) : null}
+            <View style={styles.followActions}>
+              <Pressable onPress={() => setLowerPlan(null)} style={[styles.followButton, { backgroundColor: colors.muted }]}>
+                <Text style={[styles.followButtonText, { color: colors.mutedForeground }]}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={() => void saveLowerPlanAmount()} style={[styles.followButton, { backgroundColor: colors.warning }]}>
+                <Text style={styles.followPrimaryText}>Save lower amount</Text>
               </Pressable>
             </View>
           </Pressable>
@@ -1253,6 +1379,13 @@ const styles = StyleSheet.create({
   saveDecisionText: { color: "#fff", fontSize: 13, fontFamily: "Inter_700Bold" },
   saveDecisionHint: { fontSize: 11, lineHeight: 15, textAlign: "center" },
   saveDecisionError: { fontSize: 11, fontFamily: "Inter_600SemiBold", textAlign: "center" },
+  reductionTargetCard: { borderWidth: 1, borderRadius: 12, padding: 10, gap: 2 },
+  reductionTargetLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.5 },
+  reductionTargetName: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  reductionTargetMeta: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  reductionActions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  reductionButton: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 8 },
+  reductionButtonText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   loadingBubble: { flexDirection: "row", alignItems: "center", gap: 9 },
   composerArea: { borderTopWidth: 1, paddingHorizontal: 12, paddingTop: 10 },
   quickPromptScroller: { marginBottom: 8, maxHeight: 38 },

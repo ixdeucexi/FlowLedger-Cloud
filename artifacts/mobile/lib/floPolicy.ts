@@ -568,12 +568,23 @@ function sanitizeDecisionHistoryFacts(history?: FloDecisionHistoryFacts): FloDec
 function localDecisionHistoryAnswer(message: string, facts: FloFacts): string | null {
   const lower = message.toLowerCase();
   const asksDecision = /(decision|plan|planned|review|completed|cancelled|canceled|postponed|coming up|upcoming|last decision)/i.test(lower);
-  if (!asksDecision) return null;
+  const asksReduction = /((reduce|lower|cut|postpone).*(planned|decision|spending))|((planned|decision|spending).*(reduce|lower|cut|postpone))|(planned spending)/i.test(lower);
+  if (!asksDecision && !asksReduction) return null;
   const history = sanitizeDecisionHistoryFacts(facts.decisionHistory);
   const list = (items: FloDecisionHistoryFact[]) => items
     .slice(0, 3)
     .map(item => `${item.name} on ${item.date} (${item.actualAmount === undefined ? `planned $${item.plannedAmount.toFixed(2)}` : `planned $${item.plannedAmount.toFixed(2)}, actual $${item.actualAmount.toFixed(2)}`})`)
     .join("; ");
+
+  if (asksReduction) {
+    const target = [...(history.risky ?? []), ...history.due, ...history.upcoming]
+      .sort((left, right) => right.plannedAmount - left.plannedAmount || left.date.localeCompare(right.date))[0];
+    if (!target) return "I don't see upcoming planned decisions to reduce or postpone right now.";
+    const reason = (history.risky ?? []).some(item => item.name === target.name && item.date === target.date)
+      ? "because it is no longer safe in the current forecast"
+      : "because it is one of the largest upcoming planned decisions";
+    return `The best plan to adjust is ${target.name} on ${target.date} for $${target.plannedAmount.toFixed(2)} ${reason}. You can postpone it, lower the amount, or cancel it.`;
+  }
 
   if (/no longer safe|risky|unsafe|risk|became unsafe/.test(lower)) {
     return (history.risky ?? []).length
