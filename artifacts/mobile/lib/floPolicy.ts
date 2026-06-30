@@ -21,6 +21,23 @@ export interface FloFacts {
   forecastConfidence: string;
   sourceTypes: string[];
   categoryPlan?: FloCategoryFact[];
+  decisionHistory?: FloDecisionHistoryFacts;
+}
+
+export interface FloDecisionHistoryFact {
+  name: string;
+  date: string;
+  plannedAmount: number;
+  actualAmount?: number;
+  varianceLabel?: string;
+  status: "upcoming" | "due" | "completed" | "postponed" | "cancelled" | "saved";
+}
+
+export interface FloDecisionHistoryFacts {
+  due: FloDecisionHistoryFact[];
+  upcoming: FloDecisionHistoryFact[];
+  completed: FloDecisionHistoryFact[];
+  changed: FloDecisionHistoryFact[];
 }
 
 export interface FloCategoryFact {
@@ -182,6 +199,7 @@ export function sanitizeFloFacts(facts: FloFacts): FloFacts {
         date: String(item.topTransaction.date ?? "").slice(0, 10),
       } : undefined,
     })),
+    decisionHistory: sanitizeDecisionHistoryFacts(facts.decisionHistory),
   };
 }
 
@@ -198,6 +216,8 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
         : "Not safely.";
     return `${lead} ${result.explanation} Your lowest projected balance would be $${result.lowestBalance.toFixed(0)} on ${result.lowestBalanceDate}.`;
   }
+  const decisionHistoryAnswer = localDecisionHistoryAnswer(message, facts);
+  if (decisionHistoryAnswer) return decisionHistoryAnswer;
   const categoryAnswer = localCategoryAnswer(message, facts);
   if (categoryAnswer) return categoryAnswer;
   if (lower.includes("why") && (lower.includes("negative") || lower.includes("balance"))) {
@@ -241,6 +261,64 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
     return facts.unallocatedTransactionCount > 0
       ? `You have spent $${facts.unallocatedSpendingThisMonth.toFixed(2)} across ${countLabel} this month. These are expenses that are not linked to a bill.`
       : "You have $0.00 in unallocated spending this month. Every recorded expense is linked to a bill, or there are no expense transactions yet.";
+  }
+  return null;
+}
+
+function sanitizeDecisionHistoryFacts(history?: FloDecisionHistoryFacts): FloDecisionHistoryFacts {
+  const cleanItems = (items?: FloDecisionHistoryFact[]) => (items ?? []).slice(0, 8).map(item => ({
+    name: String(item.name ?? "Decision").slice(0, 80),
+    date: String(item.date ?? "").slice(0, 10),
+    plannedAmount: num(item.plannedAmount),
+    actualAmount: item.actualAmount === undefined ? undefined : num(item.actualAmount),
+    varianceLabel: item.varianceLabel ? String(item.varianceLabel).slice(0, 40) : undefined,
+    status: ["upcoming", "due", "completed", "postponed", "cancelled", "saved"].includes(String(item.status))
+      ? item.status
+      : "upcoming",
+  })) as FloDecisionHistoryFact[];
+  return {
+    due: cleanItems(history?.due),
+    upcoming: cleanItems(history?.upcoming),
+    completed: cleanItems(history?.completed),
+    changed: cleanItems(history?.changed),
+  };
+}
+
+function localDecisionHistoryAnswer(message: string, facts: FloFacts): string | null {
+  const lower = message.toLowerCase();
+  const asksDecision = /(decision|plan|planned|review|completed|cancelled|canceled|postponed|coming up|upcoming|last decision)/i.test(lower);
+  if (!asksDecision) return null;
+  const history = sanitizeDecisionHistoryFacts(facts.decisionHistory);
+  const list = (items: FloDecisionHistoryFact[]) => items
+    .slice(0, 3)
+    .map(item => `${item.name} on ${item.date} (${item.actualAmount === undefined ? `planned $${item.plannedAmount.toFixed(2)}` : `planned $${item.plannedAmount.toFixed(2)}, actual $${item.actualAmount.toFixed(2)}`})`)
+    .join("; ");
+
+  if (/need.*review|review|past due|overdue/.test(lower)) {
+    return history.due.length
+      ? `You have ${history.due.length} decision${history.due.length === 1 ? "" : "s"} needing review: ${list(history.due)}. Complete, postpone, or cancel them from Decision History.`
+      : "You don't have any planned decisions needing review right now.";
+  }
+  if (/coming up|upcoming|planned decisions?|what.*planned|next plans?/.test(lower)) {
+    return history.upcoming.length
+      ? `Your upcoming planned decisions are ${list(history.upcoming)}.`
+      : "I don't see any upcoming planned decisions right now.";
+  }
+  if (/last decision|how.*last|last.*go/.test(lower)) {
+    const last = [...history.completed].sort((left, right) => right.date.localeCompare(left.date))[0];
+    if (!last) return "I don't see a completed decision yet. Complete one from Decision History and I'll compare actual versus planned.";
+    const variance = last.varianceLabel ? ` ${last.varianceLabel}.` : "";
+    return `${last.name} was completed on ${last.date}. It was planned at $${last.plannedAmount.toFixed(2)}${last.actualAmount === undefined ? "" : ` and actual was $${last.actualAmount.toFixed(2)}`}.${variance}`;
+  }
+  if (/cancelled|canceled|postponed|changed/.test(lower)) {
+    return history.changed.length
+      ? `Your changed decisions are ${list(history.changed)}.`
+      : "I don't see any cancelled or postponed decisions right now.";
+  }
+  if (/completed|done|finished/.test(lower)) {
+    return history.completed.length
+      ? `Your completed decisions are ${list(history.completed)}.`
+      : "I don't see any completed decisions yet.";
   }
   return null;
 }

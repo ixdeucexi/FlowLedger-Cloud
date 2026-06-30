@@ -216,6 +216,11 @@ export default function FloScreen() {
     });
   }, [categories, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, now, decisionHubSettings.categoryRolloverEnabled]);
 
+  const decisionHistory = useMemo(
+    () => buildDecisionHistory(decisions.filter(decision => decisionStillHasSource(decision, transactions)), today, now.toISOString()),
+    [decisions, transactions, today, now],
+  );
+
   const facts = useMemo<FloFacts>(() => {
     const lowest = baseline.reduce(
       (best, day) => day.balance < best.balance ? day : best,
@@ -254,23 +259,26 @@ export default function FloScreen() {
       forecastConfidence: forecastConfidence.level,
       sourceTypes: ["forecast", "bill", "transaction", "account", "debt", "goal", "decision"],
       categoryPlan,
+      decisionHistory: {
+        due: decisionHistory.due,
+        upcoming: decisionHistory.upcoming,
+        completed: decisionHistory.completed,
+        changed: decisionHistory.changed,
+      },
     };
-  }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, transactions, upcoming, decisions, forecastConfidence.level, categoryPlan]);
+  }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, transactions, upcoming, decisions, forecastConfidence.level, categoryPlan, decisionHistory]);
 
   const quickPrompts = useMemo(() => {
     const categoryPrompts = buildFloCategoryQuickPrompts(categoryPlan);
     return [
+      ...(decisionHistory.due.length ? ["What decisions need review?"] : []),
+      ...(decisionHistory.upcoming.length ? ["What planned decisions are coming up?"] : []),
       ...categoryPrompts,
       "Can I afford $500?",
       "What bills are due next?",
       "Why does my balance run low?",
     ].slice(0, 8);
-  }, [categoryPlan]);
-
-  const decisionHistory = useMemo(
-    () => buildDecisionHistory(decisions.filter(decision => decisionStillHasSource(decision, transactions)), today, now.toISOString()),
-    [decisions, transactions, today],
-  );
+  }, [categoryPlan, decisionHistory]);
 
   const send = async (text = input) => {
     const clean = text.trim();

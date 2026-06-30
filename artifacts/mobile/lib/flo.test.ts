@@ -38,6 +38,12 @@ const facts: FloFacts = {
   activePlans: 0,
   forecastConfidence: "high",
   sourceTypes: ["forecast", "bill", "transaction", "account", "debt", "goal", "decision"],
+  decisionHistory: {
+    due: [{ name: "Fireworks", date: "2026-07-03", plannedAmount: 500, status: "due" }],
+    upcoming: [{ name: "School clothes", date: "2026-07-20", plannedAmount: 250, status: "upcoming" }],
+    completed: [{ name: "Dinner", date: "2026-07-02", plannedAmount: 100, actualAmount: 80, varianceLabel: "-$20.00 vs plan", status: "completed" }],
+    changed: [{ name: "Trip", date: "2026-07-18", plannedAmount: 400, status: "cancelled" }],
+  },
   categoryPlan: [
     { category: "Food", budgeted: 500, spent: 560, remaining: -60, status: "over", percentUsed: 112, topTransaction: { name: "Groceries", amount: -180, date: "2026-06-20" } },
     { category: "Entertainment", budgeted: 200, spent: 50, remaining: 150, status: "available", percentUsed: 25 },
@@ -75,6 +81,13 @@ test("Flo answers category budget questions from verified facts", () => {
   assert.match(localFloAnswer("How much do I have left for Utilities?", facts, days) ?? "", /Utilities has \$40\.00 left/);
   assert.match(localFloAnswer("Which categories need attention?", facts, days) ?? "", /Food/);
   assert.match(localFloAnswer("What category has the most room left?", facts, days) ?? "", /Entertainment/);
+});
+
+test("Flo answers decision history questions from verified facts", () => {
+  assert.match(localFloAnswer("What decisions need review?", facts, days) ?? "", /Fireworks/);
+  assert.match(localFloAnswer("What planned decisions are coming up?", facts, days) ?? "", /School clothes/);
+  assert.match(localFloAnswer("How did my last decision go?", facts, days) ?? "", /Dinner/);
+  assert.match(localFloAnswer("Show my cancelled decisions", facts, days) ?? "", /Trip/);
 });
 
 test("Flo evaluates category budget moves from verified facts", () => {
