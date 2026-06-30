@@ -19,6 +19,7 @@ import { useColors } from "@/hooks/useColors";
 import { applyCategoryBudgetMove, buildCategoryPlan, buildCategoryRolloverAdjustments } from "@/lib/categoryPlanning";
 import { DECISION_HUB_SETTINGS_EVENT, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { buildDecisionHistory } from "@/lib/decisionHistory";
+import { buildDecisionRiskAlerts } from "@/lib/decisionRisk";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -566,6 +567,20 @@ export default function DashboardScreen() {
     () => buildDecisionHistory(decisions, todayIso, now.toISOString()),
     [decisions, todayIso, now],
   );
+  const decisionForecastDays = useMemo(() => {
+    const days = [];
+    for (let i = 0; i < settings.forecast_horizon_months; i += 1) {
+      const month = (currentMonth + i) % 12;
+      const year = selectedYear + Math.floor((currentMonth + i) / 12);
+      const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+      days.push(...getDailyBalances(month, year).map(day => ({ date: `${monthPrefix}-${String(day.day).padStart(2, "0")}`, balance: day.balance })));
+    }
+    return days.filter(day => day.date >= todayIso);
+  }, [getDailyBalances, currentMonth, selectedYear, settings.forecast_horizon_months, todayIso]);
+  const decisionRiskAlerts = useMemo(
+    () => buildDecisionRiskAlerts(decisions, decisionForecastDays, settings.safety_floor, todayIso),
+    [decisions, decisionForecastDays, settings.safety_floor, todayIso],
+  );
   const decisionAlert = useMemo(() => {
     const sevenDaysLater = new Date(now);
     sevenDaysLater.setDate(now.getDate() + 7);
@@ -576,8 +591,13 @@ export default function DashboardScreen() {
     const totalTracked = reviewCount + decisionHistory.upcoming.length + decisionHistory.completed.length + decisionHistory.changed.length;
     let title = "Decision Hub";
     let detail = "Ask Flo before you change the plan.";
-    let tone: "review" | "upcoming" | "completed" | "empty" = "empty";
-    if (reviewCount > 0) {
+    let tone: "risk" | "review" | "upcoming" | "completed" | "empty" = "empty";
+    if (decisionRiskAlerts.length > 0) {
+      const alert = decisionRiskAlerts[0];
+      title = `${decisionRiskAlerts.length} decision${decisionRiskAlerts.length === 1 ? "" : "s"} no longer safe`;
+      detail = `${alert.name} drops to $${alert.lowestBalance.toFixed(0)} on ${formatShortDate(alert.lowestBalanceDate)}.`;
+      tone = "risk";
+    } else if (reviewCount > 0) {
       title = `${reviewCount} decision${reviewCount === 1 ? "" : "s"} need review`;
       detail = "Complete, postpone, or cancel past planned decisions.";
       tone = "review";
@@ -594,8 +614,8 @@ export default function DashboardScreen() {
       detail = `${decisionHistory.upcoming.length} upcoming · ${decisionHistory.completed.length} completed.`;
       tone = "completed";
     }
-    return { title, detail, reviewCount, upcomingCount: decisionHistory.upcoming.length, completedCount: decisionHistory.completed.length, tone };
-  }, [decisionHistory, now, todayIso]);
+    return { title, detail, riskCount: decisionRiskAlerts.length, reviewCount, upcomingCount: decisionHistory.upcoming.length, completedCount: decisionHistory.completed.length, tone };
+  }, [decisionHistory, decisionRiskAlerts, now, todayIso]);
 
   return (
     <ScrollView
@@ -860,19 +880,26 @@ export default function DashboardScreen() {
           styles.decisionHubCard,
           {
             backgroundColor: c.card,
-            borderColor: decisionAlert.tone === "review" ? c.warning + "80" : c.border,
+            borderColor: decisionAlert.tone === "risk" ? c.destructive + "80" : decisionAlert.tone === "review" ? c.warning + "80" : c.border,
             opacity: pressed ? 0.82 : 1,
           },
         ]}
       >
-        <View style={[styles.decisionHubIcon, { backgroundColor: decisionAlert.tone === "review" ? c.warning + "18" : c.primary + "18" }]}>
-          <Feather name={decisionAlert.tone === "review" ? "alert-circle" : "clock"} size={18} color={decisionAlert.tone === "review" ? c.warning : c.primary} />
+        <View style={[styles.decisionHubIcon, { backgroundColor: decisionAlert.tone === "risk" ? c.destructive + "18" : decisionAlert.tone === "review" ? c.warning + "18" : c.primary + "18" }]}>
+          <Feather
+            name={decisionAlert.tone === "risk" ? "alert-triangle" : decisionAlert.tone === "review" ? "alert-circle" : "clock"}
+            size={18}
+            color={decisionAlert.tone === "risk" ? c.destructive : decisionAlert.tone === "review" ? c.warning : c.primary}
+          />
         </View>
         <View style={styles.decisionHubBody}>
           <Text style={[styles.decisionHubEyebrow, { color: c.mutedForeground }]}>Decision Hub</Text>
           <Text style={[styles.decisionHubTitle, { color: c.foreground }]}>{decisionAlert.title}</Text>
           <Text style={[styles.decisionHubDesc, { color: c.mutedForeground }]}>{decisionAlert.detail}</Text>
           <View style={styles.decisionHubStats}>
+            <Text style={[styles.decisionHubStat, { color: decisionAlert.riskCount > 0 ? c.destructive : c.mutedForeground }]}>
+              {decisionAlert.riskCount} risky
+            </Text>
             <Text style={[styles.decisionHubStat, { color: decisionAlert.reviewCount > 0 ? c.warning : c.mutedForeground }]}>
               {decisionAlert.reviewCount} review
             </Text>

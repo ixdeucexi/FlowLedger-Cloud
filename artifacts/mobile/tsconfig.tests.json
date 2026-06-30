@@ -34,6 +34,8 @@
     ,"lib/decisions.test.ts"
     ,"lib/decisionHistory.ts"
     ,"lib/decisionHistory.test.ts"
+    ,"lib/decisionRisk.ts"
+    ,"lib/decisionRisk.test.ts"
     ,"lib/flo.test.ts"
     ,"lib/floPolicy.ts"
     ,"lib/debtOrder.ts"

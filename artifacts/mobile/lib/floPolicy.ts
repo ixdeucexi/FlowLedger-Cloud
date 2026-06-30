@@ -38,6 +38,7 @@ export interface FloDecisionHistoryFacts {
   upcoming: FloDecisionHistoryFact[];
   completed: FloDecisionHistoryFact[];
   changed: FloDecisionHistoryFact[];
+  risky?: FloDecisionHistoryFact[];
 }
 
 export interface FloCategoryFact {
@@ -281,6 +282,7 @@ function sanitizeDecisionHistoryFacts(history?: FloDecisionHistoryFacts): FloDec
     upcoming: cleanItems(history?.upcoming),
     completed: cleanItems(history?.completed),
     changed: cleanItems(history?.changed),
+    risky: cleanItems(history?.risky),
   };
 }
 
@@ -294,6 +296,11 @@ function localDecisionHistoryAnswer(message: string, facts: FloFacts): string | 
     .map(item => `${item.name} on ${item.date} (${item.actualAmount === undefined ? `planned $${item.plannedAmount.toFixed(2)}` : `planned $${item.plannedAmount.toFixed(2)}, actual $${item.actualAmount.toFixed(2)}`})`)
     .join("; ");
 
+  if (/no longer safe|risky|unsafe|risk|became unsafe/.test(lower)) {
+    return (history.risky ?? []).length
+      ? `${history.risky!.length} planned decision${history.risky!.length === 1 ? " is" : "s are"} no longer safe: ${list(history.risky!)}. Review them before the planned date.`
+      : "I don't see any planned decisions that are currently below your safety floor.";
+  }
   if (/need.*review|review|past due|overdue/.test(lower)) {
     return history.due.length
       ? `You have ${history.due.length} decision${history.due.length === 1 ? "" : "s"} needing review: ${list(history.due)}. Complete, postpone, or cancel them from Decision History.`

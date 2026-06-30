@@ -43,6 +43,7 @@ const facts: FloFacts = {
     upcoming: [{ name: "School clothes", date: "2026-07-20", plannedAmount: 250, status: "upcoming" }],
     completed: [{ name: "Dinner", date: "2026-07-02", plannedAmount: 100, actualAmount: 80, varianceLabel: "-$20.00 vs plan", status: "completed" }],
     changed: [{ name: "Trip", date: "2026-07-18", plannedAmount: 400, status: "cancelled" }],
+    risky: [{ name: "Concert", date: "2026-07-22", plannedAmount: 300, status: "upcoming" }],
   },
   categoryPlan: [
     { category: "Food", budgeted: 500, spent: 560, remaining: -60, status: "over", percentUsed: 112, topTransaction: { name: "Groceries", amount: -180, date: "2026-06-20" } },
@@ -88,6 +89,7 @@ test("Flo answers decision history questions from verified facts", () => {
   assert.match(localFloAnswer("What planned decisions are coming up?", facts, days) ?? "", /School clothes/);
   assert.match(localFloAnswer("How did my last decision go?", facts, days) ?? "", /Dinner/);
   assert.match(localFloAnswer("Show my cancelled decisions", facts, days) ?? "", /Trip/);
+  assert.match(localFloAnswer("Are any planned decisions no longer safe?", facts, days) ?? "", /Concert/);
 });
 
 test("Flo evaluates category budget moves from verified facts", () => {

@@ -34,6 +34,7 @@ import {
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { evaluateDecision, type DecisionResult, type DecisionScenario } from "@/lib/decisions";
 import { buildDecisionHistory, type DecisionHistoryItem } from "@/lib/decisionHistory";
+import { buildDecisionRiskAlerts } from "@/lib/decisionRisk";
 import { applyCategoryBudgetMove, buildCategoryPlan, buildCategoryRolloverAdjustments } from "@/lib/categoryPlanning";
 import { DECISION_HUB_SETTINGS_EVENT, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 
@@ -221,6 +222,20 @@ export default function FloScreen() {
     [decisions, transactions, today, now],
   );
 
+  const decisionRiskAlerts = useMemo(
+    () => buildDecisionRiskAlerts(decisions, baseline, settings.safety_floor, today),
+    [decisions, baseline, settings.safety_floor, today],
+  );
+  const riskyDecisionItems = useMemo<DecisionHistoryItem[]>(() => decisionRiskAlerts.map(alert => ({
+    id: alert.id,
+    name: alert.name,
+    date: alert.date,
+    status: "upcoming",
+    plannedAmount: alert.plannedAmount,
+    amountLabel: `Planned $${alert.plannedAmount.toFixed(2)}`,
+    varianceLabel: `$${alert.shortfall.toFixed(2)} below floor`,
+  })), [decisionRiskAlerts]);
+
   const facts = useMemo<FloFacts>(() => {
     const lowest = baseline.reduce(
       (best, day) => day.balance < best.balance ? day : best,
@@ -264,21 +279,29 @@ export default function FloScreen() {
         upcoming: decisionHistory.upcoming,
         completed: decisionHistory.completed,
         changed: decisionHistory.changed,
+        risky: decisionRiskAlerts.map(alert => ({
+          name: alert.name,
+          date: alert.date,
+          plannedAmount: alert.plannedAmount,
+          status: "upcoming",
+          varianceLabel: `$${alert.shortfall.toFixed(2)} below floor`,
+        })),
       },
     };
-  }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, transactions, upcoming, decisions, forecastConfidence.level, categoryPlan, decisionHistory]);
+  }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, transactions, upcoming, decisions, forecastConfidence.level, categoryPlan, decisionHistory, decisionRiskAlerts]);
 
   const quickPrompts = useMemo(() => {
     const categoryPrompts = buildFloCategoryQuickPrompts(categoryPlan);
     return [
       ...(decisionHistory.due.length ? ["What decisions need review?"] : []),
+      ...(decisionRiskAlerts.length ? ["Are any planned decisions no longer safe?"] : []),
       ...(decisionHistory.upcoming.length ? ["What planned decisions are coming up?"] : []),
       ...categoryPrompts,
       "Can I afford $500?",
       "What bills are due next?",
       "Why does my balance run low?",
     ].slice(0, 8);
-  }, [categoryPlan, decisionHistory]);
+  }, [categoryPlan, decisionHistory, decisionRiskAlerts]);
 
   const send = async (text = input) => {
     const clean = text.trim();
@@ -472,14 +495,15 @@ export default function FloScreen() {
           </View>
           <View style={styles.historyStats}>
             <HistoryStat label="Review" value={decisionHistory.due.length} color={colors.warning} />
+            <HistoryStat label="Risky" value={decisionRiskAlerts.length} color={colors.destructive} />
             <HistoryStat label="Upcoming" value={decisionHistory.upcoming.length} color={colors.primary} />
             <HistoryStat label="Completed" value={decisionHistory.completed.length} color={colors.success} />
-            <HistoryStat label="Changed" value={decisionHistory.changed.length} color={colors.warning} />
           </View>
-          {decisionHistory.due.length + decisionHistory.upcoming.length + decisionHistory.completed.length + decisionHistory.changed.length === 0 ? (
+          {decisionRiskAlerts.length + decisionHistory.due.length + decisionHistory.upcoming.length + decisionHistory.completed.length + decisionHistory.changed.length === 0 ? (
             <Text style={[styles.historyEmpty, { color: colors.mutedForeground }]}>Ask Flo if you can afford something, then save it to start tracking decisions here.</Text>
           ) : (
             <View style={styles.historySections}>
+              <DecisionHistorySection title="No longer safe" items={riskyDecisionItems.slice(0, 4)} colors={colors} actionState={historyActionState} onComplete={openCompletePlan} onPostpone={openPostponePlan} onCancel={(id) => void cancelPlan(id)} />
               <DecisionHistorySection title="Needs review" items={decisionHistory.due.slice(0, 4)} colors={colors} actionState={historyActionState} onComplete={openCompletePlan} onPostpone={openPostponePlan} onCancel={(id) => void cancelPlan(id)} />
               <DecisionHistorySection title="Upcoming planned" items={decisionHistory.upcoming.slice(0, 4)} colors={colors} actionState={historyActionState} onComplete={openCompletePlan} onPostpone={openPostponePlan} onCancel={(id) => void cancelPlan(id)} />
               <DecisionHistorySection title="Completed" items={decisionHistory.completed.slice(0, 3)} colors={colors} />
