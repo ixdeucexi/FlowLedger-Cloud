@@ -51,6 +51,20 @@ const facts: FloFacts = {
     { category: "Entertainment", budgeted: 200, spent: 50, remaining: 150, status: "available", percentUsed: 25 },
     { category: "Utilities", budgeted: 300, spent: 260, remaining: 40, status: "watch", percentUsed: 87 },
   ],
+  paycheckPlan: {
+    nextPaycheck: { id: "pay-1", name: "Main Paycheck", amount: 1200, date: "2026-06-28" },
+    windowStart: "2026-06-24",
+    windowEnd: "2026-06-27",
+    billsDue: [
+      { id: "power", name: "Power", amount: 120, dueDate: "2026-06-28" },
+      { id: "phone", name: "Phone", amount: 80, dueDate: "2026-06-26" },
+    ],
+    billsTotal: 200,
+    safeToSpend: 600,
+    lowestBalance: 800,
+    lowestBalanceDate: "2026-07-01",
+    status: "safe",
+  },
 };
 const days = [{ date: "2026-06-24", balance: 1000 }, { date: "2026-07-01", balance: 800 }];
 
@@ -91,6 +105,12 @@ test("Flo answers decision history questions from verified facts", () => {
   assert.match(localFloAnswer("How did my last decision go?", facts, days) ?? "", /Dinner/);
   assert.match(localFloAnswer("Show my cancelled decisions", facts, days) ?? "", /Trip/);
   assert.match(localFloAnswer("Are any planned decisions no longer safe?", facts, days) ?? "", /Concert/);
+});
+
+test("Flo answers paycheck planning questions from verified facts", () => {
+  assert.match(localFloAnswer("What can I spend until payday?", facts, days) ?? "", /\$600\.00/);
+  assert.match(localFloAnswer("What bills are due before my next paycheck?", facts, days) ?? "", /2 bills/);
+  assert.match(localFloAnswer("What bills are due before my next paycheck?", facts, days) ?? "", /Power/);
 });
 
 test("Flo evaluates category budget moves from verified facts", () => {
@@ -147,6 +167,10 @@ test("Flo creates deterministic response cards for supported finance questions",
   const categoryCards = floResponseCards("Why is Food over?", facts, days);
   assert.equal(categoryCards[0]?.title, "Category Status");
   assert.equal(categoryCards[0]?.value, "OVER");
+
+  const paycheckCards = floResponseCards("What can I spend until payday?", facts, days);
+  assert.equal(paycheckCards[0]?.title, "Safe Until Payday");
+  assert.equal(paycheckCards[0]?.value, "$600");
 });
 
 test("Flo builds saveable planned decisions from natural affordability questions", () => {
@@ -233,4 +257,6 @@ test("Flo fact payload is allowlisted before AI", () => {
   assert.deepEqual(clean.sourceTypes, ["forecast", "bill"]);
   assert.equal(clean.categoryPlan?.[0]?.category, "Food");
   assert.equal(clean.categoryPlan?.[0]?.topTransaction?.name, "Groceries");
+  assert.equal(clean.paycheckPlan?.nextPaycheck?.name, "Main Paycheck");
+  assert.equal(clean.paycheckPlan?.billsDue.length, 2);
 });

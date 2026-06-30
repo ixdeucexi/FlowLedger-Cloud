@@ -38,6 +38,7 @@ import { buildDecisionHistory, type DecisionHistoryItem } from "@/lib/decisionHi
 import { buildDecisionRiskAlerts } from "@/lib/decisionRisk";
 import { applyCategoryBudgetMove, buildCategoryPlan, buildCategoryRolloverAdjustments } from "@/lib/categoryPlanning";
 import { DECISION_HUB_SETTINGS_EVENT, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
+import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 
 const sampleQuestions = [
   "Ask Flo anything…",
@@ -53,7 +54,7 @@ export default function FloScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { bills, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, saveDecision, updateDecision, getTransactionsForMonth, categories } = useBudget();
+  const { bills, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getPaidAmount, saveDecision, updateDecision, getTransactionsForMonth, categories } = useBudget();
   const [chat, dispatch] = useReducer(reduceFloChat, initialChat);
   const [cardsByMessageId, setCardsByMessageId] = useState<Record<string, FloResponseCard[]>>({});
   const [decisionByMessageId, setDecisionByMessageId] = useState<Record<string, { scenario: DecisionScenario; result: DecisionResult }>>({});
@@ -227,6 +228,54 @@ export default function FloScreen() {
     () => buildDecisionRiskAlerts(decisions, baseline, settings.safety_floor, today),
     [decisions, baseline, settings.safety_floor, today],
   );
+  const paycheckPlan = useMemo(() => {
+    const horizon = Math.max(2, Math.min(settings.forecast_horizon_months, 6));
+    const incomeEvents: { id?: string; name: string; amount: number; date: string }[] = [];
+    const billEvents: { id?: string; name: string; amount: number; dueDate: string }[] = [];
+    const balanceEvents: { date: string; balance: number }[] = [];
+
+    for (let i = 0; i < horizon; i += 1) {
+      const absoluteMonth = now.getMonth() + i;
+      const month = absoluteMonth % 12;
+      const year = now.getFullYear() + Math.floor(absoluteMonth / 12);
+
+      getIncomeOccurrencesInMonth(month, year).forEach(({ income, days, effectiveAmount }) => {
+        days.forEach(day => incomeEvents.push({
+          id: income.id,
+          name: income.name,
+          amount: effectiveAmount,
+          date: makeDateKey(year, month, day),
+        }));
+      });
+
+      getMonthlyBills(month, year).forEach(bill => {
+        const occurrences = getBillOccurrencesInMonth(bill, month, year);
+        if (!occurrences.length) return;
+        const monthlyTotal = getBillMonthlyTotal(bill, month, year);
+        const perOccurrence = monthlyTotal / occurrences.length;
+        let paidRemaining = getPaidAmount(bill.id, month, year);
+        occurrences.forEach(day => {
+          const appliedPaid = Math.min(perOccurrence, Math.max(0, paidRemaining));
+          paidRemaining = Math.max(0, paidRemaining - perOccurrence);
+          const remaining = Math.max(0, perOccurrence - appliedPaid);
+          if (remaining > 0.005) {
+            billEvents.push({
+              id: bill.id,
+              name: bill.name,
+              amount: remaining,
+              dueDate: makeDateKey(year, month, day),
+            });
+          }
+        });
+      });
+
+      getDailyBalances(month, year).forEach(day => {
+        balanceEvents.push({ date: makeDateKey(year, month, day.day), balance: day.balance });
+      });
+    }
+
+    return buildPaycheckPlan(incomeEvents, billEvents, balanceEvents, settings.safety_floor, today);
+  }, [getBillMonthlyTotal, getBillOccurrencesInMonth, getDailyBalances, getIncomeOccurrencesInMonth, getMonthlyBills, getPaidAmount, now, settings.forecast_horizon_months, settings.safety_floor, today]);
   const riskyDecisionItems = useMemo<DecisionHistoryItem[]>(() => decisionRiskAlerts.map(alert => ({
     id: alert.id,
     name: alert.name,
@@ -275,6 +324,7 @@ export default function FloScreen() {
       forecastConfidence: forecastConfidence.level,
       sourceTypes: ["forecast", "bill", "transaction", "account", "debt", "goal", "decision"],
       categoryPlan,
+      paycheckPlan,
       decisionHistory: {
         due: decisionHistory.due,
         upcoming: decisionHistory.upcoming,
@@ -289,7 +339,7 @@ export default function FloScreen() {
         })),
       },
     };
-  }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, transactions, upcoming, decisions, forecastConfidence.level, categoryPlan, decisionHistory, decisionRiskAlerts]);
+  }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, transactions, upcoming, decisions, forecastConfidence.level, categoryPlan, paycheckPlan, decisionHistory, decisionRiskAlerts]);
 
   const quickPrompts = useMemo(() => {
     const categoryPrompts = buildFloCategoryQuickPrompts(categoryPlan);
@@ -297,6 +347,7 @@ export default function FloScreen() {
       ...(decisionHistory.due.length ? ["What decisions need review?"] : []),
       ...(decisionRiskAlerts.length ? ["Are any planned decisions no longer safe?"] : []),
       ...(decisionHistory.upcoming.length ? ["What planned decisions are coming up?"] : []),
+      "What can I spend until payday?",
       ...categoryPrompts,
       "Can I afford $500?",
       "What bills are due next?",

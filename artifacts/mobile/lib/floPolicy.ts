@@ -1,4 +1,5 @@
 import { evaluateDecision, type DecisionBaselineDay, type DecisionScenario } from "./decisions";
+import type { PaycheckPlanResult } from "./paycheckPlanning";
 
 export interface FloFacts {
   balanceToday: number;
@@ -22,6 +23,7 @@ export interface FloFacts {
   sourceTypes: string[];
   categoryPlan?: FloCategoryFact[];
   decisionHistory?: FloDecisionHistoryFacts;
+  paycheckPlan?: PaycheckPlanResult;
 }
 
 export interface FloDecisionHistoryFact {
@@ -201,6 +203,7 @@ export function sanitizeFloFacts(facts: FloFacts): FloFacts {
       } : undefined,
     })),
     decisionHistory: sanitizeDecisionHistoryFacts(facts.decisionHistory),
+    paycheckPlan: facts.paycheckPlan ? sanitizePaycheckPlan(facts.paycheckPlan) : undefined,
   };
 }
 
@@ -219,6 +222,8 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
   }
   const decisionHistoryAnswer = localDecisionHistoryAnswer(message, facts);
   if (decisionHistoryAnswer) return decisionHistoryAnswer;
+  const paycheckAnswer = localPaycheckAnswer(message, facts);
+  if (paycheckAnswer) return paycheckAnswer;
   const categoryAnswer = localCategoryAnswer(message, facts);
   if (categoryAnswer) return categoryAnswer;
   if (lower.includes("why") && (lower.includes("negative") || lower.includes("balance"))) {
@@ -264,6 +269,55 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
       : "You have $0.00 in unallocated spending this month. Every recorded expense is linked to a bill, or there are no expense transactions yet.";
   }
   return null;
+}
+
+function sanitizePaycheckPlan(plan: PaycheckPlanResult): PaycheckPlanResult {
+  const status = ["safe", "tight", "risk", "empty"].includes(String(plan.status)) ? plan.status : "empty";
+  return {
+    nextPaycheck: plan.nextPaycheck ? {
+      id: plan.nextPaycheck.id ? String(plan.nextPaycheck.id).slice(0, 80) : undefined,
+      name: String(plan.nextPaycheck.name ?? "Next paycheck").slice(0, 80),
+      amount: num(plan.nextPaycheck.amount),
+      date: String(plan.nextPaycheck.date ?? "").slice(0, 10),
+    } : null,
+    windowStart: String(plan.windowStart ?? "").slice(0, 10),
+    windowEnd: String(plan.windowEnd ?? "").slice(0, 10),
+    billsDue: (plan.billsDue ?? []).slice(0, 8).map(bill => ({
+      id: bill.id ? String(bill.id).slice(0, 80) : undefined,
+      name: String(bill.name ?? "Bill").slice(0, 80),
+      amount: num(bill.amount),
+      dueDate: String(bill.dueDate ?? "").slice(0, 10),
+    })),
+    billsTotal: num(plan.billsTotal),
+    safeToSpend: Math.max(0, num(plan.safeToSpend)),
+    lowestBalance: num(plan.lowestBalance),
+    lowestBalanceDate: String(plan.lowestBalanceDate ?? "").slice(0, 10),
+    status,
+  };
+}
+
+function localPaycheckAnswer(message: string, facts: FloFacts): string | null {
+  const lower = message.toLowerCase();
+  const asksPaycheck = /paycheck|pay day|payday|until pay|before i get paid|before next pay|next pay|spend until|safe to spend|what can i spend|bills before pay|this paycheck|eating up.*paycheck|okay before/i.test(lower);
+  if (!asksPaycheck) return null;
+  const plan = facts.paycheckPlan ? sanitizePaycheckPlan(facts.paycheckPlan) : null;
+  if (!plan || !plan.nextPaycheck || plan.status === "empty") {
+    return "I don't see an upcoming paycheck in the forecast yet. Add recurring income with a next pay date and I can plan the window before payday.";
+  }
+  const nextPayDate = plan.nextPaycheck.date;
+  const billList = plan.billsDue.slice(0, 3).map(bill => `${bill.name} ($${bill.amount.toFixed(0)} on ${bill.dueDate})`).join(", ");
+  if (/bill|due|eating up|taking|why|what.*before/i.test(lower)) {
+    return plan.billsDue.length
+      ? `Before your next paycheck on ${nextPayDate}, I see ${plan.billsDue.length} bill${plan.billsDue.length === 1 ? "" : "s"} totaling $${plan.billsTotal.toFixed(2)}: ${billList}. Your safe-to-spend before payday is about $${plan.safeToSpend.toFixed(2)}.`
+      : `I don't see bills due before your next paycheck on ${nextPayDate}. Your safe-to-spend before payday is about $${plan.safeToSpend.toFixed(2)}.`;
+  }
+  if (plan.status === "risk") {
+    return `Not safely. Before your next paycheck on ${nextPayDate}, your forecast drops to $${plan.lowestBalance.toFixed(2)} on ${plan.lowestBalanceDate}, which is below your $${facts.safetyFloor.toFixed(0)} floor. Bills before payday total $${plan.billsTotal.toFixed(2)}.`;
+  }
+  if (plan.status === "tight") {
+    return `Yes, but tight. You can spend about $${plan.safeToSpend.toFixed(2)} before your next paycheck on ${nextPayDate}. Your lowest balance in that window is $${plan.lowestBalance.toFixed(2)} on ${plan.lowestBalanceDate}.`;
+  }
+  return `You can spend about $${plan.safeToSpend.toFixed(2)} before your next paycheck on ${nextPayDate}. I see ${plan.billsDue.length} bill${plan.billsDue.length === 1 ? "" : "s"} due before then totaling $${plan.billsTotal.toFixed(2)}, and your lowest balance should be $${plan.lowestBalance.toFixed(2)} on ${plan.lowestBalanceDate}.`;
 }
 
 function sanitizeDecisionHistoryFacts(history?: FloDecisionHistoryFacts): FloDecisionHistoryFacts {
@@ -509,6 +563,8 @@ export function floResponseCards(message: string, facts: FloFacts, days: Decisio
   }
   const categoryCards = floCategoryCards(message, facts);
   if (categoryCards.length) return categoryCards;
+  const paycheckCards = floPaycheckCards(message, facts);
+  if (paycheckCards.length) return paycheckCards;
   if (lower.includes("why") && (lower.includes("negative") || lower.includes("balance"))) {
     return [
       { title: "Lowest Forecast", value: `$${facts.lowestBalance.toFixed(0)}`, detail: facts.lowestBalanceDate, tone: facts.lowestBalance < facts.safetyFloor ? "risk" : "caution" },
@@ -534,6 +590,23 @@ export function floResponseCards(message: string, facts: FloFacts, days: Decisio
     ];
   }
   return [];
+}
+
+function floPaycheckCards(message: string, facts: FloFacts): FloResponseCard[] {
+  const lower = message.toLowerCase();
+  if (!/paycheck|pay day|payday|until pay|before i get paid|before next pay|next pay|spend until|safe to spend|what can i spend|bills before pay|this paycheck/i.test(lower)) return [];
+  const plan = facts.paycheckPlan ? sanitizePaycheckPlan(facts.paycheckPlan) : null;
+  if (!plan || !plan.nextPaycheck || plan.status === "empty") {
+    return [
+      { title: "Paycheck Plan", value: "NEEDS INCOME", detail: "Add recurring income with a next pay date", tone: "caution" },
+    ];
+  }
+  const tone = plan.status === "risk" ? "risk" : plan.status === "tight" ? "caution" : "safe";
+  return [
+    { title: "Safe Until Payday", value: `$${plan.safeToSpend.toFixed(0)}`, detail: `Next pay: ${plan.nextPaycheck.date}`, tone },
+    { title: "Bills Before Pay", value: String(plan.billsDue.length), detail: `$${plan.billsTotal.toFixed(2)} total`, tone: plan.billsDue.length ? "caution" : "safe" },
+    { title: "Lowest Balance", value: `$${plan.lowestBalance.toFixed(0)}`, detail: plan.lowestBalanceDate, tone: plan.lowestBalance < facts.safetyFloor ? "risk" : "info" },
+  ];
 }
 
 function floCategoryCards(message: string, facts: FloFacts): FloResponseCard[] {
