@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -53,6 +54,7 @@ const ps = StyleSheet.create({
 export default function MonthlyScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const {
     bills, overrides, billDateMoves, transactions, goals, decisions, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
     getCustomDueDay, setCustomDueDay,
@@ -183,6 +185,32 @@ export default function MonthlyScreen() {
       },
     };
   }, [dailyBalances, month, settings.starting_balance, txIncome, txExpense, txList]);
+
+  const monthWatchInsight = useMemo(() => {
+    if (!monthSummary.lowestDay || monthSummary.lowest >= settings.safety_floor) return null;
+    const eventsBeforeLow = dailyBalances
+      .filter(day => day.day <= (monthSummary.lowestDay ?? 0))
+      .flatMap(day => (day.events ?? []).map(event => ({ ...event, day: day.day })));
+    const biggestOutflows = eventsBeforeLow
+      .filter(event => event.amount < -0.005)
+      .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
+      .slice(0, 3)
+      .map(event => `${event.name || event.kind} ${money(event.amount, "auto")} on ${MONTH_FULL[month].slice(0, 3)} ${event.day}`);
+    const reason = biggestOutflows.length
+      ? `${MONTH_FULL[month]} drops to ${money(monthSummary.lowest)} on ${MONTH_FULL[month]} ${monthSummary.lowestDay} after ${biggestOutflows.join(", ")}.`
+      : `${MONTH_FULL[month]} drops to ${money(monthSummary.lowest)} on ${MONTH_FULL[month]} ${monthSummary.lowestDay}, below your ${money(settings.safety_floor)} safety floor.`;
+    const prompt = `${reason} What should I fix first? Preview safer options like moving a flexible bill, lowering a planned decision, or keeping more cash above my safety floor.`;
+    return { reason, prompt };
+  }, [dailyBalances, month, monthSummary.lowest, monthSummary.lowestDay, settings.safety_floor]);
+
+  const askFloAboutMonthWatch = useCallback(() => {
+    if (!monthWatchInsight) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    router.push({
+      pathname: "/(tabs)/flo",
+      params: { prompt: monthWatchInsight.prompt },
+    } as never);
+  }, [monthWatchInsight, router]);
 
   const showMonthSummaryDetail = useCallback((title: string, value: string, details: string[], fallback: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -885,6 +913,22 @@ export default function MonthlyScreen() {
                   </Pressable>
                 ))}
               </View>
+              {monthWatchInsight ? (
+                <View style={[styles.monthWatchCard, { backgroundColor: c.warning + "12", borderColor: c.warning + "55" }]}>
+                  <View style={styles.monthWatchHeader}>
+                    <Feather name="alert-triangle" size={15} color={c.warning} />
+                    <Text style={[styles.monthWatchTitle, { color: c.foreground }]}>This month needs attention</Text>
+                  </View>
+                  <Text style={[styles.monthWatchText, { color: c.mutedForeground }]}>{monthWatchInsight.reason}</Text>
+                  <Pressable
+                    onPress={askFloAboutMonthWatch}
+                    style={({ pressed }) => [styles.askFloFixButton, { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 }]}
+                  >
+                    <Feather name="message-circle" size={14} color={c.primaryForeground} />
+                    <Text style={[styles.askFloFixText, { color: c.primaryForeground }]}>Ask Flo what to fix</Text>
+                  </Pressable>
+                </View>
+              ) : null}
             </View>
 
             {(() => {
@@ -1512,6 +1556,12 @@ const styles = StyleSheet.create({
   monthSummaryTile: { width: "48.5%", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 9, minHeight: 58, justifyContent: "center" },
   monthSummaryLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.55, marginBottom: 4 },
   monthSummaryValue: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
+  monthWatchCard: { borderWidth: 1, borderRadius: 14, padding: 12, marginTop: 10 },
+  monthWatchHeader: { flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 6 },
+  monthWatchTitle: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  monthWatchText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
+  askFloFixButton: { marginTop: 10, minHeight: 42, borderRadius: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  askFloFixText: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   txSummary: { flexDirection: "row", padding: 12, marginBottom: 10 },
   txSumItem: { flex: 1, alignItems: "center" },
   txSumLabel: { fontSize: 10, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 },
