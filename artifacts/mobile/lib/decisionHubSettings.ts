@@ -15,7 +15,7 @@ export interface DecisionHubSettings {
 export const DEFAULT_DECISION_HUB_SETTINGS: DecisionHubSettings = {
   categoryRolloverEnabled: false,
   categoryDecisionAlertsEnabled: true,
-  paycheckPlanningEnabled: false,
+  paycheckPlanningEnabled: true,
   lowBalanceAlertsEnabled: true,
   billBeforePaydayAlertsEnabled: true,
   plannedDecisionReviewAlertsEnabled: true,
@@ -34,7 +34,7 @@ export function readDecisionHubSettings(): DecisionHubSettings {
     return {
       categoryRolloverEnabled: Boolean(parsed.categoryRolloverEnabled),
       categoryDecisionAlertsEnabled: parsed.categoryDecisionAlertsEnabled !== false,
-      paycheckPlanningEnabled: Boolean(parsed.paycheckPlanningEnabled),
+      paycheckPlanningEnabled: parsed.paycheckPlanningEnabled !== false,
       lowBalanceAlertsEnabled: parsed.lowBalanceAlertsEnabled !== false,
       billBeforePaydayAlertsEnabled: parsed.billBeforePaydayAlertsEnabled !== false,
       plannedDecisionReviewAlertsEnabled: parsed.plannedDecisionReviewAlertsEnabled !== false,
@@ -84,7 +84,7 @@ function normalizeDecisionHubSettings(value: unknown): DecisionHubSettings {
   return {
     categoryRolloverEnabled: Boolean(parsed.categoryRolloverEnabled),
     categoryDecisionAlertsEnabled: parsed.categoryDecisionAlertsEnabled !== false,
-    paycheckPlanningEnabled: Boolean(parsed.paycheckPlanningEnabled),
+    paycheckPlanningEnabled: parsed.paycheckPlanningEnabled !== false,
     lowBalanceAlertsEnabled: parsed.lowBalanceAlertsEnabled !== false,
     billBeforePaydayAlertsEnabled: parsed.billBeforePaydayAlertsEnabled !== false,
     plannedDecisionReviewAlertsEnabled: parsed.plannedDecisionReviewAlertsEnabled !== false,

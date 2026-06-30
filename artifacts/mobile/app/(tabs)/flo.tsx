@@ -399,18 +399,18 @@ export default function FloScreen() {
 
   const quickPrompts = useMemo(() => {
     const categoryPrompts = decisionHubSettings.categoryDecisionAlertsEnabled ? buildFloCategoryQuickPrompts(categoryPlan) : [];
+    const paycheckPrompts = decisionHubSettings.paycheckPlanningEnabled ? ["What can I spend until payday?", "What bill should I move?"] : [];
     return [
       ...(decisionHistory.due.length ? ["What decisions need review?"] : []),
       ...(decisionRiskAlerts.length ? ["Are any planned decisions no longer safe?"] : []),
       ...(decisionHistory.upcoming.length ? ["What planned decisions are coming up?"] : []),
-      "What can I spend until payday?",
-      "What bill should I move?",
+      ...paycheckPrompts,
       ...categoryPrompts,
       "Can I afford $500?",
       "What bills are due next?",
       "Why does my balance run low?",
     ].slice(0, 8);
-  }, [categoryPlan, decisionHistory, decisionRiskAlerts, decisionHubSettings.categoryDecisionAlertsEnabled]);
+  }, [categoryPlan, decisionHistory, decisionRiskAlerts, decisionHubSettings.categoryDecisionAlertsEnabled, decisionHubSettings.paycheckPlanningEnabled]);
 
   const send = async (text = input) => {
     const clean = text.trim();

@@ -1123,6 +1123,24 @@ export default function DashboardScreen() {
               ))}
             </View>
           )}
+          <View style={styles.paycheckPlanActions}>
+            <Pressable
+              onPress={() => openFloWithPrompt("What can I spend until payday?")}
+              style={({ pressed }) => [styles.paycheckPlanAction, { backgroundColor: c.primary + "18", opacity: pressed ? 0.75 : 1 }]}
+            >
+              <Feather name="message-circle" size={13} color={c.primary} />
+              <Text style={[styles.paycheckPlanActionText, { color: c.primary }]}>Ask Flo</Text>
+            </Pressable>
+            {paycheckPlan.billsDue.length > 0 ? (
+              <Pressable
+                onPress={() => openFloWithPrompt("What bill should I move?")}
+                style={({ pressed }) => [styles.paycheckPlanAction, { backgroundColor: c.warning + "18", opacity: pressed ? 0.75 : 1 }]}
+              >
+                <Feather name="shuffle" size={13} color={c.warning} />
+                <Text style={[styles.paycheckPlanActionText, { color: c.warning }]}>Move a bill</Text>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
       )}
 
@@ -2206,6 +2224,9 @@ const styles = StyleSheet.create({
   paycheckPlanBillRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   paycheckPlanBillName: { flex: 1, fontSize: 13, fontFamily: "Inter_600SemiBold" },
   paycheckPlanBillAmount: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  paycheckPlanActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
+  paycheckPlanAction: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
+  paycheckPlanActionText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   whatBtn:     { flexDirection: "row", alignItems: "center", gap: 12, padding: 16, marginBottom: 14, borderWidth: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
   whatBtnIcon: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   whatBtnText: { flex: 1, fontSize: 16, fontFamily: "Inter_700Bold" },
