@@ -18,6 +18,7 @@ import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { applyCategoryBudgetMove, buildCategoryPlan, buildCategoryRolloverAdjustments } from "@/lib/categoryPlanning";
 import { DECISION_HUB_SETTINGS_EVENT, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
+import { buildDecisionHistory } from "@/lib/decisionHistory";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -38,7 +39,7 @@ export default function DashboardScreen() {
     bills, getPaidAmount, getBillMonthlyTotal, getMonthlyBills, selectedYear, setDashboardFilter,
     goals, addGoal, updateGoal, deleteGoal, checkGoalAffordability,
     getCashFlow, getMonthlyIncome, addBill, addTransaction, getDailyBalances, getTransactionsForMonth, settings,
-    accounts, incomes, forecastConfidence, updateSettings,
+    accounts, incomes, decisions, forecastConfidence, updateSettings,
     categories,
   } = useBudget();
 
@@ -560,6 +561,41 @@ export default function DashboardScreen() {
     : "";
   const breakdownText =
     `$${cashFlow.monthlyIncome.toFixed(0)} income − $${cashFlow.totalBillsDue.toFixed(0)} bills${txDisplay} = $${Math.abs(cashFlow.remaining).toFixed(0)} ${cashFlow.remaining >= 0 ? "left" : "short"}`;
+  const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const decisionHistory = useMemo(
+    () => buildDecisionHistory(decisions, todayIso, now.toISOString()),
+    [decisions, todayIso, now],
+  );
+  const decisionAlert = useMemo(() => {
+    const sevenDaysLater = new Date(now);
+    sevenDaysLater.setDate(now.getDate() + 7);
+    const weekEnd = `${sevenDaysLater.getFullYear()}-${String(sevenDaysLater.getMonth() + 1).padStart(2, "0")}-${String(sevenDaysLater.getDate()).padStart(2, "0")}`;
+    const upcomingThisWeek = decisionHistory.upcoming.filter(item => item.date >= todayIso && item.date <= weekEnd);
+    const recentCompleted = [...decisionHistory.completed].sort((left, right) => right.date.localeCompare(left.date))[0];
+    const reviewCount = decisionHistory.due.length;
+    const totalTracked = reviewCount + decisionHistory.upcoming.length + decisionHistory.completed.length + decisionHistory.changed.length;
+    let title = "Decision Hub";
+    let detail = "Ask Flo before you change the plan.";
+    let tone: "review" | "upcoming" | "completed" | "empty" = "empty";
+    if (reviewCount > 0) {
+      title = `${reviewCount} decision${reviewCount === 1 ? "" : "s"} need review`;
+      detail = "Complete, postpone, or cancel past planned decisions.";
+      tone = "review";
+    } else if (upcomingThisWeek.length > 0) {
+      title = `${upcomingThisWeek.length} planned this week`;
+      detail = `${upcomingThisWeek[0].name} is next on ${formatShortDate(upcomingThisWeek[0].date)}.`;
+      tone = "upcoming";
+    } else if (recentCompleted?.varianceLabel) {
+      title = "Last decision completed";
+      detail = `${recentCompleted.name}: ${recentCompleted.varianceLabel}.`;
+      tone = "completed";
+    } else if (totalTracked > 0) {
+      title = "Decision plan is current";
+      detail = `${decisionHistory.upcoming.length} upcoming · ${decisionHistory.completed.length} completed.`;
+      tone = "completed";
+    }
+    return { title, detail, reviewCount, upcomingCount: decisionHistory.upcoming.length, completedCount: decisionHistory.completed.length, tone };
+  }, [decisionHistory, now, todayIso]);
 
   return (
     <ScrollView
@@ -817,6 +853,35 @@ export default function DashboardScreen() {
           <Feather name="chevron-right" size={14} color={c.destructive} />
         </Pressable>
       )}
+
+      <Pressable
+        onPress={() => router.push("/(tabs)/flo" as any)}
+        style={({ pressed }) => [
+          styles.decisionHubCard,
+          {
+            backgroundColor: c.card,
+            borderColor: decisionAlert.tone === "review" ? c.warning + "80" : c.border,
+            opacity: pressed ? 0.82 : 1,
+          },
+        ]}
+      >
+        <View style={[styles.decisionHubIcon, { backgroundColor: decisionAlert.tone === "review" ? c.warning + "18" : c.primary + "18" }]}>
+          <Feather name={decisionAlert.tone === "review" ? "alert-circle" : "clock"} size={18} color={decisionAlert.tone === "review" ? c.warning : c.primary} />
+        </View>
+        <View style={styles.decisionHubBody}>
+          <Text style={[styles.decisionHubEyebrow, { color: c.mutedForeground }]}>Decision Hub</Text>
+          <Text style={[styles.decisionHubTitle, { color: c.foreground }]}>{decisionAlert.title}</Text>
+          <Text style={[styles.decisionHubDesc, { color: c.mutedForeground }]}>{decisionAlert.detail}</Text>
+          <View style={styles.decisionHubStats}>
+            <Text style={[styles.decisionHubStat, { color: decisionAlert.reviewCount > 0 ? c.warning : c.mutedForeground }]}>
+              {decisionAlert.reviewCount} review
+            </Text>
+            <Text style={[styles.decisionHubStat, { color: c.primary }]}>{decisionAlert.upcomingCount} upcoming</Text>
+            <Text style={[styles.decisionHubStat, { color: c.success }]}>{decisionAlert.completedCount} completed</Text>
+          </View>
+        </View>
+        <Feather name="chevron-right" size={18} color={c.mutedForeground} />
+      </Pressable>
 
       <Pressable onPress={() => router.push("/(tabs)/flo" as any)} style={({pressed})=>[styles.whatBtn,{backgroundColor:c.primary+"12",borderColor:c.primary+"45",borderRadius:colors.radius,opacity:pressed?.8:1}]}>
         <View style={[styles.whatBtnIcon,{backgroundColor:c.primary}]}><Text style={{color:c.primaryForeground,fontFamily:"Inter_700Bold",fontSize:18}}>F</Text></View>
@@ -1791,6 +1856,12 @@ export default function DashboardScreen() {
   );
 }
 
+function formatShortDate(date: string): string {
+  const parsed = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return date;
+  return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 const styles = StyleSheet.create({
   screen:  { flex: 1 },
   content: { paddingHorizontal: 16 },
@@ -1853,6 +1924,14 @@ const styles = StyleSheet.create({
   outlookValue: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
 
   // What can I do? button
+  decisionHubCard: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 16, padding: 14, marginBottom: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
+  decisionHubIcon: { width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  decisionHubBody: { flex: 1 },
+  decisionHubEyebrow: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 2 },
+  decisionHubTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  decisionHubDesc: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 2 },
+  decisionHubStats: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
+  decisionHubStat: { fontSize: 11, fontFamily: "Inter_700Bold" },
   whatBtn:     { flexDirection: "row", alignItems: "center", gap: 12, padding: 16, marginBottom: 14, borderWidth: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
   whatBtnIcon: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   whatBtnText: { flex: 1, fontSize: 16, fontFamily: "Inter_700Bold" },
