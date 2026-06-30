@@ -1183,22 +1183,52 @@ export default function DashboardScreen() {
           </Pressable>
         </View>
         <View style={styles.monthlyReviewGrid}>
-          <View style={[styles.monthlyReviewMetric, { backgroundColor: c.muted }]}>
+          <Pressable
+            onPress={() => navigate("unpaid", "monthly")}
+            style={({ pressed }) => [styles.monthlyReviewMetric, { backgroundColor: c.muted, opacity: pressed ? 0.75 : 1 }]}
+          >
             <Text style={[styles.monthlyReviewLabel, { color: c.mutedForeground }]}>Bills left</Text>
             <Text style={[styles.monthlyReviewValue, { color: monthlyReview.billDelta > 0 ? c.warning : c.success }]}>${Math.max(0, monthlyReview.billDelta).toFixed(0)}</Text>
-          </View>
-          <View style={[styles.monthlyReviewMetric, { backgroundColor: c.muted }]}>
+          </Pressable>
+          <Pressable
+            onPress={() => openFloWithPrompt("What decisions need review?")}
+            style={({ pressed }) => [styles.monthlyReviewMetric, { backgroundColor: c.muted, opacity: pressed ? 0.75 : 1 }]}
+          >
             <Text style={[styles.monthlyReviewLabel, { color: c.mutedForeground }]}>Decisions</Text>
             <Text style={[styles.monthlyReviewValue, { color: monthlyReview.changed > 0 ? c.warning : c.success }]}>{monthlyReview.completed}/{monthlyReview.changed + monthlyReview.completed}</Text>
-          </View>
-          <View style={[styles.monthlyReviewMetric, { backgroundColor: c.muted }]}>
+          </Pressable>
+          <Pressable
+            onPress={() => navigate("debt", "bills")}
+            style={({ pressed }) => [styles.monthlyReviewMetric, { backgroundColor: c.muted, opacity: pressed ? 0.75 : 1 }]}
+          >
             <Text style={[styles.monthlyReviewLabel, { color: c.mutedForeground }]}>Debt mins</Text>
             <Text style={[styles.monthlyReviewValue, { color: c.destructive }]}>${monthlyReview.totalDebtMinimums.toFixed(0)}</Text>
-          </View>
-          <View style={[styles.monthlyReviewMetric, { backgroundColor: c.muted }]}>
+          </Pressable>
+          <Pressable
+            onPress={() => router.push("/(tabs)/more" as any)}
+            style={({ pressed }) => [styles.monthlyReviewMetric, { backgroundColor: c.muted, opacity: pressed ? 0.75 : 1 }]}
+          >
             <Text style={[styles.monthlyReviewLabel, { color: c.mutedForeground }]}>Savings</Text>
             <Text style={[styles.monthlyReviewValue, { color: c.success }]}>{monthlyReview.savingsPct.toFixed(0)}%</Text>
-          </View>
+          </Pressable>
+        </View>
+        <View style={styles.monthlyReviewActions}>
+          <Pressable
+            onPress={() => router.push("/(tabs)/category-budget" as any)}
+            style={({ pressed }) => [styles.monthlyReviewAction, { backgroundColor: (monthlyReview.overCategory ? c.warning : c.primary) + "18", opacity: pressed ? 0.75 : 1 }]}
+          >
+            <Feather name={monthlyReview.overCategory ? "alert-triangle" : "grid"} size={12} color={monthlyReview.overCategory ? c.warning : c.primary} />
+            <Text style={[styles.monthlyReviewActionText, { color: monthlyReview.overCategory ? c.warning : c.primary }]}>
+              {monthlyReview.overCategory ? "Review category leak" : "Review categories"}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => openFloWithPrompt(monthlyReview.prompt)}
+            style={({ pressed }) => [styles.monthlyReviewAction, { backgroundColor: c.success + "18", opacity: pressed ? 0.75 : 1 }]}
+          >
+            <Feather name="message-circle" size={12} color={c.success} />
+            <Text style={[styles.monthlyReviewActionText, { color: c.success }]}>Improve next month</Text>
+          </Pressable>
         </View>
       </View>
 
@@ -2355,6 +2385,9 @@ const styles = StyleSheet.create({
   monthlyReviewMetric: { flexBasis: "48%", flexGrow: 1, borderRadius: 12, padding: 10 },
   monthlyReviewLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", marginBottom: 4 },
   monthlyReviewValue: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
+  monthlyReviewActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
+  monthlyReviewAction: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 8 },
+  monthlyReviewActionText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   paycheckPlanCard: { borderWidth: 1, borderRadius: 16, padding: 14, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
   paycheckPlanHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
   paycheckPlanIcon: { width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center" },
