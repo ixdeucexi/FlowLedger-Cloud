@@ -21,10 +21,13 @@ import { useColors } from "@/hooks/useColors";
 import { askFlo, loadFloMemory, updateFloMemory, type FloFacts } from "@/lib/flo";
 import {
   FLO_CONNECTION_ERROR_MESSAGE,
+  buildDebtPaymentScenario,
   buildFloCategoryQuickPrompts,
   buildFloDecisionScenario,
   evaluateFloBillDateMove,
   evaluateFloBillMoveUndo,
+  evaluateFloDebtPayment,
+  evaluateFloRecurringBillChange,
   evaluateFloCategoryMove,
   floResponseCards,
   isFloPlanCreateCommand,
@@ -33,6 +36,8 @@ import {
   type FloCategoryMoveResult,
   type FloBillDateMoveResult,
   type FloBillMoveFact,
+  type FloDebtPaymentResult,
+  type FloRecurringBillChangeResult,
   type FloResponseCard,
   type FloChatState,
 } from "@/lib/floPolicy";
@@ -59,7 +64,7 @@ export default function FloScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { bills, billDateMoves, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getPaidAmount, moveBillOccurrence, removeBillOccurrenceMove, saveDecision, updateDecision, getTransactionsForMonth, categories } = useBudget();
+  const { bills, billDateMoves, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getPaidAmount, moveBillOccurrence, removeBillOccurrenceMove, saveDecision, updateDecision, updateBill, setCustomAmount, saveExtraPayment, getTransactionsForMonth, categories } = useBudget();
   const [chat, dispatch] = useReducer(reduceFloChat, initialChat);
   const [cardsByMessageId, setCardsByMessageId] = useState<Record<string, FloResponseCard[]>>({});
   const [decisionByMessageId, setDecisionByMessageId] = useState<Record<string, { scenario: DecisionScenario; result: DecisionResult }>>({});
@@ -70,6 +75,10 @@ export default function FloScreen() {
   const [billDateMoveState, setBillDateMoveState] = useState<Record<string, "idle" | "saving" | "saved" | "failed">>({});
   const [billMoveUndoByMessageId, setBillMoveUndoByMessageId] = useState<Record<string, FloBillMoveFact>>({});
   const [billMoveUndoState, setBillMoveUndoState] = useState<Record<string, "idle" | "saving" | "saved" | "failed">>({});
+  const [debtPaymentByMessageId, setDebtPaymentByMessageId] = useState<Record<string, FloDebtPaymentResult>>({});
+  const [debtPaymentState, setDebtPaymentState] = useState<Record<string, "idle" | "saving" | "saved" | "failed">>({});
+  const [billChangeByMessageId, setBillChangeByMessageId] = useState<Record<string, FloRecurringBillChangeResult>>({});
+  const [billChangeState, setBillChangeState] = useState<Record<string, "idle" | "saving" | "saved" | "failed">>({});
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
   const [decisionHubSettings, setDecisionHubSettings] = useState<DecisionHubSettings>(() => readDecisionHubSettings());
   const [input, setInput] = useState("");
@@ -348,6 +357,24 @@ export default function FloScreen() {
         fromDate: move.from_date,
         toDate: move.to_date,
       })),
+      debts: bills
+        .filter(bill => bill.is_debt && bill.balance > 0)
+        .map(bill => ({
+          id: bill.id,
+          name: bill.name,
+          balance: bill.balance,
+          minimumPayment: bill.amount,
+          dueDay: bill.due_day,
+        })),
+      recurringBills: bills
+        .filter(bill => bill.is_recurring && !bill.is_debt)
+        .map(bill => ({
+          id: bill.id,
+          name: bill.name,
+          amount: bill.amount,
+          dueDay: bill.due_day,
+          category: bill.category || "Other",
+        })),
       decisionHistory: {
         due: decisionHistory.due,
         upcoming: decisionHistory.upcoming,
@@ -394,6 +421,19 @@ export default function FloScreen() {
     dispatch({ type: "reply", id: replyId, text: reply });
     const cards = floResponseCards(clean, facts, baseline);
     if (cards.length) setCardsByMessageId(previous => ({ ...previous, [replyId]: cards }));
+    const debtPayment = evaluateFloDebtPayment(clean, facts, today);
+    if (debtPayment?.allowed) {
+      const result = evaluateDecision(baseline, buildDebtPaymentScenario(debtPayment), settings.safety_floor);
+      if (result.verdict !== "unsafe") {
+        setDebtPaymentByMessageId(previous => ({ ...previous, [replyId]: debtPayment }));
+        setDebtPaymentState(previous => ({ ...previous, [replyId]: "idle" }));
+      }
+    }
+    const billChange = evaluateFloRecurringBillChange(clean, facts, today);
+    if (billChange?.allowed) {
+      setBillChangeByMessageId(previous => ({ ...previous, [replyId]: billChange }));
+      setBillChangeState(previous => ({ ...previous, [replyId]: "idle" }));
+    }
     const scenario = buildFloDecisionScenario(clean, today);
     if (scenario) {
       const result = evaluateDecision(baseline, scenario, settings.safety_floor);
@@ -563,6 +603,51 @@ export default function FloScreen() {
       setBillMoveUndoState(previous => ({ ...previous, [messageId]: "saved" }));
     } catch {
       setBillMoveUndoState(previous => ({ ...previous, [messageId]: "failed" }));
+    }
+  };
+
+  const applyDebtPaymentFromFlo = async (messageId: string) => {
+    const payment = debtPaymentByMessageId[messageId];
+    if (!payment || debtPaymentState[messageId] === "saving" || debtPaymentState[messageId] === "saved") return;
+    setDebtPaymentState(previous => ({ ...previous, [messageId]: "saving" }));
+    try {
+      const [yearValue, monthValue] = payment.date.split("-").map(Number);
+      await saveExtraPayment(
+        monthValue - 1,
+        yearValue,
+        payment.amount,
+        [{
+          billId: payment.debtId,
+          billName: payment.debtName,
+          payment: payment.amount,
+          balanceBefore: payment.balanceBefore,
+          balanceAfter: payment.balanceAfter,
+          paidOff: payment.balanceAfter <= 0.005,
+          paymentDate: payment.date,
+        }],
+        payment.date,
+        [{ type: "manual", amount: payment.amount, pendingBalanceApply: payment.date > today }],
+      );
+      setDebtPaymentState(previous => ({ ...previous, [messageId]: "saved" }));
+    } catch {
+      setDebtPaymentState(previous => ({ ...previous, [messageId]: "failed" }));
+    }
+  };
+
+  const applyBillChangeFromFlo = async (messageId: string) => {
+    const change = billChangeByMessageId[messageId];
+    if (!change || billChangeState[messageId] === "saving" || billChangeState[messageId] === "saved") return;
+    const bill = bills.find(item => item.id === change.billId);
+    if (!bill) return;
+    setBillChangeState(previous => ({ ...previous, [messageId]: "saving" }));
+    try {
+      if (change.preserveCurrentMonth) {
+        await setCustomAmount(bill.id, now.getMonth(), now.getFullYear(), bill.amount);
+      }
+      await updateBill({ ...bill, amount: change.newAmount });
+      setBillChangeState(previous => ({ ...previous, [messageId]: "saved" }));
+    } catch {
+      setBillChangeState(previous => ({ ...previous, [messageId]: "failed" }));
     }
   };
 
@@ -750,6 +835,72 @@ export default function FloScreen() {
                 </Text>
                 {billDateMoveState[message.id] === "failed" ? (
                   <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t move this bill. Try again.</Text>
+                ) : null}
+              </View>
+            ) : null}
+            {message.role === "flo" && debtPaymentByMessageId[message.id] ? (
+              <View style={styles.decisionActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Apply this extra debt payment"
+                  disabled={debtPaymentState[message.id] === "saving" || debtPaymentState[message.id] === "saved"}
+                  onPress={() => void applyDebtPaymentFromFlo(message.id)}
+                  style={[
+                    styles.saveDecisionButton,
+                    { backgroundColor: colors.success, opacity: debtPaymentState[message.id] === "saved" ? 0.7 : 1 },
+                  ]}
+                >
+                  <Feather
+                    name={debtPaymentState[message.id] === "saved" ? "check-circle" : "zap"}
+                    size={16}
+                    color="#fff"
+                  />
+                  <Text style={styles.saveDecisionText}>
+                    {debtPaymentState[message.id] === "saving"
+                      ? "Applying..."
+                      : debtPaymentState[message.id] === "saved"
+                        ? "Debt payment scheduled"
+                        : `Apply $${debtPaymentByMessageId[message.id].amount.toFixed(2)} to ${debtPaymentByMessageId[message.id].debtName}`}
+                  </Text>
+                </Pressable>
+                <Text style={[styles.saveDecisionHint, { color: colors.mutedForeground }]}>
+                  Adds an extra debt payment on {formatDisplayDate(debtPaymentByMessageId[message.id].date)} and updates the debt when that date arrives.
+                </Text>
+                {debtPaymentState[message.id] === "failed" ? (
+                  <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t schedule this debt payment. Try again.</Text>
+                ) : null}
+              </View>
+            ) : null}
+            {message.role === "flo" && billChangeByMessageId[message.id] ? (
+              <View style={styles.decisionActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Apply this recurring bill change"
+                  disabled={billChangeState[message.id] === "saving" || billChangeState[message.id] === "saved"}
+                  onPress={() => void applyBillChangeFromFlo(message.id)}
+                  style={[
+                    styles.saveDecisionButton,
+                    { backgroundColor: colors.primary, opacity: billChangeState[message.id] === "saved" ? 0.7 : 1 },
+                  ]}
+                >
+                  <Feather
+                    name={billChangeState[message.id] === "saved" ? "check-circle" : "edit-3"}
+                    size={16}
+                    color="#fff"
+                  />
+                  <Text style={styles.saveDecisionText}>
+                    {billChangeState[message.id] === "saving"
+                      ? "Applying..."
+                      : billChangeState[message.id] === "saved"
+                        ? "Bill updated"
+                        : `Update ${billChangeByMessageId[message.id].billName} to $${billChangeByMessageId[message.id].newAmount.toFixed(2)}`}
+                  </Text>
+                </Pressable>
+                <Text style={[styles.saveDecisionHint, { color: colors.mutedForeground }]}>
+                  Starts {formatDisplayDate(billChangeByMessageId[message.id].startDate)}{billChangeByMessageId[message.id].preserveCurrentMonth ? " and keeps this month unchanged." : "."}
+                </Text>
+                {billChangeState[message.id] === "failed" ? (
+                  <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t update this bill. Try again.</Text>
                 ) : null}
               </View>
             ) : null}

@@ -8,6 +8,8 @@ import {
   evaluateFloBillDateMove,
   evaluateFloBillMoveUndo,
   evaluateFloCategoryMove,
+  evaluateFloDebtPayment,
+  evaluateFloRecurringBillChange,
   floResponseCards,
   isFloPlanCreateCommand,
   isUnsafeFloRequest,
@@ -69,6 +71,14 @@ const facts: FloFacts = {
   },
   billDateMoves: [
     { id: "move-1", billId: "power", billName: "Power", fromDate: "2026-06-28", toDate: "2026-07-03" },
+  ],
+  debts: [
+    { id: "camera", name: "Camera", balance: 143.64, minimumPayment: 38.27, dueDay: 11 },
+    { id: "concert", name: "Concert", balance: 389.44, minimumPayment: 35.41, dueDay: 29 },
+  ],
+  recurringBills: [
+    { id: "utilities", name: "Utilities", amount: 370, dueDay: 4, category: "Utilities" },
+    { id: "internet", name: "Internet", amount: 90, dueDay: 13, category: "Utilities" },
   ],
 };
 const days = [{ date: "2026-06-24", balance: 1000 }, { date: "2026-07-01", balance: 800 }];
@@ -227,6 +237,38 @@ test("Flo builds planned decisions from task-style add plan commands", () => {
   assert.equal(scenario?.type, "one_time_purchase");
   assert.equal(scenario?.amount, 100);
   assert.equal(scenario?.date, "2026-07-05");
+});
+
+test("Flo builds saveable savings contribution decisions", () => {
+  const scenario = buildFloDecisionScenario("Put $75 into savings on July 9", "2026-06-29");
+  assert.equal(scenario?.type, "savings_contribution");
+  assert.equal(scenario?.amount, 75);
+  assert.equal(scenario?.date, "2026-07-09");
+  assert.match(scenario?.name ?? "", /Savings contribution/);
+});
+
+test("Flo previews extra debt payments against named debts", () => {
+  const payment = evaluateFloDebtPayment("Put $50 toward Camera on July 4", facts, "2026-06-29");
+  assert.equal(payment?.allowed, true);
+  assert.equal(payment?.debtId, "camera");
+  assert.equal(payment?.date, "2026-07-04");
+  assert.equal(payment?.balanceAfter, 93.64);
+  assert.match(localFloAnswer("Put $50 toward Camera on July 4", facts, days) ?? "", /apply \$50\.00 to Camera/);
+
+  const cards = floResponseCards("Put $50 toward Camera on July 4", facts, days);
+  assert.equal(cards[0]?.title, "Extra Debt Payment");
+  assert.equal(cards[1]?.title, "Debt Balance After");
+});
+
+test("Flo previews recurring bill amount changes", () => {
+  const change = evaluateFloRecurringBillChange("Change Utilities bill to $350 starting next month", facts, "2026-06-29");
+  assert.equal(change?.allowed, true);
+  assert.equal(change?.billId, "utilities");
+  assert.equal(change?.oldAmount, 370);
+  assert.equal(change?.newAmount, 350);
+  assert.equal(change?.startDate, "2026-07-01");
+  assert.equal(change?.preserveCurrentMonth, true);
+  assert.match(localFloAnswer("Change Utilities bill to $350 starting next month", facts, days) ?? "", /preserve this month's amount/);
 });
 
 test("Flo rolls natural decision dates into next year when the date already passed", () => {

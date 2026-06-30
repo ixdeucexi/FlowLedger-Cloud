@@ -33,6 +33,24 @@ export interface FloFacts {
   decisionHistory?: FloDecisionHistoryFacts;
   paycheckPlan?: PaycheckPlanResult;
   billDateMoves?: FloBillMoveFact[];
+  debts?: FloDebtFact[];
+  recurringBills?: FloRecurringBillFact[];
+}
+
+export interface FloDebtFact {
+  id: string;
+  name: string;
+  balance: number;
+  minimumPayment: number;
+  dueDay: number;
+}
+
+export interface FloRecurringBillFact {
+  id: string;
+  name: string;
+  amount: number;
+  dueDay: number;
+  category: string;
 }
 
 export interface FloDecisionHistoryFact {
@@ -83,6 +101,26 @@ export interface FloBillDateMoveResult {
   fromDate: string;
   toDate: string;
   toDay: number;
+  allowed: boolean;
+  reason: string;
+}
+export interface FloDebtPaymentResult {
+  amount: number;
+  debtId: string;
+  debtName: string;
+  date: string;
+  balanceBefore: number;
+  balanceAfter: number;
+  allowed: boolean;
+  reason: string;
+}
+export interface FloRecurringBillChangeResult {
+  billId: string;
+  billName: string;
+  oldAmount: number;
+  newAmount: number;
+  startDate: string;
+  preserveCurrentMonth: boolean;
   allowed: boolean;
   reason: string;
 }
@@ -223,12 +261,27 @@ export function sanitizeFloFacts(facts: FloFacts): FloFacts {
     decisionHistory: sanitizeDecisionHistoryFacts(facts.decisionHistory),
     paycheckPlan: facts.paycheckPlan ? sanitizePaycheckPlan(facts.paycheckPlan) : undefined,
     billDateMoves: sanitizeBillMoveFacts(facts.billDateMoves),
+    debts: sanitizeDebtFacts(facts.debts),
+    recurringBills: sanitizeRecurringBillFacts(facts.recurringBills),
   };
 }
 
 export function localFloAnswer(message: string, facts: FloFacts, days: DecisionBaselineDay[]): string | null {
   if (isUnsafeFloRequest(message)) return FLO_SECURITY_REFUSAL_MESSAGE;
   const lower = message.toLowerCase();
+  const debtPayment = evaluateFloDebtPayment(message, facts);
+  if (debtPayment) {
+    if (!debtPayment.allowed) return debtPayment.reason;
+    const result = evaluateDecision(days, buildDebtPaymentScenario(debtPayment), facts.safetyFloor);
+    const lead = result.verdict === "safe"
+      ? "Yes."
+      : result.verdict === "caution"
+        ? "Yes, but keep an eye on the cushion."
+        : "Not safely.";
+    return `${lead} ${debtPayment.reason} Your lowest projected balance would be $${result.lowestBalance.toFixed(0)} on ${result.lowestBalanceDate}.`;
+  }
+  const billChange = evaluateFloRecurringBillChange(message, facts);
+  if (billChange) return billChange.reason;
   const scenario = buildFloDecisionScenario(message);
   if (scenario) {
     const result = evaluateDecision(days, scenario, facts.safetyFloor);
@@ -292,6 +345,26 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
       : "You have $0.00 in unallocated spending this month. Every recorded expense is linked to a bill, or there are no expense transactions yet.";
   }
   return null;
+}
+
+function sanitizeDebtFacts(debts?: FloDebtFact[]): FloDebtFact[] {
+  return (debts ?? []).slice(0, 40).map(debt => ({
+    id: String(debt.id ?? "").slice(0, 80),
+    name: String(debt.name ?? "Debt").slice(0, 80),
+    balance: Math.max(0, num(debt.balance)),
+    minimumPayment: Math.max(0, num(debt.minimumPayment)),
+    dueDay: Math.max(1, Math.min(31, Math.round(num(debt.dueDay) || 1))),
+  })).filter(debt => debt.id && debt.name && debt.balance > 0);
+}
+
+function sanitizeRecurringBillFacts(bills?: FloRecurringBillFact[]): FloRecurringBillFact[] {
+  return (bills ?? []).slice(0, 60).map(bill => ({
+    id: String(bill.id ?? "").slice(0, 80),
+    name: String(bill.name ?? "Bill").slice(0, 80),
+    amount: Math.max(0, num(bill.amount)),
+    dueDay: Math.max(1, Math.min(31, Math.round(num(bill.dueDay) || 1))),
+    category: String(bill.category ?? "Other").slice(0, 50),
+  })).filter(bill => bill.id && bill.name && bill.amount >= 0);
 }
 
 function sanitizeBillMoveFacts(moves?: FloBillMoveFact[]): FloBillMoveFact[] {
@@ -719,6 +792,41 @@ function formatSignedDollars(amount: number): string {
 
 export function floResponseCards(message: string, facts: FloFacts, days: DecisionBaselineDay[]): FloResponseCard[] {
   const lower = message.toLowerCase();
+  const debtPayment = evaluateFloDebtPayment(message, facts);
+  if (debtPayment) {
+    const result = debtPayment.allowed ? evaluateDecision(days, buildDebtPaymentScenario(debtPayment), facts.safetyFloor) : null;
+    return [
+      {
+        title: "Extra Debt Payment",
+        value: debtPayment.allowed && result ? result.verdict.toUpperCase() : "NEEDS CHECK",
+        detail: debtPayment.reason,
+        tone: debtPayment.allowed && result ? (result.verdict === "safe" ? "safe" : result.verdict === "caution" ? "caution" : "risk") : "risk",
+      },
+      {
+        title: "Debt Balance After",
+        value: `$${debtPayment.balanceAfter.toFixed(0)}`,
+        detail: debtPayment.debtName || "Select a debt",
+        tone: debtPayment.allowed ? "info" : "risk",
+      },
+    ];
+  }
+  const billChange = evaluateFloRecurringBillChange(message, facts);
+  if (billChange) {
+    return [
+      {
+        title: "Recurring Bill Change",
+        value: billChange.allowed ? "READY" : "NEEDS BILL",
+        detail: billChange.reason,
+        tone: billChange.allowed ? "safe" : "risk",
+      },
+      {
+        title: "Monthly Change",
+        value: formatSignedDollars(billChange.newAmount - billChange.oldAmount),
+        detail: `${billChange.billName || "Bill"} starting ${billChange.startDate}`,
+        tone: billChange.newAmount <= billChange.oldAmount ? "safe" : "caution",
+      },
+    ];
+  }
   const scenario = buildFloDecisionScenario(message);
   if (scenario) {
     const result = evaluateDecision(days, scenario, facts.safetyFloor);
@@ -812,6 +920,18 @@ function floCategoryCards(message: string, facts: FloFacts): FloResponseCard[] {
 export function buildFloDecisionScenario(message: string, today = new Date().toISOString().slice(0, 10)): DecisionScenario | null {
   const lower = message.toLowerCase();
   const amount = parseFloDecisionAmount(message);
+  const hasSavingsIntent = /\b(add|put|move|transfer|contribute|save)\b/.test(lower)
+    && /\b(savings?|emergency fund|rainy day)\b/.test(lower);
+  if (hasSavingsIntent) {
+    if (!Number.isFinite(amount) || amount <= 0) return null;
+    return {
+      type: "savings_contribution",
+      name: `Savings contribution: $${amount.toFixed(amount % 1 === 0 ? 0 : 2)}`,
+      amount,
+      date: parseFloDate(message, today),
+      frequency: "once",
+    };
+  }
   const hasDecisionIntent = lower.includes("afford")
     || lower.includes("buy")
     || lower.includes("spend")
@@ -825,6 +945,150 @@ export function buildFloDecisionScenario(message: string, today = new Date().toI
     date: parseFloDate(message, today),
     frequency: "once",
   };
+}
+
+export function evaluateFloDebtPayment(message: string, facts: FloFacts, today = new Date().toISOString().slice(0, 10)): FloDebtPaymentResult | null {
+  const lower = message.toLowerCase();
+  const hasIntent = /\b(pay|payment|put|apply|send|add)\b/.test(lower)
+    && /\b(debt|snowball|toward|towards|payoff|principal)\b/.test(lower);
+  if (!hasIntent) return null;
+  const amount = parseFloDecisionAmount(message);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  const debts = sanitizeDebtFacts(facts.debts);
+  const debt = findNamedItem(message, debts);
+  if (!debts.length) {
+    return {
+      amount,
+      debtId: "",
+      debtName: "",
+      date: parseFloDate(message, today),
+      balanceBefore: 0,
+      balanceAfter: 0,
+      allowed: false,
+      reason: "I don't see any active debts I can apply this payment to yet.",
+    };
+  }
+  if (!debt) {
+    return {
+      amount,
+      debtId: "",
+      debtName: "",
+      date: parseFloDate(message, today),
+      balanceBefore: 0,
+      balanceAfter: 0,
+      allowed: false,
+      reason: `I can help, but I need the debt name. Active debts include ${debts.slice(0, 4).map(item => item.name).join(", ")}.`,
+    };
+  }
+  if (amount > debt.balance + 0.005) {
+    return {
+      amount,
+      debtId: debt.id,
+      debtName: debt.name,
+      date: parseFloDate(message, today),
+      balanceBefore: debt.balance,
+      balanceAfter: debt.balance,
+      allowed: false,
+      reason: `${debt.name} only has $${debt.balance.toFixed(2)} left, so I won't create a $${amount.toFixed(2)} debt payment for it.`,
+    };
+  }
+  const date = parseFloDate(message, today);
+  const balanceAfter = roundCents(Math.max(0, debt.balance - amount));
+  return {
+    amount,
+    debtId: debt.id,
+    debtName: debt.name,
+    date,
+    balanceBefore: debt.balance,
+    balanceAfter,
+    allowed: true,
+    reason: `I can apply $${amount.toFixed(2)} to ${debt.name} on ${date}. The debt balance would move from $${debt.balance.toFixed(2)} to $${balanceAfter.toFixed(2)} when that date arrives.`,
+  };
+}
+
+export function evaluateFloRecurringBillChange(message: string, facts: FloFacts, today = new Date().toISOString().slice(0, 10)): FloRecurringBillChangeResult | null {
+  const lower = message.toLowerCase();
+  const hasIntent = /\b(change|update|set|make)\b/.test(lower)
+    && /\b(bill|payment|monthly|starting|next month|due)\b/.test(lower)
+    && /\$?\s*[\d,]+(?:\.\d{1,2})?/.test(message);
+  if (!hasIntent) return null;
+  const amount = parseFloDecisionAmount(message);
+  if (!Number.isFinite(amount) || amount < 0) return null;
+  const bills = sanitizeRecurringBillFacts(facts.recurringBills);
+  const bill = findNamedItem(message, bills);
+  const startDate = parseBillChangeStartDate(message, today);
+  const preserveCurrentMonth = isFutureMonth(startDate, today);
+  if (!bills.length) {
+    return {
+      billId: "",
+      billName: "",
+      oldAmount: 0,
+      newAmount: amount,
+      startDate,
+      preserveCurrentMonth,
+      allowed: false,
+      reason: "I don't see recurring bills I can update from here yet.",
+    };
+  }
+  if (!bill) {
+    return {
+      billId: "",
+      billName: "",
+      oldAmount: 0,
+      newAmount: amount,
+      startDate,
+      preserveCurrentMonth,
+      allowed: false,
+      reason: `I can update a recurring bill, but I need the bill name. I see ${bills.slice(0, 4).map(item => item.name).join(", ")}.`,
+    };
+  }
+  return {
+    billId: bill.id,
+    billName: bill.name,
+    oldAmount: bill.amount,
+    newAmount: amount,
+    startDate,
+    preserveCurrentMonth,
+    allowed: true,
+    reason: `I can change ${bill.name} from $${bill.amount.toFixed(2)} to $${amount.toFixed(2)} starting ${startDate}.${preserveCurrentMonth ? " I will preserve this month's amount and apply the new amount moving forward." : ""}`,
+  };
+}
+
+export function buildDebtPaymentScenario(payment: FloDebtPaymentResult): DecisionScenario {
+  return {
+    type: "extra_debt_payment",
+    name: `Extra debt payment: ${payment.debtName}`,
+    amount: payment.amount,
+    date: payment.date,
+    frequency: "once",
+    sourceId: payment.debtId,
+  };
+}
+
+function parseBillChangeStartDate(message: string, today: string): string {
+  if (/\bnext month\b/i.test(message)) {
+    const base = new Date(`${today}T00:00:00Z`);
+    return `${base.getUTCFullYear() + (base.getUTCMonth() === 11 ? 1 : 0)}-${String((base.getUTCMonth() + 1) % 12 + 1).padStart(2, "0")}-01`;
+  }
+  if (/\b(today|20\d{2}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i.test(message)) {
+    return parseFloDate(message, today);
+  }
+  return today;
+}
+
+function isFutureMonth(date: string, today: string): boolean {
+  return date.slice(0, 7) > today.slice(0, 7);
+}
+
+function findNamedItem<T extends { name: string }>(message: string, items: T[]): T | null {
+  const lower = message.toLowerCase();
+  return [...items]
+    .sort((left, right) => right.name.length - left.name.length)
+    .find(item => lower.includes(item.name.toLowerCase())) ?? null;
+}
+
+function roundCents(amount: number): number {
+  return Math.round(amount * 100) / 100;
 }
 
 export function isFloPlanCreateCommand(message: string): boolean {
