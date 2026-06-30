@@ -62,7 +62,7 @@ export default function FloScreen() {
   const [chat, dispatch] = useReducer(reduceFloChat, initialChat);
   const [cardsByMessageId, setCardsByMessageId] = useState<Record<string, FloResponseCard[]>>({});
   const [decisionByMessageId, setDecisionByMessageId] = useState<Record<string, { scenario: DecisionScenario; result: DecisionResult }>>({});
-  const [decisionSaveState, setDecisionSaveState] = useState<Record<string, "saving" | "saved" | "failed">>({});
+  const [decisionSaveState, setDecisionSaveState] = useState<Record<string, "idle" | "saving" | "saved" | "failed">>({});
   const [categoryMoveByMessageId, setCategoryMoveByMessageId] = useState<Record<string, FloCategoryMoveResult>>({});
   const [categoryMoveState, setCategoryMoveState] = useState<Record<string, "idle" | "saving" | "saved" | "failed">>({});
   const [billDateMoveByMessageId, setBillDateMoveByMessageId] = useState<Record<string, FloBillDateMoveResult>>({});
@@ -391,13 +391,7 @@ export default function FloScreen() {
       const result = evaluateDecision(baseline, scenario, settings.safety_floor);
       setDecisionByMessageId(previous => ({ ...previous, [replyId]: { scenario, result } }));
       if (isFloPlanCreateCommand(clean)) {
-        setDecisionSaveState(previous => ({ ...previous, [replyId]: "saving" }));
-        try {
-          await saveDecision(scenario, result, "planned");
-          setDecisionSaveState(previous => ({ ...previous, [replyId]: "saved" }));
-        } catch {
-          setDecisionSaveState(previous => ({ ...previous, [replyId]: "failed" }));
-        }
+        setDecisionSaveState(previous => ({ ...previous, [replyId]: "idle" as const }));
       }
     }
     const categoryMove = evaluateFloCategoryMove(clean, facts);

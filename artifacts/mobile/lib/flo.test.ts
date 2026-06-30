@@ -148,12 +148,17 @@ test("Flo evaluates category budget moves from verified facts", () => {
   assert.match(localFloAnswer("Can I move $60 from Entertainment to Food?", facts, days) ?? "", /Yes/);
   assert.match(localFloAnswer("Can I move $50 from Entertainment to Food?", facts, days) ?? "", /still leave Food \$10\.00 over plan/);
   assert.match(localFloAnswer("Can I move $500 from Entertainment to Food?", facts, days) ?? "", /only has \$150\.00 left/);
+  assert.match(localFloAnswer("Can I move $100 from Entertainment to Debt?", facts, days) ?? "", /reserved for debt payoff/);
 
   const move = evaluateFloCategoryMove("Can I move $60 from Entertainment to Food?", facts);
   assert.equal(move?.allowed, true);
   assert.equal(move?.from, "Entertainment");
   assert.equal(move?.to, "Food");
   assert.equal(move?.amount, 60);
+
+  const debtMove = evaluateFloCategoryMove("Can I move $100 from Entertainment to Debt?", facts);
+  assert.equal(debtMove?.allowed, true);
+  assert.equal(debtMove?.to, "Debt");
 });
 
 test("Flo builds dynamic category quick prompts", () => {
@@ -198,6 +203,10 @@ test("Flo creates deterministic response cards for supported finance questions",
   const categoryCards = floResponseCards("Why is Food over?", facts, days);
   assert.equal(categoryCards[0]?.title, "Category Status");
   assert.equal(categoryCards[0]?.value, "OVER");
+
+  const categoryMoveCards = floResponseCards("Can I move $100 from Entertainment to Debt?", facts, days);
+  assert.equal(categoryMoveCards[0]?.title, "Budget Move");
+  assert.equal(categoryMoveCards[0]?.value, "READY");
 
   const paycheckCards = floResponseCards("What can I spend until payday?", facts, days);
   assert.equal(paycheckCards[0]?.title, "Safe Until Payday");

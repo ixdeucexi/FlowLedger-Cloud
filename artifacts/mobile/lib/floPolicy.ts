@@ -622,7 +622,7 @@ export function evaluateFloCategoryMove(message: string, facts: FloFacts): FloCa
     };
   }
   const source = findCategoryByName(requested.from, categories);
-  const target = findCategoryByName(requested.to, categories);
+  const target = findCategoryByName(requested.to, categories) ?? debtCategoryFallback(requested.to);
   if (!source) {
     return {
       amount: requested.amount,
@@ -665,7 +665,9 @@ export function evaluateFloCategoryMove(message: string, facts: FloFacts): FloCa
     from: source.category,
     to: target.category,
     allowed: true,
-    reason: `Yes. You can move $${requested.amount.toFixed(2)} from ${source.category} to ${target.category}. ${source.category} would have $${(source.remaining - requested.amount).toFixed(2)} left, and ${target.category} would improve to $${(target.remaining + requested.amount).toFixed(2)} left.`,
+    reason: target.category === "Debt"
+      ? `Yes. You can move $${requested.amount.toFixed(2)} from ${source.category} to Debt. ${source.category} would have $${(source.remaining - requested.amount).toFixed(2)} left, and the money can be reserved for debt payoff instead of extra spending.`
+      : `Yes. You can move $${requested.amount.toFixed(2)} from ${source.category} to ${target.category}. ${source.category} would have $${(source.remaining - requested.amount).toFixed(2)} left, and ${target.category} would improve to $${(target.remaining + requested.amount).toFixed(2)} left.`,
   };
 }
 
@@ -685,6 +687,19 @@ function findCategoryByName(name: string, categories: FloCategoryFact[]) {
   const normalized = cleanupCategoryName(name).toLowerCase();
   return categories.find(item => item.category.toLowerCase() === normalized)
     ?? categories.find(item => item.category.toLowerCase().includes(normalized) || normalized.includes(item.category.toLowerCase()));
+}
+
+function debtCategoryFallback(name: string): FloCategoryFact | null {
+  const normalized = cleanupCategoryName(name).toLowerCase();
+  if (!/\b(debt|snowball|extra debt|debt payoff|payoff)\b/.test(normalized)) return null;
+  return {
+    category: "Debt",
+    budgeted: 0,
+    spent: 0,
+    remaining: 0,
+    status: "available",
+    percentUsed: 0,
+  };
 }
 
 function cleanupCategoryName(value: string) {
@@ -763,6 +778,17 @@ function floPaycheckCards(message: string, facts: FloFacts): FloResponseCard[] {
 
 function floCategoryCards(message: string, facts: FloFacts): FloResponseCard[] {
   const categories = facts.categoryPlan ?? [];
+  const move = evaluateFloCategoryMove(message, facts);
+  if (move) {
+    return [
+      {
+        title: "Budget Move",
+        value: move.allowed ? "READY" : "NOT SAFE",
+        detail: move.allowed ? `$${move.amount.toFixed(2)} from ${move.from} to ${move.to}` : move.reason,
+        tone: move.allowed ? "safe" : "risk",
+      },
+    ];
+  }
   if (!categories.length) return [];
   const named = findMentionedCategory(message, categories);
   const lower = message.toLowerCase();
