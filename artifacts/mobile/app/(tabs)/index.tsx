@@ -22,6 +22,7 @@ import { CATEGORY_BUDGETS_EVENT, categoryBudgetStorageKey, loadCategoryBudgets, 
 import { DECISION_HUB_SETTINGS_EVENT, loadDecisionHubSettings, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { buildDecisionHistory } from "@/lib/decisionHistory";
 import { buildDecisionRiskAlerts } from "@/lib/decisionRisk";
+import { groupForecastEvents } from "@/lib/forecastDisplay";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 
@@ -126,6 +127,26 @@ export default function DashboardScreen() {
     const firstNegEntry = currentMonthBalances.find(db => db.balance < 0);
     return { currentBalance, endOfMonthBalance, lowestBalance, lowestDay, firstNegDay: firstNegEntry?.day ?? null };
   }, [currentMonthBalances, today]);
+
+  const forecastTrust = useMemo(() => {
+    if (!balanceMetrics || !currentMonthBalances.length) return null;
+    const todayEntry = currentMonthBalances.find(day => day.day === today) ?? currentMonthBalances[0];
+    const endEntry = currentMonthBalances[currentMonthBalances.length - 1];
+    const lowEntry = currentMonthBalances.find(day => day.day === balanceMetrics.lowestDay) ?? todayEntry;
+    const groups = groupForecastEvents(lowEntry?.events ?? []);
+    const sourceCount = (todayEntry?.events?.length ?? 0) + (endEntry?.events?.length ?? 0) + (lowEntry?.events?.length ?? 0);
+    const topDrivers = groups
+      .flatMap(group => group.events.map(event => `${event.label} ${event.amountLabel}`))
+      .slice(0, 3);
+    return {
+      todayEntry,
+      endEntry,
+      lowEntry,
+      sourceCount,
+      topDrivers,
+      prompt: `Explain my forecast numbers. Balance today is $${balanceMetrics.currentBalance.toFixed(0)}, end of month is $${balanceMetrics.endOfMonthBalance.toFixed(0)}, and lowest balance is $${balanceMetrics.lowestBalance.toFixed(0)} on ${MONTH_NAMES[currentMonth]} ${balanceMetrics.lowestDay}.`,
+    };
+  }, [balanceMetrics, currentMonthBalances, currentMonth, today]);
 
   // ── 12-month negative schedule ─────────────────────────────────────────────
   type OutlookMonth = { month: number; year: number; label: string; firstNegDay: number | null; lowestBalance: number };
@@ -984,6 +1005,47 @@ export default function DashboardScreen() {
 
       {/* ── Stat Pill Cards ── */}
       {/* Row 1: Bills · Paid · Unpaid */}
+      {forecastTrust && balanceMetrics ? (
+        <View style={[styles.forecastTrustCard, { backgroundColor: c.card, borderColor: c.border }]}>
+          <View style={styles.forecastTrustHeader}>
+            <View style={[styles.forecastTrustIcon, { backgroundColor: c.primary + "18" }]}>
+              <Feather name="shield" size={15} color={c.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.forecastTrustTitle, { color: c.foreground }]}>Why these numbers?</Text>
+              <Text style={[styles.forecastTrustSub, { color: c.mutedForeground }]}>
+                Forecast uses {forecastTrust.sourceCount} dated source item{forecastTrust.sourceCount === 1 ? "" : "s"} across today, month-end, and the low point.
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => openFloWithPrompt(forecastTrust.prompt)}
+              style={({ pressed }) => [styles.forecastTrustAsk, { backgroundColor: c.primary + "18", opacity: pressed ? 0.75 : 1 }]}
+            >
+              <Text style={[styles.forecastTrustAskText, { color: c.primary }]}>Ask Flo</Text>
+            </Pressable>
+          </View>
+          <View style={styles.forecastTrustGrid}>
+            <View style={[styles.forecastTrustMetric, { backgroundColor: c.muted }]}>
+              <Text style={[styles.forecastTrustLabel, { color: c.mutedForeground }]}>Today</Text>
+              <Text style={[styles.forecastTrustValue, { color: balanceMetrics.currentBalance < settings.safety_floor ? c.warning : c.success }]}>${balanceMetrics.currentBalance.toFixed(0)}</Text>
+            </View>
+            <View style={[styles.forecastTrustMetric, { backgroundColor: c.muted }]}>
+              <Text style={[styles.forecastTrustLabel, { color: c.mutedForeground }]}>End Month</Text>
+              <Text style={[styles.forecastTrustValue, { color: balanceMetrics.endOfMonthBalance < 0 ? c.destructive : c.foreground }]}>${balanceMetrics.endOfMonthBalance.toFixed(0)}</Text>
+            </View>
+            <View style={[styles.forecastTrustMetric, { backgroundColor: c.muted }]}>
+              <Text style={[styles.forecastTrustLabel, { color: c.mutedForeground }]}>Low Point</Text>
+              <Text style={[styles.forecastTrustValue, { color: balanceMetrics.lowestBalance < settings.safety_floor ? c.warning : c.success }]}>${balanceMetrics.lowestBalance.toFixed(0)}</Text>
+            </View>
+          </View>
+          <Text style={[styles.forecastTrustDrivers, { color: c.mutedForeground }]}>
+            {forecastTrust.topDrivers.length > 0
+              ? `Low-point drivers: ${forecastTrust.topDrivers.join(" · ")}`
+              : "Tap a calendar day in Monthly for the full source-by-source breakdown."}
+          </Text>
+        </View>
+      ) : null}
+
       <View style={[styles.statsPillRow, { marginBottom: 8 }]}>
         {statCards.slice(0, 3).map(card => (
           <Pressable
@@ -2317,6 +2379,18 @@ const styles = StyleSheet.create({
   upcomingAmt:   { fontSize: 15, fontFamily: "Inter_700Bold" },
 
   // Stat pill cards
+  forecastTrustCard: { borderWidth: 1, borderRadius: 16, padding: 12, marginBottom: 10 },
+  forecastTrustHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  forecastTrustIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  forecastTrustTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
+  forecastTrustSub: { fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 16, marginTop: 2 },
+  forecastTrustAsk: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
+  forecastTrustAskText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
+  forecastTrustGrid: { flexDirection: "row", gap: 8, marginTop: 10 },
+  forecastTrustMetric: { flex: 1, borderRadius: 12, padding: 9 },
+  forecastTrustLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", marginBottom: 3 },
+  forecastTrustValue: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
+  forecastTrustDrivers: { fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 16, marginTop: 9 },
   statsPillRow:  { flexDirection: "row", gap: 6, marginBottom: 14 },
   statPill:      { flex: 1, borderRadius: 14, paddingVertical: 16, paddingHorizontal: 6, alignItems: "center", justifyContent: "center" },
   statPillValue: { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 5 },
