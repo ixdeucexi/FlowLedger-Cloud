@@ -306,6 +306,23 @@ export default function MoreScreen() {
           </View>
         </Pressable>
         <Pressable
+          onPress={() => updateDecisionHubSetting({ categoryDecisionAlertsEnabled: !decisionHubSettings.categoryDecisionAlertsEnabled })}
+          style={({ pressed }) => [styles.decisionSettingRow, { borderTopWidth: 1, borderTopColor: c.border, marginTop: 14, paddingTop: 14, opacity: pressed ? 0.75 : 1 }]}
+        >
+          <View style={[styles.dataIcon, { backgroundColor: c.warning + "18" }]}>
+            <Feather name="tag" size={17} color={c.warning} />
+          </View>
+          <View style={styles.switchInfo}>
+            <Text style={[styles.switchLabel, { color: c.foreground }]}>Category decision help</Text>
+            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>
+              Show category warnings and let Flo suggest money moves between categories.
+            </Text>
+          </View>
+          <View style={[styles.toggleTrack, { backgroundColor: decisionHubSettings.categoryDecisionAlertsEnabled ? c.primary : c.muted }]}>
+            <View style={[styles.toggleKnob, { backgroundColor: "#fff", alignSelf: decisionHubSettings.categoryDecisionAlertsEnabled ? "flex-end" : "flex-start" }]} />
+          </View>
+        </Pressable>
+        <Pressable
           onPress={() => updateDecisionHubSetting({ paycheckPlanningEnabled: !decisionHubSettings.paycheckPlanningEnabled })}
           style={({ pressed }) => [styles.decisionSettingRow, { borderTopWidth: 1, borderTopColor: c.border, marginTop: 14, paddingTop: 14, opacity: pressed ? 0.75 : 1 }]}
         >

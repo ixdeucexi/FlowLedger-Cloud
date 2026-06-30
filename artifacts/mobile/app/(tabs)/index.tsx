@@ -331,6 +331,37 @@ export default function DashboardScreen() {
     spent: totals.spent + row.spent,
     remaining: totals.remaining + row.remaining,
   }), { budgeted: 0, spent: 0, remaining: 0 }), [categoryPlan]);
+  const categoryDecisionAlert = useMemo(() => {
+    if (!decisionHubSettings.categoryDecisionAlertsEnabled) return null;
+    const over = categoryPlan
+      .filter(row => row.remaining < -0.005)
+      .sort((left, right) => left.remaining - right.remaining)[0];
+    if (over) {
+      const source = categoryPlan
+        .filter(row => row.category !== over.category && row.remaining > 0.005)
+        .sort((left, right) => right.remaining - left.remaining)[0];
+      return {
+        tone: "risk" as const,
+        title: `${over.category} is over by $${Math.abs(over.remaining).toFixed(0)}`,
+        detail: source
+          ? `${source.category} has $${source.remaining.toFixed(0)} available. Ask Flo before moving money.`
+          : "No category has enough extra room yet. Review the budget or spending.",
+        prompt: source
+          ? `Can I move $${Math.abs(over.remaining).toFixed(0)} from ${source.category} to ${over.category}?`
+          : `Why is ${over.category} over?`,
+      };
+    }
+    const watch = categoryPlan
+      .filter(row => row.status === "watch")
+      .sort((left, right) => left.remaining - right.remaining)[0];
+    if (!watch) return null;
+    return {
+      tone: "watch" as const,
+      title: `${watch.category} is getting tight`,
+      detail: `$${Math.max(0, watch.remaining).toFixed(0)} left this month. Ask Flo before spending more.`,
+      prompt: `How much do I have left for ${watch.category}?`,
+    };
+  }, [categoryPlan, decisionHubSettings.categoryDecisionAlertsEnabled]);
 
   const openCategoryBudgetEditor = () => {
     const drafts: Record<string, string> = {};
@@ -1097,9 +1128,31 @@ export default function DashboardScreen() {
 
       {categoryPlan.length > 0 && (
         <View style={{ marginBottom: 14 }}>
+          {categoryDecisionAlert ? (
+            <Pressable
+              onPress={() => openFloWithPrompt(categoryDecisionAlert.prompt)}
+              style={({ pressed }) => [
+                styles.categoryDecisionAlert,
+                {
+                  backgroundColor: categoryDecisionAlert.tone === "risk" ? c.destructive + "12" : c.warning + "14",
+                  borderColor: categoryDecisionAlert.tone === "risk" ? c.destructive + "70" : c.warning + "70",
+                  opacity: pressed ? 0.8 : 1,
+                },
+              ]}
+            >
+              <Feather name={categoryDecisionAlert.tone === "risk" ? "alert-triangle" : "eye"} size={17} color={categoryDecisionAlert.tone === "risk" ? c.destructive : c.warning} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.categoryDecisionAlertTitle, { color: c.foreground }]}>{categoryDecisionAlert.title}</Text>
+                <Text style={[styles.categoryDecisionAlertText, { color: c.mutedForeground }]}>{categoryDecisionAlert.detail}</Text>
+              </View>
+              <View style={[styles.askFloPill, { backgroundColor: c.primary + "18" }]}>
+                <Text style={[styles.askFloPillText, { color: c.primary }]}>Ask Flo</Text>
+              </View>
+            </Pressable>
+          ) : null}
           <View style={styles.categoryPlanHeader}>
             <View>
-              <Text style={[styles.sectionTitle, { color: c.foreground, marginBottom: 2 }]}>Category Plan</Text>
+              <Text style={[styles.sectionTitle, { color: c.foreground, marginBottom: 2 }]}>Category Budget</Text>
               <Text style={[styles.categoryPlanSub, { color: c.mutedForeground }]}>
                 ${categoryPlanTotals.spent.toFixed(0)} spent · ${Math.max(0, categoryPlanTotals.remaining).toFixed(0)} left
               </Text>
@@ -2159,6 +2212,9 @@ const styles = StyleSheet.create({
 
   // Phase 4 category planning
   categoryPlanHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 },
+  categoryDecisionAlert: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 12 },
+  categoryDecisionAlertTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
+  categoryDecisionAlertText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 2 },
   categoryPlanSub: { fontSize: 12, fontFamily: "Inter_400Regular" },
   categoryPlanHeaderActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   categoryBudgetEdit: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },

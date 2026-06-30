@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase";
 
 export interface DecisionHubSettings {
   categoryRolloverEnabled: boolean;
+  categoryDecisionAlertsEnabled: boolean;
   paycheckPlanningEnabled: boolean;
   lowBalanceAlertsEnabled: boolean;
   billBeforePaydayAlertsEnabled: boolean;
@@ -13,6 +14,7 @@ export interface DecisionHubSettings {
 
 export const DEFAULT_DECISION_HUB_SETTINGS: DecisionHubSettings = {
   categoryRolloverEnabled: false,
+  categoryDecisionAlertsEnabled: true,
   paycheckPlanningEnabled: false,
   lowBalanceAlertsEnabled: true,
   billBeforePaydayAlertsEnabled: true,
@@ -31,6 +33,7 @@ export function readDecisionHubSettings(): DecisionHubSettings {
     const parsed = raw ? JSON.parse(raw) as Partial<DecisionHubSettings> : {};
     return {
       categoryRolloverEnabled: Boolean(parsed.categoryRolloverEnabled),
+      categoryDecisionAlertsEnabled: parsed.categoryDecisionAlertsEnabled !== false,
       paycheckPlanningEnabled: Boolean(parsed.paycheckPlanningEnabled),
       lowBalanceAlertsEnabled: parsed.lowBalanceAlertsEnabled !== false,
       billBeforePaydayAlertsEnabled: parsed.billBeforePaydayAlertsEnabled !== false,
@@ -80,6 +83,7 @@ function normalizeDecisionHubSettings(value: unknown): DecisionHubSettings {
   const parsed = value && typeof value === "object" ? value as Partial<DecisionHubSettings> : {};
   return {
     categoryRolloverEnabled: Boolean(parsed.categoryRolloverEnabled),
+    categoryDecisionAlertsEnabled: parsed.categoryDecisionAlertsEnabled !== false,
     paycheckPlanningEnabled: Boolean(parsed.paycheckPlanningEnabled),
     lowBalanceAlertsEnabled: parsed.lowBalanceAlertsEnabled !== false,
     billBeforePaydayAlertsEnabled: parsed.billBeforePaydayAlertsEnabled !== false,

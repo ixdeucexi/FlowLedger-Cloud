@@ -398,7 +398,7 @@ export default function FloScreen() {
   }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, transactions, upcoming, decisions, forecastConfidence.level, categoryPlan, paycheckPlan, billDateMoves, bills, decisionHistory, decisionRiskAlerts]);
 
   const quickPrompts = useMemo(() => {
-    const categoryPrompts = buildFloCategoryQuickPrompts(categoryPlan);
+    const categoryPrompts = decisionHubSettings.categoryDecisionAlertsEnabled ? buildFloCategoryQuickPrompts(categoryPlan) : [];
     return [
       ...(decisionHistory.due.length ? ["What decisions need review?"] : []),
       ...(decisionRiskAlerts.length ? ["Are any planned decisions no longer safe?"] : []),
@@ -410,7 +410,7 @@ export default function FloScreen() {
       "What bills are due next?",
       "Why does my balance run low?",
     ].slice(0, 8);
-  }, [categoryPlan, decisionHistory, decisionRiskAlerts]);
+  }, [categoryPlan, decisionHistory, decisionRiskAlerts, decisionHubSettings.categoryDecisionAlertsEnabled]);
 
   const send = async (text = input) => {
     const clean = text.trim();
@@ -448,7 +448,7 @@ export default function FloScreen() {
         setDecisionSaveState(previous => ({ ...previous, [replyId]: "idle" as const }));
       }
     }
-    const categoryMove = evaluateFloCategoryMove(clean, facts);
+    const categoryMove = decisionHubSettings.categoryDecisionAlertsEnabled ? evaluateFloCategoryMove(clean, facts) : null;
     if (categoryMove?.allowed) {
       setCategoryMoveByMessageId(previous => ({ ...previous, [replyId]: categoryMove }));
       setCategoryMoveState(previous => ({ ...previous, [replyId]: "idle" }));
