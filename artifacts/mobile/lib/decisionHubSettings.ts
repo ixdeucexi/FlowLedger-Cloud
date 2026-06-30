@@ -2,10 +2,12 @@ import { Platform } from "react-native";
 
 export interface DecisionHubSettings {
   categoryRolloverEnabled: boolean;
+  paycheckPlanningEnabled: boolean;
 }
 
 export const DEFAULT_DECISION_HUB_SETTINGS: DecisionHubSettings = {
   categoryRolloverEnabled: false,
+  paycheckPlanningEnabled: false,
 };
 
 export const DECISION_HUB_SETTINGS_KEY = "flowledger-decision-hub-settings";
@@ -18,6 +20,7 @@ export function readDecisionHubSettings(): DecisionHubSettings {
     const parsed = raw ? JSON.parse(raw) as Partial<DecisionHubSettings> : {};
     return {
       categoryRolloverEnabled: Boolean(parsed.categoryRolloverEnabled),
+      paycheckPlanningEnabled: Boolean(parsed.paycheckPlanningEnabled),
     };
   } catch {
     return DEFAULT_DECISION_HUB_SETTINGS;

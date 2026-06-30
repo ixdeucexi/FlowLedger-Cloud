@@ -40,5 +40,7 @@
     ,"lib/floPolicy.ts"
     ,"lib/debtOrder.ts"
     ,"lib/debtOrder.test.ts"
+    ,"lib/paycheckPlanning.ts"
+    ,"lib/paycheckPlanning.test.ts"
   ]
 }

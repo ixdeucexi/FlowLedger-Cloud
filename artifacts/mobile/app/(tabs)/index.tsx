@@ -21,6 +21,7 @@ import { DECISION_HUB_SETTINGS_EVENT, readDecisionHubSettings, type DecisionHubS
 import { buildDecisionHistory } from "@/lib/decisionHistory";
 import { buildDecisionRiskAlerts } from "@/lib/decisionRisk";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
+import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const MONTH_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -38,6 +39,7 @@ export default function DashboardScreen() {
   const router = useRouter();
   const {
     bills, getPaidAmount, getBillMonthlyTotal, getMonthlyBills, selectedYear, setDashboardFilter,
+    getBillOccurrencesInMonth, getIncomeOccurrencesInMonth,
     goals, addGoal, updateGoal, deleteGoal, checkGoalAffordability,
     getCashFlow, getMonthlyIncome, addBill, addTransaction, getDailyBalances, getTransactionsForMonth, settings,
     accounts, incomes, decisions, forecastConfidence, updateSettings,
@@ -563,6 +565,69 @@ export default function DashboardScreen() {
   const breakdownText =
     `$${cashFlow.monthlyIncome.toFixed(0)} income − $${cashFlow.totalBillsDue.toFixed(0)} bills${txDisplay} = $${Math.abs(cashFlow.remaining).toFixed(0)} ${cashFlow.remaining >= 0 ? "left" : "short"}`;
   const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const currentYear = now.getFullYear();
+  const paycheckPlan = useMemo(() => {
+    if (!decisionHubSettings.paycheckPlanningEnabled) return null;
+    const horizon = Math.max(2, Math.min(settings.forecast_horizon_months, 6));
+    const incomeEvents: { id?: string; name: string; amount: number; date: string }[] = [];
+    const billEvents: { id?: string; name: string; amount: number; dueDate: string }[] = [];
+    const balanceEvents: { date: string; balance: number }[] = [];
+
+    for (let i = 0; i < horizon; i += 1) {
+      const absoluteMonth = currentMonth + i;
+      const month = absoluteMonth % 12;
+      const year = currentYear + Math.floor(absoluteMonth / 12);
+
+      getIncomeOccurrencesInMonth(month, year).forEach(({ income, days, effectiveAmount }) => {
+        days.forEach(day => incomeEvents.push({
+          id: income.id,
+          name: income.name,
+          amount: effectiveAmount,
+          date: makeDateKey(year, month, day),
+        }));
+      });
+
+      getMonthlyBills(month, year).forEach(bill => {
+        const occurrences = getBillOccurrencesInMonth(bill, month, year);
+        if (!occurrences.length) return;
+        const monthlyTotal = getBillMonthlyTotal(bill, month, year);
+        const perOccurrence = monthlyTotal / occurrences.length;
+        let paidRemaining = getPaidAmount(bill.id, month, year);
+        occurrences.forEach(day => {
+          const appliedPaid = Math.min(perOccurrence, Math.max(0, paidRemaining));
+          paidRemaining = Math.max(0, paidRemaining - perOccurrence);
+          const remaining = Math.max(0, perOccurrence - appliedPaid);
+          if (remaining > 0.005) {
+            billEvents.push({
+              id: bill.id,
+              name: bill.name,
+              amount: remaining,
+              dueDate: makeDateKey(year, month, day),
+            });
+          }
+        });
+      });
+
+      getDailyBalances(month, year).forEach(day => {
+        balanceEvents.push({ date: makeDateKey(year, month, day.day), balance: day.balance });
+      });
+    }
+
+    return buildPaycheckPlan(incomeEvents, billEvents, balanceEvents, settings.safety_floor, todayIso);
+  }, [
+    currentMonth,
+    currentYear,
+    decisionHubSettings.paycheckPlanningEnabled,
+    getBillMonthlyTotal,
+    getBillOccurrencesInMonth,
+    getDailyBalances,
+    getIncomeOccurrencesInMonth,
+    getMonthlyBills,
+    getPaidAmount,
+    settings.forecast_horizon_months,
+    settings.safety_floor,
+    todayIso,
+  ]);
   const decisionHistory = useMemo(
     () => buildDecisionHistory(decisions, todayIso, now.toISOString()),
     [decisions, todayIso, now],
@@ -909,6 +974,64 @@ export default function DashboardScreen() {
         </View>
         <Feather name="chevron-right" size={18} color={c.mutedForeground} />
       </Pressable>
+
+      {paycheckPlan && (
+        <View style={[styles.paycheckPlanCard, { backgroundColor: c.card, borderColor: paycheckPlan.status === "risk" ? c.destructive + "80" : paycheckPlan.status === "tight" ? c.warning + "80" : c.border }]}>
+          <View style={styles.paycheckPlanHeader}>
+            <View style={[styles.paycheckPlanIcon, { backgroundColor: paycheckPlan.status === "risk" ? c.destructive + "18" : paycheckPlan.status === "tight" ? c.warning + "18" : c.success + "18" }]}>
+              <Feather
+                name={paycheckPlan.status === "risk" ? "alert-triangle" : paycheckPlan.status === "empty" ? "calendar" : "briefcase"}
+                size={18}
+                color={paycheckPlan.status === "risk" ? c.destructive : paycheckPlan.status === "tight" ? c.warning : c.success}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.decisionHubEyebrow, { color: c.mutedForeground }]}>Paycheck Plan</Text>
+              <Text style={[styles.paycheckPlanTitle, { color: c.foreground }]}>
+                {paycheckPlan.nextPaycheck
+                  ? `Until ${new Date(paycheckPlan.nextPaycheck.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                  : "No upcoming paycheck found"}
+              </Text>
+            </View>
+            <Text style={[styles.paycheckPlanSafe, { color: paycheckPlan.status === "risk" ? c.destructive : paycheckPlan.status === "tight" ? c.warning : c.success }]}>
+              ${paycheckPlan.safeToSpend.toFixed(0)}
+            </Text>
+          </View>
+          <Text style={[styles.paycheckPlanDesc, { color: c.mutedForeground }]}>
+            {paycheckPlan.nextPaycheck
+              ? `Safe to spend before ${paycheckPlan.nextPaycheck.name} lands. Lowest forecast: $${paycheckPlan.lowestBalance.toFixed(0)} on ${new Date(paycheckPlan.lowestBalanceDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}.`
+              : "Add recurring income to unlock paycheck-by-paycheck planning."}
+          </Text>
+          <View style={styles.paycheckPlanStats}>
+            <View style={[styles.paycheckPlanStatBox, { backgroundColor: c.muted }]}>
+              <Text style={[styles.paycheckPlanStatLabel, { color: c.mutedForeground }]}>Bills before pay</Text>
+              <Text style={[styles.paycheckPlanStatValue, { color: c.foreground }]}>{paycheckPlan.billsDue.length}</Text>
+            </View>
+            <View style={[styles.paycheckPlanStatBox, { backgroundColor: c.muted }]}>
+              <Text style={[styles.paycheckPlanStatLabel, { color: c.mutedForeground }]}>Bills total</Text>
+              <Text style={[styles.paycheckPlanStatValue, { color: c.warning }]}>${paycheckPlan.billsTotal.toFixed(0)}</Text>
+            </View>
+            <View style={[styles.paycheckPlanStatBox, { backgroundColor: c.muted }]}>
+              <Text style={[styles.paycheckPlanStatLabel, { color: c.mutedForeground }]}>Next pay</Text>
+              <Text style={[styles.paycheckPlanStatValue, { color: c.success }]}>
+                {paycheckPlan.nextPaycheck ? `$${paycheckPlan.nextPaycheck.amount.toFixed(0)}` : "—"}
+              </Text>
+            </View>
+          </View>
+          {paycheckPlan.billsDue.length > 0 && (
+            <View style={[styles.paycheckPlanBills, { borderTopColor: c.border }]}>
+              {paycheckPlan.billsDue.slice(0, 3).map(bill => (
+                <View key={`${bill.id ?? bill.name}-${bill.dueDate}`} style={styles.paycheckPlanBillRow}>
+                  <Text numberOfLines={1} style={[styles.paycheckPlanBillName, { color: c.foreground }]}>{bill.name}</Text>
+                  <Text style={[styles.paycheckPlanBillAmount, { color: c.mutedForeground }]}>
+                    ${bill.amount.toFixed(0)} · {new Date(bill.dueDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
 
       {categoryPlan.length > 0 && (
         <View style={{ marginBottom: 14 }}>
@@ -1954,6 +2077,20 @@ const styles = StyleSheet.create({
   decisionHubDesc: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 2 },
   decisionHubStats: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
   decisionHubStat: { fontSize: 11, fontFamily: "Inter_700Bold" },
+  paycheckPlanCard: { borderWidth: 1, borderRadius: 16, padding: 14, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
+  paycheckPlanHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  paycheckPlanIcon: { width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  paycheckPlanTitle: { fontSize: 16, fontFamily: "Inter_700Bold" },
+  paycheckPlanSafe: { fontSize: 23, fontFamily: "Inter_800ExtraBold" },
+  paycheckPlanDesc: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 10 },
+  paycheckPlanStats: { flexDirection: "row", gap: 8, marginTop: 12 },
+  paycheckPlanStatBox: { flex: 1, borderRadius: 12, padding: 10 },
+  paycheckPlanStatLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 },
+  paycheckPlanStatValue: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
+  paycheckPlanBills: { borderTopWidth: 1, marginTop: 12, paddingTop: 10, gap: 7 },
+  paycheckPlanBillRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  paycheckPlanBillName: { flex: 1, fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  paycheckPlanBillAmount: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   whatBtn:     { flexDirection: "row", alignItems: "center", gap: 12, padding: 16, marginBottom: 14, borderWidth: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
   whatBtnIcon: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   whatBtnText: { flex: 1, fontSize: 16, fontFamily: "Inter_700Bold" },

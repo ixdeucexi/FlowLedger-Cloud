@@ -289,12 +289,31 @@ export default function MoreScreen() {
             <View style={[styles.toggleKnob, { backgroundColor: "#fff", alignSelf: decisionHubSettings.categoryRolloverEnabled ? "flex-end" : "flex-start" }]} />
           </View>
         </Pressable>
+        <Pressable
+          onPress={() => updateDecisionHubSetting({ paycheckPlanningEnabled: !decisionHubSettings.paycheckPlanningEnabled })}
+          style={({ pressed }) => [styles.decisionSettingRow, { borderTopWidth: 1, borderTopColor: c.border, marginTop: 14, paddingTop: 14, opacity: pressed ? 0.75 : 1 }]}
+        >
+          <View style={[styles.dataIcon, { backgroundColor: c.success + "18" }]}>
+            <Feather name="calendar" size={17} color={c.success} />
+          </View>
+          <View style={styles.switchInfo}>
+            <Text style={[styles.switchLabel, { color: c.foreground }]}>Paycheck planning</Text>
+            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>
+              Show bills due and safe-to-spend before your next paycheck on Dashboard.
+            </Text>
+          </View>
+          <View style={[styles.toggleTrack, { backgroundColor: decisionHubSettings.paycheckPlanningEnabled ? c.primary : c.muted }]}>
+            <View style={[styles.toggleKnob, { backgroundColor: "#fff", alignSelf: decisionHubSettings.paycheckPlanningEnabled ? "flex-end" : "flex-start" }]} />
+          </View>
+        </Pressable>
         <View style={[styles.priorityNote, { backgroundColor: decisionHubSettings.categoryRolloverEnabled ? c.success + "12" : c.muted, borderRadius: 8 }]}>
           <Feather name="info" size={12} color={decisionHubSettings.categoryRolloverEnabled ? c.success : c.mutedForeground} />
           <Text style={[styles.priorityNoteText, { color: c.mutedForeground }]}>
-            {decisionHubSettings.categoryRolloverEnabled
-              ? "Rollover is on. Positive balances build up; negative balances reduce next month."
-              : "Rollover is off. Category budgets reset to this month's plan."}
+            {decisionHubSettings.paycheckPlanningEnabled
+              ? "Paycheck planning is on. Dashboard will show what is due before the next payday."
+              : decisionHubSettings.categoryRolloverEnabled
+                ? "Rollover is on. Positive balances build up; negative balances reduce next month."
+                : "Decision Hub extras are optional. Turn on the planning tools you want to see."}
           </Text>
         </View>
       </View>
