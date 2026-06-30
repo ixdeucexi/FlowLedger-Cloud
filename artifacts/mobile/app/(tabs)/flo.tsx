@@ -41,7 +41,8 @@ import { evaluateDecision, type DecisionResult, type DecisionScenario } from "@/
 import { buildDecisionHistory, type DecisionHistoryItem } from "@/lib/decisionHistory";
 import { buildDecisionRiskAlerts } from "@/lib/decisionRisk";
 import { applyCategoryBudgetMove, buildCategoryPlan, buildCategoryRolloverAdjustments } from "@/lib/categoryPlanning";
-import { DECISION_HUB_SETTINGS_EVENT, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
+import { CATEGORY_BUDGETS_EVENT, categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets } from "@/lib/categoryBudgetStore";
+import { DECISION_HUB_SETTINGS_EVENT, loadDecisionHubSettings, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 
 const sampleQuestions = [
@@ -126,43 +127,51 @@ export default function FloScreen() {
   const categoryBudgetKey = useMemo(() => {
     const month = now.getMonth();
     const year = now.getFullYear();
-    return `flowledger-category-budgets-${year}-${String(month + 1).padStart(2, "0")}`;
+    return categoryBudgetStorageKey(month, year);
   }, [today]);
 
-  const readCategoryBudgetsFromStorage = (key = categoryBudgetKey) => {
-    if (Platform.OS !== "web") return {};
-    try {
-      const raw = globalThis.localStorage?.getItem(key);
-      const parsed = raw ? JSON.parse(raw) as Record<string, unknown> : {};
-      const next: Record<string, number> = {};
-      Object.entries(parsed).forEach(([category, amount]) => {
-        const value = Number(amount);
-        if (category && Number.isFinite(value) && value >= 0) next[category] = value;
+  const readCategoryBudgetsFromStorage = (month = now.getMonth(), year = now.getFullYear()) =>
+    readCategoryBudgetCache(month, year);
+
+  useEffect(() => {
+    let cancelled = false;
+    const month = now.getMonth();
+    const year = now.getFullYear();
+    const refreshCategoryBudgets = () => {
+      setCategoryBudgets(readCategoryBudgetCache(month, year));
+      void loadCategoryBudgets(user?.id, month, year).then(next => {
+        if (!cancelled) setCategoryBudgets(next);
       });
-      return next;
-    } catch {
-      return {};
-    }
-  };
-
-  useEffect(() => {
-    setCategoryBudgets(readCategoryBudgetsFromStorage());
-  }, [categoryBudgetKey]);
-
-  useEffect(() => {
-    const loadDecisionHubSettings = () => setDecisionHubSettings(readDecisionHubSettings());
-    loadDecisionHubSettings();
+    };
+    refreshCategoryBudgets();
     if (Platform.OS !== "web") return;
-    globalThis.addEventListener?.(DECISION_HUB_SETTINGS_EVENT, loadDecisionHubSettings);
-    return () => globalThis.removeEventListener?.(DECISION_HUB_SETTINGS_EVENT, loadDecisionHubSettings);
-  }, []);
+    globalThis.addEventListener?.(CATEGORY_BUDGETS_EVENT, refreshCategoryBudgets);
+    return () => {
+      cancelled = true;
+      globalThis.removeEventListener?.(CATEGORY_BUDGETS_EVENT, refreshCategoryBudgets);
+    };
+  }, [categoryBudgetKey, now, user?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refreshDecisionHubSettings = () => {
+      setDecisionHubSettings(readDecisionHubSettings());
+      void loadDecisionHubSettings(user?.id).then(next => {
+        if (!cancelled) setDecisionHubSettings(next);
+      });
+    };
+    refreshDecisionHubSettings();
+    if (Platform.OS !== "web") return;
+    globalThis.addEventListener?.(DECISION_HUB_SETTINGS_EVENT, refreshDecisionHubSettings);
+    return () => {
+      cancelled = true;
+      globalThis.removeEventListener?.(DECISION_HUB_SETTINGS_EVENT, refreshDecisionHubSettings);
+    };
+  }, [user?.id]);
 
   const writeCategoryBudgets = (budgets: Record<string, number>) => {
     setCategoryBudgets(budgets);
-    if (Platform.OS === "web") {
-      globalThis.localStorage?.setItem(categoryBudgetKey, JSON.stringify(budgets));
-      globalThis.dispatchEvent?.(new Event("flowledger-category-budgets-updated"));
-    }
+    void saveCategoryBudgets(user?.id, now.getMonth(), now.getFullYear(), budgets).catch(() => undefined);
   };
 
   const categoryPlan = useMemo(() => {
@@ -171,7 +180,6 @@ export default function FloScreen() {
     const previousDate = new Date(year, month - 1, 1);
     const previousMonth = previousDate.getMonth();
     const previousYear = previousDate.getFullYear();
-    const previousBudgetKey = `flowledger-category-budgets-${previousYear}-${String(previousMonth + 1).padStart(2, "0")}`;
     const previousBills = getMonthlyBills(previousMonth, previousYear)
       .filter(bill => !bill.is_debt)
       .map(bill => ({
@@ -185,7 +193,7 @@ export default function FloScreen() {
       categories.filter(category => category !== "Debt"),
       previousBills,
       previousTransactions,
-      Object.entries(readCategoryBudgetsFromStorage(previousBudgetKey)).map(([category, amount]) => ({ category, amount })),
+      Object.entries(readCategoryBudgetsFromStorage(previousMonth, previousYear)).map(([category, amount]) => ({ category, amount })),
     );
     const rollovers = buildCategoryRolloverAdjustments(previousRows, decisionHubSettings.categoryRolloverEnabled);
     const monthBills = getMonthlyBills(month, year)

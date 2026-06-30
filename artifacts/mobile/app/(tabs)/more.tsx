@@ -20,7 +20,7 @@ import { useAuth } from "@/context/AuthContext";
 import { type ThemeMode, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import { parseStatementCsv } from "@/lib/accounts";
-import { readDecisionHubSettings, writeDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
+import { loadDecisionHubSettings, readDecisionHubSettings, saveDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { resetFloMemory } from "@/lib/flo";
 
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
@@ -62,6 +62,17 @@ export default function MoreScreen() {
     setForecastHorizonText(settings.forecast_horizon_months.toString());
   }, [settings.safety_floor, settings.forecast_horizon_months]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setDecisionHubSettings(readDecisionHubSettings());
+    void loadDecisionHubSettings(user?.id).then(next => {
+      if (!cancelled) setDecisionHubSettings(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
   const saveSafetySettings = () => {
     const floor = Math.max(0, parseFloat(safetyFloorText) || 0);
     const horizon = Math.min(24, Math.max(1, Math.round(parseFloat(forecastHorizonText) || 6)));
@@ -74,7 +85,7 @@ export default function MoreScreen() {
   const updateDecisionHubSetting = (next: Partial<DecisionHubSettings>) => {
     const merged = { ...decisionHubSettings, ...next };
     setDecisionHubSettings(merged);
-    writeDecisionHubSettings(merged);
+    void saveDecisionHubSettings(user?.id, merged).catch(() => undefined);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
