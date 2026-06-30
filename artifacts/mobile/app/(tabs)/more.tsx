@@ -30,6 +30,11 @@ const THEME_OPTIONS: { label: string; value: ThemeMode; icon: string }[] = [
   { label: "Dark",  value: "dark",  icon: "moon" },
   { label: "Auto",  value: "auto",  icon: "smartphone" },
 ];
+const ALERT_SENSITIVITY_OPTIONS: { label: string; value: DecisionHubSettings["alertSensitivity"]; desc: string }[] = [
+  { label: "Conservative", value: "conservative", desc: "Warn earlier with more cushion." },
+  { label: "Balanced", value: "balanced", desc: "Default alert level." },
+  { label: "Quiet", value: "quiet", desc: "Only warn when the floor is crossed." },
+];
 
 export default function MoreScreen() {
   const c = useColors();
@@ -317,6 +322,77 @@ export default function MoreScreen() {
             <View style={[styles.toggleKnob, { backgroundColor: "#fff", alignSelf: decisionHubSettings.paycheckPlanningEnabled ? "flex-end" : "flex-start" }]} />
           </View>
         </Pressable>
+        {[
+          {
+            key: "lowBalanceAlertsEnabled" as const,
+            icon: "alert-triangle",
+            color: c.warning,
+            label: "Low balance alerts",
+            desc: "Show Dashboard and calendar alerts when the forecast gets tight.",
+          },
+          {
+            key: "billBeforePaydayAlertsEnabled" as const,
+            icon: "zap",
+            color: c.warning,
+            label: "Bill-before-payday prompts",
+            desc: "Show Bills tab prompts when moving a bill may help the paycheck window.",
+          },
+          {
+            key: "plannedDecisionReviewAlertsEnabled" as const,
+            icon: "clock",
+            color: c.primary,
+            label: "Planned decision review",
+            desc: "Count risky or overdue planned decisions in Flo alerts.",
+          },
+          {
+            key: "floTabBadgeEnabled" as const,
+            icon: "message-circle",
+            color: c.primary,
+            label: "Flo tab badge",
+            desc: "Show a small badge when Flo has items needing attention.",
+          },
+        ].map(item => {
+          const enabled = Boolean(decisionHubSettings[item.key]);
+          return (
+            <Pressable
+              key={item.key}
+              onPress={() => updateDecisionHubSetting({ [item.key]: !enabled })}
+              style={({ pressed }) => [styles.decisionSettingRow, { borderTopWidth: 1, borderTopColor: c.border, marginTop: 14, paddingTop: 14, opacity: pressed ? 0.75 : 1 }]}
+            >
+              <View style={[styles.dataIcon, { backgroundColor: item.color + "18" }]}>
+                <Feather name={item.icon as any} size={17} color={item.color} />
+              </View>
+              <View style={styles.switchInfo}>
+                <Text style={[styles.switchLabel, { color: c.foreground }]}>{item.label}</Text>
+                <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>{item.desc}</Text>
+              </View>
+              <View style={[styles.toggleTrack, { backgroundColor: enabled ? c.primary : c.muted }]}>
+                <View style={[styles.toggleKnob, { backgroundColor: "#fff", alignSelf: enabled ? "flex-end" : "flex-start" }]} />
+              </View>
+            </Pressable>
+          );
+        })}
+        <View style={[styles.alertSensitivityBox, { borderTopColor: c.border }]}>
+          <Text style={[styles.switchLabel, { color: c.foreground }]}>Alert sensitivity</Text>
+          <Text style={[styles.switchDesc, { color: c.mutedForeground, marginBottom: 10 }]}>Control how early FlowLedger warns you before a low balance.</Text>
+          <View style={[styles.themeRow, { backgroundColor: c.muted, borderRadius: 10 }]}>
+            {ALERT_SENSITIVITY_OPTIONS.map(opt => {
+              const active = decisionHubSettings.alertSensitivity === opt.value;
+              return (
+                <Pressable
+                  key={opt.value}
+                  onPress={() => updateDecisionHubSetting({ alertSensitivity: opt.value })}
+                  style={[styles.themeBtn, { backgroundColor: active ? c.primary : "transparent", borderRadius: 8 }]}
+                >
+                  <Text style={[styles.themeBtnText, { color: active ? "#fff" : c.mutedForeground }]}>{opt.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={[styles.switchDesc, { color: c.mutedForeground, marginTop: 8 }]}>
+            {ALERT_SENSITIVITY_OPTIONS.find(opt => opt.value === decisionHubSettings.alertSensitivity)?.desc}
+          </Text>
+        </View>
         <View style={[styles.priorityNote, { backgroundColor: decisionHubSettings.categoryRolloverEnabled ? c.success + "12" : c.muted, borderRadius: 8 }]}>
           <Feather name="info" size={12} color={decisionHubSettings.categoryRolloverEnabled ? c.success : c.mutedForeground} />
           <Text style={[styles.priorityNoteText, { color: c.mutedForeground }]}>
@@ -714,6 +790,7 @@ const styles = StyleSheet.create({
   decisionSettingRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   toggleTrack: { width: 48, height: 28, borderRadius: 999, padding: 3, justifyContent: "center" },
   toggleKnob: { width: 22, height: 22, borderRadius: 11 },
+  alertSensitivityBox: { borderTopWidth: 1, marginTop: 14, paddingTop: 14 },
   balanceDivider: { borderTopWidth: 1, marginTop: 14, paddingTop: 14 },
   balanceHeader: { marginBottom: 10 },
   balanceFieldLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 6 },

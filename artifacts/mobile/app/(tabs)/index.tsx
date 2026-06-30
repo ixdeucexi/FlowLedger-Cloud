@@ -639,12 +639,12 @@ export default function DashboardScreen() {
     const weekEnd = `${sevenDaysLater.getFullYear()}-${String(sevenDaysLater.getMonth() + 1).padStart(2, "0")}-${String(sevenDaysLater.getDate()).padStart(2, "0")}`;
     const upcomingThisWeek = decisionHistory.upcoming.filter(item => item.date >= todayIso && item.date <= weekEnd);
     const recentCompleted = [...decisionHistory.completed].sort((left, right) => right.date.localeCompare(left.date))[0];
-    const reviewCount = decisionHistory.due.length;
+    const reviewCount = decisionHubSettings.plannedDecisionReviewAlertsEnabled ? decisionHistory.due.length : 0;
     const totalTracked = reviewCount + decisionHistory.upcoming.length + decisionHistory.completed.length + decisionHistory.changed.length;
     let title = "Ask Flo before you change the plan";
     let detail = "Flo is your one place to check, save, and apply money decisions.";
     let tone: "risk" | "review" | "upcoming" | "completed" | "empty" = "empty";
-    if (decisionRiskAlerts.length > 0) {
+    if (decisionHubSettings.plannedDecisionReviewAlertsEnabled && decisionRiskAlerts.length > 0) {
       const alert = decisionRiskAlerts[0];
       title = `${decisionRiskAlerts.length} decision${decisionRiskAlerts.length === 1 ? "" : "s"} no longer safe`;
       detail = `${alert.name} drops to $${alert.lowestBalance.toFixed(0)} on ${formatShortDate(alert.lowestBalanceDate)}.`;
@@ -666,9 +666,10 @@ export default function DashboardScreen() {
       detail = `${decisionHistory.upcoming.length} upcoming · ${decisionHistory.completed.length} completed.`;
       tone = "completed";
     }
-    return { title, detail, riskCount: decisionRiskAlerts.length, reviewCount, upcomingCount: decisionHistory.upcoming.length, completedCount: decisionHistory.completed.length, tone };
-  }, [decisionHistory, decisionRiskAlerts, now, todayIso]);
+    return { title, detail, riskCount: decisionHubSettings.plannedDecisionReviewAlertsEnabled ? decisionRiskAlerts.length : 0, reviewCount, upcomingCount: decisionHistory.upcoming.length, completedCount: decisionHistory.completed.length, tone };
+  }, [decisionHistory, decisionRiskAlerts, decisionHubSettings.plannedDecisionReviewAlertsEnabled, now, todayIso]);
   const nextWeekRisk = useMemo(() => {
+    if (!decisionHubSettings.lowBalanceAlertsEnabled) return null;
     const weekEndDate = new Date(now);
     weekEndDate.setDate(now.getDate() + 7);
     const weekEnd = `${weekEndDate.getFullYear()}-${String(weekEndDate.getMonth() + 1).padStart(2, "0")}-${String(weekEndDate.getDate()).padStart(2, "0")}`;
@@ -677,7 +678,12 @@ export default function DashboardScreen() {
       (best, day) => !best || day.balance < best.balance ? day : best,
       null,
     );
-    if (!lowest || lowest.balance >= settings.safety_floor + 150) return null;
+    const sensitivityBuffer = decisionHubSettings.alertSensitivity === "conservative"
+      ? 300
+      : decisionHubSettings.alertSensitivity === "quiet"
+        ? 0
+        : 150;
+    if (!lowest || lowest.balance >= settings.safety_floor + sensitivityBuffer) return null;
     const tone = lowest.balance < settings.safety_floor ? "risk" : "tight";
     const prompt = `Why is my balance low next week? My lowest projected balance is $${lowest.balance.toFixed(0)} on ${lowest.date}.`;
     return {
@@ -686,7 +692,7 @@ export default function DashboardScreen() {
       detail: `Lowest projected balance: $${lowest.balance.toFixed(0)} on ${formatShortDate(lowest.date)}. Ask Flo why before changing the plan.`,
       prompt,
     };
-  }, [decisionForecastDays, now, settings.safety_floor, todayIso]);
+  }, [decisionForecastDays, decisionHubSettings.alertSensitivity, decisionHubSettings.lowBalanceAlertsEnabled, now, settings.safety_floor, todayIso]);
   const openFloWithPrompt = (prompt: string) => {
     router.push({ pathname: "/(tabs)/flo", params: { prompt } } as any);
   };

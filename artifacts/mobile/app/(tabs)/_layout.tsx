@@ -10,6 +10,7 @@ import { DecisionDueModal } from "@/components/DecisionDueModal";
 import { useColors } from "@/hooks/useColors";
 import { buildDecisionHistory } from "@/lib/decisionHistory";
 import { buildDecisionRiskAlerts } from "@/lib/decisionRisk";
+import { DECISION_HUB_SETTINGS_EVENT, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 
 const TABS = [
   { name: "index",        title: "Dashboard",    icon: "bar-chart-2"     },
@@ -40,8 +41,17 @@ function TabContent() {
   const isDark = colorScheme === "dark";
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
+  const [decisionHubSettings, setDecisionHubSettings] = React.useState<DecisionHubSettings>(() => readDecisionHubSettings());
+
+  React.useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const refresh = () => setDecisionHubSettings(readDecisionHubSettings());
+    globalThis.addEventListener?.(DECISION_HUB_SETTINGS_EVENT, refresh);
+    return () => globalThis.removeEventListener?.(DECISION_HUB_SETTINGS_EVENT, refresh);
+  }, []);
+
   const attentionCount = React.useMemo(() => {
-    if (loading) return 0;
+    if (loading || !decisionHubSettings.floTabBadgeEnabled) return 0;
     const now = new Date();
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const weekEndDate = new Date(now);
@@ -57,11 +67,21 @@ function TabContent() {
         if (date >= today) forecastDays.push({ date, balance: day.balance });
       });
     }
-    const history = buildDecisionHistory(decisions, today, now.toISOString());
-    const risky = buildDecisionRiskAlerts(decisions, forecastDays, settings.safety_floor, today).length;
-    const lowNextWeek = forecastDays.some(day => day.date >= today && day.date <= weekEnd && day.balance < settings.safety_floor);
+    const history = decisionHubSettings.plannedDecisionReviewAlertsEnabled
+      ? buildDecisionHistory(decisions, today, now.toISOString())
+      : { due: [] };
+    const risky = decisionHubSettings.plannedDecisionReviewAlertsEnabled
+      ? buildDecisionRiskAlerts(decisions, forecastDays, settings.safety_floor, today).length
+      : 0;
+    const sensitivityBuffer = decisionHubSettings.alertSensitivity === "conservative"
+      ? 300
+      : decisionHubSettings.alertSensitivity === "quiet"
+        ? 0
+        : 150;
+    const lowNextWeek = decisionHubSettings.lowBalanceAlertsEnabled
+      && forecastDays.some(day => day.date >= today && day.date <= weekEnd && day.balance < settings.safety_floor + sensitivityBuffer);
     return Math.min(9, history.due.length + risky + (lowNextWeek ? 1 : 0));
-  }, [decisions, getDailyBalances, loading, settings.forecast_horizon_months, settings.safety_floor]);
+  }, [decisionHubSettings, decisions, getDailyBalances, loading, settings.forecast_horizon_months, settings.safety_floor]);
 
   if (loading) return <BudgetLoadingScreen />;
 

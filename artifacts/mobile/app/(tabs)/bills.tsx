@@ -17,6 +17,7 @@ import { useColors } from "@/hooks/useColors";
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { sortDebtsLeastToGreatest } from "@/lib/debtOrder";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
+import { DECISION_HUB_SETTINGS_EVENT, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 
 const CAT_COLORS: Record<string, string> = {
   Housing: "#0f9b8e", Utilities: "#f0b429", Insurance: "#6366f1",
@@ -50,6 +51,7 @@ export default function BillsScreen() {
   const [snowballModalVisible, setSnowballModalVisible] = useState(false);
   const [snowballAmount, setSnowballAmount] = useState("");
   const [snowballPreview, setSnowballPreview] = useState<SnowballProjectionResult | null>(null);
+  const [decisionHubSettings, setDecisionHubSettings] = useState<DecisionHubSettings>(() => readDecisionHubSettings());
 
   useEffect(() => {
     if (dashboardFilter === "debt") {
@@ -57,6 +59,13 @@ export default function BillsScreen() {
       setDashboardFilter(null);
     }
   }, [dashboardFilter]);
+
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const refresh = () => setDecisionHubSettings(readDecisionHubSettings());
+    globalThis.addEventListener?.(DECISION_HUB_SETTINGS_EVENT, refresh);
+    return () => globalThis.removeEventListener?.(DECISION_HUB_SETTINGS_EVENT, refresh);
+  }, []);
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
 
@@ -131,12 +140,12 @@ export default function BillsScreen() {
     return buildPaycheckPlan(incomeEvents, billEvents, balanceEvents, settings.safety_floor, todayIso);
   }, [currentMonth, currentYear, getBillMonthlyTotal, getBillOccurrencesInMonth, getDailyBalances, getIncomeOccurrencesInMonth, getMonthlyBills, getPaidAmount, settings.forecast_horizon_months, settings.safety_floor, todayIso]);
   const billOptimizationPrompt = useMemo(() => {
-    if (!paycheckPlan.nextPaycheck || !paycheckPlan.billsDue.length) return null;
+    if (!decisionHubSettings.billBeforePaydayAlertsEnabled || !paycheckPlan.nextPaycheck || !paycheckPlan.billsDue.length) return null;
     const bill = [...paycheckPlan.billsDue].sort((left, right) => right.amount - left.amount)[0];
     const saferDate = new Date(`${paycheckPlan.nextPaycheck.date}T12:00:00`);
     saferDate.setDate(saferDate.getDate() + 1);
     return { bill, saferDate };
-  }, [paycheckPlan]);
+  }, [decisionHubSettings.billBeforePaydayAlertsEnabled, paycheckPlan]);
 
   // ── Handlers ────────────────────────────────────────────────────
   const handleSave = useCallback((data: Omit<Bill, "id" | "created_at"> | Bill) => {

@@ -4,11 +4,21 @@ import { supabase } from "@/lib/supabase";
 export interface DecisionHubSettings {
   categoryRolloverEnabled: boolean;
   paycheckPlanningEnabled: boolean;
+  lowBalanceAlertsEnabled: boolean;
+  billBeforePaydayAlertsEnabled: boolean;
+  plannedDecisionReviewAlertsEnabled: boolean;
+  floTabBadgeEnabled: boolean;
+  alertSensitivity: "conservative" | "balanced" | "quiet";
 }
 
 export const DEFAULT_DECISION_HUB_SETTINGS: DecisionHubSettings = {
   categoryRolloverEnabled: false,
   paycheckPlanningEnabled: false,
+  lowBalanceAlertsEnabled: true,
+  billBeforePaydayAlertsEnabled: true,
+  plannedDecisionReviewAlertsEnabled: true,
+  floTabBadgeEnabled: true,
+  alertSensitivity: "balanced",
 };
 
 export const DECISION_HUB_SETTINGS_KEY = "flowledger-decision-hub-settings";
@@ -22,6 +32,11 @@ export function readDecisionHubSettings(): DecisionHubSettings {
     return {
       categoryRolloverEnabled: Boolean(parsed.categoryRolloverEnabled),
       paycheckPlanningEnabled: Boolean(parsed.paycheckPlanningEnabled),
+      lowBalanceAlertsEnabled: parsed.lowBalanceAlertsEnabled !== false,
+      billBeforePaydayAlertsEnabled: parsed.billBeforePaydayAlertsEnabled !== false,
+      plannedDecisionReviewAlertsEnabled: parsed.plannedDecisionReviewAlertsEnabled !== false,
+      floTabBadgeEnabled: parsed.floTabBadgeEnabled !== false,
+      alertSensitivity: normalizeAlertSensitivity(parsed.alertSensitivity),
     };
   } catch {
     return DEFAULT_DECISION_HUB_SETTINGS;
@@ -66,5 +81,14 @@ function normalizeDecisionHubSettings(value: unknown): DecisionHubSettings {
   return {
     categoryRolloverEnabled: Boolean(parsed.categoryRolloverEnabled),
     paycheckPlanningEnabled: Boolean(parsed.paycheckPlanningEnabled),
+    lowBalanceAlertsEnabled: parsed.lowBalanceAlertsEnabled !== false,
+    billBeforePaydayAlertsEnabled: parsed.billBeforePaydayAlertsEnabled !== false,
+    plannedDecisionReviewAlertsEnabled: parsed.plannedDecisionReviewAlertsEnabled !== false,
+    floTabBadgeEnabled: parsed.floTabBadgeEnabled !== false,
+    alertSensitivity: normalizeAlertSensitivity(parsed.alertSensitivity),
   };
+}
+
+function normalizeAlertSensitivity(value: unknown): DecisionHubSettings["alertSensitivity"] {
+  return value === "conservative" || value === "quiet" || value === "balanced" ? value : "balanced";
 }
