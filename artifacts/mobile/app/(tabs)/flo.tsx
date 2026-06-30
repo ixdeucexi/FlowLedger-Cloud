@@ -25,6 +25,7 @@ import {
   buildFloDecisionScenario,
   evaluateFloCategoryMove,
   floResponseCards,
+  isFloPlanCreateCommand,
   reduceFloChat,
   sanitizeFloSummary,
   type FloCategoryMoveResult,
@@ -322,6 +323,15 @@ export default function FloScreen() {
     if (scenario) {
       const result = evaluateDecision(baseline, scenario, settings.safety_floor);
       setDecisionByMessageId(previous => ({ ...previous, [replyId]: { scenario, result } }));
+      if (isFloPlanCreateCommand(clean)) {
+        setDecisionSaveState(previous => ({ ...previous, [replyId]: "saving" }));
+        try {
+          await saveDecision(scenario, result, "planned");
+          setDecisionSaveState(previous => ({ ...previous, [replyId]: "saved" }));
+        } catch {
+          setDecisionSaveState(previous => ({ ...previous, [replyId]: "failed" }));
+        }
+      }
     }
     const categoryMove = evaluateFloCategoryMove(clean, facts);
     if (categoryMove?.allowed) {

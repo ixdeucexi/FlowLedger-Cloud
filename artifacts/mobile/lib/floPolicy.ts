@@ -560,9 +560,12 @@ function floCategoryCards(message: string, facts: FloFacts): FloResponseCard[] {
 
 export function buildFloDecisionScenario(message: string, today = new Date().toISOString().slice(0, 10)): DecisionScenario | null {
   const lower = message.toLowerCase();
-  const match = message.match(/\$?\s*([\d,]+(?:\.\d{1,2})?)/);
-  if (!(lower.includes("afford") || lower.includes("buy") || lower.includes("spend")) || !match) return null;
-  const amount = Number(match[1].replace(/,/g, ""));
+  const amount = parseFloDecisionAmount(message);
+  const hasDecisionIntent = lower.includes("afford")
+    || lower.includes("buy")
+    || lower.includes("spend")
+    || isFloPlanCreateCommand(message);
+  if (!hasDecisionIntent) return null;
   if (!Number.isFinite(amount) || amount <= 0) return null;
   return {
     type: "one_time_purchase",
@@ -571,6 +574,27 @@ export function buildFloDecisionScenario(message: string, today = new Date().toI
     date: parseFloDate(message, today),
     frequency: "once",
   };
+}
+
+export function isFloPlanCreateCommand(message: string): boolean {
+  const lower = message.toLowerCase();
+  return /\b(add|create|save|schedule|make|put)\b/.test(lower)
+    && /\b(plan|planned|decision|purchase|expense|transaction)\b/.test(lower);
+}
+
+function parseFloDecisionAmount(message: string): number {
+  const dollar = message.match(/\$\s*([\d,]+(?:\.\d{1,2})?)/);
+  if (dollar) return Number(dollar[1].replace(/,/g, ""));
+
+  const trailingAmount = message.match(/\b(?:for|of|amount|cost(?:ing)?|price(?:d)?(?: at)?)\s+\$?\s*([\d,]+(?:\.\d{1,2})?)\s*$/i);
+  if (trailingAmount) return Number(trailingAmount[1].replace(/,/g, ""));
+
+  const withoutDates = message
+    .replace(/\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s*20\d{2})?\b/gi, "")
+    .replace(/\b20\d{2}-\d{2}-\d{2}\b/g, "")
+    .replace(/\b\d{1,2}\/\d{1,2}(?:\/(?:20\d{2}|\d{2}))?\b/g, "");
+  const numbers = [...withoutDates.matchAll(/\b([\d,]+(?:\.\d{1,2})?)\b/g)].map(match => Number(match[1].replace(/,/g, "")));
+  return numbers.length ? numbers[numbers.length - 1] : 0;
 }
 
 function parseFloDate(message: string, today: string): string {

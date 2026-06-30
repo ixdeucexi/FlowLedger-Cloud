@@ -7,6 +7,7 @@ import {
   buildFloCategoryQuickPrompts,
   evaluateFloCategoryMove,
   floResponseCards,
+  isFloPlanCreateCommand,
   isUnsafeFloRequest,
   localFloAnswer,
   normalizeFloError,
@@ -154,6 +155,14 @@ test("Flo builds saveable planned decisions from natural affordability questions
   assert.equal(scenario?.amount, 500);
   assert.equal(scenario?.date, "2026-07-15");
   assert.equal(scenario?.frequency, "once");
+});
+
+test("Flo builds planned decisions from task-style add plan commands", () => {
+  const scenario = buildFloDecisionScenario("Add a plan for July 5th for 100", "2026-06-29");
+  assert.equal(isFloPlanCreateCommand("Add a plan for July 5th for 100"), true);
+  assert.equal(scenario?.type, "one_time_purchase");
+  assert.equal(scenario?.amount, 100);
+  assert.equal(scenario?.date, "2026-07-05");
 });
 
 test("Flo rolls natural decision dates into next year when the date already passed", () => {
