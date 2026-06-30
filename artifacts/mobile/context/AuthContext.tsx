@@ -1,5 +1,6 @@
 import { Session, User } from "@supabase/supabase-js";
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { Platform } from "react-native";
 
 import { DEV_DEMO_USER_ID, disableDevDemoMode, isDevDemoMode } from "@/lib/demoMode";
 import { supabase } from "@/lib/supabase";
@@ -10,6 +11,7 @@ interface AuthContextType {
   loading:  boolean;
   signIn:   (email: string, password: string) => Promise<string | null>;
   signUp:   (email: string, password: string) => Promise<string | null>;
+  signInWithGoogle: () => Promise<string | null>;
   signOut:  () => Promise<void>;
 }
 
@@ -66,6 +68,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return error?.message ?? null;
   };
 
+  const signInWithGoogle = async (): Promise<string | null> => {
+    if (demoMode) return null;
+    const redirectTo = Platform.OS === "web" && typeof window !== "undefined"
+      ? `${window.location.origin}/`
+      : undefined;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: redirectTo ? { redirectTo } : undefined,
+    });
+    return error?.message ?? null;
+  };
+
   const signOut = async () => {
     setSession(null);
     if (demoMode) {
@@ -77,7 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user: session?.user ?? null, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ session, user: session?.user ?? null, loading, signIn, signUp, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   );

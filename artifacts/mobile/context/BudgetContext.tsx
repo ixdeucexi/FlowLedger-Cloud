@@ -74,6 +74,7 @@ export interface Transaction {
   linked_bill_id?: string;
   account_id?: string;
   import_hash?: string;
+  transfer_group_id?: string;
   debt_applied_amount?: number;
   debt_applied_bill_id?: string;
 }

@@ -37,7 +37,9 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
   const [note, setNote] = useState("");
   const [date, setDate] = useState(defaultDate ?? new Date().toISOString().split("T")[0]);
   const [isExpense, setIsExpense] = useState(true);
+  const [isTransfer, setIsTransfer] = useState(false);
   const [accountId, setAccountId] = useState<string | undefined>();
+  const [transferToAccountId, setTransferToAccountId] = useState<string | undefined>();
   const [linkedBillId, setLinkedBillId] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
   const activeDebts = bills
@@ -54,7 +56,9 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
       setNote(editTx.note);
       setDate(editTx.date);
       setIsExpense(editTx.amount < 0);
+      setIsTransfer(false);
       setAccountId(editTx.account_id);
+      setTransferToAccountId(undefined);
       setLinkedBillId(editTx.linked_bill_id);
     } else {
       const init = defaultDate ?? new Date().toISOString().split("T")[0];
@@ -63,7 +67,9 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
       setNote("");
       setDate(init);
       setIsExpense(true);
+      setIsTransfer(false);
       setAccountId(accounts.find(account => account.is_active)?.id);
+      setTransferToAccountId(accounts.filter(account => account.is_active)[1]?.id);
       setLinkedBillId(undefined);
     }
   }, [editTx, visible, defaultDate, accounts]);
@@ -72,7 +78,41 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
     if (saving) return;
     const parsed = parseFloat(amount);
     if (isNaN(parsed) || parsed <= 0) return;
+    if (isTransfer && (!accountId || !transferToAccountId || accountId === transferToAccountId)) {
+      Alert.alert("Choose two accounts", "Pick a different from and to account for this transfer.");
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (isTransfer && !editTx) {
+      const fromName = accounts.find(account => account.id === accountId)?.name ?? "account";
+      const toName = accounts.find(account => account.id === transferToAccountId)?.name ?? "account";
+      const transferGroupId = `transfer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      setSaving(true);
+      try {
+        await onSave({
+          amount: -parsed,
+          category: "Transfer",
+          note: note.trim() || `Transfer to ${toName}`,
+          date,
+          account_id: accountId,
+          transfer_group_id: transferGroupId,
+        });
+        await onSave({
+          amount: parsed,
+          category: "Transfer",
+          note: note.trim() || `Transfer from ${fromName}`,
+          date,
+          account_id: transferToAccountId,
+          transfer_group_id: transferGroupId,
+        });
+        onClose();
+      } catch (error) {
+        Alert.alert("Could not save transfer", error instanceof Error ? error.message : "Please try again.");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     const data: Omit<Transaction, "id"> = {
       amount: isExpense ? -parsed : parsed,
       category,
@@ -108,17 +148,25 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
           <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <View style={[styles.typeToggle, { backgroundColor: c.muted, borderRadius: 10 }]}>
               <Pressable
-                onPress={() => setIsExpense(true)}
-                style={[styles.typeBtn, { backgroundColor: isExpense ? c.destructive : "transparent", borderRadius: 8 }]}
+                onPress={() => { setIsTransfer(false); setIsExpense(true); }}
+                style={[styles.typeBtn, { backgroundColor: !isTransfer && isExpense ? c.destructive : "transparent", borderRadius: 8 }]}
               >
-                <Text style={[styles.typeBtnText, { color: isExpense ? "#fff" : c.mutedForeground }]}>Expense</Text>
+                <Text style={[styles.typeBtnText, { color: !isTransfer && isExpense ? "#fff" : c.mutedForeground }]}>Expense</Text>
               </Pressable>
               <Pressable
-                onPress={() => setIsExpense(false)}
-                style={[styles.typeBtn, { backgroundColor: !isExpense ? c.success : "transparent", borderRadius: 8 }]}
+                onPress={() => { setIsTransfer(false); setIsExpense(false); }}
+                style={[styles.typeBtn, { backgroundColor: !isTransfer && !isExpense ? c.success : "transparent", borderRadius: 8 }]}
               >
-                <Text style={[styles.typeBtnText, { color: !isExpense ? "#fff" : c.mutedForeground }]}>Income</Text>
+                <Text style={[styles.typeBtnText, { color: !isTransfer && !isExpense ? "#fff" : c.mutedForeground }]}>Income</Text>
               </Pressable>
+              {!editTx && accounts.filter(account => account.is_active).length >= 2 && (
+                <Pressable
+                  onPress={() => { setIsTransfer(true); setLinkedBillId(undefined); setCategory("Transfer"); }}
+                  style={[styles.typeBtn, { backgroundColor: isTransfer ? c.primary : "transparent", borderRadius: 8 }]}
+                >
+                  <Text style={[styles.typeBtnText, { color: isTransfer ? c.primaryForeground : c.mutedForeground }]}>Transfer</Text>
+                </Pressable>
+              )}
             </View>
 
             <Text style={labelStyle}>Amount ($)</Text>
@@ -129,20 +177,22 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
             <Text style={labelStyle}>Note</Text>
             <TextInput style={inputStyle} value={note} onChangeText={setNote} placeholder="What was it for?" placeholderTextColor={c.mutedForeground} />
 
-            <Text style={labelStyle}>Category</Text>
-            <View style={styles.categoryGrid}>
-              {categories.map(cat => (
-                <Pressable
-                  key={cat}
-                  onPress={() => setCategory(cat)}
-                  style={[styles.chip, { backgroundColor: category === cat ? c.primary : c.muted, borderRadius: 8 }]}
-                >
-                  <Text style={[styles.chipText, { color: category === cat ? c.primaryForeground : c.mutedForeground }]}>{cat}</Text>
-                </Pressable>
-              ))}
-            </View>
+            {!isTransfer && <>
+              <Text style={labelStyle}>Category</Text>
+              <View style={styles.categoryGrid}>
+                {categories.map(cat => (
+                  <Pressable
+                    key={cat}
+                    onPress={() => setCategory(cat)}
+                    style={[styles.chip, { backgroundColor: category === cat ? c.primary : c.muted, borderRadius: 8 }]}
+                  >
+                    <Text style={[styles.chipText, { color: category === cat ? c.primaryForeground : c.mutedForeground }]}>{cat}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </>}
 
-            {isExpense && activeDebts.length > 0 && <>
+            {!isTransfer && isExpense && activeDebts.length > 0 && <>
               <Text style={labelStyle}>Apply Toward Debt (Optional)</Text>
               <Text style={[styles.helpText, { color: c.mutedForeground }]}>The payment stays on the calendar and reduces the selected debt when this date arrives.</Text>
               <View style={styles.categoryGrid}>
@@ -162,9 +212,16 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
             </>}
 
             {accounts.some(account => account.is_active) && <>
-              <Text style={labelStyle}>Account</Text>
+              <Text style={labelStyle}>{isTransfer ? "From account" : "Account"}</Text>
               <View style={styles.categoryGrid}>
                 {accounts.filter(account => account.is_active).map(account => <Pressable key={account.id} onPress={() => setAccountId(account.id)} style={[styles.chip, { backgroundColor: accountId === account.id ? c.primary : c.muted, borderRadius: 8 }]}><Text style={[styles.chipText, { color: accountId === account.id ? c.primaryForeground : c.mutedForeground }]}>{account.name}</Text></Pressable>)}
+              </View>
+            </>}
+
+            {isTransfer && accounts.some(account => account.is_active) && <>
+              <Text style={labelStyle}>To account</Text>
+              <View style={styles.categoryGrid}>
+                {accounts.filter(account => account.is_active).map(account => <Pressable key={account.id} onPress={() => setTransferToAccountId(account.id)} style={[styles.chip, { backgroundColor: transferToAccountId === account.id ? c.primary : c.muted, borderRadius: 8 }]}><Text style={[styles.chipText, { color: transferToAccountId === account.id ? c.primaryForeground : c.mutedForeground }]}>{account.name}</Text></Pressable>)}
               </View>
             </>}
 
@@ -183,7 +240,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
               onPress={handleSave}
               style={({ pressed }) => [styles.saveBtn, { backgroundColor: c.primary, borderRadius: colors.radius, opacity: saving ? 0.55 : pressed ? 0.85 : 1 }]}
             >
-              <Text style={[styles.saveBtnText, { color: c.primaryForeground }]}>{saving ? "Saving…" : editTx ? "Update" : "Add Transaction"}</Text>
+              <Text style={[styles.saveBtnText, { color: c.primaryForeground }]}>{saving ? "Saving…" : editTx ? "Update" : isTransfer ? "Add Transfer" : "Add Transaction"}</Text>
             </Pressable>
           </ScrollView>
         </View>

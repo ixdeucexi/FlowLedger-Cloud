@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 
 export default function LoginScreen() {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, signInWithGoogle } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -47,6 +47,14 @@ export default function LoginScreen() {
     } else {
       router.replace("/(tabs)");
     }
+  };
+
+  const handleGoogle = async () => {
+    setError(null);
+    setLoading(true);
+    const err = await signInWithGoogle();
+    setLoading(false);
+    if (err) setError(err);
   };
 
   return (
@@ -162,6 +170,15 @@ export default function LoginScreen() {
               }
             </Pressable>
 
+            <Pressable
+              style={({ pressed }) => [styles.googleBtn, { opacity: pressed || loading ? 0.85 : 1 }]}
+              onPress={handleGoogle}
+              disabled={loading}
+            >
+              <Feather name="chrome" size={16} color="#f8fafc" />
+              <Text style={styles.googleBtnText}>Continue with Google</Text>
+            </Pressable>
+
             {mode === "signup" && (
               <Text style={styles.hint}>
                 Your data is stored securely and synced across all your devices.
@@ -196,5 +213,7 @@ const styles = StyleSheet.create({
   errorText:     { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: "#f87171" },
   btn:           { backgroundColor: "#2563eb", borderRadius: 12, paddingVertical: 14, alignItems: "center", marginTop: 4 },
   btnText:       { fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#fff" },
+  googleBtn:     { marginTop: 12, borderRadius: 12, paddingVertical: 13, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, backgroundColor: "#0f172a", borderWidth: 1, borderColor: "#334155" },
+  googleBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#f8fafc" },
   hint:          { fontSize: 12, fontFamily: "Inter_400Regular", color: "#475569", textAlign: "center", marginTop: 14, lineHeight: 18 },
 });

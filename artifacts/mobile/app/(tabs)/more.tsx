@@ -4,7 +4,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
 import * as Sharing from "expo-sharing";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert, Platform, Pressable, ScrollView, StyleSheet,
   Text, TextInput, View,
@@ -20,6 +20,7 @@ import { useAuth } from "@/context/AuthContext";
 import { type ThemeMode, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import { parseStatementCsv } from "@/lib/accounts";
+import { buildDataIntegrityIssues } from "@/lib/dataIntegrity";
 import { loadDecisionHubSettings, readDecisionHubSettings, saveDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { resetFloMemory } from "@/lib/flo";
 
@@ -35,6 +36,11 @@ const ALERT_SENSITIVITY_OPTIONS: { label: string; value: DecisionHubSettings["al
   { label: "Balanced", value: "balanced", desc: "Default alert level." },
   { label: "Quiet", value: "quiet", desc: "Only warn when the floor is crossed." },
 ];
+
+function csvCell(value: unknown): string {
+  const text = String(value ?? "");
+  return `"${text.replace(/"/g, '""')}"`;
+}
 
 export default function MoreScreen() {
   const c = useColors();
@@ -95,22 +101,52 @@ export default function MoreScreen() {
   };
 
   const totalMonthlyIncome = getMonthlyIncome();
+  const dataIntegrityIssues = useMemo(
+    () => buildDataIntegrityIssues({ accounts, bills, incomes, transactions }),
+    [accounts, bills, incomes, transactions],
+  );
+  const currentMonthPrefix = new Date().toISOString().slice(0, 7);
+  const accountMonthDeltas = useMemo(() => {
+    const deltas = new Map<string, number>();
+    transactions.forEach(transaction => {
+      if (!transaction.account_id || !transaction.date.startsWith(currentMonthPrefix)) return;
+      deltas.set(transaction.account_id, (deltas.get(transaction.account_id) ?? 0) + transaction.amount);
+    });
+    return deltas;
+  }, [transactions, currentMonthPrefix]);
 
   const handleExport = async () => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const accountHeader = "Id,Name,Type,CurrentBalance,BalanceAsOf,LastReconciledAt,IsActive";
+      const accountRows = accounts.map(account => [
+        account.id, account.name, account.account_type, account.current_balance,
+        account.balance_as_of, account.last_reconciled_at ?? "", account.is_active,
+      ].map(csvCell).join(",")).join("\n");
+      const incomeHeader = "Name,Amount,Frequency,StartDate,NextPaymentDate,LastReviewedAt";
+      const incomeRows = incomes.map(income => [
+        income.name, income.amount, income.frequency, income.start_date ?? "",
+        income.next_payment_date ?? "", income.last_reviewed_at ?? "",
+      ].map(csvCell).join(",")).join("\n");
       const billHeader = "Name,Amount,Category,Priority,IsDebt,Balance,InterestRate,DueDay,IsRecurring,Frequency";
       const billRows = bills.map(b =>
-        `"${b.name}",${b.amount},"${b.category}",${b.priority},${b.is_debt},${b.balance},${b.interest_rate},${b.due_day},${b.is_recurring},${b.frequency ?? "monthly"}`
+        [b.name, b.amount, b.category, b.priority, b.is_debt, b.balance, b.interest_rate, b.due_day, b.is_recurring, b.frequency ?? "monthly"].map(csvCell).join(",")
       ).join("\n");
-      const txHeader = "Date,Amount,Category,Note";
-      const txRows = transactions.map(t => `"${t.date}",${t.amount},"${t.category}","${t.note}"`).join("\n");
+      const txHeader = "Date,Amount,Category,Note,AccountId,LinkedBillId,TransferGroupId,ImportHash";
+      const txRows = transactions.map(t => [
+        t.date, t.amount, t.category, t.note, t.account_id ?? "", t.linked_bill_id ?? "", t.transfer_group_id ?? "", t.import_hash ?? "",
+      ].map(csvCell).join(",")).join("\n");
       const ovrHeader = "BillId,Month,Year,CustomAmount,PaidAmount";
-      const ovrRows = overrides.map(o => `"${o.bill_id}",${o.month},${o.year},${o.custom_amount ?? ""},${o.paid_amount}`).join("\n");
+      const ovrRows = overrides.map(o => [o.bill_id, o.month, o.year, o.custom_amount ?? "", o.paid_amount].map(csvCell).join(",")).join("\n");
+      const goalHeader = "Name,TargetAmount,CurrentAmount,TargetDate,Type";
+      const goalRows = goals.map(goal => [goal.name, goal.target_amount, goal.current_amount, goal.target_date ?? "", goal.goal_type ?? ""].map(csvCell).join(",")).join("\n");
       const csv = [
-        "=== BILLS ===", billHeader, billRows,
+        "=== ACCOUNTS ===", accountHeader, accountRows,
+        "", "=== INCOME ===", incomeHeader, incomeRows,
+        "", "=== BILLS ===", billHeader, billRows,
         "", "=== TRANSACTIONS ===", txHeader, txRows,
         "", "=== MONTHLY OVERRIDES ===", ovrHeader, ovrRows,
+        "", "=== GOALS ===", goalHeader, goalRows,
       ].join("\n");
 
       if (Platform.OS === "web") {
@@ -431,10 +467,12 @@ export default function MoreScreen() {
         {accounts.filter(account => account.is_active).map((account, index) => {
           const reviewed = account.last_reconciled_at ?? account.balance_as_of;
           const age = Math.max(0, Math.floor((Date.now() - new Date(reviewed).getTime()) / 86_400_000));
+          const monthDelta = accountMonthDeltas.get(account.id) ?? 0;
+          const projected = account.current_balance + monthDelta;
           return <View key={account.id} style={[styles.accountRow, { borderTopWidth: index ? 1 : 0, borderTopColor: c.border }]}>
             <View style={[styles.incomeIcon, { backgroundColor: c.primary + "16" }]}><Feather name={account.account_type === "savings" ? "heart" : "dollar-sign"} size={17} color={c.primary} /></View>
             <Pressable style={{ flex: 1 }} onPress={() => openAccount("edit", account)}><Text style={[styles.accountName, { color: c.foreground }]}>{account.name}</Text><Text style={[styles.incomeFreq, { color: age > 30 ? c.destructive : c.mutedForeground }]}>{account.account_type.replace("_", " ")} · {age === 0 ? "reconciled today" : `${age} days since review`}</Text></Pressable>
-            <View style={styles.accountRight}><Text style={[styles.incomeMonthly, { color: c.foreground }]}>${account.current_balance.toFixed(2)}</Text><Pressable onPress={() => openAccount("reconcile", account)}><Text style={[styles.reconcileText, { color: c.primary }]}>Reconcile</Text></Pressable></View>
+            <View style={styles.accountRight}><Text style={[styles.incomeMonthly, { color: c.foreground }]}>${account.current_balance.toFixed(2)}</Text><Text style={[styles.reconcileText, { color: c.mutedForeground }]}>Proj ${projected.toFixed(2)}</Text><Pressable onPress={() => openAccount("reconcile", account)}><Text style={[styles.reconcileText, { color: c.primary }]}>Reconcile</Text></Pressable></View>
           </View>;
         })}
         {!accounts.some(account => account.is_active) && <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Add checking, savings, or cash accounts that fund your budget.</Text>}
@@ -659,7 +697,7 @@ export default function MoreScreen() {
         {[
           { icon: "upload" as const,   label: "Import Bills from CSV", desc: "Name, Amount, Category, Balance, Interest Rate…", onPress: handleImport, color: c.primary },
           { icon: "file-text" as const, label: "Import Bank Statement", desc: "Transactions CSV with automatic duplicate detection", onPress: handleStatementImport, color: c.success },
-          { icon: "download" as const, label: "Export Bills (CSV)",    desc: "Bills, transactions, monthly overrides",           onPress: handleExport, color: "#6366f1" },
+          { icon: "download" as const, label: "Export Full Backup (CSV)",    desc: "Accounts, income, bills, transactions, goals, and overrides",           onPress: handleExport, color: "#6366f1" },
           { icon: "refresh-cw" as const, label: "Reset Flo Memory", desc: "Remove Flo's rolling preference summary", onPress: handleResetFlo, color: "#3b82f6" },
         ].map((item, i) => (
           <Pressable
@@ -680,6 +718,26 @@ export default function MoreScreen() {
       </View>
 
       {/* ── Summary ── */}
+      <SLabel c={c} text="Data Health" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <View style={[styles.confidenceBox, { backgroundColor: dataIntegrityIssues.length ? c.warning + "12" : c.success + "14" }]}>
+          <Feather name={dataIntegrityIssues.length ? "alert-triangle" : "check-circle"} size={16} color={dataIntegrityIssues.length ? c.warning : c.success} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.accountName, { color: c.foreground }]}>{dataIntegrityIssues.length ? `${dataIntegrityIssues.length} item${dataIntegrityIssues.length === 1 ? "" : "s"} to review` : "No data issues found"}</Text>
+            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Checks accounts, bills, income, duplicate-looking bills, and unlinked transactions.</Text>
+          </View>
+        </View>
+        {dataIntegrityIssues.slice(0, 4).map((issue, index) => (
+          <View key={`${issue.title}-${index}`} style={[styles.dataHealthRow, { borderTopWidth: index ? 1 : 0, borderTopColor: c.border }]}>
+            <Feather name={issue.severity === "error" ? "x-circle" : issue.severity === "warning" ? "alert-circle" : "info"} size={15} color={issue.severity === "error" ? c.destructive : issue.severity === "warning" ? c.warning : c.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.dataLabel, { color: c.foreground }]}>{issue.title}</Text>
+              <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{issue.detail}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+
       <SLabel c={c} text="Summary" />
       <View style={[styles.summaryCard, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         {[
@@ -837,6 +895,7 @@ const styles = StyleSheet.create({
   dataBody: { flex: 1 },
   dataLabel: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   dataDesc: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  dataHealthRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, paddingVertical: 11 },
 
   summaryCard: { flexDirection: "row", justifyContent: "space-around", padding: 16, marginBottom: 8 },
   summaryItem: { alignItems: "center" },
