@@ -87,6 +87,12 @@ export default function MonthlyScreen() {
   const [editPlanAmount, setEditPlanAmount] = useState("");
   const [editPlanDate, setEditPlanDate] = useState("");
   const [savingPlan, setSavingPlan] = useState(false);
+  const [monthSummaryDetail, setMonthSummaryDetail] = useState<{
+    title: string;
+    value: string;
+    details: string[];
+    fallback: string;
+  } | null>(null);
 
   useEffect(() => {
     if (dashboardFilter === "paid") { setBillFilter("paid"); setActiveTab("bills"); setDashboardFilter(null); }
@@ -179,7 +185,8 @@ export default function MonthlyScreen() {
   }, [dailyBalances, month, settings.starting_balance, txIncome, txExpense, txList]);
 
   const showMonthSummaryDetail = useCallback((title: string, value: string, details: string[], fallback: string) => {
-    Alert.alert(title, [`Total: ${value}`, "", ...(details.length ? details : [fallback])].join("\n"));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setMonthSummaryDetail({ title, value, details, fallback });
   }, []);
 
   const selectedDay = selectedDate ? parseInt(selectedDate.split("-")[2]) : null;
@@ -1280,6 +1287,36 @@ export default function MonthlyScreen() {
         defaultDate={selectedDate ?? undefined}
       />
       <Modal
+        visible={monthSummaryDetail !== null}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setMonthSummaryDetail(null)}
+      >
+        <Pressable style={styles.pickerOverlay} onPress={() => setMonthSummaryDetail(null)}>
+          <Pressable style={[styles.pickerSheet, { backgroundColor: c.background }]} onPress={e => e.stopPropagation()}>
+            <View style={styles.pickerHandle} />
+            <View style={styles.pickerHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.pickerTitle, { color: c.foreground }]}>{monthSummaryDetail?.title ?? "Month detail"}</Text>
+                <Text style={[styles.monthDetailTotal, { color: c.primary }]}>Total: {monthSummaryDetail?.value ?? "$0"}</Text>
+              </View>
+              <Pressable onPress={() => setMonthSummaryDetail(null)} hitSlop={8}>
+                <Feather name="x" size={20} color={c.mutedForeground} />
+              </Pressable>
+            </View>
+
+            <ScrollView style={styles.monthDetailList} showsVerticalScrollIndicator={false}>
+              {(monthSummaryDetail?.details.length ? monthSummaryDetail.details : [monthSummaryDetail?.fallback ?? "No details available."]).map((detail, index) => (
+                <View key={`${detail}-${index}`} style={[styles.monthDetailRow, { backgroundColor: c.card, borderColor: c.border }]}>
+                  <View style={[styles.monthDetailDot, { backgroundColor: c.primary }]} />
+                  <Text style={[styles.monthDetailText, { color: c.foreground }]}>{detail}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+      <Modal
         visible={editPlan !== null}
         animationType="slide"
         transparent
@@ -1516,6 +1553,11 @@ const styles = StyleSheet.create({
   pickerHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 },
   pickerTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
   pickerSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  monthDetailTotal: { fontSize: 22, fontFamily: "Inter_800ExtraBold", marginTop: 6 },
+  monthDetailList: { maxHeight: 360 },
+  monthDetailRow: { flexDirection: "row", alignItems: "flex-start", gap: 9, borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 8 },
+  monthDetailDot: { width: 8, height: 8, borderRadius: 4, marginTop: 5 },
+  monthDetailText: { flex: 1, fontSize: 13, fontFamily: "Inter_500Medium", lineHeight: 18 },
   pickerLabel: { fontSize: 11, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 12 },
   pickerCalDowRow: { flexDirection: "row", marginBottom: 4 },
   pickerCalDowLabel: { width: "14.285714%", textAlign: "center", fontSize: 11, fontFamily: "Inter_600SemiBold" },
