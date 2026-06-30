@@ -34,6 +34,11 @@ function formatShortDate(date: string) {
   return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+function money(amount: number, sign: "auto" | "none" = "none") {
+  const prefix = sign === "auto" && amount > 0 ? "+" : amount < 0 ? "-" : "";
+  return `${prefix}$${Math.abs(amount).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+}
+
 function PayStatus({ paid, partial }: { paid: boolean; partial: boolean }) {
   const c = useColors();
   if (paid) return <View style={[ps.badge, { backgroundColor: c.success + "25" }]}><Text style={[ps.text, { color: c.success }]}>PAID</Text></View>;
@@ -129,6 +134,53 @@ export default function MonthlyScreen() {
   }, [getIncomeOccurrencesInMonth, month, selectedYear]);
   const txIncome = txList.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
   const txExpense = txList.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+  const monthSummary = useMemo(() => {
+    const first = dailyBalances[0];
+    const last = dailyBalances[dailyBalances.length - 1];
+    const starting = first ? first.balance - first.net : settings.starting_balance;
+    const ending = last?.balance ?? starting;
+    const lowestDay = dailyBalances.reduce((low, day) => !low || day.balance < low.balance ? day : low, undefined as typeof dailyBalances[number] | undefined);
+    const allEvents = dailyBalances.flatMap(day => (day.events ?? []).map(event => ({ ...event, day: day.day })));
+    const scheduledIncome = dailyBalances.reduce((sum, day) => sum + day.scheduledIncome, 0);
+    const scheduledBills = dailyBalances.reduce((sum, day) => sum + day.bills, 0);
+    const planned = allEvents
+      .filter(event => event.sourceType === "decision")
+      .reduce((sum, event) => sum + event.amount, 0);
+    const debtExtras = allEvents
+      .filter(event => event.sourceType === "extra_payment" || event.kind === "debt_payment")
+      .reduce((sum, event) => sum + event.amount, 0);
+    const detailsFor = (predicate: (event: typeof allEvents[number]) => boolean) =>
+      allEvents
+        .filter(predicate)
+        .sort((a, b) => a.day - b.day || Math.abs(b.amount) - Math.abs(a.amount))
+        .slice(0, 10)
+        .map(event => `${MONTH_FULL[month]} ${event.day}: ${event.name || event.kind} ${money(event.amount, "auto")}`);
+    return {
+      starting,
+      ending,
+      lowest: lowestDay?.balance ?? ending,
+      lowestDay: lowestDay?.day,
+      income: scheduledIncome + txIncome,
+      bills: scheduledBills,
+      transactions: txIncome - txExpense,
+      planned,
+      debtExtras,
+      details: {
+        income: [
+          ...detailsFor(event => event.sourceType === "income" || event.kind === "scheduled_income"),
+          ...txList.filter(tx => tx.amount > 0).slice(0, 10).map(tx => `${formatShortDate(tx.date)}: ${tx.note || tx.category} ${money(tx.amount, "auto")}`),
+        ],
+        bills: detailsFor(event => event.sourceType === "bill" || event.kind === "bill"),
+        transactions: txList.slice(0, 10).map(tx => `${formatShortDate(tx.date)}: ${tx.note || tx.category} ${money(tx.amount, "auto")}`),
+        planned: detailsFor(event => event.sourceType === "decision"),
+        debtExtras: detailsFor(event => event.sourceType === "extra_payment" || event.kind === "debt_payment"),
+      },
+    };
+  }, [dailyBalances, month, settings.starting_balance, txIncome, txExpense, txList]);
+
+  const showMonthSummaryDetail = useCallback((title: string, value: string, details: string[], fallback: string) => {
+    Alert.alert(title, [`Total: ${value}`, "", ...(details.length ? details : [fallback])].join("\n"));
+  }, []);
 
   const selectedDay = selectedDate ? parseInt(selectedDate.split("-")[2]) : null;
   const selectedForecastDay = selectedDay === null ? undefined : dailyBalances.find(item => item.day === selectedDay);
@@ -792,6 +844,42 @@ export default function MonthlyScreen() {
             })()}
 
             {/* Income / Spent / Net — includes both scheduled events and manual transactions */}
+            <View style={[styles.monthControlCard, { backgroundColor: c.card, borderColor: c.border }]}>
+              <View style={styles.monthControlHeader}>
+                <View>
+                  <Text style={[styles.monthControlTitle, { color: c.foreground }]}>Month Summary</Text>
+                  <Text style={[styles.monthControlSubtitle, { color: c.mutedForeground }]}>Tap a number to see what created it.</Text>
+                </View>
+                <View style={[styles.monthControlBadge, { backgroundColor: monthSummary.lowest < settings.safety_floor ? c.warning + "18" : c.success + "16" }]}>
+                  <Feather name={monthSummary.lowest < settings.safety_floor ? "alert-triangle" : "check-circle"} size={12} color={monthSummary.lowest < settings.safety_floor ? c.warning : c.success} />
+                  <Text style={[styles.monthControlBadgeText, { color: monthSummary.lowest < settings.safety_floor ? c.warning : c.success }]}>
+                    {monthSummary.lowest < settings.safety_floor ? "Watch" : "Safe"}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.monthSummaryGrid}>
+                {[
+                  { label: "Starting", value: money(monthSummary.starting), color: c.foreground, onPress: () => showMonthSummaryDetail("Starting balance", money(monthSummary.starting), [], "This is the balance before the first day of the selected month.") },
+                  { label: "Income", value: money(monthSummary.income), color: c.success, onPress: () => showMonthSummaryDetail("Monthly income", money(monthSummary.income), monthSummary.details.income, "No income is scheduled or logged for this month.") },
+                  { label: "Bills", value: money(-monthSummary.bills, "auto"), color: c.destructive, onPress: () => showMonthSummaryDetail("Monthly bills", money(-monthSummary.bills, "auto"), monthSummary.details.bills, "No bills are scheduled for this month.") },
+                  { label: "Transactions", value: money(monthSummary.transactions, "auto"), color: monthSummary.transactions >= 0 ? c.success : c.destructive, onPress: () => showMonthSummaryDetail("Manual transactions", money(monthSummary.transactions, "auto"), monthSummary.details.transactions, "No manual transactions are logged for this month.") },
+                  { label: "Plans", value: money(monthSummary.planned, "auto"), color: monthSummary.planned >= 0 ? c.success : "#8b5cf6", onPress: () => showMonthSummaryDetail("Planned decisions", money(monthSummary.planned, "auto"), monthSummary.details.planned, "No saved planned decisions affect this month.") },
+                  { label: "Debt extras", value: money(monthSummary.debtExtras, "auto"), color: monthSummary.debtExtras < 0 ? c.destructive : c.mutedForeground, onPress: () => showMonthSummaryDetail("Extra debt payments", money(monthSummary.debtExtras, "auto"), monthSummary.details.debtExtras, "No extra debt payments are scheduled for this month.") },
+                  { label: "Ending", value: money(monthSummary.ending), color: monthSummary.ending >= settings.safety_floor ? c.success : c.destructive, onPress: () => showMonthSummaryDetail("Ending balance", money(monthSummary.ending), [], "This is the projected close after all dated items in the month.") },
+                  { label: "Lowest", value: `${money(monthSummary.lowest)}${monthSummary.lowestDay ? ` · ${MONTH_FULL[month].slice(0, 3)} ${monthSummary.lowestDay}` : ""}`, color: monthSummary.lowest >= settings.safety_floor ? c.success : c.warning, onPress: () => showMonthSummaryDetail("Lowest balance", money(monthSummary.lowest), [], monthSummary.lowestDay ? `Lowest projected close is on ${MONTH_FULL[month]} ${monthSummary.lowestDay}.` : "No daily forecast is available for this month.") },
+                ].map(item => (
+                  <Pressable
+                    key={item.label}
+                    onPress={item.onPress}
+                    style={({ pressed }) => [styles.monthSummaryTile, { backgroundColor: c.muted, opacity: pressed ? 0.78 : 1 }]}
+                  >
+                    <Text style={[styles.monthSummaryLabel, { color: c.mutedForeground }]}>{item.label}</Text>
+                    <Text style={[styles.monthSummaryValue, { color: item.color }]} numberOfLines={1} adjustsFontSizeToFit>{item.value}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
             {(() => {
               const schedIncome = dailyBalances.reduce((s, db) => s + db.scheduledIncome, 0);
               const schedBills  = dailyBalances.reduce((s, db) => s + db.bills, 0);
@@ -1377,6 +1465,16 @@ const styles = StyleSheet.create({
   balanceBarItem: { flex: 1, alignItems: "center" },
   balanceBarLabel: { fontSize: 10, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 },
   balanceBarValue: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  monthControlCard: { borderWidth: 1, borderRadius: 16, padding: 12, marginBottom: 10 },
+  monthControlHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 10 },
+  monthControlTitle: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
+  monthControlSubtitle: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
+  monthControlBadge: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
+  monthControlBadgeText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
+  monthSummaryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  monthSummaryTile: { width: "48.5%", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 9, minHeight: 58, justifyContent: "center" },
+  monthSummaryLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.55, marginBottom: 4 },
+  monthSummaryValue: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
   txSummary: { flexDirection: "row", padding: 12, marginBottom: 10 },
   txSumItem: { flex: 1, alignItems: "center" },
   txSumLabel: { fontSize: 10, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 },
