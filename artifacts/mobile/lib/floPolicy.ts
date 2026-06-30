@@ -68,6 +68,15 @@ export interface FloCategoryMoveResult {
   allowed: boolean;
   reason: string;
 }
+export interface FloBillDateMoveResult {
+  billId: string;
+  billName: string;
+  fromDate: string;
+  toDate: string;
+  toDay: number;
+  allowed: boolean;
+  reason: string;
+}
 
 export function buildFloCategoryQuickPrompts(categories: FloCategoryFact[]): string[] {
   const rows = [...(categories ?? [])];
@@ -222,6 +231,8 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
   }
   const decisionHistoryAnswer = localDecisionHistoryAnswer(message, facts);
   if (decisionHistoryAnswer) return decisionHistoryAnswer;
+  const billMove = evaluateFloBillDateMove(message, facts);
+  if (billMove) return billMove.reason;
   const paycheckAnswer = localPaycheckAnswer(message, facts);
   if (paycheckAnswer) return paycheckAnswer;
   const categoryAnswer = localCategoryAnswer(message, facts);
@@ -269,6 +280,115 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
       : "You have $0.00 in unallocated spending this month. Every recorded expense is linked to a bill, or there are no expense transactions yet.";
   }
   return null;
+}
+
+export function evaluateFloBillDateMove(message: string, facts: FloFacts, today = new Date().toISOString().slice(0, 10)): FloBillDateMoveResult | null {
+  const lower = message.toLowerCase();
+  const plan = facts.paycheckPlan ? sanitizePaycheckPlan(facts.paycheckPlan) : null;
+  const hasMoveVerb = /\b(move|change|shift|push|reschedule)\b/.test(lower);
+  const asksMoveBillLanguage = hasMoveVerb && /\b(bill|due|paycheck|payday|pay day|after pay|after payday)\b/.test(lower);
+  const asksRecommendation = /\b(what|which|show|suggest|recommend)\b/.test(lower) && /\b(bill|due)\b/.test(lower) && /\b(move|shift|change|reschedule)\b/.test(lower);
+  if (!plan || !plan.nextPaycheck || !plan.billsDue.length) {
+    return asksMoveBillLanguage || asksRecommendation
+      ? {
+        billId: "",
+        billName: "",
+        fromDate: "",
+        toDate: "",
+        toDay: 0,
+        allowed: false,
+        reason: "I don't see any unpaid bills before your next paycheck that I can safely move from here.",
+      }
+      : null;
+  }
+  const mentionedBill = findBillMention(message, plan.billsDue);
+  const candidate = mentionedBill
+    ?? (asksRecommendation ? [...plan.billsDue].sort((left, right) => right.amount - left.amount || left.dueDate.localeCompare(right.dueDate))[0] : null);
+  const asksMoveBill = asksMoveBillLanguage || Boolean(hasMoveVerb && candidate);
+  if (!candidate) return asksMoveBill
+    ? {
+      billId: "",
+      billName: "",
+      fromDate: "",
+      toDate: "",
+      toDay: 0,
+      allowed: false,
+      reason: `I can help, but I need the bill name. Bills before payday are ${plan.billsDue.slice(0, 3).map(bill => bill.name).join(", ")}.`,
+    }
+    : null;
+
+  if (asksRecommendation && !mentionedBill) {
+    const suggestedDate = addDaysIso(plan.nextPaycheck.date, 1);
+    return {
+      billId: String(candidate.id ?? ""),
+      billName: candidate.name,
+      fromDate: candidate.dueDate,
+      toDate: suggestedDate,
+      toDay: Number(suggestedDate.slice(8, 10)),
+      allowed: false,
+      reason: `${candidate.name} is the best bill to consider moving because it is $${candidate.amount.toFixed(2)} before payday. A safer date would be ${suggestedDate}, just after your next paycheck.`,
+    };
+  }
+
+  const targetDate = /after (?:my |the )?(?:next )?(?:paycheck|payday|pay day|pay)/i.test(message)
+    ? addDaysIso(plan.nextPaycheck.date, 1)
+    : parseFloDate(message, today);
+  if (!targetDate || targetDate === today && !/\b(today|20\d{2}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i.test(message)) {
+    return {
+      billId: String(candidate.id ?? ""),
+      billName: candidate.name,
+      fromDate: candidate.dueDate,
+      toDate: "",
+      toDay: 0,
+      allowed: false,
+      reason: `I found ${candidate.name}, but I need the new date. Try “Move ${candidate.name} to ${addDaysIso(plan.nextPaycheck.date, 1)}.”`,
+    };
+  }
+  if (!candidate.id) {
+    return {
+      billId: "",
+      billName: candidate.name,
+      fromDate: candidate.dueDate,
+      toDate: targetDate,
+      toDay: Number(targetDate.slice(8, 10)),
+      allowed: false,
+      reason: `I found ${candidate.name}, but it is missing the saved bill ID needed to update the due date.`,
+    };
+  }
+  if (targetDate.slice(0, 7) !== candidate.dueDate.slice(0, 7)) {
+    return {
+      billId: String(candidate.id),
+      billName: candidate.name,
+      fromDate: candidate.dueDate,
+      toDate: targetDate,
+      toDay: Number(targetDate.slice(8, 10)),
+      allowed: false,
+      reason: `${candidate.name} is in ${candidate.dueDate.slice(0, 7)}, but ${targetDate} is a different month. I can only move a bill within the same month from here right now.`,
+    };
+  }
+  return {
+    billId: String(candidate.id),
+    billName: candidate.name,
+    fromDate: candidate.dueDate,
+    toDate: targetDate,
+    toDay: Number(targetDate.slice(8, 10)),
+    allowed: true,
+    reason: `I can move ${candidate.name} from ${candidate.dueDate} to ${targetDate} for this month only. Preview first: this should put the bill after payday and keep the paycheck window cleaner.`,
+  };
+}
+
+function findBillMention(message: string, bills: PaycheckPlanResult["billsDue"]) {
+  const lower = message.toLowerCase();
+  return [...bills]
+    .sort((left, right) => right.name.length - left.name.length)
+    .find(bill => lower.includes(bill.name.toLowerCase()))
+    ?? null;
+}
+
+function addDaysIso(isoDate: string, days: number) {
+  const date = new Date(`${isoDate}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 function sanitizePaycheckPlan(plan: PaycheckPlanResult): PaycheckPlanResult {
@@ -670,7 +790,7 @@ function parseFloDecisionAmount(message: string): number {
   return numbers.length ? numbers[numbers.length - 1] : 0;
 }
 
-function parseFloDate(message: string, today: string): string {
+export function parseFloDate(message: string, today: string): string {
   const iso = message.match(/\b(20\d{2}-\d{2}-\d{2})\b/)?.[1];
   if (iso) return iso;
   const base = new Date(`${today}T00:00:00Z`);

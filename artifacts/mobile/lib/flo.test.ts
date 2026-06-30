@@ -5,6 +5,7 @@ import {
   FLO_SECURITY_REFUSAL_MESSAGE,
   buildFloDecisionScenario,
   buildFloCategoryQuickPrompts,
+  evaluateFloBillDateMove,
   evaluateFloCategoryMove,
   floResponseCards,
   isFloPlanCreateCommand,
@@ -111,6 +112,21 @@ test("Flo answers paycheck planning questions from verified facts", () => {
   assert.match(localFloAnswer("What can I spend until payday?", facts, days) ?? "", /\$600\.00/);
   assert.match(localFloAnswer("What bills are due before my next paycheck?", facts, days) ?? "", /2 bills/);
   assert.match(localFloAnswer("What bills are due before my next paycheck?", facts, days) ?? "", /Power/);
+});
+
+test("Flo recommends and parses bill date moves from paycheck facts", () => {
+  const recommendation = localFloAnswer("What bill should I move?", facts, days) ?? "";
+  assert.match(recommendation, /Power/);
+  assert.match(recommendation, /safer date/);
+
+  const move = evaluateFloBillDateMove("Move Power to June 27", facts, "2026-06-24");
+  assert.equal(move?.allowed, true);
+  assert.equal(move?.billId, "power");
+  assert.equal(move?.toDate, "2026-06-27");
+
+  const afterPay = evaluateFloBillDateMove("Move Phone to after payday", facts, "2026-06-24");
+  assert.equal(afterPay?.allowed, true);
+  assert.equal(afterPay?.toDate, "2026-06-29");
 });
 
 test("Flo evaluates category budget moves from verified facts", () => {

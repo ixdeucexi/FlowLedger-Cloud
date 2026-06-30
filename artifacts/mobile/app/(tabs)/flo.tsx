@@ -23,12 +23,14 @@ import {
   FLO_CONNECTION_ERROR_MESSAGE,
   buildFloCategoryQuickPrompts,
   buildFloDecisionScenario,
+  evaluateFloBillDateMove,
   evaluateFloCategoryMove,
   floResponseCards,
   isFloPlanCreateCommand,
   reduceFloChat,
   sanitizeFloSummary,
   type FloCategoryMoveResult,
+  type FloBillDateMoveResult,
   type FloResponseCard,
   type FloChatState,
 } from "@/lib/floPolicy";
@@ -54,13 +56,15 @@ export default function FloScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { bills, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getPaidAmount, saveDecision, updateDecision, getTransactionsForMonth, categories } = useBudget();
+  const { bills, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getPaidAmount, setCustomDueDay, saveDecision, updateDecision, getTransactionsForMonth, categories } = useBudget();
   const [chat, dispatch] = useReducer(reduceFloChat, initialChat);
   const [cardsByMessageId, setCardsByMessageId] = useState<Record<string, FloResponseCard[]>>({});
   const [decisionByMessageId, setDecisionByMessageId] = useState<Record<string, { scenario: DecisionScenario; result: DecisionResult }>>({});
   const [decisionSaveState, setDecisionSaveState] = useState<Record<string, "saving" | "saved" | "failed">>({});
   const [categoryMoveByMessageId, setCategoryMoveByMessageId] = useState<Record<string, FloCategoryMoveResult>>({});
   const [categoryMoveState, setCategoryMoveState] = useState<Record<string, "idle" | "saving" | "saved" | "failed">>({});
+  const [billDateMoveByMessageId, setBillDateMoveByMessageId] = useState<Record<string, FloBillDateMoveResult>>({});
+  const [billDateMoveState, setBillDateMoveState] = useState<Record<string, "idle" | "saving" | "saved" | "failed">>({});
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
   const [decisionHubSettings, setDecisionHubSettings] = useState<DecisionHubSettings>(() => readDecisionHubSettings());
   const [input, setInput] = useState("");
@@ -348,6 +352,7 @@ export default function FloScreen() {
       ...(decisionRiskAlerts.length ? ["Are any planned decisions no longer safe?"] : []),
       ...(decisionHistory.upcoming.length ? ["What planned decisions are coming up?"] : []),
       "What can I spend until payday?",
+      "What bill should I move?",
       ...categoryPrompts,
       "Can I afford $500?",
       "What bills are due next?",
@@ -388,6 +393,11 @@ export default function FloScreen() {
     if (categoryMove?.allowed) {
       setCategoryMoveByMessageId(previous => ({ ...previous, [replyId]: categoryMove }));
       setCategoryMoveState(previous => ({ ...previous, [replyId]: "idle" }));
+    }
+    const billDateMove = evaluateFloBillDateMove(clean, facts, today);
+    if (billDateMove?.allowed) {
+      setBillDateMoveByMessageId(previous => ({ ...previous, [replyId]: billDateMove }));
+      setBillDateMoveState(previous => ({ ...previous, [replyId]: "idle" }));
     }
     if (user) {
       const nextSummary = `Recent topic: ${sanitizeFloSummary(clean).slice(0, 120)}`;
@@ -511,6 +521,19 @@ export default function FloScreen() {
       setCategoryMoveState(previous => ({ ...previous, [messageId]: "saved" }));
     } catch {
       setCategoryMoveState(previous => ({ ...previous, [messageId]: "failed" }));
+    }
+  };
+
+  const applyBillDateMoveFromFlo = async (messageId: string) => {
+    const move = billDateMoveByMessageId[messageId];
+    if (!move || billDateMoveState[messageId] === "saving" || billDateMoveState[messageId] === "saved") return;
+    setBillDateMoveState(previous => ({ ...previous, [messageId]: "saving" }));
+    try {
+      const sourceMonth = new Date(`${move.fromDate}T12:00:00`);
+      await setCustomDueDay(move.billId, sourceMonth.getMonth(), sourceMonth.getFullYear(), move.toDay);
+      setBillDateMoveState(previous => ({ ...previous, [messageId]: "saved" }));
+    } catch {
+      setBillDateMoveState(previous => ({ ...previous, [messageId]: "failed" }));
     }
   };
 
@@ -665,6 +688,39 @@ export default function FloScreen() {
                 </Text>
                 {categoryMoveState[message.id] === "failed" ? (
                   <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t apply this move. Try again.</Text>
+                ) : null}
+              </View>
+            ) : null}
+            {message.role === "flo" && billDateMoveByMessageId[message.id] ? (
+              <View style={styles.decisionActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Apply this bill due date move"
+                  disabled={billDateMoveState[message.id] === "saving" || billDateMoveState[message.id] === "saved"}
+                  onPress={() => void applyBillDateMoveFromFlo(message.id)}
+                  style={[
+                    styles.saveDecisionButton,
+                    { backgroundColor: colors.primary, opacity: billDateMoveState[message.id] === "saved" ? 0.7 : 1 },
+                  ]}
+                >
+                  <Feather
+                    name={billDateMoveState[message.id] === "saved" ? "check-circle" : "calendar"}
+                    size={16}
+                    color="#fff"
+                  />
+                  <Text style={styles.saveDecisionText}>
+                    {billDateMoveState[message.id] === "saving"
+                      ? "Applying..."
+                      : billDateMoveState[message.id] === "saved"
+                        ? "Due date moved"
+                        : `Move ${billDateMoveByMessageId[message.id].billName}`}
+                  </Text>
+                </Pressable>
+                <Text style={[styles.saveDecisionHint, { color: colors.mutedForeground }]}>
+                  Moves this month only from {formatDisplayDate(billDateMoveByMessageId[message.id].fromDate)} to {formatDisplayDate(billDateMoveByMessageId[message.id].toDate)}.
+                </Text>
+                {billDateMoveState[message.id] === "failed" ? (
+                  <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t move this bill. Try again.</Text>
                 ) : null}
               </View>
             ) : null}
