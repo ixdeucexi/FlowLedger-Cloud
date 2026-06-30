@@ -845,6 +845,18 @@ export default function MonthlyScreen() {
             </View>
             )}
 
+            {selectedForecastDay && selectedForecastDay.balance < settings.safety_floor ? (
+              <View style={[styles.lowBalanceCard, { backgroundColor: selectedForecastDay.balance < 0 ? c.destructive + "12" : c.warning + "14", borderColor: selectedForecastDay.balance < 0 ? c.destructive + "70" : c.warning + "70" }]}>
+                <Feather name="alert-triangle" size={16} color={selectedForecastDay.balance < 0 ? c.destructive : c.warning} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.lowBalanceTitle, { color: c.foreground }]}>Low balance risk</Text>
+                  <Text style={[styles.lowBalanceText, { color: c.mutedForeground }]}>
+                    This day is projected at ${selectedForecastDay.balance.toFixed(2)}, below your ${settings.safety_floor.toFixed(0)} safety floor.
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+
             {selectedForecastDay && (
               <View style={[styles.forecastExplanation, { backgroundColor: c.card, borderColor: c.border }]}>
                 <View style={styles.forecastExplanationHeader}>
@@ -1356,6 +1368,9 @@ const styles = StyleSheet.create({
   txSumLabel: { fontSize: 10, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 },
   txSumValue: { fontSize: 15, fontFamily: "Inter_700Bold" },
   txListHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8, marginTop: 4 },
+  lowBalanceCard: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 10 },
+  lowBalanceTitle: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  lowBalanceText: { fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 16, marginTop: 2 },
   forecastExplanation: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 10 },
   forecastExplanationHeader: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginBottom: 6 },
   forecastExplanationTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold" },

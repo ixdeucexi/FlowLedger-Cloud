@@ -113,6 +113,7 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
               ? "rgba(245,158,11,0.11)"
               : "rgba(34,197,94,0.06)"
             : "transparent";
+          const isLowRiskDay = Boolean(db && db.balance < safetyFloor);
 
           return (
             <Pressable
@@ -181,6 +182,11 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
                   ${fmt(db.balance)}
                 </Text>
               )}
+              {isLowRiskDay ? (
+                <Text style={[styles.riskText, { color: db && db.balance < 0 ? c.destructive : c.warning }]} numberOfLines={1}>
+                  Low risk
+                </Text>
+              ) : null}
             </Pressable>
           );
         })}
@@ -204,6 +210,7 @@ export function CalendarView({ month, year, transactions, selectedDate, onDayPre
           { bg: "rgba(34,197,94,0.15)",   label: "safe" },
           { bg: "rgba(245,158,11,0.18)",  label: "low"  },
           { bg: "rgba(239,68,68,0.20)",   label: "neg"  },
+          { bg: "rgba(245,158,11,0.28)",  label: "Low balance risk" },
         ].map(l => (
           <View key={l.label} style={styles.legendItem}>
             <View style={[styles.legendSwatch, { backgroundColor: l.bg }]} />
@@ -226,6 +233,7 @@ const styles = StyleSheet.create({
   amountsCol: { alignItems: "center", marginTop: 1 },
   amtText: { fontSize: 8, fontFamily: "Inter_600SemiBold" },
   balanceText: { fontSize: 7, fontFamily: "Inter_700Bold", marginTop: 1 },
+  riskText: { fontSize: 7, fontFamily: "Inter_700Bold", marginTop: 1 },
   legend: { flexDirection: "row", justifyContent: "center", gap: 12, paddingTop: 8, marginTop: 4, borderTopWidth: 1, flexWrap: "wrap" },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 4 },
   legendDot:    { width: 6, height: 6, borderRadius: 3 },

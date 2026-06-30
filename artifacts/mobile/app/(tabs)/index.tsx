@@ -668,6 +668,28 @@ export default function DashboardScreen() {
     }
     return { title, detail, riskCount: decisionRiskAlerts.length, reviewCount, upcomingCount: decisionHistory.upcoming.length, completedCount: decisionHistory.completed.length, tone };
   }, [decisionHistory, decisionRiskAlerts, now, todayIso]);
+  const nextWeekRisk = useMemo(() => {
+    const weekEndDate = new Date(now);
+    weekEndDate.setDate(now.getDate() + 7);
+    const weekEnd = `${weekEndDate.getFullYear()}-${String(weekEndDate.getMonth() + 1).padStart(2, "0")}-${String(weekEndDate.getDate()).padStart(2, "0")}`;
+    const weekDays = decisionForecastDays.filter(day => day.date >= todayIso && day.date <= weekEnd);
+    const lowest = weekDays.reduce<{ date: string; balance: number } | null>(
+      (best, day) => !best || day.balance < best.balance ? day : best,
+      null,
+    );
+    if (!lowest || lowest.balance >= settings.safety_floor + 150) return null;
+    const tone = lowest.balance < settings.safety_floor ? "risk" : "tight";
+    const prompt = `Why is my balance low next week? My lowest projected balance is $${lowest.balance.toFixed(0)} on ${lowest.date}.`;
+    return {
+      tone,
+      title: tone === "risk" ? "Next week has a low balance risk" : "Next week is tight",
+      detail: `Lowest projected balance: $${lowest.balance.toFixed(0)} on ${formatShortDate(lowest.date)}. Ask Flo why before changing the plan.`,
+      prompt,
+    };
+  }, [decisionForecastDays, now, settings.safety_floor, todayIso]);
+  const openFloWithPrompt = (prompt: string) => {
+    router.push({ pathname: "/(tabs)/flo", params: { prompt } } as any);
+  };
 
   return (
     <ScrollView
@@ -699,6 +721,31 @@ export default function DashboardScreen() {
         <Feather name={forecastConfidence.level === "high" ? "check-circle" : "alert-circle"} size={17} color={forecastConfidence.level === "high" ? c.success : forecastConfidence.level === "medium" ? "#d97706" : c.destructive} />
         <View style={{ flex: 1 }}><Text style={[styles.confidenceTitle, { color: c.foreground }]}>Forecast confidence: {forecastConfidence.label}</Text><Text style={[styles.confidenceDesc, { color: c.mutedForeground }]}>{forecastConfidence.reasons[0]}</Text></View><Feather name="chevron-right" size={16} color={c.mutedForeground} />
       </Pressable>
+
+      {nextWeekRisk ? (
+        <Pressable
+          onPress={() => openFloWithPrompt(nextWeekRisk.prompt)}
+          style={({ pressed }) => [
+            styles.proactiveAlertCard,
+            {
+              backgroundColor: nextWeekRisk.tone === "risk" ? c.destructive + "12" : c.warning + "14",
+              borderColor: nextWeekRisk.tone === "risk" ? c.destructive + "70" : c.warning + "70",
+              opacity: pressed ? 0.82 : 1,
+            },
+          ]}
+        >
+          <View style={[styles.proactiveAlertIcon, { backgroundColor: nextWeekRisk.tone === "risk" ? c.destructive + "18" : c.warning + "18" }]}>
+            <Feather name="alert-triangle" size={17} color={nextWeekRisk.tone === "risk" ? c.destructive : c.warning} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.proactiveAlertTitle, { color: c.foreground }]}>{nextWeekRisk.title}</Text>
+            <Text style={[styles.proactiveAlertText, { color: c.mutedForeground }]}>{nextWeekRisk.detail}</Text>
+          </View>
+          <View style={[styles.askFloPill, { backgroundColor: c.primary + "18" }]}>
+            <Text style={[styles.askFloPillText, { color: c.primary }]}>Ask Flo</Text>
+          </View>
+        </Pressable>
+      ) : null}
 
       {/* ── HERO: flip card — front = Balance Today, back = Savings ── */}
       {(() => {
@@ -927,7 +974,7 @@ export default function DashboardScreen() {
       )}
 
       <Pressable
-        onPress={() => router.push("/(tabs)/flo" as any)}
+        onPress={() => openFloWithPrompt("What decisions need review?")}
         style={({ pressed }) => [
           styles.decisionHubCard,
           {
@@ -1999,6 +2046,12 @@ const styles = StyleSheet.create({
   setupButton: { height: 40, borderRadius: 9, alignItems: "center", justifyContent: "center", marginTop: 10 },
   setupButtonText: { fontSize: 13, fontFamily: "Inter_700Bold" },
   confidenceCard: { flexDirection: "row", alignItems: "center", gap: 9, padding: 12, borderRadius: 12, marginBottom: 14 },
+  proactiveAlertCard: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 14 },
+  proactiveAlertIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  proactiveAlertTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
+  proactiveAlertText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 2 },
+  askFloPill: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999 },
+  askFloPillText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   confidenceTitle: { fontSize: 13, fontFamily: "Inter_700Bold" },
   confidenceDesc: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
 

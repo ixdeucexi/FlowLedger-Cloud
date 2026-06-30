@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert, FlatList, Platform, Pressable, StyleSheet, Text, View,
@@ -15,6 +16,7 @@ import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { sortDebtsLeastToGreatest } from "@/lib/debtOrder";
+import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 
 const CAT_COLORS: Record<string, string> = {
   Housing: "#0f9b8e", Utilities: "#f0b429", Insurance: "#6366f1",
@@ -29,11 +31,14 @@ type SortMode = "priority" | "balance" | "interest";
 export default function BillsScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const {
     bills, addBill, updateBill, deleteBill,
     dashboardFilter, setDashboardFilter,
     settings, updateSettings,
     previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, getExtraPayment,
+    getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getPaidAmount,
+    getDailyBalances, getIncomeOccurrencesInMonth,
   } = useBudget();
 
   const [activeTab, setActiveTab]       = useState<Tab>("bills");
@@ -96,6 +101,42 @@ export default function BillsScreen() {
   const highestAPR       = debts.length ? Math.max(...debts.map(b => b.interest_rate)) : 0;
 
   const priorityColors = ["#22c55e", "#f0b429", "#ef4444", "#8b5cf6", "#ec4899"];
+  const todayIso = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const paycheckPlan = useMemo(() => {
+    const horizon = Math.max(2, Math.min(settings.forecast_horizon_months, 6));
+    const incomeEvents: { id?: string; name: string; amount: number; date: string }[] = [];
+    const billEvents: { id?: string; name: string; amount: number; dueDate: string }[] = [];
+    const balanceEvents: { date: string; balance: number }[] = [];
+    for (let i = 0; i < horizon; i += 1) {
+      const absoluteMonth = currentMonth + i;
+      const month = absoluteMonth % 12;
+      const year = currentYear + Math.floor(absoluteMonth / 12);
+      getIncomeOccurrencesInMonth(month, year).forEach(({ income, days, effectiveAmount }) => {
+        days.forEach(day => incomeEvents.push({ id: income.id, name: income.name, amount: effectiveAmount, date: makeDateKey(year, month, day) }));
+      });
+      getMonthlyBills(month, year).forEach(bill => {
+        const occurrences = getBillOccurrencesInMonth(bill, month, year);
+        if (!occurrences.length) return;
+        const perOccurrence = getBillMonthlyTotal(bill, month, year) / occurrences.length;
+        let paidRemaining = getPaidAmount(bill.id, month, year);
+        occurrences.forEach(day => {
+          const appliedPaid = Math.min(perOccurrence, Math.max(0, paidRemaining));
+          paidRemaining = Math.max(0, paidRemaining - perOccurrence);
+          const remaining = Math.max(0, perOccurrence - appliedPaid);
+          if (remaining > 0.005) billEvents.push({ id: bill.id, name: bill.name, amount: remaining, dueDate: makeDateKey(year, month, day) });
+        });
+      });
+      getDailyBalances(month, year).forEach(day => balanceEvents.push({ date: makeDateKey(year, month, day.day), balance: day.balance }));
+    }
+    return buildPaycheckPlan(incomeEvents, billEvents, balanceEvents, settings.safety_floor, todayIso);
+  }, [currentMonth, currentYear, getBillMonthlyTotal, getBillOccurrencesInMonth, getDailyBalances, getIncomeOccurrencesInMonth, getMonthlyBills, getPaidAmount, settings.forecast_horizon_months, settings.safety_floor, todayIso]);
+  const billOptimizationPrompt = useMemo(() => {
+    if (!paycheckPlan.nextPaycheck || !paycheckPlan.billsDue.length) return null;
+    const bill = [...paycheckPlan.billsDue].sort((left, right) => right.amount - left.amount)[0];
+    const saferDate = new Date(`${paycheckPlan.nextPaycheck.date}T12:00:00`);
+    saferDate.setDate(saferDate.getDate() + 1);
+    return { bill, saferDate };
+  }, [paycheckPlan]);
 
   // ── Handlers ────────────────────────────────────────────────────
   const handleSave = useCallback((data: Omit<Bill, "id" | "created_at"> | Bill) => {
@@ -157,6 +198,25 @@ export default function BillsScreen() {
       </View>
 
       {/* ── Bills / Debt segment toggle ── */}
+      {activeTab === "bills" && billOptimizationPrompt ? (
+        <Pressable
+          onPress={() => router.push({ pathname: "/(tabs)/flo", params: { prompt: `Move ${billOptimizationPrompt.bill.name} to after payday` } } as any)}
+          style={({ pressed }) => [
+            styles.billPromptCard,
+            { backgroundColor: c.warning + "12", borderColor: c.warning + "70", opacity: pressed ? 0.82 : 1 },
+          ]}
+        >
+          <Feather name="zap" size={17} color={c.warning} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.billPromptTitle, { color: c.foreground }]}>{billOptimizationPrompt.bill.name} hits before payday</Text>
+            <Text style={[styles.billPromptText, { color: c.mutedForeground }]}>
+              Safer after {billOptimizationPrompt.saferDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Tap to ask Flo.
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={16} color={c.mutedForeground} />
+        </Pressable>
+      ) : null}
+
       <View style={[styles.segmentWrap, { paddingHorizontal: 16, marginBottom: 12 }]}>
         <View style={[styles.segment, { backgroundColor: c.muted }]}>
           {(["bills", "debt"] as Tab[]).map(t => (
@@ -448,6 +508,9 @@ const styles = StyleSheet.create({
   title:    { fontSize: 28, fontFamily: "Inter_700Bold" },
   subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
   addBtn:   { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
+  billPromptCard: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 14, padding: 12, marginHorizontal: 16, marginBottom: 12 },
+  billPromptTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
+  billPromptText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 2 },
 
   // Segment toggle
   segmentWrap: {},

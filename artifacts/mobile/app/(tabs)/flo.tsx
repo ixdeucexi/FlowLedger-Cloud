@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -63,6 +64,7 @@ const initialChat: FloChatState = { messages: [], sending: false };
 export default function FloScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ prompt?: string }>();
   const { user } = useAuth();
   const { bills, billDateMoves, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getPaidAmount, moveBillOccurrence, removeBillOccurrenceMove, saveDecision, updateDecision, updateBill, setCustomAmount, saveExtraPayment, getTransactionsForMonth, categories } = useBudget();
   const [chat, dispatch] = useReducer(reduceFloChat, initialChat);
@@ -90,6 +92,7 @@ export default function FloScreen() {
   const [postponeDate, setPostponeDate] = useState("");
   const [historyActionState, setHistoryActionState] = useState<Record<string, "saving" | "failed">>({});
   const scrollRef = useRef<ScrollView>(null);
+  const handledPromptRef = useRef<string | null>(null);
   const now = useMemo(() => new Date(), []);
   const today = now.toISOString().slice(0, 10);
 
@@ -463,6 +466,14 @@ export default function FloScreen() {
       void updateFloMemory(user.id, clean);
     }
   };
+
+  useEffect(() => {
+    const prompt = Array.isArray(params.prompt) ? params.prompt[0] : params.prompt;
+    const cleanPrompt = typeof prompt === "string" ? prompt.trim() : "";
+    if (!cleanPrompt || handledPromptRef.current === cleanPrompt || chat.sending) return;
+    handledPromptRef.current = cleanPrompt;
+    void send(cleanPrompt);
+  }, [params.prompt, chat.sending]);
 
   const addDecisionToCalendar = async (messageId: string) => {
     const decision = decisionByMessageId[messageId];

@@ -8,6 +8,8 @@ import { BudgetProvider, useBudget } from "@/context/BudgetContext";
 import { SaveStatusBanner } from "@/components/SaveStatusBanner";
 import { DecisionDueModal } from "@/components/DecisionDueModal";
 import { useColors } from "@/hooks/useColors";
+import { buildDecisionHistory } from "@/lib/decisionHistory";
+import { buildDecisionRiskAlerts } from "@/lib/decisionRisk";
 
 const TABS = [
   { name: "index",        title: "Dashboard",    icon: "bar-chart-2"     },
@@ -33,11 +35,33 @@ function BudgetLoadingScreen() {
 
 function TabContent() {
   const colors = useColors();
-  const { loading } = useBudget();
+  const { loading, decisions, getDailyBalances, settings } = useBudget();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
+  const attentionCount = React.useMemo(() => {
+    if (loading) return 0;
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const weekEndDate = new Date(now);
+    weekEndDate.setDate(now.getDate() + 7);
+    const weekEnd = `${weekEndDate.getFullYear()}-${String(weekEndDate.getMonth() + 1).padStart(2, "0")}-${String(weekEndDate.getDate()).padStart(2, "0")}`;
+    const forecastDays: { date: string; balance: number }[] = [];
+    for (let index = 0; index < Math.max(1, Math.min(settings.forecast_horizon_months, 2)); index += 1) {
+      const absoluteMonth = now.getMonth() + index;
+      const month = absoluteMonth % 12;
+      const year = now.getFullYear() + Math.floor(absoluteMonth / 12);
+      getDailyBalances(month, year).forEach(day => {
+        const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day.day).padStart(2, "0")}`;
+        if (date >= today) forecastDays.push({ date, balance: day.balance });
+      });
+    }
+    const history = buildDecisionHistory(decisions, today, now.toISOString());
+    const risky = buildDecisionRiskAlerts(decisions, forecastDays, settings.safety_floor, today).length;
+    const lowNextWeek = forecastDays.some(day => day.date >= today && day.date <= weekEnd && day.balance < settings.safety_floor);
+    return Math.min(9, history.due.length + risky + (lowNextWeek ? 1 : 0));
+  }, [decisions, getDailyBalances, loading, settings.forecast_horizon_months, settings.safety_floor]);
 
   if (loading) return <BudgetLoadingScreen />;
 
@@ -78,6 +102,8 @@ function TabContent() {
             name={tab.name}
             options={{
               title: tab.title,
+              tabBarBadge: tab.name === "flo" && attentionCount > 0 ? attentionCount : undefined,
+              tabBarBadgeStyle: tab.name === "flo" ? { backgroundColor: colors.destructive, color: "#fff", fontSize: 10 } : undefined,
               tabBarActiveTintColor: tab.name === "flo" ? colors.primary : undefined,
               tabBarInactiveTintColor: tab.name === "flo" ? colors.primary : undefined,
               tabBarIcon: ({ color }) => <Feather name={tab.icon} size={22} color={tab.name === "flo" ? colors.primary : color} />,
