@@ -699,7 +699,7 @@ export default function FloScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.historyTitle, { color: colors.foreground }]}>Decision History</Text>
-              <Text style={[styles.historySub, { color: colors.mutedForeground }]}>The clean path for upcoming, risky, completed, and changed plans.</Text>
+              <Text style={[styles.historySub, { color: colors.mutedForeground }]}>The clean path for review, risky, upcoming, and completed plans.</Text>
             </View>
           </View>
           <View style={styles.historyStats}>
@@ -708,7 +708,7 @@ export default function FloScreen() {
             <HistoryStat label="Upcoming" value={decisionHistory.upcoming.length} color={colors.primary} />
             <HistoryStat label="Completed" value={decisionHistory.completed.length} color={colors.success} />
           </View>
-          {decisionRiskAlerts.length + decisionHistory.due.length + decisionHistory.upcoming.length + decisionHistory.completed.length + decisionHistory.changed.length === 0 ? (
+          {decisionRiskAlerts.length + decisionHistory.due.length + decisionHistory.upcoming.length + decisionHistory.completed.length === 0 ? (
             <Text style={[styles.historyEmpty, { color: colors.mutedForeground }]}>Ask Flo if you can afford something, then save it to start tracking decisions here.</Text>
           ) : (
             <View style={styles.historySections}>
@@ -716,7 +716,6 @@ export default function FloScreen() {
               <DecisionHistorySection title="Needs review" items={decisionHistory.due.slice(0, 4)} colors={colors} actionState={historyActionState} onComplete={openCompletePlan} onPostpone={openPostponePlan} onCancel={(id) => void cancelPlan(id)} />
               <DecisionHistorySection title="Upcoming planned" items={decisionHistory.upcoming.slice(0, 4)} colors={colors} actionState={historyActionState} onComplete={openCompletePlan} onPostpone={openPostponePlan} onCancel={(id) => void cancelPlan(id)} />
               <DecisionHistorySection title="Completed" items={decisionHistory.completed.slice(0, 3)} colors={colors} />
-              <DecisionHistorySection title="Postponed / Cancelled" items={decisionHistory.changed.slice(0, 3)} colors={colors} />
             </View>
           )}
         </View>
