@@ -61,6 +61,7 @@ export interface BillDateMove {
   from_date: string;
   to_date: string;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface Transaction {
@@ -410,6 +411,76 @@ function writeStoredBillDateMoves(userId: string | undefined, moves: BillDateMov
   globalThis.localStorage?.setItem(billDateMoveStorageKey(userId), JSON.stringify(moves));
 }
 
+function normalizeBillDateMoveRow(row: any): BillDateMove {
+  return {
+    id: String(row.id ?? genId()),
+    bill_id: String(row.bill_id),
+    from_date: String(row.from_date).slice(0, 10),
+    to_date: String(row.to_date).slice(0, 10),
+    created_at: String(row.created_at ?? new Date().toISOString()),
+    updated_at: row.updated_at ? String(row.updated_at) : undefined,
+  };
+}
+
+function billDateMoveKey(move: Pick<BillDateMove, "bill_id" | "from_date">) {
+  return `${move.bill_id}::${move.from_date}`;
+}
+
+function mergeBillDateMoves(primary: BillDateMove[], fallback: BillDateMove[]) {
+  const seen = new Set<string>();
+  const merged: BillDateMove[] = [];
+  [...primary, ...fallback].forEach(move => {
+    const key = billDateMoveKey(move);
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push(move);
+  });
+  return merged.sort((a, b) => a.from_date.localeCompare(b.from_date) || a.to_date.localeCompare(b.to_date));
+}
+
+function billDateMoveDbPayload(move: Pick<BillDateMove, "bill_id" | "from_date" | "to_date">, userId: string) {
+  return {
+    user_id: userId,
+    bill_id: move.bill_id,
+    from_date: move.from_date.slice(0, 10),
+    to_date: move.to_date.slice(0, 10),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+async function loadBillDateMoves(uid: string): Promise<BillDateMove[]> {
+  const stored = readStoredBillDateMoves(uid);
+  const remote = await supabase
+    .from("bill_date_moves")
+    .select("*")
+    .eq("user_id", uid)
+    .order("from_date");
+
+  if (remote.error) {
+    return stored;
+  }
+
+  let remoteMoves = (remote.data ?? []).map(normalizeBillDateMoveRow);
+  const remoteKeys = new Set(remoteMoves.map(billDateMoveKey));
+  const localOnly = stored.filter(move => !remoteKeys.has(billDateMoveKey(move)));
+
+  if (localOnly.length > 0) {
+    const synced = await Promise.all(localOnly.map(async move => {
+      const saved = await supabase
+        .from("bill_date_moves")
+        .upsert(billDateMoveDbPayload(move, uid), { onConflict: "user_id,bill_id,from_date" })
+        .select("*")
+        .single();
+      return saved.error ? move : normalizeBillDateMoveRow(saved.data);
+    }));
+    remoteMoves = mergeBillDateMoves(remoteMoves, synced);
+  }
+
+  const merged = mergeBillDateMoves(remoteMoves, stored);
+  writeStoredBillDateMoves(uid, merged);
+  return merged;
+}
+
 const markSnowballSourcesPending = (sources: SnowballFundingSource[]) =>
   sources.map(source => ({ ...source, pendingBalanceApply: true }));
 
@@ -654,7 +725,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           actual_amount: o.actual_amount !== null ? Number(o.actual_amount) : undefined,
           paid_date: o.paid_date ?? undefined,
         })));
-        const storedBillDateMoves = readStoredBillDateMoves(uid);
+        const storedBillDateMoves = await loadBillDateMoves(uid);
         setBillDateMoves(storedBillDateMoves);
         billDateMovesRef.current = storedBillDateMoves;
         setTransactions((tData ?? []).map(normalizeTransactionRow));
@@ -1007,6 +1078,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     const cleanFrom = fromDate.slice(0, 10);
     const cleanTo = toDate.slice(0, 10);
+    const previous = billDateMovesRef.current;
     const existing = billDateMovesRef.current.find(move => move.bill_id === billId && move.from_date === cleanFrom);
     const nextMove: BillDateMove = existing
       ? { ...existing, to_date: cleanTo }
@@ -1017,17 +1089,68 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     billDateMovesRef.current = next;
     setBillDateMoves(next);
     writeStoredBillDateMoves(user.id, next);
-    markSaveCompleted();
-  }, [user, markSaveCompleted]);
+    if (demoMode) {
+      markSaveCompleted();
+      return;
+    }
+    markSaveStarted();
+    try {
+      const saved = await supabase
+        .from("bill_date_moves")
+        .upsert(billDateMoveDbPayload(nextMove, user.id), { onConflict: "user_id,bill_id,from_date" })
+        .select("*")
+        .single();
+      if (saved.error) throw new Error(`Move bill date: ${saved.error.message}`);
+      const savedMove = normalizeBillDateMoveRow(saved.data);
+      const finalMoves = billDateMovesRef.current.map(move =>
+        move.bill_id === savedMove.bill_id && move.from_date === savedMove.from_date ? savedMove : move
+      );
+      billDateMovesRef.current = finalMoves;
+      setBillDateMoves(finalMoves);
+      writeStoredBillDateMoves(user.id, finalMoves);
+      markSaveCompleted();
+    } catch (error) {
+      const current = billDateMovesRef.current.find(move => move.bill_id === billId && move.from_date === cleanFrom);
+      if (current?.to_date === cleanTo) {
+        billDateMovesRef.current = previous;
+        setBillDateMoves(previous);
+        writeStoredBillDateMoves(user.id, previous);
+      }
+      markSaveFailed(error, () => moveBillOccurrence(billId, fromDate, toDate));
+      throw error;
+    }
+  }, [user, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed]);
 
   const removeBillOccurrenceMove = useCallback(async (id: string) => {
     if (!user) return;
+    const previous = billDateMovesRef.current;
+    const existing = previous.find(move => move.id === id);
     const next = billDateMovesRef.current.filter(move => move.id !== id);
     billDateMovesRef.current = next;
     setBillDateMoves(next);
     writeStoredBillDateMoves(user.id, next);
-    markSaveCompleted();
-  }, [user, markSaveCompleted]);
+    if (demoMode || !existing) {
+      markSaveCompleted();
+      return;
+    }
+    markSaveStarted();
+    try {
+      const removed = await supabase
+        .from("bill_date_moves")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("bill_id", existing.bill_id)
+        .eq("from_date", existing.from_date);
+      if (removed.error) throw new Error(`Restore bill date: ${removed.error.message}`);
+      markSaveCompleted();
+    } catch (error) {
+      billDateMovesRef.current = previous;
+      setBillDateMoves(previous);
+      writeStoredBillDateMoves(user.id, previous);
+      markSaveFailed(error, () => removeBillOccurrenceMove(id));
+      throw error;
+    }
+  }, [user, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed]);
 
   const applyBillDateMovesToOccurrences = useCallback((bill: Bill, month: number, year: number, occurrences: number[]): number[] => {
     const key = monthKey(year, month);
