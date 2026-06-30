@@ -691,6 +691,8 @@ export default function DashboardScreen() {
       title: tone === "risk" ? "Next week has a low balance risk" : "Next week is tight",
       detail: `Lowest projected balance: $${lowest.balance.toFixed(0)} on ${formatShortDate(lowest.date)}. Ask Flo why before changing the plan.`,
       prompt,
+      saferBillPrompt: "What bill should I move?",
+      reducePlanPrompt: "Which planned decisions should I reduce or postpone?",
     };
   }, [decisionForecastDays, decisionHubSettings.alertSensitivity, decisionHubSettings.lowBalanceAlertsEnabled, now, settings.safety_floor, todayIso]);
   const openFloWithPrompt = (prompt: string) => {
@@ -746,6 +748,26 @@ export default function DashboardScreen() {
           <View style={{ flex: 1 }}>
             <Text style={[styles.proactiveAlertTitle, { color: c.foreground }]}>{nextWeekRisk.title}</Text>
             <Text style={[styles.proactiveAlertText, { color: c.mutedForeground }]}>{nextWeekRisk.detail}</Text>
+            <View style={styles.proactiveActionRow}>
+              <Pressable
+                onPress={() => openFloWithPrompt(nextWeekRisk.prompt)}
+                style={({ pressed }) => [styles.proactiveActionButton, { backgroundColor: c.primary + "18", opacity: pressed ? 0.75 : 1 }]}
+              >
+                <Text style={[styles.proactiveActionText, { color: c.primary }]}>Show why</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => openFloWithPrompt(nextWeekRisk.saferBillPrompt)}
+                style={({ pressed }) => [styles.proactiveActionButton, { backgroundColor: c.warning + "18", opacity: pressed ? 0.75 : 1 }]}
+              >
+                <Text style={[styles.proactiveActionText, { color: c.warning }]}>Find safer bill date</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => openFloWithPrompt(nextWeekRisk.reducePlanPrompt)}
+                style={({ pressed }) => [styles.proactiveActionButton, { backgroundColor: c.destructive + "12", opacity: pressed ? 0.75 : 1 }]}
+              >
+                <Text style={[styles.proactiveActionText, { color: c.destructive }]}>Reduce planned spending</Text>
+              </Pressable>
+            </View>
           </View>
           <View style={[styles.askFloPill, { backgroundColor: c.primary + "18" }]}>
             <Text style={[styles.askFloPillText, { color: c.primary }]}>Ask Flo</Text>
@@ -2056,6 +2078,9 @@ const styles = StyleSheet.create({
   proactiveAlertIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" },
   proactiveAlertTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   proactiveAlertText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 2 },
+  proactiveActionRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
+  proactiveActionButton: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999 },
+  proactiveActionText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   askFloPill: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999 },
   askFloPillText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   confidenceTitle: { fontSize: 13, fontFamily: "Inter_700Bold" },

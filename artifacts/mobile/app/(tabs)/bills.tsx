@@ -52,6 +52,7 @@ export default function BillsScreen() {
   const [snowballAmount, setSnowballAmount] = useState("");
   const [snowballPreview, setSnowballPreview] = useState<SnowballProjectionResult | null>(null);
   const [decisionHubSettings, setDecisionHubSettings] = useState<DecisionHubSettings>(() => readDecisionHubSettings());
+  const [dismissedBillPromptKey, setDismissedBillPromptKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (dashboardFilter === "debt") {
@@ -144,8 +145,10 @@ export default function BillsScreen() {
     const bill = [...paycheckPlan.billsDue].sort((left, right) => right.amount - left.amount)[0];
     const saferDate = new Date(`${paycheckPlan.nextPaycheck.date}T12:00:00`);
     saferDate.setDate(saferDate.getDate() + 1);
-    return { bill, saferDate };
-  }, [decisionHubSettings.billBeforePaydayAlertsEnabled, paycheckPlan]);
+    const key = `${bill.id ?? bill.name}-${bill.dueDate}-${paycheckPlan.nextPaycheck.date}`;
+    if (dismissedBillPromptKey === key) return null;
+    return { bill, saferDate, key };
+  }, [decisionHubSettings.billBeforePaydayAlertsEnabled, dismissedBillPromptKey, paycheckPlan]);
 
   // ── Handlers ────────────────────────────────────────────────────
   const handleSave = useCallback((data: Omit<Bill, "id" | "created_at"> | Bill) => {
@@ -221,6 +224,20 @@ export default function BillsScreen() {
             <Text style={[styles.billPromptText, { color: c.mutedForeground }]}>
               Safer after {billOptimizationPrompt.saferDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Tap to ask Flo.
             </Text>
+            <View style={styles.billPromptActions}>
+              <Pressable
+                onPress={() => router.push({ pathname: "/(tabs)/flo", params: { prompt: `Move ${billOptimizationPrompt.bill.name} to after payday` } } as any)}
+                style={({ pressed }) => [styles.billPromptAction, { backgroundColor: c.primary + "18", opacity: pressed ? 0.75 : 1 }]}
+              >
+                <Text style={[styles.billPromptActionText, { color: c.primary }]}>Preview move</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setDismissedBillPromptKey(billOptimizationPrompt.key)}
+                style={({ pressed }) => [styles.billPromptAction, { backgroundColor: c.muted, opacity: pressed ? 0.75 : 1 }]}
+              >
+                <Text style={[styles.billPromptActionText, { color: c.mutedForeground }]}>Keep as-is</Text>
+              </Pressable>
+            </View>
           </View>
           <Feather name="chevron-right" size={16} color={c.mutedForeground} />
         </Pressable>
@@ -520,6 +537,9 @@ const styles = StyleSheet.create({
   billPromptCard: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 14, padding: 12, marginHorizontal: 16, marginBottom: 12 },
   billPromptTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   billPromptText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 2 },
+  billPromptActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
+  billPromptAction: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999 },
+  billPromptActionText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
 
   // Segment toggle
   segmentWrap: {},
