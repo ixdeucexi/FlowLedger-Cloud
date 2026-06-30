@@ -56,7 +56,7 @@ export default function FloScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { bills, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getPaidAmount, setCustomDueDay, saveDecision, updateDecision, getTransactionsForMonth, categories } = useBudget();
+  const { bills, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getPaidAmount, moveBillOccurrence, saveDecision, updateDecision, getTransactionsForMonth, categories } = useBudget();
   const [chat, dispatch] = useReducer(reduceFloChat, initialChat);
   const [cardsByMessageId, setCardsByMessageId] = useState<Record<string, FloResponseCard[]>>({});
   const [decisionByMessageId, setDecisionByMessageId] = useState<Record<string, { scenario: DecisionScenario; result: DecisionResult }>>({});
@@ -529,8 +529,7 @@ export default function FloScreen() {
     if (!move || billDateMoveState[messageId] === "saving" || billDateMoveState[messageId] === "saved") return;
     setBillDateMoveState(previous => ({ ...previous, [messageId]: "saving" }));
     try {
-      const sourceMonth = new Date(`${move.fromDate}T12:00:00`);
-      await setCustomDueDay(move.billId, sourceMonth.getMonth(), sourceMonth.getFullYear(), move.toDay);
+      await moveBillOccurrence(move.billId, move.fromDate, move.toDate);
       setBillDateMoveState(previous => ({ ...previous, [messageId]: "saved" }));
     } catch {
       setBillDateMoveState(previous => ({ ...previous, [messageId]: "failed" }));
@@ -717,7 +716,7 @@ export default function FloScreen() {
                   </Text>
                 </Pressable>
                 <Text style={[styles.saveDecisionHint, { color: colors.mutedForeground }]}>
-                  Moves this month only from {formatDisplayDate(billDateMoveByMessageId[message.id].fromDate)} to {formatDisplayDate(billDateMoveByMessageId[message.id].toDate)}.
+                  Moves this one bill occurrence from {formatDisplayDate(billDateMoveByMessageId[message.id].fromDate)} to {formatDisplayDate(billDateMoveByMessageId[message.id].toDate)}.
                 </Text>
                 {billDateMoveState[message.id] === "failed" ? (
                   <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t move this bill. Try again.</Text>

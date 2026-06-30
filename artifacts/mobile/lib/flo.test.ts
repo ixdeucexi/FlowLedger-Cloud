@@ -124,6 +124,10 @@ test("Flo recommends and parses bill date moves from paycheck facts", () => {
   assert.equal(move?.billId, "power");
   assert.equal(move?.toDate, "2026-06-27");
 
+  const crossMonth = evaluateFloBillDateMove("Move Power to July 3", facts, "2026-06-24");
+  assert.equal(crossMonth?.allowed, true);
+  assert.equal(crossMonth?.toDate, "2026-07-03");
+
   const afterPay = evaluateFloBillDateMove("Move Phone to after payday", facts, "2026-06-24");
   assert.equal(afterPay?.allowed, true);
   assert.equal(afterPay?.toDate, "2026-06-29");

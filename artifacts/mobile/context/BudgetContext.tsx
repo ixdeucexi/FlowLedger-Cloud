@@ -55,6 +55,14 @@ export interface MonthlyOverride {
   paid_date?: string;
 }
 
+export interface BillDateMove {
+  id: string;
+  bill_id: string;
+  from_date: string;
+  to_date: string;
+  created_at: string;
+}
+
 export interface Transaction {
   id: string;
   date: string;
@@ -190,6 +198,7 @@ export type SaveStatus = "idle" | "saving" | "saved" | "failed";
 interface BudgetContextType {
   bills: Bill[];
   overrides: MonthlyOverride[];
+  billDateMoves: BillDateMove[];
   transactions: Transaction[];
   incomes: IncomeItem[];
   goals: Goal[];
@@ -221,6 +230,10 @@ interface BudgetContextType {
   setCustomAmount: (billId: string, month: number, year: number, amount: number | undefined) => Promise<void>;
   getCustomDueDay: (billId: string, month: number, year: number) => number | undefined;
   setCustomDueDay: (billId: string, month: number, year: number, day: number | undefined) => Promise<void>;
+  moveBillOccurrence: (billId: string, fromDate: string, toDate: string) => Promise<void>;
+  removeBillOccurrenceMove: (id: string) => Promise<void>;
+  getBillDateMoveForOccurrence: (billId: string, fromDate: string) => BillDateMove | undefined;
+  getBillDateMovesForMonth: (month: number, year: number) => BillDateMove[];
   getMonthlyBills: (month: number, year: number) => Bill[];
   getBillOccurrencesInMonth: (bill: Bill, month: number, year: number) => number[];
   getBillMonthlyTotal: (bill: Bill, month: number, year: number) => number;
@@ -355,6 +368,48 @@ function localDateString(date = new Date()): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+function monthKey(year: number, month: number) {
+  return `${year}-${String(month + 1).padStart(2, "0")}`;
+}
+
+function dateFromParts(year: number, month: number, day: number) {
+  return `${monthKey(year, month)}-${String(day).padStart(2, "0")}`;
+}
+
+function parseYmd(date: string): { year: number; month: number; day: number } | null {
+  const [year, month, day] = date.slice(0, 10).split("-").map(Number);
+  if (![year, month, day].every(Number.isFinite)) return null;
+  return { year, month: month - 1, day };
+}
+
+function billDateMoveStorageKey(userId?: string) {
+  return `flowledger-bill-date-moves-${userId ?? "local"}`;
+}
+
+function readStoredBillDateMoves(userId?: string): BillDateMove[] {
+  if (Platform.OS !== "web") return [];
+  try {
+    const raw = globalThis.localStorage?.getItem(billDateMoveStorageKey(userId));
+    const parsed = raw ? JSON.parse(raw) as Partial<BillDateMove>[] : [];
+    return parsed
+      .filter(item => item.bill_id && item.from_date && item.to_date)
+      .map(item => ({
+        id: String(item.id ?? genId()),
+        bill_id: String(item.bill_id),
+        from_date: String(item.from_date).slice(0, 10),
+        to_date: String(item.to_date).slice(0, 10),
+        created_at: String(item.created_at ?? new Date().toISOString()),
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredBillDateMoves(userId: string | undefined, moves: BillDateMove[]) {
+  if (Platform.OS !== "web") return;
+  globalThis.localStorage?.setItem(billDateMoveStorageKey(userId), JSON.stringify(moves));
+}
+
 const markSnowballSourcesPending = (sources: SnowballFundingSource[]) =>
   sources.map(source => ({ ...source, pendingBalanceApply: true }));
 
@@ -433,7 +488,7 @@ function createDemoBudgetData(today = new Date()) {
     starting_balance_date: localDateString(today),
     onboarding_completed: true,
   };
-  return { bills, overrides, transactions, incomes, goals, extraPayments: [] as ExtraPayment[], categories: DEFAULT_CATEGORIES, accounts, decisions, settings };
+  return { bills, overrides, billDateMoves: [] as BillDateMove[], transactions, incomes, goals, extraPayments: [] as ExtraPayment[], categories: DEFAULT_CATEGORIES, accounts, decisions, settings };
 }
 
 function normalizeTransactionRow(transaction: any): Transaction {
@@ -463,6 +518,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const [bills,         setBills]         = useState<Bill[]>([]);
   const [overrides,     setOverrides]     = useState<MonthlyOverride[]>([]);
+  const [billDateMoves, setBillDateMoves] = useState<BillDateMove[]>([]);
   const [transactions,  setTransactions]  = useState<Transaction[]>([]);
   const [incomes,       setIncomes]       = useState<IncomeItem[]>([]);
   const [goals,         setGoals]         = useState<Goal[]>([]);
@@ -479,9 +535,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const loaded = useRef(false);
   const overridesRef = useRef<MonthlyOverride[]>([]);
+  const billDateMovesRef = useRef<BillDateMove[]>([]);
   const retrySaveRef = useRef<null | (() => Promise<void>)>(null);
   const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => { overridesRef.current = overrides; }, [overrides]);
+  useEffect(() => { billDateMovesRef.current = billDateMoves; }, [billDateMoves]);
 
   const markSaveStarted = useCallback(() => {
     if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
@@ -530,6 +588,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setBills(demo.bills);
       setOverrides(demo.overrides);
       overridesRef.current = demo.overrides;
+      setBillDateMoves(demo.billDateMoves);
+      billDateMovesRef.current = demo.billDateMoves;
       setTransactions(demo.transactions);
       setIncomes(demo.incomes);
       setGoals(demo.goals);
@@ -543,8 +603,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     if (!user) {
-      setBills([]); setOverrides([]); setTransactions([]); setIncomes([]);
+      setBills([]); setOverrides([]); setBillDateMoves([]); setTransactions([]); setIncomes([]);
       setGoals([]); setExtraPayments([]); setCategories([]); setAccounts([]); setDecisions([]); setSettings(DEFAULT_SETTINGS);
+      billDateMovesRef.current = [];
       loaded.current = false;
       setLoading(false);
       return;
@@ -593,6 +654,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           actual_amount: o.actual_amount !== null ? Number(o.actual_amount) : undefined,
           paid_date: o.paid_date ?? undefined,
         })));
+        const storedBillDateMoves = readStoredBillDateMoves(uid);
+        setBillDateMoves(storedBillDateMoves);
+        billDateMovesRef.current = storedBillDateMoves;
         setTransactions((tData ?? []).map(normalizeTransactionRow));
         setIncomes((iData ?? []).map((i: any) => ({
           ...i,
@@ -925,25 +989,76 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Bill scheduling helpers ──────────────────────────────────────────────────
 
+  const getBillDateMoveForOccurrence = useCallback(
+    (billId: string, fromDate: string): BillDateMove | undefined =>
+      billDateMoves.find(move => move.bill_id === billId && move.from_date === fromDate),
+    [billDateMoves]
+  );
+
+  const getBillDateMovesForMonth = useCallback(
+    (month: number, year: number): BillDateMove[] => {
+      const key = monthKey(year, month);
+      return billDateMoves.filter(move => move.from_date.startsWith(key) || move.to_date.startsWith(key));
+    },
+    [billDateMoves]
+  );
+
+  const moveBillOccurrence = useCallback(async (billId: string, fromDate: string, toDate: string) => {
+    if (!user) return;
+    const cleanFrom = fromDate.slice(0, 10);
+    const cleanTo = toDate.slice(0, 10);
+    const existing = billDateMovesRef.current.find(move => move.bill_id === billId && move.from_date === cleanFrom);
+    const nextMove: BillDateMove = existing
+      ? { ...existing, to_date: cleanTo }
+      : { id: genId(), bill_id: billId, from_date: cleanFrom, to_date: cleanTo, created_at: new Date().toISOString() };
+    const next = existing
+      ? billDateMovesRef.current.map(move => move.id === existing.id ? nextMove : move)
+      : [...billDateMovesRef.current, nextMove];
+    billDateMovesRef.current = next;
+    setBillDateMoves(next);
+    writeStoredBillDateMoves(user.id, next);
+    markSaveCompleted();
+  }, [user, markSaveCompleted]);
+
+  const removeBillOccurrenceMove = useCallback(async (id: string) => {
+    if (!user) return;
+    const next = billDateMovesRef.current.filter(move => move.id !== id);
+    billDateMovesRef.current = next;
+    setBillDateMoves(next);
+    writeStoredBillDateMoves(user.id, next);
+    markSaveCompleted();
+  }, [user, markSaveCompleted]);
+
+  const applyBillDateMovesToOccurrences = useCallback((bill: Bill, month: number, year: number, occurrences: number[]): number[] => {
+    const key = monthKey(year, month);
+    const kept = occurrences.filter(day => !billDateMoves.some(move =>
+      move.bill_id === bill.id && move.from_date === dateFromParts(year, month, day)
+    ));
+    const movedIn = billDateMoves
+      .filter(move => move.bill_id === bill.id && move.to_date.startsWith(key))
+      .map(move => Number(move.to_date.slice(8, 10)))
+      .filter(day => Number.isFinite(day));
+    return Array.from(new Set([...kept, ...movedIn])).sort((a, b) => a - b);
+  }, [billDateMoves]);
+
   const getBillOccurrencesInMonth = useCallback(
     (bill: Bill, month: number, year: number): number[] => {
       const daysInMonth = new Date(year, month + 1, 0).getDate();
       let occ = getBillOccurrenceDays(bill, month, year);
-      if (occ.length === 0) return occ;
       const o = overrides.find(ov => ov.bill_id === bill.id && ov.month === month && ov.year === year);
       if (o?.custom_due_day !== undefined && bill.frequency === "monthly") {
         occ = [Math.min(o.custom_due_day, daysInMonth)];
       }
-      return occ;
+      return applyBillDateMovesToOccurrences(bill, month, year, occ);
     },
-    [overrides]
+    [overrides, applyBillDateMovesToOccurrences]
   );
 
   const getBillMonthlyTotal = useCallback((bill: Bill, month: number, year: number): number => {
-    const occurrences = getBillOccurrenceDays(bill, month, year);
+    const occurrences = getBillOccurrencesInMonth(bill, month, year);
     if (occurrences.length === 0) return 0;
     return getAmount(bill, month, year) * occurrences.length;
-  }, [getAmount]);
+  }, [getAmount, getBillOccurrencesInMonth]);
 
   const getBillEffectiveMonthlyTotal = useCallback((bill: Bill, month: number, year: number): number => {
     const override = overrides.find(o => o.bill_id === bill.id && o.month === month && o.year === year);
@@ -954,8 +1069,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const getMonthlyBills = useCallback(
     (month: number, year: number): Bill[] =>
-      bills.filter(b => (b.is_recurring || b.is_debt) && isBillActiveForMonth(b, month, year)),
-    [bills]
+      bills.filter(b => (b.is_recurring || b.is_debt) && (isBillActiveForMonth(b, month, year) || getBillOccurrencesInMonth(b, month, year).length > 0)),
+    [bills, getBillOccurrencesInMonth]
   );
 
   // ─── Snowball / Avalanche ─────────────────────────────────────────────────────
@@ -1501,7 +1616,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const monthlyIncome = incomes
       .filter(i => isIncomeActiveForMonth(i, month, year))
       .reduce((s, i) => s + getIncomeOccurrenceDays(i, month, year).length * getEffectiveIncomeAmount(i, month, year), 0);
-    const activeBills = bills.filter(b => (b.is_recurring || b.is_debt) && isBillActiveForMonth(b, month, year));
+    const activeBills = getMonthlyBills(month, year);
     const totalBillsDue = activeBills.reduce((s, b) => s + getBillEffectiveMonthlyTotal(b, month, year), 0);
     const totalPaid = activeBills.reduce((s, b) =>
       s + (overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year)?.paid_amount ?? 0), 0);
@@ -1518,7 +1633,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         return sum + occurrences * signedAmount;
       }, 0);
     return { monthlyIncome, totalBillsDue, totalPaid, netTransactions, goalAllocations: 0, remaining: monthlyIncome - totalBillsDue - snowballExtra + netTransactions + plannedDecisionNet };
-  }, [bills, incomes, transactions, overrides, extraPayments, decisions, getBillEffectiveMonthlyTotal]);
+  }, [incomes, transactions, overrides, extraPayments, decisions, getBillEffectiveMonthlyTotal, getMonthlyBills]);
 
   // ─── Daily Balances ───────────────────────────────────────────────────────────
 
@@ -1526,7 +1641,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     monthNet: new Map<string, number>(),
     carryover: new Map<string, number>(),
     daily: new Map<string, DailyBalance[]>(),
-  }), [bills, transactions, incomes, goals, decisions, overrides, extraPayments, getBillEffectiveMonthlyTotal, settings.starting_balance, settings.starting_balance_date]);
+  }), [bills, transactions, incomes, goals, decisions, overrides, billDateMoves, extraPayments, getBillEffectiveMonthlyTotal, settings.starting_balance, settings.starting_balance_date]);
 
   const getDailyBalances = useCallback((month: number, year: number): DailyBalance[] => {
     const dailyKey = `${year}-${month}`;
@@ -1547,7 +1662,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         return sum + count * amount;
       }, 0);
       const bil = bills.filter(b => b.is_recurring || b.is_debt).reduce((s, b) => {
-        const occ = getBillOccurrenceDays(b, m, y);
+        const occ = getBillOccurrencesInMonth(b, m, y);
         if (occ.length === 0) return s;
         const override = overrides.find(item => item.bill_id === b.id && item.month === m && item.year === y);
         const dates = override?.actual_amount !== undefined && override.paid_date
@@ -1627,7 +1742,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }));
     const billsByDay: Record<number, number> = {};
     bills.filter(b => b.is_recurring || b.is_debt).forEach(b => {
-      let occ = getBillOccurrenceDays(b, month, year);
+      let occ = getBillOccurrencesInMonth(b, month, year);
       if (occ.length === 0) return;
       const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
       const total = getBillEffectiveMonthlyTotal(b, month, year);
@@ -1643,9 +1758,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           });
           return;
         }
-      }
-      if (o?.custom_due_day !== undefined && b.frequency === "monthly") {
-        occ = [Math.min(o.custom_due_day, daysInMonth)];
       }
       occ.forEach(d => {
         billsByDay[d] = (billsByDay[d] ?? 0) + amt;
@@ -1736,7 +1848,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     balanceComputationCache.daily.set(dailyKey, result);
     return result;
-  }, [bills, transactions, incomes, goals, decisions, overrides, extraPayments, getBillEffectiveMonthlyTotal, settings.starting_balance, settings.starting_balance_date, balanceComputationCache, user]);
+  }, [bills, transactions, incomes, goals, decisions, overrides, billDateMoves, extraPayments, getBillEffectiveMonthlyTotal, getBillOccurrencesInMonth, settings.starting_balance, settings.starting_balance_date, balanceComputationCache, user]);
 
   const previewDebtSnowball = useCallback((month: number, year: number, requestedExtra?: number, additionalSafeCredit = 0, paymentDateOverride?: string): SnowballProjectionResult => {
     const debtInputs: SnowballDebtInput[] = bills
@@ -2127,11 +2239,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <BudgetContext.Provider value={{
-      bills, overrides, transactions, incomes, goals, extraPayments, categories, settings, accounts, decisions, forecastConfidence, loading,
+      bills, overrides, billDateMoves, transactions, incomes, goals, extraPayments, categories, settings, accounts, decisions, forecastConfidence, loading,
       saveStatus, saveError, retryLastSave, clearSaveError,
       dashboardFilter, setDashboardFilter,
       addBill, updateBill, deleteBill, getBillById,
       getOverride, getAmount, getPaidAmount, setPaidAmount, setCustomAmount, getCustomDueDay, setCustomDueDay,
+      moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence, getBillDateMovesForMonth,
       getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal,
       runSnowball, previewDebtSnowball, applyDebtSnowballPayment, saveExtraPayment, getExtraPayment, deleteExtraPayment, removeDebtSnowballPayment, finalizeBillPayment,
       addTransaction, updateTransaction, deleteTransaction, getTransactionsForMonth,

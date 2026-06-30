@@ -355,17 +355,6 @@ export function evaluateFloBillDateMove(message: string, facts: FloFacts, today 
       reason: `I found ${candidate.name}, but it is missing the saved bill ID needed to update the due date.`,
     };
   }
-  if (targetDate.slice(0, 7) !== candidate.dueDate.slice(0, 7)) {
-    return {
-      billId: String(candidate.id),
-      billName: candidate.name,
-      fromDate: candidate.dueDate,
-      toDate: targetDate,
-      toDay: Number(targetDate.slice(8, 10)),
-      allowed: false,
-      reason: `${candidate.name} is in ${candidate.dueDate.slice(0, 7)}, but ${targetDate} is a different month. I can only move a bill within the same month from here right now.`,
-    };
-  }
   return {
     billId: String(candidate.id),
     billName: candidate.name,
@@ -373,7 +362,7 @@ export function evaluateFloBillDateMove(message: string, facts: FloFacts, today 
     toDate: targetDate,
     toDay: Number(targetDate.slice(8, 10)),
     allowed: true,
-    reason: `I can move ${candidate.name} from ${candidate.dueDate} to ${targetDate} for this month only. Preview first: this should put the bill after payday and keep the paycheck window cleaner.`,
+    reason: `I can move ${candidate.name} from ${candidate.dueDate} to ${targetDate} for this one occurrence only. Preview first: this should put the bill after payday and keep the paycheck window cleaner.`,
   };
 }
 
