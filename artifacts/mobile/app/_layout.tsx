@@ -42,7 +42,7 @@ function AuthObserver() {
           if (showSetup) window.localStorage.removeItem("flowledger_show_setup_after_login");
         } catch {}
       }
-      router.replace(showSetup ? "/(tabs)/more" : "/(tabs)");
+      router.replace(showSetup ? "/setup" : "/(tabs)");
     }
   }, [session, loading, segments, router]);
 
@@ -84,6 +84,7 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" />
           <Stack.Screen name="login" />
+          <Stack.Screen name="setup" />
           <Stack.Screen name="(tabs)" />
         </Stack>
       </GestureHandlerRootView>

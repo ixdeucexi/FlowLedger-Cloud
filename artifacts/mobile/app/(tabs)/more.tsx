@@ -423,6 +423,7 @@ export default function MoreScreen() {
         <Pressable
           onPress={() => {
             void updateSettings({ onboarding_completed: false });
+            router.push("/setup" as any);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           }}
           style={({ pressed }) => [styles.setupRestartBtn, { borderColor: c.border, opacity: pressed ? 0.75 : 1 }]}
