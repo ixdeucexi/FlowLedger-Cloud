@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AccountModal } from "@/components/AccountModal";
 import { FloLogo } from "@/components/FloLogo";
 import { IncomeModal } from "@/components/IncomeModal";
+import { PWA_INSTALL_EVENT } from "@/components/PwaInstallPrompt";
 import colors from "@/constants/colors";
 import type { Account, IncomeItem } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
@@ -253,6 +254,13 @@ export default function MoreScreen() {
       { text: "Cancel", style: "cancel" },
       { text: "Reset", style: "destructive", onPress: () => void resetFloMemory(user.id).then(() => Alert.alert("Flo Memory Reset", "Flo's rolling summary was removed.")) },
     ]);
+  };
+  const handleShowInstallPrompt = () => {
+    if (Platform.OS === "web") {
+      globalThis.dispatchEvent?.(new Event(PWA_INSTALL_EVENT));
+      return;
+    }
+    Alert.alert("Install FlowLedger", "Open FlowLedger in your phone browser, then use Add to Home Screen.");
   };
 
   const handleSignOut = async () => {
@@ -830,6 +838,7 @@ export default function MoreScreen() {
           { icon: "upload" as const,   label: "Import Bills from CSV", desc: "Name, Amount, Category, Balance, Interest Rate…", onPress: handleImport, color: c.primary },
           { icon: "file-text" as const, label: "Import Bank Statement", desc: "Transactions CSV with automatic duplicate detection", onPress: handleStatementImport, color: c.success },
           { icon: "download" as const, label: "Export Full Backup (CSV)",    desc: "Accounts, income, bills, transactions, goals, and overrides",           onPress: handleExport, color: "#6366f1" },
+          { icon: "smartphone" as const, label: "Install FlowLedger App", desc: "Show Apple and Android install instructions", onPress: handleShowInstallPrompt, color: "#22c55e" },
           { icon: "refresh-cw" as const, label: "Reset Flo Memory", desc: "Remove Flo's rolling preference summary", onPress: handleResetFlo, color: "#3b82f6" },
         ].map((item, i) => (
           <Pressable
