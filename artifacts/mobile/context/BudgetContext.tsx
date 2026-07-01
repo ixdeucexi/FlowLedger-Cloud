@@ -1576,7 +1576,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const syncDebtTransactionsAndRefresh = useCallback(async () => {
     if (!user || demoMode) return;
     const synced = await supabase.rpc("sync_due_debt_transactions", { p_as_of_date: localDateString() });
-    if (synced.error) throw new Error(`Sync scheduled debt payments: ${synced.error.message}`);
+    if (synced.error) {
+      console.warn("Scheduled debt sync skipped", synced.error.message);
+    }
     const [billRows, transactionRows] = await Promise.all([
       supabase.from("bills").select("*").eq("user_id", user.id),
       supabase.from("transactions").select("*").eq("user_id", user.id),
