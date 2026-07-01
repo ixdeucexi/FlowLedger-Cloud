@@ -3,7 +3,7 @@ import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert, FlatList, Keyboard, Modal, Platform,
+  Alert, FlatList, Keyboard, Modal, PanResponder, Platform,
   Pressable, ScrollView, StyleSheet, Text,
   TextInput, View,
 } from "react-native";
@@ -13,7 +13,6 @@ import { AddTransactionModal } from "@/components/AddTransactionModal";
 import { BillSurplusModal } from "@/components/BillSurplusModal";
 import { CalendarView } from "@/components/CalendarView";
 import { EmptyState } from "@/components/EmptyState";
-import { MonthPicker } from "@/components/MonthPicker";
 import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
 import colors from "@/constants/colors";
 import type { Bill, BillDateMove, DecisionRecord, Transaction } from "@/context/BudgetContext";
@@ -564,6 +563,33 @@ export default function MonthlyScreen() {
     : [];
   const selectedDayItemCount = scheduledBillsForDay.length + selectedMovedAwayBills.length + displayedTxs.length + goalsForSelectedDay.length + plansForSelectedDay.length;
 
+  const changeMonth = useCallback((delta: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedDate(null);
+    setMonth(currentMonth => {
+      let nextMonth = currentMonth + delta;
+      let nextYear = selectedYear;
+      while (nextMonth < 0) {
+        nextMonth += 12;
+        nextYear -= 1;
+      }
+      while (nextMonth > 11) {
+        nextMonth -= 12;
+        nextYear += 1;
+      }
+      if (nextYear !== selectedYear) setSelectedYear(nextYear);
+      return nextMonth;
+    });
+  }, [selectedYear, setSelectedYear]);
+
+  const calendarSwipeResponder = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dx) > 28 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.35,
+    onPanResponderRelease: (_, gesture) => {
+      if (gesture.dx <= -48) changeMonth(1);
+      else if (gesture.dx >= 48) changeMonth(-1);
+    },
+  }), [changeMonth]);
+
   const webTopPad = Platform.OS === "web" ? 4 : 0;
 
   return (
@@ -581,7 +607,26 @@ export default function MonthlyScreen() {
         </Pressable>
       </View>
 
-      <MonthPicker selectedMonth={month} onSelect={m => { setMonth(m); setSelectedDate(null); }} year={selectedYear} onYearChange={setSelectedYear} />
+      <View style={styles.calendarMonthBar}>
+        <Pressable
+          onPress={() => changeMonth(-1)}
+          hitSlop={10}
+          style={({ pressed }) => [styles.monthArrowBtn, { opacity: pressed ? 0.55 : 1 }]}
+        >
+          <Feather name="chevron-left" size={24} color={c.mutedForeground} />
+        </Pressable>
+        <View style={styles.monthCenterLabel}>
+          <Text style={[styles.monthShortTitle, { color: c.foreground }]}>{MONTH_FULL[month].slice(0, 3).toUpperCase()}</Text>
+          <Text style={[styles.monthSwipeHint, { color: c.mutedForeground }]}>Swipe left or right</Text>
+        </View>
+        <Pressable
+          onPress={() => changeMonth(1)}
+          hitSlop={10}
+          style={({ pressed }) => [styles.monthArrowBtn, { opacity: pressed ? 0.55 : 1 }]}
+        >
+          <Feather name="chevron-right" size={24} color={c.mutedForeground} />
+        </Pressable>
+      </View>
 
       {activeTab === "bills" ? (
           <FlatList
@@ -858,17 +903,19 @@ export default function MonthlyScreen() {
       ) : (
         <ScrollView contentContainerStyle={[styles.calScroll, { paddingBottom: insets.bottom + 100 }]}>
           <View style={{ paddingHorizontal: 16 }}>
-            <CalendarView
-              month={month}
-              year={selectedYear}
-              transactions={txList}
-              selectedDate={selectedDate}
-              onDayPress={(date) => setSelectedDate(date)}
+            <View {...calendarSwipeResponder.panHandlers}>
+              <CalendarView
+                month={month}
+                year={selectedYear}
+                transactions={txList}
+                selectedDate={selectedDate}
+                onDayPress={(date) => setSelectedDate(date)}
                 dailyBalances={dailyBalances}
-              goals={goals}
-              decisions={decisions}
+                goals={goals}
+                decisions={decisions}
                 safetyFloor={settings.safety_floor}
-            />
+              />
+            </View>
 
             <Modal
               visible={selectedDate !== null}
@@ -1582,6 +1629,11 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontFamily: "Inter_700Bold" },
   forecastTag: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginTop: 1 },
   iconBtn: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  calendarMonthBar: { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
+  monthArrowBtn: { width: 44, height: 38, alignItems: "center", justifyContent: "center" },
+  monthCenterLabel: { flex: 1, alignItems: "center", justifyContent: "center" },
+  monthShortTitle: { fontSize: 22, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.4 },
+  monthSwipeHint: { fontSize: 10, fontFamily: "Inter_500Medium", marginTop: 1 },
   tabBar: { flexDirection: "row", padding: 4, gap: 4 },
   tabBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 9 },
   tabBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
