@@ -13,6 +13,7 @@ import { useColors } from "@/hooks/useColors";
 import { buildDecisionHistory } from "@/lib/decisionHistory";
 import { buildDecisionRiskAlerts } from "@/lib/decisionRisk";
 import { DECISION_HUB_SETTINGS_EVENT, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
+import { clearStoredSetupStep } from "@/lib/setupProgress";
 
 const TABS = [
   { name: "index",        title: "Dashboard",    icon: "bar-chart-2"     },
@@ -141,6 +142,7 @@ function DemoModeBanner() {
   }, [routeStepIndex]);
 
   const startRealSetup = () => {
+    clearStoredSetupStep();
     stopDemoMode();
     router.replace("/setup" as any);
   };

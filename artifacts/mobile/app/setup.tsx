@@ -12,27 +12,7 @@ import { IncomeModal } from "@/components/IncomeModal";
 import { useAuth } from "@/context/AuthContext";
 import { BudgetProvider, useBudget, type Account, type Bill, type IncomeItem } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
-
-type SetupStepKey = "welcome" | "account" | "money" | "income" | "bills" | "debts" | "safety" | "reconcile" | "finish";
-const SETUP_PROGRESS_KEY = "flowledger_setup_step_key";
-
-function readStoredSetupStep(): SetupStepKey | null {
-  if (Platform.OS !== "web" || typeof window === "undefined") return null;
-  try {
-    const value = window.localStorage.getItem(SETUP_PROGRESS_KEY);
-    return value as SetupStepKey | null;
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredSetupStep(step: SetupStepKey | null) {
-  if (Platform.OS !== "web" || typeof window === "undefined") return;
-  try {
-    if (step) window.localStorage.setItem(SETUP_PROGRESS_KEY, step);
-    else window.localStorage.removeItem(SETUP_PROGRESS_KEY);
-  } catch {}
-}
+import { readStoredSetupStep, writeStoredSetupStep, type SetupStepKey } from "@/lib/setupProgress";
 
 function SetupWizard() {
   const c = useColors();
@@ -142,22 +122,17 @@ function SetupWizard() {
 
   const current = steps[index];
   const progressIndex = Math.min(index + 1, steps.length);
-  const firstIncompleteIndex = useMemo(() => {
-    const next = steps.findIndex(step => step.key !== "welcome" && step.key !== "finish" && !step.done);
-    return next >= 0 ? next : steps.findIndex(step => step.key === "finish");
-  }, [steps]);
-
   useEffect(() => {
     if (restoredProgress) return;
     const storedKey = readStoredSetupStep();
     const storedIndex = storedKey ? steps.findIndex(step => step.key === storedKey) : -1;
-    const resumeIndex = storedIndex > 0 ? storedIndex : firstIncompleteIndex;
+    const resumeIndex = storedIndex > 0 ? storedIndex : 0;
     setIndex(Math.max(0, resumeIndex));
     if (storedIndex > 0 && steps[storedIndex]?.key !== "finish") {
       setFloConfirmation("Welcome back — we can pick up where we left off.");
     }
     setRestoredProgress(true);
-  }, [firstIncompleteIndex, restoredProgress, steps]);
+  }, [restoredProgress, steps]);
 
   useEffect(() => {
     if (!restoredProgress) return;

@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
 import { useAuth } from "@/context/AuthContext";
+import { clearStoredSetupStep } from "@/lib/setupProgress";
 
 function GoogleMark() {
   return (
@@ -69,6 +70,7 @@ export default function LoginScreen() {
     if (err) {
       setError(err);
     } else {
+      clearStoredSetupStep();
       if (Platform.OS === "web" && typeof window !== "undefined") {
         try { window.localStorage.setItem("flowledger_show_setup_after_login", "true"); } catch {}
       }

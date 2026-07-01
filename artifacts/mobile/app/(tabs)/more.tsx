@@ -25,6 +25,7 @@ import { parseStatementCsv } from "@/lib/accounts";
 import { buildDataIntegrityIssues } from "@/lib/dataIntegrity";
 import { loadDecisionHubSettings, readDecisionHubSettings, saveDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { resetFloMemory } from "@/lib/flo";
+import { clearStoredSetupStep } from "@/lib/setupProgress";
 
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
 
@@ -436,6 +437,7 @@ export default function MoreScreen() {
         </View>
         <Pressable
           onPress={() => {
+            clearStoredSetupStep();
             void updateSettings({ onboarding_completed: false });
             router.push("/setup" as any);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

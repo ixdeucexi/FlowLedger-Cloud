@@ -3,6 +3,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { AppState, Platform } from "react-native";
 
 import { DEV_DEMO_USER_ID, disableDevDemoMode, enableDevDemoMode, isDevDemoMode } from "@/lib/demoMode";
+import { clearStoredSetupStep } from "@/lib/setupProgress";
 import { supabase } from "@/lib/supabase";
 
 function friendlyAuthError(message?: string | null): string | null {
@@ -156,7 +157,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInWithGoogle = async (): Promise<string | null> => {
     if (demoMode) return null;
     if (Platform.OS === "web" && typeof window !== "undefined") {
-      try { window.localStorage.setItem("flowledger_show_setup_after_login", "true"); } catch {}
+      try {
+        clearStoredSetupStep();
+        window.localStorage.setItem("flowledger_show_setup_after_login", "true");
+      } catch {}
     }
     const redirectTo = Platform.OS === "web" && typeof window !== "undefined"
       ? `${window.location.origin}/`
