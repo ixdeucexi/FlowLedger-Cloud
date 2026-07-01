@@ -55,6 +55,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
     if (demoMode) {
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        const host = window.location.hostname;
+        const isDevHost = host.includes("flow-ledger-cloud-git-dev-") || host === "localhost" || host === "127.0.0.1";
+        if (!isDevHost) {
+          void withTimeout(supabase.auth.getSession(), 8000, "Live session check before demo")
+            .then(({ data }) => {
+              if (!mounted) return;
+              if (data.session) {
+                disableDevDemoMode();
+                setDemoMode(false);
+                return;
+              }
+              createDemoSession();
+            })
+            .catch(() => {
+              if (!mounted) return;
+              createDemoSession();
+            });
+          return () => {
+            mounted = false;
+          };
+        }
+      }
+      createDemoSession();
+      return;
+    }
+
+    function createDemoSession() {
       const demoUser = {
         id: DEV_DEMO_USER_ID,
         aud: "authenticated",
@@ -73,8 +101,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user: demoUser,
       } as Session);
       setLoading(false);
-      return;
     }
+
     const finishInitialAuth = async () => {
       if (Platform.OS === "web" && typeof window !== "undefined") {
         const params = new URLSearchParams(window.location.search);
