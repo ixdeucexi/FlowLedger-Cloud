@@ -21,8 +21,6 @@ import { applyCategoryBudgetMove, buildCategoryPlan, buildCategoryRolloverAdjust
 import { CATEGORY_BUDGETS_EVENT, categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets as saveCategoryBudgetsRemote } from "@/lib/categoryBudgetStore";
 import { DECISION_HUB_SETTINGS_EVENT, loadDecisionHubSettings, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { buildDecisionHistory } from "@/lib/decisionHistory";
-import { buildDecisionRiskAlerts } from "@/lib/decisionRisk";
-import { groupForecastEvents } from "@/lib/forecastDisplay";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 
@@ -46,7 +44,7 @@ export default function DashboardScreen() {
     getBillOccurrencesInMonth, getIncomeOccurrencesInMonth,
     goals, addGoal, updateGoal, deleteGoal, checkGoalAffordability,
     getCashFlow, getMonthlyIncome, addBill, addTransaction, getDailyBalances, getTransactionsForMonth, settings,
-    accounts, incomes, decisions, forecastConfidence, updateSettings,
+    accounts, incomes, decisions, updateSettings,
     categories,
   } = useBudget();
 
@@ -127,26 +125,6 @@ export default function DashboardScreen() {
     const firstNegEntry = currentMonthBalances.find(db => db.balance < 0);
     return { currentBalance, endOfMonthBalance, lowestBalance, lowestDay, firstNegDay: firstNegEntry?.day ?? null };
   }, [currentMonthBalances, today]);
-
-  const forecastTrust = useMemo(() => {
-    if (!balanceMetrics || !currentMonthBalances.length) return null;
-    const todayEntry = currentMonthBalances.find(day => day.day === today) ?? currentMonthBalances[0];
-    const endEntry = currentMonthBalances[currentMonthBalances.length - 1];
-    const lowEntry = currentMonthBalances.find(day => day.day === balanceMetrics.lowestDay) ?? todayEntry;
-    const groups = groupForecastEvents(lowEntry?.events ?? []);
-    const sourceCount = (todayEntry?.events?.length ?? 0) + (endEntry?.events?.length ?? 0) + (lowEntry?.events?.length ?? 0);
-    const topDrivers = groups
-      .flatMap(group => group.events.map(event => `${event.label} ${event.amountLabel}`))
-      .slice(0, 3);
-    return {
-      todayEntry,
-      endEntry,
-      lowEntry,
-      sourceCount,
-      topDrivers,
-      prompt: `Explain my forecast numbers. Balance today is $${balanceMetrics.currentBalance.toFixed(0)}, end of month is $${balanceMetrics.endOfMonthBalance.toFixed(0)}, and lowest balance is $${balanceMetrics.lowestBalance.toFixed(0)} on ${MONTH_NAMES[currentMonth]} ${balanceMetrics.lowestDay}.`,
-    };
-  }, [balanceMetrics, currentMonthBalances, currentMonth, today]);
 
   // ── 12-month negative schedule ─────────────────────────────────────────────
   type OutlookMonth = { month: number; year: number; label: string; firstNegDay: number | null; lowestBalance: number };
@@ -681,45 +659,6 @@ export default function DashboardScreen() {
     }
     return days.filter(day => day.date >= todayIso);
   }, [getDailyBalances, currentMonth, selectedYear, settings.forecast_horizon_months, todayIso]);
-  const decisionRiskAlerts = useMemo(
-    () => buildDecisionRiskAlerts(decisions, decisionForecastDays, settings.safety_floor, todayIso),
-    [decisions, decisionForecastDays, settings.safety_floor, todayIso],
-  );
-  const decisionAlert = useMemo(() => {
-    const sevenDaysLater = new Date(now);
-    sevenDaysLater.setDate(now.getDate() + 7);
-    const weekEnd = `${sevenDaysLater.getFullYear()}-${String(sevenDaysLater.getMonth() + 1).padStart(2, "0")}-${String(sevenDaysLater.getDate()).padStart(2, "0")}`;
-    const upcomingThisWeek = decisionHistory.upcoming.filter(item => item.date >= todayIso && item.date <= weekEnd);
-    const recentCompleted = [...decisionHistory.completed].sort((left, right) => right.date.localeCompare(left.date))[0];
-    const reviewCount = decisionHubSettings.plannedDecisionReviewAlertsEnabled ? decisionHistory.due.length : 0;
-    const totalTracked = reviewCount + decisionHistory.upcoming.length + decisionHistory.completed.length + decisionHistory.changed.length;
-    let title = "Ask Flo before you change the plan";
-    let detail = "Flo is your one place to check, save, and apply money decisions.";
-    let tone: "risk" | "review" | "upcoming" | "completed" | "empty" = "empty";
-    if (decisionHubSettings.plannedDecisionReviewAlertsEnabled && decisionRiskAlerts.length > 0) {
-      const alert = decisionRiskAlerts[0];
-      title = `${decisionRiskAlerts.length} decision${decisionRiskAlerts.length === 1 ? "" : "s"} no longer safe`;
-      detail = `${alert.name} drops to $${alert.lowestBalance.toFixed(0)} on ${formatShortDate(alert.lowestBalanceDate)}.`;
-      tone = "risk";
-    } else if (reviewCount > 0) {
-      title = `${reviewCount} decision${reviewCount === 1 ? "" : "s"} need review`;
-      detail = "Complete, postpone, or cancel past planned decisions.";
-      tone = "review";
-    } else if (upcomingThisWeek.length > 0) {
-      title = `${upcomingThisWeek.length} planned this week`;
-      detail = `${upcomingThisWeek[0].name} is next on ${formatShortDate(upcomingThisWeek[0].date)}.`;
-      tone = "upcoming";
-    } else if (recentCompleted?.varianceLabel) {
-      title = "Last decision completed";
-      detail = `${recentCompleted.name}: ${recentCompleted.varianceLabel}.`;
-      tone = "completed";
-    } else if (totalTracked > 0) {
-      title = "Decision plan is current";
-      detail = `${decisionHistory.upcoming.length} upcoming · ${decisionHistory.completed.length} completed.`;
-      tone = "completed";
-    }
-    return { title, detail, riskCount: decisionHubSettings.plannedDecisionReviewAlertsEnabled ? decisionRiskAlerts.length : 0, reviewCount, upcomingCount: decisionHistory.upcoming.length, completedCount: decisionHistory.completed.length, tone };
-  }, [decisionHistory, decisionRiskAlerts, decisionHubSettings.plannedDecisionReviewAlertsEnabled, now, todayIso]);
   const monthlyReview = useMemo(() => {
     const overCategory = [...categoryPlan]
       .filter(row => row.remaining < -0.005)
@@ -727,34 +666,37 @@ export default function DashboardScreen() {
     const bestCategory = [...categoryPlan]
       .filter(row => row.remaining > 0.005 && row.budgeted > 0)
       .sort((left, right) => right.remaining - left.remaining)[0];
-    const totalDebtMinimums = bills
-      .filter(bill => bill.is_debt && bill.balance > 0)
-      .reduce((sum, bill) => sum + bill.amount + Number(bill.snowball_minimum_boost ?? 0), 0);
     const savingsPct = savingsData.totalTarget > 0
       ? Math.min(100, (savingsData.totalSaved / savingsData.totalTarget) * 100)
       : 0;
     const billDelta = stats.totalDue - stats.totalPaid;
-    const headline = billDelta <= 0.005
-      ? "Bills are covered"
-      : `${stats.unpaidCount} bill${stats.unpaidCount === 1 ? "" : "s"} still open`;
+    const lowestBalance = balanceMetrics?.lowestBalance ?? 0;
+    const lowestDay = balanceMetrics?.lowestDay ?? today;
+    const headline = stats.unpaidCount <= 0
+      ? "This month is caught up"
+      : `${stats.unpaidCount} bill${stats.unpaidCount === 1 ? "" : "s"} left`;
     const nextStep = overCategory
-      ? `Review ${overCategory.category}; it is over by $${Math.abs(overCategory.remaining).toFixed(0)}.`
-      : bestCategory
-        ? `${bestCategory.category} has the best cushion at $${bestCategory.remaining.toFixed(0)} left.`
-        : "Keep reviewing actuals as they come in.";
+      ? `${overCategory.category} is over by $${Math.abs(overCategory.remaining).toFixed(0)}.`
+      : lowestBalance < settings.safety_floor
+        ? `Lowest balance is $${lowestBalance.toFixed(0)} on ${MONTH_NAMES[currentMonth]} ${lowestDay}.`
+        : bestCategory
+          ? `${bestCategory.category} has $${bestCategory.remaining.toFixed(0)} left.`
+          : "Looks steady. Keep updating actuals as bills clear.";
     return {
       headline,
       billDelta,
       overCategory,
       bestCategory,
-      completed: decisionHistory.completed.length,
-      changed: decisionHistory.changed.length + decisionHistory.due.length,
-      totalDebtMinimums,
+      paidCount: stats.paidCount,
+      billCount: stats.billCount,
+      unpaidCount: stats.unpaidCount,
+      lowestBalance,
+      lowestDay,
       savingsPct,
       nextStep,
-      prompt: "What should I improve next month?",
+      prompt: "Review my month and tell me what needs attention.",
     };
-  }, [bills, categoryPlan, decisionHistory, savingsData.totalSaved, savingsData.totalTarget, stats.totalDue, stats.totalPaid, stats.unpaidCount]);
+  }, [balanceMetrics, categoryPlan, currentMonth, savingsData.totalSaved, savingsData.totalTarget, settings.safety_floor, stats.billCount, stats.paidCount, stats.totalDue, stats.totalPaid, stats.unpaidCount, today]);
   const nextWeekRisk = useMemo(() => {
     if (!decisionHubSettings.lowBalanceAlertsEnabled) return null;
     const weekEndDate = new Date(now);
@@ -811,11 +753,6 @@ export default function DashboardScreen() {
           <Pressable onPress={() => complete ? void updateSettings({ onboarding_completed: true }) : router.push("/setup" as any)} style={[styles.setupButton, { backgroundColor: c.primary }]}><Text style={[styles.setupButtonText, { color: c.primaryForeground }]}>{complete ? "Finish Setup" : "Continue with Flo"}</Text></Pressable>
         </View>;
       })()}
-
-      <Pressable onPress={() => router.push("/(tabs)/more" as any)} style={[styles.confidenceCard, { backgroundColor: forecastConfidence.level === "high" ? c.success + "12" : forecastConfidence.level === "medium" ? "#f59e0b16" : c.destructive + "10" }]}>
-        <Feather name={forecastConfidence.level === "high" ? "check-circle" : "alert-circle"} size={17} color={forecastConfidence.level === "high" ? c.success : forecastConfidence.level === "medium" ? "#d97706" : c.destructive} />
-        <View style={{ flex: 1 }}><Text style={[styles.confidenceTitle, { color: c.foreground }]}>Forecast confidence: {forecastConfidence.label}</Text><Text style={[styles.confidenceDesc, { color: c.mutedForeground }]}>{forecastConfidence.reasons[0]}</Text></View><Feather name="chevron-right" size={16} color={c.mutedForeground} />
-      </Pressable>
 
       {nextWeekRisk ? (
         <Pressable
@@ -1040,47 +977,6 @@ export default function DashboardScreen() {
 
       {/* ── Stat Pill Cards ── */}
       {/* Row 1: Bills · Paid · Unpaid */}
-      {forecastTrust && balanceMetrics ? (
-        <View style={[styles.forecastTrustCard, { backgroundColor: c.card, borderColor: c.border }]}>
-          <View style={styles.forecastTrustHeader}>
-            <View style={[styles.forecastTrustIcon, { backgroundColor: c.primary + "18" }]}>
-              <Feather name="shield" size={15} color={c.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.forecastTrustTitle, { color: c.foreground }]}>Why these numbers?</Text>
-              <Text style={[styles.forecastTrustSub, { color: c.mutedForeground }]}>
-                Forecast uses {forecastTrust.sourceCount} dated source item{forecastTrust.sourceCount === 1 ? "" : "s"} across today, month-end, and the low point.
-              </Text>
-            </View>
-            <Pressable
-              onPress={() => openFloWithPrompt(forecastTrust.prompt)}
-              style={({ pressed }) => [styles.forecastTrustAsk, { backgroundColor: c.primary + "18", opacity: pressed ? 0.75 : 1 }]}
-            >
-              <Text style={[styles.forecastTrustAskText, { color: c.primary }]}>Ask Flo</Text>
-            </Pressable>
-          </View>
-          <View style={styles.forecastTrustGrid}>
-            <View style={[styles.forecastTrustMetric, { backgroundColor: c.muted }]}>
-              <Text style={[styles.forecastTrustLabel, { color: c.mutedForeground }]}>Today</Text>
-              <Text style={[styles.forecastTrustValue, { color: balanceMetrics.currentBalance < settings.safety_floor ? c.warning : c.success }]}>${balanceMetrics.currentBalance.toFixed(0)}</Text>
-            </View>
-            <View style={[styles.forecastTrustMetric, { backgroundColor: c.muted }]}>
-              <Text style={[styles.forecastTrustLabel, { color: c.mutedForeground }]}>End Month</Text>
-              <Text style={[styles.forecastTrustValue, { color: balanceMetrics.endOfMonthBalance < 0 ? c.destructive : c.foreground }]}>${balanceMetrics.endOfMonthBalance.toFixed(0)}</Text>
-            </View>
-            <View style={[styles.forecastTrustMetric, { backgroundColor: c.muted }]}>
-              <Text style={[styles.forecastTrustLabel, { color: c.mutedForeground }]}>Low Point</Text>
-              <Text style={[styles.forecastTrustValue, { color: balanceMetrics.lowestBalance < settings.safety_floor ? c.warning : c.success }]}>${balanceMetrics.lowestBalance.toFixed(0)}</Text>
-            </View>
-          </View>
-          <Text style={[styles.forecastTrustDrivers, { color: c.mutedForeground }]}>
-            {forecastTrust.topDrivers.length > 0
-              ? `Low-point drivers: ${forecastTrust.topDrivers.join(" · ")}`
-              : "Tap a calendar day in Monthly for the full source-by-source breakdown."}
-          </Text>
-        </View>
-      ) : null}
-
       <View style={[styles.statsPillRow, { marginBottom: 8 }]}>
         {statCards.slice(0, 3).map(card => (
           <Pressable
@@ -1129,49 +1025,13 @@ export default function DashboardScreen() {
         </Pressable>
       )}
 
-      <Pressable
-        onPress={() => openFloWithPrompt("What decisions need review?")}
-        style={({ pressed }) => [
-          styles.decisionHubCard,
-          {
-            backgroundColor: c.card,
-            borderColor: decisionAlert.tone === "risk" ? c.destructive + "80" : decisionAlert.tone === "review" ? c.warning + "80" : c.border,
-            opacity: pressed ? 0.82 : 1,
-          },
-        ]}
-      >
-        <View style={[styles.decisionHubIcon, { backgroundColor: decisionAlert.tone === "risk" ? c.destructive + "18" : decisionAlert.tone === "review" ? c.warning + "18" : c.primary + "18" }]}>
-          <Feather
-            name={decisionAlert.tone === "risk" ? "alert-triangle" : decisionAlert.tone === "review" ? "alert-circle" : "clock"}
-            size={18}
-            color={decisionAlert.tone === "risk" ? c.destructive : decisionAlert.tone === "review" ? c.warning : c.primary}
-          />
-        </View>
-        <View style={styles.decisionHubBody}>
-          <Text style={[styles.decisionHubEyebrow, { color: c.mutedForeground }]}>Flo Decision Center</Text>
-          <Text style={[styles.decisionHubTitle, { color: c.foreground }]}>{decisionAlert.title}</Text>
-          <Text style={[styles.decisionHubDesc, { color: c.mutedForeground }]}>{decisionAlert.detail}</Text>
-          <View style={styles.decisionHubStats}>
-            <Text style={[styles.decisionHubStat, { color: decisionAlert.riskCount > 0 ? c.destructive : c.mutedForeground }]}>
-              {decisionAlert.riskCount} risky
-            </Text>
-            <Text style={[styles.decisionHubStat, { color: decisionAlert.reviewCount > 0 ? c.warning : c.mutedForeground }]}>
-              {decisionAlert.reviewCount} review
-            </Text>
-            <Text style={[styles.decisionHubStat, { color: c.primary }]}>{decisionAlert.upcomingCount} upcoming</Text>
-            <Text style={[styles.decisionHubStat, { color: c.success }]}>{decisionAlert.completedCount} completed</Text>
-          </View>
-        </View>
-        <Feather name="chevron-right" size={18} color={c.mutedForeground} />
-      </Pressable>
-
       <View style={[styles.monthlyReviewCard, { backgroundColor: c.card, borderColor: c.border }]}>
         <View style={styles.monthlyReviewHeader}>
           <View style={[styles.monthlyReviewIcon, { backgroundColor: c.success + "18" }]}>
             <Feather name="bar-chart-2" size={17} color={c.success} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.decisionHubEyebrow, { color: c.mutedForeground }]}>Monthly Review</Text>
+            <Text style={[styles.decisionHubEyebrow, { color: c.mutedForeground }]}>Month Checkup</Text>
             <Text style={[styles.monthlyReviewTitle, { color: c.foreground }]}>{monthlyReview.headline}</Text>
             <Text style={[styles.monthlyReviewDesc, { color: c.mutedForeground }]}>{monthlyReview.nextStep}</Text>
           </View>
@@ -1187,22 +1047,22 @@ export default function DashboardScreen() {
             onPress={() => navigate("unpaid", "monthly")}
             style={({ pressed }) => [styles.monthlyReviewMetric, { backgroundColor: c.muted, opacity: pressed ? 0.75 : 1 }]}
           >
-            <Text style={[styles.monthlyReviewLabel, { color: c.mutedForeground }]}>Bills left</Text>
+            <Text style={[styles.monthlyReviewLabel, { color: c.mutedForeground }]}>Bills paid</Text>
+            <Text style={[styles.monthlyReviewValue, { color: monthlyReview.unpaidCount > 0 ? c.warning : c.success }]}>{monthlyReview.paidCount}/{monthlyReview.billCount}</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => navigate("unpaid", "monthly")}
+            style={({ pressed }) => [styles.monthlyReviewMetric, { backgroundColor: c.muted, opacity: pressed ? 0.75 : 1 }]}
+          >
+            <Text style={[styles.monthlyReviewLabel, { color: c.mutedForeground }]}>Unpaid</Text>
             <Text style={[styles.monthlyReviewValue, { color: monthlyReview.billDelta > 0 ? c.warning : c.success }]}>${Math.max(0, monthlyReview.billDelta).toFixed(0)}</Text>
           </Pressable>
           <Pressable
-            onPress={() => openFloWithPrompt("What decisions need review?")}
+            onPress={() => router.push("/(tabs)/monthly" as any)}
             style={({ pressed }) => [styles.monthlyReviewMetric, { backgroundColor: c.muted, opacity: pressed ? 0.75 : 1 }]}
           >
-            <Text style={[styles.monthlyReviewLabel, { color: c.mutedForeground }]}>Decisions</Text>
-            <Text style={[styles.monthlyReviewValue, { color: monthlyReview.changed > 0 ? c.warning : c.success }]}>{monthlyReview.completed}/{monthlyReview.changed + monthlyReview.completed}</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => navigate("debt", "bills")}
-            style={({ pressed }) => [styles.monthlyReviewMetric, { backgroundColor: c.muted, opacity: pressed ? 0.75 : 1 }]}
-          >
-            <Text style={[styles.monthlyReviewLabel, { color: c.mutedForeground }]}>Debt mins</Text>
-            <Text style={[styles.monthlyReviewValue, { color: c.destructive }]}>${monthlyReview.totalDebtMinimums.toFixed(0)}</Text>
+            <Text style={[styles.monthlyReviewLabel, { color: c.mutedForeground }]}>Low point</Text>
+            <Text style={[styles.monthlyReviewValue, { color: monthlyReview.lowestBalance < settings.safety_floor ? c.warning : c.success }]}>${monthlyReview.lowestBalance.toFixed(0)}</Text>
           </Pressable>
           <Pressable
             onPress={() => router.push("/(tabs)/more" as any)}
@@ -1214,20 +1074,18 @@ export default function DashboardScreen() {
         </View>
         <View style={styles.monthlyReviewActions}>
           <Pressable
-            onPress={() => router.push("/(tabs)/category-budget" as any)}
-            style={({ pressed }) => [styles.monthlyReviewAction, { backgroundColor: (monthlyReview.overCategory ? c.warning : c.primary) + "18", opacity: pressed ? 0.75 : 1 }]}
+            onPress={() => router.push("/(tabs)/monthly" as any)}
+            style={({ pressed }) => [styles.monthlyReviewAction, { backgroundColor: c.primary + "18", opacity: pressed ? 0.75 : 1 }]}
           >
-            <Feather name={monthlyReview.overCategory ? "alert-triangle" : "grid"} size={12} color={monthlyReview.overCategory ? c.warning : c.primary} />
-            <Text style={[styles.monthlyReviewActionText, { color: monthlyReview.overCategory ? c.warning : c.primary }]}>
-              {monthlyReview.overCategory ? "Review category leak" : "Review categories"}
-            </Text>
+            <Feather name="calendar" size={12} color={c.primary} />
+            <Text style={[styles.monthlyReviewActionText, { color: c.primary }]}>Open monthly plan</Text>
           </Pressable>
           <Pressable
             onPress={() => openFloWithPrompt(monthlyReview.prompt)}
             style={({ pressed }) => [styles.monthlyReviewAction, { backgroundColor: c.success + "18", opacity: pressed ? 0.75 : 1 }]}
           >
             <Feather name="message-circle" size={12} color={c.success} />
-            <Text style={[styles.monthlyReviewActionText, { color: c.success }]}>Improve next month</Text>
+            <Text style={[styles.monthlyReviewActionText, { color: c.success }]}>Ask Flo to review</Text>
           </Pressable>
         </View>
       </View>
@@ -1308,7 +1166,7 @@ export default function DashboardScreen() {
         </View>
       )}
 
-      {categoryPlan.length > 0 && (
+      {decisionHubSettings.categoryDecisionAlertsEnabled && categoryPlan.length > 0 && (
         <View style={{ marginBottom: 14 }}>
           {categoryDecisionAlert ? (
             <Pressable
