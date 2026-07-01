@@ -1,8 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AccountModal } from "@/components/AccountModal";
@@ -13,6 +13,25 @@ import { BudgetProvider, useBudget, type Account, type Bill, type IncomeItem } f
 import { useColors } from "@/hooks/useColors";
 
 type SetupStepKey = "welcome" | "account" | "money" | "income" | "bills" | "debts" | "safety" | "reconcile" | "finish";
+const SETUP_PROGRESS_KEY = "flowledger_setup_step_key";
+
+function readStoredSetupStep(): SetupStepKey | null {
+  if (Platform.OS !== "web" || typeof window === "undefined") return null;
+  try {
+    const value = window.localStorage.getItem(SETUP_PROGRESS_KEY);
+    return value as SetupStepKey | null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredSetupStep(step: SetupStepKey | null) {
+  if (Platform.OS !== "web" || typeof window === "undefined") return;
+  try {
+    if (step) window.localStorage.setItem(SETUP_PROGRESS_KEY, step);
+    else window.localStorage.removeItem(SETUP_PROGRESS_KEY);
+  } catch {}
+}
 
 function SetupWizard() {
   const c = useColors();
@@ -33,6 +52,7 @@ function SetupWizard() {
   const [safetyFloorText, setSafetyFloorText] = useState(String(settings.safety_floor));
   const [horizonText, setHorizonText] = useState(String(settings.forecast_horizon_months));
   const [floConfirmation, setFloConfirmation] = useState("");
+  const [restoredProgress, setRestoredProgress] = useState(false);
 
   const activeAccount = accounts.find(account => account.is_active) ?? null;
   const steps = useMemo(() => {
@@ -120,8 +140,32 @@ function SetupWizard() {
 
   const current = steps[index];
   const progressIndex = Math.min(index + 1, steps.length);
+  const firstIncompleteIndex = useMemo(() => {
+    const next = steps.findIndex(step => step.key !== "welcome" && step.key !== "finish" && !step.done);
+    return next >= 0 ? next : steps.findIndex(step => step.key === "finish");
+  }, [steps]);
 
-  const goNext = () => setIndex(value => Math.min(steps.length - 1, value + 1));
+  useEffect(() => {
+    if (restoredProgress) return;
+    const storedKey = readStoredSetupStep();
+    const storedIndex = storedKey ? steps.findIndex(step => step.key === storedKey) : -1;
+    const resumeIndex = storedIndex > 0 ? storedIndex : firstIncompleteIndex;
+    setIndex(Math.max(0, resumeIndex));
+    if (storedIndex > 0 && steps[storedIndex]?.key !== "finish") {
+      setFloConfirmation("Welcome back — we can pick up where we left off.");
+    }
+    setRestoredProgress(true);
+  }, [firstIncompleteIndex, restoredProgress, steps]);
+
+  useEffect(() => {
+    if (!restoredProgress) return;
+    writeStoredSetupStep(current.key === "finish" ? null : current.key);
+  }, [current.key, restoredProgress]);
+
+  const goNext = () => setIndex(value => {
+    const next = steps.findIndex((step, stepIndex) => stepIndex > value && (step.key === "finish" || !step.done));
+    return next >= 0 ? next : steps.length - 1;
+  });
   const goBack = () => setIndex(value => Math.max(0, value - 1));
   const confirmAndNext = (message: string) => {
     setFloConfirmation(message);
@@ -129,6 +173,7 @@ function SetupWizard() {
   };
 
   const finish = async () => {
+    writeStoredSetupStep(null);
     await updateSettings({ onboarding_completed: true });
     router.replace({ pathname: "/(tabs)/flo", params: { prompt: "Can I afford $100?" } } as any);
   };
