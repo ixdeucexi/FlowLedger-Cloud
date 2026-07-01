@@ -1,6 +1,6 @@
 import { Session, User } from "@supabase/supabase-js";
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 
 import { DEV_DEMO_USER_ID, disableDevDemoMode, isDevDemoMode } from "@/lib/demoMode";
 import { supabase } from "@/lib/supabase";
@@ -25,6 +25,22 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+    promise.then(
+      value => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      error => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [demoMode, setDemoMode] = useState(isDevDemoMode());
@@ -61,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const hasOAuthTokens = window.location.hash.includes("access_token=");
 
         if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          const { error } = await withTimeout(supabase.auth.exchangeCodeForSession(code), 8000, "Google sign-in callback");
           const cleanUrl = `${window.location.origin}${window.location.pathname}`;
           window.history.replaceState({}, document.title, cleanUrl);
           if (error) console.warn("Google sign-in callback failed", error.message);
@@ -71,7 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      const { data } = await supabase.auth.getSession();
+      const { data } = await withTimeout(supabase.auth.getSession(), 8000, "Session check");
       if (!mounted) return;
       setSession(data.session);
       setLoading(false);
@@ -86,11 +102,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
+      setLoading(false);
     });
+
+    const refreshSession = () => {
+      void withTimeout(supabase.auth.getSession(), 8000, "Resume session check")
+        .then(({ data }) => {
+          if (!mounted) return;
+          setSession(data.session);
+          setLoading(false);
+        })
+        .catch(error => {
+          console.warn("Resume auth check failed", error);
+          if (!mounted) return;
+          setLoading(false);
+        });
+    };
+    const appStateSubscription = AppState.addEventListener("change", state => {
+      if (state === "active") refreshSession();
+    });
+    if (Platform.OS === "web" && typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", refreshSession);
+      window.addEventListener("pageshow", refreshSession);
+    }
 
     return () => {
       mounted = false;
       listener.subscription.unsubscribe();
+      appStateSubscription.remove();
+      if (Platform.OS === "web" && typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", refreshSession);
+        window.removeEventListener("pageshow", refreshSession);
+      }
     };
   }, [demoMode]);
 

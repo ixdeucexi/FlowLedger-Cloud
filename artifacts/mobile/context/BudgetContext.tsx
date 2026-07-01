@@ -348,6 +348,22 @@ function monthlyOverrideDbPayload(override: MonthlyOverride) {
   };
 }
 
+function withLoadTimeout<T>(promise: PromiseLike<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+    promise.then(
+      value => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      error => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 function endOfCurrentMonthYMD() {
   const now = new Date();
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -690,20 +706,28 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const loadStarted = Date.now();
       try {
         const uid = user.id;
-        const dueDebtSync = await supabase.rpc("sync_due_debt_transactions", { p_as_of_date: localDateString() });
+        const dueDebtSync = await withLoadTimeout(
+          supabase.rpc("sync_due_debt_transactions", { p_as_of_date: localDateString() }),
+          8000,
+          "Sync scheduled debt payments",
+        );
         if (dueDebtSync.error) throw new Error(`Sync scheduled debt payments: ${dueDebtSync.error.message}`);
-        const results = await Promise.all([
-          supabase.from("bills").select("*").eq("user_id", uid),
-          supabase.from("monthly_overrides").select("*").eq("user_id", uid),
-          supabase.from("transactions").select("*").eq("user_id", uid),
-          supabase.from("incomes").select("*").eq("user_id", uid),
-          supabase.from("goals").select("*").eq("user_id", uid),
-          supabase.from("extra_payments").select("*").eq("user_id", uid),
-          supabase.from("settings").select("*").eq("user_id", uid).maybeSingle(),
-          supabase.from("categories").select("name").eq("user_id", uid),
-          supabase.from("accounts").select("*").eq("user_id", uid).order("created_at"),
-          supabase.from("decisions").select("*").eq("user_id", uid).order("created_at", { ascending: false }),
-        ]);
+        const results = await withLoadTimeout(
+          Promise.all([
+            supabase.from("bills").select("*").eq("user_id", uid),
+            supabase.from("monthly_overrides").select("*").eq("user_id", uid),
+            supabase.from("transactions").select("*").eq("user_id", uid),
+            supabase.from("incomes").select("*").eq("user_id", uid),
+            supabase.from("goals").select("*").eq("user_id", uid),
+            supabase.from("extra_payments").select("*").eq("user_id", uid),
+            supabase.from("settings").select("*").eq("user_id", uid).maybeSingle(),
+            supabase.from("categories").select("name").eq("user_id", uid),
+            supabase.from("accounts").select("*").eq("user_id", uid).order("created_at"),
+            supabase.from("decisions").select("*").eq("user_id", uid).order("created_at", { ascending: false }),
+          ]),
+          12000,
+          "Load budget data",
+        );
         const failed = results.find(result => result.error);
         if (failed?.error) throw new Error(`Load budget data: ${failed.error.message}`);
         const [
@@ -728,7 +752,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           actual_amount: o.actual_amount !== null ? Number(o.actual_amount) : undefined,
           paid_date: o.paid_date ?? undefined,
         })));
-        const storedBillDateMoves = await loadBillDateMoves(uid);
+        const storedBillDateMoves = await withLoadTimeout(loadBillDateMoves(uid), 8000, "Load moved bill dates");
         setBillDateMoves(storedBillDateMoves);
         billDateMovesRef.current = storedBillDateMoves;
         setTransactions((tData ?? []).map(normalizeTransactionRow));
@@ -769,6 +793,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }
         const cats = (cData ?? []).map((c: any) => c.name as string);
         setCategories(cats.length > 0 ? cats : DEFAULT_CATEGORIES);
+      } catch (error) {
+        console.warn("Budget load failed or timed out", error);
       } finally {
         loaded.current = true;
         setLoading(false);
