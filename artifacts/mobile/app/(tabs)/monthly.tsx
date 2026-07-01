@@ -1104,20 +1104,6 @@ export default function MonthlyScreen() {
               </Pressable>
             </Modal>
 
-            {!selectedDate && (
-              <View style={[styles.selectDateCard, { backgroundColor: c.card, borderColor: c.border }]}>
-                <View style={[styles.selectDateIcon, { backgroundColor: c.primary + "18" }]}>
-                  <Feather name="calendar" size={16} color={c.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.selectDateTitle, { color: c.foreground }]}>Select a date to see details</Text>
-                  <Text style={[styles.selectDateText, { color: c.mutedForeground }]}>
-                    Monthly stays focused on the plan. Transactions, bills, goals, and planned decisions show after you tap a calendar day.
-                  </Text>
-                </View>
-              </View>
-            )}
-
             {selectedDate && (
             <View style={styles.txListHeader}>
               <Text style={[styles.txListTitle, { color: c.foreground }]}>
@@ -1708,10 +1694,6 @@ const styles = StyleSheet.create({
   txSumLabel: { fontSize: 10, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 },
   txSumValue: { fontSize: 15, fontFamily: "Inter_700Bold" },
   txListHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8, marginTop: 4 },
-  selectDateCard: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 14, padding: 12, marginTop: 12, marginBottom: 10 },
-  selectDateIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  selectDateTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
-  selectDateText: { fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 16, marginTop: 2 },
   lowBalanceCard: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 10 },
   lowBalanceTitle: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   lowBalanceText: { fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 16, marginTop: 2 },
