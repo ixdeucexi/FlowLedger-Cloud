@@ -36,6 +36,7 @@ const ALERT_SENSITIVITY_OPTIONS: { label: string; value: DecisionHubSettings["al
   { label: "Balanced", value: "balanced", desc: "Default alert level." },
   { label: "Quiet", value: "quiet", desc: "Only warn when the floor is crossed." },
 ];
+const BACKUP_COMPLETE_KEY = "flowledger_backup_exported";
 
 function csvCell(value: unknown): string {
   const text = String(value ?? "");
@@ -66,6 +67,10 @@ export default function MoreScreen() {
   const [safetyFloorText, setSafetyFloorText] = useState(settings.safety_floor.toString());
   const [forecastHorizonText, setForecastHorizonText] = useState(settings.forecast_horizon_months.toString());
   const [decisionHubSettings, setDecisionHubSettings] = useState<DecisionHubSettings>(() => readDecisionHubSettings());
+  const [backupExported, setBackupExported] = useState(() => {
+    try { return Platform.OS === "web" && globalThis.localStorage?.getItem(BACKUP_COMPLETE_KEY) === "true"; }
+    catch { return false; }
+  });
   const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
@@ -110,7 +115,7 @@ export default function MoreScreen() {
     { label: "Add income", done: incomes.length > 0 },
     { label: "Add recurring bills", done: bills.some(bill => bill.is_recurring || bill.is_debt) },
     { label: "Reconcile account", done: forecastConfidence.level === "high" || accounts.some(account => account.last_reconciled_at) },
-    { label: "Export a backup", done: false },
+    { label: "Export a backup", done: backupExported },
   ];
   const setupComplete = setupSteps.filter(step => step.done).length;
   const currentMonthPrefix = new Date().toISOString().slice(0, 7);
@@ -167,6 +172,8 @@ export default function MoreScreen() {
         await FileSystem.writeAsStringAsync(uri, csv);
         await Sharing.shareAsync(uri, { mimeType: "text/csv" });
       }
+      setBackupExported(true);
+      try { if (Platform.OS === "web") globalThis.localStorage?.setItem(BACKUP_COMPLETE_KEY, "true"); } catch {}
     } catch { Alert.alert("Error", "Export failed."); }
   };
 
@@ -484,9 +491,9 @@ export default function MoreScreen() {
           </View>
         ))}
         <View style={[styles.priorityNote, { backgroundColor: c.primary + "12", borderRadius: 8, marginTop: 10 }]}>
-          <Feather name="layers" size={12} color={c.primary} />
+          <Feather name="shield" size={12} color={c.primary} />
           <Text style={[styles.priorityNoteText, { color: c.mutedForeground }]}>
-            Your data is already household and budget-ready behind the scenes. Separate budget switching can be turned on later without renaming tables.
+            Keep one active account current, review income and bills, and export a backup before major cleanup.
           </Text>
         </View>
       </View>

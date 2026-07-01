@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator, KeyboardAvoidingView, Platform,
   Pressable, ScrollView, StyleSheet, Text, TextInput, View,
@@ -22,6 +22,16 @@ export default function LoginScreen() {
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState<string | null>(null);
   const [showPass, setShowPass] = useState(false);
+
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const oauthError = params.get("error_description") || params.get("error") || hashParams.get("error_description") || hashParams.get("error");
+    if (!oauthError) return;
+    setError("Google sign-in could not finish. Check the Google provider and redirect URL in Supabase.");
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }, []);
 
   const handleSubmit = async () => {
     setError(null);

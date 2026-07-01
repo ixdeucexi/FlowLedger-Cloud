@@ -5,6 +5,15 @@ import { Platform } from "react-native";
 import { DEV_DEMO_USER_ID, disableDevDemoMode, isDevDemoMode } from "@/lib/demoMode";
 import { supabase } from "@/lib/supabase";
 
+function friendlyAuthError(message?: string | null): string | null {
+  if (!message) return null;
+  const normalized = message.toLowerCase();
+  if (normalized.includes("provider") || normalized.includes("oauth") || normalized.includes("redirect")) {
+    return "Google sign-in is almost ready, but the Google provider or redirect URL still needs to be configured in Supabase.";
+  }
+  return message;
+}
+
 interface AuthContextType {
   session:  Session | null;
   user:     User | null;
@@ -59,13 +68,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string): Promise<string | null> => {
     if (demoMode) return null;
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return error?.message ?? null;
+    return friendlyAuthError(error?.message);
   };
 
   const signUp = async (email: string, password: string): Promise<string | null> => {
     if (demoMode) return null;
     const { error } = await supabase.auth.signUp({ email, password });
-    return error?.message ?? null;
+    return friendlyAuthError(error?.message);
   };
 
   const signInWithGoogle = async (): Promise<string | null> => {
@@ -77,7 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       provider: "google",
       options: redirectTo ? { redirectTo } : undefined,
     });
-    return error?.message ?? null;
+    return friendlyAuthError(error?.message);
   };
 
   const signOut = async () => {
