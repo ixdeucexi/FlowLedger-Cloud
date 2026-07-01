@@ -901,8 +901,8 @@ export default function MonthlyScreen() {
             }}
           />
       ) : (
-        <ScrollView contentContainerStyle={[styles.calScroll, { paddingBottom: insets.bottom + 100 }]}>
-          <View style={{ paddingHorizontal: 16 }}>
+        <View style={[styles.calFixed, { paddingBottom: insets.bottom + 76 }]}>
+          <View style={styles.calInner}>
             <View {...calendarSwipeResponder.panHandlers}>
               <CalendarView
                 month={month}
@@ -958,22 +958,18 @@ export default function MonthlyScreen() {
                       </View>
                     ) : null}
 
-                    {selectedForecastDay ? (
+                    {selectedForecastGroups.some(group => group.key.includes("income")) ? (
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
-                        <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>How this day is calculated</Text>
-                        {selectedForecastGroups.length > 0 ? selectedForecastGroups.map(group => (
-                          <View key={`overlay-${group.key}`} style={styles.dayOverlayGroup}>
-                            <Text style={[styles.dayOverlayGroupTitle, { color: c.mutedForeground }]}>{group.title}</Text>
-                            {group.events.map(item => (
-                              <View key={`overlay-${item.event.id}`} style={styles.dayOverlayRow}>
-                                <Text numberOfLines={1} style={[styles.dayOverlayRowName, { color: c.foreground }]}>{item.label} · {item.statusLabel}</Text>
-                                <Text style={[styles.dayOverlayAmount, { color: item.event.amount >= 0 ? c.success : c.foreground }]}>{item.amountLabel}</Text>
-                              </View>
-                            ))}
-                          </View>
-                        )) : (
-                          <Text style={[styles.dayOverlayEmptyText, { color: c.mutedForeground }]}>No forecast items for this day.</Text>
-                        )}
+                        <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Income</Text>
+                        {selectedForecastGroups
+                          .filter(group => group.key.includes("income"))
+                          .flatMap(group => group.events)
+                          .map(item => (
+                            <View key={`overlay-income-${item.event.id}`} style={styles.dayOverlayRow}>
+                              <Text numberOfLines={1} style={[styles.dayOverlayRowName, { color: c.foreground }]}>{item.label}</Text>
+                              <Text style={[styles.dayOverlayAmount, { color: c.success }]}>{item.amountLabel}</Text>
+                            </View>
+                          ))}
                       </View>
                     ) : null}
 
@@ -1088,6 +1084,21 @@ export default function MonthlyScreen() {
 
                   <View style={styles.dayOverlayActions}>
                     <Pressable
+                      onPress={() => {
+                        if (!selectedDate) return;
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        router.push({
+                          pathname: "/(tabs)/flo",
+                          params: { prompt: `Look at ${formatLongDate(selectedDate)}. What should I know about this day and my balance?` },
+                        } as never);
+                        setSelectedDate(null);
+                      }}
+                      style={({ pressed }) => [styles.dayOverlayAskPill, { backgroundColor: c.primary + "16", borderColor: c.primary + "40", opacity: pressed ? 0.8 : 1 }]}
+                    >
+                      <Feather name="message-circle" size={16} color={c.primary} />
+                      <Text style={[styles.dayOverlayAskText, { color: c.primary }]}>Ask Flo</Text>
+                    </Pressable>
+                    <Pressable
                       onPress={() => openAddTransaction(selectedDate)}
                       style={({ pressed }) => [styles.dayOverlayAddPill, { borderColor: c.foreground, opacity: pressed ? 0.8 : 1 }]}
                     >
@@ -1104,241 +1115,8 @@ export default function MonthlyScreen() {
               </Pressable>
             </Modal>
 
-            {selectedDate && (
-            <View style={styles.txListHeader}>
-              <Text style={[styles.txListTitle, { color: c.foreground }]}>
-                {selectedDate
-                  ? `${selectedDate}${selectedDayItemCount > 0 ? ` · ${selectedDayItemCount} item${selectedDayItemCount !== 1 ? "s" : ""}` : ""}`
-                  : `All Transactions (${txList.length})`}
-              </Text>
-              <Pressable
-                onPress={() => openAddTransaction(selectedDate)}
-                style={({ pressed }) => [styles.iconBtn, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
-              >
-                <Feather name="plus" size={16} color={c.primaryForeground} />
-              </Pressable>
-            </View>
-            )}
-
-            {selectedForecastDay && selectedForecastDay.balance < settings.safety_floor ? (
-              <View style={[styles.lowBalanceCard, { backgroundColor: selectedForecastDay.balance < 0 ? c.destructive + "12" : c.warning + "14", borderColor: selectedForecastDay.balance < 0 ? c.destructive + "70" : c.warning + "70" }]}>
-                <Feather name="alert-triangle" size={16} color={selectedForecastDay.balance < 0 ? c.destructive : c.warning} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.lowBalanceTitle, { color: c.foreground }]}>Low balance risk</Text>
-                  <Text style={[styles.lowBalanceText, { color: c.mutedForeground }]}>
-                    This day is projected at ${selectedForecastDay.balance.toFixed(2)}, below your ${settings.safety_floor.toFixed(0)} safety floor.
-                  </Text>
-                </View>
-              </View>
-            ) : null}
-
-            {selectedForecastDay && (
-              <View style={[styles.forecastExplanation, { backgroundColor: c.card, borderColor: c.border }]}>
-                <View style={styles.forecastExplanationHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.forecastExplanationTitle, { color: c.foreground }]}>How this balance is calculated</Text>
-                    <Text style={[styles.forecastExplanationSub, { color: c.mutedForeground }]}>Projected close ${selectedForecastDay.balance.toFixed(2)} from {selectedForecastDay.events?.length ?? 0} dated item{(selectedForecastDay.events?.length ?? 0) === 1 ? "" : "s"}.</Text>
-                  </View>
-                  <Feather name="info" size={16} color={c.primary} />
-                </View>
-                {selectedForecastGroups.map(group => (
-                  <View key={group.key} style={styles.forecastGroup}>
-                    <Text style={[styles.forecastGroupTitle, { color: c.foreground }]}>{group.title}</Text>
-                    {group.events.map(item => (
-                      <View key={item.event.id} style={styles.forecastSourceRow}>
-                        <Text numberOfLines={1} style={[styles.forecastSourceName, { color: c.mutedForeground }]}>{item.label} · {item.statusLabel}</Text>
-                        <Text style={[styles.forecastSourceAmount, { color: item.event.amount >= 0 ? c.success : c.foreground }]}>{item.amountLabel}</Text>
-                      </View>
-                    ))}
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {/* Scheduled bills & debts for the selected day */}
-            {scheduledBillsForDay.length > 0 && (
-              <>
-                <Text style={[styles.sectionLabel, { color: c.mutedForeground }]}>Scheduled</Text>
-                {scheduledBillsForDay.map(b => {
-                  const amt = getAmount(b, month, selectedYear);
-                  const paid = getPaidAmount(b.id, month, selectedYear);
-                  const isPaid = amt > 0 && paid >= amt;
-                  const isDebt = b.is_debt;
-                  const iconColor = isPaid ? c.success : isDebt ? c.destructive : c.warning;
-                  const iconName = isDebt ? "credit-card" : "file-text";
-                  const canReschedule = b.frequency === "monthly";
-                  const hasCustomDay = getCustomDueDay(b.id, month, selectedYear) !== undefined;
-                  const movedIn = movedInByBillId.get(b.id);
-                  return (
-                    <Pressable
-                      key={`sched-${b.id}`}
-                      onPress={() => canReschedule && setDueDayPickerBill(b)}
-                      style={({ pressed }) => [
-                        styles.txRow,
-                        { backgroundColor: c.card, borderRadius: colors.radius, opacity: pressed && canReschedule ? 0.75 : 1 },
-                      ]}
-                    >
-                      <View style={styles.txMain}>
-                        <View style={[styles.txIcon, { backgroundColor: iconColor + "20" }]}>
-                          <Feather name={iconName} size={15} color={iconColor} />
-                        </View>
-                        <View style={styles.txBody}>
-                          <Text style={[styles.txNote, { color: c.foreground }]}>{b.name}</Text>
-                          <Text style={[styles.txDate, { color: c.mutedForeground }]}>
-                            {isDebt ? "Debt" : "Bill"} · {b.category}
-                            {b.frequency === "weekly" ? " · weekly" : ""}
-                            {isPaid ? " · paid" : paid > 0 ? ` · $${paid.toFixed(2)} paid` : ""}
-                            {hasCustomDay ? " · rescheduled" : ""}
-                          </Text>
-                          {movedIn && (
-                            <Text style={[styles.txMovedHint, { color: c.primary }]}>
-                              Moved from {formatShortDate(movedIn.from_date)}
-                            </Text>
-                          )}
-                          {canReschedule && (
-                            <Text style={[styles.txRescheduleHint, { color: c.primary }]}>
-                              Tap to change due day this month
-                            </Text>
-                          )}
-                        </View>
-                        <Text style={[styles.txAmt, { color: iconColor }]}>
-                          -${amt.toFixed(2)}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </>
-            )}
-
-            {selectedMovedAwayBills.length > 0 && (
-              <>
-                <Text style={[styles.sectionLabel, { color: c.mutedForeground }]}>Moved Away</Text>
-                {selectedMovedAwayBills.map(({ move, bill }) => (
-                  <View
-                    key={`moved-away-${move.id}`}
-                    style={[styles.txRow, { backgroundColor: c.card, borderRadius: colors.radius }]}
-                  >
-                    <View style={styles.txMain}>
-                      <View style={[styles.txIcon, { backgroundColor: c.primary + "20" }]}>
-                        <Feather name="corner-up-right" size={15} color={c.primary} />
-                      </View>
-                      <View style={styles.txBody}>
-                        <Text style={[styles.txNote, { color: c.foreground }]}>{bill.name}</Text>
-                        <Text style={[styles.txDate, { color: c.mutedForeground }]}>
-                          Moved to {formatShortDate(move.to_date)} · one-time bill move
-                        </Text>
-                      </View>
-                      <Pressable
-                        onPress={() => void removeBillOccurrenceMove(move.id)}
-                        style={({ pressed }) => [styles.restoreMoveButton, { backgroundColor: c.primary + "16", opacity: pressed ? 0.7 : 1 }]}
-                      >
-                        <Text style={[styles.restoreMoveText, { color: c.primary }]}>Restore</Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                ))}
-              </>
-            )}
-
-            {/* Goals due on selected day */}
-            {goalsForSelectedDay.length > 0 && (
-              <>
-                <Text style={[styles.sectionLabel, { color: c.mutedForeground }]}>Goals</Text>
-                {goalsForSelectedDay.map(goal => (
-                  <View
-                    key={`goal-${goal.id}`}
-                    style={[styles.txRow, { backgroundColor: c.card, borderRadius: colors.radius }]}
-                  >
-                    <View style={styles.txMain}>
-                      <View style={[styles.txIcon, { backgroundColor: "#8b5cf620" }]}>
-                        <Feather name="target" size={15} color="#8b5cf6" />
-                      </View>
-                      <View style={styles.txBody}>
-                        <Text style={[styles.txNote, { color: c.foreground }]}>{goal.name}</Text>
-                        <Text style={[styles.txDate, { color: c.mutedForeground }]}>Goal · target date</Text>
-                      </View>
-                      <Text style={[styles.txAmt, { color: "#8b5cf6" }]}>
-                        -${goal.amount.toFixed(2)}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
-              </>
-            )}
-
-            {/* Saved plans due on selected day */}
-            {plansForSelectedDay.length > 0 && (
-              <>
-                <Text style={[styles.sectionLabel, { color: c.mutedForeground }]}>Saved Plans</Text>
-                {plansForSelectedDay.map(plan => {
-                  const isIncome = plan.scenario.type === "income_change";
-                  const amount = isIncome ? Math.abs(plan.scenario.amount) : -Math.abs(plan.scenario.amount);
-                  return (
-                    <View
-                      key={`plan-${plan.id}`}
-                      style={[styles.txRow, { backgroundColor: c.card, borderRadius: colors.radius }]}
-                    >
-                      <Pressable onPress={() => openEditPlan(plan)} style={styles.txMain}>
-                        <View style={[styles.txIcon, { backgroundColor: "#3b82f620" }]}>
-                          <Feather name="calendar" size={15} color="#3b82f6" />
-                        </View>
-                        <View style={styles.txBody}>
-                          <Text style={[styles.txNote, { color: c.foreground }]}>{plan.name}</Text>
-                          <Text style={[styles.txDate, { color: c.mutedForeground }]}>
-                            Planned decision · {plan.result.verdict} · tap to edit
-                          </Text>
-                        </View>
-                        <Text style={[styles.txAmt, { color: amount >= 0 ? c.success : "#3b82f6" }]}>
-                          {amount >= 0 ? "+" : "-"}${Math.abs(amount).toFixed(2)}
-                        </Text>
-                      </Pressable>
-                      <Pressable onPress={() => handleDeletePlan(plan)} hitSlop={8} style={styles.txDelete}>
-                        <Feather name="trash-2" size={14} color={c.destructive} />
-                      </Pressable>
-                    </View>
-                  );
-                })}
-              </>
-            )}
-
-            {/* Manual transactions */}
-            {selectedDate && displayedTxs.length === 0 && scheduledBillsForDay.length === 0 && selectedMovedAwayBills.length === 0 && goalsForSelectedDay.length === 0 && plansForSelectedDay.length === 0 ? (
-              <EmptyState icon="credit-card" title="No Activity" message="Tap + to log a transaction for this day." />
-            ) : displayedTxs.length > 0 ? (
-              <>
-                {(scheduledBillsForDay.length > 0 || selectedMovedAwayBills.length > 0 || goalsForSelectedDay.length > 0 || plansForSelectedDay.length > 0) && (
-                  <Text style={[styles.sectionLabel, { color: c.mutedForeground }]}>Transactions</Text>
-                )}
-                {displayedTxs.map(tx => (
-                  <View
-                    key={tx.id}
-                    style={[styles.txRow, { backgroundColor: c.card, borderRadius: colors.radius }]}
-                  >
-                    <Pressable
-                      onPress={() => openEditTransaction(tx)}
-                      style={styles.txMain}
-                    >
-                      <View style={[styles.txIcon, { backgroundColor: tx.amount > 0 ? c.success + "20" : c.destructive + "20" }]}>
-                        <Feather name={tx.amount > 0 ? "arrow-down-left" : "arrow-up-right"} size={15} color={tx.amount > 0 ? c.success : c.destructive} />
-                      </View>
-                      <View style={styles.txBody}>
-                        <Text style={[styles.txNote, { color: c.foreground }]}>{tx.note || tx.category}</Text>
-                        <Text style={[styles.txDate, { color: c.mutedForeground }]}>{tx.date} · {tx.category}</Text>
-                      </View>
-                      <Text style={[styles.txAmt, { color: tx.amount > 0 ? c.success : c.destructive }]}>
-                        {tx.amount > 0 ? "+" : ""}{tx.amount.toFixed(2)}
-                      </Text>
-                    </Pressable>
-                    <Pressable onPress={() => handleDeleteTx(tx.id)} hitSlop={8} style={styles.txDelete}>
-                      <Feather name="trash-2" size={14} color={c.destructive} />
-                    </Pressable>
-                  </View>
-                ))}
-              </>
-            ) : null}
           </View>
-        </ScrollView>
+        </View>
       )}
 
       {/* ── Due-day reschedule picker ── */}
@@ -1667,6 +1445,8 @@ const styles = StyleSheet.create({
   dueDayRow: { flexDirection: "row", alignItems: "center", marginHorizontal: 12, marginBottom: 10 },
   dueDayInput: { width: 42, height: 30, borderRadius: 6, textAlign: "center", fontSize: 14, fontFamily: "Inter_600SemiBold", borderWidth: 1 },
   calScroll: { paddingTop: 8 },
+  calFixed: { flex: 1, paddingTop: 8 },
+  calInner: { flex: 1, paddingHorizontal: 16 },
   weeklyChip: { flexDirection: "row", alignItems: "center", gap: 5, marginHorizontal: 12, marginTop: 2, marginBottom: 6, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   weeklyChipText: { fontSize: 11, fontFamily: "Inter_500Medium" },
   balanceBar: { flexDirection: "row", padding: 12, marginBottom: 0 },
@@ -1750,7 +1530,9 @@ const styles = StyleSheet.create({
   dayBillActionText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   dayOverlayEmptyTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
   dayOverlayEmptyText: { fontSize: 12, fontFamily: "Inter_400Regular" },
-  dayOverlayActions: { flexDirection: "row", alignItems: "center", gap: 12, paddingTop: 14 },
+  dayOverlayActions: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 14 },
+  dayOverlayAskPill: { minHeight: 50, borderWidth: 1, borderRadius: 25, alignItems: "center", justifyContent: "center", paddingHorizontal: 14, flexDirection: "row", gap: 6 },
+  dayOverlayAskText: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   dayOverlayAddPill: { flex: 1, minHeight: 50, borderWidth: 1.5, borderRadius: 25, alignItems: "center", justifyContent: "center", paddingHorizontal: 16 },
   dayOverlayAddText: { fontSize: 14, fontFamily: "Inter_700Bold" },
   dayOverlayFab: { width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
