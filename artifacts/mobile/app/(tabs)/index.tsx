@@ -806,9 +806,9 @@ export default function DashboardScreen() {
         ];
         const complete = steps.every(step => step.done);
         return <View style={[styles.setupCard, { backgroundColor: c.card, borderColor: c.border }]}>
-          <View style={styles.setupHeader}><View style={{ flex: 1 }}><Text style={[styles.setupTitle, { color: c.foreground }]}>Build a forecast you can trust</Text><Text style={[styles.setupDesc, { color: c.mutedForeground }]}>{steps.filter(step => step.done).length} of {steps.length} setup steps complete</Text></View><Pressable onPress={() => void updateSettings({ onboarding_completed: true })}><Feather name="x" size={18} color={c.mutedForeground} /></Pressable></View>
+          <View style={styles.setupHeader}><View style={{ flex: 1 }}><Text style={[styles.setupTitle, { color: c.foreground }]}>Let Flo set up your forecast</Text><Text style={[styles.setupDesc, { color: c.mutedForeground }]}>{steps.filter(step => step.done).length} of {steps.length} setup steps complete</Text></View><Pressable onPress={() => void updateSettings({ onboarding_completed: true })}><Feather name="x" size={18} color={c.mutedForeground} /></Pressable></View>
           {steps.map(step => <View key={step.label} style={styles.setupStep}><Feather name={step.done ? "check-circle" : "circle"} size={15} color={step.done ? c.success : c.mutedForeground} /><Text style={[styles.setupStepText, { color: step.done ? c.mutedForeground : c.foreground }]}>{step.label}</Text></View>)}
-          <Pressable onPress={() => complete ? void updateSettings({ onboarding_completed: true }) : router.push("/(tabs)/more" as any)} style={[styles.setupButton, { backgroundColor: c.primary }]}><Text style={[styles.setupButtonText, { color: c.primaryForeground }]}>{complete ? "Finish Setup" : "Continue in Settings"}</Text></Pressable>
+          <Pressable onPress={() => complete ? void updateSettings({ onboarding_completed: true }) : router.push("/(tabs)/more" as any)} style={[styles.setupButton, { backgroundColor: c.primary }]}><Text style={[styles.setupButtonText, { color: c.primaryForeground }]}>{complete ? "Finish Setup" : "Start with Flo"}</Text></Pressable>
         </View>;
       })()}
 

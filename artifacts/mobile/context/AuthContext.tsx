@@ -108,6 +108,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithGoogle = async (): Promise<string | null> => {
     if (demoMode) return null;
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      try { window.localStorage.setItem("flowledger_show_setup_after_login", "true"); } catch {}
+    }
     const redirectTo = Platform.OS === "web" && typeof window !== "undefined"
       ? `${window.location.origin}/`
       : undefined;

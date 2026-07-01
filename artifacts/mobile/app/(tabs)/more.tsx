@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AccountModal } from "@/components/AccountModal";
+import { FloLogo } from "@/components/FloLogo";
 import { IncomeModal } from "@/components/IncomeModal";
 import colors from "@/constants/colors";
 import type { Account, IncomeItem } from "@/context/BudgetContext";
@@ -111,13 +112,17 @@ export default function MoreScreen() {
     [accounts, bills, incomes, transactions],
   );
   const setupSteps = [
-    { label: "Add an account", done: accounts.some(account => account.is_active) },
-    { label: "Add income", done: incomes.length > 0 },
-    { label: "Add recurring bills", done: bills.some(bill => bill.is_recurring || bill.is_debt) },
-    { label: "Reconcile account", done: forecastConfidence.level === "high" || accounts.some(account => account.last_reconciled_at) },
-    { label: "Export a backup", done: backupExported },
+    { key: "account", label: "What account should I track first?", detail: "Tell me about your checking, savings, or cash account so I know where your money starts.", done: accounts.some(account => account.is_active), action: "Answer" },
+    { key: "money", label: "How much money is in that account today?", detail: "Give me the current balance and date so my forecast starts from the right number.", done: accounts.some(account => account.is_active && Math.abs(account.current_balance) > 0), action: "Answer" },
+    { key: "income", label: "When does money come in?", detail: "Add paychecks, side income, or recurring deposits so I can look ahead.", done: incomes.length > 0, action: "Answer" },
+    { key: "bills", label: "What bills have to be paid?", detail: "Add recurring bills and due days so I can protect the month before decisions.", done: bills.some(bill => bill.is_recurring && !bill.is_debt), action: "Answer" },
+    { key: "debts", label: "What debts should I include?", detail: "Add balances, minimums, APRs, and snowball settings so payoff advice is accurate.", done: bills.some(bill => bill.is_debt), action: "Answer" },
+    { key: "safety", label: "How much cushion should I protect?", detail: `Right now I protect $${settings.safety_floor.toFixed(0)} across ${settings.forecast_horizon_months} months.`, done: settings.safety_floor >= 0 && settings.forecast_horizon_months > 0, action: "Review" },
+    { key: "reconcile", label: "Can we confirm the balance matches your bank?", detail: "Reconcile once so you can trust the forecast before making decisions.", done: forecastConfidence.level === "high" || accounts.some(account => account.last_reconciled_at), action: "Answer" },
+    { key: "backup", label: "Want to save a backup before we move on?", detail: "Export a CSV backup after setup so your data has a safety net.", done: backupExported, action: "Export" },
   ];
   const setupComplete = setupSteps.filter(step => step.done).length;
+  const currentSetupStep = setupSteps.find(step => !step.done) ?? setupSteps[setupSteps.length - 1];
   const currentMonthPrefix = new Date().toISOString().slice(0, 7);
   const accountMonthDeltas = useMemo(() => {
     const deltas = new Map<string, number>();
@@ -307,6 +312,36 @@ export default function MoreScreen() {
     ]);
   };
 
+  const handleSetupStep = (key: string) => {
+    switch (key) {
+      case "account":
+        openAccount("add");
+        break;
+      case "money":
+      case "reconcile": {
+        const firstActive = accounts.find(account => account.is_active) ?? null;
+        if (firstActive) openAccount(key === "money" ? "edit" : "reconcile", firstActive);
+        else openAccount("add");
+        break;
+      }
+      case "income":
+        setEditIncome(null);
+        setIncomeModalVisible(true);
+        break;
+      case "bills":
+      case "debts":
+        router.push("/(tabs)/bills" as any);
+        break;
+      case "backup":
+        void handleExport();
+        break;
+      case "safety":
+      default:
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        break;
+    }
+  };
+
   const webTopPad = Platform.OS === "web" ? 4 : 0;
 
   return (
@@ -315,6 +350,77 @@ export default function MoreScreen() {
       contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 + webTopPad, paddingBottom: insets.bottom + 100 }]}
     >
       <Text style={[styles.pageTitle, { color: c.foreground }]}>Settings</Text>
+
+      <SLabel c={c} text="Flo Setup" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <View style={[styles.floSetupHero, { backgroundColor: c.primary + "10", borderColor: c.primary + "30" }]}>
+          <FloLogo size={54} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.floSetupTitle, { color: c.foreground }]}>Hi, I&apos;m Flo. Let&apos;s set up your money.</Text>
+            <Text style={[styles.floSetupDesc, { color: c.mutedForeground }]}>
+              I&apos;ll ask one question at a time, then FlowLedger will use your answers for forecasts and decisions.
+            </Text>
+          </View>
+        </View>
+        <View style={[styles.floQuestionCard, { backgroundColor: c.muted, borderColor: c.border }]}>
+          <Text style={[styles.floQuestionEyebrow, { color: c.primary }]}>Flo asks</Text>
+          <Text style={[styles.floQuestionText, { color: c.foreground }]}>{currentSetupStep.label}</Text>
+          <Text style={[styles.floQuestionHelp, { color: c.mutedForeground }]}>{currentSetupStep.detail}</Text>
+          <Pressable
+            onPress={() => handleSetupStep(currentSetupStep.key)}
+            style={({ pressed }) => [styles.floQuestionButton, { backgroundColor: c.primary, opacity: pressed ? 0.8 : 1 }]}
+          >
+            <Text style={[styles.floQuestionButtonText, { color: c.primaryForeground }]}>
+              {currentSetupStep.done ? "Review this with Flo" : currentSetupStep.action}
+            </Text>
+          </Pressable>
+        </View>
+        <View style={[styles.setupProgressTrack, { backgroundColor: c.muted }]}>
+          <View
+            style={[
+              styles.setupProgressFill,
+              { backgroundColor: c.primary, width: `${Math.round((setupComplete / setupSteps.length) * 100)}%` as any },
+            ]}
+          />
+        </View>
+        <Text style={[styles.setupProgressText, { color: c.mutedForeground }]}>
+          {setupComplete} of {setupSteps.length} setup steps complete
+        </Text>
+        {setupSteps.map((step, index) => (
+          <View key={step.key} style={[styles.floSetupStep, { borderTopWidth: index ? 1 : 0, borderTopColor: c.border }]}>
+            <View style={[styles.floSetupNumber, { backgroundColor: step.done ? c.success + "18" : c.muted }]}>
+              {step.done
+                ? <Feather name="check" size={15} color={c.success} />
+                : <Text style={[styles.floSetupNumberText, { color: c.mutedForeground }]}>{index + 1}</Text>
+              }
+            </View>
+            <View style={styles.floSetupBody}>
+              <Text style={[styles.dataLabel, { color: c.foreground }]}>{step.label}</Text>
+              <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{step.detail}</Text>
+            </View>
+            <Pressable
+              onPress={() => handleSetupStep(step.key)}
+              style={({ pressed }) => [
+                styles.floSetupAction,
+                {
+                  backgroundColor: step.done ? c.muted : c.primary + "18",
+                  opacity: pressed ? 0.75 : 1,
+                },
+              ]}
+            >
+              <Text style={[styles.floSetupActionText, { color: step.done ? c.mutedForeground : c.primary }]}>
+                {step.done ? "Review" : step.action}
+              </Text>
+            </Pressable>
+          </View>
+        ))}
+        <View style={[styles.priorityNote, { backgroundColor: c.primary + "12", borderRadius: 8, marginTop: 10 }]}>
+          <Feather name="message-circle" size={12} color={c.primary} />
+          <Text style={[styles.priorityNoteText, { color: c.mutedForeground }]}>
+            Once these are done, ask Flo things like “Can I afford $500?” or “Why is next week tight?” and she&apos;ll use your real setup.
+          </Text>
+        </View>
+      </View>
 
       {/* ── Appearance ── */}
       <SLabel c={c} text="Appearance" />
@@ -473,31 +579,66 @@ export default function MoreScreen() {
         </View>
       </View>
 
+      {false && <>
       <SLabel c={c} text="Setup" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        <View style={styles.setupHeader}>
-          <View style={[styles.dataIcon, { backgroundColor: c.primary + "18" }]}>
-            <Feather name="compass" size={17} color={c.primary} />
-          </View>
+        <View style={[styles.floSetupHero, { backgroundColor: c.primary + "10", borderColor: c.primary + "30" }]}>
+          <FloLogo size={54} />
           <View style={{ flex: 1 }}>
-            <Text style={[styles.accountName, { color: c.foreground }]}>Budget setup</Text>
-            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>{setupComplete} of {setupSteps.length} trust steps complete</Text>
+            <Text style={[styles.floSetupTitle, { color: c.foreground }]}>Flo setup walkthrough</Text>
+            <Text style={[styles.floSetupDesc, { color: c.mutedForeground }]}>
+              I&apos;ll help you build the pieces FlowLedger needs before it starts making money decisions.
+            </Text>
           </View>
         </View>
-        {setupSteps.map(step => (
-          <View key={step.label} style={styles.setupStep}>
-            <Feather name={step.done ? "check-circle" : "circle"} size={15} color={step.done ? c.success : c.mutedForeground} />
-            <Text style={[styles.dataDesc, { color: step.done ? c.foreground : c.mutedForeground }]}>{step.label}</Text>
+        <View style={[styles.setupProgressTrack, { backgroundColor: c.muted }]}>
+          <View
+            style={[
+              styles.setupProgressFill,
+              { backgroundColor: c.primary, width: `${Math.round((setupComplete / setupSteps.length) * 100)}%` as any },
+            ]}
+          />
+        </View>
+        <Text style={[styles.setupProgressText, { color: c.mutedForeground }]}>
+          {setupComplete} of {setupSteps.length} setup steps complete
+        </Text>
+        {setupSteps.map((step, index) => (
+          <View key={step.key} style={[styles.floSetupStep, { borderTopWidth: index ? 1 : 0, borderTopColor: c.border }]}>
+            <View style={[styles.floSetupNumber, { backgroundColor: step.done ? c.success + "18" : c.muted }]}>
+              {step.done
+                ? <Feather name="check" size={15} color={c.success} />
+                : <Text style={[styles.floSetupNumberText, { color: c.mutedForeground }]}>{index + 1}</Text>
+              }
+            </View>
+            <View style={styles.floSetupBody}>
+              <Text style={[styles.dataLabel, { color: c.foreground }]}>{step.label}</Text>
+              <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{step.detail}</Text>
+            </View>
+            <Pressable
+              onPress={() => handleSetupStep(step.key)}
+              style={({ pressed }) => [
+                styles.floSetupAction,
+                {
+                  backgroundColor: step.done ? c.muted : c.primary + "18",
+                  opacity: pressed ? 0.75 : 1,
+                },
+              ]}
+            >
+              <Text style={[styles.floSetupActionText, { color: step.done ? c.mutedForeground : c.primary }]}>
+                {step.done ? "Review" : step.action}
+              </Text>
+            </Pressable>
           </View>
         ))}
         <View style={[styles.priorityNote, { backgroundColor: c.primary + "12", borderRadius: 8, marginTop: 10 }]}>
-          <Feather name="shield" size={12} color={c.primary} />
+          <Feather name="message-circle" size={12} color={c.primary} />
           <Text style={[styles.priorityNoteText, { color: c.mutedForeground }]}>
-            Keep one active account current, review income and bills, and export a backup before major cleanup.
+            Once these are done, ask Flo things like “Can I afford $500?” or “Why is next week tight?” and she&apos;ll use your real setup.
           </Text>
         </View>
       </View>
 
+      </>}
       <SLabel c={c} text="Accounts" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View style={[styles.confidenceBox, { backgroundColor: forecastConfidence.level === "high" ? c.success + "14" : forecastConfidence.level === "medium" ? "#f59e0b18" : c.destructive + "12" }]}>
@@ -890,6 +1031,24 @@ const styles = StyleSheet.create({
   reconcileText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   setupHeader: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
   setupStep: { flexDirection: "row", alignItems: "center", gap: 9, paddingVertical: 5 },
+  floSetupHero: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 16, padding: 12, marginBottom: 12 },
+  floSetupTitle: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
+  floSetupDesc: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 3 },
+  floQuestionCard: { borderWidth: 1, borderRadius: 16, padding: 14, marginBottom: 12 },
+  floQuestionEyebrow: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 5 },
+  floQuestionText: { fontSize: 18, fontFamily: "Inter_800ExtraBold", lineHeight: 23 },
+  floQuestionHelp: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 18, marginTop: 6 },
+  floQuestionButton: { alignItems: "center", justifyContent: "center", borderRadius: 12, paddingVertical: 12, marginTop: 12 },
+  floQuestionButtonText: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
+  setupProgressTrack: { height: 6, borderRadius: 999, overflow: "hidden", marginBottom: 6 },
+  setupProgressFill: { height: 6, borderRadius: 999 },
+  setupProgressText: { fontSize: 11, fontFamily: "Inter_700Bold", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 },
+  floSetupStep: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12 },
+  floSetupNumber: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  floSetupNumberText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
+  floSetupBody: { flex: 1 },
+  floSetupAction: { minWidth: 76, alignItems: "center", justifyContent: "center", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 8 },
+  floSetupActionText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
 
   categoryBudgetLink: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 10 },
   categoryRow: { flexDirection: "row", alignItems: "center", paddingVertical: 11 },

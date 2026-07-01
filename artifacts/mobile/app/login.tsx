@@ -69,7 +69,10 @@ export default function LoginScreen() {
     if (err) {
       setError(err);
     } else {
-      router.replace("/(tabs)");
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        try { window.localStorage.setItem("flowledger_show_setup_after_login", "true"); } catch {}
+      }
+      router.replace("/(tabs)/more");
     }
   };
 

@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useBudget, type DecisionRecord } from "@/context/BudgetContext";
 import { DatePickerField } from "@/components/DatePickerField";
+import { FloLogo } from "@/components/FloLogo";
 import { useColors } from "@/hooks/useColors";
 import { askFlo, loadFloMemory, updateFloMemory, type FloFacts } from "@/lib/flo";
 import {
@@ -731,9 +732,7 @@ export default function FloScreen() {
         end={{ x: 1, y: 0 }}
         style={[styles.header, { paddingTop: Platform.OS === "web" ? 18 : insets.top + 12, borderColor: colors.border }]}
       >
-        <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-          <Text style={styles.avatarText}>F</Text>
-        </View>
+        <FloLogo size={48} />
         <View style={styles.headerText}>
           <Text style={[styles.title, { color: colors.foreground }]}>Ask Flo</Text>
           <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Decision checks, plan actions, and history</Text>
@@ -1322,8 +1321,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     gap: 12,
   },
-  avatar: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  avatarText: { color: "#fff", fontSize: 23, fontFamily: "Inter_700Bold" },
   headerText: { flex: 1 },
   title: { fontSize: 25, fontFamily: "Inter_700Bold" },
   subtitle: { fontSize: 12, marginTop: 1 },

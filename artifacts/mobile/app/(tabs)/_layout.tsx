@@ -7,6 +7,7 @@ import { Platform, StyleSheet, Text, View, useColorScheme } from "react-native";
 import { BudgetProvider, useBudget } from "@/context/BudgetContext";
 import { SaveStatusBanner } from "@/components/SaveStatusBanner";
 import { DecisionDueModal } from "@/components/DecisionDueModal";
+import { FloLogo } from "@/components/FloLogo";
 import { useColors } from "@/hooks/useColors";
 import { buildDecisionHistory } from "@/lib/decisionHistory";
 import { buildDecisionRiskAlerts } from "@/lib/decisionRisk";
@@ -126,7 +127,9 @@ function TabContent() {
               tabBarBadgeStyle: tab.name === "flo" ? { backgroundColor: colors.destructive, color: "#fff", fontSize: 10 } : undefined,
               tabBarActiveTintColor: tab.name === "flo" ? colors.primary : undefined,
               tabBarInactiveTintColor: tab.name === "flo" ? colors.primary : undefined,
-              tabBarIcon: ({ color }) => <Feather name={tab.icon} size={22} color={tab.name === "flo" ? colors.primary : color} />,
+              tabBarIcon: ({ color }) => tab.name === "flo"
+                ? <FloLogo size={24} ring={false} />
+                : <Feather name={tab.icon} size={22} color={color} />,
             }}
           />
         ))}

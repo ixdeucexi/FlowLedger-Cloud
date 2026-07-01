@@ -10,7 +10,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useCallback, useEffect, useRef } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -35,7 +35,14 @@ function AuthObserver() {
     if (!session && !inAuth) {
       router.replace("/login");
     } else if (session && (inAuth || atRoot)) {
-      router.replace("/(tabs)");
+      let showSetup = false;
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        try {
+          showSetup = window.localStorage.getItem("flowledger_show_setup_after_login") === "true";
+          if (showSetup) window.localStorage.removeItem("flowledger_show_setup_after_login");
+        } catch {}
+      }
+      router.replace(showSetup ? "/(tabs)/more" : "/(tabs)");
     }
   }, [session, loading, segments, router]);
 
