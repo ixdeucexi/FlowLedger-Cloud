@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AccountModal } from "@/components/AccountModal";
@@ -32,6 +32,7 @@ function SetupWizard() {
   const [debtModalVisible, setDebtModalVisible] = useState(false);
   const [safetyFloorText, setSafetyFloorText] = useState(String(settings.safety_floor));
   const [horizonText, setHorizonText] = useState(String(settings.forecast_horizon_months));
+  const [floConfirmation, setFloConfirmation] = useState("");
 
   const activeAccount = accounts.find(account => account.is_active) ?? null;
   const steps = useMemo(() => {
@@ -47,63 +48,63 @@ function SetupWizard() {
         done: false,
         title: "Welcome to FlowLedger",
         ask: "Let’s get started.",
-        body: "I’m Flo. I’ll walk you through the money pieces I need so FlowLedger can forecast your cash and answer decisions.",
+        body: "I’m Flo. I’ll ask a few simple questions, then I’ll use your answers to help FlowLedger forecast your cash and guide money decisions.",
         button: "Get Started",
       },
       {
         key: "account" as const,
         done: accountDone,
         title: "First, what account should I track?",
-        ask: "Tell me where your spending money lives.",
-        body: "Most people start with their main checking account. You can add savings or cash too.",
+        ask: "Where does your everyday money live?",
+        body: "Most people start with their main checking account. Once I know that account, I can anchor your plan to real money instead of guesses.",
         button: accountDone ? "Review Account" : "Add Account",
       },
       {
         key: "money" as const,
         done: moneyDone,
         title: "How much money is in it today?",
-        ask: "This becomes the starting point for your forecast.",
-        body: "Use the current balance from your bank and the date it is accurate as of.",
+        ask: "Let’s anchor your forecast.",
+        body: "What does your account show today? I’ll use that number as the starting point for every balance, bill, and decision.",
         button: moneyDone ? "Review Balance" : "Add Starting Money",
       },
       {
         key: "income" as const,
         done: incomeDone,
         title: "When does money come in?",
-        ask: "Add your paychecks or recurring deposits.",
-        body: "Weekly, biweekly, and monthly income helps me predict what is safe before payday.",
+        ask: "Now tell me when money shows up.",
+        body: "Add paychecks, side income, or recurring deposits. This helps me see what’s safe before payday and what might get tight.",
         button: incomeDone ? "Add Another Income" : "Add Income",
       },
       {
         key: "bills" as const,
         done: billsDone,
         title: "What bills have to be paid?",
-        ask: "Add recurring bills and due dates.",
-        body: "Rent, utilities, subscriptions, insurance, and transfers all shape the forecast.",
+        ask: "Next, tell me what bills usually hit your account.",
+        body: "Rent, utilities, subscriptions, insurance, and transfers all shape your forecast. I’ll use those dates to spot tight weeks before they happen.",
         button: billsDone ? "Add Another Bill" : "Add Bill",
       },
       {
         key: "debts" as const,
         done: debtsDone,
         title: "What debts should I know about?",
-        ask: "Add balances, minimums, due dates, and APRs.",
-        body: "This powers debt payoff, snowball targets, and safer extra-payment decisions.",
+        ask: "If you’re paying down debt, add it here.",
+        body: "Balances, minimums, due dates, and APRs help me show what’s safe to send extra toward without hurting the rest of your month.",
         button: debtsDone ? "Add Another Debt" : "Add Debt",
       },
       {
         key: "safety" as const,
         done: true,
         title: "How much cushion should I protect?",
-        ask: "This is the floor I try not to let your forecast cross.",
-        body: "The default is $200 over six months. You can change it now or leave it alone.",
+        ask: "Let’s choose your comfort zone.",
+        body: "This is the floor I try not to let your forecast cross. The default is $200 over six months, but you can set the cushion that feels right.",
         button: "Save Safety Settings",
       },
       {
         key: "reconcile" as const,
         done: reconcileDone,
         title: "Can we confirm your bank balance?",
-        ask: "One reconciliation makes the forecast more trustworthy.",
-        body: "Enter the current bank balance so FlowLedger and reality match before decisions.",
+        ask: "One quick check makes the plan more trustworthy.",
+        body: "Enter the balance your bank shows now. That keeps FlowLedger and reality lined up before you ask me if something is affordable.",
         button: reconcileDone ? "Review Reconciliation" : "Reconcile Account",
       },
       {
@@ -111,8 +112,8 @@ function SetupWizard() {
         done: false,
         title: "You’re ready to use Flo.",
         ask: "Now ask me before money decisions.",
-        body: "Try: “Can I afford $500?” or “Why is next week tight?” I’ll use the setup you just built.",
-        button: "Finish Setup",
+        body: "Let’s try one together. I’ll use the setup you just built to answer a real affordability question.",
+        button: "Ask Flo if I can afford $100",
       },
     ];
   }, [accounts, bills, incomes]);
@@ -122,15 +123,20 @@ function SetupWizard() {
 
   const goNext = () => setIndex(value => Math.min(steps.length - 1, value + 1));
   const goBack = () => setIndex(value => Math.max(0, value - 1));
+  const confirmAndNext = (message: string) => {
+    setFloConfirmation(message);
+    goNext();
+  };
 
   const finish = async () => {
     await updateSettings({ onboarding_completed: true });
-    router.replace("/(tabs)" as any);
+    router.replace({ pathname: "/(tabs)/flo", params: { prompt: "Can I afford $100?" } } as any);
   };
 
   const runAction = async () => {
     switch (current.key) {
       case "welcome":
+        setFloConfirmation("");
         goNext();
         return;
       case "account":
@@ -158,7 +164,7 @@ function SetupWizard() {
         setSafetyFloorText(String(floor));
         setHorizonText(String(horizon));
         await updateSettings({ safety_floor: floor, forecast_horizon_months: horizon });
-        goNext();
+        confirmAndNext(`Got it — I’ll protect a $${floor.toFixed(0)} cushion across ${horizon} month${horizon === 1 ? "" : "s"}.`);
         return;
       }
       case "reconcile":
@@ -199,6 +205,12 @@ function SetupWizard() {
             <Text style={styles.ask}>{current.ask}</Text>
             <Text style={styles.body}>{current.body}</Text>
           </View>
+          {floConfirmation ? (
+            <View style={styles.confirmation}>
+              <Feather name="check-circle" size={16} color="#22c55e" />
+              <Text style={styles.confirmationText}>{floConfirmation}</Text>
+            </View>
+          ) : null}
         </View>
 
         {current.key === "safety" && (
@@ -253,12 +265,12 @@ function SetupWizard() {
           if (selectedAccount) await updateAccount({ ...selectedAccount, ...value });
           else await addAccount({ ...value, is_active: true });
           setAccountModalVisible(false);
-          goNext();
+          confirmAndNext("Got it — I’ll use that account as part of your forecast.");
         }}
         onReconcile={async (balance, date) => {
           if (selectedAccount) await reconcileAccount(selectedAccount.id, balance, date);
           setAccountModalVisible(false);
-          goNext();
+          confirmAndNext(`Perfect — I’ll trust $${balance.toFixed(2)} as of ${date}.`);
         }}
       />
       <IncomeModal
@@ -267,7 +279,7 @@ function SetupWizard() {
         onSave={async data => {
           await addIncome(data as Omit<IncomeItem, "id">);
           setIncomeModalVisible(false);
-          goNext();
+          confirmAndNext("Nice — I’ll include that income when I check future cash flow.");
         }}
       />
       <AddBillModal
@@ -276,7 +288,7 @@ function SetupWizard() {
         onSave={async data => {
           await addBill(data as Omit<Bill, "id" | "created_at">);
           setBillModalVisible(false);
-          goNext();
+          confirmAndNext("Got it — I’ll watch that bill date when I forecast your month.");
         }}
       />
       <AddBillModal
@@ -286,7 +298,7 @@ function SetupWizard() {
         onSave={async data => {
           await addBill(data as Omit<Bill, "id" | "created_at">);
           setDebtModalVisible(false);
-          goNext();
+          confirmAndNext("Debt added — I’ll use it for payoff and extra-payment decisions.");
         }}
       />
     </LinearGradient>
@@ -313,12 +325,14 @@ const styles = StyleSheet.create({
   bubbleLabel: { color: "#22c55e", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 },
   ask: { color: "#f8fafc", fontSize: 21, lineHeight: 28, fontFamily: "Inter_800ExtraBold", textAlign: "center" },
   body: { color: "#94a3b8", fontSize: 15, lineHeight: 23, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: 12 },
+  confirmation: { alignSelf: "stretch", flexDirection: "row", alignItems: "center", gap: 9, backgroundColor: "rgba(34,197,94,0.12)", borderWidth: 1, borderColor: "rgba(34,197,94,0.28)", borderRadius: 16, padding: 12, marginTop: 14 },
+  confirmationText: { flex: 1, color: "#bbf7d0", fontSize: 13, lineHeight: 18, fontFamily: "Inter_700Bold" },
   safetyCard: { flexDirection: "row", gap: 10, marginTop: 20 },
   inputWrap: { flex: 1 },
   inputLabel: { color: "#94a3b8", fontSize: 11, fontFamily: "Inter_800ExtraBold", marginBottom: 6, textTransform: "uppercase" },
   input: { height: 52, borderRadius: 14, paddingHorizontal: 14, backgroundColor: "#111827", borderWidth: 1, borderColor: "#1e293b", color: "#f8fafc", fontSize: 17, fontFamily: "Inter_700Bold" },
   primary: { height: 58, borderRadius: 16, backgroundColor: "#22c55e", alignItems: "center", justifyContent: "center", marginTop: 30, shadowColor: "#22c55e", shadowOpacity: 0.28, shadowRadius: 18, shadowOffset: { width: 0, height: 8 } },
-  primaryText: { color: "#f8fafc", fontSize: 18, fontFamily: "Inter_800ExtraBold" },
+  primaryText: { color: "#f8fafc", fontSize: 18, fontFamily: "Inter_800ExtraBold", textAlign: "center", paddingHorizontal: 12 },
   navRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 18 },
   navText: { color: "#94a3b8", fontSize: 14, fontFamily: "Inter_700Bold" },
 });
