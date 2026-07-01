@@ -450,7 +450,7 @@ export default function MoreScreen() {
           style={({ pressed }) => [styles.setupRestartBtn, { borderColor: c.primary + "55", backgroundColor: c.primary + "12", opacity: pressed ? 0.75 : 1 }]}
         >
           <Feather name="play-circle" size={14} color={c.primary} />
-          <Text style={[styles.setupRestartText, { color: c.primary }]}>Try sample budget demo</Text>
+          <Text style={[styles.setupRestartText, { color: c.primary }]}>Start live sample tour</Text>
         </Pressable>
       </View>
 

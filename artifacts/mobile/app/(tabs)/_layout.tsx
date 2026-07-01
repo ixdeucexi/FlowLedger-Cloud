@@ -23,6 +23,58 @@ const TABS = [
   { name: "more",         title: "More",         icon: "more-horizontal" },
 ] as const;
 
+const DEMO_TOUR_KEY = "flowledger_demo_tour_step";
+const DEMO_TOUR_STEPS = [
+  {
+    route: "index",
+    title: "Dashboard",
+    path: "/(tabs)",
+    nextLabel: "Open Monthly",
+    short: "This is the quick answer page.",
+    detail: "Dashboard is where a user checks the headline: balance today, lowest forecast, bills paid, unpaid bills, debt, upcoming bills, and anything Flo thinks needs attention.",
+  },
+  {
+    route: "monthly",
+    title: "Monthly",
+    path: "/(tabs)/monthly",
+    nextLabel: "Open Bills",
+    short: "This is the calendar and plan view.",
+    detail: "Monthly shows how money moves day by day. Tap a date to see the income, bills, transactions, planned decisions, and projected balance for that day.",
+  },
+  {
+    route: "bills",
+    title: "Bills",
+    path: "/(tabs)/bills",
+    nextLabel: "Open Transactions",
+    short: "This is where obligations are set up.",
+    detail: "Bills holds recurring bills and debts. This is where a user manages due dates, minimum payments, snowball settings, bill priority, and what must be paid versus optional.",
+  },
+  {
+    route: "transactions",
+    title: "Transactions",
+    path: "/(tabs)/transactions",
+    nextLabel: "Open Flo",
+    short: "This is what actually happened.",
+    detail: "Transactions is the activity log. It shows spending, income, transfers, debt payments, and anything imported or manually added so the forecast can stay honest.",
+  },
+  {
+    route: "flo",
+    title: "Flo",
+    path: "/(tabs)/flo",
+    nextLabel: "Open Settings",
+    short: "This is the action and decision layer.",
+    detail: "Flo is where users ask money questions, create plans, preview changes, and get plain-English explanations. Flo should confirm before changing the real plan.",
+  },
+  {
+    route: "more",
+    title: "Settings",
+    path: "/(tabs)/more",
+    nextLabel: "Finish tour",
+    short: "This is the control room.",
+    detail: "Settings is where users manage accounts, setup, safety cushion, forecast horizon, imports, exports, app install help, Flo memory, and decision settings.",
+  },
+] as const;
+
 function BudgetLoadingScreen() {
   const colors = useColors();
   return (
@@ -34,6 +86,28 @@ function BudgetLoadingScreen() {
       <Text style={[styles.loadingSub, { color: colors.mutedForeground }]}>Loading your plan…</Text>
     </View>
   );
+}
+
+function readDemoTourStep() {
+  if (Platform.OS !== "web") return 0;
+  try {
+    const stored = Number(globalThis.localStorage?.getItem(DEMO_TOUR_KEY) ?? 0);
+    return Number.isFinite(stored) ? Math.max(0, Math.min(DEMO_TOUR_STEPS.length - 1, stored)) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeDemoTourStep(step: number) {
+  if (Platform.OS !== "web") return;
+  try {
+    globalThis.localStorage?.setItem(DEMO_TOUR_KEY, String(Math.max(0, Math.min(DEMO_TOUR_STEPS.length - 1, step))));
+  } catch {}
+}
+
+function routeKeyFromSegments(segments: string[]) {
+  const known = DEMO_TOUR_STEPS.find(step => segments.includes(step.route));
+  return known?.route ?? "index";
 }
 
 function demoHintForRoute(routeName: string) {
@@ -51,8 +125,20 @@ function DemoModeBanner() {
   const segments = useSegments();
   const { stopDemoMode, resetDemoMode } = useAuth();
   const [expanded, setExpanded] = React.useState(true);
-  const routeName = String(segments[segments.length - 1] ?? "index");
-  const hint = demoHintForRoute(routeName);
+  const [tourStepIndex, setTourStepIndex] = React.useState(readDemoTourStep);
+  const [showDetails, setShowDetails] = React.useState(true);
+  const routeName = routeKeyFromSegments(segments.map(String));
+  const routeStepIndex = DEMO_TOUR_STEPS.findIndex(step => step.route === routeName);
+  const activeStepIndex = routeStepIndex >= 0 ? routeStepIndex : tourStepIndex;
+  const activeStep = DEMO_TOUR_STEPS[activeStepIndex] ?? DEMO_TOUR_STEPS[0];
+  const nextStep = DEMO_TOUR_STEPS[activeStepIndex + 1];
+
+  React.useEffect(() => {
+    if (routeStepIndex < 0) return;
+    setTourStepIndex(routeStepIndex);
+    writeDemoTourStep(routeStepIndex);
+    setShowDetails(true);
+  }, [routeStepIndex]);
 
   const startRealSetup = () => {
     stopDemoMode();
@@ -61,6 +147,9 @@ function DemoModeBanner() {
 
   const resetDemo = () => {
     resetDemoMode();
+    writeDemoTourStep(0);
+    setTourStepIndex(0);
+    setShowDetails(true);
     router.replace("/(tabs)" as any);
   };
 
@@ -68,22 +157,41 @@ function DemoModeBanner() {
     router.push({ pathname: "/(tabs)/flo", params: { prompt: "Can I afford $500 on July 15?" } } as any);
   };
 
+  const openNextTourStep = () => {
+    if (!nextStep) {
+      setExpanded(false);
+      return;
+    }
+    const nextIndex = activeStepIndex + 1;
+    setTourStepIndex(nextIndex);
+    writeDemoTourStep(nextIndex);
+    setShowDetails(true);
+    router.push(nextStep.path as any);
+  };
+
   return (
     <View style={[styles.demoBanner, { borderColor: colors.primary + "55" }]}>
       <Pressable onPress={() => setExpanded(value => !value)} style={styles.demoBannerHeader}>
         <View style={styles.demoBadge}>
           <Feather name="play" size={13} color="#bae6fd" />
-          <Text style={styles.demoBadgeText}>Sample data</Text>
+          <Text style={styles.demoBadgeText}>Live demo</Text>
         </View>
-        <Text style={styles.demoBannerTitle}>{expanded ? "Demo mode is on" : "Sample budget"}</Text>
+        <Text style={styles.demoBannerTitle}>{expanded ? `${activeStep.title} · ${activeStepIndex + 1} of ${DEMO_TOUR_STEPS.length}` : "Sample budget tour"}</Text>
         <Feather name={expanded ? "chevron-up" : "chevron-down"} size={18} color="#93c5fd" />
       </Pressable>
       {expanded ? (
         <>
-          <Text style={styles.demoBannerBody}>{hint}</Text>
+          <Pressable onPress={() => setShowDetails(value => !value)} style={styles.demoExplainCard}>
+            <View style={styles.demoExplainHeader}>
+              <Feather name="info" size={15} color="#38bdf8" />
+              <Text style={styles.demoExplainTitle}>{activeStep.short}</Text>
+            </View>
+            {showDetails ? <Text style={styles.demoBannerBody}>{activeStep.detail}</Text> : null}
+            <Text style={styles.demoTapHint}>{showDetails ? "Tap to hide explanation" : "Tap to explain this page"}</Text>
+          </Pressable>
           <View style={styles.demoButtonRow}>
-            <Pressable onPress={() => setExpanded(false)} style={styles.demoSmallButton}>
-              <Text style={styles.demoSmallButtonText}>Keep exploring</Text>
+            <Pressable onPress={openNextTourStep} style={[styles.demoSmallButton, styles.demoPrimaryButton]}>
+              <Text style={styles.demoPrimaryButtonText}>{nextStep ? activeStep.nextLabel : "Finish tour"}</Text>
             </Pressable>
             <Pressable onPress={askSampleQuestion} style={styles.demoSmallButton}>
               <Text style={styles.demoSmallButtonText}>Ask Flo</Text>
@@ -292,7 +400,32 @@ const styles = StyleSheet.create({
     color: "#cbd5e1",
     fontSize: 13,
     lineHeight: 18,
+    marginTop: 8,
+  },
+  demoExplainCard: {
+    borderWidth: 1,
+    borderColor: "rgba(56,189,248,0.18)",
+    borderRadius: 14,
+    backgroundColor: "rgba(15,23,42,0.74)",
+    padding: 10,
     marginTop: 10,
+  },
+  demoExplainHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  demoExplainTitle: {
+    flex: 1,
+    color: "#f8fafc",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  demoTapHint: {
+    color: "#93c5fd",
+    fontSize: 11,
+    fontWeight: "700",
+    marginTop: 8,
   },
   demoButtonRow: {
     flexDirection: "row",
