@@ -719,12 +719,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const loadStarted = Date.now();
       try {
         const uid = user.id;
-        const dueDebtSync = await withLoadTimeout(
+        void withLoadTimeout(
           supabase.rpc("sync_due_debt_transactions", { p_as_of_date: localDateString() }),
           8000,
           "Sync scheduled debt payments",
-        );
-        if (dueDebtSync.error) throw new Error(`Sync scheduled debt payments: ${dueDebtSync.error.message}`);
+        ).then(({ error }) => {
+          if (error) console.warn("Scheduled debt sync skipped", error.message);
+        }, error => {
+          console.warn("Scheduled debt sync skipped", error);
+        });
         const results = await withLoadTimeout(
           Promise.all([
             supabase.from("bills").select("*").eq("user_id", uid),
