@@ -48,7 +48,7 @@ const DEMO_TOUR_STEPS = [
     path: "/(tabs)/bills",
     nextLabel: "Open Transactions",
     short: "This is where obligations are set up.",
-    detail: "Bills holds recurring bills and debts. This is where a user manages due dates, minimum payments, snowball settings, bill priority, and what must be paid versus optional.",
+    detail: "Bills holds recurring bills and debts. This is where a user manages due dates, minimum payments, snowball settings, and recurring obligations.",
   },
   {
     route: "transactions",
@@ -114,7 +114,7 @@ function routeKeyFromSegments(segments: string[]) {
 
 function demoHintForRoute(routeName: string) {
   if (routeName === "monthly") return "Monthly is the plan view. Tap a day to see the balance, bills, income, and decisions behind it.";
-  if (routeName === "bills") return "Bills is where obligations and debts live. Try the demo snowball and bill-priority tools.";
+  if (routeName === "bills") return "Bills is where obligations and debts live. Try the demo snowball and due-date tools.";
   if (routeName === "transactions") return "Transactions is the activity trail. These are fake entries so you can explore safely.";
   if (routeName === "flo") return "Ask Flo: “Can I afford $500 on July 15?” She will preview the decision before anything applies.";
   if (routeName === "more") return "More is where settings, setup, accounts, imports, and app controls live.";

@@ -26,22 +26,8 @@ const CAT_COLORS: Record<string, string> = {
 };
 
 type Tab    = "bills" | "debt";
-type Filter = "all" | "must" | "flexible" | "optional" | "recurring" | "one-time";
+type Filter = "all" | "recurring" | "one-time";
 type SortMode = "priority" | "balance" | "interest";
-
-function getSmartBillPriority(bill: Bill): { level: "must" | "flexible" | "optional"; label: string; icon: keyof typeof Feather.glyphMap } {
-  if (bill.smart_priority === "must") return { level: "must", label: "Must-pay", icon: "shield" };
-  if (bill.smart_priority === "flexible") return { level: "flexible", label: "Flexible", icon: "shuffle" };
-  if (bill.smart_priority === "optional") return { level: "optional", label: "Optional", icon: "sliders" };
-  const category = (bill.category || "Other").toLowerCase();
-  const name = bill.name.toLowerCase();
-  const essentialCategory = /(housing|rent|utilities|insurance|transportation|health)/i.test(category);
-  const optionalCategory = /(entertainment|shopping|other)/i.test(category);
-  const essentialName = /(mortgage|rent|electric|water|gas|utility|insurance|phone|internet|car|auto|medical|health)/i.test(name);
-  if (essentialCategory || essentialName || bill.priority <= 2) return { level: "must", label: "Must-pay", icon: "shield" };
-  if (optionalCategory || !bill.is_recurring) return { level: "optional", label: "Optional", icon: "sliders" };
-  return { level: "flexible", label: "Flexible", icon: "shuffle" };
-}
 
 export default function BillsScreen() {
   const c = useColors();
@@ -88,18 +74,11 @@ export default function BillsScreen() {
   const nonDebtBills = bills.filter(b => !b.is_debt);
   const filteredBills = nonDebtBills
     .filter(b => {
-      const smart = getSmartBillPriority(b).level;
-      if (filter === "must") return smart === "must";
-      if (filter === "flexible") return smart === "flexible";
-      if (filter === "optional") return smart === "optional";
       if (filter === "recurring") return b.is_recurring;
       if (filter === "one-time")  return !b.is_recurring;
       return true;
     })
-    .sort((a, b) => {
-      const rank = { must: 0, flexible: 1, optional: 2 };
-      return rank[getSmartBillPriority(a).level] - rank[getSmartBillPriority(b).level] || a.due_day - b.due_day;
-    });
+    .sort((a, b) => a.due_day - b.due_day || a.name.localeCompare(b.name));
 
   const totalAmount = nonDebtBills.filter(b => b.is_recurring).reduce((s, b) => s + b.amount, 0);
   const totalCount  = nonDebtBills.length;
@@ -289,14 +268,14 @@ export default function BillsScreen() {
       {activeTab === "bills" && (
         <>
           <View style={styles.filterRow}>
-            {(["all", "must", "flexible", "optional", "recurring", "one-time"] as Filter[]).map(f => (
+            {(["all", "recurring", "one-time"] as Filter[]).map(f => (
               <Pressable
                 key={f}
                 onPress={() => setFilter(f)}
                 style={[styles.filterChip, { backgroundColor: filter === f ? c.primary : c.card, borderRadius: colors.radius }]}
               >
                 <Text style={[styles.filterText, { color: filter === f ? c.primaryForeground : c.mutedForeground }]}>
-                  {f === "all" ? "All" : f === "recurring" ? "Recurring" : f === "one-time" ? "One-Time" : f === "must" ? "Must-pay" : f === "flexible" ? "Flexible" : "Optional"}
+                  {f === "all" ? "All" : f === "recurring" ? "Recurring" : "One-Time"}
                 </Text>
               </Pressable>
             ))}
@@ -311,8 +290,6 @@ export default function BillsScreen() {
             }
             renderItem={({ item }) => {
               const catColor = CAT_COLORS[item.category] ?? c.primary;
-              const smartPriority = getSmartBillPriority(item);
-              const smartColor = smartPriority.level === "must" ? c.destructive : smartPriority.level === "flexible" ? c.warning : c.primary;
               const beforePayday = paycheckPlan.billsDue.some(bill => bill.id === item.id);
               return (
                 <Pressable
@@ -327,10 +304,6 @@ export default function BillsScreen() {
                         <View style={styles.metaRow}>
                           <View style={[styles.tag, { backgroundColor: catColor + "18" }]}>
                             <Text style={[styles.tagText, { color: catColor }]}>{item.category}</Text>
-                          </View>
-                          <View style={[styles.tag, { backgroundColor: smartColor + "18" }]}>
-                            <Feather name={smartPriority.icon} size={10} color={smartColor} />
-                            <Text style={[styles.tagText, { color: smartColor }]}>{smartPriority.label}</Text>
                           </View>
                           <Text style={[styles.metaText, { color: c.mutedForeground }]}>Due day {item.due_day}</Text>
                           {beforePayday ? (
@@ -350,11 +323,6 @@ export default function BillsScreen() {
                         <Text style={[styles.amountSub, { color: c.mutedForeground }]}>{item.is_recurring ? "/month" : "one-time"}</Text>
                       </View>
                     </View>
-                    {beforePayday && smartPriority.level !== "must" ? (
-                      <Text style={[styles.smartBillNote, { color: c.mutedForeground }]}>
-                        Smart Bills: Flo can preview moving this after payday if the current date makes the paycheck window tight.
-                      </Text>
-                    ) : null}
                   </View>
                   <View style={styles.editHint}>
                     <Feather name="edit-2" size={13} color={c.mutedForeground} />
