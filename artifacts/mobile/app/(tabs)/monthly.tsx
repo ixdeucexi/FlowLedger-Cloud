@@ -35,6 +35,12 @@ function formatShortDate(date: string) {
   return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+function formatLongDate(date: string) {
+  const parsed = new Date(`${date}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return date;
+  return parsed.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+}
+
 function money(amount: number, sign: "auto" | "none" = "none") {
   const prefix = sign === "auto" && amount > 0 ? "+" : amount < 0 ? "-" : "";
   return `${prefix}$${Math.abs(amount).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
@@ -961,12 +967,154 @@ export default function MonthlyScreen() {
               year={selectedYear}
               transactions={txList}
               selectedDate={selectedDate}
-              onDayPress={(date) => setSelectedDate(prev => prev === date ? null : date)}
+              onDayPress={(date) => setSelectedDate(date)}
                 dailyBalances={dailyBalances}
               goals={goals}
               decisions={decisions}
                 safetyFloor={settings.safety_floor}
             />
+
+            <Modal
+              visible={selectedDate !== null}
+              animationType="fade"
+              transparent
+              onRequestClose={() => setSelectedDate(null)}
+            >
+              <Pressable style={styles.dayOverlayBackdrop} onPress={() => setSelectedDate(null)}>
+                <Pressable
+                  style={[styles.dayOverlayCard, { backgroundColor: c.background, borderColor: c.border }]}
+                  onPress={e => e.stopPropagation()}
+                >
+                  <View style={styles.dayOverlayHeader}>
+                    <View style={styles.dayOverlayDateBlock}>
+                      <Text style={[styles.dayOverlayBigDay, { color: c.foreground }]}>
+                        {selectedDay ?? ""}
+                      </Text>
+                      <View>
+                        <Text style={[styles.dayOverlayTitle, { color: c.foreground }]}>
+                          {selectedDate ? formatLongDate(selectedDate) : ""}
+                        </Text>
+                        <Text style={[styles.dayOverlaySub, { color: c.mutedForeground }]}>
+                          {selectedDayItemCount} item{selectedDayItemCount === 1 ? "" : "s"}
+                          {selectedForecastDay ? ` · projected close $${selectedForecastDay.balance.toFixed(2)}` : ""}
+                        </Text>
+                      </View>
+                    </View>
+                    <Pressable onPress={() => setSelectedDate(null)} hitSlop={8}>
+                      <Feather name="x" size={22} color={c.mutedForeground} />
+                    </Pressable>
+                  </View>
+
+                  <ScrollView style={styles.dayOverlayScroll} contentContainerStyle={styles.dayOverlayScrollContent}>
+                    {selectedForecastDay && selectedForecastDay.balance < settings.safety_floor ? (
+                      <View style={[styles.dayOverlayRisk, { backgroundColor: selectedForecastDay.balance < 0 ? c.destructive + "14" : c.warning + "16", borderColor: selectedForecastDay.balance < 0 ? c.destructive + "70" : c.warning + "70" }]}>
+                        <Feather name="alert-triangle" size={16} color={selectedForecastDay.balance < 0 ? c.destructive : c.warning} />
+                        <Text style={[styles.dayOverlayRiskText, { color: c.foreground }]}>
+                          Projected below your ${settings.safety_floor.toFixed(0)} safety floor.
+                        </Text>
+                      </View>
+                    ) : null}
+
+                    {selectedForecastDay ? (
+                      <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
+                        <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>How this day is calculated</Text>
+                        {selectedForecastGroups.length > 0 ? selectedForecastGroups.map(group => (
+                          <View key={`overlay-${group.key}`} style={styles.dayOverlayGroup}>
+                            <Text style={[styles.dayOverlayGroupTitle, { color: c.mutedForeground }]}>{group.title}</Text>
+                            {group.events.map(item => (
+                              <View key={`overlay-${item.event.id}`} style={styles.dayOverlayRow}>
+                                <Text numberOfLines={1} style={[styles.dayOverlayRowName, { color: c.foreground }]}>{item.label} · {item.statusLabel}</Text>
+                                <Text style={[styles.dayOverlayAmount, { color: item.event.amount >= 0 ? c.success : c.foreground }]}>{item.amountLabel}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        )) : (
+                          <Text style={[styles.dayOverlayEmptyText, { color: c.mutedForeground }]}>No forecast items for this day.</Text>
+                        )}
+                      </View>
+                    ) : null}
+
+                    {scheduledBillsForDay.length > 0 ? (
+                      <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
+                        <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Scheduled</Text>
+                        {scheduledBillsForDay.map(bill => {
+                          const amount = getAmount(bill, month, selectedYear);
+                          const paid = getPaidAmount(bill.id, month, selectedYear);
+                          const isPaid = amount > 0 && paid >= amount;
+                          return (
+                            <View key={`overlay-bill-${bill.id}`} style={styles.dayOverlayRow}>
+                              <Text numberOfLines={1} style={[styles.dayOverlayRowName, { color: c.foreground }]}>{bill.name}{isPaid ? " · paid" : ""}</Text>
+                              <Text style={[styles.dayOverlayAmount, { color: isPaid ? c.success : bill.is_debt ? c.destructive : c.warning }]}>-${amount.toFixed(2)}</Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    ) : null}
+
+                    {goalsForSelectedDay.length > 0 || plansForSelectedDay.length > 0 ? (
+                      <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
+                        <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Plans & goals</Text>
+                        {goalsForSelectedDay.map(goal => (
+                          <View key={`overlay-goal-${goal.id}`} style={styles.dayOverlayRow}>
+                            <Text numberOfLines={1} style={[styles.dayOverlayRowName, { color: c.foreground }]}>★ {goal.name}</Text>
+                            <Text style={[styles.dayOverlayAmount, { color: "#8b5cf6" }]}>-${goal.amount.toFixed(2)}</Text>
+                          </View>
+                        ))}
+                        {plansForSelectedDay.map(plan => {
+                          const amount = plan.scenario.type === "income_change" ? Math.abs(plan.scenario.amount) : -Math.abs(plan.scenario.amount);
+                          return (
+                            <Pressable key={`overlay-plan-${plan.id}`} onPress={() => openEditPlan(plan)} style={styles.dayOverlayRow}>
+                              <Text numberOfLines={1} style={[styles.dayOverlayRowName, { color: c.foreground }]}>◆ {plan.name}</Text>
+                              <Text style={[styles.dayOverlayAmount, { color: amount >= 0 ? c.success : "#3b82f6" }]}>{amount >= 0 ? "+" : "-"}${Math.abs(amount).toFixed(2)}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    ) : null}
+
+                    {displayedTxs.length > 0 ? (
+                      <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
+                        <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Transactions</Text>
+                        {displayedTxs.map(tx => (
+                          <Pressable
+                            key={`overlay-tx-${tx.id}`}
+                            onPress={() => { setEditTx(tx); setTxModalVisible(true); }}
+                            style={styles.dayOverlayRow}
+                          >
+                            <Text numberOfLines={1} style={[styles.dayOverlayRowName, { color: c.foreground }]}>{tx.note || tx.category}</Text>
+                            <Text style={[styles.dayOverlayAmount, { color: tx.amount > 0 ? c.success : c.destructive }]}>
+                              {tx.amount > 0 ? "+" : ""}{tx.amount.toFixed(2)}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    ) : null}
+
+                    {selectedDayItemCount === 0 ? (
+                      <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
+                        <Text style={[styles.dayOverlayEmptyTitle, { color: c.foreground }]}>No activity</Text>
+                        <Text style={[styles.dayOverlayEmptyText, { color: c.mutedForeground }]}>Add a transaction or plan for this day.</Text>
+                      </View>
+                    ) : null}
+                  </ScrollView>
+
+                  <View style={styles.dayOverlayActions}>
+                    <Pressable
+                      onPress={() => { setEditTx(null); setTxModalVisible(true); }}
+                      style={({ pressed }) => [styles.dayOverlayAddPill, { borderColor: c.foreground, opacity: pressed ? 0.8 : 1 }]}
+                    >
+                      <Text style={[styles.dayOverlayAddText, { color: c.foreground }]}>Add on {selectedDate ? formatShortDate(selectedDate) : "date"}</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => { setEditTx(null); setTxModalVisible(true); }}
+                      style={({ pressed }) => [styles.dayOverlayFab, { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 }]}
+                    >
+                      <Feather name="plus" size={24} color={c.primaryForeground} />
+                    </Pressable>
+                  </View>
+                </Pressable>
+              </Pressable>
+            </Modal>
 
             {!selectedDate && (
               <View style={[styles.selectDateCard, { backgroundColor: c.card, borderColor: c.border }]}>
@@ -1583,6 +1731,43 @@ const styles = StyleSheet.create({
   forecastSourceRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 5 },
   forecastSourceName: { flex: 1, fontSize: 11, fontFamily: "Inter_400Regular" },
   forecastSourceAmount: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  dayOverlayBackdrop: { flex: 1, justifyContent: "center", padding: 20, backgroundColor: "rgba(0,0,0,0.48)" },
+  dayOverlayCard: {
+    width: "100%",
+    maxWidth: 560,
+    alignSelf: "center",
+    borderWidth: 1,
+    borderRadius: 28,
+    padding: 18,
+    maxHeight: "82%",
+    shadowColor: "#000",
+    shadowOpacity: 0.35,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 12,
+  },
+  dayOverlayHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 14 },
+  dayOverlayDateBlock: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
+  dayOverlayBigDay: { fontSize: 34, fontFamily: "Inter_700Bold", lineHeight: 40 },
+  dayOverlayTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
+  dayOverlaySub: { fontSize: 12, fontFamily: "Inter_500Medium", marginTop: 2 },
+  dayOverlayScroll: { maxHeight: 470 },
+  dayOverlayScrollContent: { gap: 10, paddingBottom: 8 },
+  dayOverlayRisk: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 16, padding: 12 },
+  dayOverlayRiskText: { flex: 1, fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  dayOverlaySection: { borderWidth: 1, borderRadius: 18, padding: 12, gap: 8 },
+  dayOverlaySectionTitle: { fontSize: 14, fontFamily: "Inter_700Bold", marginBottom: 2 },
+  dayOverlayGroup: { gap: 5 },
+  dayOverlayGroupTitle: { fontSize: 11, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.6 },
+  dayOverlayRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: 30 },
+  dayOverlayRowName: { flex: 1, fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  dayOverlayAmount: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  dayOverlayEmptyTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  dayOverlayEmptyText: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  dayOverlayActions: { flexDirection: "row", alignItems: "center", gap: 12, paddingTop: 14 },
+  dayOverlayAddPill: { flex: 1, minHeight: 50, borderWidth: 1.5, borderRadius: 25, alignItems: "center", justifyContent: "center", paddingHorizontal: 16 },
+  dayOverlayAddText: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  dayOverlayFab: { width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
   txListTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   sectionLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.8, marginHorizontal: 16, marginTop: 10, marginBottom: 4 },
   txRow: { flexDirection: "row", alignItems: "center", marginBottom: 7, overflow: "hidden" },
