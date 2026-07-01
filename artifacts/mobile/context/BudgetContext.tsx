@@ -305,6 +305,18 @@ function toAccountSnapshot(account: Account): AccountSnapshot {
   };
 }
 
+function accountAnchorFromAccounts(accounts: Account[]) {
+  const active = accounts.filter(account => account.is_active);
+  if (!active.length) return null;
+  const balance = totalForecastBalance(active.map(toAccountSnapshot));
+  const date = active
+    .map(account => account.balance_as_of)
+    .filter(Boolean)
+    .sort()
+    .at(-1) ?? localDateString();
+  return { balance, date };
+}
+
 const DEFAULT_CATEGORIES = [
   "Housing", "Utilities", "Insurance", "Transportation", "Food",
   "Entertainment", "Health", "Education", "Savings", "Debt",
@@ -775,22 +787,37 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           payment_date: ep.payment_date ?? undefined,
           sources: ep.sources ?? [{ type: "manual", amount: Number(ep.amount) }],
         })));
-        setAccounts((aData ?? []).filter((a: any) => a.account_type !== "credit_card").map((a: any) => ({
+        const loadedAccounts = (aData ?? []).filter((a: any) => a.account_type !== "credit_card").map((a: any) => ({
           ...a,
           current_balance: Number(a.current_balance),
           last_reconciled_at: a.last_reconciled_at ?? undefined,
           is_active: a.is_active !== false,
-        })));
+        }));
+        setAccounts(loadedAccounts);
         setDecisions((dData ?? []).map((d: any) => ({ ...d, calendar_date: d.calendar_date ?? undefined, applied_change: d.applied_change ?? undefined })));
         if (sData) {
+          const accountAnchor = accountAnchorFromAccounts(loadedAccounts);
+          const nextStartingBalance = accountAnchor ? accountAnchor.balance : Number(sData.starting_balance);
+          const nextStartingBalanceDate = accountAnchor ? accountAnchor.date : (sData.starting_balance_date ?? undefined);
           setSettings({
             paymentMethod:        sData.payment_method as Settings["paymentMethod"],
-            starting_balance:     Number(sData.starting_balance),
-            starting_balance_date: sData.starting_balance_date ?? undefined,
+            starting_balance:     nextStartingBalance,
+            starting_balance_date: nextStartingBalanceDate,
             safety_floor:         Number(sData.safety_floor ?? 200),
             forecast_horizon_months: Math.min(24, Math.max(1, Number(sData.forecast_horizon_months ?? 6))),
             onboarding_completed: Boolean(sData.onboarding_completed),
           });
+          if (accountAnchor && (Number(sData.starting_balance) !== accountAnchor.balance || sData.starting_balance_date !== accountAnchor.date)) {
+            void supabase.from("settings").upsert({
+              user_id: uid,
+              payment_method: sData.payment_method,
+              starting_balance: accountAnchor.balance,
+              starting_balance_date: accountAnchor.date,
+              safety_floor: Number(sData.safety_floor ?? 200),
+              forecast_horizon_months: Math.min(24, Math.max(1, Number(sData.forecast_horizon_months ?? 6))),
+              onboarding_completed: Boolean(sData.onboarding_completed),
+            }).then(undefined, () => undefined);
+          }
         }
         const cats = (cData ?? []).map((c: any) => c.name as string);
         setCategories(cats.length > 0 ? cats : DEFAULT_CATEGORIES);
@@ -811,36 +838,52 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!user || demoMode) return;
     const refreshAccountsAndSettings = async () => {
       const uid = user.id;
+      let loadedAccounts: Account[] | null = null;
       const [accountResult, settingsResult] = await Promise.all([
         supabase.from("accounts").select("*").eq("user_id", uid).order("created_at"),
         supabase.from("settings").select("*").eq("user_id", uid).maybeSingle(),
       ]);
       if (!accountResult.error) {
-        setAccounts((accountResult.data ?? []).filter((a: any) => a.account_type !== "credit_card").map((a: any) => ({
+        loadedAccounts = (accountResult.data ?? []).filter((a: any) => a.account_type !== "credit_card").map((a: any) => ({
           ...a,
           current_balance: Number(a.current_balance),
           last_reconciled_at: a.last_reconciled_at ?? undefined,
           is_active: a.is_active !== false,
-        })));
+        }));
+        setAccounts(loadedAccounts);
       }
       if (!settingsResult.error && settingsResult.data) {
         const sData = settingsResult.data;
+        const accountAnchor = accountAnchorFromAccounts(loadedAccounts ?? accounts);
+        const nextStartingBalance = accountAnchor ? accountAnchor.balance : Number(sData.starting_balance);
+        const nextStartingBalanceDate = accountAnchor ? accountAnchor.date : (sData.starting_balance_date ?? undefined);
         setSettings(prev => ({
           ...prev,
           paymentMethod:        sData.payment_method as Settings["paymentMethod"],
-          starting_balance:     Number(sData.starting_balance),
-          starting_balance_date: sData.starting_balance_date ?? undefined,
+          starting_balance:     nextStartingBalance,
+          starting_balance_date: nextStartingBalanceDate,
           safety_floor:         Number(sData.safety_floor ?? 200),
           forecast_horizon_months: Math.min(24, Math.max(1, Number(sData.forecast_horizon_months ?? 6))),
           onboarding_completed: Boolean(sData.onboarding_completed),
         }));
+        if (accountAnchor && (Number(sData.starting_balance) !== accountAnchor.balance || sData.starting_balance_date !== accountAnchor.date)) {
+          void supabase.from("settings").upsert({
+            user_id: uid,
+            payment_method: sData.payment_method,
+            starting_balance: accountAnchor.balance,
+            starting_balance_date: accountAnchor.date,
+            safety_floor: Number(sData.safety_floor ?? 200),
+            forecast_horizon_months: Math.min(24, Math.max(1, Number(sData.forecast_horizon_months ?? 6))),
+            onboarding_completed: Boolean(sData.onboarding_completed),
+          }).then(undefined, () => undefined);
+        }
       }
     };
     const subscription = AppState.addEventListener("change", state => {
       if (state === "active") void refreshAccountsAndSettings();
     });
     return () => subscription.remove();
-  }, [user, demoMode]);
+  }, [user, demoMode, accounts]);
 
   // ─── Bills ────────────────────────────────────────────────────────────────────
 
