@@ -32,6 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
     if (demoMode) {
       const demoUser = {
         id: DEV_DEMO_USER_ID,
@@ -53,8 +54,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
       return;
     }
-    supabase.auth.getSession().then(({ data }) => {
+    const finishInitialAuth = async () => {
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get("code");
+        const hasOAuthTokens = window.location.hash.includes("access_token=");
+
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          const cleanUrl = `${window.location.origin}${window.location.pathname}`;
+          window.history.replaceState({}, document.title, cleanUrl);
+          if (error) console.warn("Google sign-in callback failed", error.message);
+        } else if (hasOAuthTokens) {
+          const cleanUrl = `${window.location.origin}${window.location.pathname}`;
+          window.history.replaceState({}, document.title, cleanUrl);
+        }
+      }
+
+      const { data } = await supabase.auth.getSession();
+      if (!mounted) return;
       setSession(data.session);
+      setLoading(false);
+    };
+
+    finishInitialAuth().catch(error => {
+      console.warn("Initial auth check failed", error);
+      if (!mounted) return;
+      setSession(null);
       setLoading(false);
     });
 
@@ -62,7 +88,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(s);
     });
 
-    return () => listener.subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
   }, [demoMode]);
 
   const signIn = async (email: string, password: string): Promise<string | null> => {
