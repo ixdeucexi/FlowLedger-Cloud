@@ -1,9 +1,10 @@
 import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { Tabs } from "expo-router";
+import { Tabs, useRouter, useSegments } from "expo-router";
 import React from "react";
-import { Platform, StyleSheet, Text, View, useColorScheme } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
 
+import { useAuth } from "@/context/AuthContext";
 import { BudgetProvider, useBudget } from "@/context/BudgetContext";
 import { SaveStatusBanner } from "@/components/SaveStatusBanner";
 import { DecisionDueModal } from "@/components/DecisionDueModal";
@@ -35,9 +36,76 @@ function BudgetLoadingScreen() {
   );
 }
 
+function demoHintForRoute(routeName: string) {
+  if (routeName === "monthly") return "Monthly is the plan view. Tap a day to see the balance, bills, income, and decisions behind it.";
+  if (routeName === "bills") return "Bills is where obligations and debts live. Try the demo snowball and bill-priority tools.";
+  if (routeName === "transactions") return "Transactions is the activity trail. These are fake entries so you can explore safely.";
+  if (routeName === "flo") return "Ask Flo: “Can I afford $500 on July 15?” She will preview the decision before anything applies.";
+  if (routeName === "more") return "More is where settings, setup, accounts, imports, and app controls live.";
+  return "Dashboard shows the story at a glance: balance, lowest forecast, bills, debt, and what needs attention.";
+}
+
+function DemoModeBanner() {
+  const colors = useColors();
+  const router = useRouter();
+  const segments = useSegments();
+  const { stopDemoMode, resetDemoMode } = useAuth();
+  const [expanded, setExpanded] = React.useState(true);
+  const routeName = String(segments[segments.length - 1] ?? "index");
+  const hint = demoHintForRoute(routeName);
+
+  const startRealSetup = () => {
+    stopDemoMode();
+    router.replace("/setup" as any);
+  };
+
+  const resetDemo = () => {
+    resetDemoMode();
+    router.replace("/(tabs)" as any);
+  };
+
+  const askSampleQuestion = () => {
+    router.push({ pathname: "/(tabs)/flo", params: { prompt: "Can I afford $500 on July 15?" } } as any);
+  };
+
+  return (
+    <View style={[styles.demoBanner, { borderColor: colors.primary + "55" }]}>
+      <Pressable onPress={() => setExpanded(value => !value)} style={styles.demoBannerHeader}>
+        <View style={styles.demoBadge}>
+          <Feather name="play" size={13} color="#bae6fd" />
+          <Text style={styles.demoBadgeText}>Sample data</Text>
+        </View>
+        <Text style={styles.demoBannerTitle}>{expanded ? "Demo mode is on" : "Sample budget"}</Text>
+        <Feather name={expanded ? "chevron-up" : "chevron-down"} size={18} color="#93c5fd" />
+      </Pressable>
+      {expanded ? (
+        <>
+          <Text style={styles.demoBannerBody}>{hint}</Text>
+          <View style={styles.demoButtonRow}>
+            <Pressable onPress={() => setExpanded(false)} style={styles.demoSmallButton}>
+              <Text style={styles.demoSmallButtonText}>Keep exploring</Text>
+            </Pressable>
+            <Pressable onPress={askSampleQuestion} style={styles.demoSmallButton}>
+              <Text style={styles.demoSmallButtonText}>Ask Flo</Text>
+            </Pressable>
+          </View>
+          <View style={styles.demoButtonRow}>
+            <Pressable onPress={resetDemo} style={styles.demoSmallButton}>
+              <Text style={styles.demoSmallButtonText}>Reset demo</Text>
+            </Pressable>
+            <Pressable onPress={startRealSetup} style={[styles.demoSmallButton, styles.demoPrimaryButton]}>
+              <Text style={styles.demoPrimaryButtonText}>Start my real setup</Text>
+            </Pressable>
+          </View>
+        </>
+      ) : null}
+    </View>
+  );
+}
+
 function TabContent() {
   const colors = useColors();
-  const { loading, decisions, getDailyBalances, settings } = useBudget();
+  const { loading, demoMode, decisions, getDailyBalances, settings } = useBudget();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const isIOS = Platform.OS === "ios";
@@ -135,6 +203,7 @@ function TabContent() {
         ))}
         <Tabs.Screen name="category-budget" options={{ href: null }} />
       </Tabs>
+      {demoMode ? <DemoModeBanner /> : null}
       <SaveStatusBanner />
       <DecisionDueModal />
     </>
@@ -178,5 +247,83 @@ const styles = StyleSheet.create({
   loadingSub: {
     fontSize: 14,
     marginTop: 4,
+  },
+  demoBanner: {
+    position: "absolute",
+    top: Platform.OS === "ios" ? 54 : 14,
+    left: 14,
+    right: 14,
+    zIndex: 80,
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 12,
+    backgroundColor: "rgba(15,23,42,0.96)",
+    shadowColor: "#2563eb",
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  demoBannerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  demoBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    backgroundColor: "rgba(37,99,235,0.22)",
+  },
+  demoBadgeText: {
+    color: "#bfdbfe",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  demoBannerTitle: {
+    flex: 1,
+    color: "#f8fafc",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  demoBannerBody: {
+    color: "#cbd5e1",
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 10,
+  },
+  demoButtonRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+  },
+  demoSmallButton: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+    backgroundColor: "rgba(30,41,59,0.9)",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.18)",
+  },
+  demoSmallButtonText: {
+    color: "#dbeafe",
+    fontSize: 12,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  demoPrimaryButton: {
+    backgroundColor: "#2563eb",
+    borderColor: "#60a5fa",
+  },
+  demoPrimaryButtonText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "800",
+    textAlign: "center",
   },
 });

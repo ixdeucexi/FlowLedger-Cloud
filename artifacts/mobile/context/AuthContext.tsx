@@ -2,7 +2,7 @@ import { Session, User } from "@supabase/supabase-js";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { AppState, Platform } from "react-native";
 
-import { DEV_DEMO_USER_ID, disableDevDemoMode, isDevDemoMode } from "@/lib/demoMode";
+import { DEV_DEMO_USER_ID, disableDevDemoMode, enableDevDemoMode, isDevDemoMode } from "@/lib/demoMode";
 import { supabase } from "@/lib/supabase";
 
 function friendlyAuthError(message?: string | null): string | null {
@@ -22,6 +22,10 @@ interface AuthContextType {
   signUp:   (email: string, password: string) => Promise<string | null>;
   signInWithGoogle: () => Promise<string | null>;
   signOut:  () => Promise<void>;
+  demoMode: boolean;
+  startDemoMode: () => void;
+  stopDemoMode: () => void;
+  resetDemoMode: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -174,8 +178,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   };
 
+  const startDemoMode = () => {
+    enableDevDemoMode();
+    setDemoMode(true);
+  };
+
+  const stopDemoMode = () => {
+    disableDevDemoMode();
+    setSession(null);
+    setDemoMode(false);
+    setLoading(true);
+  };
+
+  const resetDemoMode = () => {
+    enableDevDemoMode();
+    setSession(null);
+    setDemoMode(false);
+    setLoading(true);
+    setTimeout(() => setDemoMode(true), 0);
+  };
+
   return (
-    <AuthContext.Provider value={{ session, user: session?.user ?? null, loading, signIn, signUp, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ session, user: session?.user ?? null, loading, signIn, signUp, signInWithGoogle, signOut, demoMode, startDemoMode, stopDemoMode, resetDemoMode }}>
       {children}
     </AuthContext.Provider>
   );

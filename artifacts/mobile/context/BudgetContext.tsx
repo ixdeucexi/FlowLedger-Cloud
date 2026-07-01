@@ -212,6 +212,7 @@ interface BudgetContextType {
   decisions: DecisionRecord[];
   forecastConfidence: ForecastConfidence;
   loading: boolean;
+  demoMode: boolean;
   selectedYear: number;
   setSelectedYear: (y: number) => void;
   dashboardFilter: DashboardFilter;
@@ -2401,7 +2402,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <BudgetContext.Provider value={{
-      bills, overrides, billDateMoves, transactions, incomes, goals, extraPayments, categories, settings, accounts, decisions, forecastConfidence, loading,
+      bills, overrides, billDateMoves, transactions, incomes, goals, extraPayments, categories, settings, accounts, decisions, forecastConfidence, loading, demoMode,
       saveStatus, saveError, retryLastSave, clearSaveError,
       dashboardFilter, setDashboardFilter,
       addBill, updateBill, deleteBill, getBillById,
