@@ -413,6 +413,57 @@ export default function FloScreen() {
     ].slice(0, 8);
   }, [categoryPlan, decisionHistory, decisionRiskAlerts, decisionHubSettings.categoryDecisionAlertsEnabled, decisionHubSettings.paycheckPlanningEnabled]);
 
+  const buildCalendarDayReply = (prompt: string) => {
+    const date = prompt.match(/\b(20\d{2}-\d{2}-\d{2})\b/)?.[1];
+    if (!date || !/\b(calendar|day|date|know|balance)\b/i.test(prompt)) return null;
+    const [year, monthNumber, day] = date.split("-").map(Number);
+    if (!year || !monthNumber || !day) return null;
+    const month = monthNumber - 1;
+    const dayBalance = getDailyBalances(month, year).find(item => item.day === day)?.balance ?? null;
+    const incomesDue = getIncomeOccurrencesInMonth(month, year)
+      .filter(({ days }) => days.includes(day))
+      .map(({ income, effectiveAmount }) => `${income.name} +${formatMoney(effectiveAmount)}`);
+    const billsDue: string[] = [];
+    getMonthlyBills(month, year).forEach(bill => {
+      const occurrences = getBillOccurrencesInMonth(bill, month, year);
+      if (!occurrences.includes(day)) return;
+      const monthlyTotal = getBillMonthlyTotal(bill, month, year);
+      const perOccurrence = occurrences.length ? monthlyTotal / occurrences.length : monthlyTotal;
+      let paidRemaining = getPaidAmount(bill.id, month, year);
+      occurrences.forEach(occurrenceDay => {
+        const appliedPaid = Math.min(perOccurrence, Math.max(0, paidRemaining));
+        paidRemaining = Math.max(0, paidRemaining - perOccurrence);
+        if (occurrenceDay === day) {
+          const left = Math.max(0, perOccurrence - appliedPaid);
+          billsDue.push(`${bill.name} ${left > 0.005 ? `${formatMoney(left)} left` : "paid"}`);
+        }
+      });
+    });
+    const dayTransactions = transactions
+      .filter(transaction => transaction.date === date)
+      .map(transaction => `${transaction.note?.trim() || transaction.category || "Transaction"} ${formatSignedMoney(transaction.amount)}`);
+    const dayPlans = decisions
+      .filter(decision => (decision.status === "planned" || decision.status === "calendar") && (decision.calendar_date || decision.scenario.date) === date)
+      .map(decision => `${decision.name} ${formatMoney(decision.scenario.amount)}`);
+    const parts = [
+      `For ${formatDisplayDate(date)}, your projected close is ${dayBalance === null ? "not available yet" : formatMoney(dayBalance)}.`,
+    ];
+    if (incomesDue.length) parts.push(`Income: ${incomesDue.join(", ")}.`);
+    if (billsDue.length) parts.push(`Bills due: ${billsDue.join(", ")}.`);
+    if (dayTransactions.length) parts.push(`Transactions: ${dayTransactions.join(", ")}.`);
+    if (dayPlans.length) parts.push(`Planned decisions: ${dayPlans.join(", ")}.`);
+    if (!incomesDue.length && !billsDue.length && !dayTransactions.length && !dayPlans.length) {
+      parts.push("I don't see any dated items on that day yet.");
+    }
+    if (dayBalance !== null) {
+      const cushion = dayBalance - settings.safety_floor;
+      parts.push(cushion >= 0
+        ? `That leaves ${formatMoney(cushion)} above your safety floor.`
+        : `That is ${formatMoney(Math.abs(cushion))} below your safety floor, so this day needs attention.`);
+    }
+    return parts.join(" ");
+  };
+
   const send = async (text = input) => {
     const clean = text.trim();
     if (!clean || chat.sending) return;
@@ -420,7 +471,7 @@ export default function FloScreen() {
     dispatch({ type: "submit", id: `u-${Date.now()}`, text: clean });
     let reply = FLO_CONNECTION_ERROR_MESSAGE;
     try {
-      reply = await askFlo(clean, facts, summary, baseline);
+      reply = buildCalendarDayReply(clean) ?? await askFlo(clean, facts, summary, baseline);
     } catch {
       reply = FLO_CONNECTION_ERROR_MESSAGE;
     }
@@ -1204,6 +1255,15 @@ function formatDisplayDate(date: string): string {
   const parsed = new Date(`${date}T00:00:00Z`);
   if (Number.isNaN(parsed.getTime())) return date;
   return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function formatMoney(amount: number): string {
+  return `$${Math.abs(amount).toFixed(2)}`;
+}
+
+function formatSignedMoney(amount: number): string {
+  const sign = amount < 0 ? "-" : "+";
+  return `${sign}${formatMoney(amount)}`;
 }
 
 function HistoryStat({ label, value, color }: { label: string; value: number; color: string }) {

@@ -1089,7 +1089,7 @@ export default function MonthlyScreen() {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                         router.push({
                           pathname: "/(tabs)/flo",
-                          params: { prompt: `Look at ${formatLongDate(selectedDate)}. What should I know about this day and my balance?` },
+                          params: { prompt: `What should I know about ${formatLongDate(selectedDate)}? (${selectedDate})` },
                         } as never);
                         setSelectedDate(null);
                       }}
@@ -1097,12 +1097,6 @@ export default function MonthlyScreen() {
                     >
                       <Feather name="message-circle" size={16} color={c.primary} />
                       <Text style={[styles.dayOverlayAskText, { color: c.primary }]}>Ask Flo</Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => openAddTransaction(selectedDate)}
-                      style={({ pressed }) => [styles.dayOverlayAddPill, { borderColor: c.foreground, opacity: pressed ? 0.8 : 1 }]}
-                    >
-                      <Text style={[styles.dayOverlayAddText, { color: c.foreground }]}>Add on {selectedDate ? formatShortDate(selectedDate) : "date"}</Text>
                     </Pressable>
                     <Pressable
                       onPress={() => openAddTransaction(selectedDate)}
@@ -1531,10 +1525,8 @@ const styles = StyleSheet.create({
   dayOverlayEmptyTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
   dayOverlayEmptyText: { fontSize: 12, fontFamily: "Inter_400Regular" },
   dayOverlayActions: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 14 },
-  dayOverlayAskPill: { minHeight: 50, borderWidth: 1, borderRadius: 25, alignItems: "center", justifyContent: "center", paddingHorizontal: 14, flexDirection: "row", gap: 6 },
+  dayOverlayAskPill: { flex: 1, minHeight: 50, borderWidth: 1, borderRadius: 25, alignItems: "center", justifyContent: "center", paddingHorizontal: 14, flexDirection: "row", gap: 6 },
   dayOverlayAskText: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
-  dayOverlayAddPill: { flex: 1, minHeight: 50, borderWidth: 1.5, borderRadius: 25, alignItems: "center", justifyContent: "center", paddingHorizontal: 16 },
-  dayOverlayAddText: { fontSize: 14, fontFamily: "Inter_700Bold" },
   dayOverlayFab: { width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
   txListTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   sectionLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.8, marginHorizontal: 16, marginTop: 10, marginBottom: 4 },
