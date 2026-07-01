@@ -7,16 +7,18 @@ import { scenarioDates } from "@/lib/decisions";
 const DAY_NAMES = ["S", "M", "T", "W", "T", "F", "S"];
 
 const CALENDAR = {
-  surface: "#ffffff",
-  line: "#d1d5db",
-  text: "#111827",
-  muted: "#6b7280",
-  faded: "#9ca3af",
-  selected: "#e5e7eb",
-  today: "#111827",
-  green: "#059669",
-  amber: "#d97706",
-  red: "#dc2626",
+  surface: "#050816",
+  cell: "#080d1f",
+  selectedCell: "#111827",
+  line: "#1f2937",
+  text: "#f8fafc",
+  muted: "#94a3b8",
+  faded: "#64748b",
+  selected: "#334155",
+  today: "#2563eb",
+  green: "#4ade80",
+  amber: "#fbbf24",
+  red: "#fb7185",
 };
 
 type ChipKind = "income" | "bill" | "expense" | "goal" | "plan" | "risk";
@@ -40,12 +42,12 @@ function fmt(n: number) {
 }
 
 function chipPalette(kind: ChipKind) {
-  if (kind === "income") return { bg: "#d1fae5", border: "#10b981", text: "#064e3b" };
-  if (kind === "bill") return { bg: "#fef3c7", border: "#f59e0b", text: "#78350f" };
-  if (kind === "goal") return { bg: "#ede9fe", border: "#8b5cf6", text: "#4c1d95" };
-  if (kind === "plan") return { bg: "#dbeafe", border: "#3b82f6", text: "#1e3a8a" };
-  if (kind === "risk") return { bg: "#fee2e2", border: "#ef4444", text: "#7f1d1d" };
-  return { bg: "#fce7f3", border: "#ec4899", text: "#831843" };
+  if (kind === "income") return { bg: "#064e3b", border: "#34d399", text: "#d1fae5" };
+  if (kind === "bill") return { bg: "#451a03", border: "#f59e0b", text: "#fef3c7" };
+  if (kind === "goal") return { bg: "#312e81", border: "#a78bfa", text: "#ede9fe" };
+  if (kind === "plan") return { bg: "#1e3a8a", border: "#60a5fa", text: "#dbeafe" };
+  if (kind === "risk") return { bg: "#7f1d1d", border: "#fb7185", text: "#fee2e2" };
+  return { bg: "#831843", border: "#f472b6", text: "#fce7f3" };
 }
 
 export function CalendarView({
@@ -125,6 +127,9 @@ export function CalendarView({
           const isSelected = ds === selectedDate;
           const db = balanceByDay[day];
           const dayTxs = txByDay[day] ?? [];
+          const billEvents = (db?.events ?? [])
+            .filter(event => event.amount < 0 && (event.sourceType === "bill" || event.kind === "bill"))
+            .slice(0, 3);
           const calendarGoals = [...(db?.goalExpenses ?? [])];
           (goalsByDay[day] ?? []).forEach(goal => {
             if (!calendarGoals.some(existing => existing.id === goal.id)) calendarGoals.push(goal);
@@ -136,7 +141,8 @@ export function CalendarView({
 
           if (db && db.scheduledIncome > 0) chips.push({ label: "Payday", kind: "income" });
           dayTxs.filter(tx => tx.amount > 0).slice(0, 1).forEach(tx => chips.push({ label: `${tx.note || tx.category} +$${fmt(tx.amount)}`, kind: "income" }));
-          if (db && db.bills > 0) chips.push({ label: `Bills $${fmt(db.bills)}`, kind: "bill" });
+          if (billEvents.length > 0) billEvents.forEach(event => chips.push({ label: event.name || `Bill $${fmt(Math.abs(event.amount))}`, kind: "bill" }));
+          else if (db && db.bills > 0) chips.push({ label: `Bills $${fmt(db.bills)}`, kind: "bill" });
           dayTxs.filter(tx => tx.amount < 0).slice(0, 2).forEach(tx => chips.push({ label: `${tx.note || tx.category} -$${fmt(tx.amount)}`, kind: "expense" }));
           calendarGoals.slice(0, 2).forEach(goal => chips.push({ label: goal.name, kind: "goal" }));
           if (decisionAmount > 0) chips.push({ label: `Plan $${fmt(decisionAmount)}`, kind: "plan" });
@@ -214,9 +220,9 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
     borderTopWidth: 1,
     borderTopColor: CALENDAR.line,
-    backgroundColor: CALENDAR.surface,
+    backgroundColor: CALENDAR.cell,
   },
-  selectedCell: { backgroundColor: "#f9fafb", borderColor: CALENDAR.selected, borderWidth: 1, borderRadius: 12 },
+  selectedCell: { backgroundColor: CALENDAR.selectedCell, borderColor: CALENDAR.selected, borderWidth: 1, borderRadius: 12 },
   emptyCell: { opacity: 0.35 },
   dayTopRow: { alignItems: "center", gap: 2 },
   todayCircle: { minWidth: 22, height: 22, borderRadius: 7, alignItems: "center", justifyContent: "center", paddingHorizontal: 6, backgroundColor: CALENDAR.today },
