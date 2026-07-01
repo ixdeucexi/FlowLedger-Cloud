@@ -31,7 +31,7 @@ interface Props {
 
 export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx, defaultDate }: Props) {
   const c = useColors();
-  const { categories, accounts, bills } = useBudget();
+  const { categories, accounts, bills, transactions } = useBudget();
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Other");
   const [note, setNote] = useState("");
@@ -42,6 +42,9 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
   const [transferToAccountId, setTransferToAccountId] = useState<string | undefined>();
   const [linkedBillId, setLinkedBillId] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
+  const transferMate = editTx?.transfer_group_id
+    ? transactions.find(transaction => transaction.transfer_group_id === editTx.transfer_group_id && transaction.id !== editTx.id)
+    : undefined;
   const activeDebts = bills
     .filter(bill => bill.is_debt && Number(bill.balance) > 0)
     .slice()
@@ -56,9 +59,9 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
       setNote(editTx.note);
       setDate(editTx.date);
       setIsExpense(editTx.amount < 0);
-      setIsTransfer(false);
-      setAccountId(editTx.account_id);
-      setTransferToAccountId(undefined);
+      setIsTransfer(Boolean(editTx.transfer_group_id));
+      setAccountId(editTx.amount < 0 ? editTx.account_id : transferMate?.account_id);
+      setTransferToAccountId(editTx.amount < 0 ? transferMate?.account_id : editTx.account_id);
       setLinkedBillId(editTx.linked_bill_id);
     } else {
       const init = defaultDate ?? new Date().toISOString().split("T")[0];
@@ -72,7 +75,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
       setTransferToAccountId(accounts.filter(account => account.is_active)[1]?.id);
       setLinkedBillId(undefined);
     }
-  }, [editTx, visible, defaultDate, accounts]);
+  }, [editTx, visible, defaultDate, accounts, transferMate]);
 
   const handleSave = async () => {
     if (saving) return;
@@ -83,28 +86,32 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (isTransfer && !editTx) {
+    if (isTransfer) {
       const fromName = accounts.find(account => account.id === accountId)?.name ?? "account";
       const toName = accounts.find(account => account.id === transferToAccountId)?.name ?? "account";
-      const transferGroupId = `transfer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const transferGroupId = editTx?.transfer_group_id ?? `transfer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       setSaving(true);
       try {
-        await onSave({
+        const fromTx = editTx && editTx.amount < 0 ? editTx : transferMate;
+        const toTx = editTx && editTx.amount >= 0 ? editTx : transferMate;
+        const fromPayload = {
           amount: -parsed,
           category: "Transfer",
           note: note.trim() || `Transfer to ${toName}`,
           date,
           account_id: accountId,
           transfer_group_id: transferGroupId,
-        });
-        await onSave({
+        };
+        const toPayload = {
           amount: parsed,
           category: "Transfer",
           note: note.trim() || `Transfer from ${fromName}`,
           date,
           account_id: transferToAccountId,
           transfer_group_id: transferGroupId,
-        });
+        };
+        await onSave(fromTx ? { ...fromPayload, id: fromTx.id } : fromPayload);
+        await onSave(toTx ? { ...toPayload, id: toTx.id } : toPayload);
         onClose();
       } catch (error) {
         Alert.alert("Could not save transfer", error instanceof Error ? error.message : "Please try again.");
@@ -159,7 +166,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
               >
                 <Text style={[styles.typeBtnText, { color: !isTransfer && !isExpense ? "#fff" : c.mutedForeground }]}>Income</Text>
               </Pressable>
-              {!editTx && accounts.filter(account => account.is_active).length >= 2 && (
+              {(!editTx || editTx.transfer_group_id) && accounts.filter(account => account.is_active).length >= 2 && (
                 <Pressable
                   onPress={() => { setIsTransfer(true); setLinkedBillId(undefined); setCategory("Transfer"); }}
                   style={[styles.typeBtn, { backgroundColor: isTransfer ? c.primary : "transparent", borderRadius: 8 }]}

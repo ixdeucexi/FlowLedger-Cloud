@@ -105,6 +105,14 @@ export default function MoreScreen() {
     () => buildDataIntegrityIssues({ accounts, bills, incomes, transactions }),
     [accounts, bills, incomes, transactions],
   );
+  const setupSteps = [
+    { label: "Add an account", done: accounts.some(account => account.is_active) },
+    { label: "Add income", done: incomes.length > 0 },
+    { label: "Add recurring bills", done: bills.some(bill => bill.is_recurring || bill.is_debt) },
+    { label: "Reconcile account", done: forecastConfidence.level === "high" || accounts.some(account => account.last_reconciled_at) },
+    { label: "Export a backup", done: false },
+  ];
+  const setupComplete = setupSteps.filter(step => step.done).length;
   const currentMonthPrefix = new Date().toISOString().slice(0, 7);
   const accountMonthDeltas = useMemo(() => {
     const deltas = new Map<string, number>();
@@ -454,6 +462,31 @@ export default function MoreScreen() {
               : decisionHubSettings.categoryRolloverEnabled
                 ? "Rollover is on. Positive balances build up; negative balances reduce next month."
                 : "Flo decision extras are optional. Turn on the planning tools you want to see."}
+          </Text>
+        </View>
+      </View>
+
+      <SLabel c={c} text="Setup" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <View style={styles.setupHeader}>
+          <View style={[styles.dataIcon, { backgroundColor: c.primary + "18" }]}>
+            <Feather name="compass" size={17} color={c.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.accountName, { color: c.foreground }]}>Budget setup</Text>
+            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>{setupComplete} of {setupSteps.length} trust steps complete</Text>
+          </View>
+        </View>
+        {setupSteps.map(step => (
+          <View key={step.label} style={styles.setupStep}>
+            <Feather name={step.done ? "check-circle" : "circle"} size={15} color={step.done ? c.success : c.mutedForeground} />
+            <Text style={[styles.dataDesc, { color: step.done ? c.foreground : c.mutedForeground }]}>{step.label}</Text>
+          </View>
+        ))}
+        <View style={[styles.priorityNote, { backgroundColor: c.primary + "12", borderRadius: 8, marginTop: 10 }]}>
+          <Feather name="layers" size={12} color={c.primary} />
+          <Text style={[styles.priorityNoteText, { color: c.mutedForeground }]}>
+            Your data is already household and budget-ready behind the scenes. Separate budget switching can be turned on later without renaming tables.
           </Text>
         </View>
       </View>
@@ -848,6 +881,8 @@ const styles = StyleSheet.create({
   accountName: { fontSize: 14, fontFamily: "Inter_600SemiBold", textTransform: "capitalize" },
   accountRight: { alignItems: "flex-end", gap: 3 },
   reconcileText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  setupHeader: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
+  setupStep: { flexDirection: "row", alignItems: "center", gap: 9, paddingVertical: 5 },
 
   categoryBudgetLink: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 10 },
   categoryRow: { flexDirection: "row", alignItems: "center", paddingVertical: 11 },

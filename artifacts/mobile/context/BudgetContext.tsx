@@ -1530,7 +1530,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const addTransaction = useCallback(async (tx: Omit<Transaction, "id">) => {
     if (!user) throw new Error("Sign in to add a transaction");
-    const nt: Transaction = { ...tx, id: genId() };
+    const defaultAccountId = accounts.find(account => account.is_active)?.id;
+    const nt: Transaction = { ...tx, account_id: tx.account_id ?? defaultAccountId, id: genId() };
     if (demoMode) {
       setTransactions(prev => [...prev, nt]);
       return nt.id;
@@ -1539,7 +1540,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setTransactions(prev => [...prev, nt]);
     if (nt.linked_bill_id) await syncDebtTransactionsAndRefresh();
     return nt.id;
-  }, [user, syncDebtTransactionsAndRefresh, demoMode]);
+  }, [user, accounts, syncDebtTransactionsAndRefresh, demoMode]);
 
   const updateTransaction = useCallback(async (tx: Transaction) => {
     if (!user) return;
@@ -1560,13 +1561,22 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const deleteTransaction = useCallback(async (id: string) => {
     if (!user) return;
+    const existing = transactions.find(transaction => transaction.id === id);
+    const groupId = existing?.transfer_group_id;
+    const idsToDelete = groupId
+      ? transactions.filter(transaction => transaction.transfer_group_id === groupId).map(transaction => transaction.id)
+      : [id];
     if (demoMode) {
-      setTransactions(prev => prev.filter(t => t.id !== id));
+      setTransactions(prev => prev.filter(t => !idsToDelete.includes(t.id)));
       return;
     }
-    await ensureSaved(supabase.from("transactions").delete().eq("id", id).eq("user_id", user.id), "Delete transaction");
-    setTransactions(prev => prev.filter(t => t.id !== id));
-    if (transactions.find(transaction => transaction.id === id)?.debt_applied_bill_id) await syncDebtTransactionsAndRefresh();
+    if (groupId) {
+      await ensureSaved(supabase.from("transactions").delete().eq("user_id", user.id).eq("transfer_group_id", groupId), "Delete transfer");
+    } else {
+      await ensureSaved(supabase.from("transactions").delete().eq("id", id).eq("user_id", user.id), "Delete transaction");
+    }
+    setTransactions(prev => prev.filter(t => !idsToDelete.includes(t.id)));
+    if (idsToDelete.some(txId => transactions.find(transaction => transaction.id === txId)?.debt_applied_bill_id)) await syncDebtTransactionsAndRefresh();
   }, [user, transactions, syncDebtTransactionsAndRefresh, demoMode]);
 
   const getTransactionsForMonth = useCallback(
