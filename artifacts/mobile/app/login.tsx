@@ -72,9 +72,12 @@ export default function LoginScreen() {
     } else {
       clearStoredSetupStep();
       if (Platform.OS === "web" && typeof window !== "undefined") {
-        try { window.localStorage.setItem("flowledger_show_setup_after_login", "true"); } catch {}
+        try {
+          if (mode === "signup") window.localStorage.setItem("flowledger_show_setup_after_login", "true");
+          else window.localStorage.removeItem("flowledger_show_setup_after_login");
+        } catch {}
       }
-      router.replace("/setup");
+      router.replace(mode === "signup" ? "/setup" : "/(tabs)");
     }
   };
 

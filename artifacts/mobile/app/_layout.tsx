@@ -18,6 +18,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PwaInstallPrompt } from "@/components/PwaInstallPrompt";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider, useThemeMode } from "@/context/ThemeContext";
+import { supabase } from "@/lib/supabase";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -36,14 +37,32 @@ function AuthObserver() {
     if (!session && !inAuth) {
       router.replace("/login");
     } else if (session && (inAuth || atRoot)) {
-      let showSetup = false;
+      let requestedSetup = false;
       if (Platform.OS === "web" && typeof window !== "undefined") {
         try {
-          showSetup = window.localStorage.getItem("flowledger_show_setup_after_login") === "true";
-          if (showSetup) window.localStorage.removeItem("flowledger_show_setup_after_login");
+          requestedSetup = window.localStorage.getItem("flowledger_show_setup_after_login") === "true";
+          if (requestedSetup) window.localStorage.removeItem("flowledger_show_setup_after_login");
         } catch {}
       }
-      router.replace(showSetup ? "/setup" : "/(tabs)");
+      if (!requestedSetup) {
+        router.replace("/(tabs)");
+        return;
+      }
+      let cancelled = false;
+      void supabase
+        .from("settings")
+        .select("onboarding_completed")
+        .eq("user_id", session.user.id)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (cancelled) return;
+          router.replace(data?.onboarding_completed ? "/(tabs)" : "/setup");
+        }, () => {
+          if (!cancelled) router.replace("/(tabs)");
+        });
+      return () => {
+        cancelled = true;
+      };
     }
   }, [session, loading, segments, router]);
 
