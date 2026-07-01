@@ -420,6 +420,16 @@ export default function MoreScreen() {
             Once these are done, ask Flo things like “Can I afford $500?” or “Why is next week tight?” and she&apos;ll use your real setup.
           </Text>
         </View>
+        <Pressable
+          onPress={() => {
+            void updateSettings({ onboarding_completed: false });
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          }}
+          style={({ pressed }) => [styles.setupRestartBtn, { borderColor: c.border, opacity: pressed ? 0.75 : 1 }]}
+        >
+          <Feather name="refresh-cw" size={14} color={c.primary} />
+          <Text style={[styles.setupRestartText, { color: c.primary }]}>Restart setup walkthrough for testing</Text>
+        </Pressable>
       </View>
 
       {/* ── Appearance ── */}
@@ -579,66 +589,6 @@ export default function MoreScreen() {
         </View>
       </View>
 
-      {false && <>
-      <SLabel c={c} text="Setup" />
-      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        <View style={[styles.floSetupHero, { backgroundColor: c.primary + "10", borderColor: c.primary + "30" }]}>
-          <FloLogo size={54} />
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.floSetupTitle, { color: c.foreground }]}>Flo setup walkthrough</Text>
-            <Text style={[styles.floSetupDesc, { color: c.mutedForeground }]}>
-              I&apos;ll help you build the pieces FlowLedger needs before it starts making money decisions.
-            </Text>
-          </View>
-        </View>
-        <View style={[styles.setupProgressTrack, { backgroundColor: c.muted }]}>
-          <View
-            style={[
-              styles.setupProgressFill,
-              { backgroundColor: c.primary, width: `${Math.round((setupComplete / setupSteps.length) * 100)}%` as any },
-            ]}
-          />
-        </View>
-        <Text style={[styles.setupProgressText, { color: c.mutedForeground }]}>
-          {setupComplete} of {setupSteps.length} setup steps complete
-        </Text>
-        {setupSteps.map((step, index) => (
-          <View key={step.key} style={[styles.floSetupStep, { borderTopWidth: index ? 1 : 0, borderTopColor: c.border }]}>
-            <View style={[styles.floSetupNumber, { backgroundColor: step.done ? c.success + "18" : c.muted }]}>
-              {step.done
-                ? <Feather name="check" size={15} color={c.success} />
-                : <Text style={[styles.floSetupNumberText, { color: c.mutedForeground }]}>{index + 1}</Text>
-              }
-            </View>
-            <View style={styles.floSetupBody}>
-              <Text style={[styles.dataLabel, { color: c.foreground }]}>{step.label}</Text>
-              <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{step.detail}</Text>
-            </View>
-            <Pressable
-              onPress={() => handleSetupStep(step.key)}
-              style={({ pressed }) => [
-                styles.floSetupAction,
-                {
-                  backgroundColor: step.done ? c.muted : c.primary + "18",
-                  opacity: pressed ? 0.75 : 1,
-                },
-              ]}
-            >
-              <Text style={[styles.floSetupActionText, { color: step.done ? c.mutedForeground : c.primary }]}>
-                {step.done ? "Review" : step.action}
-              </Text>
-            </Pressable>
-          </View>
-        ))}
-        <View style={[styles.priorityNote, { backgroundColor: c.primary + "12", borderRadius: 8, marginTop: 10 }]}>
-          <Feather name="message-circle" size={12} color={c.primary} />
-          <Text style={[styles.priorityNoteText, { color: c.mutedForeground }]}>
-            Once these are done, ask Flo things like “Can I afford $500?” or “Why is next week tight?” and she&apos;ll use your real setup.
-          </Text>
-        </View>
-      </View>
-
-      </>}
       <SLabel c={c} text="Accounts" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View style={[styles.confidenceBox, { backgroundColor: forecastConfidence.level === "high" ? c.success + "14" : forecastConfidence.level === "medium" ? "#f59e0b18" : c.destructive + "12" }]}>
@@ -1040,6 +990,8 @@ const styles = StyleSheet.create({
   floQuestionHelp: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 18, marginTop: 6 },
   floQuestionButton: { alignItems: "center", justifyContent: "center", borderRadius: 12, paddingVertical: 12, marginTop: 12 },
   floQuestionButtonText: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
+  setupRestartBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderWidth: 1, borderRadius: 12, paddingVertical: 11, marginTop: 12 },
+  setupRestartText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   setupProgressTrack: { height: 6, borderRadius: 999, overflow: "hidden", marginBottom: 6 },
   setupProgressFill: { height: 6, borderRadius: 999 },
   setupProgressText: { fontSize: 11, fontFamily: "Inter_700Bold", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 },
@@ -1104,4 +1056,5 @@ const styles = StyleSheet.create({
   summaryLabel: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
 
 });
+
 
