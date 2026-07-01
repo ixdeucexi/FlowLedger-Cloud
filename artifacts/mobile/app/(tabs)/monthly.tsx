@@ -74,9 +74,10 @@ export default function MonthlyScreen() {
   } = useBudget();
 
   const [month, setMonth] = useState(new Date().getMonth());
-  const [activeTab, setActiveTab] = useState<TabView>("bills");
+  const [activeTab] = useState<TabView>("calendar");
   const [txModalVisible, setTxModalVisible] = useState(false);
   const [editTx, setEditTx] = useState<Transaction | null>(null);
+  const [transactionDefaultDate, setTransactionDefaultDate] = useState<string | undefined>();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [editingAmounts, setEditingAmounts] = useState<Record<string, string>>({});
   const [editingPaid, setEditingPaid] = useState<Record<string, string>>({});
@@ -103,9 +104,8 @@ export default function MonthlyScreen() {
   } | null>(null);
 
   useEffect(() => {
-    if (dashboardFilter === "paid") { setBillFilter("paid"); setActiveTab("bills"); setDashboardFilter(null); }
-    else if (dashboardFilter === "unpaid") { setBillFilter("unpaid"); setActiveTab("bills"); setDashboardFilter(null); }
-  }, [dashboardFilter]);
+    if (dashboardFilter === "paid" || dashboardFilter === "unpaid") setDashboardFilter(null);
+  }, [dashboardFilter, setDashboardFilter]);
 
   const monthBills = useMemo(() => getMonthlyBills(month, selectedYear), [getMonthlyBills, month, selectedYear]);
 
@@ -450,6 +450,20 @@ export default function MonthlyScreen() {
     ]);
   };
 
+  const openAddTransaction = useCallback((date?: string | null) => {
+    setEditTx(null);
+    setTransactionDefaultDate(date ?? undefined);
+    setSelectedDate(null);
+    setTimeout(() => setTxModalVisible(true), 0);
+  }, []);
+
+  const openEditTransaction = useCallback((tx: Transaction) => {
+    setEditTx(tx);
+    setTransactionDefaultDate(tx.date);
+    setSelectedDate(null);
+    setTimeout(() => setTxModalVisible(true), 0);
+  }, []);
+
   const handleDeletePlan = (decision: DecisionRecord) => {
     const doDelete = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); void deleteDecision(decision.id); };
     if (Platform.OS === "web") { doDelete(); return; }
@@ -559,32 +573,15 @@ export default function MonthlyScreen() {
           <Text style={[styles.title, { color: c.foreground }]}>{MONTH_FULL[month]} {selectedYear}</Text>
           {isFuture && <Text style={[styles.forecastTag, { color: c.primary }]}>Forecast Mode</Text>}
         </View>
-        {activeTab === "calendar" && (
-          <Pressable
-            onPress={() => { setEditTx(null); setTxModalVisible(true); }}
-            style={({ pressed }) => [styles.iconBtn, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
-          >
-            <Feather name="plus" size={18} color={c.primaryForeground} />
-          </Pressable>
-        )}
+        <Pressable
+          onPress={() => openAddTransaction(selectedDate)}
+          style={({ pressed }) => [styles.iconBtn, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
+        >
+          <Feather name="plus" size={18} color={c.primaryForeground} />
+        </Pressable>
       </View>
 
       <MonthPicker selectedMonth={month} onSelect={m => { setMonth(m); setSelectedDate(null); }} year={selectedYear} onYearChange={setSelectedYear} />
-
-      <View style={[styles.tabBar, { backgroundColor: c.muted, marginHorizontal: 16, borderRadius: colors.radius }]}>
-        {(["bills", "calendar"] as TabView[]).map(t => (
-          <Pressable
-            key={t}
-            onPress={() => setActiveTab(t)}
-            style={[styles.tabBtn, { backgroundColor: activeTab === t ? c.card : "transparent", borderRadius: colors.radius - 2 }]}
-          >
-            <Feather name={t === "bills" ? "list" : "calendar"} size={14} color={activeTab === t ? c.primary : c.mutedForeground} />
-            <Text style={[styles.tabBtnText, { color: activeTab === t ? c.primary : c.mutedForeground }]}>
-              {t === "bills" ? "Bills" : "Calendar"}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
 
       {activeTab === "bills" ? (
           <FlatList
@@ -1036,15 +1033,60 @@ export default function MonthlyScreen() {
 
                     {scheduledBillsForDay.length > 0 ? (
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
-                        <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Scheduled</Text>
+                        <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Bills due this day</Text>
                         {scheduledBillsForDay.map(bill => {
                           const amount = getAmount(bill, month, selectedYear);
                           const paid = getPaidAmount(bill.id, month, selectedYear);
                           const isPaid = amount > 0 && paid >= amount;
+                          const isPartial = paid > 0 && !isPaid;
+                          const remaining = Math.max(0, amount - paid);
+                          const movedIn = movedInByBillId.get(bill.id);
+                          const canReschedule = bill.frequency === "monthly";
                           return (
-                            <View key={`overlay-bill-${bill.id}`} style={styles.dayOverlayRow}>
-                              <Text numberOfLines={1} style={[styles.dayOverlayRowName, { color: c.foreground }]}>{bill.name}{isPaid ? " · paid" : ""}</Text>
-                              <Text style={[styles.dayOverlayAmount, { color: isPaid ? c.success : bill.is_debt ? c.destructive : c.warning }]}>-${amount.toFixed(2)}</Text>
+                            <View key={`overlay-bill-${bill.id}`} style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: isPaid ? c.success + "40" : isPartial ? c.warning + "45" : c.border }]}>
+                              <View style={styles.dayBillTop}>
+                                <View style={{ flex: 1 }}>
+                                  <Text numberOfLines={1} style={[styles.dayBillName, { color: c.foreground }]}>{bill.name}</Text>
+                                  <Text style={[styles.dayBillMeta, { color: c.mutedForeground }]}>
+                                    {bill.category}{bill.is_debt ? " · debt" : ""}{movedIn ? ` · moved from ${formatShortDate(movedIn.from_date)}` : ""}
+                                  </Text>
+                                </View>
+                                <PayStatus paid={isPaid} partial={isPartial} />
+                              </View>
+                              <View style={styles.dayBillNumbers}>
+                                {[
+                                  { label: "Amount", value: `$${amount.toFixed(2)}`, color: c.foreground },
+                                  { label: "Paid", value: `$${paid.toFixed(2)}`, color: paid > 0 ? c.success : c.mutedForeground },
+                                  { label: "Left", value: `$${remaining.toFixed(2)}`, color: remaining > 0 ? c.destructive : c.success },
+                                ].map(item => (
+                                  <View key={`${bill.id}-${item.label}`} style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
+                                    <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>{item.label}</Text>
+                                    <Text style={[styles.dayBillNumberValue, { color: item.color }]}>{item.value}</Text>
+                                  </View>
+                                ))}
+                              </View>
+                              <View style={styles.dayBillActions}>
+                                <Pressable
+                                  onPress={() => handleQuickPaid(bill.id, amount, isPaid)}
+                                  style={({ pressed }) => [styles.dayBillAction, { backgroundColor: isPaid ? c.background : c.success + "20", borderColor: isPaid ? c.border : c.success + "35", opacity: pressed ? 0.74 : 1 }]}
+                                >
+                                  <Feather name={isPaid ? "x" : "check"} size={13} color={isPaid ? c.mutedForeground : c.success} />
+                                  <Text style={[styles.dayBillActionText, { color: isPaid ? c.mutedForeground : c.success }]}>{isPaid ? "Unpay" : "Mark paid"}</Text>
+                                </Pressable>
+                                {canReschedule ? (
+                                  <Pressable
+                                    onPress={() => {
+                                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                      setSelectedDate(null);
+                                      setDueDayPickerBill(bill);
+                                    }}
+                                    style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.primary + "16", borderColor: c.primary + "35", opacity: pressed ? 0.74 : 1 }]}
+                                  >
+                                    <Feather name="calendar" size={13} color={c.primary} />
+                                    <Text style={[styles.dayBillActionText, { color: c.primary }]}>Change date</Text>
+                                  </Pressable>
+                                ) : null}
+                              </View>
                             </View>
                           );
                         })}
@@ -1078,7 +1120,7 @@ export default function MonthlyScreen() {
                         {displayedTxs.map(tx => (
                           <Pressable
                             key={`overlay-tx-${tx.id}`}
-                            onPress={() => { setEditTx(tx); setTxModalVisible(true); }}
+                            onPress={() => openEditTransaction(tx)}
                             style={styles.dayOverlayRow}
                           >
                             <Text numberOfLines={1} style={[styles.dayOverlayRowName, { color: c.foreground }]}>{tx.note || tx.category}</Text>
@@ -1100,13 +1142,13 @@ export default function MonthlyScreen() {
 
                   <View style={styles.dayOverlayActions}>
                     <Pressable
-                      onPress={() => { setEditTx(null); setTxModalVisible(true); }}
+                      onPress={() => openAddTransaction(selectedDate)}
                       style={({ pressed }) => [styles.dayOverlayAddPill, { borderColor: c.foreground, opacity: pressed ? 0.8 : 1 }]}
                     >
                       <Text style={[styles.dayOverlayAddText, { color: c.foreground }]}>Add on {selectedDate ? formatShortDate(selectedDate) : "date"}</Text>
                     </Pressable>
                     <Pressable
-                      onPress={() => { setEditTx(null); setTxModalVisible(true); }}
+                      onPress={() => openAddTransaction(selectedDate)}
                       style={({ pressed }) => [styles.dayOverlayFab, { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 }]}
                     >
                       <Feather name="plus" size={24} color={c.primaryForeground} />
@@ -1138,7 +1180,7 @@ export default function MonthlyScreen() {
                   : `All Transactions (${txList.length})`}
               </Text>
               <Pressable
-                onPress={() => { setEditTx(null); setTxModalVisible(true); }}
+                onPress={() => openAddTransaction(selectedDate)}
                 style={({ pressed }) => [styles.iconBtn, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
               >
                 <Feather name="plus" size={16} color={c.primaryForeground} />
@@ -1342,7 +1384,7 @@ export default function MonthlyScreen() {
                     style={[styles.txRow, { backgroundColor: c.card, borderRadius: colors.radius }]}
                   >
                     <Pressable
-                      onPress={() => { setEditTx(tx); setTxModalVisible(true); }}
+                      onPress={() => openEditTransaction(tx)}
                       style={styles.txMain}
                     >
                       <View style={[styles.txIcon, { backgroundColor: tx.amount > 0 ? c.success + "20" : c.destructive + "20" }]}>
@@ -1465,7 +1507,7 @@ export default function MonthlyScreen() {
 
       <AddTransactionModal
         visible={txModalVisible}
-        onClose={() => { setTxModalVisible(false); setEditTx(null); }}
+        onClose={() => { setTxModalVisible(false); setEditTx(null); setTransactionDefaultDate(undefined); }}
         onSave={async (data) => {
           if (editTx && "id" in data) {
             await updateTransaction(data as Transaction);
@@ -1476,7 +1518,7 @@ export default function MonthlyScreen() {
           }
         }}
         editTx={editTx}
-        defaultDate={selectedDate ?? undefined}
+        defaultDate={editTx ? undefined : transactionDefaultDate}
       />
       <Modal
         visible={monthSummaryDetail !== null}
@@ -1762,6 +1804,17 @@ const styles = StyleSheet.create({
   dayOverlayRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: 30 },
   dayOverlayRowName: { flex: 1, fontSize: 13, fontFamily: "Inter_600SemiBold" },
   dayOverlayAmount: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  dayBillCard: { borderWidth: 1, borderRadius: 16, padding: 11, gap: 10 },
+  dayBillTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  dayBillName: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  dayBillMeta: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
+  dayBillNumbers: { flexDirection: "row", gap: 8 },
+  dayBillNumberTile: { flex: 1, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 8 },
+  dayBillNumberLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.5 },
+  dayBillNumberValue: { fontSize: 13, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
+  dayBillActions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  dayBillAction: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
+  dayBillActionText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   dayOverlayEmptyTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
   dayOverlayEmptyText: { fontSize: 12, fontFamily: "Inter_400Regular" },
   dayOverlayActions: { flexDirection: "row", alignItems: "center", gap: 12, paddingTop: 14 },
