@@ -10,7 +10,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useCallback, useEffect, useRef } from "react";
-import { Platform, StyleSheet, Text, View } from "react-native";
+import { Image, Platform, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -72,10 +72,11 @@ function AuthObserver() {
 function StartupScreen() {
   return (
     <View style={styles.startup}>
-      <View style={styles.logoMark}>
-        <Text style={styles.logoGlyph}>F</Text>
-      </View>
-      <Text style={styles.logoText}>FlowLedger</Text>
+      <Image
+        source={require("../assets/images/logo_transparent.png")}
+        style={styles.startupLogo}
+        resizeMode="contain"
+      />
       <Text style={styles.logoSub}>Your money, clearly.</Text>
     </View>
   );
@@ -152,26 +153,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#0a0e1a",
   },
-  logoMark: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(34,197,94,0.15)",
-    borderWidth: 1,
-    borderColor: "rgba(34,197,94,0.3)",
-    marginBottom: 14,
-  },
-  logoGlyph: {
-    color: "#22c55e",
-    fontSize: 30,
-    fontWeight: "800",
-  },
-  logoText: {
-    color: "#f8fafc",
-    fontSize: 30,
-    fontWeight: "800",
+  startupLogo: {
+    width: 280,
+    height: 116,
+    marginBottom: 6,
   },
   logoSub: {
     color: "#64748b",

@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Tabs, useRouter, useSegments } from "expo-router";
 import React from "react";
-import { Platform, Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
+import { Image, Platform, Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
 
 import { useAuth } from "@/context/AuthContext";
 import { BudgetProvider, useBudget } from "@/context/BudgetContext";
@@ -80,10 +80,11 @@ function BudgetLoadingScreen() {
   const colors = useColors();
   return (
     <View style={[styles.loadingScreen, { backgroundColor: colors.background }]}>
-      <View style={styles.loadingMark}>
-        <Text style={styles.loadingMarkText}>F</Text>
-      </View>
-      <Text style={[styles.loadingTitle, { color: colors.foreground }]}>FlowLedger</Text>
+      <Image
+        source={require("../../assets/images/logo_transparent.png")}
+        style={styles.loadingLogo}
+        resizeMode="contain"
+      />
       <Text style={[styles.loadingSub, { color: colors.mutedForeground }]}>Loading your plan…</Text>
     </View>
   );
@@ -334,25 +335,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  loadingMark: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(37,99,235,0.18)",
-    borderWidth: 1,
-    borderColor: "rgba(37,99,235,0.35)",
-    marginBottom: 12,
-  },
-  loadingMarkText: {
-    color: "#2563eb",
-    fontSize: 28,
-    fontWeight: "800",
-  },
-  loadingTitle: {
-    fontSize: 28,
-    fontWeight: "800",
+  loadingLogo: {
+    width: 260,
+    height: 108,
+    marginBottom: 4,
   },
   loadingSub: {
     fontSize: 14,

@@ -10,9 +10,9 @@ module.exports = {
     newArchEnabled: true,
     updates: { enabled: false },
     splash: {
-      image: "./assets/images/icon.png",
+      image: "./assets/images/logo_transparent.png",
       resizeMode: "contain",
-      backgroundColor: "#0f9b8e",
+      backgroundColor: "#050816",
     },
     ios: { supportsTablet: false },
     android: {
