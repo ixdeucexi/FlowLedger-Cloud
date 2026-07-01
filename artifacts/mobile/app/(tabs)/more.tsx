@@ -51,7 +51,7 @@ export default function MoreScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { themeMode, setThemeMode } = useThemeMode();
-  const { signOut, user, startDemoMode } = useAuth();
+  const { signOut, user } = useAuth();
   const {
     bills, transactions, overrides, incomes, goals, importBills, settings, updateSettings, accounts, forecastConfidence,
     addIncome, updateIncome, deleteIncome, getMonthlyIncome,
@@ -351,12 +351,6 @@ export default function MoreScreen() {
     }
   };
 
-  const handleTrySampleBudget = () => {
-    startDemoMode();
-    router.replace("/(tabs)" as any);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
-
   const webTopPad = Platform.OS === "web" ? 4 : 0;
 
   return (
@@ -446,13 +440,6 @@ export default function MoreScreen() {
         >
           <Feather name="refresh-cw" size={14} color={c.primary} />
           <Text style={[styles.setupRestartText, { color: c.primary }]}>Restart setup walkthrough for testing</Text>
-        </Pressable>
-        <Pressable
-          onPress={handleTrySampleBudget}
-          style={({ pressed }) => [styles.setupRestartBtn, { borderColor: c.primary + "55", backgroundColor: c.primary + "12", opacity: pressed ? 0.75 : 1 }]}
-        >
-          <Feather name="play-circle" size={14} color={c.primary} />
-          <Text style={[styles.setupRestartText, { color: c.primary }]}>Start live sample tour</Text>
         </Pressable>
       </View>
 

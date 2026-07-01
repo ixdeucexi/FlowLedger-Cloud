@@ -15,6 +15,12 @@ function friendlyAuthError(message?: string | null): string | null {
   return message;
 }
 
+function isLiveWebHost() {
+  if (Platform.OS !== "web" || typeof window === "undefined") return false;
+  const host = window.location.hostname;
+  return !(host.includes("flow-ledger-cloud-git-dev-") || host === "localhost" || host === "127.0.0.1");
+}
+
 interface AuthContextType {
   session:  Session | null;
   user:     User | null;
@@ -234,6 +240,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const startDemoMode = () => {
+    if (isLiveWebHost()) {
+      disableDevDemoMode();
+      setDemoMode(false);
+      return;
+    }
     enableDevDemoMode();
     setDemoMode(true);
   };
@@ -246,6 +257,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetDemoMode = () => {
+    if (isLiveWebHost()) {
+      disableDevDemoMode();
+      setDemoMode(false);
+      return;
+    }
     enableDevDemoMode();
     setSession(null);
     setDemoMode(false);

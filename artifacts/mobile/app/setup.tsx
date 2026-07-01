@@ -9,7 +9,6 @@ import { AccountModal } from "@/components/AccountModal";
 import { AddBillModal } from "@/components/AddBillModal";
 import { FloLogo } from "@/components/FloLogo";
 import { IncomeModal } from "@/components/IncomeModal";
-import { useAuth } from "@/context/AuthContext";
 import { BudgetProvider, useBudget, type Account, type Bill, type IncomeItem } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { readStoredSetupStep, writeStoredSetupStep, type SetupStepKey } from "@/lib/setupProgress";
@@ -18,7 +17,6 @@ function SetupWizard() {
   const c = useColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { startDemoMode } = useAuth();
   const {
     accounts, incomes, bills, settings,
     addAccount, updateAccount, reconcileAccount,
@@ -155,12 +153,6 @@ function SetupWizard() {
     router.replace({ pathname: "/(tabs)/flo", params: { prompt: "Can I afford $100?" } } as any);
   };
 
-  const startSampleBudget = () => {
-    writeStoredSetupStep(null);
-    startDemoMode();
-    router.replace("/(tabs)" as any);
-  };
-
   const runAction = async () => {
     switch (current.key) {
       case "welcome":
@@ -272,13 +264,6 @@ function SetupWizard() {
           <Text style={styles.primaryText}>{current.button}</Text>
         </Pressable>
 
-        {current.key === "welcome" ? (
-          <Pressable onPress={startSampleBudget} style={({ pressed }) => [styles.demoButton, { opacity: pressed ? 0.82 : 1 }]}>
-            <Feather name="play-circle" size={18} color="#38bdf8" />
-            <Text style={styles.demoButtonText}>Try sample budget</Text>
-          </Pressable>
-        ) : null}
-
         <View style={styles.navRow}>
           <Pressable onPress={goBack} disabled={index === 0} style={{ opacity: index === 0 ? 0.35 : 1 }}>
             <Text style={styles.navText}>Back</Text>
@@ -368,8 +353,6 @@ const styles = StyleSheet.create({
   input: { height: 52, borderRadius: 14, paddingHorizontal: 14, backgroundColor: "#111827", borderWidth: 1, borderColor: "#1e293b", color: "#f8fafc", fontSize: 17, fontFamily: "Inter_700Bold" },
   primary: { height: 58, borderRadius: 16, backgroundColor: "#22c55e", alignItems: "center", justifyContent: "center", marginTop: 30, shadowColor: "#22c55e", shadowOpacity: 0.28, shadowRadius: 18, shadowOffset: { width: 0, height: 8 } },
   primaryText: { color: "#f8fafc", fontSize: 18, fontFamily: "Inter_800ExtraBold", textAlign: "center", paddingHorizontal: 12 },
-  demoButton: { height: 54, borderRadius: 16, borderWidth: 1, borderColor: "rgba(56,189,248,0.36)", backgroundColor: "rgba(14,165,233,0.12)", alignItems: "center", justifyContent: "center", marginTop: 12, flexDirection: "row", gap: 8 },
-  demoButtonText: { color: "#bae6fd", fontSize: 16, fontFamily: "Inter_800ExtraBold", textAlign: "center" },
   navRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 18 },
   navText: { color: "#94a3b8", fontSize: 14, fontFamily: "Inter_700Bold" },
 });

@@ -27,9 +27,7 @@ export function enableDevDemoMode() {
 }
 
 export function isDevDemoMode(hostname = globalThis.location?.hostname ?? "", authPreference = readDemoAuthPreference()): boolean {
-  const isDevHost = hostname.includes("flow-ledger-cloud-git-dev-") || hostname === "localhost" || hostname === "127.0.0.1";
-  if (authPreference === DEMO_AUTH_VALUE) return true;
-  return isDevHost && authPreference !== REAL_AUTH_VALUE;
+  return false;
 }
 
 export const DEV_DEMO_USER_ID = "dev-demo-user";
