@@ -1089,7 +1089,10 @@ export default function MonthlyScreen() {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                         router.push({
                           pathname: "/(tabs)/flo",
-                          params: { prompt: `What should I know about ${formatLongDate(selectedDate)}? (${selectedDate})` },
+                          params: {
+                            prompt: `What should I know about ${formatLongDate(selectedDate)}? (${selectedDate})`,
+                            promptId: `${selectedDate}-${Date.now()}`,
+                          },
                         } as never);
                         setSelectedDate(null);
                       }}

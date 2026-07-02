@@ -65,7 +65,7 @@ const initialChat: FloChatState = { messages: [], sending: false };
 export default function FloScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ prompt?: string }>();
+  const params = useLocalSearchParams<{ prompt?: string; promptId?: string }>();
   const { user } = useAuth();
   const { bills, billDateMoves, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getPaidAmount, moveBillOccurrence, removeBillOccurrenceMove, saveDecision, updateDecision, updateBill, setCustomAmount, saveExtraPayment, getTransactionsForMonth, categories } = useBudget();
   const [chat, dispatch] = useReducer(reduceFloChat, initialChat);
@@ -528,11 +528,13 @@ export default function FloScreen() {
 
   useEffect(() => {
     const prompt = Array.isArray(params.prompt) ? params.prompt[0] : params.prompt;
+    const promptId = Array.isArray(params.promptId) ? params.promptId[0] : params.promptId;
     const cleanPrompt = typeof prompt === "string" ? prompt.trim() : "";
-    if (!cleanPrompt || handledPromptRef.current === cleanPrompt || chat.sending) return;
-    handledPromptRef.current = cleanPrompt;
+    const promptKey = `${promptId || "manual"}:${cleanPrompt}`;
+    if (!cleanPrompt || handledPromptRef.current === promptKey || chat.sending) return;
+    handledPromptRef.current = promptKey;
     void send(cleanPrompt);
-  }, [params.prompt, chat.sending]);
+  }, [params.prompt, params.promptId, chat.sending]);
 
   const addDecisionToCalendar = async (messageId: string) => {
     const decision = decisionByMessageId[messageId];
