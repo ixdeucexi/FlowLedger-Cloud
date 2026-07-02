@@ -192,7 +192,8 @@ export function CalendarView({
                   {visibleChips.map((chip, index) => {
                     const palette = chipPalette(chip.kind);
                     return (
-                      <View key={`${chip.label}-${index}`} style={[styles.eventChip, { backgroundColor: palette.bg, borderLeftColor: palette.border }]}>
+                      <View key={`${chip.label}-${index}`} style={[styles.eventChip, { backgroundColor: palette.bg }]}>
+                        <View style={[styles.eventDot, { backgroundColor: palette.border }]} />
                         <Text style={[styles.eventChipText, { color: palette.text }]} numberOfLines={1}>{chip.label}</Text>
                       </View>
                     );
@@ -250,7 +251,8 @@ const styles = StyleSheet.create({
   dayNum: { fontSize: 14 },
   balanceText: { fontSize: 8, fontFamily: "Inter_700Bold" },
   eventStack: { marginTop: 9, gap: 4 },
-  eventChip: { borderLeftWidth: 3, borderRadius: 7, minHeight: 18, paddingHorizontal: 4, paddingVertical: 2 },
-  eventChipText: { fontSize: 8, fontFamily: "Inter_700Bold" },
+  eventChip: { borderRadius: 7, minHeight: 18, paddingHorizontal: 4, paddingVertical: 2, flexDirection: "row", alignItems: "center", gap: 3 },
+  eventDot: { width: 4, height: 4, borderRadius: 2, flexShrink: 0 },
+  eventChipText: { flex: 1, fontSize: 8, fontFamily: "Inter_700Bold" },
   moreText: { fontSize: 8, fontFamily: "Inter_600SemiBold", textAlign: "center", color: CALENDAR.faded },
 });
