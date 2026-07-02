@@ -212,6 +212,8 @@ interface BudgetContextType {
   decisions: DecisionRecord[];
   forecastConfidence: ForecastConfidence;
   loading: boolean;
+  loadError: string | null;
+  retryBudgetLoad: () => void;
   demoMode: boolean;
   selectedYear: number;
   setSelectedYear: (y: number) => void;
@@ -631,6 +633,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [decisions,     setDecisions]     = useState<DecisionRecord[]>([]);
   const [settings,      setSettings]      = useState<Settings>(DEFAULT_SETTINGS);
   const [loading,       setLoading]       = useState(true);
+  const [loadError,     setLoadError]     = useState<string | null>(null);
+  const [loadRetryNonce, setLoadRetryNonce] = useState(0);
   const [selectedYear,  setSelectedYear]  = useState(new Date().getFullYear());
   const [dashboardFilter, setDashboardFilter] = useState<DashboardFilter>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
@@ -684,9 +688,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setSaveStatus("idle");
   }, []);
 
+  const retryBudgetLoad = useCallback(() => {
+    setLoadError(null);
+    setLoadRetryNonce(value => value + 1);
+  }, []);
+
   // ── Load from Supabase when user changes ────────────────────────────────────
   useEffect(() => {
     if (demoMode) {
+      setLoadError(null);
       const demo = createDemoBudgetData();
       setBills(demo.bills);
       setOverrides(demo.overrides);
@@ -706,6 +716,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     if (!user) {
+      setLoadError(null);
       setBills([]); setOverrides([]); setBillDateMoves([]); setTransactions([]); setIncomes([]);
       setGoals([]); setExtraPayments([]); setCategories([]); setAccounts([]); setDecisions([]); setSettings(DEFAULT_SETTINGS);
       billDateMovesRef.current = [];
@@ -715,6 +726,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     loaded.current = false;
     setLoading(true);
+    setLoadError(null);
     (async () => {
       const loadStarted = Date.now();
       try {
@@ -824,8 +836,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }
         const cats = (cData ?? []).map((c: any) => c.name as string);
         setCategories(cats.length > 0 ? cats : DEFAULT_CATEGORIES);
+        setLoadError(null);
       } catch (error) {
         console.warn("Budget load failed or timed out", error);
+        setLoadError(error instanceof Error ? error.message : "FlowLedger could not load your plan.");
       } finally {
         loaded.current = true;
         setLoading(false);
@@ -835,7 +849,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }).catch(() => undefined);
       }
     })();
-  }, [user, demoMode]);
+  }, [user, demoMode, loadRetryNonce]);
 
   useEffect(() => {
     if (!user || demoMode) return;
@@ -1577,7 +1591,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!user || demoMode) return;
     const synced = await supabase.rpc("sync_due_debt_transactions", { p_as_of_date: localDateString() });
     if (synced.error) {
-      console.warn("Scheduled debt sync skipped", synced.error.message);
+      throw new Error(`Sync scheduled debt payments: ${synced.error.message}`);
     }
     const [billRows, transactionRows] = await Promise.all([
       supabase.from("bills").select("*").eq("user_id", user.id),
@@ -1628,7 +1642,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       if (tx.linked_bill_id || existing?.linked_bill_id || existing?.debt_applied_bill_id) await syncDebtTransactionsAndRefresh();
       markSaveCompleted();
     } catch (error) {
-      if (existing) setTransactions(prev => prev.map(item => item.id === existing.id && item === tx ? existing : item));
+      if (existing) setTransactions(prev => prev.map(item => item.id === existing.id ? existing : item));
       markSaveFailed(error, () => updateTransaction(tx));
       throw error;
     }
@@ -2450,7 +2464,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <BudgetContext.Provider value={{
-      bills, overrides, billDateMoves, transactions, incomes, goals, extraPayments, categories, settings, accounts, decisions, forecastConfidence, loading, demoMode,
+      bills, overrides, billDateMoves, transactions, incomes, goals, extraPayments, categories, settings, accounts, decisions, forecastConfidence, loading, loadError, retryBudgetLoad, demoMode,
       saveStatus, saveError, retryLastSave, clearSaveError,
       dashboardFilter, setDashboardFilter,
       addBill, updateBill, deleteBill, getBillById,

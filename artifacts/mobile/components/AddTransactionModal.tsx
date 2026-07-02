@@ -91,6 +91,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
       const toName = accounts.find(account => account.id === transferToAccountId)?.name ?? "account";
       const transferGroupId = editTx?.transfer_group_id ?? `transfer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       setSaving(true);
+      const createdIds: string[] = [];
       try {
         const fromTx = editTx && editTx.amount < 0 ? editTx : transferMate;
         const toTx = editTx && editTx.amount >= 0 ? editTx : transferMate;
@@ -110,10 +111,15 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
           account_id: transferToAccountId,
           transfer_group_id: transferGroupId,
         };
-        await onSave(fromTx ? { ...fromPayload, id: fromTx.id } : fromPayload);
-        await onSave(toTx ? { ...toPayload, id: toTx.id } : toPayload);
+        const fromResult = await onSave(fromTx ? { ...fromPayload, id: fromTx.id } : fromPayload);
+        if (!fromTx && typeof fromResult === "string") createdIds.push(fromResult);
+        const toResult = await onSave(toTx ? { ...toPayload, id: toTx.id } : toPayload);
+        if (!toTx && typeof toResult === "string") createdIds.push(toResult);
         onClose();
       } catch (error) {
+        if (createdIds.length > 0 && onDelete) {
+          await Promise.allSettled(createdIds.map(id => onDelete(id)));
+        }
         Alert.alert("Could not save transfer", error instanceof Error ? error.message : "Please try again.");
       } finally {
         setSaving(false);
@@ -234,7 +240,18 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
 
             {editTx && onDelete && (
               <Pressable
-                onPress={() => { onDelete(editTx.id); onClose(); }}
+                onPress={async () => {
+                  if (saving) return;
+                  setSaving(true);
+                  try {
+                    await onDelete(editTx.id);
+                    onClose();
+                  } catch (error) {
+                    Alert.alert("Couldn’t delete transaction", error instanceof Error ? error.message : "Please try again.");
+                  } finally {
+                    setSaving(false);
+                  }
+                }}
                 style={({ pressed }) => [styles.deleteBtn, { borderColor: c.destructive, opacity: pressed ? 0.8 : 1 }]}
               >
                 <Feather name="trash-2" size={15} color={c.destructive} />

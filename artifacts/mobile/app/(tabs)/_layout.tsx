@@ -90,6 +90,24 @@ function BudgetLoadingScreen() {
   );
 }
 
+function BudgetLoadErrorScreen({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const colors = useColors();
+  return (
+    <View style={[styles.loadingScreen, { backgroundColor: colors.background }]}>
+      <Image
+        source={require("../../assets/images/logo_transparent.png")}
+        style={styles.loadingLogo}
+        resizeMode="contain"
+      />
+      <Text style={[styles.loadErrorTitle, { color: colors.foreground }]}>Couldn’t load your plan</Text>
+      <Text style={[styles.loadErrorBody, { color: colors.mutedForeground }]}>{message}</Text>
+      <Pressable onPress={onRetry} style={[styles.loadRetryButton, { backgroundColor: colors.primary }]}>
+        <Text style={[styles.loadRetryText, { color: colors.primaryForeground }]}>Try again</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function readDemoTourStep() {
   if (Platform.OS !== "web") return 0;
   try {
@@ -216,7 +234,7 @@ function DemoModeBanner() {
 
 function TabContent() {
   const colors = useColors();
-  const { loading, demoMode, decisions, getDailyBalances, settings } = useBudget();
+  const { loading, loadError, retryBudgetLoad, demoMode, decisions, getDailyBalances, settings } = useBudget();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const isIOS = Platform.OS === "ios";
@@ -264,6 +282,7 @@ function TabContent() {
   }, [decisionHubSettings, decisions, getDailyBalances, loading, settings.forecast_horizon_months, settings.safety_floor]);
 
   if (loading) return <BudgetLoadingScreen />;
+  if (loadError) return <BudgetLoadErrorScreen message={loadError} onRetry={retryBudgetLoad} />;
 
   return (
     <>
@@ -343,6 +362,31 @@ const styles = StyleSheet.create({
   loadingSub: {
     fontSize: 14,
     marginTop: 4,
+  },
+  loadErrorTitle: {
+    fontSize: 24,
+    fontWeight: "900",
+    marginTop: 14,
+  },
+  loadErrorBody: {
+    maxWidth: 320,
+    textAlign: "center",
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 8,
+  },
+  loadRetryButton: {
+    minWidth: 160,
+    minHeight: 48,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 18,
+    paddingHorizontal: 22,
+  },
+  loadRetryText: {
+    fontSize: 16,
+    fontWeight: "800",
   },
   demoBanner: {
     position: "absolute",
