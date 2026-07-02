@@ -336,12 +336,20 @@ export default function MonthlyScreen() {
       setEditingPaid(p => { const n = { ...p }; delete n[key]; return n; });
     };
     clearPaidEdit();
-    if (trimmed.length === 0) return;
     setSavingPaidKey(key);
     try {
+      const bill = bills.find(item => item.id === billId);
+      if (trimmed.length === 0) {
+        if (bill?.is_debt) {
+          const key = `flowledger:debt-surplus:${bill.id}:${selectedYear}-${String(month + 1).padStart(2, "0")}`;
+          const existingTx = transactions.find(transaction => transaction.import_hash === key);
+          if (existingTx) await deleteTransaction(existingTx.id);
+        }
+        await setPaidAmount(billId, month, selectedYear, 0);
+        return;
+      }
       const parsed = parseFloat(trimmed);
       if (!Number.isFinite(parsed)) return;
-      const bill = bills.find(item => item.id === billId);
       const budgeted = bill ? getBillMonthlyTotal(bill, month, selectedYear) : 0;
       const day = bill ? Math.min(new Date(selectedYear, month + 1, 0).getDate(), getCustomDueDay(bill.id, month, selectedYear) ?? bill.due_day) : 1;
       const paidDate = `${selectedYear}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -374,19 +382,11 @@ export default function MonthlyScreen() {
     } finally {
       setSavingPaidKey(current => current === key ? null : current);
     }
-  }, [editingPaid, savingPaidKey, setPaidAmount, bills, overrides, getBillMonthlyTotal, getCustomDueDay, getExtraPayment, previewDebtSnowball, finalizeBillPayment, applyDebtSnowballPayment, removeDebtSnowballPayment, month, selectedYear]);
+  }, [editingPaid, savingPaidKey, setPaidAmount, bills, overrides, transactions, deleteTransaction, getBillMonthlyTotal, getCustomDueDay, getExtraPayment, previewDebtSnowball, finalizeBillPayment, applyDebtSnowballPayment, removeDebtSnowballPayment, month, selectedYear]);
 
   const finalizeBillAtActualForMonth = useCallback(async (prompt: { bill: Bill; actual: number; paidDate: string }) => {
     if (prompt.bill.is_debt) {
       await setPaidAmount(prompt.bill.id, month, selectedYear, prompt.actual);
-      const boost = Number(prompt.bill.snowball_minimum_boost ?? 0);
-      const baseAmount = Math.max(0, prompt.actual - boost);
-      await setCustomAmount(
-        prompt.bill.id,
-        month,
-        selectedYear,
-        Math.abs(baseAmount - prompt.bill.amount) < 0.005 ? undefined : baseAmount,
-      );
       return;
     }
     await finalizeBillPayment(prompt.bill.id, month, selectedYear, prompt.actual, prompt.paidDate);
