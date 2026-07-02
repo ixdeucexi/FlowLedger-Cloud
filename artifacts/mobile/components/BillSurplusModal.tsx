@@ -38,10 +38,10 @@ export function BillSurplusModal({ visible, billName, itemType = "bill", budgete
               <Text style={[styles.floIconText, { color: c.primary }]}>F</Text>
             </View>
           </View>
-          <Text style={[styles.eyebrow, { color: c.primary }]}>Flo found leftover money</Text>
-          <Text style={[styles.title, { color: c.foreground }]}>${difference.toFixed(2)} under budget</Text>
+          <Text style={[styles.eyebrow, { color: c.primary }]}>Flo can help</Text>
+          <Text style={[styles.title, { color: c.foreground }]}>Over-budgeted by ${difference.toFixed(2)}</Text>
           <Text style={[styles.sub, { color: c.mutedForeground }]}>
-            {itemType === "debt" ? `${billName} was budgeted at ${budgeted.toFixed(2)} and you paid ${actual.toFixed(2)}.` : `${billName} came in lower this month.`} I can mark it paid at ${actual.toFixed(2)} and help you decide where the extra ${difference.toFixed(2)} should go.
+            Hey, I see {billName} was over-budgeted by ${difference.toFixed(2)}. I can add it to {targetDebt ?? "your snowball"} for you.
           </Text>
           <View style={[styles.breakdown, { backgroundColor: c.card }]}> 
             <View style={styles.row}><Text style={[styles.rowLabel, { color: c.mutedForeground }]}>Budgeted</Text><Text style={[styles.rowValue, { color: c.foreground }]}>${budgeted.toFixed(2)}</Text></View>
@@ -62,7 +62,7 @@ export function BillSurplusModal({ visible, billName, itemType = "bill", budgete
           {targetDebt && paymentDateValid && !snowballSafe && <Text style={[styles.note, { color: c.warning }]}>Keep this money available to preserve your ${safetyFloor.toFixed(0)} floor across {forecastHorizonMonths} months.</Text>}
           <Pressable disabled={!targetDebt || !snowballSafe} onPress={onSnowball} style={[styles.primary, { backgroundColor: targetDebt && snowballSafe ? c.primary : c.muted }]}> 
             <Feather name="zap" size={16} color={targetDebt && snowballSafe ? c.primaryForeground : c.mutedForeground} />
-            <Text style={[styles.primaryText, { color: targetDebt && snowballSafe ? c.primaryForeground : c.mutedForeground }]}>Yes, send ${difference.toFixed(2)} to {targetDebt ?? "Snowball"}</Text>
+            <Text style={[styles.primaryText, { color: targetDebt && snowballSafe ? c.primaryForeground : c.mutedForeground }]}>Add ${difference.toFixed(2)} to {targetDebt ?? "Snowball"}</Text>
           </Pressable>
           <Pressable onPress={onKeep} style={[styles.secondary, { borderColor: c.border }]}><Text style={[styles.secondaryText, { color: c.foreground }]}>No, keep ${difference.toFixed(2)} available</Text></Pressable>
         </Pressable>
