@@ -735,8 +735,18 @@ export default function DashboardScreen() {
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
-      <Text style={[styles.heading,    { color: c.foreground }]}>FlowLedger</Text>
-      <Text style={[styles.subheading, { color: c.mutedForeground }]}>{MONTH_FULL[currentMonth]} {selectedYear}</Text>
+      <View style={styles.dashboardHeader}>
+        <View>
+          <Text style={[styles.heading, { color: c.foreground }]}>FlowLedger</Text>
+          <Text style={[styles.subheading, { color: c.mutedForeground }]}>{MONTH_FULL[currentMonth]} {selectedYear}</Text>
+        </View>
+        <Pressable
+          onPress={() => setActionModalVisible(true)}
+          style={({ pressed }) => [styles.headerActionButton, { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 }]}
+        >
+          <Feather name="plus" size={20} color={c.primaryForeground} />
+        </Pressable>
+      </View>
 
       {!settings.onboarding_completed && (() => {
         const steps = [
@@ -982,8 +992,11 @@ export default function DashboardScreen() {
           <Pressable
             key={card.title}
             onPress={() => navigate(card.filter, card.tab)}
-            style={({ pressed }) => [styles.statPill, { backgroundColor: c.card, opacity: pressed ? 0.8 : 1 }]}
+            style={({ pressed }) => [styles.statPill, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.8 : 1 }]}
           >
+            <View style={[styles.statPillIcon, { backgroundColor: card.col + "18" }]}>
+              <Feather name={card.icon} size={14} color={card.col} />
+            </View>
             <Text style={[styles.statPillValue, { color: card.col }]} numberOfLines={1}>{card.value}</Text>
             <Text style={[styles.statPillLabel, { color: c.mutedForeground }]}>{card.title.toUpperCase()}</Text>
           </Pressable>
@@ -995,16 +1008,41 @@ export default function DashboardScreen() {
         return (
           <Pressable
             onPress={() => navigate(debt.filter, debt.tab)}
-            style={({ pressed }) => [styles.statDebtRow, { backgroundColor: c.card, opacity: pressed ? 0.8 : 1 }]}
+            style={({ pressed }) => [styles.statDebtRow, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.8 : 1 }]}
           >
-            <View>
-              <Text style={[styles.statPillLabel, { color: c.mutedForeground }]}>DEBT</Text>
-              <Text style={[styles.statDebtValue, { color: debt.col }]}>{debt.value}</Text>
+            <View style={styles.statDebtLeft}>
+              <View style={[styles.statDebtIcon, { backgroundColor: debt.col + "16" }]}>
+                <Feather name={debt.icon} size={18} color={debt.col} />
+              </View>
+              <View>
+                <Text style={[styles.statPillLabel, { color: c.mutedForeground }]}>DEBT</Text>
+                <Text style={[styles.statDebtValue, { color: debt.col }]}>{debt.value}</Text>
+              </View>
             </View>
             <Feather name="chevron-right" size={16} color={c.mutedForeground} />
           </Pressable>
         );
       })()}
+
+      <View style={styles.commandGrid}>
+        {[
+          { label: "Ask Flo", sub: "Decide before you spend", icon: "message-circle" as const, color: c.primary, action: () => router.push("/(tabs)/flo" as any) },
+          { label: "Calendar", sub: "See the month", icon: "calendar" as const, color: c.success, action: () => router.push("/(tabs)/monthly" as any) },
+          { label: "Bills", sub: "Setup & debt", icon: "file-text" as const, color: c.warning, action: () => router.push("/(tabs)/bills" as any) },
+        ].map(item => (
+          <Pressable
+            key={item.label}
+            onPress={item.action}
+            style={({ pressed }) => [styles.commandCard, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.78 : 1 }]}
+          >
+            <View style={[styles.commandIcon, { backgroundColor: item.color + "18" }]}>
+              <Feather name={item.icon} size={17} color={item.color} />
+            </View>
+            <Text style={[styles.commandLabel, { color: c.foreground }]}>{item.label}</Text>
+            <Text style={[styles.commandSub, { color: c.mutedForeground }]}>{item.sub}</Text>
+          </Pressable>
+        ))}
+      </View>
 
       {/* ── Negative date warning (tappable → 12-month outlook) ── */}
       {firstYearNegEntry && (
@@ -1089,170 +1127,6 @@ export default function DashboardScreen() {
           </Pressable>
         </View>
       </View>
-
-      {paycheckPlan && (
-        <View style={[styles.paycheckPlanCard, { backgroundColor: c.card, borderColor: paycheckPlan.status === "risk" ? c.destructive + "80" : paycheckPlan.status === "tight" ? c.warning + "80" : c.border }]}>
-          <View style={styles.paycheckPlanHeader}>
-            <View style={[styles.paycheckPlanIcon, { backgroundColor: paycheckPlan.status === "risk" ? c.destructive + "18" : paycheckPlan.status === "tight" ? c.warning + "18" : c.success + "18" }]}>
-              <Feather
-                name={paycheckPlan.status === "risk" ? "alert-triangle" : paycheckPlan.status === "empty" ? "calendar" : "briefcase"}
-                size={18}
-                color={paycheckPlan.status === "risk" ? c.destructive : paycheckPlan.status === "tight" ? c.warning : c.success}
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.decisionHubEyebrow, { color: c.mutedForeground }]}>Paycheck Plan</Text>
-              <Text style={[styles.paycheckPlanTitle, { color: c.foreground }]}>
-                {paycheckPlan.nextPaycheck
-                  ? `Until ${new Date(paycheckPlan.nextPaycheck.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                  : "No upcoming paycheck found"}
-              </Text>
-            </View>
-            <Text style={[styles.paycheckPlanSafe, { color: paycheckPlan.status === "risk" ? c.destructive : paycheckPlan.status === "tight" ? c.warning : c.success }]}>
-              ${paycheckPlan.safeToSpend.toFixed(0)}
-            </Text>
-          </View>
-          <Text style={[styles.paycheckPlanDesc, { color: c.mutedForeground }]}>
-            {paycheckPlan.nextPaycheck
-              ? `Safe to spend before ${paycheckPlan.nextPaycheck.name} lands. Lowest forecast: $${paycheckPlan.lowestBalance.toFixed(0)} on ${new Date(paycheckPlan.lowestBalanceDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}.`
-              : "Add recurring income to unlock paycheck-by-paycheck planning."}
-          </Text>
-          <View style={styles.paycheckPlanStats}>
-            <View style={[styles.paycheckPlanStatBox, { backgroundColor: c.muted }]}>
-              <Text style={[styles.paycheckPlanStatLabel, { color: c.mutedForeground }]}>Bills before pay</Text>
-              <Text style={[styles.paycheckPlanStatValue, { color: c.foreground }]}>{paycheckPlan.billsDue.length}</Text>
-            </View>
-            <View style={[styles.paycheckPlanStatBox, { backgroundColor: c.muted }]}>
-              <Text style={[styles.paycheckPlanStatLabel, { color: c.mutedForeground }]}>Bills total</Text>
-              <Text style={[styles.paycheckPlanStatValue, { color: c.warning }]}>${paycheckPlan.billsTotal.toFixed(0)}</Text>
-            </View>
-            <View style={[styles.paycheckPlanStatBox, { backgroundColor: c.muted }]}>
-              <Text style={[styles.paycheckPlanStatLabel, { color: c.mutedForeground }]}>Next pay</Text>
-              <Text style={[styles.paycheckPlanStatValue, { color: c.success }]}>
-                {paycheckPlan.nextPaycheck ? `$${paycheckPlan.nextPaycheck.amount.toFixed(0)}` : "—"}
-              </Text>
-            </View>
-          </View>
-          {paycheckPlan.billsDue.length > 0 && (
-            <View style={[styles.paycheckPlanBills, { borderTopColor: c.border }]}>
-              {paycheckPlan.billsDue.slice(0, 3).map(bill => (
-                <View key={`${bill.id ?? bill.name}-${bill.dueDate}`} style={styles.paycheckPlanBillRow}>
-                  <Text numberOfLines={1} style={[styles.paycheckPlanBillName, { color: c.foreground }]}>{bill.name}</Text>
-                  <Text style={[styles.paycheckPlanBillAmount, { color: c.mutedForeground }]}>
-                    ${bill.amount.toFixed(0)} · {new Date(bill.dueDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          )}
-          <View style={styles.paycheckPlanActions}>
-            <Pressable
-              onPress={() => openFloWithPrompt("What can I spend until payday?")}
-              style={({ pressed }) => [styles.paycheckPlanAction, { backgroundColor: c.primary + "18", opacity: pressed ? 0.75 : 1 }]}
-            >
-              <Feather name="message-circle" size={13} color={c.primary} />
-              <Text style={[styles.paycheckPlanActionText, { color: c.primary }]}>Ask Flo</Text>
-            </Pressable>
-            {paycheckPlan.billsDue.length > 0 ? (
-              <Pressable
-                onPress={() => openFloWithPrompt("What bill should I move?")}
-                style={({ pressed }) => [styles.paycheckPlanAction, { backgroundColor: c.warning + "18", opacity: pressed ? 0.75 : 1 }]}
-              >
-                <Feather name="shuffle" size={13} color={c.warning} />
-                <Text style={[styles.paycheckPlanActionText, { color: c.warning }]}>Move a bill</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        </View>
-      )}
-
-      {decisionHubSettings.categoryDecisionAlertsEnabled && categoryPlan.length > 0 && (
-        <View style={{ marginBottom: 14 }}>
-          {categoryDecisionAlert ? (
-            <Pressable
-              onPress={() => openFloWithPrompt(categoryDecisionAlert.prompt)}
-              style={({ pressed }) => [
-                styles.categoryDecisionAlert,
-                {
-                  backgroundColor: categoryDecisionAlert.tone === "risk" ? c.destructive + "12" : c.warning + "14",
-                  borderColor: categoryDecisionAlert.tone === "risk" ? c.destructive + "70" : c.warning + "70",
-                  opacity: pressed ? 0.8 : 1,
-                },
-              ]}
-            >
-              <Feather name={categoryDecisionAlert.tone === "risk" ? "alert-triangle" : "eye"} size={17} color={categoryDecisionAlert.tone === "risk" ? c.destructive : c.warning} />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.categoryDecisionAlertTitle, { color: c.foreground }]}>{categoryDecisionAlert.title}</Text>
-                <Text style={[styles.categoryDecisionAlertText, { color: c.mutedForeground }]}>{categoryDecisionAlert.detail}</Text>
-              </View>
-              <View style={[styles.askFloPill, { backgroundColor: c.primary + "18" }]}>
-                <Text style={[styles.askFloPillText, { color: c.primary }]}>Ask Flo</Text>
-              </View>
-            </Pressable>
-          ) : null}
-          <View style={styles.categoryPlanHeader}>
-            <View>
-              <Text style={[styles.sectionTitle, { color: c.foreground, marginBottom: 2 }]}>Category Budget</Text>
-              <Text style={[styles.categoryPlanSub, { color: c.mutedForeground }]}>
-                ${categoryPlanTotals.spent.toFixed(0)} spent · ${Math.max(0, categoryPlanTotals.remaining).toFixed(0)} left
-              </Text>
-            </View>
-            <View style={styles.categoryPlanHeaderActions}>
-              <Pressable
-                onPress={() => router.push("/(tabs)/category-budget" as any)}
-                style={({ pressed }) => [styles.categoryBudgetEdit, { backgroundColor: c.primary + "18", opacity: pressed ? 0.75 : 1 }]}
-              >
-                <Feather name="grid" size={12} color={c.primary} />
-                <Text style={[styles.categoryBudgetEditText, { color: c.primary }]}>Manage</Text>
-              </Pressable>
-              {categoryPlanTotals.remaining < -0.005 ? (
-                <View style={[styles.categoryPlanBadge, { backgroundColor: c.destructive + "18" }]}>
-                  <Text style={[styles.categoryPlanBadgeText, { color: c.destructive }]}>OVER</Text>
-                </View>
-              ) : (
-                <View style={[styles.categoryPlanBadge, { backgroundColor: c.success + "18" }]}>
-                  <Text style={[styles.categoryPlanBadgeText, { color: c.success }]}>ON PLAN</Text>
-                </View>
-              )}
-            </View>
-          </View>
-          <View style={[styles.categoryPlanCard, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-            {categoryPlan.slice(0, 5).map((row, index) => {
-              const color = row.status === "over" ? c.destructive : row.status === "watch" ? c.warning : CAT_COLORS[row.category] ?? c.primary;
-              const trackWidth = `${Math.min(100, row.percentUsed)}%` as any;
-              return (
-                <Pressable
-                  key={row.category}
-                  onPress={() => setSelectedCategory(row.category)}
-                  style={({ pressed }) => [
-                    styles.categoryPlanRow,
-                    { borderTopColor: c.border, borderTopWidth: index > 0 ? 1 : 0, opacity: pressed ? 0.75 : 1 },
-                  ]}
-                >
-                  <View style={[styles.categoryPlanIcon, { backgroundColor: color + "18" }]}>
-                    <Feather name={row.status === "over" ? "alert-triangle" : row.status === "watch" ? "eye" : "tag"} size={14} color={color} />
-                  </View>
-                  <View style={styles.categoryPlanBody}>
-                    <View style={styles.categoryPlanTop}>
-                      <Text numberOfLines={1} style={[styles.categoryPlanName, { color: c.foreground }]}>{row.category}</Text>
-                      <Text style={[styles.categoryPlanAmount, { color }]}>
-                        {row.remaining < 0 ? "-" : ""}${Math.abs(row.remaining).toFixed(0)}
-                      </Text>
-                    </View>
-                    <View style={[styles.categoryPlanTrack, { backgroundColor: c.muted }]}>
-                      <View style={[styles.categoryPlanFill, { backgroundColor: color, width: trackWidth }]} />
-                    </View>
-                    <Text style={[styles.categoryPlanDetail, { color: c.mutedForeground }]}>
-                      ${row.spent.toFixed(0)} spent of ${row.budgeted.toFixed(0)} planned
-                      {row.rollover ? ` · ${row.rollover > 0 ? "+" : "-"}$${Math.abs(row.rollover).toFixed(0)} rollover` : ""}
-                    </Text>
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-      )}
 
       {false && <>
       {/* ── WHAT CAN I DO? button ── */}
@@ -1423,67 +1297,7 @@ export default function DashboardScreen() {
         </>
       )}
 
-      {/* ── Financial Outlook ── */}
-      {balanceMetrics && (() => {
-        const daysUntilLowest = balanceMetrics.lowestDay - today;
-        const largestUpcoming = bills
-          .filter(b => (b.is_recurring || b.is_debt) && b.due_day >= today && b.due_day <= today + 7)
-          .reduce<{ name: string; amount: number } | null>((best, b) => {
-            const amt = b.amount;
-            return !best || amt > best.amount ? { name: b.name, amount: amt } : best;
-          }, null);
-        const hasRisk = firstYearNegEntry !== null || balanceMetrics.lowestBalance < settings.safety_floor;
-        if (!hasRisk && !largestUpcoming) return null;
-        return (
-          <View style={{ marginBottom: 14 }}>
-            <Text style={[styles.sectionTitle, { color: c.foreground }]}>Financial Outlook</Text>
-            <View style={[styles.outlookCard, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-              {firstYearNegEntry && (
-                <View style={[styles.outlookRow, { borderBottomWidth: 1, borderBottomColor: c.border }]}>
-                  <View style={[styles.outlookIcon, { backgroundColor: c.destructive + "18" }]}>
-                    <Feather name="alert-triangle" size={16} color={c.destructive} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.outlookLabel, { color: c.mutedForeground }]}>Next Risk Date</Text>
-                    <Text style={[styles.outlookValue, { color: c.destructive }]}>
-                      {MONTH_NAMES[firstYearNegEntry.month]}{firstYearNegEntry.year !== selectedYear ? ` ${firstYearNegEntry.year}` : ""} {firstYearNegEntry.firstNegDay} — balance goes negative
-                    </Text>
-                  </View>
-                </View>
-              )}
-              {balanceMetrics.lowestBalance < settings.safety_floor && (
-                <View style={[styles.outlookRow, largestUpcoming ? { borderBottomWidth: 1, borderBottomColor: c.border } : {}]}>
-                  <View style={[styles.outlookIcon, { backgroundColor: "#f0b42918" }]}>
-                    <Feather name="trending-down" size={16} color="#f0b429" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.outlookLabel, { color: c.mutedForeground }]}>
-                      {daysUntilLowest > 0 ? `Lowest balance in ${daysUntilLowest} day${daysUntilLowest !== 1 ? "s" : ""}` : "Lowest balance today"}
-                    </Text>
-                    <Text style={[styles.outlookValue, { color: balanceMetrics.lowestBalance < 0 ? c.destructive : "#f0b429" }]}>
-                      {balanceMetrics.lowestBalance < 0 ? "−" : ""}${Math.abs(balanceMetrics.lowestBalance).toFixed(0)} on {MONTH_NAMES[currentMonth]} {balanceMetrics.lowestDay}
-                    </Text>
-                  </View>
-                </View>
-              )}
-              {largestUpcoming && (
-                <View style={styles.outlookRow}>
-                  <View style={[styles.outlookIcon, { backgroundColor: c.warning + "18" }]}>
-                    <Feather name="calendar" size={16} color={c.warning} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.outlookLabel, { color: c.mutedForeground }]}>Largest upcoming bill (7 days)</Text>
-                    <Text style={[styles.outlookValue, { color: c.foreground }]}>
-                      {largestUpcoming.name} — ${largestUpcoming.amount.toFixed(0)} due {MONTH_NAMES[currentMonth]} {bills.find(b => b.name === largestUpcoming!.name)?.due_day}
-                    </Text>
-                  </View>
-                </View>
-              )}
-            </View>
-          </View>
-        );
-      })()}
-
+      {false && <>
       {/* ── Financial Goals ── */}
       <View style={styles.goalsHeader}>
         <Text style={[styles.sectionTitle, { color: c.foreground, marginBottom: 0 }]}>Financial Goals</Text>
@@ -1582,6 +1396,8 @@ export default function DashboardScreen() {
           );
         })
       )}
+
+      </>}
 
       {/* ── "What can I do?" modal ── */}
       <Modal
@@ -2156,9 +1972,11 @@ function formatShortDate(date: string): string {
 const styles = StyleSheet.create({
   screen:  { flex: 1 },
   content: { paddingHorizontal: 16 },
-  heading:    { fontSize: 28, fontFamily: "Inter_700Bold" },
-  subheading: { fontSize: 14, fontFamily: "Inter_400Regular", marginTop: 4, marginBottom: 20 },
-  setupCard: { borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 12 },
+  dashboardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 14, marginBottom: 18 },
+  heading:    { fontSize: 30, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.6 },
+  subheading: { fontSize: 14, fontFamily: "Inter_500Medium", marginTop: 3 },
+  headerActionButton: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center", shadowColor: "#2563eb", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.32, shadowRadius: 16, elevation: 8 },
+  setupCard: { borderWidth: 1, borderRadius: 18, padding: 14, marginBottom: 12 },
   setupHeader: { flexDirection: "row", alignItems: "flex-start", marginBottom: 8 },
   setupTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
   setupDesc: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
@@ -2167,8 +1985,8 @@ const styles = StyleSheet.create({
   setupButton: { height: 40, borderRadius: 9, alignItems: "center", justifyContent: "center", marginTop: 10 },
   setupButtonText: { fontSize: 13, fontFamily: "Inter_700Bold" },
   confidenceCard: { flexDirection: "row", alignItems: "center", gap: 9, padding: 12, borderRadius: 12, marginBottom: 14 },
-  proactiveAlertCard: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 14 },
-  proactiveAlertIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  proactiveAlertCard: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 18, padding: 13, marginBottom: 14 },
+  proactiveAlertIcon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   proactiveAlertTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   proactiveAlertText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 2 },
   proactiveActionRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
@@ -2180,15 +1998,15 @@ const styles = StyleSheet.create({
   confidenceDesc: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
 
   // Hero
-  heroCard:          { borderRadius: 22, padding: 22, marginBottom: 14, shadowColor: "#1d4ed8", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 8 },
+  heroCard:          { borderRadius: 28, padding: 24, marginBottom: 14, shadowColor: "#1d4ed8", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.35, shadowRadius: 22, elevation: 10 },
   heroGlowTop:       { position: "absolute", top: -40, right: -30, width: 160, height: 160, borderRadius: 80, backgroundColor: "rgba(255,255,255,0.08)" },
   heroGlowBottom:    { position: "absolute", bottom: -40, left: 20, width: 120, height: 120, borderRadius: 60, backgroundColor: "rgba(255,255,255,0.05)" },
-  heroLabel:         { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "rgba(255,255,255,0.8)", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 },
-  heroValue:         { fontSize: 46, fontFamily: "Inter_700Bold", color: "#fff", lineHeight: 52 },
-  heroMetrics:       { flexDirection: "row", marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.2)" },
+  heroLabel:         { fontSize: 12, fontFamily: "Inter_700Bold", color: "rgba(255,255,255,0.78)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 },
+  heroValue:         { fontSize: 52, fontFamily: "Inter_800ExtraBold", color: "#fff", lineHeight: 58, letterSpacing: -1.6 },
+  heroMetrics:       { flexDirection: "row", marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.2)" },
   heroMetric:        { flex: 1 },
   heroMetricLabel:   { fontSize: 11, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 3 },
-  heroMetricValue:   { fontSize: 14, fontFamily: "Inter_700Bold" },
+  heroMetricValue:   { fontSize: 15, fontFamily: "Inter_800ExtraBold" },
   heroMetricDivider: { width: 1, backgroundColor: "rgba(255,255,255,0.2)", marginHorizontal: 14 },
   heroProgress:      { marginTop: 14 },
   heroProgressTrack: { height: 5, borderRadius: 3, overflow: "hidden" },
@@ -2232,7 +2050,7 @@ const styles = StyleSheet.create({
   decisionHubDesc: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 2 },
   decisionHubStats: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
   decisionHubStat: { fontSize: 11, fontFamily: "Inter_700Bold" },
-  monthlyReviewCard: { borderWidth: 1, borderRadius: 16, padding: 14, marginBottom: 14 },
+  monthlyReviewCard: { borderWidth: 1, borderRadius: 20, padding: 15, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
   monthlyReviewHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
   monthlyReviewIcon: { width: 40, height: 40, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   monthlyReviewTitle: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
@@ -2240,7 +2058,7 @@ const styles = StyleSheet.create({
   monthlyReviewAsk: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
   monthlyReviewAskText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   monthlyReviewGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
-  monthlyReviewMetric: { flexBasis: "48%", flexGrow: 1, borderRadius: 12, padding: 10 },
+  monthlyReviewMetric: { flexBasis: "48%", flexGrow: 1, borderRadius: 14, padding: 11 },
   monthlyReviewLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", marginBottom: 4 },
   monthlyReviewValue: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
   monthlyReviewActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
@@ -2343,10 +2161,10 @@ const styles = StyleSheet.create({
   affordActionDoneText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
 
   // Upcoming
-  sectionTitle:  { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 10, marginTop: 4 },
-  upcomingCard:  { marginBottom: 16, overflow: "hidden" },
-  upcomingRow:   { flexDirection: "row", alignItems: "center", padding: 12, gap: 10 },
-  upcomingDot:   { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  sectionTitle:  { fontSize: 19, fontFamily: "Inter_800ExtraBold", marginBottom: 10, marginTop: 6, letterSpacing: -0.2 },
+  upcomingCard:  { marginBottom: 16, overflow: "hidden", borderWidth: 1 },
+  upcomingRow:   { flexDirection: "row", alignItems: "center", padding: 13, gap: 11 },
+  upcomingDot:   { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   upcomingInfo:  { flex: 1 },
   upcomingName:  { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   upcomingDate:  { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 1 },
@@ -2365,12 +2183,20 @@ const styles = StyleSheet.create({
   forecastTrustLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", marginBottom: 3 },
   forecastTrustValue: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
   forecastTrustDrivers: { fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 16, marginTop: 9 },
-  statsPillRow:  { flexDirection: "row", gap: 6, marginBottom: 14 },
-  statPill:      { flex: 1, borderRadius: 14, paddingVertical: 16, paddingHorizontal: 6, alignItems: "center", justifyContent: "center" },
-  statPillValue: { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 5 },
-  statPillLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", letterSpacing: 0.2 },
-  statDebtRow:   { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderRadius: 14, paddingVertical: 16, paddingHorizontal: 18, marginBottom: 14 },
-  statDebtValue: { fontSize: 28, fontFamily: "Inter_700Bold", marginTop: 2 },
+  statsPillRow:  { flexDirection: "row", gap: 8, marginBottom: 14 },
+  statPill:      { flex: 1, borderWidth: 1, borderRadius: 18, paddingVertical: 13, paddingHorizontal: 6, alignItems: "center", justifyContent: "center" },
+  statPillIcon:  { width: 28, height: 28, borderRadius: 10, alignItems: "center", justifyContent: "center", marginBottom: 7 },
+  statPillValue: { fontSize: 19, fontFamily: "Inter_800ExtraBold", marginBottom: 4 },
+  statPillLabel: { fontSize: 10, fontFamily: "Inter_700Bold", letterSpacing: 0.35 },
+  statDebtRow:   { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1, borderRadius: 18, paddingVertical: 15, paddingHorizontal: 16, marginBottom: 14 },
+  statDebtLeft:  { flexDirection: "row", alignItems: "center", gap: 12 },
+  statDebtIcon:  { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  statDebtValue: { fontSize: 28, fontFamily: "Inter_800ExtraBold", marginTop: 2, letterSpacing: -0.6 },
+  commandGrid: { flexDirection: "row", gap: 8, marginBottom: 14 },
+  commandCard: { flex: 1, borderWidth: 1, borderRadius: 18, padding: 11, minHeight: 104 },
+  commandIcon: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 10 },
+  commandLabel: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  commandSub: { fontSize: 10, fontFamily: "Inter_500Medium", lineHeight: 13, marginTop: 3 },
 
   // Goals
   goalsHeader:        { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10, marginTop: 8, gap: 8 },
@@ -2381,7 +2207,7 @@ const styles = StyleSheet.create({
   goalsEmptyText:     { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: 10, marginBottom: 16, lineHeight: 20 },
   goalsEmptyBtn:      { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
   goalsEmptyBtnText:  { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-  goalCard:           { marginBottom: 12, padding: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
+  goalCard:           { marginBottom: 12, padding: 15, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
   goalTop:            { flexDirection: "row", alignItems: "flex-start", marginBottom: 10 },
   goalLeft:           { flex: 1 },
   goalRight:          { alignItems: "flex-end" },
