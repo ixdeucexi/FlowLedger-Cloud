@@ -59,6 +59,10 @@ test("builds Flow Score, Safe Cushion, and practical algorithm outputs", () => {
   assert.ok(suite.flowScore.topAction.length > 0);
   assert.ok(suite.flowScore.breakdownItems.length >= 4);
   assert.equal(suite.safeCushion.amount, 1200);
+  assert.equal(suite.safeCushion.status, "safe");
+  assert.match(suite.safeCushion.topReason, /\$1200/);
+  assert.ok(suite.safeCushion.topAction.length > 0);
+  assert.ok(suite.safeCushion.breakdownItems.some(item => item.label === "Safety floor"));
   assert.equal(suite.lowBalanceWarning.status, "safe");
   assert.equal(suite.billPriority.bills[0].name, "Phone");
   assert.equal(suite.debtPayoff.nextDebtName, "Credit Card");
@@ -113,4 +117,20 @@ test("flags risk days and low balance warnings deterministically", () => {
   assert.equal(suite.riskDay.risk, 1);
   assert.ok(suite.flowScore.score < 70);
   assert.match(suite.flowScore.topReason, /floor|negative|risk/i);
+  assert.equal(suite.safeCushion.amount, 0);
+  assert.equal(suite.safeCushion.status, "risk");
+  assert.match(suite.safeCushion.topAction, /protect/i);
+});
+
+test("Safe Cushion enters watch status when only a small amount remains above the floor", () => {
+  const suite = buildAlgorithmSuite(baseInput({
+    dailyBalances: [
+      { day: 1, income: 0, bills: 0, expense: 0, net: 0, balance: 500 },
+      { day: 8, income: 0, bills: 100, expense: 0, net: -100, balance: 325 },
+    ],
+  }));
+
+  assert.equal(suite.safeCushion.amount, 125);
+  assert.equal(suite.safeCushion.status, "watch");
+  assert.match(suite.safeCushion.topReason, /only \$125/);
 });

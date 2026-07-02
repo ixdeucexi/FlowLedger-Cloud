@@ -88,6 +88,17 @@ const facts: FloFacts = {
     positiveFactors: ["No negative days are showing."],
     negativeFactors: ["Safe Cushion is thin."],
   },
+  safeCushion: {
+    amount: 600,
+    label: "healthy cushion",
+    status: "safe",
+    lowestBalance: 800,
+    lowestDay: 1,
+    safetyFloor: 200,
+    reservedAmount: 1520,
+    topReason: "Your lowest forecast stays $600 above the $200 floor.",
+    topAction: "Ask Flo what this cushion can safely do.",
+  },
 };
 const days = [{ date: "2026-06-24", balance: 1000 }, { date: "2026-07-01", balance: 800 }];
 
@@ -120,6 +131,12 @@ test("Flo explains Flow Score from deterministic facts", () => {
   assert.match(localFloAnswer("How do I improve my Flow Score?", facts, days) ?? "", /Ask Flo why day 8 is tight/);
   assert.match(localFloAnswer("What hurt my Flow Score?", facts, days) ?? "", /Safe Cushion is thin/);
   assert.match(localFloAnswer("What helped my Flow Score?", facts, days) ?? "", /No negative days/);
+});
+
+test("Flo explains Safe Cushion from deterministic facts", () => {
+  assert.match(localFloAnswer("What is my Safe Cushion?", facts, days) ?? "", /\$600/);
+  assert.match(localFloAnswer("How much can I safely spend?", facts, days) ?? "", /reserving/);
+  assert.match(localFloAnswer("Why is my cushion low?", { ...facts, safeCushion: { ...facts.safeCushion!, amount: 80, label: "thin cushion", status: "watch" } }, days) ?? "", /lowest projected balance/i);
 });
 
 test("Flo answers category budget questions from verified facts", () => {

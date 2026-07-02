@@ -99,7 +99,19 @@ export interface AlgorithmSuiteResult {
     confidence: "high" | "medium" | "low";
     factors: string[];
   };
-  safeCushion: { amount: number; label: string };
+  safeCushion: {
+    amount: number;
+    label: string;
+    status: "safe" | "watch" | "risk";
+    lowestBalance: number;
+    lowestDay: number | null;
+    safetyFloor: number;
+    reservedAmount: number;
+    reservedLabel: string;
+    topReason: string;
+    topAction: string;
+    breakdownItems: { label: string; value: string; tone: "safe" | "watch" | "risk" | "info" }[];
+  };
   purchaseDecision: { safeNowLimit: number; action: "safe" | "wait" | "split" | "avoid"; detail: string };
   billPriority: { bills: { id: string; name: string; amount: number; dueDay: number; score: number; reason: string }[] };
   paydaySplit: { bills: number; spending: number; savings: number; debt: number; goals: number };
@@ -176,6 +188,12 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
         : { safeNowLimit: 0, action: "avoid" as const, detail: "New spending is unsafe until the forecast improves." };
 
   const reminders = buildSmartReminders(lowBalanceWarning, billPriority.bills, goalAcceleration.goalName);
+  const safeCushionDetails = buildSafeCushionDetails(input, {
+    safeCushionAmount,
+    lowestBalance,
+    lowestDay,
+    lowBalanceWarning,
+  });
   const categoryPressure = (input.categoryPlan ?? []).filter(row => row.status !== "available");
   const flowScoreDetails = buildFlowScoreDetails(input, {
     flowScore,
@@ -221,7 +239,10 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
         `${paidBills}/${input.bills.length || 0} bills cleared`,
       ],
     },
-    safeCushion: { amount: isAlgorithmEnabled(input.settings, "safeCushion") ? safeCushionAmount : 0, label: safeCushionAmount > 0 ? "safe after floor" : "no extra cushion" },
+    safeCushion: {
+      ...safeCushionDetails,
+      amount: isAlgorithmEnabled(input.settings, "safeCushion") ? safeCushionAmount : 0,
+    },
     purchaseDecision,
     billPriority,
     paydaySplit,
@@ -407,6 +428,56 @@ function buildSmartReminders(lowBalance: AlgorithmSuiteResult["lowBalanceWarning
   bills.slice(0, 2).forEach(bill => reminders.push(`Confirm ${bill.name} before day ${bill.dueDay}.`));
   if (goalName) reminders.push(`Check if extra savings can go to ${goalName}.`);
   return reminders.slice(0, 4);
+}
+
+function buildSafeCushionDetails(
+  input: AlgorithmSuiteInput,
+  facts: {
+    safeCushionAmount: number;
+    lowestBalance: number;
+    lowestDay: number | null;
+    lowBalanceWarning: AlgorithmSuiteResult["lowBalanceWarning"];
+  },
+): Omit<AlgorithmSuiteResult["safeCushion"], "amount"> {
+  const remainingBills = Math.max(0, input.cashFlow.totalBillsDue - input.cashFlow.totalPaid);
+  const plannedOutflow = Math.max(0, -input.cashFlow.netTransactions) + Math.max(0, input.cashFlow.goalAllocations);
+  const reservedAmount = roundCurrency(remainingBills + plannedOutflow);
+  const status: AlgorithmSuiteResult["safeCushion"]["status"] = facts.safeCushionAmount <= 0
+    ? "risk"
+    : facts.safeCushionAmount < 250
+      ? "watch"
+      : "safe";
+  const label = status === "safe" ? "healthy cushion" : status === "watch" ? "thin cushion" : "no safe cushion";
+  const reservedLabel = reservedAmount > 0
+    ? `$${reservedAmount.toFixed(0)} is already reserved for bills, spending, and goals in this month.`
+    : "No remaining planned outflow is reserved in this month.";
+  const topReason = status === "safe"
+    ? `Your lowest forecast stays $${facts.safeCushionAmount.toFixed(0)} above the $${input.safetyFloor.toFixed(0)} floor.`
+    : status === "watch"
+      ? `Your lowest forecast leaves only $${facts.safeCushionAmount.toFixed(0)} above the $${input.safetyFloor.toFixed(0)} floor.`
+      : facts.lowBalanceWarning.message;
+  const topAction = status === "safe"
+    ? "Ask Flo what this cushion can safely do."
+    : status === "watch"
+      ? "Keep extra money available until the tight day passes."
+      : "Ask Flo how to protect your safety floor.";
+  return {
+    label,
+    status,
+    lowestBalance: roundCurrency(facts.lowestBalance),
+    lowestDay: facts.lowestDay,
+    safetyFloor: input.safetyFloor,
+    reservedAmount,
+    reservedLabel,
+    topReason,
+    topAction,
+    breakdownItems: [
+      { label: "Safe amount", value: `$${facts.safeCushionAmount.toFixed(0)}`, tone: status },
+      { label: "Lowest balance", value: `$${facts.lowestBalance.toFixed(0)}${facts.lowestDay ? ` day ${facts.lowestDay}` : ""}`, tone: facts.lowestBalance < input.safetyFloor ? "risk" : "info" },
+      { label: "Safety floor", value: `$${input.safetyFloor.toFixed(0)}`, tone: "info" },
+      { label: "Reserved", value: `$${reservedAmount.toFixed(0)}`, tone: reservedAmount > facts.safeCushionAmount ? "watch" : "info" },
+    ],
+  };
 }
 
 function buildFlowScoreDetails(

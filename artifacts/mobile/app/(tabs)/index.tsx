@@ -80,6 +80,7 @@ export default function DashboardScreen() {
   const [moveAmount, setMoveAmount] = useState("");
   const [moveError, setMoveError] = useState("");
   const [flowScoreVisible, setFlowScoreVisible] = useState(false);
+  const [safeCushionVisible, setSafeCushionVisible] = useState(false);
 
   useFocusEffect(useCallback(() => {
     setIsFocused(true);
@@ -1180,10 +1181,16 @@ export default function DashboardScreen() {
           </View>
 
           <View style={styles.algoMetricRow}>
-            <View style={styles.algoMiniMetric}>
+            <Pressable
+              onPress={(event) => {
+                event.stopPropagation();
+                setSafeCushionVisible(true);
+              }}
+              style={({ pressed }) => [styles.algoMiniMetric, { opacity: pressed ? 0.78 : 1 }]}
+            >
               <Text style={styles.algoMiniLabel}>Safe Cushion</Text>
               <Text style={styles.algoMiniValue}>${algorithmSuite.safeCushion.amount.toFixed(0)}</Text>
-            </View>
+            </Pressable>
             <View style={styles.algoMiniMetric}>
               <Text style={styles.algoMiniLabel}>Daily Limit</Text>
               <Text style={styles.algoMiniValue}>${algorithmSuite.spendingLimit.daily.toFixed(0)}</Text>
@@ -1745,6 +1752,47 @@ export default function DashboardScreen() {
               onPress={() => {
                 setFlowScoreVisible(false);
                 openFloWithPrompt(`Why is my Flow Score ${algorithmSuite.flowScore.score}? ${algorithmSuite.flowScore.topReason} ${algorithmSuite.flowScore.topAction}`);
+              }}
+              style={({ pressed }) => [styles.flowScoreFloButton, { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 }]}
+            >
+              <Feather name="message-circle" size={16} color={c.primaryForeground} />
+              <Text style={[styles.flowScoreFloText, { color: c.primaryForeground }]}>Ask Flo about this</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={safeCushionVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSafeCushionVisible(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setSafeCushionVisible(false)}>
+          <Pressable style={[styles.actionSheet, { backgroundColor: c.card }]} onPress={() => {}}>
+            <View style={[styles.sheetHandle, { backgroundColor: c.muted }]} />
+            <Text style={[styles.sheetTitle, { color: c.foreground }]}>Safe Cushion</Text>
+            <Text style={[styles.sheetSub, { color: c.mutedForeground }]}>{algorithmSuite.safeCushion.topReason}</Text>
+
+            <View style={styles.flowScoreBreakdown}>
+              {algorithmSuite.safeCushion.breakdownItems.map(item => (
+                <View key={item.label} style={[styles.flowScoreBreakdownRow, { borderTopColor: c.border }]}>
+                  <Text style={[styles.flowScoreBreakdownLabel, { color: c.mutedForeground }]}>{item.label}</Text>
+                  <Text style={[styles.flowScoreBreakdownValue, { color: algoToneColor(item.tone === "watch" ? "watch" : item.tone === "risk" ? "risk" : item.tone === "safe" ? "safe" : "info") }]}>{item.value}</Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={[styles.flowScoreNextMove, { backgroundColor: c.primary + "18", borderColor: c.primary + "35" }]}>
+              <Text style={[styles.flowScoreColumnTitle, { color: c.primary }]}>What this means</Text>
+              <Text style={[styles.flowScoreFactor, { color: c.foreground }]}>{algorithmSuite.safeCushion.reservedLabel}</Text>
+              <Text style={[styles.flowScoreFactor, { color: c.foreground, marginTop: 6 }]}>{algorithmSuite.safeCushion.topAction}</Text>
+            </View>
+
+            <Pressable
+              onPress={() => {
+                setSafeCushionVisible(false);
+                openFloWithPrompt("What is my Safe Cushion and what can I safely do with it?");
               }}
               style={({ pressed }) => [styles.flowScoreFloButton, { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 }]}
             >

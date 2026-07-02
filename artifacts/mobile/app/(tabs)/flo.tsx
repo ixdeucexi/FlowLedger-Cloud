@@ -444,6 +444,17 @@ export default function FloScreen() {
         positiveFactors: algorithmSuite.flowScore.positiveFactors,
         negativeFactors: algorithmSuite.flowScore.negativeFactors,
       },
+      safeCushion: {
+        amount: algorithmSuite.safeCushion.amount,
+        label: algorithmSuite.safeCushion.label,
+        status: algorithmSuite.safeCushion.status,
+        lowestBalance: algorithmSuite.safeCushion.lowestBalance,
+        lowestDay: algorithmSuite.safeCushion.lowestDay,
+        safetyFloor: algorithmSuite.safeCushion.safetyFloor,
+        reservedAmount: algorithmSuite.safeCushion.reservedAmount,
+        topReason: algorithmSuite.safeCushion.topReason,
+        topAction: algorithmSuite.safeCushion.topAction,
+      },
       decisionHistory: {
         due: decisionHistory.due,
         upcoming: decisionHistory.upcoming,

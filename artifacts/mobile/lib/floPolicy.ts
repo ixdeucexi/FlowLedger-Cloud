@@ -43,6 +43,17 @@ export interface FloFacts {
     positiveFactors: string[];
     negativeFactors: string[];
   };
+  safeCushion?: {
+    amount: number;
+    label: string;
+    status: "safe" | "watch" | "risk";
+    lowestBalance: number;
+    lowestDay: number | null;
+    safetyFloor: number;
+    reservedAmount: number;
+    topReason: string;
+    topAction: string;
+  };
 }
 
 export interface FloDebtFact {
@@ -289,6 +300,17 @@ export function sanitizeFloFacts(facts: FloFacts): FloFacts {
       positiveFactors: (facts.flowScore.positiveFactors ?? []).slice(0, 3).map(item => String(item).slice(0, 140)),
       negativeFactors: (facts.flowScore.negativeFactors ?? []).slice(0, 3).map(item => String(item).slice(0, 140)),
     } : undefined,
+    safeCushion: facts.safeCushion ? {
+      amount: num(facts.safeCushion.amount),
+      label: String(facts.safeCushion.label ?? "").slice(0, 40),
+      status: facts.safeCushion.status === "safe" || facts.safeCushion.status === "watch" || facts.safeCushion.status === "risk" ? facts.safeCushion.status : "risk",
+      lowestBalance: num(facts.safeCushion.lowestBalance),
+      lowestDay: facts.safeCushion.lowestDay === null ? null : num(facts.safeCushion.lowestDay),
+      safetyFloor: num(facts.safeCushion.safetyFloor),
+      reservedAmount: num(facts.safeCushion.reservedAmount),
+      topReason: String(facts.safeCushion.topReason ?? "").slice(0, 180),
+      topAction: String(facts.safeCushion.topAction ?? "").slice(0, 120),
+    } : undefined,
   };
 }
 
@@ -303,6 +325,14 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
     if (lower.includes("hurt")) return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. What hurt it: ${hurt} Best next move: ${facts.flowScore.topAction}`;
     if (lower.includes("help")) return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. What helped it: ${helped}`;
     return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. ${facts.flowScore.topReason} What helped: ${helped} What hurt: ${hurt} Best next move: ${facts.flowScore.topAction}`;
+  }
+  const asksSafeCushion = lower.includes("safe cushion") || lower.includes("cushion") || /safely spend|safe to spend|how much can i spend|available to spend/.test(lower);
+  if (asksSafeCushion && facts.safeCushion) {
+    const dayText = facts.safeCushion.lowestDay ? ` on day ${facts.safeCushion.lowestDay}` : "";
+    if (lower.includes("low") || lower.includes("why")) {
+      return `Your Safe Cushion is $${facts.safeCushion.amount.toFixed(0)} - ${facts.safeCushion.label}. ${facts.safeCushion.topReason} Your lowest projected balance is $${facts.safeCushion.lowestBalance.toFixed(0)}${dayText}, with a $${facts.safeCushion.safetyFloor.toFixed(0)} floor. ${facts.safeCushion.topAction}`;
+    }
+    return `Your Safe Cushion is $${facts.safeCushion.amount.toFixed(0)} - ${facts.safeCushion.label}. ${facts.safeCushion.topReason} FlowLedger is already reserving about $${facts.safeCushion.reservedAmount.toFixed(0)} for the current plan. ${facts.safeCushion.topAction}`;
   }
   const debtPayment = evaluateFloDebtPayment(message, facts);
   if (debtPayment) {
