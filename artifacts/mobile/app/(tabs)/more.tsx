@@ -140,6 +140,8 @@ export default function MoreScreen() {
   ];
   const setupComplete = setupSteps.filter(step => step.done).length;
   const currentSetupStep = setupSteps.find(step => !step.done) ?? setupSteps[setupSteps.length - 1];
+  const setupIsComplete = settings.onboarding_completed || setupComplete >= setupSteps.length;
+  const shouldShowFloSetup = !setupIsComplete;
   const currentMonthPrefix = new Date().toISOString().slice(0, 7);
   const accountMonthDeltas = useMemo(() => {
     const deltas = new Map<string, number>();
@@ -375,6 +377,7 @@ export default function MoreScreen() {
     >
       <Text style={[styles.pageTitle, { color: c.foreground }]}>Settings</Text>
 
+      {shouldShowFloSetup && <>
       <SLabel c={c} text="Flo Setup" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View style={[styles.floSetupHero, { backgroundColor: c.primary + "10", borderColor: c.primary + "30" }]}>
@@ -459,6 +462,8 @@ export default function MoreScreen() {
       </View>
 
       {/* ── Appearance ── */}
+      </>}
+
       <SLabel c={c} text="Appearance" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View style={[styles.themeRow, { backgroundColor: c.muted, borderRadius: 10 }]}>
