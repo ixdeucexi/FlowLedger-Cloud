@@ -229,6 +229,28 @@ async function downloadFile(url, outputPath) {
   }
 }
 
+async function withDownloadRetry(label, operation, maxAttempts = 4) {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      const isLastAttempt = attempt === maxAttempts;
+      if (isLastAttempt) break;
+
+      const delayMs = Math.min(2000 * attempt, 8000);
+      console.warn(
+        `${label} failed on attempt ${attempt}/${maxAttempts}: ${error.message}. Retrying in ${Math.round(delayMs / 1000)}s...`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+
+  throw lastError;
+}
+
 async function downloadBundle(platform, timestamp) {
   const entryPath = path.resolve(projectRoot, "node_modules", "expo-router", "entry");
   const bundlePath = path.relative(workspaceRoot, entryPath);
@@ -250,7 +272,10 @@ async function downloadBundle(platform, timestamp) {
   );
 
   console.log(`Fetching ${platform} bundle...`);
-  await downloadFile(url.toString(), output);
+  await withDownloadRetry(
+    `${platform} bundle download`,
+    () => downloadFile(url.toString(), output),
+  );
   console.log(`${platform} bundle ready`);
 }
 
@@ -260,10 +285,13 @@ async function downloadManifest(platform) {
 
   try {
     console.log(`Fetching ${platform} manifest...`);
-    const response = await fetch("http://localhost:8081/manifest", {
-      headers: { "expo-platform": platform },
-      signal: controller.signal,
-    });
+    const response = await withDownloadRetry(
+      `${platform} manifest download`,
+      () => fetch("http://localhost:8081/manifest", {
+        headers: { "expo-platform": platform },
+        signal: controller.signal,
+      }),
+    );
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
