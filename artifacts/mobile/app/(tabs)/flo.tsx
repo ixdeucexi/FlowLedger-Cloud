@@ -19,6 +19,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useBudget, type DecisionRecord } from "@/context/BudgetContext";
 import { DatePickerField } from "@/components/DatePickerField";
 import { FloLogo } from "@/components/FloLogo";
+import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { useColors } from "@/hooks/useColors";
 import { askFlo, loadFloMemory, updateFloMemory, type FloFacts } from "@/lib/flo";
 import {
@@ -852,8 +853,9 @@ export default function FloScreen() {
       style={[styles.screen, { backgroundColor: colors.background }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      <PremiumBackdrop variant="blue" />
       <LinearGradient
-        colors={["#172554", "#083344"]}
+        colors={["rgba(37,99,235,0.72)", "rgba(8,51,68,0.78)", "rgba(2,6,23,0.78)"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={[styles.header, { paddingTop: Platform.OS === "web" ? 18 : insets.top + 12, borderColor: colors.border }]}

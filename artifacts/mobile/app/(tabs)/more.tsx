@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AccountModal } from "@/components/AccountModal";
 import { FloLogo } from "@/components/FloLogo";
 import { IncomeModal } from "@/components/IncomeModal";
+import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { PWA_INSTALL_EVENT } from "@/components/PwaInstallPrompt";
 import colors from "@/constants/colors";
 import type { Account, IncomeItem } from "@/context/BudgetContext";
@@ -79,6 +80,7 @@ export default function MoreScreen() {
   const [forecastHorizonText, setForecastHorizonText] = useState(settings.forecast_horizon_months.toString());
   const [decisionHubSettings, setDecisionHubSettings] = useState<DecisionHubSettings>(() => readDecisionHubSettings());
   const [selectedAlgorithm, setSelectedAlgorithm] = useState<AlgorithmCatalogItem | null>(null);
+  const [showAlgorithmSuite, setShowAlgorithmSuite] = useState(false);
   const [backupExported, setBackupExported] = useState(() => {
     try { return Platform.OS === "web" && globalThis.localStorage?.getItem(BACKUP_COMPLETE_KEY) === "true"; }
     catch { return false; }
@@ -373,11 +375,22 @@ export default function MoreScreen() {
   const webTopPad = Platform.OS === "web" ? 4 : 0;
 
   return (
-    <ScrollView
-      style={[styles.screen, { backgroundColor: c.background }]}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 + webTopPad, paddingBottom: insets.bottom + 100 }]}
-    >
+    <View style={[styles.screen, { backgroundColor: c.background }]}>
+      <PremiumBackdrop variant="blue" />
+      <ScrollView
+        style={styles.scroller}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 + webTopPad, paddingBottom: insets.bottom + 100 }]}
+      >
       <Text style={[styles.pageTitle, { color: c.foreground }]}>Settings</Text>
+      <View style={[styles.settingsHero, { backgroundColor: c.card, borderColor: c.border }]}>
+        <View style={[styles.settingsHeroIcon, { backgroundColor: c.primary + "18" }]}>
+          <Feather name="sliders" size={20} color={c.primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.settingsHeroTitle, { color: c.foreground }]}>Control Center</Text>
+          <Text style={[styles.settingsHeroText, { color: c.mutedForeground }]}>Clean sections for setup, money, decisions, advanced tools, and data.</Text>
+        </View>
+      </View>
 
       {shouldShowFloSetup && <>
       <SLabel c={c} text="Flo Setup" />
@@ -485,7 +498,25 @@ export default function MoreScreen() {
         </View>
       </View>
 
-      {/* ── Accounts and reconciliation ── */}
+      <SLabel c={c} text="Advanced" />
+      <Pressable
+        onPress={() => {
+          setShowAlgorithmSuite(current => !current);
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }}
+        style={({ pressed }) => [styles.settingsLauncher, { backgroundColor: c.card, borderColor: showAlgorithmSuite ? c.primary + "70" : c.border, opacity: pressed ? 0.82 : 1 }]}
+      >
+        <View style={[styles.dataIcon, { backgroundColor: c.primary + "18" }]}>
+          <Feather name="cpu" size={17} color={c.primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.switchLabel, { color: c.foreground }]}>Algorithm Suite</Text>
+          <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Flow Score, Safe Cushion, warnings, category decisions, and risk tools.</Text>
+        </View>
+        <Feather name={showAlgorithmSuite ? "chevron-up" : "chevron-down"} size={20} color={c.mutedForeground} />
+      </Pressable>
+
+      {showAlgorithmSuite && <>
       <SLabel c={c} text="Algorithm Suite" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <Pressable
@@ -578,6 +609,7 @@ export default function MoreScreen() {
           })}
         </View>
       </View>
+      </>}
 
       <SLabel c={c} text="Flo Decision Center" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
@@ -1104,7 +1136,8 @@ export default function MoreScreen() {
         }}
         onReconcile={(balance, date) => selectedAccount ? reconcileAccount(selectedAccount.id, balance, date) : Promise.resolve()}
       />
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -1118,10 +1151,16 @@ function SLabel({ c, text }: { c: any; text: string }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  scroller: { flex: 1 },
   content: { paddingHorizontal: 16 },
-  pageTitle:    { fontSize: 28, fontFamily: "Inter_700Bold", marginBottom: 20 },
+  pageTitle:    { fontSize: 34, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.1, marginBottom: 14 },
   pageSubtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginBottom: 20 },
-  card: { padding: 16, marginBottom: 20, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
+  settingsHero: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 24, padding: 14, marginBottom: 18, shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.16, shadowRadius: 18, elevation: 4 },
+  settingsHeroIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  settingsHeroTitle: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
+  settingsHeroText: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 17, marginTop: 2 },
+  settingsLauncher: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 20, padding: 14, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.16, shadowRadius: 18, elevation: 4 },
+  card: { padding: 16, marginBottom: 20, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", shadowColor: "#000", shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 22, elevation: 5 },
   emptyText: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", paddingVertical: 8 },
 
   incomeRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, gap: 10 },

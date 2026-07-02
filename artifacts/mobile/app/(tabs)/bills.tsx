@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddBillModal } from "@/components/AddBillModal";
 import { EmptyState } from "@/components/EmptyState";
+import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
 import colors from "@/constants/colors";
 import type { Bill } from "@/context/BudgetContext";
@@ -195,6 +196,7 @@ export default function BillsScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: c.background }]}>
+      <PremiumBackdrop variant={activeTab === "debt" ? "purple" : "blue"} />
       {/* ── Header ── */}
       <View style={[styles.header, { paddingTop: insets.top + 12 + webTopPad }]}>
         <View>
@@ -536,11 +538,11 @@ export default function BillsScreen() {
 
 const styles = StyleSheet.create({
   screen:   { flex: 1 },
-  header:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingBottom: 10 },
-  title:    { fontSize: 28, fontFamily: "Inter_700Bold" },
-  subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
-  addBtn:   { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  billPromptCard: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 14, padding: 12, marginHorizontal: 16, marginBottom: 12 },
+  header:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingBottom: 14 },
+  title:    { fontSize: 34, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.1 },
+  subtitle: { fontSize: 13, fontFamily: "Inter_500Medium", marginTop: 3, letterSpacing: 0.2 },
+  addBtn:   { width: 52, height: 52, borderRadius: 18, alignItems: "center", justifyContent: "center", shadowColor: "#2563eb", shadowOpacity: 0.32, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
+  billPromptCard: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 22, padding: 14, marginHorizontal: 16, marginBottom: 12 },
   billPromptTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   billPromptText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 2 },
   billPromptActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
@@ -549,8 +551,8 @@ const styles = StyleSheet.create({
 
   // Segment toggle
   segmentWrap: {},
-  segment:    { flexDirection: "row", borderRadius: 12, padding: 4, gap: 4 },
-  segmentBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, borderRadius: 9 },
+  segment:    { flexDirection: "row", borderRadius: 18, padding: 5, gap: 5, borderWidth: 1, borderColor: "rgba(148,163,184,0.10)" },
+  segmentBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 11, borderRadius: 13 },
   segmentText:{ fontSize: 14, fontFamily: "Inter_600SemiBold" },
 
   // Bills filters
@@ -560,7 +562,7 @@ const styles = StyleSheet.create({
 
   // Shared list / card
   list:     { paddingHorizontal: 16, paddingTop: 6 },
-  card:     { flexDirection: "row", marginBottom: 10, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2, overflow: "hidden" },
+  card:     { flexDirection: "row", marginBottom: 12, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", shadowColor: "#000", shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 22, elevation: 5, overflow: "hidden" },
   cardBody: { flex: 1, padding: 14 },
   cardTop:  { flexDirection: "row", alignItems: "flex-start", marginBottom: 10 },
   cardLeft: { flex: 1 },
@@ -572,7 +574,7 @@ const styles = StyleSheet.create({
 
   // Bills-specific
   catBar:    { width: 4 },
-  billName:  { fontSize: 15, fontFamily: "Inter_600SemiBold", marginBottom: 6 },
+  billName:  { fontSize: 17, fontFamily: "Inter_800ExtraBold", marginBottom: 7, letterSpacing: -0.2 },
   tag:       { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   tagText:   { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   amount:    { fontSize: 18, fontFamily: "Inter_700Bold" },
@@ -583,7 +585,7 @@ const styles = StyleSheet.create({
   statCard:       { flex: 1, alignItems: "center", paddingVertical: 12, gap: 4 },
   statValue:      { fontSize: 16, fontFamily: "Inter_700Bold" },
   statLabel:      { fontSize: 10, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.4 },
-  extraBanner:    { flexDirection: "column", padding: 14, marginBottom: 10, marginTop: 4 },
+  extraBanner:    { flexDirection: "column", padding: 16, marginBottom: 12, marginTop: 4, borderWidth: 1, borderColor: "rgba(34,197,94,0.16)" },
   extraTopRow:    { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   extraLeft:      { flexDirection: "row", alignItems: "center", gap: 10 },
   extraLabel:     { fontSize: 11, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.5 },

@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import colors from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import { useBudget } from "@/context/BudgetContext";
@@ -148,6 +149,7 @@ export default function CategoryBudgetScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: c.background, paddingTop: insets.top + 10 }]}>
+      <PremiumBackdrop variant="green" />
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: c.card }]}>
           <Feather name="chevron-left" size={20} color={c.foreground} />
@@ -271,13 +273,13 @@ function statusRank(status: CategoryPlanRow["status"]) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  header: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingBottom: 12 },
-  backBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
-  title: { fontSize: 24, fontFamily: "Inter_800ExtraBold" },
+  header: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 20, paddingBottom: 14 },
+  backBtn: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  title: { fontSize: 28, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.8 },
   subtitle: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   saveBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12 },
   saveText: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
-  monthCard: { marginHorizontal: 16, borderRadius: colors.radius, padding: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  monthCard: { marginHorizontal: 16, borderRadius: 20, padding: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)" },
   monthBtn: { padding: 6 },
   monthTitle: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
   summaryRow: { flexDirection: "row", gap: 8, paddingHorizontal: 16, marginBottom: 10 },
@@ -287,7 +289,7 @@ const styles = StyleSheet.create({
   filterRow: { flexDirection: "row", gap: 8, paddingHorizontal: 16, marginBottom: 2 },
   filterChip: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   filterText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
-  rowCard: { borderWidth: 1, borderRadius: 18, padding: 14, marginBottom: 12, gap: 10 },
+  rowCard: { borderWidth: 1, borderRadius: 22, padding: 14, marginBottom: 12, gap: 10, shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.16, shadowRadius: 18, elevation: 4 },
   rowTop: { flexDirection: "row", alignItems: "center", gap: 10 },
   icon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   rowName: { fontSize: 15, fontFamily: "Inter_800ExtraBold" },

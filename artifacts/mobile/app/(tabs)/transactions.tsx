@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddTransactionModal } from "@/components/AddTransactionModal";
 import { EmptyState } from "@/components/EmptyState";
+import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import colors from "@/constants/colors";
 import type { Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
@@ -387,6 +388,7 @@ export default function TransactionsScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: c.background }]}>
+      <PremiumBackdrop variant="green" />
       {/* ── Header ── */}
       <View style={[styles.header, { paddingTop: insets.top + 12 + webTopPad }]}>
         <View>
@@ -687,15 +689,15 @@ export default function TransactionsScreen() {
 
 const styles = StyleSheet.create({
   screen:   { flex: 1 },
-  header:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingBottom: 10 },
-  title:    { fontSize: 28, fontFamily: "Inter_700Bold" },
-  subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
-  addBtn:   { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
+  header:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingBottom: 14 },
+  title:    { fontSize: 34, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.1 },
+  subtitle: { fontSize: 13, fontFamily: "Inter_500Medium", marginTop: 3, letterSpacing: 0.2 },
+  addBtn:   { width: 52, height: 52, borderRadius: 18, alignItems: "center", justifyContent: "center", shadowColor: "#2563eb", shadowOpacity: 0.32, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
 
   searchWrap:  { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16 },
-  searchBox:   { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
+  searchBox:   { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 12 },
   searchInput: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", padding: 0 },
-  filterIconButton: { width: 44, height: 44, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  filterIconButton: { width: 48, height: 48, borderRadius: 16, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   filterCount: { position: "absolute", top: -5, right: -5, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, alignItems: "center", justifyContent: "center" },
   filterCountText: { color: "#fff", fontSize: 10, fontFamily: "Inter_700Bold" },
 
@@ -714,7 +716,7 @@ const styles = StyleSheet.create({
   filterActionButton: { flex: 1, minHeight: 48, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 10 },
   filterActionText: { fontSize: 14, fontFamily: "Inter_700Bold" },
 
-  summaryRow:     { flexDirection: "row", paddingVertical: 14 },
+  summaryRow:     { flexDirection: "row", paddingVertical: 16, borderWidth: 1, borderColor: "rgba(148,163,184,0.10)", shadowColor: "#000", shadowOpacity: 0.16, shadowRadius: 18, shadowOffset: { width: 0, height: 10 }, elevation: 4 },
   summaryStat:    { flex: 1, alignItems: "center", gap: 4 },
   summaryValue:   { fontSize: 18, fontFamily: "Inter_700Bold" },
   summaryLabel:   { fontSize: 10, fontFamily: "Inter_600SemiBold", letterSpacing: 0.4, textTransform: "uppercase" },
@@ -724,7 +726,7 @@ const styles = StyleSheet.create({
   sectionHeader: { paddingVertical: 6 },
   sectionTitle:  { fontSize: 12, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.6 },
 
-  txRow:          { flexDirection: "row", alignItems: "center", padding: 12, gap: 12 },
+  txRow:          { flexDirection: "row", alignItems: "center", padding: 14, gap: 12, borderWidth: 1, borderColor: "rgba(148,163,184,0.10)", shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 3 },
   sourceIcon:     { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
   txMid:          { flex: 1 },
   txNote:         { fontSize: 14, fontFamily: "Inter_600SemiBold", marginBottom: 4 },

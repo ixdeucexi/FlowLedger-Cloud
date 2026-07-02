@@ -13,6 +13,7 @@ import { AddTransactionModal } from "@/components/AddTransactionModal";
 import { BillSurplusModal } from "@/components/BillSurplusModal";
 import { CalendarView } from "@/components/CalendarView";
 import { EmptyState } from "@/components/EmptyState";
+import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
 import colors from "@/constants/colors";
 import type { Bill, BillDateMove, DecisionRecord, Transaction } from "@/context/BudgetContext";
@@ -729,6 +730,7 @@ export default function MonthlyScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: c.background }]}>
+      <PremiumBackdrop variant="purple" />
       <View style={[styles.header, { paddingTop: insets.top + 12 + webTopPad }]}>
         <View>
           <Text style={[styles.title, { color: c.foreground }]}>{MONTH_FULL[month]} {selectedYear}</Text>
@@ -1560,10 +1562,10 @@ export default function MonthlyScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingBottom: 8 },
-  title: { fontSize: 28, fontFamily: "Inter_700Bold" },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingBottom: 10 },
+  title: { fontSize: 34, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.1 },
   forecastTag: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginTop: 1 },
-  iconBtn: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  iconBtn: { width: 52, height: 52, borderRadius: 18, alignItems: "center", justifyContent: "center", shadowColor: "#2563eb", shadowOpacity: 0.32, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
   calendarMonthBar: { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
   monthArrowBtn: { width: 44, height: 38, alignItems: "center", justifyContent: "center" },
   monthCenterLabel: { flex: 1, alignItems: "center", justifyContent: "center" },
@@ -1597,7 +1599,7 @@ const styles = StyleSheet.create({
   pill: { paddingHorizontal: 12, paddingVertical: 5 },
   pillText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   list: { paddingHorizontal: 16, paddingTop: 6 },
-  entryCard: { marginBottom: 10, borderLeftWidth: 4, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
+  entryCard: { marginBottom: 12, borderLeftWidth: 4, borderWidth: 1, borderColor: "rgba(148,163,184,0.10)", shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.16, shadowRadius: 18, elevation: 4 },
   entryTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", padding: 12, paddingBottom: 6 },
   entryLeft: { flex: 1 },
   entryName: { fontSize: 15, fontFamily: "Inter_600SemiBold", marginBottom: 2 },
@@ -1667,7 +1669,7 @@ const styles = StyleSheet.create({
     padding: 18,
     maxHeight: "82%",
     shadowColor: "#000",
-    shadowOpacity: 0.35,
+    shadowOpacity: 0.42,
     shadowRadius: 22,
     shadowOffset: { width: 0, height: 12 },
     elevation: 12,
