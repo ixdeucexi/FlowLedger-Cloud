@@ -8,6 +8,7 @@ import { useColors } from "@/hooks/useColors";
 interface Props {
   visible: boolean;
   billName: string;
+  itemType?: "bill" | "debt";
   budgeted: number;
   actual: number;
   targetDebt?: string;
@@ -24,7 +25,7 @@ interface Props {
   onClose: () => void;
 }
 
-export function BillSurplusModal({ visible, billName, budgeted, actual, targetDebt, snowballSafe, safetyFloor = 200, forecastHorizonMonths = 6, paymentDate, paymentDateValid, paymentDateMin, paymentDateMax, onPaymentDateChange, onKeep, onSnowball, onClose }: Props) {
+export function BillSurplusModal({ visible, billName, itemType = "bill", budgeted, actual, targetDebt, snowballSafe, safetyFloor = 200, forecastHorizonMonths = 6, paymentDate, paymentDateValid, paymentDateMin, paymentDateMax, onPaymentDateChange, onKeep, onSnowball, onClose }: Props) {
   const c = useColors();
   const difference = Math.max(0, budgeted - actual);
   return (
@@ -40,7 +41,7 @@ export function BillSurplusModal({ visible, billName, budgeted, actual, targetDe
           <Text style={[styles.eyebrow, { color: c.primary }]}>Flo found leftover money</Text>
           <Text style={[styles.title, { color: c.foreground }]}>${difference.toFixed(2)} under budget</Text>
           <Text style={[styles.sub, { color: c.mutedForeground }]}>
-            {billName} came in lower this month. I can mark it paid at ${actual.toFixed(2)} and help you decide where the extra ${difference.toFixed(2)} should go.
+            {itemType === "debt" ? `${billName} was budgeted at ${budgeted.toFixed(2)} and you paid ${actual.toFixed(2)}.` : `${billName} came in lower this month.`} I can mark it paid at ${actual.toFixed(2)} and help you decide where the extra ${difference.toFixed(2)} should go.
           </Text>
           <View style={[styles.breakdown, { backgroundColor: c.card }]}> 
             <View style={styles.row}><Text style={[styles.rowLabel, { color: c.mutedForeground }]}>Budgeted</Text><Text style={[styles.rowValue, { color: c.foreground }]}>${budgeted.toFixed(2)}</Text></View>
