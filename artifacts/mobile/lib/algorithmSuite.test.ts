@@ -58,6 +58,8 @@ test("builds Flow Score, Safe Cushion, and practical algorithm outputs", () => {
   assert.ok(suite.flowScore.topReason.length > 0);
   assert.ok(suite.flowScore.topAction.length > 0);
   assert.ok(suite.flowScore.breakdownItems.length >= 4);
+  assert.ok(suite.flowScore.positiveFactors.some(factor => /upcoming bill/i.test(factor)));
+  assert.ok(suite.flowScore.negativeFactors.every(factor => !/still need attention/i.test(factor)));
   assert.equal(suite.safeCushion.amount, 1200);
   assert.equal(suite.safeCushion.status, "safe");
   assert.match(suite.safeCushion.topReason, /\$1200/);
@@ -68,6 +70,33 @@ test("builds Flow Score, Safe Cushion, and practical algorithm outputs", () => {
   assert.equal(suite.debtPayoff.nextDebtName, "Credit Card");
   assert.ok(suite.spendingLimit.daily > 0);
   assert.ok(suite.insights.some(insight => insight.algorithm === "Flow Score"));
+});
+
+test("Flow Score treats future bills as planned, not negative", () => {
+  const suite = buildAlgorithmSuite(baseInput({
+    todayDay: 1,
+    bills: [
+      { id: "a", name: "Future A", amount: 100, category: "Other", due_day: 20, is_debt: false, is_recurring: true, paidAmount: 0 },
+      { id: "b", name: "Future B", amount: 200, category: "Other", due_day: 25, is_debt: false, is_recurring: true, paidAmount: 0 },
+    ],
+  }));
+
+  assert.equal(suite.flowScore.breakdownItems.find(item => item.label === "Due Bills")?.value, "On track");
+  assert.ok(suite.flowScore.positiveFactors.some(factor => /upcoming bills are planned/i.test(factor)));
+  assert.ok(suite.flowScore.negativeFactors.every(factor => !/bill/i.test(factor)));
+});
+
+test("Flow Score only flags bills when due or overdue", () => {
+  const suite = buildAlgorithmSuite(baseInput({
+    todayDay: 12,
+    bills: [
+      { id: "a", name: "Past Bill", amount: 100, category: "Other", due_day: 9, is_debt: false, is_recurring: true, paidAmount: 0 },
+      { id: "b", name: "Future Bill", amount: 200, category: "Other", due_day: 25, is_debt: false, is_recurring: true, paidAmount: 0 },
+    ],
+  }));
+
+  assert.equal(suite.flowScore.breakdownItems.find(item => item.label === "Due Bills")?.value, "0/1");
+  assert.ok(suite.flowScore.negativeFactors.some(factor => /overdue bill/i.test(factor)));
 });
 
 test("visible algorithm catalog is trimmed to user-facing suite", () => {

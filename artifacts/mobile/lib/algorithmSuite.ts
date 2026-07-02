@@ -141,14 +141,17 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
   const lowestDay = lowest?.day ?? null;
   const safeCushionAmount = roundCurrency(Math.max(0, lowestBalance - input.safetyFloor));
   const paidBills = input.bills.filter(bill => (bill.paidAmount ?? 0) >= Math.max(0.01, bill.amount)).length;
-  const billProgress = input.bills.length ? paidBills / input.bills.length : 1;
+  const dueBills = input.bills.filter(bill => bill.due_day <= input.todayDay);
+  const paidDueBills = dueBills.filter(bill => (bill.paidAmount ?? 0) >= Math.max(0.01, bill.amount)).length;
+  const overdueBills = input.bills.filter(bill => bill.due_day < input.todayDay && (bill.paidAmount ?? 0) < Math.max(0.01, bill.amount));
+  const billReadiness = dueBills.length ? paidDueBills / dueBills.length : 1;
   const incomeStability = scoreIncomeStability(input.incomes);
   const confidenceScore = input.forecastConfidence.level === "high" ? 92 : input.forecastConfidence.level === "medium" ? 68 : 42;
   const debtTotal = input.bills.filter(bill => bill.is_debt).reduce((sum, bill) => sum + Math.max(0, bill.balance ?? bill.amount), 0);
   const debtPressure = input.cashFlow.monthlyIncome > 0 ? Math.min(25, (debtTotal / input.cashFlow.monthlyIncome) * 2) : debtTotal > 0 ? 18 : 0;
   const lowBalancePenalty = lowestBalance < 0 ? 35 : lowestBalance < input.safetyFloor ? 22 : safeCushionAmount < 100 ? 10 : 0;
   const flowScore = clamp(
-    Math.round(42 + confidenceScore * 0.2 + billProgress * 18 + incomeStability.score * 0.14 + Math.min(16, safeCushionAmount / 60) - lowBalancePenalty - debtPressure),
+    Math.round(42 + confidenceScore * 0.2 + billReadiness * 18 + incomeStability.score * 0.14 + Math.min(16, safeCushionAmount / 60) - lowBalancePenalty - debtPressure),
     0,
     100,
   );
@@ -201,8 +204,11 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     lowestBalance,
     lowestDay,
     safeCushionAmount,
-    billProgress,
+    billReadiness,
     paidBills,
+    dueBillsCount: dueBills.length,
+    paidDueBills,
+    overdueBillsCount: overdueBills.length,
     debtPressure,
     lowBalanceWarning,
     categoryPressure,
@@ -236,7 +242,7 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
       factors: [
         `Forecast confidence: ${input.forecastConfidence.label}`,
         `Lowest balance: $${lowestBalance.toFixed(0)}${lowestDay ? ` on day ${lowestDay}` : ""}`,
-        `${paidBills}/${input.bills.length || 0} bills cleared`,
+        dueBills.length ? `${paidDueBills}/${dueBills.length} due bills cleared` : "No bills are due yet",
       ],
     },
     safeCushion: {
@@ -488,8 +494,11 @@ function buildFlowScoreDetails(
     lowestBalance: number;
     lowestDay: number | null;
     safeCushionAmount: number;
-    billProgress: number;
+    billReadiness: number;
     paidBills: number;
+    dueBillsCount: number;
+    paidDueBills: number;
+    overdueBillsCount: number;
     debtPressure: number;
     lowBalanceWarning: AlgorithmSuiteResult["lowBalanceWarning"];
     categoryPressure: AlgorithmCategoryRow[];
@@ -507,8 +516,15 @@ function buildFlowScoreDetails(
   if (facts.lowBalanceWarning.status === "safe") positiveFactors.push("No low-balance risk is showing in this month.");
   else negativeFactors.push(facts.lowBalanceWarning.message);
 
-  if (facts.billProgress >= 0.75) positiveFactors.push(`${facts.paidBills}/${input.bills.length || 0} bills are already cleared.`);
-  else if (input.bills.length) negativeFactors.push(`${Math.max(0, input.bills.length - facts.paidBills)} bill${input.bills.length - facts.paidBills === 1 ? "" : "s"} still need attention.`);
+  if (facts.overdueBillsCount > 0) {
+    negativeFactors.push(`${facts.overdueBillsCount} overdue bill${facts.overdueBillsCount === 1 ? "" : "s"} need attention.`);
+  } else if (facts.dueBillsCount > 0 && facts.billReadiness < 1) {
+    negativeFactors.push(`${facts.dueBillsCount - facts.paidDueBills} bill${facts.dueBillsCount - facts.paidDueBills === 1 ? "" : "s"} due so far still need attention.`);
+  } else if (facts.dueBillsCount > 0) {
+    positiveFactors.push(`${facts.paidDueBills}/${facts.dueBillsCount} due bills are cleared.`);
+  } else if (input.bills.length > 0) {
+    positiveFactors.push(`${input.bills.length} upcoming bill${input.bills.length === 1 ? " is" : "s are"} planned in the forecast.`);
+  }
 
   if (input.forecastConfidence.level === "high") positiveFactors.push("Forecast confidence is high.");
   else negativeFactors.push(`Forecast confidence is ${input.forecastConfidence.label.toLowerCase()}.`);
@@ -527,9 +543,9 @@ function buildFlowScoreDetails(
     tone: facts.safeCushionAmount >= 250 ? "safe" : facts.safeCushionAmount > 0 ? "watch" : "risk",
   });
   breakdownItems.push({
-    label: "Bills Progress",
-    value: input.bills.length ? `${Math.round(facts.billProgress * 100)}%` : "No bills",
-    tone: facts.billProgress >= 0.75 ? "safe" : facts.billProgress >= 0.4 ? "watch" : "risk",
+    label: "Due Bills",
+    value: facts.dueBillsCount ? `${facts.paidDueBills}/${facts.dueBillsCount}` : "On track",
+    tone: facts.overdueBillsCount > 0 ? "risk" : facts.dueBillsCount && facts.billReadiness < 1 ? "watch" : "safe",
   });
   breakdownItems.push({
     label: "Forecast Confidence",
@@ -565,15 +581,16 @@ function flowScoreAction(
   facts: {
     safeCushionAmount: number;
     lowBalanceWarning: AlgorithmSuiteResult["lowBalanceWarning"];
-    billProgress: number;
+    billReadiness: number;
     categoryPressure: AlgorithmCategoryRow[];
+    overdueBillsCount: number;
   },
   input: AlgorithmSuiteInput,
 ) {
   if (facts.lowBalanceWarning.status !== "safe" && facts.lowBalanceWarning.day) return `Ask Flo why day ${facts.lowBalanceWarning.day} is tight.`;
   if (facts.safeCushionAmount <= 0) return "Ask Flo how to protect your safety floor.";
   const priorityBill = prioritizeBills(input.bills, input.todayDay, input.safetyFloor, facts.lowBalanceWarning.day).bills[0];
-  if (priorityBill && facts.billProgress < 0.75) return `Review ${priorityBill.name} first.`;
+  if (priorityBill && facts.overdueBillsCount > 0) return `Review ${priorityBill.name} first.`;
   if (facts.categoryPressure.length) return `Review ${facts.categoryPressure[0].category} spending.`;
   if (facts.safeCushionAmount > 250) return "Ask Flo what extra money can safely do.";
   return "No action needed right now.";
