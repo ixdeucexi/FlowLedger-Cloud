@@ -6,7 +6,7 @@ import * as Sharing from "expo-sharing";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Alert, Platform, Pressable, ScrollView, StyleSheet,
+  Alert, Modal, Platform, Pressable, ScrollView, StyleSheet,
   Text, TextInput, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -47,6 +47,7 @@ const ALERT_SENSITIVITY_OPTIONS: { label: string; value: DecisionHubSettings["al
   { label: "Quiet", value: "quiet", desc: "Only warn when the floor is crossed." },
 ];
 const BACKUP_COMPLETE_KEY = "flowledger_backup_exported";
+type AlgorithmCatalogItem = typeof ALGORITHM_CATALOG[number];
 
 function csvCell(value: unknown): string {
   const text = String(value ?? "");
@@ -77,6 +78,7 @@ export default function MoreScreen() {
   const [safetyFloorText, setSafetyFloorText] = useState(settings.safety_floor.toString());
   const [forecastHorizonText, setForecastHorizonText] = useState(settings.forecast_horizon_months.toString());
   const [decisionHubSettings, setDecisionHubSettings] = useState<DecisionHubSettings>(() => readDecisionHubSettings());
+  const [selectedAlgorithm, setSelectedAlgorithm] = useState<AlgorithmCatalogItem | null>(null);
   const [backupExported, setBackupExported] = useState(() => {
     try { return Platform.OS === "web" && globalThis.localStorage?.getItem(BACKUP_COMPLETE_KEY) === "true"; }
     catch { return false; }
@@ -554,6 +556,16 @@ export default function MoreScreen() {
                   </View>
                   <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>{algorithm.desc}</Text>
                 </View>
+                <Pressable
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    setSelectedAlgorithm(algorithm);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                  style={({ pressed }) => [styles.algorithmInfoButton, { backgroundColor: c.muted, opacity: pressed ? 0.7 : 1 }]}
+                >
+                  <Feather name="info" size={15} color={c.primary} />
+                </Pressable>
                 <View style={[styles.toggleTrack, { backgroundColor: enabled ? c.primary : c.muted }]}>
                   <View style={[styles.toggleKnob, { backgroundColor: "#fff", alignSelf: enabled ? "flex-end" : "flex-start" }]} />
                 </View>
@@ -1025,6 +1037,49 @@ export default function MoreScreen() {
         </View>
       </View>
 
+      <Modal
+        visible={Boolean(selectedAlgorithm)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedAlgorithm(null)}
+      >
+        <Pressable style={styles.infoOverlay} onPress={() => setSelectedAlgorithm(null)}>
+          <Pressable style={[styles.infoSheet, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => undefined}>
+            {selectedAlgorithm && (
+              <>
+                <View style={styles.infoSheetHeader}>
+                  <View style={[styles.infoSheetIcon, { backgroundColor: c.primary + "18" }]}>
+                    <Feather name={selectedAlgorithm.icon as any} size={20} color={c.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.infoSheetEyebrow, { color: c.primary }]}>
+                      {GROWTH_STAGE_LABELS[selectedAlgorithm.stage]} Algorithm
+                    </Text>
+                    <Text style={[styles.infoSheetTitle, { color: c.foreground }]}>{selectedAlgorithm.name}</Text>
+                  </View>
+                  <Pressable onPress={() => setSelectedAlgorithm(null)} style={[styles.infoCloseButton, { backgroundColor: c.muted }]}>
+                    <Feather name="x" size={18} color={c.mutedForeground} />
+                  </Pressable>
+                </View>
+                <Text style={[styles.infoSheetDesc, { color: c.mutedForeground }]}>{selectedAlgorithm.desc}</Text>
+                <View style={[styles.infoNote, { backgroundColor: c.primary + "10", borderColor: c.primary + "25" }]}>
+                  <Feather name="cpu" size={14} color={c.primary} />
+                  <Text style={[styles.infoNoteText, { color: c.mutedForeground }]}>
+                    Algo uses FlowLedger calculations and stored records. It does not guess, chat, or change your plan by itself.
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() => setSelectedAlgorithm(null)}
+                  style={({ pressed }) => [styles.infoDoneButton, { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 }]}
+                >
+                  <Text style={[styles.infoDoneText, { color: c.primaryForeground }]}>Got it</Text>
+                </Pressable>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <IncomeModal
         visible={incomeModalVisible}
         onClose={() => { setIncomeModalVisible(false); setEditIncome(null); }}
@@ -1149,8 +1204,21 @@ const styles = StyleSheet.create({
   algoStageText: { fontSize: 11, fontFamily: "Inter_700Bold" },
   algorithmList: { borderTopWidth: 1, marginTop: 14, paddingTop: 2 },
   algorithmToggleRow: { flexDirection: "row", alignItems: "center", gap: 12, borderTopWidth: 1, paddingTop: 12, marginTop: 12 },
+  algorithmInfoButton: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
   algorithmTitleRow: { flexDirection: "row", alignItems: "center", gap: 7, flexWrap: "wrap" },
   algorithmStageTag: { overflow: "hidden", borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3, fontSize: 9, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.5 },
+  infoOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end", padding: 16 },
+  infoSheet: { borderWidth: 1, borderRadius: 24, padding: 18, marginBottom: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.22, shadowRadius: 24, elevation: 12 },
+  infoSheetHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },
+  infoSheetIcon: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  infoSheetEyebrow: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.9, marginBottom: 2 },
+  infoSheetTitle: { fontSize: 21, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.3 },
+  infoCloseButton: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  infoSheetDesc: { fontSize: 14, fontFamily: "Inter_500Medium", lineHeight: 20 },
+  infoNote: { flexDirection: "row", alignItems: "flex-start", gap: 9, borderWidth: 1, borderRadius: 14, padding: 12, marginTop: 14 },
+  infoNoteText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
+  infoDoneButton: { alignItems: "center", justifyContent: "center", minHeight: 46, borderRadius: 14, marginTop: 16 },
+  infoDoneText: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   balanceDivider: { borderTopWidth: 1, marginTop: 14, paddingTop: 14 },
   balanceHeader: { marginBottom: 10 },
   balanceFieldLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 6 },
