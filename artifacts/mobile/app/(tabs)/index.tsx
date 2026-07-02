@@ -3,7 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Animated, Keyboard, Modal, Platform, Pressable,
+  Animated, Image, Keyboard, Modal, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -34,6 +34,8 @@ const CAT_COLORS: Record<string, string> = {
   Transportation: "#ec4899", Food: "#f97316", Entertainment: "#8b5cf6",
   Health: "#ef4444", Education: "#3b82f6", Savings: "#22c55e", Debt: "#e11d48", Other: "#94a3b8",
 };
+
+const FLOWLEDGER_LOGO = require("@/assets/brand/flowledger-dashboard-logo.jpg");
 
 function algoToneColor(tone: AlgorithmInsight["tone"]) {
   if (tone === "safe") return "#22c55e";
@@ -881,14 +883,9 @@ export default function DashboardScreen() {
       </View>
       <View style={styles.dashboardHeader}>
         <View style={styles.brandLockup}>
-          <LinearGradient
-            colors={["#38bdf8", "#6366f1", "#22c55e"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.brandMark}
-          >
-            <Text style={styles.brandMarkText}>F</Text>
-          </LinearGradient>
+          <View style={styles.brandMark}>
+            <Image source={FLOWLEDGER_LOGO} style={styles.brandMarkImage} resizeMode="cover" />
+          </View>
           <View>
             <Text style={styles.brandEyebrow}>FLOWLEDGER</Text>
             <Text style={styles.heading}>Command Center</Text>
@@ -2377,8 +2374,8 @@ const styles = StyleSheet.create({
   stormGrid: { position: "absolute", top: 0, left: -20, right: -20, height: 740, borderWidth: 1, borderColor: "rgba(148,163,184,0.05)", opacity: 0.55 },
   dashboardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 14, marginBottom: 18 },
   brandLockup: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
-  brandMark: { width: 48, height: 48, borderRadius: 17, alignItems: "center", justifyContent: "center", shadowColor: "#38bdf8", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 18, elevation: 9 },
-  brandMarkText: { color: "#ffffff", fontSize: 24, fontFamily: "Inter_800ExtraBold" },
+  brandMark: { width: 48, height: 48, borderRadius: 17, alignItems: "center", justifyContent: "center", overflow: "hidden", borderWidth: 1, borderColor: "rgba(96,165,250,0.35)", backgroundColor: "#020617", shadowColor: "#38bdf8", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 18, elevation: 9 },
+  brandMarkImage: { width: "100%", height: "100%" },
   brandEyebrow: { color: "#60a5fa", fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.6, marginBottom: 2 },
   heading:    { fontSize: 28, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.8, color: "#f8fafc" },
   subheading: { fontSize: 12, fontFamily: "Inter_600SemiBold", marginTop: 2, color: "#94a3b8" },
