@@ -282,12 +282,16 @@ test("chat input appends the user message and Flo response in order", () => {
   const start: FloChatState = { messages: [], sending: false };
   const submitted = reduceFloChat(start, { type: "submit", id: "user-1", text: "  Hello Flo  " });
   assert.deepEqual(submitted, {
-    messages: [{ id: "user-1", role: "user", text: "Hello Flo" }],
+    messages: [
+      { id: "user-1", role: "user", text: "Hello Flo" },
+      { id: "user-1-thinking", role: "flo", text: "Flo thinking...", thinking: true },
+    ],
     sending: true,
   });
   const replied = reduceFloChat(submitted, { type: "reply", id: "flo-1", text: "Hi!" });
   assert.equal(replied.messages[1]?.role, "flo");
   assert.equal(replied.messages[1]?.text, "Hi!");
+  assert.equal(replied.messages[1]?.thinking, undefined);
   assert.equal(replied.sending, false);
 });
 

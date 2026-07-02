@@ -81,7 +81,7 @@ export interface FloCategoryFact {
   topTransaction?: { name: string; amount: number; date: string };
 }
 
-export type FloChatMessage = { id: string; role: "user" | "flo"; text: string };
+export type FloChatMessage = { id: string; role: "user" | "flo"; text: string; thinking?: boolean };
 export interface FloResponseCard {
   title: string;
   value: string;
@@ -181,10 +181,20 @@ export function reduceFloChat(state: FloChatState, action: FloChatAction): FloCh
   if (action.type === "submit") {
     const text = action.text.trim();
     if (!text || state.sending) return state;
-    return { messages: [...state.messages, { id: action.id, role: "user", text }], sending: true };
+    return {
+      messages: [
+        ...state.messages,
+        { id: action.id, role: "user", text },
+        { id: `${action.id}-thinking`, role: "flo", text: "Flo thinking...", thinking: true },
+      ],
+      sending: true,
+    };
   }
   return {
-    messages: [...state.messages, { id: action.id, role: "flo", text: action.text }],
+    messages: [
+      ...state.messages.filter(message => !message.thinking),
+      { id: action.id, role: "flo", text: action.text },
+    ],
     sending: false,
   };
 }

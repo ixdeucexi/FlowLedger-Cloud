@@ -843,9 +843,12 @@ export default function FloScreen() {
                 : { backgroundColor: colors.card, borderColor: colors.border },
             ]}
           >
-            <Text style={[styles.bubbleText, { color: message.role === "user" ? colors.primaryForeground : colors.foreground }]}>
-              {message.text}
-            </Text>
+            <View style={message.thinking ? styles.thinkingRow : undefined}>
+              {message.thinking ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+              <Text style={[styles.bubbleText, { color: message.role === "user" ? colors.primaryForeground : message.thinking ? colors.mutedForeground : colors.foreground }]}>
+                {message.text}
+              </Text>
+            </View>
             {message.role === "flo" && cardsByMessageId[message.id]?.length ? (
               <View style={styles.cardGrid}>
                 {cardsByMessageId[message.id].map(card => (
@@ -1093,13 +1096,6 @@ export default function FloScreen() {
             ) : null}
           </View>
         ))}
-
-        {chat.sending && (
-          <View style={[styles.bubble, styles.floBubble, styles.loadingBubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={{ color: colors.mutedForeground }}>Flo is thinking…</Text>
-          </View>
-        )}
       </ScrollView>
 
       <Modal visible={!!completePlan} transparent animationType="slide" onRequestClose={() => setCompletePlan(null)}>
@@ -1427,6 +1423,7 @@ const styles = StyleSheet.create({
   bubble: { maxWidth: "88%", paddingHorizontal: 15, paddingVertical: 13, borderRadius: 18 },
   floBubble: { alignSelf: "flex-start", borderWidth: 1, borderTopLeftRadius: 6 },
   userBubble: { alignSelf: "flex-end", borderTopRightRadius: 6 },
+  thinkingRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   bubbleText: { fontSize: 15, lineHeight: 21 },
   cardGrid: { marginTop: 10, gap: 8 },
   insightCard: { borderWidth: 1, borderRadius: 12, padding: 10 },
@@ -1445,7 +1442,6 @@ const styles = StyleSheet.create({
   reductionActions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   reductionButton: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 8 },
   reductionButtonText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
-  loadingBubble: { flexDirection: "row", alignItems: "center", gap: 9 },
   composerArea: { borderTopWidth: 1, paddingHorizontal: 12, paddingTop: 10 },
   quickPromptScroller: { marginBottom: 8, maxHeight: 38 },
   quickPromptContent: { gap: 8, paddingRight: 12 },
@@ -1467,3 +1463,4 @@ const styles = StyleSheet.create({
   send: { minWidth: 70, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", paddingHorizontal: 15 },
   sendText: { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold" },
 });
+
