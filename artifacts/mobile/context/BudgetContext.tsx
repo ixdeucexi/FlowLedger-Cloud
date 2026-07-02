@@ -1692,7 +1692,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     await ensureSaved(supabase.from("transactions").insert({ ...nt, user_id: user.id }), "Add transaction");
     setTransactions(prev => [...prev, nt]);
-    if (nt.linked_bill_id) await syncDebtTransactionsAndRefresh();
+    if (nt.linked_bill_id || nt.debt_applied_bill_id) await syncDebtTransactionsAndRefresh();
     return nt.id;
   }, [user, accounts, syncDebtTransactionsAndRefresh, demoMode]);
 

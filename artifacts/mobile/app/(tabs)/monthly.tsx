@@ -375,6 +375,14 @@ export default function MonthlyScreen() {
   const finalizeBillAtActualForMonth = useCallback(async (prompt: { bill: Bill; actual: number; paidDate: string }) => {
     if (prompt.bill.is_debt) {
       await setPaidAmount(prompt.bill.id, month, selectedYear, prompt.actual);
+      const boost = Number(prompt.bill.snowball_minimum_boost ?? 0);
+      const baseAmount = Math.max(0, prompt.actual - boost);
+      await setCustomAmount(
+        prompt.bill.id,
+        month,
+        selectedYear,
+        Math.abs(baseAmount - prompt.bill.amount) < 0.005 ? undefined : baseAmount,
+      );
       return;
     }
     await finalizeBillPayment(prompt.bill.id, month, selectedYear, prompt.actual, prompt.paidDate);
@@ -388,8 +396,48 @@ export default function MonthlyScreen() {
     }
   }, [finalizeBillPayment, month, selectedYear, setCustomAmount, setPaidAmount]);
 
+  const debtSurplusTransactionKey = useCallback((sourceDebtId: string) =>
+    `flowledger:debt-surplus:${sourceDebtId}:${selectedYear}-${String(month + 1).padStart(2, "0")}`,
+  [month, selectedYear]);
+
+  const removeDebtSurplusTransaction = useCallback(async (sourceDebtId: string) => {
+    const key = debtSurplusTransactionKey(sourceDebtId);
+    const existingTx = transactions.find(transaction => transaction.import_hash === key);
+    if (existingTx) await deleteTransaction(existingTx.id);
+  }, [debtSurplusTransactionKey, deleteTransaction, transactions]);
+
+  const upsertDebtSurplusTransaction = useCallback(async (
+    sourceDebt: Bill,
+    targetDebt: { billId: string; billName: string },
+    amount: number,
+    paymentDate: string,
+  ) => {
+    const key = debtSurplusTransactionKey(sourceDebt.id);
+    const existingTx = transactions.find(transaction => transaction.import_hash === key);
+    const nextTx = {
+      date: paymentDate,
+      amount: -Math.abs(amount),
+      category: "Debt",
+      note: `${targetDebt.billName} snowball`,
+      linked_bill_id: targetDebt.billId,
+      debt_applied_amount: 0,
+      debt_applied_bill_id: undefined,
+      import_hash: key,
+      account_id: existingTx?.account_id,
+      transfer_group_id: existingTx?.transfer_group_id,
+    };
+    if (existingTx) await updateTransaction({ ...existingTx, ...nextTx });
+    else await addTransaction(nextTx);
+  }, [addTransaction, debtSurplusTransactionKey, transactions, updateTransaction]);
+
   const keepBillSurplus = async () => {
     if (!surplusPrompt) return;
+    if (surplusPrompt.bill.is_debt) {
+      await finalizeBillAtActualForMonth(surplusPrompt);
+      await removeDebtSurplusTransaction(surplusPrompt.bill.id);
+      setSurplusPrompt(null);
+      return;
+    }
     const existing = getExtraPayment(month, selectedYear);
     const sources = (existing?.sources ?? []).filter(source => !(source.type === "bill_surplus" && source.billId === surplusPrompt.bill.id));
     const total = sources.reduce((sum, source) => sum + source.amount, 0);
@@ -430,6 +478,26 @@ export default function MonthlyScreen() {
   const addBillSurplusToSnowball = async () => {
     if (!surplusPrompt || !surplusSnowballOffer) return;
     const surplus = surplusPrompt.budgeted - surplusPrompt.actual;
+    if (surplusPrompt.bill.is_debt) {
+      const target = surplusSnowballOffer.preview.allocations[0];
+      if (!surplusSnowballOffer.safe || !target) return;
+      await finalizeBillAtActualForMonth(surplusPrompt);
+      try {
+        await upsertDebtSurplusTransaction(
+          surplusPrompt.bill,
+          { billId: target.billId, billName: target.billName },
+          surplus,
+          surplusPaymentDate,
+        );
+      } catch {
+        Alert.alert(
+          "Debt Finalized",
+          "The debt payment was saved, but the leftover could not be added as a snowball transaction. The difference is still available, so you can try again.",
+        );
+      }
+      setSurplusPrompt(null);
+      return;
+    }
     const existing = getExtraPayment(month, selectedYear);
     const otherSources = (existing?.sources ?? [{ type: "manual" as const, amount: existing?.amount ?? 0 }])
       .filter(source => !(source.type === "bill_surplus" && source.billId === surplusPrompt.bill.id));
