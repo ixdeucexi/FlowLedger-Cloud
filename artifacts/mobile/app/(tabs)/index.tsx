@@ -90,6 +90,39 @@ export default function DashboardScreen() {
 
   const frontRotate = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] });
   const backRotate  = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ["180deg", "360deg"] });
+  const stormAnim = useRef(new Animated.Value(0)).current;
+  const lightningAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const stormLoop = Animated.loop(
+      Animated.timing(stormAnim, {
+        toValue: 1,
+        duration: 14000,
+        useNativeDriver: true,
+      }),
+    );
+    const lightningLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(lightningAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
+        Animated.timing(lightningAnim, { toValue: 0, duration: 1700, useNativeDriver: true }),
+        Animated.timing(lightningAnim, { toValue: 1, duration: 180, useNativeDriver: true }),
+        Animated.timing(lightningAnim, { toValue: 0, duration: 5200, useNativeDriver: true }),
+      ]),
+    );
+    stormLoop.start();
+    lightningLoop.start();
+    return () => {
+      stormLoop.stop();
+      lightningLoop.stop();
+    };
+  }, [lightningAnim, stormAnim]);
+
+  const stormShift = stormAnim.interpolate({ inputRange: [0, 1], outputRange: [-70, 90] });
+  const stormLift = stormAnim.interpolate({ inputRange: [0, 1], outputRange: [16, -22] });
+  const lightningOpacity = lightningAnim.interpolate({
+    inputRange: [0, 0.35, 0.5, 0.68, 1],
+    outputRange: [0.05, 0.32, 0.1, 0.44, 0.06],
+  });
 
   const now          = new Date();
   const currentMonth = now.getMonth();
@@ -730,21 +763,69 @@ export default function DashboardScreen() {
 
   return (
     <ScrollView
-      style={[styles.screen, { backgroundColor: c.background }]}
+      style={[styles.screen, styles.dashboardStage]}
       contentContainerStyle={[styles.content, { paddingTop: Platform.OS === "web" ? 16 : insets.top + 16, paddingBottom: insets.bottom + 100 }]}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
+      <View pointerEvents="none" style={styles.stormBackdrop}>
+        <LinearGradient
+          colors={["#030712", "#07111f", "#0f172a"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.stormBase}
+        />
+        <Animated.View
+          style={[
+            styles.stormOrb,
+            styles.stormOrbBlue,
+            { transform: [{ translateX: stormShift }, { translateY: stormLift }] },
+          ]}
+        />
+        <Animated.View
+          style={[
+            styles.stormOrb,
+            styles.stormOrbViolet,
+            { transform: [{ translateX: stormLift }, { translateY: stormShift }] },
+          ]}
+        />
+        <Animated.View
+          style={[
+            styles.lightningBeam,
+            styles.lightningBeamOne,
+            { opacity: lightningOpacity, transform: [{ translateX: stormShift }, { rotate: "-24deg" }] },
+          ]}
+        />
+        <Animated.View
+          style={[
+            styles.lightningBeam,
+            styles.lightningBeamTwo,
+            { opacity: lightningOpacity, transform: [{ translateX: stormLift }, { rotate: "18deg" }] },
+          ]}
+        />
+        <View style={styles.stormGrid} />
+      </View>
       <View style={styles.dashboardHeader}>
-        <View>
-          <Text style={[styles.heading, { color: c.foreground }]}>FlowLedger</Text>
-          <Text style={[styles.subheading, { color: c.mutedForeground }]}>{MONTH_FULL[currentMonth]} {selectedYear}</Text>
+        <View style={styles.brandLockup}>
+          <LinearGradient
+            colors={["#38bdf8", "#6366f1", "#22c55e"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.brandMark}
+          >
+            <Text style={styles.brandMarkText}>F</Text>
+          </LinearGradient>
+          <View>
+            <Text style={styles.brandEyebrow}>FLOWLEDGER</Text>
+            <Text style={styles.heading}>Command Center</Text>
+            <Text style={styles.subheading}>{MONTH_FULL[currentMonth]} {selectedYear} · live forecast</Text>
+          </View>
         </View>
         <Pressable
           onPress={() => setActionModalVisible(true)}
-          style={({ pressed }) => [styles.headerActionButton, { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 }]}
+          style={({ pressed }) => [styles.headerActionButton, { opacity: pressed ? 0.82 : 1 }]}
         >
-          <Feather name="plus" size={20} color={c.primaryForeground} />
+          <Feather name="plus" size={20} color="#f8fafc" />
         </Pressable>
       </View>
 
@@ -815,10 +896,12 @@ export default function DashboardScreen() {
         const isNeg = cur < 0;
         const isLow = !isNeg && cur < settings.safety_floor;
         const gradColors: [string, string] = isNeg
-          ? [c.destructive, "#b91c1c"]
+          ? ["#450a0a", "#991b1b"]
           : isLow
-          ? ["#d97706", "#b45309"]
-          : ["#1d4ed8", "#16a34a"];
+          ? ["#431407", "#92400e"]
+          : ["#031326", "#172554"];
+        const statusLabel = isNeg ? "Risk" : isLow ? "Tight" : "On track";
+        const statusColor = isNeg ? "#fb7185" : isLow ? "#fbbf24" : "#22c55e";
 
         const savingsPct = savingsData.totalTarget > 0
           ? Math.min((savingsData.totalSaved / savingsData.totalTarget) * 100, 100)
@@ -845,20 +928,28 @@ export default function DashboardScreen() {
               >
                 <View style={styles.heroGlowTop} />
                 <View style={styles.heroGlowBottom} />
+                <View style={styles.heroSignalLine} />
 
-                <View style={styles.heroFlipHint}>
-                  <Feather name="refresh-cw" size={12} color="rgba(255,255,255,0.55)" />
-                  <Text style={styles.heroFlipHintText}>tap to see savings</Text>
+                <View style={styles.heroTopRow}>
+                  <View style={[styles.heroStatusBadge, { borderColor: statusColor + "55", backgroundColor: statusColor + "18" }]}>
+                    <View style={[styles.heroStatusDot, { backgroundColor: statusColor }]} />
+                    <Text style={[styles.heroStatusText, { color: statusColor }]}>{statusLabel}</Text>
+                  </View>
+                  <View style={styles.heroFlipHint}>
+                    <Feather name="refresh-cw" size={12} color="rgba(255,255,255,0.62)" />
+                    <Text style={styles.heroFlipHintText}>savings</Text>
+                  </View>
                 </View>
 
-                <Text style={styles.heroLabel}>Balance Today</Text>
+                <Text style={styles.heroLabel}>Available today</Text>
                 <Text style={styles.heroValue}>
                   {cur < 0 ? "−" : ""}${Math.abs(cur).toFixed(0)}
                 </Text>
+                <Text style={styles.heroSubtitle}>Projected command balance after scheduled money moves.</Text>
 
                 <View style={styles.heroMetrics}>
                   <View style={styles.heroMetric}>
-                    <Text style={styles.heroMetricLabel}>End of Month</Text>
+                    <Text style={styles.heroMetricLabel}>Month close</Text>
                     <Text style={[styles.heroMetricValue, {
                       color: (balanceMetrics?.endOfMonthBalance ?? 0) < 0 ? "#fca5a5" : "rgba(255,255,255,0.95)"
                     }]}>
@@ -868,7 +959,7 @@ export default function DashboardScreen() {
                   </View>
                   <View style={styles.heroMetricDivider} />
                   <View style={styles.heroMetric}>
-                    <Text style={styles.heroMetricLabel}>Lowest Balance</Text>
+                    <Text style={styles.heroMetricLabel}>Lowest point</Text>
                     <Text style={[styles.heroMetricValue, {
                       color: (balanceMetrics?.lowestBalance ?? 0) < 0 ? "#fca5a5"
                         : (balanceMetrics?.lowestBalance ?? 0) < settings.safety_floor ? "#fde68a"
@@ -892,8 +983,8 @@ export default function DashboardScreen() {
                       />
                     </View>
                     <Text style={styles.heroProgressLabel}>
-                      {stats.paidCount} of {stats.billCount} bills paid this month
-                      {stats.unpaidCount > 0 ? ` • ${stats.unpaidCount} left` : ""}
+                      Bill runway: {stats.paidCount} of {stats.billCount} cleared
+                      {stats.unpaidCount > 0 ? ` · ${stats.unpaidCount} left` : ""}
                     </Text>
                   </View>
                 )}
@@ -911,17 +1002,24 @@ export default function DashboardScreen() {
               ]}
             >
               <LinearGradient
-                colors={["#065f46", "#047857"]}
+                colors={["#052e2b", "#064e3b"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={[styles.heroCard, { overflow: "hidden", marginBottom: 0, height: cardHeight || undefined }]}
               >
                 <View style={styles.heroGlowTop} />
                 <View style={styles.heroGlowBottom} />
+                <View style={styles.heroSignalLine} />
 
-                <View style={styles.heroFlipHint}>
-                  <Feather name="refresh-cw" size={12} color="rgba(255,255,255,0.55)" />
-                  <Text style={styles.heroFlipHintText}>tap to go back</Text>
+                <View style={styles.heroTopRow}>
+                  <View style={[styles.heroStatusBadge, { borderColor: "#34d39955", backgroundColor: "#34d39918" }]}>
+                    <View style={[styles.heroStatusDot, { backgroundColor: "#34d399" }]} />
+                    <Text style={[styles.heroStatusText, { color: "#86efac" }]}>Savings lane</Text>
+                  </View>
+                  <View style={styles.heroFlipHint}>
+                    <Feather name="refresh-cw" size={12} color="rgba(255,255,255,0.62)" />
+                    <Text style={styles.heroFlipHintText}>balance</Text>
+                  </View>
                 </View>
 
                 <Text style={styles.heroLabel}>Savings</Text>
@@ -987,7 +1085,79 @@ export default function DashboardScreen() {
 
       {/* ── Stat Pill Cards ── */}
       {/* Row 1: Bills · Paid · Unpaid */}
-      <View style={[styles.statsPillRow, { marginBottom: 8 }]}>
+      <View style={styles.commandDeck}>
+        <Pressable
+          onPress={() => router.push("/(tabs)/flo" as any)}
+          style={({ pressed }) => [styles.primaryCommandCard, { opacity: pressed ? 0.82 : 1 }]}
+        >
+          <LinearGradient
+            colors={["#2563eb", "#7c3aed"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.primaryCommandGradient}
+          >
+            <View style={styles.primaryCommandIcon}>
+              <Feather name="message-circle" size={19} color="#dbeafe" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.primaryCommandEyebrow}>DECISION LAYER</Text>
+              <Text style={styles.primaryCommandTitle}>Ask Flo before you move money</Text>
+              <Text style={styles.primaryCommandSub}>Affordability, low-balance causes, bill timing, and category moves.</Text>
+            </View>
+            <Feather name="arrow-up-right" size={18} color="#ffffff" />
+          </LinearGradient>
+        </Pressable>
+
+        <View style={styles.quickCommandRow}>
+          {[
+            { label: "Calendar", icon: "calendar" as const, color: "#38bdf8", action: () => router.push("/(tabs)/monthly" as any) },
+            { label: "Bills", icon: "file-text" as const, color: "#fbbf24", action: () => router.push("/(tabs)/bills" as any) },
+            { label: "Activity", icon: "repeat" as const, color: "#34d399", action: () => router.push("/(tabs)/transactions" as any) },
+          ].map(item => (
+            <Pressable
+              key={item.label}
+              onPress={item.action}
+              style={({ pressed }) => [styles.quickCommand, { opacity: pressed ? 0.76 : 1 }]}
+            >
+              <View style={[styles.quickCommandIcon, { backgroundColor: item.color + "1f" }]}>
+                <Feather name={item.icon} size={16} color={item.color} />
+              </View>
+              <Text style={styles.quickCommandText}>{item.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.moneyRadarCard}>
+        <View style={styles.moneyRadarHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.moneyRadarEyebrow}>MONTHLY MONEY RADAR</Text>
+            <Text style={styles.moneyRadarTitle}>{breakdownText}</Text>
+          </View>
+          <View style={[styles.moneyRadarBadge, { backgroundColor: (balanceMetrics?.lowestBalance ?? 0) < settings.safety_floor ? "#f59e0b22" : "#22c55e22" }]}>
+            <Text style={[styles.moneyRadarBadgeText, { color: (balanceMetrics?.lowestBalance ?? 0) < settings.safety_floor ? "#fbbf24" : "#4ade80" }]}>
+              {(balanceMetrics?.lowestBalance ?? 0) < settings.safety_floor ? "WATCH" : "SAFE"}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.moneyRadarGrid}>
+          {statCards.map(card => (
+            <Pressable
+              key={card.title}
+              onPress={() => navigate(card.filter, card.tab)}
+              style={({ pressed }) => [styles.radarMetric, { opacity: pressed ? 0.78 : 1 }]}
+            >
+              <View style={[styles.radarMetricIcon, { backgroundColor: card.col + "1f" }]}>
+                <Feather name={card.icon} size={15} color={card.col} />
+              </View>
+              <Text style={[styles.radarMetricValue, { color: card.col }]} numberOfLines={1}>{card.value}</Text>
+              <Text style={styles.radarMetricLabel}>{card.title}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      {false && <View style={[styles.statsPillRow, { marginBottom: 8 }]}>
         {statCards.slice(0, 3).map(card => (
           <Pressable
             key={card.title}
@@ -1001,9 +1171,9 @@ export default function DashboardScreen() {
             <Text style={[styles.statPillLabel, { color: c.mutedForeground }]}>{card.title.toUpperCase()}</Text>
           </Pressable>
         ))}
-      </View>
+      </View>}
       {/* Row 2: Debt — full width */}
-      {(() => {
+      {false && (() => {
         const debt = statCards[3];
         return (
           <Pressable
@@ -1024,7 +1194,7 @@ export default function DashboardScreen() {
         );
       })()}
 
-      <View style={styles.commandGrid}>
+      {false && <View style={styles.commandGrid}>
         {[
           { label: "Ask Flo", sub: "Decide before you spend", icon: "message-circle" as const, color: c.primary, action: () => router.push("/(tabs)/flo" as any) },
           { label: "Calendar", sub: "See the month", icon: "calendar" as const, color: c.success, action: () => router.push("/(tabs)/monthly" as any) },
@@ -1042,7 +1212,7 @@ export default function DashboardScreen() {
             <Text style={[styles.commandSub, { color: c.mutedForeground }]}>{item.sub}</Text>
           </Pressable>
         ))}
-      </View>
+      </View>}
 
       {/* ── Negative date warning (tappable → 12-month outlook) ── */}
       {firstYearNegEntry && (
@@ -1063,50 +1233,50 @@ export default function DashboardScreen() {
         </Pressable>
       )}
 
-      <View style={[styles.monthlyReviewCard, { backgroundColor: c.card, borderColor: c.border }]}>
+      <View style={styles.monthlyReviewCard}>
         <View style={styles.monthlyReviewHeader}>
-          <View style={[styles.monthlyReviewIcon, { backgroundColor: c.success + "18" }]}>
-            <Feather name="bar-chart-2" size={17} color={c.success} />
+          <View style={styles.monthlyReviewIcon}>
+            <Feather name="activity" size={17} color="#38bdf8" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.decisionHubEyebrow, { color: c.mutedForeground }]}>Month Checkup</Text>
-            <Text style={[styles.monthlyReviewTitle, { color: c.foreground }]}>{monthlyReview.headline}</Text>
-            <Text style={[styles.monthlyReviewDesc, { color: c.mutedForeground }]}>{monthlyReview.nextStep}</Text>
+            <Text style={styles.decisionHubEyebrow}>FLO BRIEFING</Text>
+            <Text style={styles.monthlyReviewTitle}>{monthlyReview.headline}</Text>
+            <Text style={styles.monthlyReviewDesc}>{monthlyReview.nextStep}</Text>
           </View>
           <Pressable
             onPress={() => openFloWithPrompt(monthlyReview.prompt)}
-            style={({ pressed }) => [styles.monthlyReviewAsk, { backgroundColor: c.primary + "18", opacity: pressed ? 0.75 : 1 }]}
+            style={({ pressed }) => [styles.monthlyReviewAsk, { opacity: pressed ? 0.75 : 1 }]}
           >
-            <Text style={[styles.monthlyReviewAskText, { color: c.primary }]}>Ask Flo</Text>
+            <Text style={styles.monthlyReviewAskText}>Ask Flo</Text>
           </Pressable>
         </View>
         <View style={styles.monthlyReviewGrid}>
           <Pressable
             onPress={() => navigate("unpaid", "monthly")}
-            style={({ pressed }) => [styles.monthlyReviewMetric, { backgroundColor: c.muted, opacity: pressed ? 0.75 : 1 }]}
+            style={({ pressed }) => [styles.monthlyReviewMetric, { opacity: pressed ? 0.75 : 1 }]}
           >
-            <Text style={[styles.monthlyReviewLabel, { color: c.mutedForeground }]}>Bills paid</Text>
+            <Text style={styles.monthlyReviewLabel}>Bills paid</Text>
             <Text style={[styles.monthlyReviewValue, { color: monthlyReview.unpaidCount > 0 ? c.warning : c.success }]}>{monthlyReview.paidCount}/{monthlyReview.billCount}</Text>
           </Pressable>
           <Pressable
             onPress={() => navigate("unpaid", "monthly")}
-            style={({ pressed }) => [styles.monthlyReviewMetric, { backgroundColor: c.muted, opacity: pressed ? 0.75 : 1 }]}
+            style={({ pressed }) => [styles.monthlyReviewMetric, { opacity: pressed ? 0.75 : 1 }]}
           >
-            <Text style={[styles.monthlyReviewLabel, { color: c.mutedForeground }]}>Unpaid</Text>
+            <Text style={styles.monthlyReviewLabel}>Unpaid</Text>
             <Text style={[styles.monthlyReviewValue, { color: monthlyReview.billDelta > 0 ? c.warning : c.success }]}>${Math.max(0, monthlyReview.billDelta).toFixed(0)}</Text>
           </Pressable>
           <Pressable
             onPress={() => router.push("/(tabs)/monthly" as any)}
-            style={({ pressed }) => [styles.monthlyReviewMetric, { backgroundColor: c.muted, opacity: pressed ? 0.75 : 1 }]}
+            style={({ pressed }) => [styles.monthlyReviewMetric, { opacity: pressed ? 0.75 : 1 }]}
           >
-            <Text style={[styles.monthlyReviewLabel, { color: c.mutedForeground }]}>Low point</Text>
+            <Text style={styles.monthlyReviewLabel}>Low point</Text>
             <Text style={[styles.monthlyReviewValue, { color: monthlyReview.lowestBalance < settings.safety_floor ? c.warning : c.success }]}>${monthlyReview.lowestBalance.toFixed(0)}</Text>
           </Pressable>
           <Pressable
             onPress={() => router.push("/(tabs)/more" as any)}
-            style={({ pressed }) => [styles.monthlyReviewMetric, { backgroundColor: c.muted, opacity: pressed ? 0.75 : 1 }]}
+            style={({ pressed }) => [styles.monthlyReviewMetric, { opacity: pressed ? 0.75 : 1 }]}
           >
-            <Text style={[styles.monthlyReviewLabel, { color: c.mutedForeground }]}>Savings</Text>
+            <Text style={styles.monthlyReviewLabel}>Savings</Text>
             <Text style={[styles.monthlyReviewValue, { color: c.success }]}>{monthlyReview.savingsPct.toFixed(0)}%</Text>
           </Pressable>
         </View>
@@ -1268,8 +1438,8 @@ export default function DashboardScreen() {
       {/* ── Upcoming Bills ── */}
       {upcomingBills.length > 0 && (
         <>
-          <Text style={[styles.sectionTitle, { color: c.foreground }]}>Upcoming Bills (7 days)</Text>
-          <View style={[styles.upcomingCard, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+          <Text style={styles.sectionTitle}>Next 7 Days</Text>
+          <View style={styles.upcomingCard}>
             {upcomingBills.map((bill, i) => {
               const catColor = CAT_COLORS[bill.category] ?? c.primary;
               const daysLeft = bill.due_day - today;
@@ -1277,19 +1447,19 @@ export default function DashboardScreen() {
                 <Pressable
                   key={bill.id}
                   onPress={() => { router.push("/(tabs)/monthly" as any); }}
-                  style={({ pressed }) => [styles.upcomingRow, { borderTopWidth: i > 0 ? 1 : 0, borderTopColor: c.border, opacity: pressed ? 0.75 : 1 }]}
+                  style={({ pressed }) => [styles.upcomingRow, { borderTopWidth: i > 0 ? 1 : 0, opacity: pressed ? 0.75 : 1 }]}
                 >
                   <View style={[styles.upcomingDot, { backgroundColor: catColor + "20" }]}>
                     <Feather name="calendar" size={13} color={catColor} />
                   </View>
                   <View style={styles.upcomingInfo}>
-                    <Text style={[styles.upcomingName, { color: c.foreground }]}>{bill.name}</Text>
-                    <Text style={[styles.upcomingDate, { color: c.mutedForeground }]}>
+                    <Text style={styles.upcomingName}>{bill.name}</Text>
+                    <Text style={styles.upcomingDate}>
                       Due {daysLeft === 0 ? "today" : daysLeft === 1 ? "tomorrow" : `in ${daysLeft} days`}
                     </Text>
                   </View>
-                  <Text style={[styles.upcomingAmt, { color: c.foreground }]}>${bill.amount.toFixed(0)}</Text>
-                  <Feather name="chevron-right" size={13} color={c.mutedForeground} style={{ marginLeft: 4 }} />
+                  <Text style={styles.upcomingAmt}>${bill.amount.toFixed(0)}</Text>
+                  <Feather name="chevron-right" size={13} color="#64748b" style={{ marginLeft: 4 }} />
                 </Pressable>
               );
             })}
@@ -1971,11 +2141,25 @@ function formatShortDate(date: string): string {
 
 const styles = StyleSheet.create({
   screen:  { flex: 1 },
-  content: { paddingHorizontal: 16 },
+  dashboardStage: { backgroundColor: "#030712" },
+  content: { paddingHorizontal: 16, position: "relative", overflow: "hidden" },
+  stormBackdrop: { position: "absolute", top: 0, left: 0, right: 0, height: 820 },
+  stormBase: { ...StyleSheet.absoluteFillObject },
+  stormOrb: { position: "absolute", width: 330, height: 330, borderRadius: 165, opacity: 0.32 },
+  stormOrbBlue: { top: -130, right: -150, backgroundColor: "#2563eb" },
+  stormOrbViolet: { top: 210, left: -190, backgroundColor: "#7c3aed" },
+  lightningBeam: { position: "absolute", height: 2, borderRadius: 2, backgroundColor: "#93c5fd", shadowColor: "#38bdf8", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.9, shadowRadius: 14 },
+  lightningBeamOne: { top: 116, left: -40, width: 300 },
+  lightningBeamTwo: { top: 360, right: -80, width: 260, backgroundColor: "#a78bfa" },
+  stormGrid: { position: "absolute", top: 0, left: -20, right: -20, height: 740, borderWidth: 1, borderColor: "rgba(148,163,184,0.05)", opacity: 0.55 },
   dashboardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 14, marginBottom: 18 },
-  heading:    { fontSize: 30, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.6 },
-  subheading: { fontSize: 14, fontFamily: "Inter_500Medium", marginTop: 3 },
-  headerActionButton: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center", shadowColor: "#2563eb", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.32, shadowRadius: 16, elevation: 8 },
+  brandLockup: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
+  brandMark: { width: 48, height: 48, borderRadius: 17, alignItems: "center", justifyContent: "center", shadowColor: "#38bdf8", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 18, elevation: 9 },
+  brandMarkText: { color: "#ffffff", fontSize: 24, fontFamily: "Inter_800ExtraBold" },
+  brandEyebrow: { color: "#60a5fa", fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.6, marginBottom: 2 },
+  heading:    { fontSize: 28, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.8, color: "#f8fafc" },
+  subheading: { fontSize: 12, fontFamily: "Inter_600SemiBold", marginTop: 2, color: "#94a3b8" },
+  headerActionButton: { width: 52, height: 52, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(37,99,235,0.78)", borderWidth: 1, borderColor: "rgba(147,197,253,0.35)", shadowColor: "#2563eb", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.42, shadowRadius: 18, elevation: 10 },
   setupCard: { borderWidth: 1, borderRadius: 18, padding: 14, marginBottom: 12 },
   setupHeader: { flexDirection: "row", alignItems: "flex-start", marginBottom: 8 },
   setupTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
@@ -1998,12 +2182,18 @@ const styles = StyleSheet.create({
   confidenceDesc: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
 
   // Hero
-  heroCard:          { borderRadius: 28, padding: 24, marginBottom: 14, shadowColor: "#1d4ed8", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.35, shadowRadius: 22, elevation: 10 },
-  heroGlowTop:       { position: "absolute", top: -40, right: -30, width: 160, height: 160, borderRadius: 80, backgroundColor: "rgba(255,255,255,0.08)" },
-  heroGlowBottom:    { position: "absolute", bottom: -40, left: 20, width: 120, height: 120, borderRadius: 60, backgroundColor: "rgba(255,255,255,0.05)" },
-  heroLabel:         { fontSize: 12, fontFamily: "Inter_700Bold", color: "rgba(255,255,255,0.78)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 },
-  heroValue:         { fontSize: 52, fontFamily: "Inter_800ExtraBold", color: "#fff", lineHeight: 58, letterSpacing: -1.6 },
-  heroMetrics:       { flexDirection: "row", marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.2)" },
+  heroCard:          { borderRadius: 34, padding: 24, marginBottom: 14, minHeight: 255, borderWidth: 1, borderColor: "rgba(147,197,253,0.25)", shadowColor: "#2563eb", shadowOffset: { width: 0, height: 18 }, shadowOpacity: 0.42, shadowRadius: 30, elevation: 14 },
+  heroGlowTop:       { position: "absolute", top: -60, right: -40, width: 210, height: 210, borderRadius: 105, backgroundColor: "rgba(56,189,248,0.16)" },
+  heroGlowBottom:    { position: "absolute", bottom: -80, left: -40, width: 180, height: 180, borderRadius: 90, backgroundColor: "rgba(34,197,94,0.12)" },
+  heroSignalLine:    { position: "absolute", left: 18, right: 18, bottom: 72, height: 1, backgroundColor: "rgba(125,211,252,0.18)" },
+  heroTopRow:        { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 18 },
+  heroStatusBadge:   { flexDirection: "row", alignItems: "center", gap: 7, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
+  heroStatusDot:     { width: 7, height: 7, borderRadius: 4 },
+  heroStatusText:    { fontSize: 11, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8 },
+  heroLabel:         { fontSize: 12, fontFamily: "Inter_800ExtraBold", color: "rgba(219,234,254,0.82)", textTransform: "uppercase", letterSpacing: 1.3, marginBottom: 3 },
+  heroValue:         { fontSize: 58, fontFamily: "Inter_800ExtraBold", color: "#fff", lineHeight: 63, letterSpacing: -2.2 },
+  heroSubtitle:      { fontSize: 12, fontFamily: "Inter_500Medium", color: "rgba(203,213,225,0.75)", marginTop: 4, maxWidth: 270, lineHeight: 17 },
+  heroMetrics:       { flexDirection: "row", marginTop: 18, paddingTop: 17, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.16)" },
   heroMetric:        { flex: 1 },
   heroMetricLabel:   { fontSize: 11, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 3 },
   heroMetricValue:   { fontSize: 15, fontFamily: "Inter_800ExtraBold" },
@@ -2012,13 +2202,35 @@ const styles = StyleSheet.create({
   heroProgressTrack: { height: 5, borderRadius: 3, overflow: "hidden" },
   heroProgressFill:  { height: 5, borderRadius: 3 },
   heroProgressLabel: { fontSize: 11, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.75)", marginTop: 5 },
-  heroFlipHint:      { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-end", marginBottom: 6 },
-  heroFlipHintText:  { fontSize: 10, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.55)" },
+  heroFlipHint:      { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 6, backgroundColor: "rgba(15,23,42,0.42)" },
+  heroFlipHintText:  { fontSize: 10, fontFamily: "Inter_800ExtraBold", color: "rgba(255,255,255,0.72)", textTransform: "uppercase", letterSpacing: 0.7 },
   heroGoalRow:       { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 },
   heroGoalName:      { fontSize: 11, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.85)", width: 90 },
   heroGoalTrack:     { flex: 1, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.2)", overflow: "hidden" },
   heroGoalFill:      { height: 4, borderRadius: 2, backgroundColor: "#6ee7b7" },
   heroGoalPct:       { fontSize: 10, fontFamily: "Inter_700Bold", color: "rgba(255,255,255,0.75)", width: 30, textAlign: "right" },
+  commandDeck:       { gap: 10, marginBottom: 12 },
+  primaryCommandCard: { borderRadius: 26, overflow: "hidden", borderWidth: 1, borderColor: "rgba(147,197,253,0.28)", shadowColor: "#7c3aed", shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.26, shadowRadius: 24, elevation: 9 },
+  primaryCommandGradient: { minHeight: 112, padding: 16, flexDirection: "row", alignItems: "center", gap: 12 },
+  primaryCommandIcon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(15,23,42,0.36)", borderWidth: 1, borderColor: "rgba(219,234,254,0.28)" },
+  primaryCommandEyebrow: { color: "rgba(219,234,254,0.75)", fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.2, marginBottom: 3 },
+  primaryCommandTitle: { color: "#ffffff", fontSize: 17, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.3 },
+  primaryCommandSub: { color: "rgba(226,232,240,0.78)", fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 17, marginTop: 4 },
+  quickCommandRow: { flexDirection: "row", gap: 9 },
+  quickCommand: { flex: 1, minHeight: 82, borderRadius: 22, padding: 11, justifyContent: "space-between", backgroundColor: "rgba(15,23,42,0.78)", borderWidth: 1, borderColor: "rgba(148,163,184,0.16)" },
+  quickCommandIcon: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  quickCommandText: { color: "#e5edf8", fontSize: 12, fontFamily: "Inter_800ExtraBold" },
+  moneyRadarCard: { borderRadius: 26, padding: 15, marginBottom: 14, backgroundColor: "rgba(15,23,42,0.82)", borderWidth: 1, borderColor: "rgba(148,163,184,0.16)", shadowColor: "#000", shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.3, shadowRadius: 22, elevation: 8 },
+  moneyRadarHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 12 },
+  moneyRadarEyebrow: { color: "#60a5fa", fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.1, marginBottom: 4 },
+  moneyRadarTitle: { color: "#cbd5e1", fontSize: 12, fontFamily: "Inter_600SemiBold", lineHeight: 17 },
+  moneyRadarBadge: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 6 },
+  moneyRadarBadgeText: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.8 },
+  moneyRadarGrid: { flexDirection: "row", flexWrap: "wrap", gap: 9 },
+  radarMetric: { flexBasis: "47%", flexGrow: 1, minHeight: 94, borderRadius: 20, padding: 12, backgroundColor: "rgba(2,6,23,0.48)", borderWidth: 1, borderColor: "rgba(148,163,184,0.12)" },
+  radarMetricIcon: { width: 31, height: 31, borderRadius: 11, alignItems: "center", justifyContent: "center", marginBottom: 10 },
+  radarMetricValue: { fontSize: 22, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.4 },
+  radarMetricLabel: { color: "#94a3b8", fontSize: 11, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8, marginTop: 2 },
   negWarning:          { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, marginBottom: 14 },
   negWarningText:      { flex: 1, fontSize: 13, fontFamily: "Inter_500Medium" },
   // 12-month outlook sheet
@@ -2045,21 +2257,21 @@ const styles = StyleSheet.create({
   decisionHubCard: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 16, padding: 14, marginBottom: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
   decisionHubIcon: { width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   decisionHubBody: { flex: 1 },
-  decisionHubEyebrow: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 2 },
+  decisionHubEyebrow: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 1.1, marginBottom: 3, color: "#60a5fa" },
   decisionHubTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
   decisionHubDesc: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 2 },
   decisionHubStats: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
   decisionHubStat: { fontSize: 11, fontFamily: "Inter_700Bold" },
-  monthlyReviewCard: { borderWidth: 1, borderRadius: 20, padding: 15, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
+  monthlyReviewCard: { borderWidth: 1, borderColor: "rgba(148,163,184,0.16)", backgroundColor: "rgba(15,23,42,0.78)", borderRadius: 26, padding: 15, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.26, shadowRadius: 22, elevation: 8 },
   monthlyReviewHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
-  monthlyReviewIcon: { width: 40, height: 40, borderRadius: 13, alignItems: "center", justifyContent: "center" },
-  monthlyReviewTitle: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
-  monthlyReviewDesc: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 2 },
-  monthlyReviewAsk: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
-  monthlyReviewAskText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
+  monthlyReviewIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(56,189,248,0.14)", borderWidth: 1, borderColor: "rgba(56,189,248,0.24)" },
+  monthlyReviewTitle: { fontSize: 16, fontFamily: "Inter_800ExtraBold", color: "#f8fafc" },
+  monthlyReviewDesc: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 17, marginTop: 2, color: "#94a3b8" },
+  monthlyReviewAsk: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: "rgba(37,99,235,0.18)", borderWidth: 1, borderColor: "rgba(96,165,250,0.22)" },
+  monthlyReviewAskText: { fontSize: 11, fontFamily: "Inter_800ExtraBold", color: "#60a5fa" },
   monthlyReviewGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
-  monthlyReviewMetric: { flexBasis: "48%", flexGrow: 1, borderRadius: 14, padding: 11 },
-  monthlyReviewLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", marginBottom: 4 },
+  monthlyReviewMetric: { flexBasis: "48%", flexGrow: 1, borderRadius: 16, padding: 11, backgroundColor: "rgba(2,6,23,0.45)", borderWidth: 1, borderColor: "rgba(148,163,184,0.12)" },
+  monthlyReviewLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", marginBottom: 4, color: "#94a3b8", letterSpacing: 0.7 },
   monthlyReviewValue: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
   monthlyReviewActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
   monthlyReviewAction: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 8 },
@@ -2161,14 +2373,14 @@ const styles = StyleSheet.create({
   affordActionDoneText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
 
   // Upcoming
-  sectionTitle:  { fontSize: 19, fontFamily: "Inter_800ExtraBold", marginBottom: 10, marginTop: 6, letterSpacing: -0.2 },
-  upcomingCard:  { marginBottom: 16, overflow: "hidden", borderWidth: 1 },
-  upcomingRow:   { flexDirection: "row", alignItems: "center", padding: 13, gap: 11 },
+  sectionTitle:  { fontSize: 18, fontFamily: "Inter_800ExtraBold", marginBottom: 10, marginTop: 8, letterSpacing: -0.2, color: "#f8fafc" },
+  upcomingCard:  { marginBottom: 16, overflow: "hidden", borderWidth: 1, borderColor: "rgba(148,163,184,0.16)", borderRadius: 24, backgroundColor: "rgba(15,23,42,0.78)" },
+  upcomingRow:   { flexDirection: "row", alignItems: "center", padding: 13, gap: 11, borderTopColor: "rgba(148,163,184,0.13)" },
   upcomingDot:   { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   upcomingInfo:  { flex: 1 },
-  upcomingName:  { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-  upcomingDate:  { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 1 },
-  upcomingAmt:   { fontSize: 15, fontFamily: "Inter_700Bold" },
+  upcomingName:  { fontSize: 14, fontFamily: "Inter_700Bold", color: "#e5edf8" },
+  upcomingDate:  { fontSize: 12, fontFamily: "Inter_500Medium", marginTop: 1, color: "#94a3b8" },
+  upcomingAmt:   { fontSize: 15, fontFamily: "Inter_800ExtraBold", color: "#f8fafc" },
 
   // Stat pill cards
   forecastTrustCard: { borderWidth: 1, borderRadius: 16, padding: 12, marginBottom: 10 },
