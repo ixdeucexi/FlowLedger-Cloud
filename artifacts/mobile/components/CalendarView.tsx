@@ -1,5 +1,5 @@
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import type { DailyBalance, DecisionRecord, Goal, GoalExpense, Transaction } from "@/context/BudgetContext";
 import { scenarioDates } from "@/lib/decisions";
@@ -107,6 +107,7 @@ export function CalendarView({
   for (let i = 0; i < firstDay; i += 1) cells.push(null);
   for (let d = 1; d <= daysInMonth; d += 1) cells.push(d);
   while (cells.length % 7 !== 0) cells.push(null);
+  const hasSixRows = cells.length / 7 > 5;
 
   const dateStr = (day: number) =>
     `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -119,6 +120,13 @@ export function CalendarView({
         ))}
       </View>
 
+      <ScrollView
+        scrollEnabled={hasSixRows}
+        showsVerticalScrollIndicator={hasSixRows}
+        nestedScrollEnabled
+        style={hasSixRows ? styles.gridScroll : undefined}
+        contentContainerStyle={hasSixRows ? styles.gridScrollContent : undefined}
+      >
       <View style={styles.grid}>
         {cells.map((day, i) => {
           if (!day) return <View key={`empty-${i}`} style={[styles.cellOuter, styles.emptyCell]} />;
@@ -205,6 +213,7 @@ export function CalendarView({
           );
         })}
       </View>
+      </ScrollView>
     </View>
   );
 }
@@ -225,6 +234,8 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   dayName: { flex: 1, textAlign: "center", fontSize: 12, fontFamily: "Inter_600SemiBold", color: CALENDAR.muted },
+  gridScroll: { maxHeight: 530 },
+  gridScrollContent: { paddingBottom: 4 },
   grid: { flexDirection: "row", flexWrap: "wrap", backgroundColor: CALENDAR.surface },
   cellOuter: {
     width: "14.285714%",
