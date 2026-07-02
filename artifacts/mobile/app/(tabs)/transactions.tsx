@@ -106,7 +106,7 @@ export default function TransactionsScreen() {
   const [sourceFilter, setSourceFilter]         = useState<SourceFilter>("all");
   const [dateFilter, setDateFilter]             = useState<DateFilter>("all");
   const [categoryFilter, setCategoryFilter]     = useState("all");
-  const [sortOrder, setSortOrder]               = useState<SortOrder>("asc");
+  const [sortOrder, setSortOrder]               = useState<SortOrder>("desc");
   const [search, setSearch]                     = useState("");
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
@@ -218,7 +218,7 @@ export default function TransactionsScreen() {
     sourceFilter !== "all",
     dateFilter !== "all",
     categoryFilter !== "all",
-    sortOrder !== "asc",
+    sortOrder !== "desc",
   ].filter(Boolean).length;
 
   const hasActiveFilters = activeFilterCount > 0 || search.trim().length > 0;
@@ -228,7 +228,7 @@ export default function TransactionsScreen() {
     setSourceFilter("all");
     setDateFilter("all");
     setCategoryFilter("all");
-    setSortOrder("asc");
+    setSortOrder("desc");
   };
 
   const clearFilters = () => {
@@ -279,6 +279,26 @@ export default function TransactionsScreen() {
     const totalOut = filtered.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
     return { totalIn, totalOut, net: totalIn - totalOut };
   }, [filtered]);
+
+  const currentPeriodLabel = useMemo(() => {
+    const now = new Date();
+    if (dateFilter === "this_month") return `${MONTH_NAMES_LONG[now.getMonth()]} ${now.getFullYear()}`;
+    if (dateFilter === "last_month") {
+      const last = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      return `${MONTH_NAMES_LONG[last.getMonth()]} ${last.getFullYear()}`;
+    }
+    if (dateFilter === "this_year") return `${now.getFullYear()}`;
+    return "All activity";
+  }, [dateFilter]);
+
+  const quickChips = [
+    { key: "all", label: "All", active: typeFilter === "all" && sourceFilter === "all", onPress: () => { setTypeFilter("all"); setSourceFilter("all"); } },
+    { key: "out", label: "Money out", active: typeFilter === "expense" && sourceFilter === "all", onPress: () => { setTypeFilter("expense"); setSourceFilter("all"); } },
+    { key: "in", label: "Money in", active: typeFilter === "income" && sourceFilter === "all", onPress: () => { setTypeFilter("income"); setSourceFilter("all"); } },
+    { key: "bills", label: "Bills", active: sourceFilter === "bill_payment", onPress: () => { setTypeFilter("all"); setSourceFilter("bill_payment"); } },
+    { key: "manual", label: "Manual", active: sourceFilter === "transaction", onPress: () => { setTypeFilter("all"); setSourceFilter("transaction"); } },
+    { key: "debt", label: "Debt pay", active: sourceFilter === "extra_payment", onPress: () => { setTypeFilter("all"); setSourceFilter("extra_payment"); } },
+  ];
 
   const handleSave = (data: Omit<Transaction, "id"> | Transaction) => {
     if ("id" in data) return updateTransaction(data as Transaction);
@@ -392,9 +412,9 @@ export default function TransactionsScreen() {
       {/* ── Header ── */}
       <View style={[styles.header, { paddingTop: insets.top + 12 + webTopPad }]}>
         <View>
-          <Text style={[styles.title, { color: c.foreground }]}>Transactions</Text>
+          <Text style={[styles.title, { color: c.foreground }]}>Activity</Text>
           <Text style={[styles.subtitle, { color: c.mutedForeground }]}>
-            {allActivity.length} entries
+            {filtered.length} of {allActivity.length} entries · newest first
           </Text>
         </View>
         <Pressable
@@ -403,6 +423,38 @@ export default function TransactionsScreen() {
         >
           <Feather name="plus" size={22} color={c.primaryForeground} />
         </Pressable>
+      </View>
+
+      <View style={[styles.activityHero, { backgroundColor: c.card, borderColor: c.border }]}>
+        <View style={styles.activityHeroTop}>
+          <View>
+            <Text style={[styles.activityHeroLabel, { color: c.mutedForeground }]}>{currentPeriodLabel}</Text>
+            <Text style={[styles.activityHeroTitle, { color: c.foreground }]}>Transaction flow</Text>
+          </View>
+          <View style={[styles.activityHeroBadge, { backgroundColor: net >= 0 ? c.success + "18" : c.destructive + "18" }]}>
+            <Text style={[styles.activityHeroBadgeText, { color: net >= 0 ? c.success : c.destructive }]}>
+              {net >= 0 ? "Positive" : "Negative"}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.heroStats}>
+          <View style={styles.heroStat}>
+            <Text style={[styles.heroStatValue, { color: net >= 0 ? c.success : c.destructive }]}>
+              {net >= 0 ? "+" : "-"}${Math.abs(net).toFixed(0)}
+            </Text>
+            <Text style={[styles.heroStatLabel, { color: c.mutedForeground }]}>Net</Text>
+          </View>
+          <View style={[styles.heroDivider, { backgroundColor: c.border }]} />
+          <View style={styles.heroStat}>
+            <Text style={[styles.heroStatValue, { color: c.success }]}>+${totalIn.toFixed(0)}</Text>
+            <Text style={[styles.heroStatLabel, { color: c.mutedForeground }]}>In</Text>
+          </View>
+          <View style={[styles.heroDivider, { backgroundColor: c.border }]} />
+          <View style={styles.heroStat}>
+            <Text style={[styles.heroStatValue, { color: c.destructive }]}>-${totalOut.toFixed(0)}</Text>
+            <Text style={[styles.heroStatLabel, { color: c.mutedForeground }]}>Out</Text>
+          </View>
+        </View>
       </View>
 
       {/* ── Search + filter button ── */}
@@ -444,23 +496,29 @@ export default function TransactionsScreen() {
         </Pressable>
       </View>
       {/* ── Summary bar ── */}
-      {filtered.length > 0 && (
-        <View style={[styles.summaryRow, { marginHorizontal: 16, marginBottom: 14, borderRadius: colors.radius, backgroundColor: c.card }]}>
-          {([
-            { label: "IN",  value: `+$${totalIn.toFixed(0)}`,                                         color: c.success },
-            { label: "OUT", value: `-$${totalOut.toFixed(0)}`,                                         color: c.destructive },
-            { label: "NET", value: `${net >= 0 ? "+" : "-"}$${Math.abs(net).toFixed(0)}`,              color: net >= 0 ? c.success : c.destructive },
-          ] as const).map((s, i) => (
-            <React.Fragment key={s.label}>
-              {i > 0 && <View style={[styles.summaryDivider, { backgroundColor: c.border }]} />}
-              <View style={styles.summaryStat}>
-                <Text style={[styles.summaryValue, { color: s.color }]}>{s.value}</Text>
-                <Text style={[styles.summaryLabel, { color: c.mutedForeground }]}>{s.label}</Text>
-              </View>
-            </React.Fragment>
-          ))}
-        </View>
-      )}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.quickChipRow}
+        style={styles.quickChipScroller}
+      >
+        {quickChips.map(chip => (
+          <Pressable
+            key={chip.key}
+            onPress={chip.onPress}
+            style={({ pressed }) => [
+              styles.quickChip,
+              {
+                backgroundColor: chip.active ? c.primary : c.card,
+                borderColor: chip.active ? c.primary : c.border,
+                opacity: pressed ? 0.82 : 1,
+              },
+            ]}
+          >
+            <Text style={[styles.quickChipText, { color: chip.active ? c.primaryForeground : c.foreground }]}>{chip.label}</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
 
       {/* ── Grouped list ── */}
       <SectionList
@@ -477,13 +535,13 @@ export default function TransactionsScreen() {
                 ? "Nothing matches your filters."
                 : "Mark bills paid or add income sources to see your activity here."
             }
-            actionLabel={hasActiveFilters ? undefined : "Add Transaction"}
-            onAction={hasActiveFilters ? undefined : () => { setEditTx(null); setEditModalVisible(true); }}
+            actionLabel={hasActiveFilters ? "Clear filters" : "Add Transaction"}
+            onAction={hasActiveFilters ? clearFilters : () => { setEditTx(null); setEditModalVisible(true); }}
           />
         }
         renderSectionHeader={({ section: { title } }) => (
           <View style={[styles.sectionHeader, { backgroundColor: c.background }]}>
-            <Text style={[styles.sectionTitle, { color: c.mutedForeground }]}>{title}</Text>
+            <Text style={[styles.sectionTitle, { color: c.foreground }]}>{title}</Text>
           </View>
         )}
         renderItem={({ item, index, section }) => {
@@ -501,10 +559,11 @@ export default function TransactionsScreen() {
                   backgroundColor: c.card,
                   borderRadius: colors.radius,
                   opacity: pressed ? 0.85 : 1,
-                  marginBottom: isLast ? 8 : 2,
+                  marginBottom: isLast ? 10 : 7,
                 },
               ]}
             >
+              <View style={[styles.rowAccent, { backgroundColor: sourceMeta.color }]} />
               {/* Source icon */}
               <View style={[styles.sourceIcon, { backgroundColor: sourceMeta.color + "20" }]}>
                 <Feather name={sourceMeta.icon} size={15} color={sourceMeta.color} />
@@ -646,8 +705,8 @@ export default function TransactionsScreen() {
               <Text style={[styles.filterGroupLabel, { color: c.mutedForeground }]}>SORT</Text>
               <View style={styles.filterOptionGrid}>
                 {([
-                  { id: "asc" as SortOrder, label: "Earlier first", icon: "arrow-up" as const },
-                  { id: "desc" as SortOrder, label: "Later first", icon: "arrow-down" as const },
+                  { id: "desc" as SortOrder, label: "Newest first", icon: "arrow-down" as const },
+                  { id: "asc" as SortOrder, label: "Oldest first", icon: "arrow-up" as const },
                 ]).map(option => (
                   <Pressable
                     key={option.id}
@@ -694,12 +753,29 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 13, fontFamily: "Inter_500Medium", marginTop: 3, letterSpacing: 0.2 },
   addBtn:   { width: 52, height: 52, borderRadius: 18, alignItems: "center", justifyContent: "center", shadowColor: "#2563eb", shadowOpacity: 0.32, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
 
+  activityHero: { marginHorizontal: 16, marginBottom: 12, borderWidth: 1, borderRadius: 24, padding: 16, shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 20, shadowOffset: { width: 0, height: 12 }, elevation: 5 },
+  activityHeroTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 15 },
+  activityHeroLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.1, textTransform: "uppercase" },
+  activityHeroTitle: { fontSize: 21, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.4, marginTop: 3 },
+  activityHeroBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
+  activityHeroBadgeText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
+  heroStats: { flexDirection: "row", alignItems: "center" },
+  heroStat: { flex: 1 },
+  heroStatValue: { fontSize: 21, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.5 },
+  heroStatLabel: { fontSize: 10, fontFamily: "Inter_700Bold", letterSpacing: 0.7, textTransform: "uppercase", marginTop: 3 },
+  heroDivider: { width: 1, height: 34, marginHorizontal: 12 },
+
   searchWrap:  { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16 },
   searchBox:   { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 12 },
   searchInput: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", padding: 0 },
   filterIconButton: { width: 48, height: 48, borderRadius: 16, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   filterCount: { position: "absolute", top: -5, right: -5, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, alignItems: "center", justifyContent: "center" },
   filterCountText: { color: "#fff", fontSize: 10, fontFamily: "Inter_700Bold" },
+
+  quickChipScroller: { marginBottom: 8, flexGrow: 0 },
+  quickChipRow: { paddingHorizontal: 16, gap: 8, paddingBottom: 4 },
+  quickChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 9 },
+  quickChipText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
 
   filterOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.55)" },
   filterSheet: { borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32, maxHeight: "88%" },
@@ -723,10 +799,11 @@ const styles = StyleSheet.create({
   summaryDivider: { width: 1 },
 
   list:          { paddingHorizontal: 16 },
-  sectionHeader: { paddingVertical: 6 },
-  sectionTitle:  { fontSize: 12, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.6 },
+  sectionHeader: { paddingTop: 10, paddingBottom: 8 },
+  sectionTitle:  { fontSize: 13, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8 },
 
-  txRow:          { flexDirection: "row", alignItems: "center", padding: 14, gap: 12, borderWidth: 1, borderColor: "rgba(148,163,184,0.10)", shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 3 },
+  txRow:          { flexDirection: "row", alignItems: "center", padding: 14, gap: 12, borderWidth: 1, borderColor: "rgba(148,163,184,0.10)", overflow: "hidden", shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 3 },
+  rowAccent:      { position: "absolute", left: 0, top: 0, bottom: 0, width: 4 },
   sourceIcon:     { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
   txMid:          { flex: 1 },
   txNote:         { fontSize: 14, fontFamily: "Inter_600SemiBold", marginBottom: 4 },
