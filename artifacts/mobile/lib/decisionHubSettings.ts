@@ -1,5 +1,12 @@
 import { Platform } from "react-native";
 import { supabase } from "@/lib/supabase";
+import {
+  defaultAlgorithmToggles,
+  normalizeAlgorithmGrowthStage,
+  normalizeAlgorithmToggles,
+  type AlgorithmGrowthStage,
+  type AlgorithmId,
+} from "@/lib/algorithmCatalog";
 
 export interface DecisionHubSettings {
   categoryRolloverEnabled: boolean;
@@ -10,6 +17,9 @@ export interface DecisionHubSettings {
   plannedDecisionReviewAlertsEnabled: boolean;
   floTabBadgeEnabled: boolean;
   alertSensitivity: "conservative" | "balanced" | "quiet";
+  algorithmSuiteEnabled: boolean;
+  algorithmGrowthStage: AlgorithmGrowthStage;
+  algorithmToggles: Record<AlgorithmId, boolean>;
 }
 
 export const DEFAULT_DECISION_HUB_SETTINGS: DecisionHubSettings = {
@@ -21,6 +31,9 @@ export const DEFAULT_DECISION_HUB_SETTINGS: DecisionHubSettings = {
   plannedDecisionReviewAlertsEnabled: true,
   floTabBadgeEnabled: true,
   alertSensitivity: "balanced",
+  algorithmSuiteEnabled: true,
+  algorithmGrowthStage: "growing",
+  algorithmToggles: defaultAlgorithmToggles(),
 };
 
 export const DECISION_HUB_SETTINGS_KEY = "flowledger-decision-hub-settings";
@@ -40,6 +53,9 @@ export function readDecisionHubSettings(): DecisionHubSettings {
       plannedDecisionReviewAlertsEnabled: parsed.plannedDecisionReviewAlertsEnabled !== false,
       floTabBadgeEnabled: parsed.floTabBadgeEnabled !== false,
       alertSensitivity: normalizeAlertSensitivity(parsed.alertSensitivity),
+      algorithmSuiteEnabled: parsed.algorithmSuiteEnabled !== false,
+      algorithmGrowthStage: normalizeAlgorithmGrowthStage(parsed.algorithmGrowthStage),
+      algorithmToggles: normalizeAlgorithmToggles(parsed.algorithmToggles),
     };
   } catch {
     return DEFAULT_DECISION_HUB_SETTINGS;
@@ -90,6 +106,9 @@ function normalizeDecisionHubSettings(value: unknown): DecisionHubSettings {
     plannedDecisionReviewAlertsEnabled: parsed.plannedDecisionReviewAlertsEnabled !== false,
     floTabBadgeEnabled: parsed.floTabBadgeEnabled !== false,
     alertSensitivity: normalizeAlertSensitivity(parsed.alertSensitivity),
+    algorithmSuiteEnabled: parsed.algorithmSuiteEnabled !== false,
+    algorithmGrowthStage: normalizeAlgorithmGrowthStage(parsed.algorithmGrowthStage),
+    algorithmToggles: normalizeAlgorithmToggles(parsed.algorithmToggles),
   };
 }
 

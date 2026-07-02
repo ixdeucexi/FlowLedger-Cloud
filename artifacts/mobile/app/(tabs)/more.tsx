@@ -22,6 +22,13 @@ import { useAuth } from "@/context/AuthContext";
 import { type ThemeMode, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import { parseStatementCsv } from "@/lib/accounts";
+import {
+  ALGORITHM_CATALOG,
+  GROWTH_STAGE_LABELS,
+  GROWTH_STAGE_ORDER,
+  isAlgorithmAvailableForStage,
+  type AlgorithmId,
+} from "@/lib/algorithmCatalog";
 import { buildDataIntegrityIssues } from "@/lib/dataIntegrity";
 import { loadDecisionHubSettings, readDecisionHubSettings, saveDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { resetFloMemory } from "@/lib/flo";
@@ -106,6 +113,14 @@ export default function MoreScreen() {
     setDecisionHubSettings(merged);
     void saveDecisionHubSettings(user?.id, merged).catch(() => undefined);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+  const updateAlgorithmToggle = (algorithmId: AlgorithmId, enabled: boolean) => {
+    updateDecisionHubSetting({
+      algorithmToggles: {
+        ...decisionHubSettings.algorithmToggles,
+        [algorithmId]: enabled,
+      },
+    });
   };
 
   const totalMonthlyIncome = getMonthlyIncome();
@@ -464,6 +479,85 @@ export default function MoreScreen() {
       </View>
 
       {/* ── Accounts and reconciliation ── */}
+      <SLabel c={c} text="Algorithm Suite" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <Pressable
+          onPress={() => updateDecisionHubSetting({ algorithmSuiteEnabled: !decisionHubSettings.algorithmSuiteEnabled })}
+          style={({ pressed }) => [styles.decisionSettingRow, { opacity: pressed ? 0.75 : 1 }]}
+        >
+          <View style={[styles.dataIcon, { backgroundColor: c.primary + "18" }]}>
+            <Feather name="cpu" size={17} color={c.primary} />
+          </View>
+          <View style={styles.switchInfo}>
+            <Text style={[styles.switchLabel, { color: c.foreground }]}>FlowLedger Algo</Text>
+            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>
+              Deterministic financial algorithms for scoring, forecasts, decisions, reminders, and risk.
+            </Text>
+          </View>
+          <View style={[styles.toggleTrack, { backgroundColor: decisionHubSettings.algorithmSuiteEnabled ? c.primary : c.muted }]}>
+            <View style={[styles.toggleKnob, { backgroundColor: "#fff", alignSelf: decisionHubSettings.algorithmSuiteEnabled ? "flex-end" : "flex-start" }]} />
+          </View>
+        </Pressable>
+
+        <View style={[styles.alertSensitivityBox, { borderTopColor: c.border }]}>
+          <Text style={[styles.switchLabel, { color: c.foreground }]}>Account growth stage</Text>
+          <Text style={[styles.switchDesc, { color: c.mutedForeground, marginBottom: 10 }]}>
+            Higher stages unlock more algorithms as the account setup becomes more complete.
+          </Text>
+          <View style={styles.algoStageGrid}>
+            {GROWTH_STAGE_ORDER.map(stage => {
+              const active = decisionHubSettings.algorithmGrowthStage === stage;
+              return (
+                <Pressable
+                  key={stage}
+                  onPress={() => updateDecisionHubSetting({ algorithmGrowthStage: stage })}
+                  style={({ pressed }) => [
+                    styles.algoStagePill,
+                    {
+                      backgroundColor: active ? c.primary : c.muted,
+                      borderColor: active ? c.primary : c.border,
+                      opacity: pressed ? 0.75 : 1,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.algoStageText, { color: active ? "#fff" : c.mutedForeground }]}>{GROWTH_STAGE_LABELS[stage]}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={[styles.algorithmList, { borderTopColor: c.border }]}>
+          {ALGORITHM_CATALOG.map(algorithm => {
+            const available = isAlgorithmAvailableForStage(decisionHubSettings.algorithmGrowthStage, algorithm.id);
+            const enabled = decisionHubSettings.algorithmSuiteEnabled && available && decisionHubSettings.algorithmToggles[algorithm.id] !== false;
+            return (
+              <Pressable
+                key={algorithm.id}
+                onPress={() => available ? updateAlgorithmToggle(algorithm.id, !enabled) : updateDecisionHubSetting({ algorithmGrowthStage: algorithm.stage })}
+                style={({ pressed }) => [styles.algorithmToggleRow, { borderTopColor: c.border, opacity: pressed ? 0.72 : available ? 1 : 0.62 }]}
+              >
+                <View style={[styles.dataIcon, { backgroundColor: available ? c.primary + "16" : c.muted }]}>
+                  <Feather name={algorithm.icon as any} size={16} color={available ? c.primary : c.mutedForeground} />
+                </View>
+                <View style={styles.switchInfo}>
+                  <View style={styles.algorithmTitleRow}>
+                    <Text style={[styles.switchLabel, { color: c.foreground }]}>{algorithm.name}</Text>
+                    <Text style={[styles.algorithmStageTag, { color: available ? c.primary : c.mutedForeground, backgroundColor: available ? c.primary + "12" : c.muted }]}>
+                      {GROWTH_STAGE_LABELS[algorithm.stage]}
+                    </Text>
+                  </View>
+                  <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>{algorithm.desc}</Text>
+                </View>
+                <View style={[styles.toggleTrack, { backgroundColor: enabled ? c.primary : c.muted }]}>
+                  <View style={[styles.toggleKnob, { backgroundColor: "#fff", alignSelf: enabled ? "flex-end" : "flex-start" }]} />
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
       <SLabel c={c} text="Flo Decision Center" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <Pressable
@@ -1045,6 +1139,13 @@ const styles = StyleSheet.create({
   toggleTrack: { width: 48, height: 28, borderRadius: 999, padding: 3, justifyContent: "center" },
   toggleKnob: { width: 22, height: 22, borderRadius: 11 },
   alertSensitivityBox: { borderTopWidth: 1, marginTop: 14, paddingTop: 14 },
+  algoStageGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  algoStagePill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 8 },
+  algoStageText: { fontSize: 11, fontFamily: "Inter_700Bold" },
+  algorithmList: { borderTopWidth: 1, marginTop: 14, paddingTop: 2 },
+  algorithmToggleRow: { flexDirection: "row", alignItems: "center", gap: 12, borderTopWidth: 1, paddingTop: 12, marginTop: 12 },
+  algorithmTitleRow: { flexDirection: "row", alignItems: "center", gap: 7, flexWrap: "wrap" },
+  algorithmStageTag: { overflow: "hidden", borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3, fontSize: 9, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.5 },
   balanceDivider: { borderTopWidth: 1, marginTop: 14, paddingTop: 14 },
   balanceHeader: { marginBottom: 10 },
   balanceFieldLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 6 },

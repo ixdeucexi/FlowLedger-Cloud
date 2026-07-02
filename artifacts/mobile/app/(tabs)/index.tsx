@@ -23,6 +23,7 @@ import { DECISION_HUB_SETTINGS_EVENT, loadDecisionHubSettings, readDecisionHubSe
 import { buildDecisionHistory } from "@/lib/decisionHistory";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
+import { buildAlgorithmSuite, type AlgorithmInsight } from "@/lib/algorithmSuite";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const MONTH_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -32,6 +33,13 @@ const CAT_COLORS: Record<string, string> = {
   Transportation: "#ec4899", Food: "#f97316", Entertainment: "#8b5cf6",
   Health: "#ef4444", Education: "#3b82f6", Savings: "#22c55e", Debt: "#e11d48", Other: "#94a3b8",
 };
+
+function algoToneColor(tone: AlgorithmInsight["tone"]) {
+  if (tone === "safe") return "#22c55e";
+  if (tone === "watch") return "#f59e0b";
+  if (tone === "risk") return "#fb7185";
+  return "#38bdf8";
+}
 
 export default function DashboardScreen() {
   const c = useColors();
@@ -44,7 +52,7 @@ export default function DashboardScreen() {
     getBillOccurrencesInMonth, getIncomeOccurrencesInMonth,
     goals, addGoal, updateGoal, deleteGoal, checkGoalAffordability,
     getCashFlow, getMonthlyIncome, addBill, addTransaction, getDailyBalances, getTransactionsForMonth, settings,
-    accounts, incomes, decisions, updateSettings,
+    accounts, incomes, decisions, updateSettings, forecastConfidence,
     categories,
   } = useBudget();
 
@@ -730,6 +738,73 @@ export default function DashboardScreen() {
       prompt: "Review my month and tell me what needs attention.",
     };
   }, [balanceMetrics, categoryPlan, currentMonth, savingsData.totalSaved, savingsData.totalTarget, settings.safety_floor, stats.billCount, stats.paidCount, stats.totalDue, stats.totalPaid, stats.unpaidCount, today]);
+  const algorithmSuite = useMemo(() => buildAlgorithmSuite({
+    month: currentMonth,
+    year: selectedYear,
+    todayDay: today,
+    safetyFloor: settings.safety_floor,
+    cashFlow,
+    dailyBalances: currentMonthBalances.map(day => ({
+      day: day.day,
+      income: day.income,
+      bills: day.bills,
+      expense: day.expense,
+      net: day.net,
+      balance: day.balance,
+    })),
+    bills: getMonthlyBills(currentMonth, selectedYear).map(bill => ({
+      id: bill.id,
+      name: bill.name,
+      amount: getBillMonthlyTotal(bill, currentMonth, selectedYear),
+      paidAmount: getPaidAmount(bill.id, currentMonth, selectedYear),
+      category: bill.category || "Other",
+      due_day: bill.due_day,
+      is_debt: bill.is_debt,
+      is_recurring: bill.is_recurring,
+      balance: bill.balance,
+      interest_rate: bill.interest_rate,
+    })),
+    transactions: getTransactionsForMonth(currentMonth, selectedYear).map(transaction => ({
+      id: transaction.id,
+      date: transaction.date,
+      amount: transaction.amount,
+      category: transaction.category || "Other",
+      note: transaction.note,
+    })),
+    incomes: incomes.map(income => ({
+      id: income.id,
+      name: income.name,
+      amount: income.amount,
+      frequency: income.frequency,
+    })),
+    goals: goals.map(goal => ({
+      id: goal.id,
+      name: goal.name,
+      target_amount: goal.target_amount,
+      current_amount: goal.current_amount,
+      target_date: goal.target_date,
+      goal_type: goal.goal_type,
+    })),
+    categoryPlan,
+    forecastConfidence,
+    settings: decisionHubSettings,
+  }), [
+    cashFlow,
+    categoryPlan,
+    currentMonth,
+    currentMonthBalances,
+    decisionHubSettings,
+    forecastConfidence,
+    getBillMonthlyTotal,
+    getMonthlyBills,
+    getPaidAmount,
+    getTransactionsForMonth,
+    goals,
+    incomes,
+    selectedYear,
+    settings.safety_floor,
+    today,
+  ]);
   const nextWeekRisk = useMemo(() => {
     if (!decisionHubSettings.lowBalanceAlertsEnabled) return null;
     const weekEndDate = new Date(now);
@@ -1085,6 +1160,56 @@ export default function DashboardScreen() {
 
       {/* ── Stat Pill Cards ── */}
       {/* Row 1: Bills · Paid · Unpaid */}
+      {decisionHubSettings.algorithmSuiteEnabled && (
+        <View style={styles.algoSuiteCard}>
+          <View style={styles.algoSuiteHeader}>
+            <View style={styles.algoScoreRing}>
+              <Text style={styles.algoScoreValue}>{algorithmSuite.flowScore.score}</Text>
+              <Text style={styles.algoScoreLabel}>FLOW</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.algoEyebrow}>ALGORITHM SUITE · {algorithmSuite.activeCount} ACTIVE</Text>
+              <Text style={styles.algoTitle}>{algorithmSuite.flowScore.label}</Text>
+              <Text style={styles.algoDesc}>{algorithmSuite.monthlyHealth.summary}</Text>
+            </View>
+            <View style={styles.algoGradeBadge}>
+              <Text style={styles.algoGradeText}>{algorithmSuite.monthlyHealth.grade}</Text>
+            </View>
+          </View>
+
+          <View style={styles.algoMetricRow}>
+            <View style={styles.algoMiniMetric}>
+              <Text style={styles.algoMiniLabel}>Safe Cushion</Text>
+              <Text style={styles.algoMiniValue}>${algorithmSuite.safeCushion.amount.toFixed(0)}</Text>
+            </View>
+            <View style={styles.algoMiniMetric}>
+              <Text style={styles.algoMiniLabel}>Daily Limit</Text>
+              <Text style={styles.algoMiniValue}>${algorithmSuite.spendingLimit.daily.toFixed(0)}</Text>
+            </View>
+            <View style={styles.algoMiniMetric}>
+              <Text style={styles.algoMiniLabel}>Risk Days</Text>
+              <Text style={[styles.algoMiniValue, { color: algorithmSuite.riskDay.risk ? "#fb7185" : "#4ade80" }]}>{algorithmSuite.riskDay.risk}</Text>
+            </View>
+          </View>
+
+          <View style={styles.algoInsightStack}>
+            {algorithmSuite.insights.slice(0, 3).map(insight => {
+              const toneColor = algoToneColor(insight.tone);
+              return (
+                <View key={`${insight.id}-${insight.title}`} style={styles.algoInsightRow}>
+                  <View style={[styles.algoInsightDot, { backgroundColor: toneColor }]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.algoInsightTitle}>{insight.title}</Text>
+                    <Text style={styles.algoInsightDetail}>{insight.detail}</Text>
+                  </View>
+                  <Text style={[styles.algoInsightTag, { color: toneColor }]}>{insight.algorithm}</Text>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
       <View style={styles.commandDeck}>
         <Pressable
           onPress={() => router.push("/(tabs)/flo" as any)}
@@ -2209,6 +2334,26 @@ const styles = StyleSheet.create({
   heroGoalTrack:     { flex: 1, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.2)", overflow: "hidden" },
   heroGoalFill:      { height: 4, borderRadius: 2, backgroundColor: "#6ee7b7" },
   heroGoalPct:       { fontSize: 10, fontFamily: "Inter_700Bold", color: "rgba(255,255,255,0.75)", width: 30, textAlign: "right" },
+  algoSuiteCard: { borderRadius: 28, padding: 15, marginBottom: 12, backgroundColor: "rgba(2,6,23,0.82)", borderWidth: 1, borderColor: "rgba(125,211,252,0.18)", shadowColor: "#38bdf8", shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 24, elevation: 8 },
+  algoSuiteHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  algoScoreRing: { width: 68, height: 68, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(37,99,235,0.2)", borderWidth: 1, borderColor: "rgba(96,165,250,0.38)" },
+  algoScoreValue: { color: "#f8fafc", fontSize: 24, fontFamily: "Inter_800ExtraBold", lineHeight: 27 },
+  algoScoreLabel: { color: "#93c5fd", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 1 },
+  algoEyebrow: { color: "#38bdf8", fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.1, marginBottom: 2 },
+  algoTitle: { color: "#f8fafc", fontSize: 17, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.3 },
+  algoDesc: { color: "#94a3b8", fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 17, marginTop: 3 },
+  algoGradeBadge: { width: 42, height: 42, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(34,197,94,0.16)", borderWidth: 1, borderColor: "rgba(74,222,128,0.28)" },
+  algoGradeText: { color: "#86efac", fontSize: 19, fontFamily: "Inter_800ExtraBold" },
+  algoMetricRow: { flexDirection: "row", gap: 8, marginTop: 13 },
+  algoMiniMetric: { flex: 1, borderRadius: 16, padding: 10, backgroundColor: "rgba(15,23,42,0.72)", borderWidth: 1, borderColor: "rgba(148,163,184,0.12)" },
+  algoMiniLabel: { color: "#94a3b8", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7, textTransform: "uppercase", marginBottom: 4 },
+  algoMiniValue: { color: "#f8fafc", fontSize: 17, fontFamily: "Inter_800ExtraBold" },
+  algoInsightStack: { gap: 8, marginTop: 12 },
+  algoInsightRow: { flexDirection: "row", alignItems: "center", gap: 9, borderRadius: 16, padding: 10, backgroundColor: "rgba(15,23,42,0.56)", borderWidth: 1, borderColor: "rgba(148,163,184,0.1)" },
+  algoInsightDot: { width: 8, height: 8, borderRadius: 4 },
+  algoInsightTitle: { color: "#e5edf8", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  algoInsightDetail: { color: "#94a3b8", fontSize: 11, fontFamily: "Inter_500Medium", lineHeight: 15, marginTop: 2 },
+  algoInsightTag: { maxWidth: 90, textAlign: "right", fontSize: 9, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.5 },
   commandDeck:       { gap: 10, marginBottom: 12 },
   primaryCommandCard: { borderRadius: 26, overflow: "hidden", borderWidth: 1, borderColor: "rgba(147,197,253,0.28)", shadowColor: "#7c3aed", shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.26, shadowRadius: 24, elevation: 9 },
   primaryCommandGradient: { minHeight: 112, padding: 16, flexDirection: "row", alignItems: "center", gap: 12 },

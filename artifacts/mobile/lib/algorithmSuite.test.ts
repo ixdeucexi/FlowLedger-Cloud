@@ -1,0 +1,94 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { defaultAlgorithmToggles } from "./algorithmCatalog";
+import { buildAlgorithmSuite, type AlgorithmSuiteInput } from "./algorithmSuite";
+
+function baseInput(overrides: Partial<AlgorithmSuiteInput> = {}): AlgorithmSuiteInput {
+  return {
+    month: 6,
+    year: 2026,
+    todayDay: 1,
+    safetyFloor: 200,
+    cashFlow: {
+      monthlyIncome: 3000,
+      totalBillsDue: 1400,
+      totalPaid: 900,
+      netTransactions: -250,
+      remaining: 1350,
+      goalAllocations: 100,
+    },
+    dailyBalances: [
+      { day: 1, income: 3000, bills: 0, expense: 0, net: 3000, balance: 3000 },
+      { day: 5, income: 0, bills: 800, expense: 0, net: -800, balance: 2200 },
+      { day: 12, income: 0, bills: 300, expense: 100, net: -400, balance: 1800 },
+      { day: 25, income: 0, bills: 300, expense: 100, net: -400, balance: 1400 },
+    ],
+    bills: [
+      { id: "rent", name: "Rent", amount: 800, category: "Housing", due_day: 5, is_debt: false, is_recurring: true, paidAmount: 800 },
+      { id: "phone", name: "Phone", amount: 100, category: "Utilities", due_day: 8, is_debt: false, is_recurring: true, paidAmount: 0 },
+      { id: "card", name: "Credit Card", amount: 120, category: "Debt", due_day: 10, is_debt: true, is_recurring: true, balance: 900, interest_rate: 24.99, paidAmount: 0 },
+    ],
+    transactions: [
+      { id: "food-1", date: "2026-07-03", amount: -45, category: "Food", note: "Groceries" },
+    ],
+    incomes: [
+      { id: "pay", name: "Paycheck", amount: 3000, frequency: "biweekly" },
+    ],
+    goals: [
+      { id: "emergency", name: "Emergency Fund", target_amount: 1000, current_amount: 400, target_date: "2026-12-01", goal_type: "savings" },
+    ],
+    categoryPlan: [
+      { category: "Food", budgeted: 400, spent: 200, remaining: 200, status: "available" },
+    ],
+    forecastConfidence: { level: "high", label: "High", reasons: ["Accounts and recurring cash flow are current"] },
+    settings: {
+      algorithmSuiteEnabled: true,
+      algorithmGrowthStage: "power",
+      algorithmToggles: defaultAlgorithmToggles(),
+    },
+    ...overrides,
+  };
+}
+
+test("builds Flow Score, Safe Cushion, and practical algorithm outputs", () => {
+  const suite = buildAlgorithmSuite(baseInput());
+
+  assert.ok(suite.flowScore.score > 70);
+  assert.equal(suite.safeCushion.amount, 1200);
+  assert.equal(suite.lowBalanceWarning.status, "safe");
+  assert.equal(suite.billPriority.bills[0].name, "Phone");
+  assert.equal(suite.debtPayoff.nextDebtName, "Credit Card");
+  assert.ok(suite.spendingLimit.daily > 0);
+  assert.ok(suite.insights.some(insight => insight.algorithm === "Flow Score"));
+});
+
+test("respects growth stage and disabled algorithm toggles", () => {
+  const toggles = defaultAlgorithmToggles();
+  toggles.safeCushion = false;
+  const suite = buildAlgorithmSuite(baseInput({
+    settings: {
+      algorithmSuiteEnabled: true,
+      algorithmGrowthStage: "starter",
+      algorithmToggles: toggles,
+    },
+  }));
+
+  assert.equal(suite.safeCushion.amount, 0);
+  assert.ok(suite.activeCount < 20);
+  assert.ok(suite.insights.every(insight => insight.id !== "safeCushion"));
+});
+
+test("flags risk days and low balance warnings deterministically", () => {
+  const suite = buildAlgorithmSuite(baseInput({
+    dailyBalances: [
+      { day: 1, income: 0, bills: 0, expense: 0, net: 0, balance: 500 },
+      { day: 2, income: 0, bills: 450, expense: 0, net: -450, balance: 50 },
+    ],
+  }));
+
+  assert.equal(suite.lowBalanceWarning.status, "risk");
+  assert.equal(suite.lowBalanceWarning.day, 2);
+  assert.equal(suite.riskDay.risk, 1);
+  assert.ok(suite.flowScore.score < 70);
+});

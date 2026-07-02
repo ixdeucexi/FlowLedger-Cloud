@@ -42,5 +42,8 @@
     ,"lib/debtOrder.test.ts"
     ,"lib/paycheckPlanning.ts"
     ,"lib/paycheckPlanning.test.ts"
+    ,"lib/algorithmCatalog.ts"
+    ,"lib/algorithmSuite.ts"
+    ,"lib/algorithmSuite.test.ts"
   ]
 }
