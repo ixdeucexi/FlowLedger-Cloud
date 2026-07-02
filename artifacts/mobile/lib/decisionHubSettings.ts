@@ -32,7 +32,7 @@ export const DEFAULT_DECISION_HUB_SETTINGS: DecisionHubSettings = {
   floTabBadgeEnabled: true,
   alertSensitivity: "balanced",
   algorithmSuiteEnabled: true,
-  algorithmGrowthStage: "growing",
+  algorithmGrowthStage: "starter",
   algorithmToggles: defaultAlgorithmToggles(),
 };
 

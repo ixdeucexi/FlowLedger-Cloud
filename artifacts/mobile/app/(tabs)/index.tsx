@@ -79,6 +79,7 @@ export default function DashboardScreen() {
   const [moveSourceCategory, setMoveSourceCategory] = useState("");
   const [moveAmount, setMoveAmount] = useState("");
   const [moveError, setMoveError] = useState("");
+  const [flowScoreVisible, setFlowScoreVisible] = useState(false);
 
   useFocusEffect(useCallback(() => {
     setIsFocused(true);
@@ -1161,20 +1162,21 @@ export default function DashboardScreen() {
       {/* ── Stat Pill Cards ── */}
       {/* Row 1: Bills · Paid · Unpaid */}
       {decisionHubSettings.algorithmSuiteEnabled && (
-        <View style={styles.algoSuiteCard}>
+        <Pressable
+          onPress={() => setFlowScoreVisible(true)}
+          style={({ pressed }) => [styles.algoSuiteCard, { opacity: pressed ? 0.9 : 1 }]}
+        >
           <View style={styles.algoSuiteHeader}>
             <View style={styles.algoScoreRing}>
               <Text style={styles.algoScoreValue}>{algorithmSuite.flowScore.score}</Text>
               <Text style={styles.algoScoreLabel}>FLOW</Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.algoEyebrow}>ALGORITHM SUITE · {algorithmSuite.activeCount} ACTIVE</Text>
-              <Text style={styles.algoTitle}>{algorithmSuite.flowScore.label}</Text>
-              <Text style={styles.algoDesc}>{algorithmSuite.monthlyHealth.summary}</Text>
+              <Text style={styles.algoEyebrow}>FLOW SCORE - {algorithmSuite.activeCount} ACTIVE</Text>
+              <Text style={styles.algoTitle}>{algorithmSuite.flowScore.score} - {algorithmSuite.flowScore.label}</Text>
+              <Text style={styles.algoDesc}>{algorithmSuite.flowScore.topReason}</Text>
             </View>
-            <View style={styles.algoGradeBadge}>
-              <Text style={styles.algoGradeText}>{algorithmSuite.monthlyHealth.grade}</Text>
-            </View>
+            <Feather name="chevron-right" size={20} color="rgba(226,232,240,0.72)" />
           </View>
 
           <View style={styles.algoMetricRow}>
@@ -1192,22 +1194,17 @@ export default function DashboardScreen() {
             </View>
           </View>
 
-          <View style={styles.algoInsightStack}>
-            {algorithmSuite.insights.slice(0, 3).map(insight => {
-              const toneColor = algoToneColor(insight.tone);
-              return (
-                <View key={`${insight.id}-${insight.title}`} style={styles.algoInsightRow}>
-                  <View style={[styles.algoInsightDot, { backgroundColor: toneColor }]} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.algoInsightTitle}>{insight.title}</Text>
-                    <Text style={styles.algoInsightDetail}>{insight.detail}</Text>
-                  </View>
-                  <Text style={[styles.algoInsightTag, { color: toneColor }]}>{insight.algorithm}</Text>
-                </View>
-              );
-            })}
-          </View>
-        </View>
+          <Pressable
+            onPress={(event) => {
+              event.stopPropagation();
+              openFloWithPrompt(`Why is my Flow Score ${algorithmSuite.flowScore.score}? ${algorithmSuite.flowScore.topReason} ${algorithmSuite.flowScore.topAction}`);
+            }}
+            style={({ pressed }) => [styles.algoActionButton, { opacity: pressed ? 0.78 : 1 }]}
+          >
+            <Feather name="message-circle" size={15} color="#dbeafe" />
+            <Text style={styles.algoActionText}>{algorithmSuite.flowScore.topAction}</Text>
+          </Pressable>
+        </Pressable>
       )}
 
       <View style={styles.commandDeck}>
@@ -1695,6 +1692,69 @@ export default function DashboardScreen() {
       </>}
 
       {/* ── "What can I do?" modal ── */}
+      <Modal
+        visible={flowScoreVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setFlowScoreVisible(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setFlowScoreVisible(false)}>
+          <Pressable style={[styles.actionSheet, { backgroundColor: c.card }]} onPress={() => {}}>
+            <View style={[styles.sheetHandle, { backgroundColor: c.muted }]} />
+            <View style={styles.flowScoreSheetHeader}>
+              <View style={styles.algoScoreRing}>
+                <Text style={styles.algoScoreValue}>{algorithmSuite.flowScore.score}</Text>
+                <Text style={styles.algoScoreLabel}>FLOW</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.sheetTitle, { color: c.foreground }]}>{algorithmSuite.flowScore.score} - {algorithmSuite.flowScore.label}</Text>
+                <Text style={[styles.sheetSub, { color: c.mutedForeground }]}>{algorithmSuite.flowScore.topReason}</Text>
+              </View>
+            </View>
+
+            <View style={styles.flowScoreColumns}>
+              <View style={[styles.flowScoreColumn, { backgroundColor: c.muted }]}>
+                <Text style={[styles.flowScoreColumnTitle, { color: c.success }]}>Helped</Text>
+                {(algorithmSuite.flowScore.positiveFactors.length ? algorithmSuite.flowScore.positiveFactors : ["Your plan has enough data to create a Flow Score."]).slice(0, 3).map(item => (
+                  <Text key={item} style={[styles.flowScoreFactor, { color: c.foreground }]}>- {item}</Text>
+                ))}
+              </View>
+              <View style={[styles.flowScoreColumn, { backgroundColor: c.muted }]}>
+                <Text style={[styles.flowScoreColumnTitle, { color: c.warning }]}>Hurt</Text>
+                {(algorithmSuite.flowScore.negativeFactors.length ? algorithmSuite.flowScore.negativeFactors : ["No major pressure points are showing right now."]).slice(0, 3).map(item => (
+                  <Text key={item} style={[styles.flowScoreFactor, { color: c.foreground }]}>- {item}</Text>
+                ))}
+              </View>
+            </View>
+
+            <View style={[styles.flowScoreNextMove, { backgroundColor: c.primary + "18", borderColor: c.primary + "35" }]}>
+              <Text style={[styles.flowScoreColumnTitle, { color: c.primary }]}>Best next move</Text>
+              <Text style={[styles.flowScoreFactor, { color: c.foreground }]}>{algorithmSuite.flowScore.topAction}</Text>
+            </View>
+
+            <View style={styles.flowScoreBreakdown}>
+              {algorithmSuite.flowScore.breakdownItems.slice(0, 5).map(item => (
+                <View key={item.label} style={[styles.flowScoreBreakdownRow, { borderTopColor: c.border }]}>
+                  <Text style={[styles.flowScoreBreakdownLabel, { color: c.mutedForeground }]}>{item.label}</Text>
+                  <Text style={[styles.flowScoreBreakdownValue, { color: algoToneColor(item.tone === "watch" ? "watch" : item.tone === "risk" ? "risk" : item.tone === "safe" ? "safe" : "info") }]}>{item.value}</Text>
+                </View>
+              ))}
+            </View>
+
+            <Pressable
+              onPress={() => {
+                setFlowScoreVisible(false);
+                openFloWithPrompt(`Why is my Flow Score ${algorithmSuite.flowScore.score}? ${algorithmSuite.flowScore.topReason} ${algorithmSuite.flowScore.topAction}`);
+              }}
+              style={({ pressed }) => [styles.flowScoreFloButton, { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 }]}
+            >
+              <Feather name="message-circle" size={16} color={c.primaryForeground} />
+              <Text style={[styles.flowScoreFloText, { color: c.primaryForeground }]}>Ask Flo about this</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <Modal
         visible={actionModalVisible}
         transparent
@@ -2348,6 +2408,8 @@ const styles = StyleSheet.create({
   algoMiniMetric: { flex: 1, borderRadius: 16, padding: 10, backgroundColor: "rgba(15,23,42,0.72)", borderWidth: 1, borderColor: "rgba(148,163,184,0.12)" },
   algoMiniLabel: { color: "#94a3b8", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7, textTransform: "uppercase", marginBottom: 4 },
   algoMiniValue: { color: "#f8fafc", fontSize: 17, fontFamily: "Inter_800ExtraBold" },
+  algoActionButton: { marginTop: 12, minHeight: 44, borderRadius: 16, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "rgba(37,99,235,0.28)", borderWidth: 1, borderColor: "rgba(147,197,253,0.24)" },
+  algoActionText: { color: "#dbeafe", fontSize: 12, fontFamily: "Inter_800ExtraBold", textAlign: "center", flexShrink: 1 },
   algoInsightStack: { gap: 8, marginTop: 12 },
   algoInsightRow: { flexDirection: "row", alignItems: "center", gap: 9, borderRadius: 16, padding: 10, backgroundColor: "rgba(15,23,42,0.56)", borderWidth: 1, borderColor: "rgba(148,163,184,0.1)" },
   algoInsightDot: { width: 8, height: 8, borderRadius: 4 },
@@ -2365,6 +2427,18 @@ const styles = StyleSheet.create({
   quickCommand: { flex: 1, minHeight: 82, borderRadius: 22, padding: 11, justifyContent: "space-between", backgroundColor: "rgba(15,23,42,0.78)", borderWidth: 1, borderColor: "rgba(148,163,184,0.16)" },
   quickCommandIcon: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   quickCommandText: { color: "#e5edf8", fontSize: 12, fontFamily: "Inter_800ExtraBold" },
+  flowScoreSheetHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },
+  flowScoreColumns: { flexDirection: "row", gap: 10, marginTop: 6 },
+  flowScoreColumn: { flex: 1, borderRadius: 16, padding: 12 },
+  flowScoreColumnTitle: { fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7, textTransform: "uppercase", marginBottom: 7 },
+  flowScoreFactor: { fontSize: 12, fontFamily: "Inter_600SemiBold", lineHeight: 17 },
+  flowScoreNextMove: { borderWidth: 1, borderRadius: 16, padding: 12, marginTop: 10 },
+  flowScoreBreakdown: { marginTop: 8 },
+  flowScoreBreakdownRow: { borderTopWidth: 1, paddingVertical: 9, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  flowScoreBreakdownLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  flowScoreBreakdownValue: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  flowScoreFloButton: { minHeight: 48, borderRadius: 16, marginTop: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  flowScoreFloText: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   moneyRadarCard: { borderRadius: 26, padding: 15, marginBottom: 14, backgroundColor: "rgba(15,23,42,0.82)", borderWidth: 1, borderColor: "rgba(148,163,184,0.16)", shadowColor: "#000", shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.3, shadowRadius: 22, elevation: 8 },
   moneyRadarHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 12 },
   moneyRadarEyebrow: { color: "#60a5fa", fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.1, marginBottom: 4 },

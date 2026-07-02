@@ -35,6 +35,14 @@ export interface FloFacts {
   billDateMoves?: FloBillMoveFact[];
   debts?: FloDebtFact[];
   recurringBills?: FloRecurringBillFact[];
+  flowScore?: {
+    score: number;
+    label: string;
+    topReason: string;
+    topAction: string;
+    positiveFactors: string[];
+    negativeFactors: string[];
+  };
 }
 
 export interface FloDebtFact {
@@ -273,12 +281,29 @@ export function sanitizeFloFacts(facts: FloFacts): FloFacts {
     billDateMoves: sanitizeBillMoveFacts(facts.billDateMoves),
     debts: sanitizeDebtFacts(facts.debts),
     recurringBills: sanitizeRecurringBillFacts(facts.recurringBills),
+    flowScore: facts.flowScore ? {
+      score: num(facts.flowScore.score),
+      label: String(facts.flowScore.label ?? "").slice(0, 40),
+      topReason: String(facts.flowScore.topReason ?? "").slice(0, 180),
+      topAction: String(facts.flowScore.topAction ?? "").slice(0, 120),
+      positiveFactors: (facts.flowScore.positiveFactors ?? []).slice(0, 3).map(item => String(item).slice(0, 140)),
+      negativeFactors: (facts.flowScore.negativeFactors ?? []).slice(0, 3).map(item => String(item).slice(0, 140)),
+    } : undefined,
   };
 }
 
 export function localFloAnswer(message: string, facts: FloFacts, days: DecisionBaselineDay[]): string | null {
   if (isUnsafeFloRequest(message)) return FLO_SECURITY_REFUSAL_MESSAGE;
   const lower = message.toLowerCase();
+  const asksFlowScore = lower.includes("flow score") || (lower.includes("score") && (lower.includes("why") || lower.includes("improve") || lower.includes("hurt") || lower.includes("help")));
+  if (asksFlowScore && facts.flowScore) {
+    const helped = facts.flowScore.positiveFactors.length ? facts.flowScore.positiveFactors.join(" ") : "I don't see a major positive driver yet.";
+    const hurt = facts.flowScore.negativeFactors.length ? facts.flowScore.negativeFactors.join(" ") : "I don't see a major pressure point right now.";
+    if (lower.includes("improve")) return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. Best next move: ${facts.flowScore.topAction} What hurt it most: ${hurt}`;
+    if (lower.includes("hurt")) return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. What hurt it: ${hurt} Best next move: ${facts.flowScore.topAction}`;
+    if (lower.includes("help")) return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. What helped it: ${helped}`;
+    return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. ${facts.flowScore.topReason} What helped: ${helped} What hurt: ${hurt} Best next move: ${facts.flowScore.topAction}`;
+  }
   const debtPayment = evaluateFloDebtPayment(message, facts);
   if (debtPayment) {
     if (!debtPayment.allowed) return debtPayment.reason;

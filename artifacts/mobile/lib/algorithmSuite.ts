@@ -1,4 +1,4 @@
-import { isAlgorithmEnabled, type AlgorithmSettingsShape } from "./algorithmCatalog";
+import { ALGORITHM_CATALOG, isAlgorithmEnabled, type AlgorithmSettingsShape } from "./algorithmCatalog";
 
 export interface AlgorithmDailyBalance {
   day: number;
@@ -87,7 +87,18 @@ export interface AlgorithmInsight {
 
 export interface AlgorithmSuiteResult {
   activeCount: number;
-  flowScore: { score: number; grade: string; label: string; factors: string[] };
+  flowScore: {
+    score: number;
+    grade: string;
+    label: string;
+    topReason: string;
+    topAction: string;
+    positiveFactors: string[];
+    negativeFactors: string[];
+    breakdownItems: { label: string; value: string; tone: "safe" | "watch" | "risk" | "info" }[];
+    confidence: "high" | "medium" | "low";
+    factors: string[];
+  };
   safeCushion: { amount: number; label: string };
   purchaseDecision: { safeNowLimit: number; action: "safe" | "wait" | "split" | "avoid"; detail: string };
   billPriority: { bills: { id: string; name: string; amount: number; dueDay: number; score: number; reason: string }[] };
@@ -130,6 +141,7 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     100,
   );
   const flowGrade = scoreGrade(flowScore);
+  const flowLabel = scoreLabel(flowScore);
   const lowBalanceWarning = buildLowBalanceWarning(lowestBalance, lowestDay, input.safetyFloor);
   const billPriority = prioritizeBills(input.bills, input.todayDay, input.safetyFloor, lowestDay);
   const topDebtSnowball = input.bills.filter(bill => bill.is_debt && (bill.balance ?? 0) > 0).sort((a, b) => (a.balance ?? 0) - (b.balance ?? 0))[0] ?? null;
@@ -164,9 +176,24 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
         : { safeNowLimit: 0, action: "avoid" as const, detail: "New spending is unsafe until the forecast improves." };
 
   const reminders = buildSmartReminders(lowBalanceWarning, billPriority.bills, goalAcceleration.goalName);
+  const categoryPressure = (input.categoryPlan ?? []).filter(row => row.status !== "available");
+  const flowScoreDetails = buildFlowScoreDetails(input, {
+    flowScore,
+    flowLabel,
+    lowestBalance,
+    lowestDay,
+    safeCushionAmount,
+    billProgress,
+    paidBills,
+    debtPressure,
+    lowBalanceWarning,
+    categoryPressure,
+    confidenceScore,
+  });
   const insights = buildInsights(input, {
     flowScore,
     flowGrade,
+    flowLabel,
     safeCushionAmount,
     lowBalanceWarning,
     billPriority,
@@ -177,16 +204,17 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
   });
 
   return {
-    activeCount: [
-      "flowScore", "safeCushion", "purchaseDecision", "billPriority", "paydaySplit",
-      "debtPayoff", "forecastConfidence", "lowBalanceWarning", "subscriptionCreep", "goalAcceleration",
-      "spendingPattern", "billShock", "cashFlowGap", "incomeStability", "savingsSweep",
-      "riskDay", "smartReminder", "monthlyHealth", "spendingLimit", "planDelay",
-    ].filter(id => isAlgorithmEnabled(input.settings, id as any)).length,
+    activeCount: ALGORITHM_CATALOG.filter(algorithm => isAlgorithmEnabled(input.settings, algorithm.id)).length,
     flowScore: {
       score: isAlgorithmEnabled(input.settings, "flowScore") ? flowScore : 0,
       grade: flowGrade,
-      label: flowScore >= 80 ? "Strong flow" : flowScore >= 65 ? "Stable but watchful" : flowScore >= 45 ? "Tight month" : "Needs attention",
+      label: flowLabel,
+      topReason: flowScoreDetails.topReason,
+      topAction: flowScoreDetails.topAction,
+      positiveFactors: flowScoreDetails.positiveFactors,
+      negativeFactors: flowScoreDetails.negativeFactors,
+      breakdownItems: flowScoreDetails.breakdownItems,
+      confidence: input.forecastConfidence.level,
       factors: [
         `Forecast confidence: ${input.forecastConfidence.label}`,
         `Lowest balance: $${lowestBalance.toFixed(0)}${lowestDay ? ` on day ${lowestDay}` : ""}`,
@@ -216,7 +244,7 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     savingsSweep: { amount: savingsSweepAmount, detail: savingsSweepAmount > 0 ? `Move up to $${savingsSweepAmount.toFixed(0)} safely without crossing the floor.` : "No safe leftover sweep is available yet." },
     riskDay: riskDayCounts,
     smartReminder: { reminders },
-    monthlyHealth: { score: flowScore, grade: flowGrade, summary: `${flowGrade} month based on cushion, bills, income stability, and risk days.` },
+    monthlyHealth: { score: flowScore, grade: flowGrade, summary: `${flowLabel} plan based on cushion, bills, forecast confidence, and risk days.` },
     spendingLimit: { ...spendingLimits, detail: `About $${spendingLimits.daily.toFixed(0)}/day or $${spendingLimits.weekly.toFixed(0)}/week is safe from the current cushion.` },
     planDelay: { day: planDelayDay, detail: planDelayDay ? `The next safer purchase window appears around day ${planDelayDay}.` : "No safer date appears inside this month yet." },
     insights: insights.filter(insight => isAlgorithmEnabled(input.settings, insight.id as any) || insight.id === "flowScore").slice(0, 4),
@@ -381,11 +409,111 @@ function buildSmartReminders(lowBalance: AlgorithmSuiteResult["lowBalanceWarning
   return reminders.slice(0, 4);
 }
 
+function buildFlowScoreDetails(
+  input: AlgorithmSuiteInput,
+  facts: {
+    flowScore: number;
+    flowLabel: string;
+    lowestBalance: number;
+    lowestDay: number | null;
+    safeCushionAmount: number;
+    billProgress: number;
+    paidBills: number;
+    debtPressure: number;
+    lowBalanceWarning: AlgorithmSuiteResult["lowBalanceWarning"];
+    categoryPressure: AlgorithmCategoryRow[];
+    confidenceScore: number;
+  },
+) {
+  const positiveFactors: string[] = [];
+  const negativeFactors: string[] = [];
+  const breakdownItems: AlgorithmSuiteResult["flowScore"]["breakdownItems"] = [];
+
+  if (facts.safeCushionAmount >= 250) positiveFactors.push(`Safe Cushion has $${facts.safeCushionAmount.toFixed(0)} above your floor.`);
+  else if (facts.safeCushionAmount > 0) negativeFactors.push(`Safe Cushion is thin at $${facts.safeCushionAmount.toFixed(0)} above your floor.`);
+  else negativeFactors.push("The forecast does not have extra room above your safety floor.");
+
+  if (facts.lowBalanceWarning.status === "safe") positiveFactors.push("No low-balance risk is showing in this month.");
+  else negativeFactors.push(facts.lowBalanceWarning.message);
+
+  if (facts.billProgress >= 0.75) positiveFactors.push(`${facts.paidBills}/${input.bills.length || 0} bills are already cleared.`);
+  else if (input.bills.length) negativeFactors.push(`${Math.max(0, input.bills.length - facts.paidBills)} bill${input.bills.length - facts.paidBills === 1 ? "" : "s"} still need attention.`);
+
+  if (input.forecastConfidence.level === "high") positiveFactors.push("Forecast confidence is high.");
+  else negativeFactors.push(`Forecast confidence is ${input.forecastConfidence.label.toLowerCase()}.`);
+
+  if (facts.debtPressure > 15) negativeFactors.push("Debt pressure is using a large part of monthly income.");
+  else if (input.bills.some(bill => bill.is_debt)) positiveFactors.push("Debt pressure is manageable in this plan.");
+
+  if (facts.categoryPressure.length) {
+    const top = facts.categoryPressure.slice().sort((a, b) => a.remaining - b.remaining)[0];
+    negativeFactors.push(`${top.category} is ${top.remaining < 0 ? `$${Math.abs(top.remaining).toFixed(0)} over plan` : "close to its limit"}.`);
+  }
+
+  breakdownItems.push({
+    label: "Safe Cushion",
+    value: `$${facts.safeCushionAmount.toFixed(0)}`,
+    tone: facts.safeCushionAmount >= 250 ? "safe" : facts.safeCushionAmount > 0 ? "watch" : "risk",
+  });
+  breakdownItems.push({
+    label: "Bills Progress",
+    value: input.bills.length ? `${Math.round(facts.billProgress * 100)}%` : "No bills",
+    tone: facts.billProgress >= 0.75 ? "safe" : facts.billProgress >= 0.4 ? "watch" : "risk",
+  });
+  breakdownItems.push({
+    label: "Forecast Confidence",
+    value: input.forecastConfidence.label,
+    tone: input.forecastConfidence.level === "high" ? "safe" : input.forecastConfidence.level === "medium" ? "watch" : "risk",
+  });
+  breakdownItems.push({
+    label: "Debt Pressure",
+    value: facts.debtPressure > 15 ? "High" : facts.debtPressure > 5 ? "Moderate" : "Low",
+    tone: facts.debtPressure > 15 ? "risk" : facts.debtPressure > 5 ? "watch" : "safe",
+  });
+  if (facts.categoryPressure.length) {
+    breakdownItems.push({
+      label: "Spending Pressure",
+      value: `${facts.categoryPressure.length} categor${facts.categoryPressure.length === 1 ? "y" : "ies"}`,
+      tone: facts.categoryPressure.some(row => row.status === "over") ? "risk" : "watch",
+    });
+  }
+
+  const topReason = negativeFactors[0] ?? positiveFactors[0] ?? "Your plan has enough information for a basic Flow Score.";
+  const topAction = flowScoreAction(facts, input);
+
+  return {
+    topReason,
+    topAction,
+    positiveFactors: positiveFactors.slice(0, 3),
+    negativeFactors: negativeFactors.slice(0, 3),
+    breakdownItems,
+  };
+}
+
+function flowScoreAction(
+  facts: {
+    safeCushionAmount: number;
+    lowBalanceWarning: AlgorithmSuiteResult["lowBalanceWarning"];
+    billProgress: number;
+    categoryPressure: AlgorithmCategoryRow[];
+  },
+  input: AlgorithmSuiteInput,
+) {
+  if (facts.lowBalanceWarning.status !== "safe" && facts.lowBalanceWarning.day) return `Ask Flo why day ${facts.lowBalanceWarning.day} is tight.`;
+  if (facts.safeCushionAmount <= 0) return "Ask Flo how to protect your safety floor.";
+  const priorityBill = prioritizeBills(input.bills, input.todayDay, input.safetyFloor, facts.lowBalanceWarning.day).bills[0];
+  if (priorityBill && facts.billProgress < 0.75) return `Review ${priorityBill.name} first.`;
+  if (facts.categoryPressure.length) return `Review ${facts.categoryPressure[0].category} spending.`;
+  if (facts.safeCushionAmount > 250) return "Ask Flo what extra money can safely do.";
+  return "No action needed right now.";
+}
+
 function buildInsights(
   input: AlgorithmSuiteInput,
   facts: {
     flowScore: number;
     flowGrade: string;
+    flowLabel: string;
     safeCushionAmount: number;
     lowBalanceWarning: AlgorithmSuiteResult["lowBalanceWarning"];
     billPriority: AlgorithmSuiteResult["billPriority"];
@@ -399,8 +527,8 @@ function buildInsights(
     {
       id: "flowScore",
       algorithm: "Flow Score",
-      title: `Flow Score ${facts.flowScore}`,
-      detail: `${facts.flowGrade} month. ${input.forecastConfidence.label} forecast confidence.`,
+      title: `${facts.flowScore} · ${facts.flowLabel}`,
+      detail: `Plan health uses cushion, bills, risk days, and forecast confidence.`,
       tone: facts.flowScore >= 75 ? "safe" : facts.flowScore >= 55 ? "watch" : "risk",
     },
     {
@@ -475,6 +603,14 @@ function scoreGrade(score: number) {
   if (score >= 70) return "C";
   if (score >= 60) return "D";
   return "F";
+}
+
+function scoreLabel(score: number) {
+  if (score >= 90) return "Excellent";
+  if (score >= 80) return "Strong";
+  if (score >= 65) return "Stable";
+  if (score >= 45) return "Tight";
+  return "Needs attention";
 }
 
 function minBy<T>(items: T[], selector: (item: T) => number): T | null {

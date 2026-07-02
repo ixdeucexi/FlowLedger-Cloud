@@ -80,6 +80,14 @@ const facts: FloFacts = {
     { id: "utilities", name: "Utilities", amount: 370, dueDay: 4, category: "Utilities" },
     { id: "internet", name: "Internet", amount: 90, dueDay: 13, category: "Utilities" },
   ],
+  flowScore: {
+    score: 72,
+    label: "Stable",
+    topReason: "July 8 is tight because bills hit before payday.",
+    topAction: "Ask Flo why day 8 is tight.",
+    positiveFactors: ["No negative days are showing."],
+    negativeFactors: ["Safe Cushion is thin."],
+  },
 };
 const days = [{ date: "2026-06-24", balance: 1000 }, { date: "2026-07-01", balance: 800 }];
 
@@ -105,6 +113,13 @@ test("Flo answers phase 2 planning questions without AI", () => {
   assert.match(localFloAnswer("What changed since last month?", facts, days) ?? "", /income changed by \+\$200\.00/);
   assert.match(localFloAnswer("What should I do with leftover money?", facts, days) ?? "", /\$750\.00 left/);
   assert.match(localFloAnswer("How do I fix this forecast?", { ...facts, forecastConfidence: "low" }, days) ?? "", /reconciliation/i);
+});
+
+test("Flo explains Flow Score from deterministic facts", () => {
+  assert.match(localFloAnswer("Why is my Flow Score 72?", facts, days) ?? "", /72 - Stable/);
+  assert.match(localFloAnswer("How do I improve my Flow Score?", facts, days) ?? "", /Ask Flo why day 8 is tight/);
+  assert.match(localFloAnswer("What hurt my Flow Score?", facts, days) ?? "", /Safe Cushion is thin/);
+  assert.match(localFloAnswer("What helped my Flow Score?", facts, days) ?? "", /No negative days/);
 });
 
 test("Flo answers category budget questions from verified facts", () => {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { defaultAlgorithmToggles } from "./algorithmCatalog";
+import { ALGORITHM_CATALOG, defaultAlgorithmToggles, normalizeAlgorithmGrowthStage } from "./algorithmCatalog";
 import { buildAlgorithmSuite, type AlgorithmSuiteInput } from "./algorithmSuite";
 
 function baseInput(overrides: Partial<AlgorithmSuiteInput> = {}): AlgorithmSuiteInput {
@@ -55,12 +55,33 @@ test("builds Flow Score, Safe Cushion, and practical algorithm outputs", () => {
   const suite = buildAlgorithmSuite(baseInput());
 
   assert.ok(suite.flowScore.score > 70);
+  assert.ok(suite.flowScore.topReason.length > 0);
+  assert.ok(suite.flowScore.topAction.length > 0);
+  assert.ok(suite.flowScore.breakdownItems.length >= 4);
   assert.equal(suite.safeCushion.amount, 1200);
   assert.equal(suite.lowBalanceWarning.status, "safe");
   assert.equal(suite.billPriority.bills[0].name, "Phone");
   assert.equal(suite.debtPayoff.nextDebtName, "Credit Card");
   assert.ok(suite.spendingLimit.daily > 0);
   assert.ok(suite.insights.some(insight => insight.algorithm === "Flow Score"));
+});
+
+test("visible algorithm catalog is trimmed to user-facing suite", () => {
+  assert.deepEqual(ALGORITHM_CATALOG.map(item => item.id), [
+    "flowScore",
+    "safeCushion",
+    "purchaseDecision",
+    "billPriority",
+    "lowBalanceWarning",
+    "paydaySplit",
+    "debtPayoff",
+    "spendingLimit",
+    "savingsSweep",
+    "goalAcceleration",
+    "spendingPattern",
+    "billShock",
+  ]);
+  assert.equal(normalizeAlgorithmGrowthStage("missing"), "starter");
 });
 
 test("respects growth stage and disabled algorithm toggles", () => {
@@ -91,4 +112,5 @@ test("flags risk days and low balance warnings deterministically", () => {
   assert.equal(suite.lowBalanceWarning.day, 2);
   assert.equal(suite.riskDay.risk, 1);
   assert.ok(suite.flowScore.score < 70);
+  assert.match(suite.flowScore.topReason, /floor|negative|risk/i);
 });

@@ -51,6 +51,7 @@ import { applyCategoryBudgetMove, buildCategoryPlan, buildCategoryRolloverAdjust
 import { CATEGORY_BUDGETS_EVENT, categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets } from "@/lib/categoryBudgetStore";
 import { DECISION_HUB_SETTINGS_EVENT, loadDecisionHubSettings, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
+import { buildAlgorithmSuite } from "@/lib/algorithmSuite";
 
 const sampleQuestions = [
   "Ask Flo anything…",
@@ -67,7 +68,7 @@ export default function FloScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ prompt?: string; promptId?: string }>();
   const { user } = useAuth();
-  const { bills, billDateMoves, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getPaidAmount, moveBillOccurrence, removeBillOccurrenceMove, saveDecision, updateDecision, updateBill, setCustomAmount, saveExtraPayment, getTransactionsForMonth, categories } = useBudget();
+  const { bills, billDateMoves, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getPaidAmount, moveBillOccurrence, removeBillOccurrenceMove, saveDecision, updateDecision, updateBill, setCustomAmount, saveExtraPayment, getTransactionsForMonth, categories, incomes, goals } = useBudget();
   const [chat, dispatch] = useReducer(reduceFloChat, initialChat);
   const [cardsByMessageId, setCardsByMessageId] = useState<Record<string, FloResponseCard[]>>({});
   const [decisionByMessageId, setDecisionByMessageId] = useState<Record<string, { scenario: DecisionScenario; result: DecisionResult }>>({});
@@ -335,6 +336,59 @@ export default function FloScreen() {
     const unallocatedExpenses = transactions.filter(transaction =>
       transaction.date.startsWith(currentMonth) && transaction.amount < 0 && !transaction.linked_bill_id
     );
+    const month = now.getMonth();
+    const year = now.getFullYear();
+    const algorithmSuite = buildAlgorithmSuite({
+      month,
+      year,
+      todayDay: now.getDate(),
+      safetyFloor: settings.safety_floor,
+      cashFlow,
+      dailyBalances: getDailyBalances(month, year).map(day => ({
+        day: day.day,
+        income: day.income,
+        bills: day.bills,
+        expense: day.expense,
+        net: day.net,
+        balance: day.balance,
+      })),
+      bills: getMonthlyBills(month, year).map(bill => ({
+        id: bill.id,
+        name: bill.name,
+        amount: getBillMonthlyTotal(bill, month, year),
+        paidAmount: getPaidAmount(bill.id, month, year),
+        category: bill.category || "Other",
+        due_day: bill.due_day,
+        is_debt: bill.is_debt,
+        is_recurring: bill.is_recurring,
+        balance: bill.balance,
+        interest_rate: bill.interest_rate,
+      })),
+      transactions: getTransactionsForMonth(month, year).map(transaction => ({
+        id: transaction.id,
+        date: transaction.date,
+        amount: transaction.amount,
+        category: transaction.category || "Other",
+        note: transaction.note,
+      })),
+      incomes: incomes.map(income => ({
+        id: income.id,
+        name: income.name,
+        amount: income.amount,
+        frequency: income.frequency,
+      })),
+      goals: goals.map(goal => ({
+        id: goal.id,
+        name: goal.name,
+        target_amount: goal.target_amount,
+        current_amount: goal.current_amount,
+        target_date: goal.target_date,
+        goal_type: goal.goal_type,
+      })),
+      categoryPlan,
+      forecastConfidence,
+      settings: decisionHubSettings,
+    });
     return {
       balanceToday: baseline[0]?.balance ?? 0,
       lowestBalance: lowest.balance,
@@ -382,6 +436,14 @@ export default function FloScreen() {
           dueDay: bill.due_day,
           category: bill.category || "Other",
         })),
+      flowScore: {
+        score: algorithmSuite.flowScore.score,
+        label: algorithmSuite.flowScore.label,
+        topReason: algorithmSuite.flowScore.topReason,
+        topAction: algorithmSuite.flowScore.topAction,
+        positiveFactors: algorithmSuite.flowScore.positiveFactors,
+        negativeFactors: algorithmSuite.flowScore.negativeFactors,
+      },
       decisionHistory: {
         due: decisionHistory.due,
         upcoming: decisionHistory.upcoming,
@@ -396,7 +458,7 @@ export default function FloScreen() {
         })),
       },
     };
-  }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, transactions, upcoming, decisions, forecastConfidence.level, categoryPlan, paycheckPlan, billDateMoves, bills, decisionHistory, decisionRiskAlerts]);
+  }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getDailyBalances, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, getTransactionsForMonth, transactions, upcoming, decisions, forecastConfidence, categoryPlan, paycheckPlan, billDateMoves, bills, decisionHistory, decisionRiskAlerts, now, incomes, goals, decisionHubSettings]);
 
   const quickPrompts = useMemo(() => {
     const categoryPrompts = decisionHubSettings.categoryDecisionAlertsEnabled ? buildFloCategoryQuickPrompts(categoryPlan) : [];
