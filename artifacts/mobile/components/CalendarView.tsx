@@ -157,11 +157,10 @@ export function CalendarView({
               onPress={() => onDayPress(ds)}
               style={({ pressed }) => [
                 styles.cellOuter,
-                isSelected ? styles.selectedCell : null,
                 { opacity: pressed ? 0.72 : 1 },
               ]}
             >
-              <View style={styles.cellInner}>
+              <View style={[styles.cellInner, isSelected ? styles.selectedCell : null]}>
                 <View style={styles.dayTopRow}>
                   <View style={isToday ? styles.todayCircle : undefined}>
                     <Text
@@ -242,8 +241,8 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
   },
   selectedCell: {
-    borderRadius: 16,
-    backgroundColor: "rgba(37,99,235,0.12)",
+    backgroundColor: "rgba(37,99,235,0.18)",
+    borderColor: "rgba(37,99,235,0.55)",
   },
   emptyCell: { opacity: 0.35 },
   dayTopRow: { alignItems: "center", gap: 2 },
