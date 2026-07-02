@@ -9,9 +9,8 @@ import colors from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
-import { applyCategoryBudgetMove, buildCategoryPlan, buildCategoryRolloverAdjustments, type CategoryPlanRow } from "@/lib/categoryPlanning";
+import { applyCategoryBudgetMove, buildCategoryPlan, type CategoryPlanRow } from "@/lib/categoryPlanning";
 import { CATEGORY_BUDGETS_EVENT, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets } from "@/lib/categoryBudgetStore";
-import { DECISION_HUB_SETTINGS_EVENT, loadDecisionHubSettings, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const CAT_COLORS: Record<string, string> = {
@@ -40,7 +39,6 @@ export default function CategoryBudgetScreen() {
   const [filter, setFilter] = useState<Filter>("all");
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [decisionHubSettings, setDecisionHubSettings] = useState<DecisionHubSettings>(() => readDecisionHubSettings());
   const [moveTarget, setMoveTarget] = useState<CategoryPlanRow | null>(null);
   const [moveSource, setMoveSource] = useState("");
   const [moveAmount, setMoveAmount] = useState("");
@@ -60,42 +58,14 @@ export default function CategoryBudgetScreen() {
     setDrafts(Object.fromEntries(editableCategories.map(category => [category, categoryBudgets[category] === undefined ? "" : String(categoryBudgets[category])])) as Record<string, string>);
   }, [categoryBudgets, editableCategories]);
 
-  useEffect(() => {
-    let cancelled = false;
-    setDecisionHubSettings(readDecisionHubSettings());
-    void loadDecisionHubSettings(user?.id).then(next => {
-      if (!cancelled) setDecisionHubSettings(next);
-    });
-    const refresh = () => setDecisionHubSettings(readDecisionHubSettings());
-    globalThis.addEventListener?.(DECISION_HUB_SETTINGS_EVENT, refresh);
-    return () => {
-      cancelled = true;
-      globalThis.removeEventListener?.(DECISION_HUB_SETTINGS_EVENT, refresh);
-    };
-  }, [user?.id]);
-
-  const previousPlan = useMemo(() => {
-    const previous = new Date(year, month - 1, 1);
-    const previousMonth = previous.getMonth();
-    const previousYear = previous.getFullYear();
-    return buildCategoryPlan(
-      editableCategories,
-      getMonthlyBills(previousMonth, previousYear).filter(bill => !bill.is_debt).map(bill => ({ category: bill.category || "Other", amount: getBillMonthlyTotal(bill, previousMonth, previousYear) })),
-      getTransactionsForMonth(previousMonth, previousYear).filter(tx => tx.category !== "Debt" && tx.category !== "Income").map(tx => ({ category: tx.category || "Other", amount: tx.amount })),
-      Object.entries(readCategoryBudgetCache(previousMonth, previousYear)).map(([category, amount]) => ({ category, amount })),
-    );
-  }, [editableCategories, getBillMonthlyTotal, getMonthlyBills, getTransactionsForMonth, month, year]);
-
   const categoryPlan = useMemo(() => {
-    const rollovers = buildCategoryRolloverAdjustments(previousPlan, decisionHubSettings.categoryRolloverEnabled);
     return buildCategoryPlan(
       editableCategories,
       getMonthlyBills(month, year).filter(bill => !bill.is_debt).map(bill => ({ category: bill.category || "Other", amount: getBillMonthlyTotal(bill, month, year) })),
       getTransactionsForMonth(month, year).filter(tx => tx.category !== "Debt" && tx.category !== "Income").map(tx => ({ category: tx.category || "Other", amount: tx.amount })),
       Object.entries(categoryBudgets).map(([category, amount]) => ({ category, amount })),
-      rollovers,
     ).sort((left, right) => statusRank(left.status) - statusRank(right.status) || left.remaining - right.remaining);
-  }, [categoryBudgets, decisionHubSettings.categoryRolloverEnabled, editableCategories, getBillMonthlyTotal, getMonthlyBills, getTransactionsForMonth, month, previousPlan, year]);
+  }, [categoryBudgets, editableCategories, getBillMonthlyTotal, getMonthlyBills, getTransactionsForMonth, month, year]);
 
   const visibleRows = categoryPlan.filter(row => filter === "all" || row.status === filter);
   const sourceOptions = categoryPlan.filter(row => moveTarget && row.category !== moveTarget.category && row.remaining > 0.005);
@@ -194,7 +164,7 @@ export default function CategoryBudgetScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.rowName, { color: c.foreground }]}>{row.category}</Text>
-                  <Text style={[styles.rowSub, { color: c.mutedForeground }]}>Spent ${row.spent.toFixed(0)} of ${row.budgeted.toFixed(0)}{row.rollover ? ` · rollover ${row.rollover < 0 ? "-" : "+"}$${Math.abs(row.rollover).toFixed(0)}` : ""}</Text>
+                  <Text style={[styles.rowSub, { color: c.mutedForeground }]}>Spent ${row.spent.toFixed(0)} of ${row.budgeted.toFixed(0)}</Text>
                 </View>
                 <Text style={[styles.leftValue, { color }]}>{row.remaining < 0 ? "-" : ""}${Math.abs(row.remaining).toFixed(0)}</Text>
               </View>

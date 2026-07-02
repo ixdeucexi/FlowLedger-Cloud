@@ -19,6 +19,7 @@ import type { SnowballProjectionResult } from "@/lib/snowball";
 import { sortDebtsLeastToGreatest } from "@/lib/debtOrder";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { DECISION_HUB_SETTINGS_EVENT, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
+import { isAlgorithmEnabled } from "@/lib/algorithmCatalog";
 
 const CAT_COLORS: Record<string, string> = {
   Housing: "#0f9b8e", Utilities: "#f0b429", Insurance: "#6366f1",
@@ -142,14 +143,14 @@ export default function BillsScreen() {
     return buildPaycheckPlan(incomeEvents, billEvents, balanceEvents, settings.safety_floor, todayIso);
   }, [currentMonth, currentYear, getBillMonthlyTotal, getBillOccurrencesInMonth, getDailyBalances, getIncomeOccurrencesInMonth, getMonthlyBills, getPaidAmount, settings.forecast_horizon_months, settings.safety_floor, todayIso]);
   const billOptimizationPrompt = useMemo(() => {
-    if (!decisionHubSettings.billBeforePaydayAlertsEnabled || !paycheckPlan.nextPaycheck || !paycheckPlan.billsDue.length) return null;
+    if ((!isAlgorithmEnabled(decisionHubSettings, "billPriority") && !isAlgorithmEnabled(decisionHubSettings, "paydaySplit")) || !paycheckPlan.nextPaycheck || !paycheckPlan.billsDue.length) return null;
     const bill = [...paycheckPlan.billsDue].sort((left, right) => right.amount - left.amount)[0];
     const saferDate = new Date(`${paycheckPlan.nextPaycheck.date}T12:00:00`);
     saferDate.setDate(saferDate.getDate() + 1);
     const key = `${bill.id ?? bill.name}-${bill.dueDate}-${paycheckPlan.nextPaycheck.date}`;
     if (dismissedBillPromptKey === key) return null;
     return { bill, saferDate, key };
-  }, [decisionHubSettings.billBeforePaydayAlertsEnabled, dismissedBillPromptKey, paycheckPlan]);
+  }, [decisionHubSettings, dismissedBillPromptKey, paycheckPlan]);
 
   // ── Handlers ────────────────────────────────────────────────────
   const handleSave = useCallback((data: Omit<Bill, "id" | "created_at"> | Bill) => {

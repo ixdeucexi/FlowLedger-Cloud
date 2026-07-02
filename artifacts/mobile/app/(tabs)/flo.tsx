@@ -48,11 +48,12 @@ import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { evaluateDecision, type DecisionResult, type DecisionScenario } from "@/lib/decisions";
 import { buildDecisionHistory, type DecisionHistoryItem } from "@/lib/decisionHistory";
 import { buildDecisionRiskAlerts } from "@/lib/decisionRisk";
-import { applyCategoryBudgetMove, buildCategoryPlan, buildCategoryRolloverAdjustments } from "@/lib/categoryPlanning";
+import { applyCategoryBudgetMove, buildCategoryPlan } from "@/lib/categoryPlanning";
 import { CATEGORY_BUDGETS_EVENT, categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets } from "@/lib/categoryBudgetStore";
 import { DECISION_HUB_SETTINGS_EVENT, loadDecisionHubSettings, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { buildAlgorithmSuite } from "@/lib/algorithmSuite";
+import { isAlgorithmEnabled } from "@/lib/algorithmCatalog";
 
 const sampleQuestions = [
   "Ask Flo anything…",
@@ -207,13 +208,6 @@ export default function FloScreen() {
     const previousTransactions = getTransactionsForMonth(previousMonth, previousYear)
       .filter(transaction => transaction.category !== "Debt" && transaction.category !== "Income")
       .map(transaction => ({ category: transaction.category || "Other", amount: transaction.amount }));
-    const previousRows = buildCategoryPlan(
-      categories.filter(category => category !== "Debt"),
-      previousBills,
-      previousTransactions,
-      Object.entries(readCategoryBudgetsFromStorage(previousMonth, previousYear)).map(([category, amount]) => ({ category, amount })),
-    );
-    const rollovers = buildCategoryRolloverAdjustments(previousRows, decisionHubSettings.categoryRolloverEnabled);
     const monthBills = getMonthlyBills(month, year)
       .filter(bill => !bill.is_debt)
       .map(bill => ({
@@ -228,7 +222,6 @@ export default function FloScreen() {
       monthBills,
       monthTransactions,
       Object.entries(categoryBudgets).map(([category, amount]) => ({ category, amount })),
-      rollovers,
     );
     const transactionDetails = getTransactionsForMonth(month, year)
       .filter(transaction => transaction.amount < 0 && transaction.category !== "Debt" && transaction.category !== "Income");
@@ -241,7 +234,6 @@ export default function FloScreen() {
         budgeted: row.budgeted,
         spent: row.spent,
         remaining: row.remaining,
-        rollover: row.rollover,
         status: row.status,
         percentUsed: row.percentUsed,
         topTransaction: topTransaction ? {
@@ -251,7 +243,7 @@ export default function FloScreen() {
         } : undefined,
       };
     });
-  }, [categories, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, now, decisionHubSettings.categoryRolloverEnabled]);
+  }, [categories, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, now]);
 
   const decisionHistory = useMemo(
     () => buildDecisionHistory(decisions.filter(decision => decisionStillHasSource(decision, transactions)), today, now.toISOString()),
@@ -473,8 +465,8 @@ export default function FloScreen() {
   }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getDailyBalances, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, getTransactionsForMonth, transactions, upcoming, decisions, forecastConfidence, categoryPlan, paycheckPlan, billDateMoves, bills, decisionHistory, decisionRiskAlerts, now, incomes, goals, decisionHubSettings]);
 
   const quickPrompts = useMemo(() => {
-    const categoryPrompts = decisionHubSettings.categoryDecisionAlertsEnabled ? buildFloCategoryQuickPrompts(categoryPlan) : [];
-    const paycheckPrompts = decisionHubSettings.paycheckPlanningEnabled ? ["What can I spend until payday?", "What bill should I move?"] : [];
+    const categoryPrompts = isAlgorithmEnabled(decisionHubSettings, "spendingPattern") ? buildFloCategoryQuickPrompts(categoryPlan) : [];
+    const paycheckPrompts = isAlgorithmEnabled(decisionHubSettings, "paydaySplit") ? ["What can I spend until payday?", "What bill should I move?"] : [];
     return [
       ...(decisionHistory.due.length ? ["What decisions need review?"] : []),
       ...(decisionRiskAlerts.length ? ["Are any planned decisions no longer safe?"] : []),
@@ -485,7 +477,7 @@ export default function FloScreen() {
       "What bills are due next?",
       "Why does my balance run low?",
     ].slice(0, 8);
-  }, [categoryPlan, decisionHistory, decisionRiskAlerts, decisionHubSettings.categoryDecisionAlertsEnabled, decisionHubSettings.paycheckPlanningEnabled]);
+  }, [categoryPlan, decisionHistory, decisionRiskAlerts, decisionHubSettings]);
 
   const buildCalendarDayReply = (prompt: string) => {
     const date = prompt.match(/\b(20\d{2}-\d{2}-\d{2})\b/)?.[1];
@@ -574,7 +566,7 @@ export default function FloScreen() {
         setDecisionSaveState(previous => ({ ...previous, [replyId]: "idle" as const }));
       }
     }
-    const categoryMove = decisionHubSettings.categoryDecisionAlertsEnabled ? evaluateFloCategoryMove(clean, facts) : null;
+    const categoryMove = isAlgorithmEnabled(decisionHubSettings, "spendingPattern") ? evaluateFloCategoryMove(clean, facts) : null;
     if (categoryMove?.allowed) {
       setCategoryMoveByMessageId(previous => ({ ...previous, [replyId]: categoryMove }));
       setCategoryMoveState(previous => ({ ...previous, [replyId]: "idle" }));
@@ -765,7 +757,6 @@ export default function FloScreen() {
         budgeted: row.budgeted,
         spent: row.spent,
         remaining: row.remaining,
-        rollover: row.rollover ?? 0,
         status: row.status,
         percentUsed: row.percentUsed,
       }));

@@ -17,13 +17,14 @@ import type { Bill, DashboardFilter, Goal } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
-import { applyCategoryBudgetMove, buildCategoryPlan, buildCategoryRolloverAdjustments } from "@/lib/categoryPlanning";
+import { applyCategoryBudgetMove, buildCategoryPlan } from "@/lib/categoryPlanning";
 import { CATEGORY_BUDGETS_EVENT, categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets as saveCategoryBudgetsRemote } from "@/lib/categoryBudgetStore";
 import { DECISION_HUB_SETTINGS_EVENT, loadDecisionHubSettings, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { buildDecisionHistory } from "@/lib/decisionHistory";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { buildAlgorithmSuite, type AlgorithmInsight } from "@/lib/algorithmSuite";
+import { isAlgorithmEnabled } from "@/lib/algorithmCatalog";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const MONTH_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -307,9 +308,8 @@ export default function DashboardScreen() {
       .filter(transaction => transaction.category !== "Debt" && transaction.category !== "Income")
       .map(transaction => ({ category: transaction.category || "Other", amount: transaction.amount }));
     const budgetLimits = Object.entries(categoryBudgets).map(([category, amount]) => ({ category, amount }));
-    const rollovers = buildCategoryRolloverAdjustments(previousCategoryPlan, decisionHubSettings.categoryRolloverEnabled);
-    return buildCategoryPlan(categories.filter(category => category !== "Debt"), monthBills, monthTransactions, budgetLimits, rollovers);
-  }, [categories, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, currentMonth, selectedYear, previousCategoryPlan, decisionHubSettings.categoryRolloverEnabled]);
+    return buildCategoryPlan(categories.filter(category => category !== "Debt"), monthBills, monthTransactions, budgetLimits);
+  }, [categories, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, currentMonth, selectedYear]);
 
   const categoryDetail = useMemo(() => {
     if (!selectedCategory) return null;
@@ -374,7 +374,7 @@ export default function DashboardScreen() {
     remaining: totals.remaining + row.remaining,
   }), { budgeted: 0, spent: 0, remaining: 0 }), [categoryPlan]);
   const categoryDecisionAlert = useMemo(() => {
-    if (!decisionHubSettings.categoryDecisionAlertsEnabled) return null;
+    if (!isAlgorithmEnabled(decisionHubSettings, "spendingPattern")) return null;
     const over = categoryPlan
       .filter(row => row.remaining < -0.005)
       .sort((left, right) => left.remaining - right.remaining)[0];
@@ -403,7 +403,7 @@ export default function DashboardScreen() {
       detail: `$${Math.max(0, watch.remaining).toFixed(0)} left this month. Ask Flo before spending more.`,
       prompt: `How much do I have left for ${watch.category}?`,
     };
-  }, [categoryPlan, decisionHubSettings.categoryDecisionAlertsEnabled]);
+  }, [categoryPlan, decisionHubSettings]);
 
   const openCategoryBudgetEditor = () => {
     const drafts: Record<string, string> = {};
@@ -628,7 +628,7 @@ export default function DashboardScreen() {
   const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const currentYear = now.getFullYear();
   const paycheckPlan = useMemo(() => {
-    if (!decisionHubSettings.paycheckPlanningEnabled) return null;
+    if (!isAlgorithmEnabled(decisionHubSettings, "paydaySplit")) return null;
     const horizon = Math.max(2, Math.min(settings.forecast_horizon_months, 6));
     const incomeEvents: { id?: string; name: string; amount: number; date: string }[] = [];
     const billEvents: { id?: string; name: string; amount: number; dueDate: string }[] = [];
@@ -678,7 +678,7 @@ export default function DashboardScreen() {
   }, [
     currentMonth,
     currentYear,
-    decisionHubSettings.paycheckPlanningEnabled,
+    decisionHubSettings,
     getBillMonthlyTotal,
     getBillOccurrencesInMonth,
     getDailyBalances,
@@ -809,7 +809,7 @@ export default function DashboardScreen() {
     today,
   ]);
   const nextWeekRisk = useMemo(() => {
-    if (!decisionHubSettings.lowBalanceAlertsEnabled) return null;
+    if (!isAlgorithmEnabled(decisionHubSettings, "lowBalanceWarning")) return null;
     const weekEndDate = new Date(now);
     weekEndDate.setDate(now.getDate() + 7);
     const weekEnd = `${weekEndDate.getFullYear()}-${String(weekEndDate.getMonth() + 1).padStart(2, "0")}-${String(weekEndDate.getDate()).padStart(2, "0")}`;
@@ -818,11 +818,7 @@ export default function DashboardScreen() {
       (best, day) => !best || day.balance < best.balance ? day : best,
       null,
     );
-    const sensitivityBuffer = decisionHubSettings.alertSensitivity === "conservative"
-      ? 300
-      : decisionHubSettings.alertSensitivity === "quiet"
-        ? 0
-        : 150;
+    const sensitivityBuffer = 150;
     if (!lowest || lowest.balance >= settings.safety_floor + sensitivityBuffer) return null;
     const tone = lowest.balance < settings.safety_floor ? "risk" : "tight";
     const prompt = `Why is my balance low next week? My lowest projected balance is $${lowest.balance.toFixed(0)} on ${lowest.date}.`;
@@ -834,7 +830,7 @@ export default function DashboardScreen() {
       saferBillPrompt: "What bill should I move?",
       reducePlanPrompt: "Which planned decisions should I reduce or postpone?",
     };
-  }, [decisionForecastDays, decisionHubSettings.alertSensitivity, decisionHubSettings.lowBalanceAlertsEnabled, now, settings.safety_floor, todayIso]);
+  }, [decisionForecastDays, decisionHubSettings, now, settings.safety_floor, todayIso]);
   const openFloWithPrompt = (prompt: string) => {
     router.push({ pathname: "/(tabs)/flo", params: { prompt } } as any);
   };
@@ -1950,14 +1946,6 @@ export default function DashboardScreen() {
                       {categoryDetail.row.remaining < 0 ? "-" : ""}${Math.abs(categoryDetail.row.remaining).toFixed(0)}
                     </Text>
                   </View>
-                  {categoryDetail.row.rollover ? (
-                    <View style={[styles.categoryDetailStat, { backgroundColor: c.muted }]}>
-                      <Text style={[styles.categoryDetailStatLabel, { color: c.mutedForeground }]}>Rollover</Text>
-                      <Text style={[styles.categoryDetailStatValue, { color: categoryDetail.row.rollover < 0 ? c.destructive : c.success }]}>
-                        {categoryDetail.row.rollover < 0 ? "-" : "+"}${Math.abs(categoryDetail.row.rollover).toFixed(0)}
-                      </Text>
-                    </View>
-                  ) : null}
                 </View>
 
                 <View style={[styles.categoryInsightBox, { backgroundColor: c.primary + "10", borderColor: c.primary + "30" }]}>

@@ -9,28 +9,12 @@ import {
 } from "@/lib/algorithmCatalog";
 
 export interface DecisionHubSettings {
-  categoryRolloverEnabled: boolean;
-  categoryDecisionAlertsEnabled: boolean;
-  paycheckPlanningEnabled: boolean;
-  lowBalanceAlertsEnabled: boolean;
-  billBeforePaydayAlertsEnabled: boolean;
-  plannedDecisionReviewAlertsEnabled: boolean;
-  floTabBadgeEnabled: boolean;
-  alertSensitivity: "conservative" | "balanced" | "quiet";
   algorithmSuiteEnabled: boolean;
   algorithmGrowthStage: AlgorithmGrowthStage;
   algorithmToggles: Record<AlgorithmId, boolean>;
 }
 
 export const DEFAULT_DECISION_HUB_SETTINGS: DecisionHubSettings = {
-  categoryRolloverEnabled: false,
-  categoryDecisionAlertsEnabled: true,
-  paycheckPlanningEnabled: true,
-  lowBalanceAlertsEnabled: true,
-  billBeforePaydayAlertsEnabled: true,
-  plannedDecisionReviewAlertsEnabled: true,
-  floTabBadgeEnabled: true,
-  alertSensitivity: "balanced",
   algorithmSuiteEnabled: true,
   algorithmGrowthStage: "starter",
   algorithmToggles: defaultAlgorithmToggles(),
@@ -45,14 +29,6 @@ export function readDecisionHubSettings(): DecisionHubSettings {
     const raw = globalThis.localStorage?.getItem(DECISION_HUB_SETTINGS_KEY);
     const parsed = raw ? JSON.parse(raw) as Partial<DecisionHubSettings> : {};
     return {
-      categoryRolloverEnabled: Boolean(parsed.categoryRolloverEnabled),
-      categoryDecisionAlertsEnabled: parsed.categoryDecisionAlertsEnabled !== false,
-      paycheckPlanningEnabled: parsed.paycheckPlanningEnabled !== false,
-      lowBalanceAlertsEnabled: parsed.lowBalanceAlertsEnabled !== false,
-      billBeforePaydayAlertsEnabled: parsed.billBeforePaydayAlertsEnabled !== false,
-      plannedDecisionReviewAlertsEnabled: parsed.plannedDecisionReviewAlertsEnabled !== false,
-      floTabBadgeEnabled: parsed.floTabBadgeEnabled !== false,
-      alertSensitivity: normalizeAlertSensitivity(parsed.alertSensitivity),
       algorithmSuiteEnabled: parsed.algorithmSuiteEnabled !== false,
       algorithmGrowthStage: normalizeAlgorithmGrowthStage(parsed.algorithmGrowthStage),
       algorithmToggles: normalizeAlgorithmToggles(parsed.algorithmToggles),
@@ -98,20 +74,8 @@ export async function saveDecisionHubSettings(userId: string | undefined | null,
 function normalizeDecisionHubSettings(value: unknown): DecisionHubSettings {
   const parsed = value && typeof value === "object" ? value as Partial<DecisionHubSettings> : {};
   return {
-    categoryRolloverEnabled: Boolean(parsed.categoryRolloverEnabled),
-    categoryDecisionAlertsEnabled: parsed.categoryDecisionAlertsEnabled !== false,
-    paycheckPlanningEnabled: parsed.paycheckPlanningEnabled !== false,
-    lowBalanceAlertsEnabled: parsed.lowBalanceAlertsEnabled !== false,
-    billBeforePaydayAlertsEnabled: parsed.billBeforePaydayAlertsEnabled !== false,
-    plannedDecisionReviewAlertsEnabled: parsed.plannedDecisionReviewAlertsEnabled !== false,
-    floTabBadgeEnabled: parsed.floTabBadgeEnabled !== false,
-    alertSensitivity: normalizeAlertSensitivity(parsed.alertSensitivity),
     algorithmSuiteEnabled: parsed.algorithmSuiteEnabled !== false,
     algorithmGrowthStage: normalizeAlgorithmGrowthStage(parsed.algorithmGrowthStage),
     algorithmToggles: normalizeAlgorithmToggles(parsed.algorithmToggles),
   };
-}
-
-function normalizeAlertSensitivity(value: unknown): DecisionHubSettings["alertSensitivity"] {
-  return value === "conservative" || value === "quiet" || value === "balanced" ? value : "balanced";
 }

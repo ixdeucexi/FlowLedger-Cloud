@@ -14,17 +14,11 @@ export interface CategoryBudgetLimit {
   amount: number;
 }
 
-export interface CategoryRolloverAdjustment {
-  category: string;
-  amount: number;
-}
-
 export interface CategoryPlanRow {
   category: string;
   budgeted: number;
   spent: number;
   remaining: number;
-  rollover: number;
   status: "available" | "watch" | "over";
   percentUsed: number;
 }
@@ -58,23 +52,19 @@ export function buildCategoryPlan(
   bills: CategoryPlanBill[],
   transactions: CategoryPlanTransaction[],
   budgets: CategoryBudgetLimit[] = [],
-  rollovers: CategoryRolloverAdjustment[] = [],
 ): CategoryPlanRow[] {
   const names = new Set(categories.length ? categories : ["Other"]);
   bills.forEach(bill => names.add(bill.category || "Other"));
   transactions.forEach(transaction => names.add(transaction.category || "Other"));
   budgets.forEach(budget => names.add(budget.category || "Other"));
-  rollovers.forEach(rollover => names.add(rollover.category || "Other"));
   const budgetByCategory = new Map(budgets.map(budget => [budget.category || "Other", Math.max(0, Number(budget.amount) || 0)]));
-  const rolloverByCategory = new Map(rollovers.map(rollover => [rollover.category || "Other", Number(rollover.amount) || 0]));
 
   const rows = Array.from(names).map(category => {
     const billBudget = bills
       .filter(bill => (bill.category || "Other") === category)
       .reduce((sum, bill) => sum + Math.max(0, Number(bill.amount) || 0), 0);
     const baseBudget = budgetByCategory.has(category) ? budgetByCategory.get(category)! : billBudget;
-    const rollover = rolloverByCategory.get(category) ?? 0;
-    const budgeted = Math.max(0, roundCurrency(baseBudget + rollover));
+    const budgeted = Math.max(0, roundCurrency(baseBudget));
     const spent = transactions
       .filter(transaction => (transaction.category || "Other") === category && transaction.amount < 0)
       .reduce((sum, transaction) => sum + Math.abs(Number(transaction.amount) || 0), 0);
@@ -85,7 +75,6 @@ export function buildCategoryPlan(
       budgeted,
       spent,
       remaining,
-      rollover,
       percentUsed,
       status: remaining < -0.005 ? "over" : percentUsed >= 85 ? "watch" : "available",
     } satisfies CategoryPlanRow;
@@ -98,13 +87,6 @@ export function buildCategoryPlan(
       if (pressure) return pressure;
       return (right.spent + right.budgeted) - (left.spent + left.budgeted);
     });
-}
-
-export function buildCategoryRolloverAdjustments(previousRows: CategoryPlanRow[], enabled: boolean): CategoryRolloverAdjustment[] {
-  if (!enabled) return [];
-  return previousRows
-    .filter(row => Math.abs(row.remaining) > 0.005)
-    .map(row => ({ category: row.category, amount: roundCurrency(row.remaining) }));
 }
 
 function roundCurrency(value: number) {

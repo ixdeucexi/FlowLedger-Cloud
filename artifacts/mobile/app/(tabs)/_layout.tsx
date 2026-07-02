@@ -13,6 +13,7 @@ import { useColors } from "@/hooks/useColors";
 import { buildDecisionHistory } from "@/lib/decisionHistory";
 import { buildDecisionRiskAlerts } from "@/lib/decisionRisk";
 import { DECISION_HUB_SETTINGS_EVENT, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
+import { isAlgorithmEnabled } from "@/lib/algorithmCatalog";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 
 const TABS = [
@@ -249,7 +250,7 @@ function TabContent() {
   }, []);
 
   const attentionCount = React.useMemo(() => {
-    if (loading || !decisionHubSettings.floTabBadgeEnabled) return 0;
+    if (loading) return 0;
     const now = new Date();
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const weekEndDate = new Date(now);
@@ -265,18 +266,15 @@ function TabContent() {
         if (date >= today) forecastDays.push({ date, balance: day.balance });
       });
     }
-    const history = decisionHubSettings.plannedDecisionReviewAlertsEnabled
+    const shouldReviewDecisions = isAlgorithmEnabled(decisionHubSettings, "purchaseDecision");
+    const history = shouldReviewDecisions
       ? buildDecisionHistory(decisions, today, now.toISOString())
       : { due: [] };
-    const risky = decisionHubSettings.plannedDecisionReviewAlertsEnabled
+    const risky = shouldReviewDecisions
       ? buildDecisionRiskAlerts(decisions, forecastDays, settings.safety_floor, today).length
       : 0;
-    const sensitivityBuffer = decisionHubSettings.alertSensitivity === "conservative"
-      ? 300
-      : decisionHubSettings.alertSensitivity === "quiet"
-        ? 0
-        : 150;
-    const lowNextWeek = decisionHubSettings.lowBalanceAlertsEnabled
+    const sensitivityBuffer = 150;
+    const lowNextWeek = isAlgorithmEnabled(decisionHubSettings, "lowBalanceWarning")
       && forecastDays.some(day => day.date >= today && day.date <= weekEnd && day.balance < settings.safety_floor + sensitivityBuffer);
     return Math.min(9, history.due.length + risky + (lowNextWeek ? 1 : 0));
   }, [decisionHubSettings, decisions, getDailyBalances, loading, settings.forecast_horizon_months, settings.safety_floor]);

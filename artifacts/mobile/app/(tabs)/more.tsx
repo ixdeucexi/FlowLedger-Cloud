@@ -42,11 +42,6 @@ const THEME_OPTIONS: { label: string; value: ThemeMode; icon: string }[] = [
   { label: "Dark",  value: "dark",  icon: "moon" },
   { label: "Auto",  value: "auto",  icon: "smartphone" },
 ];
-const ALERT_SENSITIVITY_OPTIONS: { label: string; value: DecisionHubSettings["alertSensitivity"]; desc: string }[] = [
-  { label: "Conservative", value: "conservative", desc: "Warn earlier with more cushion." },
-  { label: "Balanced", value: "balanced", desc: "Default alert level." },
-  { label: "Quiet", value: "quiet", desc: "Only warn when the floor is crossed." },
-];
 const BACKUP_COMPLETE_KEY = "flowledger_backup_exported";
 type AlgorithmCatalogItem = typeof ALGORITHM_CATALOG[number];
 
@@ -537,7 +532,7 @@ export default function MoreScreen() {
           </View>
         </Pressable>
 
-        <View style={[styles.alertSensitivityBox, { borderTopColor: c.border }]}>
+        <View style={[styles.algorithmStageBox, { borderTopColor: c.border }]}>
           <Text style={[styles.switchLabel, { color: c.foreground }]}>Account growth stage</Text>
           <Text style={[styles.switchDesc, { color: c.mutedForeground, marginBottom: 10 }]}>
             Higher stages unlock more algorithms as the account setup becomes more complete.
@@ -610,142 +605,6 @@ export default function MoreScreen() {
         </View>
       </View>
       </>}
-
-      <SLabel c={c} text="Flo Decision Center" />
-      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        <Pressable
-          onPress={() => updateDecisionHubSetting({ categoryRolloverEnabled: !decisionHubSettings.categoryRolloverEnabled })}
-          style={({ pressed }) => [styles.decisionSettingRow, { opacity: pressed ? 0.75 : 1 }]}
-        >
-          <View style={[styles.dataIcon, { backgroundColor: c.primary + "18" }]}>
-            <Feather name="repeat" size={17} color={c.primary} />
-          </View>
-          <View style={styles.switchInfo}>
-            <Text style={[styles.switchLabel, { color: c.foreground }]}>Category rollover</Text>
-            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>
-              Carry last month's leftover or overage into this month's Category Plan.
-            </Text>
-          </View>
-          <View style={[styles.toggleTrack, { backgroundColor: decisionHubSettings.categoryRolloverEnabled ? c.primary : c.muted }]}>
-            <View style={[styles.toggleKnob, { backgroundColor: "#fff", alignSelf: decisionHubSettings.categoryRolloverEnabled ? "flex-end" : "flex-start" }]} />
-          </View>
-        </Pressable>
-        <Pressable
-          onPress={() => updateDecisionHubSetting({ categoryDecisionAlertsEnabled: !decisionHubSettings.categoryDecisionAlertsEnabled })}
-          style={({ pressed }) => [styles.decisionSettingRow, { borderTopWidth: 1, borderTopColor: c.border, marginTop: 14, paddingTop: 14, opacity: pressed ? 0.75 : 1 }]}
-        >
-          <View style={[styles.dataIcon, { backgroundColor: c.warning + "18" }]}>
-            <Feather name="tag" size={17} color={c.warning} />
-          </View>
-          <View style={styles.switchInfo}>
-            <Text style={[styles.switchLabel, { color: c.foreground }]}>Category decision help</Text>
-            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>
-              Show category warnings and let Flo suggest money moves between categories.
-            </Text>
-          </View>
-          <View style={[styles.toggleTrack, { backgroundColor: decisionHubSettings.categoryDecisionAlertsEnabled ? c.primary : c.muted }]}>
-            <View style={[styles.toggleKnob, { backgroundColor: "#fff", alignSelf: decisionHubSettings.categoryDecisionAlertsEnabled ? "flex-end" : "flex-start" }]} />
-          </View>
-        </Pressable>
-        <Pressable
-          onPress={() => updateDecisionHubSetting({ paycheckPlanningEnabled: !decisionHubSettings.paycheckPlanningEnabled })}
-          style={({ pressed }) => [styles.decisionSettingRow, { borderTopWidth: 1, borderTopColor: c.border, marginTop: 14, paddingTop: 14, opacity: pressed ? 0.75 : 1 }]}
-        >
-          <View style={[styles.dataIcon, { backgroundColor: c.success + "18" }]}>
-            <Feather name="calendar" size={17} color={c.success} />
-          </View>
-          <View style={styles.switchInfo}>
-            <Text style={[styles.switchLabel, { color: c.foreground }]}>Paycheck planning</Text>
-            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>
-              Show bills due and safe-to-spend before your next paycheck on Dashboard.
-            </Text>
-          </View>
-          <View style={[styles.toggleTrack, { backgroundColor: decisionHubSettings.paycheckPlanningEnabled ? c.primary : c.muted }]}>
-            <View style={[styles.toggleKnob, { backgroundColor: "#fff", alignSelf: decisionHubSettings.paycheckPlanningEnabled ? "flex-end" : "flex-start" }]} />
-          </View>
-        </Pressable>
-        {[
-          {
-            key: "lowBalanceAlertsEnabled" as const,
-            icon: "alert-triangle",
-            color: c.warning,
-            label: "Low balance alerts",
-            desc: "Show Dashboard and calendar alerts when the forecast gets tight.",
-          },
-          {
-            key: "billBeforePaydayAlertsEnabled" as const,
-            icon: "zap",
-            color: c.warning,
-            label: "Bill-before-payday prompts",
-            desc: "Show Bills tab prompts when moving a bill may help the paycheck window.",
-          },
-          {
-            key: "plannedDecisionReviewAlertsEnabled" as const,
-            icon: "clock",
-            color: c.primary,
-            label: "Planned decision review",
-            desc: "Count risky or overdue planned decisions in Flo alerts.",
-          },
-          {
-            key: "floTabBadgeEnabled" as const,
-            icon: "message-circle",
-            color: c.primary,
-            label: "Flo tab badge",
-            desc: "Show a small badge when Flo has items needing attention.",
-          },
-        ].map(item => {
-          const enabled = Boolean(decisionHubSettings[item.key]);
-          return (
-            <Pressable
-              key={item.key}
-              onPress={() => updateDecisionHubSetting({ [item.key]: !enabled })}
-              style={({ pressed }) => [styles.decisionSettingRow, { borderTopWidth: 1, borderTopColor: c.border, marginTop: 14, paddingTop: 14, opacity: pressed ? 0.75 : 1 }]}
-            >
-              <View style={[styles.dataIcon, { backgroundColor: item.color + "18" }]}>
-                <Feather name={item.icon as any} size={17} color={item.color} />
-              </View>
-              <View style={styles.switchInfo}>
-                <Text style={[styles.switchLabel, { color: c.foreground }]}>{item.label}</Text>
-                <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>{item.desc}</Text>
-              </View>
-              <View style={[styles.toggleTrack, { backgroundColor: enabled ? c.primary : c.muted }]}>
-                <View style={[styles.toggleKnob, { backgroundColor: "#fff", alignSelf: enabled ? "flex-end" : "flex-start" }]} />
-              </View>
-            </Pressable>
-          );
-        })}
-        <View style={[styles.alertSensitivityBox, { borderTopColor: c.border }]}>
-          <Text style={[styles.switchLabel, { color: c.foreground }]}>Alert sensitivity</Text>
-          <Text style={[styles.switchDesc, { color: c.mutedForeground, marginBottom: 10 }]}>Control how early FlowLedger warns you before a low balance.</Text>
-          <View style={[styles.themeRow, { backgroundColor: c.muted, borderRadius: 10 }]}>
-            {ALERT_SENSITIVITY_OPTIONS.map(opt => {
-              const active = decisionHubSettings.alertSensitivity === opt.value;
-              return (
-                <Pressable
-                  key={opt.value}
-                  onPress={() => updateDecisionHubSetting({ alertSensitivity: opt.value })}
-                  style={[styles.themeBtn, { backgroundColor: active ? c.primary : "transparent", borderRadius: 8 }]}
-                >
-                  <Text style={[styles.themeBtnText, { color: active ? "#fff" : c.mutedForeground }]}>{opt.label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <Text style={[styles.switchDesc, { color: c.mutedForeground, marginTop: 8 }]}>
-            {ALERT_SENSITIVITY_OPTIONS.find(opt => opt.value === decisionHubSettings.alertSensitivity)?.desc}
-          </Text>
-        </View>
-        <View style={[styles.priorityNote, { backgroundColor: decisionHubSettings.categoryRolloverEnabled ? c.success + "12" : c.muted, borderRadius: 8 }]}>
-          <Feather name="info" size={12} color={decisionHubSettings.categoryRolloverEnabled ? c.success : c.mutedForeground} />
-          <Text style={[styles.priorityNoteText, { color: c.mutedForeground }]}>
-            {decisionHubSettings.paycheckPlanningEnabled
-              ? "Paycheck planning is on. Dashboard will show what is due before the next payday."
-              : decisionHubSettings.categoryRolloverEnabled
-                ? "Rollover is on. Positive balances build up; negative balances reduce next month."
-                : "Flo decision extras are optional. Turn on the planning tools you want to see."}
-          </Text>
-        </View>
-      </View>
 
       <SLabel c={c} text="Accounts" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
@@ -1235,7 +1094,7 @@ const styles = StyleSheet.create({
   decisionSettingRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   toggleTrack: { width: 48, height: 28, borderRadius: 999, padding: 3, justifyContent: "center" },
   toggleKnob: { width: 22, height: 22, borderRadius: 11 },
-  alertSensitivityBox: { borderTopWidth: 1, marginTop: 14, paddingTop: 14 },
+  algorithmStageBox: { borderTopWidth: 1, marginTop: 14, paddingTop: 14 },
   algoStageGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   algoStagePill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 8 },
   algoStageText: { fontSize: 11, fontFamily: "Inter_700Bold" },

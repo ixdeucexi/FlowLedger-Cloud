@@ -1261,15 +1261,16 @@ export default function MonthlyScreen() {
                     <Pressable
                       onPress={() => {
                         if (!selectedDate) return;
+                        const date = selectedDate;
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setSelectedDate(null);
                         router.push({
                           pathname: "/(tabs)/flo",
                           params: {
-                            prompt: `What should I know about ${formatLongDate(selectedDate)}? (${selectedDate})`,
-                            promptId: `${selectedDate}-${Date.now()}`,
+                            prompt: `Give me a calendar overview for ${formatLongDate(date)} (${date}).`,
+                            promptId: `${date}-${Date.now()}`,
                           },
                         } as never);
-                        setSelectedDate(null);
                       }}
                       style={({ pressed }) => [styles.dayOverlayAskPill, { backgroundColor: c.primary + "16", borderColor: c.primary + "40", opacity: pressed ? 0.8 : 1 }]}
                     >

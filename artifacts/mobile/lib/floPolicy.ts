@@ -94,7 +94,6 @@ export interface FloCategoryFact {
   budgeted: number;
   spent: number;
   remaining: number;
-  rollover?: number;
   status: "available" | "watch" | "over";
   percentUsed: number;
   topTransaction?: { name: string; amount: number; date: string };
@@ -278,7 +277,6 @@ export function sanitizeFloFacts(facts: FloFacts): FloFacts {
       budgeted: num(item.budgeted),
       spent: num(item.spent),
       remaining: num(item.remaining),
-      rollover: num(item.rollover),
       status: item.status === "over" || item.status === "watch" || item.status === "available" ? item.status : "available",
       percentUsed: Math.max(0, Math.min(999, Math.round(num(item.percentUsed)))),
       topTransaction: item.topTransaction ? {
