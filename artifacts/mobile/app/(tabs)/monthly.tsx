@@ -3,7 +3,7 @@ import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert, FlatList, Keyboard, Modal, PanResponder, Platform,
+  Alert, BackHandler, FlatList, Keyboard, Modal, PanResponder, Platform,
   Pressable, ScrollView, StyleSheet, Text,
   TextInput, View,
 } from "react-native";
@@ -105,6 +105,40 @@ export default function MonthlyScreen() {
   useEffect(() => {
     if (dashboardFilter === "paid" || dashboardFilter === "unpaid") setDashboardFilter(null);
   }, [dashboardFilter, setDashboardFilter]);
+
+  useEffect(() => {
+    const closeTopOverlay = () => {
+      if (surplusPrompt) {
+        setSurplusPrompt(null);
+        return true;
+      }
+      if (dueDayPickerBill) {
+        setDueDayPickerBill(null);
+        return true;
+      }
+      if (snowballPreview) {
+        setSnowballPreview(null);
+        return true;
+      }
+      if (selectedDate) {
+        setSelectedDate(null);
+        return true;
+      }
+      return false;
+    };
+
+    if (Platform.OS !== "web") {
+      const subscription = BackHandler.addEventListener("hardwareBackPress", closeTopOverlay);
+      return () => subscription.remove();
+    }
+
+    if (!selectedDate) return;
+    if (typeof window === "undefined") return;
+    window.history.pushState({ ...(window.history.state ?? {}), flowledgerMonthlyOverlay: selectedDate }, "", window.location.href);
+    const onPopState = () => setSelectedDate(null);
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [dueDayPickerBill, selectedDate, snowballPreview, surplusPrompt]);
 
   const monthBills = useMemo(() => getMonthlyBills(month, selectedYear), [getMonthlyBills, month, selectedYear]);
 
@@ -984,6 +1018,8 @@ export default function MonthlyScreen() {
                           const remaining = Math.max(0, amount - paid);
                           const movedIn = movedInByBillId.get(bill.id);
                           const canReschedule = bill.frequency === "monthly";
+                          const paidKey = `${bill.id}-overlay-paid`;
+                          const showPaid = editingPaid[paidKey] !== undefined ? editingPaid[paidKey] : paid > 0 ? paid.toFixed(2) : "";
                           return (
                             <View key={`overlay-bill-${bill.id}`} style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: isPaid ? c.success + "40" : isPartial ? c.warning + "45" : c.border }]}>
                               <View style={styles.dayBillTop}>
@@ -996,16 +1032,31 @@ export default function MonthlyScreen() {
                                 <PayStatus paid={isPaid} partial={isPartial} />
                               </View>
                               <View style={styles.dayBillNumbers}>
-                                {[
-                                  { label: "Amount", value: `$${amount.toFixed(2)}`, color: c.foreground },
-                                  { label: "Paid", value: `$${paid.toFixed(2)}`, color: paid > 0 ? c.success : c.mutedForeground },
-                                  { label: "Left", value: `$${remaining.toFixed(2)}`, color: remaining > 0 ? c.destructive : c.success },
-                                ].map(item => (
-                                  <View key={`${bill.id}-${item.label}`} style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
-                                    <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>{item.label}</Text>
-                                    <Text style={[styles.dayBillNumberValue, { color: item.color }]}>{item.value}</Text>
+                                <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
+                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Amount</Text>
+                                  <Text style={[styles.dayBillNumberValue, { color: c.foreground }]}>${amount.toFixed(2)}</Text>
+                                </View>
+                                <View style={[styles.dayBillNumberTile, styles.dayBillPaidTile, { backgroundColor: c.background + "66", borderColor: editingPaid[paidKey] !== undefined ? c.primary + "80" : c.border }]}>
+                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Paid</Text>
+                                  <View style={styles.dayBillPaidInputRow}>
+                                    <Text style={[styles.dayBillPaidDollar, { color: showPaid ? c.success : c.mutedForeground }]}>$</Text>
+                                    <TextInput
+                                      value={showPaid}
+                                      onChangeText={text => setEditingPaid(current => ({ ...current, [paidKey]: text }))}
+                                      onFocus={() => setEditingPaid(current => ({ ...current, [paidKey]: showPaid || "" }))}
+                                      onBlur={() => handlePaidBlur(bill.id, paidKey)}
+                                      keyboardType="decimal-pad"
+                                      placeholder="0.00"
+                                      placeholderTextColor={c.mutedForeground}
+                                      selectTextOnFocus
+                                      style={[styles.dayBillPaidInput, { color: showPaid ? c.success : c.mutedForeground }]}
+                                    />
                                   </View>
-                                ))}
+                                </View>
+                                <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
+                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Left</Text>
+                                  <Text style={[styles.dayBillNumberValue, { color: remaining > 0 ? c.destructive : c.success }]}>${remaining.toFixed(2)}</Text>
+                                </View>
                               </View>
                               <View style={styles.dayBillActions}>
                                 <Pressable
@@ -1522,6 +1573,10 @@ const styles = StyleSheet.create({
   dayBillNumberTile: { flex: 1, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 8 },
   dayBillNumberLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.5 },
   dayBillNumberValue: { fontSize: 13, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
+  dayBillPaidTile: { borderWidth: 1 },
+  dayBillPaidInputRow: { flexDirection: "row", alignItems: "center", marginTop: 1 },
+  dayBillPaidDollar: { fontSize: 13, fontFamily: "Inter_800ExtraBold", marginRight: 1 },
+  dayBillPaidInput: { flex: 1, minWidth: 42, paddingHorizontal: 0, paddingVertical: 0, fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   dayBillActions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   dayBillAction: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
   dayBillActionText: { fontSize: 12, fontFamily: "Inter_700Bold" },

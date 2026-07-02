@@ -410,6 +410,29 @@ function dateFromParts(year: number, month: number, day: number) {
   return `${monthKey(year, month)}-${String(day).padStart(2, "0")}`;
 }
 
+function billStartMonth(bill: Pick<Bill, "start_date" | "created_at">): { year: number; month: number } {
+  const parsed = parseYmd(bill.start_date || bill.created_at);
+  if (parsed) return { year: parsed.year, month: parsed.month };
+  const now = new Date();
+  return { year: now.getFullYear(), month: now.getMonth() };
+}
+
+function pastActiveMonthsForBill(bill: Bill, beforeMonth: number, beforeYear: number): { year: number; month: number }[] {
+  const start = billStartMonth(bill);
+  const months: { year: number; month: number }[] = [];
+  let cursor = new Date(start.year, start.month, 1);
+  const stop = new Date(beforeYear, beforeMonth, 1);
+  let guard = 0;
+  while (cursor < stop && guard < 240) {
+    const year = cursor.getFullYear();
+    const month = cursor.getMonth();
+    if (isBillActiveForMonth(bill, month, year)) months.push({ year, month });
+    cursor = new Date(year, month + 1, 1);
+    guard += 1;
+  }
+  return months;
+}
+
 function parseYmd(date: string): { year: number; month: number; day: number } | null {
   const [year, month, day] = date.slice(0, 10).split("-").map(Number);
   if (![year, month, day].every(Number.isFinite)) return null;
@@ -922,43 +945,85 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!existing) return;
     const previousOverrides = overridesRef.current;
     const reviewedBill = { ...bill, last_reviewed_at: new Date().toISOString() };
+    const now = new Date();
+    const curMonth = now.getMonth();
+    const curYear  = now.getFullYear();
     setBills(prev => reorderDebtPriorities(prev.map(item => item.id === bill.id ? reviewedBill : item)));
     if (demoMode) return;
     markSaveStarted();
     try {
-    if (existing.amount !== bill.amount) {
-      const now = new Date();
-      const curMonth = now.getMonth();
-      const curYear  = now.getFullYear();
+    if (existing.amount !== bill.amount || existing.due_day !== bill.due_day) {
       const currentOverrides = overridesRef.current.filter(o => o.bill_id === bill.id);
+      const overridesByMonth = new Map(currentOverrides.map(o => [`${o.year}-${o.month}`, o]));
+      const monthsToPreserve = pastActiveMonthsForBill(existing, curMonth, curYear);
       const dbUpdates: Promise<any>[] = [];
+      const insertedOverrides: MonthlyOverride[] = [];
 
       const nextOverrides = currentOverrides.map(o => {
         const isStrictlyPast = o.year < curYear || (o.year === curYear && o.month < curMonth);
-        if (isStrictlyPast && o.custom_amount === undefined) {
+        if (isStrictlyPast) {
+          const patch: Partial<MonthlyOverride> = {};
+          if (existing.amount !== bill.amount && o.custom_amount === undefined) patch.custom_amount = existing.amount;
+          if (existing.due_day !== bill.due_day && o.custom_due_day === undefined) patch.custom_due_day = existing.due_day;
+          if (Object.keys(patch).length > 0) {
+            dbUpdates.push(
+              supabase.from("monthly_overrides")
+                .update({
+                  ...(patch.custom_amount !== undefined ? { custom_amount: patch.custom_amount } : {}),
+                  ...(patch.custom_due_day !== undefined ? { custom_due_day: patch.custom_due_day } : {}),
+                })
+                .eq("id", o.id).eq("user_id", user.id) as unknown as Promise<any>
+            );
+            return { ...o, ...patch };
+          }
+        } else if (
+          !isStrictlyPast &&
+          ((existing.amount !== bill.amount && o.custom_amount !== undefined) ||
+           (existing.due_day !== bill.due_day && o.custom_due_day !== undefined))
+        ) {
+          const resetPatch = {
+            ...(existing.amount !== bill.amount ? { custom_amount: null } : {}),
+            ...(existing.due_day !== bill.due_day ? { custom_due_day: null } : {}),
+          };
           dbUpdates.push(
             supabase.from("monthly_overrides")
-              .update({ custom_amount: existing.amount })
+              .update(resetPatch)
               .eq("id", o.id).eq("user_id", user.id) as unknown as Promise<any>
           );
-          return { ...o, custom_amount: existing.amount };
-        } else if (!isStrictlyPast && o.custom_amount !== undefined) {
-          dbUpdates.push(
-            supabase.from("monthly_overrides")
-              .update({ custom_amount: null })
-              .eq("id", o.id).eq("user_id", user.id) as unknown as Promise<any>
-          );
-          return { ...o, custom_amount: undefined };
+          return {
+            ...o,
+            ...(existing.amount !== bill.amount ? { custom_amount: undefined } : {}),
+            ...(existing.due_day !== bill.due_day ? { custom_due_day: undefined } : {}),
+          };
         }
         return o;
       });
 
+      monthsToPreserve.forEach(({ year, month }) => {
+        const key = `${year}-${month}`;
+        if (overridesByMonth.has(key)) return;
+        const created: MonthlyOverride = {
+          id: genId(),
+          bill_id: bill.id,
+          month,
+          year,
+          paid_amount: 0,
+          ...(existing.amount !== bill.amount ? { custom_amount: existing.amount } : {}),
+          ...(existing.due_day !== bill.due_day ? { custom_due_day: existing.due_day } : {}),
+        };
+        insertedOverrides.push(created);
+        dbUpdates.push(
+          supabase.from("monthly_overrides")
+            .insert({ ...monthlyOverrideDbPayload(created), user_id: user.id }) as unknown as Promise<any>
+        );
+      });
+
       const changedIds = new Set(nextOverrides.filter((o, i) => o !== currentOverrides[i]).map(o => o.id));
-      if (changedIds.size > 0) {
+      if (changedIds.size > 0 || insertedOverrides.length > 0) {
         const optimisticOverrides = overridesRef.current.map(o => {
             const changed = nextOverrides.find(n => n.id === o.id);
             return changed && changedIds.has(o.id) ? changed : o;
-          });
+          }).concat(insertedOverrides);
         overridesRef.current = optimisticOverrides;
         setOverrides(optimisticOverrides);
       }

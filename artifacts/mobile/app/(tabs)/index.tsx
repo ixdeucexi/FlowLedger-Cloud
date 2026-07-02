@@ -604,6 +604,7 @@ export default function DashboardScreen() {
       else if (action === "income")   router.push("/(tabs)/more" as any);
       else if (action === "expense")  router.push("/(tabs)/monthly" as any);
       else if (action === "debt")     navigate("debt", "bills");
+      else if (action === "goal")     { setEditGoal(null); setGoalModalVisible(true); }
       else if (action === "afford") {} // handled inline
     }, 250);
   };
@@ -1135,7 +1136,7 @@ export default function DashboardScreen() {
                   <Text style={styles.heroProgressLabel}>
                     {savingsData.goalCount > 0
                       ? `${savingsPct.toFixed(0)}% of ${savingsData.goalCount} goal${savingsData.goalCount !== 1 ? "s" : ""} funded`
-                      : "No savings goals yet — tap Goals below to add one"}
+                      : "No savings goals yet — tap +, then Add Goal"}
                   </Text>
                 </View>
 
@@ -1825,6 +1826,7 @@ export default function DashboardScreen() {
               { id: "bill",    icon: "file-text"   as const, label: "Add a Bill",       sub: "Track a new recurring expense",       col: c.primary     },
               { id: "income",  icon: "trending-up" as const, label: "Add Income",        sub: "Log a salary, freelance, or other",    col: c.success     },
               { id: "expense", icon: "shopping-bag"as const, label: "Add a Transaction", sub: "Record a one-time expense or income",  col: c.warning     },
+              { id: "goal",    icon: "target"      as const, label: "Add Goal",          sub: "Plan savings or a future purchase",   col: "#8b5cf6"     },
               { id: "debt",    icon: "credit-card" as const, label: "Pay Down Debt",     sub: "Go to snowball / avalanche planner",   col: c.destructive },
             ].map(item => (
               <Pressable
