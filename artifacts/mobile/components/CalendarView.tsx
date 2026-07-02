@@ -7,16 +7,16 @@ import { scenarioDates } from "@/lib/decisions";
 const DAY_NAMES = ["S", "M", "T", "W", "T", "F", "S"];
 
 const CALENDAR = {
-  surface: "#050816",
-  cell: "#080d1f",
-  selectedCell: "#111827",
-  line: "#1f2937",
+  surface: "#0f172a",
+  cell: "#111827",
+  selectedCell: "#172554",
+  line: "#243044",
   text: "#f8fafc",
   muted: "#94a3b8",
   faded: "#64748b",
-  selected: "#334155",
+  selected: "#2563eb",
   today: "#2563eb",
-  green: "#4ade80",
+  green: "#22c55e",
   amber: "#fbbf24",
   red: "#fb7185",
 };
@@ -42,12 +42,12 @@ function fmt(n: number) {
 }
 
 function chipPalette(kind: ChipKind) {
-  if (kind === "income") return { bg: "#064e3b", border: "#34d399", text: "#d1fae5" };
-  if (kind === "bill") return { bg: "#451a03", border: "#f59e0b", text: "#fef3c7" };
-  if (kind === "goal") return { bg: "#312e81", border: "#a78bfa", text: "#ede9fe" };
-  if (kind === "plan") return { bg: "#1e3a8a", border: "#60a5fa", text: "#dbeafe" };
-  if (kind === "risk") return { bg: "#7f1d1d", border: "#fb7185", text: "#fee2e2" };
-  return { bg: "#831843", border: "#f472b6", text: "#fce7f3" };
+  if (kind === "income") return { bg: "#052e2b", border: "#22c55e", text: "#86efac" };
+  if (kind === "bill") return { bg: "#2b2115", border: "#f59e0b", text: "#fde68a" };
+  if (kind === "goal") return { bg: "#24164f", border: "#8b5cf6", text: "#ddd6fe" };
+  if (kind === "plan") return { bg: "#132a57", border: "#3b82f6", text: "#bfdbfe" };
+  if (kind === "risk") return { bg: "#3b121a", border: "#fb7185", text: "#fecdd3" };
+  return { bg: "#2a1733", border: "#a78bfa", text: "#e9d5ff" };
 }
 
 export function CalendarView({
@@ -121,7 +121,7 @@ export function CalendarView({
 
       <View style={styles.grid}>
         {cells.map((day, i) => {
-          if (!day) return <View key={`empty-${i}`} style={[styles.cell, styles.emptyCell]} />;
+          if (!day) return <View key={`empty-${i}`} style={[styles.cellOuter, styles.emptyCell]} />;
           const ds = dateStr(day);
           const isToday = ds === todayStr;
           const isSelected = ds === selectedDate;
@@ -156,48 +156,50 @@ export function CalendarView({
               key={ds}
               onPress={() => onDayPress(ds)}
               style={({ pressed }) => [
-                styles.cell,
+                styles.cellOuter,
                 isSelected ? styles.selectedCell : null,
                 { opacity: pressed ? 0.72 : 1 },
               ]}
             >
-              <View style={styles.dayTopRow}>
-                <View style={isToday ? styles.todayCircle : undefined}>
-                  <Text
-                    style={[
-                      styles.dayNum,
-                      {
-                        color: isToday ? "#ffffff" : CALENDAR.text,
-                        fontFamily: isToday || isSelected ? "Inter_700Bold" : "Inter_500Medium",
-                      },
-                    ]}
-                  >
-                    {day}
-                  </Text>
+              <View style={styles.cellInner}>
+                <View style={styles.dayTopRow}>
+                  <View style={isToday ? styles.todayCircle : undefined}>
+                    <Text
+                      style={[
+                        styles.dayNum,
+                        {
+                          color: isToday ? "#ffffff" : CALENDAR.text,
+                          fontFamily: isToday || isSelected ? "Inter_700Bold" : "Inter_500Medium",
+                        },
+                      ]}
+                    >
+                      {day}
+                    </Text>
+                  </View>
+                  {db ? (
+                    <Text
+                      style={[
+                        styles.balanceText,
+                        { color: db.balance >= safetyFloor ? CALENDAR.green : db.balance < 0 ? CALENDAR.red : CALENDAR.amber },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      ${fmt(db.balance)}
+                    </Text>
+                  ) : null}
                 </View>
-                {db ? (
-                  <Text
-                    style={[
-                      styles.balanceText,
-                      { color: db.balance >= safetyFloor ? CALENDAR.green : db.balance < 0 ? CALENDAR.red : CALENDAR.amber },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    ${fmt(db.balance)}
-                  </Text>
-                ) : null}
-              </View>
 
-              <View style={styles.eventStack}>
-                {visibleChips.map((chip, index) => {
-                  const palette = chipPalette(chip.kind);
-                  return (
-                    <View key={`${chip.label}-${index}`} style={[styles.eventChip, { backgroundColor: palette.bg, borderLeftColor: palette.border }]}>
-                      <Text style={[styles.eventChipText, { color: palette.text }]} numberOfLines={1}>{chip.label}</Text>
-                    </View>
-                  );
-                })}
-                {hiddenCount > 0 ? <Text style={styles.moreText}>+{hiddenCount} more</Text> : null}
+                <View style={styles.eventStack}>
+                  {visibleChips.map((chip, index) => {
+                    const palette = chipPalette(chip.kind);
+                    return (
+                      <View key={`${chip.label}-${index}`} style={[styles.eventChip, { backgroundColor: palette.bg, borderLeftColor: palette.border }]}>
+                        <Text style={[styles.eventChipText, { color: palette.text }]} numberOfLines={1}>{chip.label}</Text>
+                      </View>
+                    );
+                  })}
+                  {hiddenCount > 0 ? <Text style={styles.moreText}>+{hiddenCount} more</Text> : null}
+                </View>
               </View>
             </Pressable>
           );
@@ -208,28 +210,48 @@ export function CalendarView({
 }
 
 const styles = StyleSheet.create({
-  container: { marginBottom: 10, backgroundColor: CALENDAR.surface, borderRadius: 22, overflow: "hidden" },
-  dayNames: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: CALENDAR.line, paddingTop: 12, paddingBottom: 8 },
+  container: {
+    marginBottom: 10,
+    backgroundColor: CALENDAR.surface,
+    borderRadius: 22,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.12)",
+    padding: 8,
+  },
+  dayNames: {
+    flexDirection: "row",
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
   dayName: { flex: 1, textAlign: "center", fontSize: 12, fontFamily: "Inter_600SemiBold", color: CALENDAR.muted },
   grid: { flexDirection: "row", flexWrap: "wrap", backgroundColor: CALENDAR.surface },
-  cell: {
+  cellOuter: {
     width: "14.285714%",
-    minHeight: 104,
-    paddingTop: 7,
-    paddingHorizontal: 3,
-    paddingBottom: 6,
-    borderTopWidth: 1,
-    borderTopColor: CALENDAR.line,
-    backgroundColor: CALENDAR.cell,
+    minHeight: 102,
+    padding: 2,
   },
-  selectedCell: { backgroundColor: CALENDAR.selectedCell, borderColor: CALENDAR.selected, borderWidth: 1, borderRadius: 12 },
+  cellInner: {
+    flex: 1,
+    borderRadius: 14,
+    backgroundColor: CALENDAR.cell,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.08)",
+    paddingTop: 7,
+    paddingHorizontal: 4,
+    paddingBottom: 6,
+  },
+  selectedCell: {
+    borderRadius: 16,
+    backgroundColor: "rgba(37,99,235,0.12)",
+  },
   emptyCell: { opacity: 0.35 },
   dayTopRow: { alignItems: "center", gap: 2 },
   todayCircle: { minWidth: 22, height: 22, borderRadius: 7, alignItems: "center", justifyContent: "center", paddingHorizontal: 6, backgroundColor: CALENDAR.today },
   dayNum: { fontSize: 14 },
   balanceText: { fontSize: 8, fontFamily: "Inter_700Bold" },
   eventStack: { marginTop: 9, gap: 4 },
-  eventChip: { borderLeftWidth: 3, borderRadius: 4, minHeight: 18, paddingHorizontal: 3, paddingVertical: 2 },
+  eventChip: { borderLeftWidth: 3, borderRadius: 7, minHeight: 18, paddingHorizontal: 4, paddingVertical: 2 },
   eventChipText: { fontSize: 8, fontFamily: "Inter_700Bold" },
   moreText: { fontSize: 8, fontFamily: "Inter_600SemiBold", textAlign: "center", color: CALENDAR.faded },
 });
