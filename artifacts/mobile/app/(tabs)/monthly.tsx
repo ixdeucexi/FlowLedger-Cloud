@@ -329,15 +329,18 @@ export default function MonthlyScreen() {
     if (savingPaidKey === key) return;
     const val = submittedValue ?? editingPaidRef.current[key] ?? editingPaid[key];
     if (val === undefined) return;
+    const trimmed = val.trim();
     const clearPaidEdit = () => {
       editingPaidRef.current = { ...editingPaidRef.current };
       delete editingPaidRef.current[key];
       setEditingPaid(p => { const n = { ...p }; delete n[key]; return n; });
     };
     clearPaidEdit();
+    if (trimmed.length === 0) return;
     setSavingPaidKey(key);
     try {
-      const parsed = parseFloat(val) || 0;
+      const parsed = parseFloat(trimmed);
+      if (!Number.isFinite(parsed)) return;
       const bill = bills.find(item => item.id === billId);
       const budgeted = bill ? getBillMonthlyTotal(bill, month, selectedYear) : 0;
       const day = bill ? Math.min(new Date(selectedYear, month + 1, 0).getDate(), getCustomDueDay(bill.id, month, selectedYear) ?? bill.due_day) : 1;
@@ -362,6 +365,7 @@ export default function MonthlyScreen() {
         Keyboard.dismiss();
         setSurplusPrompt({ bill, budgeted, actual: parsed, paidDate });
         setSurplusPaymentDate(paidDate);
+        setSelectedDate(null);
         return;
       }
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

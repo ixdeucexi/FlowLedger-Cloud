@@ -29,7 +29,7 @@ export function BillSurplusModal({ visible, billName, itemType = "bill", budgete
   const c = useColors();
   const difference = Math.max(0, budgeted - actual);
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" presentationStyle="overFullScreen" statusBarTranslucent onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={onClose}>
         <Pressable style={[styles.sheet, { backgroundColor: c.background }]} onPress={() => {}}>
           <View style={[styles.handle, { backgroundColor: c.border }]} />
