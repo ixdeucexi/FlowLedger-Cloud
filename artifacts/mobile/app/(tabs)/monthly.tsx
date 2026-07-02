@@ -80,6 +80,7 @@ export default function MonthlyScreen() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [editingAmounts, setEditingAmounts] = useState<Record<string, string>>({});
   const [editingPaid, setEditingPaid] = useState<Record<string, string>>({});
+  const editingPaidRef = useRef<Record<string, string>>({});
   const [billFilter, setBillFilter] = useState<"all" | "paid" | "unpaid">("all");
   const [extraPayment, setExtraPayment] = useState("");
   const [snowballResults, setSnowballResults] = useState<{ name: string; payment: number; paidOff: boolean }[]>([]);
@@ -105,6 +106,10 @@ export default function MonthlyScreen() {
   useEffect(() => {
     if (dashboardFilter === "paid" || dashboardFilter === "unpaid") setDashboardFilter(null);
   }, [dashboardFilter, setDashboardFilter]);
+
+  useEffect(() => {
+    editingPaidRef.current = editingPaid;
+  }, [editingPaid]);
 
   useEffect(() => {
     const closeTopOverlay = () => {
@@ -319,9 +324,15 @@ export default function MonthlyScreen() {
     return { preview, total, targetDebt: preview.months[0]?.targetName ?? preview.allocations[0]?.billName, dateValid: validDate, safe: validDate && preview.selectedExtra + 0.005 >= total };
   }, [surplusPrompt, surplusPaymentDate, getExtraPayment, previewDebtSnowball, month, selectedYear]);
 
-  const handlePaidBlur = useCallback(async (billId: string, key: string) => {
-    const val = editingPaid[key];
+  const handlePaidBlur = useCallback(async (billId: string, key: string, submittedValue?: string) => {
+    const val = submittedValue ?? editingPaidRef.current[key] ?? editingPaid[key];
     if (val === undefined) return;
+    const clearPaidEdit = () => {
+      editingPaidRef.current = { ...editingPaidRef.current };
+      delete editingPaidRef.current[key];
+      setEditingPaid(p => { const n = { ...p }; delete n[key]; return n; });
+    };
+    clearPaidEdit();
     const parsed = parseFloat(val) || 0;
     const bill = bills.find(item => item.id === billId);
     const budgeted = bill ? getBillMonthlyTotal(bill, month, selectedYear) : 0;
@@ -340,19 +351,16 @@ export default function MonthlyScreen() {
       await finalizeBillPayment(bill.id, month, selectedYear, parsed, paidDate);
       if (total > 0.005) await applyDebtSnowballPayment(preview, sources);
       else await removeDebtSnowballPayment(month, selectedYear);
-      setEditingPaid(p => { const n = { ...p }; delete n[key]; return n; });
       return;
     }
     if (bill && !bill.is_debt && parsed >= 0 && parsed < budgeted) {
       setSurplusPrompt({ bill, budgeted, actual: parsed, paidDate });
       setSurplusPaymentDate(paidDate);
-      setEditingPaid(p => { const n = { ...p }; delete n[key]; return n; });
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (bill && !bill.is_debt) await finalizeBillPayment(billId, month, selectedYear, parsed, paidDate);
     else await setPaidAmount(billId, month, selectedYear, parsed);
-    setEditingPaid(p => { const n = { ...p }; delete n[key]; return n; });
   }, [editingPaid, setPaidAmount, bills, overrides, getBillMonthlyTotal, getCustomDueDay, getExtraPayment, previewDebtSnowball, finalizeBillPayment, applyDebtSnowballPayment, removeDebtSnowballPayment, month, selectedYear]);
 
   const finalizeBillAtActualForMonth = useCallback(async (prompt: { bill: Bill; actual: number; paidDate: string }) => {
@@ -1053,7 +1061,8 @@ export default function MonthlyScreen() {
                                       onChangeText={text => setEditingPaid(current => ({ ...current, [paidKey]: text }))}
                                       onFocus={() => setEditingPaid(current => ({ ...current, [paidKey]: showPaid || "" }))}
                                       onBlur={() => handlePaidBlur(bill.id, paidKey)}
-                                      onSubmitEditing={() => handlePaidBlur(bill.id, paidKey)}
+                                      onEndEditing={event => handlePaidBlur(bill.id, paidKey, event.nativeEvent.text)}
+                                      onSubmitEditing={event => handlePaidBlur(bill.id, paidKey, event.nativeEvent.text)}
                                       keyboardType="decimal-pad"
                                       returnKeyType="done"
                                       blurOnSubmit
