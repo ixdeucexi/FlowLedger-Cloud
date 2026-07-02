@@ -594,43 +594,39 @@ export default function MonthlyScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: c.background }]}>
-      {activeTab === "bills" ? (
-        <>
-          <View style={[styles.header, { paddingTop: insets.top + 12 + webTopPad }]}>
-            <View>
-              <Text style={[styles.title, { color: c.foreground }]}>{MONTH_FULL[month]} {selectedYear}</Text>
-              {isFuture && <Text style={[styles.forecastTag, { color: c.primary }]}>Forecast Mode</Text>}
-            </View>
-            <Pressable
-              onPress={() => openAddTransaction(selectedDate)}
-              style={({ pressed }) => [styles.iconBtn, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
-            >
-              <Feather name="plus" size={18} color={c.primaryForeground} />
-            </Pressable>
-          </View>
+      <View style={[styles.header, { paddingTop: insets.top + 12 + webTopPad }]}>
+        <View>
+          <Text style={[styles.title, { color: c.foreground }]}>{MONTH_FULL[month]} {selectedYear}</Text>
+          {isFuture && <Text style={[styles.forecastTag, { color: c.primary }]}>Forecast Mode</Text>}
+        </View>
+        <Pressable
+          onPress={() => openAddTransaction(selectedDate)}
+          style={({ pressed }) => [styles.iconBtn, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
+        >
+          <Feather name="plus" size={18} color={c.primaryForeground} />
+        </Pressable>
+      </View>
 
-          <View style={styles.calendarMonthBar}>
-            <Pressable
-              onPress={() => changeMonth(-1)}
-              hitSlop={10}
-              style={({ pressed }) => [styles.monthArrowBtn, { opacity: pressed ? 0.55 : 1 }]}
-            >
-              <Feather name="chevron-left" size={24} color={c.mutedForeground} />
-            </Pressable>
-            <View style={styles.monthCenterLabel}>
-              <Text style={[styles.monthShortTitle, { color: c.foreground }]}>{MONTH_FULL[month].slice(0, 3).toUpperCase()}</Text>
-              <Text style={[styles.monthSwipeHint, { color: c.mutedForeground }]}>Swipe left or right</Text>
-            </View>
-            <Pressable
-              onPress={() => changeMonth(1)}
-              hitSlop={10}
-              style={({ pressed }) => [styles.monthArrowBtn, { opacity: pressed ? 0.55 : 1 }]}
-            >
-              <Feather name="chevron-right" size={24} color={c.mutedForeground} />
-            </Pressable>
-          </View>
-        </>
-      ) : null}
+      <View style={styles.calendarMonthBar}>
+        <Pressable
+          onPress={() => changeMonth(-1)}
+          hitSlop={10}
+          style={({ pressed }) => [styles.monthArrowBtn, { opacity: pressed ? 0.55 : 1 }]}
+        >
+          <Feather name="chevron-left" size={24} color={c.mutedForeground} />
+        </Pressable>
+        <View style={styles.monthCenterLabel}>
+          <Text style={[styles.monthShortTitle, { color: c.foreground }]}>{MONTH_FULL[month].slice(0, 3).toUpperCase()}</Text>
+          <Text style={[styles.monthSwipeHint, { color: c.mutedForeground }]}>Swipe left or right</Text>
+        </View>
+        <Pressable
+          onPress={() => changeMonth(1)}
+          hitSlop={10}
+          style={({ pressed }) => [styles.monthArrowBtn, { opacity: pressed ? 0.55 : 1 }]}
+        >
+          <Feather name="chevron-right" size={24} color={c.mutedForeground} />
+        </Pressable>
+      </View>
 
       {activeTab === "bills" ? (
           <FlatList
@@ -905,7 +901,7 @@ export default function MonthlyScreen() {
             }}
           />
       ) : (
-        <View style={[styles.calFixed, { paddingTop: insets.top + 10 + webTopPad, paddingBottom: insets.bottom + 76 }]}>
+        <View style={[styles.calFixed, { paddingBottom: insets.bottom + 76 }]}>
           <View style={styles.calInner}>
             <View {...calendarSwipeResponder.panHandlers}>
               <CalendarView
@@ -918,9 +914,6 @@ export default function MonthlyScreen() {
                 goals={goals}
                 decisions={decisions}
                 safetyFloor={settings.safety_floor}
-                onPreviousMonth={() => changeMonth(-1)}
-                onNextMonth={() => changeMonth(1)}
-                onAddPress={() => openAddTransaction(selectedDate)}
               />
             </View>
 

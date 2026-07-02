@@ -1,26 +1,23 @@
 import React from "react";
-import { Feather } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { DailyBalance, DecisionRecord, Goal, GoalExpense, Transaction } from "@/context/BudgetContext";
 import { scenarioDates } from "@/lib/decisions";
 
 const DAY_NAMES = ["S", "M", "T", "W", "T", "F", "S"];
-const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 const CALENDAR = {
-  surface: "#2f3043",
-  cell: "#303144",
-  adjacentCell: "#292a3b",
-  selectedCell: "#383a52",
-  line: "rgba(226,232,240,0.20)",
+  surface: "#050816",
+  cell: "#080d1f",
+  selectedCell: "#111827",
+  line: "#1f2937",
   text: "#f8fafc",
-  muted: "#cbd5e1",
-  faded: "#8b91a7",
-  selected: "rgba(226,232,240,0.42)",
-  today: "#0f172a",
-  green: "#6ee7b7",
-  amber: "#facc15",
+  muted: "#94a3b8",
+  faded: "#64748b",
+  selected: "#334155",
+  today: "#2563eb",
+  green: "#4ade80",
+  amber: "#fbbf24",
   red: "#fb7185",
 };
 
@@ -36,9 +33,6 @@ interface CalendarViewProps {
   goals?: Goal[];
   decisions?: DecisionRecord[];
   safetyFloor?: number;
-  onPreviousMonth?: () => void;
-  onNextMonth?: () => void;
-  onAddPress?: () => void;
 }
 
 function fmt(n: number) {
@@ -66,9 +60,6 @@ export function CalendarView({
   goals = [],
   decisions = [],
   safetyFloor = 200,
-  onPreviousMonth,
-  onNextMonth,
-  onAddPress,
 }: CalendarViewProps) {
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -112,36 +103,16 @@ export function CalendarView({
       });
     });
 
-  const previousMonthDays = new Date(year, month, 0).getDate();
-  const cells: { day: number; current: boolean }[] = [];
-  for (let i = 0; i < firstDay; i += 1) cells.push({ day: previousMonthDays - firstDay + i + 1, current: false });
-  for (let d = 1; d <= daysInMonth; d += 1) cells.push({ day: d, current: true });
-  let nextDay = 1;
-  while (cells.length < 42) {
-    cells.push({ day: nextDay, current: false });
-    nextDay += 1;
-  }
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstDay; i += 1) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d += 1) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
 
   const dateStr = (day: number) =>
     `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 
   return (
     <View style={styles.container}>
-      <View style={styles.calendarHeader}>
-        <Text style={styles.monthTitle}>{MONTH_NAMES[month]}</Text>
-        <View style={styles.headerActions}>
-          <Pressable onPress={onPreviousMonth} disabled={!onPreviousMonth} hitSlop={12} style={({ pressed }) => [styles.headerIcon, { opacity: pressed ? 0.55 : 1 }]}>
-            <Feather name="chevron-left" size={24} color={CALENDAR.muted} />
-          </Pressable>
-          <Pressable onPress={onNextMonth} disabled={!onNextMonth} hitSlop={12} style={({ pressed }) => [styles.headerIcon, { opacity: pressed ? 0.55 : 1 }]}>
-            <Feather name="chevron-right" size={24} color={CALENDAR.muted} />
-          </Pressable>
-          <Pressable onPress={onAddPress} disabled={!onAddPress} style={({ pressed }) => [styles.addButton, { opacity: pressed ? 0.78 : 1 }]}>
-            <Feather name="plus" size={26} color="#101326" />
-          </Pressable>
-        </View>
-      </View>
-
       <View style={styles.dayNames}>
         {DAY_NAMES.map((d, index) => (
           <Text key={`${d}-${index}`} style={styles.dayName}>{d}</Text>
@@ -149,13 +120,13 @@ export function CalendarView({
       </View>
 
       <View style={styles.grid}>
-        {cells.map((cell, i) => {
-          const { day, current } = cell;
+        {cells.map((day, i) => {
+          if (!day) return <View key={`empty-${i}`} style={[styles.cell, styles.emptyCell]} />;
           const ds = dateStr(day);
-          const isToday = current && ds === todayStr;
-          const isSelected = current && ds === selectedDate;
-          const db = current ? balanceByDay[day] : undefined;
-          const dayTxs = current ? txByDay[day] ?? [] : [];
+          const isToday = ds === todayStr;
+          const isSelected = ds === selectedDate;
+          const db = balanceByDay[day];
+          const dayTxs = txByDay[day] ?? [];
           const billEvents = (db?.events ?? [])
             .filter(event => event.amount < 0 && (event.sourceType === "bill" || event.kind === "bill"))
             .slice(0, 3);
@@ -164,7 +135,7 @@ export function CalendarView({
             if (!calendarGoals.some(existing => existing.id === goal.id)) calendarGoals.push(goal);
           });
 
-          const decisionAmount = current ? decisionsByDay[day] ?? 0 : 0;
+          const decisionAmount = decisionsByDay[day] ?? 0;
           const isLowRiskDay = Boolean(db && db.balance < safetyFloor);
           const chips: { label: string; kind: ChipKind }[] = [];
 
@@ -182,12 +153,10 @@ export function CalendarView({
 
           return (
             <Pressable
-              key={`${current ? "current" : "adjacent"}-${i}-${day}`}
-              disabled={!current}
+              key={ds}
               onPress={() => onDayPress(ds)}
               style={({ pressed }) => [
                 styles.cell,
-                !current ? styles.adjacentCell : null,
                 isSelected ? styles.selectedCell : null,
                 { opacity: pressed ? 0.72 : 1 },
               ]}
@@ -198,7 +167,7 @@ export function CalendarView({
                     style={[
                       styles.dayNum,
                       {
-                        color: !current ? CALENDAR.faded : isToday ? "#ffffff" : CALENDAR.text,
+                        color: isToday ? "#ffffff" : CALENDAR.text,
                         fontFamily: isToday || isSelected ? "Inter_700Bold" : "Inter_500Medium",
                       },
                     ]}
@@ -239,35 +208,28 @@ export function CalendarView({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: CALENDAR.surface, borderRadius: 18, overflow: "hidden" },
-  calendarHeader: { minHeight: 72, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  monthTitle: { color: CALENDAR.text, fontSize: 21, fontFamily: "Inter_800ExtraBold" },
-  headerActions: { flexDirection: "row", alignItems: "center", gap: 12 },
-  headerIcon: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
-  addButton: { width: 76, height: 46, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: "#c7c5ff" },
-  dayNames: { flexDirection: "row", borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: CALENDAR.line, borderBottomColor: CALENDAR.line, paddingTop: 6, paddingBottom: 6 },
+  container: { marginBottom: 10, backgroundColor: CALENDAR.surface, borderRadius: 22, overflow: "hidden" },
+  dayNames: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: CALENDAR.line, paddingTop: 12, paddingBottom: 8 },
   dayName: { flex: 1, textAlign: "center", fontSize: 12, fontFamily: "Inter_600SemiBold", color: CALENDAR.muted },
-  grid: { flex: 1, flexDirection: "row", flexWrap: "wrap", backgroundColor: CALENDAR.surface },
+  grid: { flexDirection: "row", flexWrap: "wrap", backgroundColor: CALENDAR.surface },
   cell: {
     width: "14.285714%",
-    height: "16.666667%",
-    paddingTop: 5,
-    paddingHorizontal: 2,
-    paddingBottom: 4,
-    borderRightWidth: 1,
-    borderBottomWidth: 1,
-    borderRightColor: CALENDAR.line,
-    borderBottomColor: CALENDAR.line,
+    minHeight: 104,
+    paddingTop: 7,
+    paddingHorizontal: 3,
+    paddingBottom: 6,
+    borderTopWidth: 1,
+    borderTopColor: CALENDAR.line,
     backgroundColor: CALENDAR.cell,
   },
-  adjacentCell: { backgroundColor: CALENDAR.adjacentCell },
-  selectedCell: { backgroundColor: CALENDAR.selectedCell, borderColor: CALENDAR.selected, borderWidth: 1 },
+  selectedCell: { backgroundColor: CALENDAR.selectedCell, borderColor: CALENDAR.selected, borderWidth: 1, borderRadius: 12 },
+  emptyCell: { opacity: 0.35 },
   dayTopRow: { alignItems: "center", gap: 2 },
   todayCircle: { minWidth: 22, height: 22, borderRadius: 7, alignItems: "center", justifyContent: "center", paddingHorizontal: 6, backgroundColor: CALENDAR.today },
-  dayNum: { fontSize: 14, lineHeight: 18 },
+  dayNum: { fontSize: 14 },
   balanceText: { fontSize: 8, fontFamily: "Inter_700Bold" },
-  eventStack: { marginTop: 8, gap: 3 },
-  eventChip: { borderLeftWidth: 3, borderRadius: 4, minHeight: 17, paddingHorizontal: 3, paddingVertical: 2 },
-  eventChipText: { fontSize: 8, lineHeight: 10, fontFamily: "Inter_800ExtraBold" },
+  eventStack: { marginTop: 9, gap: 4 },
+  eventChip: { borderLeftWidth: 3, borderRadius: 4, minHeight: 18, paddingHorizontal: 3, paddingVertical: 2 },
+  eventChipText: { fontSize: 8, fontFamily: "Inter_700Bold" },
   moreText: { fontSize: 8, fontFamily: "Inter_600SemiBold", textAlign: "center", color: CALENDAR.faded },
 });
