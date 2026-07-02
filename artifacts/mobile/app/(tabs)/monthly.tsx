@@ -96,6 +96,7 @@ export default function MonthlyScreen() {
   const [editPlanAmount, setEditPlanAmount] = useState("");
   const [editPlanDate, setEditPlanDate] = useState("");
   const [savingPlan, setSavingPlan] = useState(false);
+  const [savingPaidKey, setSavingPaidKey] = useState<string | null>(null);
   const [monthSummaryDetail, setMonthSummaryDetail] = useState<{
     title: string;
     value: string;
@@ -325,6 +326,7 @@ export default function MonthlyScreen() {
   }, [surplusPrompt, surplusPaymentDate, getExtraPayment, previewDebtSnowball, month, selectedYear]);
 
   const handlePaidBlur = useCallback(async (billId: string, key: string, submittedValue?: string) => {
+    if (savingPaidKey === key) return;
     const val = submittedValue ?? editingPaidRef.current[key] ?? editingPaid[key];
     if (val === undefined) return;
     const clearPaidEdit = () => {
@@ -333,35 +335,41 @@ export default function MonthlyScreen() {
       setEditingPaid(p => { const n = { ...p }; delete n[key]; return n; });
     };
     clearPaidEdit();
-    const parsed = parseFloat(val) || 0;
-    const bill = bills.find(item => item.id === billId);
-    const budgeted = bill ? getBillMonthlyTotal(bill, month, selectedYear) : 0;
-    const day = bill ? Math.min(new Date(selectedYear, month + 1, 0).getDate(), getCustomDueDay(bill.id, month, selectedYear) ?? bill.due_day) : 1;
-    const paidDate = `${selectedYear}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    const existing = getExtraPayment(month, selectedYear);
-    const previousSource = existing?.sources?.find(source => source.type === "bill_surplus" && source.billId === billId);
-    const newSurplus = Math.max(0, budgeted - parsed);
+    setSavingPaidKey(key);
+    try {
+      const parsed = parseFloat(val) || 0;
+      const bill = bills.find(item => item.id === billId);
+      const budgeted = bill ? getBillMonthlyTotal(bill, month, selectedYear) : 0;
+      const day = bill ? Math.min(new Date(selectedYear, month + 1, 0).getDate(), getCustomDueDay(bill.id, month, selectedYear) ?? bill.due_day) : 1;
+      const paidDate = `${selectedYear}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const existing = getExtraPayment(month, selectedYear);
+      const previousSource = existing?.sources?.find(source => source.type === "bill_surplus" && source.billId === billId);
+      const newSurplus = Math.max(0, budgeted - parsed);
 
-    if (bill && !bill.is_debt && previousSource && newSurplus <= previousSource.amount + 0.005) {
-      const sources = (existing?.sources ?? [])
-        .filter(source => !(source.type === "bill_surplus" && source.billId === billId));
-      if (newSurplus > 0.005) sources.push({ ...previousSource, amount: newSurplus });
-      const total = sources.reduce((sum, source) => sum + source.amount, 0);
-      const preview = previewDebtSnowball(month, selectedYear, total);
-      await finalizeBillPayment(bill.id, month, selectedYear, parsed, paidDate);
-      if (total > 0.005) await applyDebtSnowballPayment(preview, sources);
-      else await removeDebtSnowballPayment(month, selectedYear);
-      return;
+      if (bill && !bill.is_debt && previousSource && newSurplus <= previousSource.amount + 0.005) {
+        const sources = (existing?.sources ?? [])
+          .filter(source => !(source.type === "bill_surplus" && source.billId === billId));
+        if (newSurplus > 0.005) sources.push({ ...previousSource, amount: newSurplus });
+        const total = sources.reduce((sum, source) => sum + source.amount, 0);
+        const preview = previewDebtSnowball(month, selectedYear, total);
+        await finalizeBillPayment(bill.id, month, selectedYear, parsed, paidDate);
+        if (total > 0.005) await applyDebtSnowballPayment(preview, sources);
+        else await removeDebtSnowballPayment(month, selectedYear);
+        return;
+      }
+      if (bill && !bill.is_debt && parsed >= 0 && parsed < budgeted) {
+        Keyboard.dismiss();
+        setSurplusPrompt({ bill, budgeted, actual: parsed, paidDate });
+        setSurplusPaymentDate(paidDate);
+        return;
+      }
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      if (bill && !bill.is_debt) await finalizeBillPayment(billId, month, selectedYear, parsed, paidDate);
+      else await setPaidAmount(billId, month, selectedYear, parsed);
+    } finally {
+      setSavingPaidKey(current => current === key ? null : current);
     }
-    if (bill && !bill.is_debt && parsed >= 0 && parsed < budgeted) {
-      setSurplusPrompt({ bill, budgeted, actual: parsed, paidDate });
-      setSurplusPaymentDate(paidDate);
-      return;
-    }
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (bill && !bill.is_debt) await finalizeBillPayment(billId, month, selectedYear, parsed, paidDate);
-    else await setPaidAmount(billId, month, selectedYear, parsed);
-  }, [editingPaid, setPaidAmount, bills, overrides, getBillMonthlyTotal, getCustomDueDay, getExtraPayment, previewDebtSnowball, finalizeBillPayment, applyDebtSnowballPayment, removeDebtSnowballPayment, month, selectedYear]);
+  }, [editingPaid, savingPaidKey, setPaidAmount, bills, overrides, getBillMonthlyTotal, getCustomDueDay, getExtraPayment, previewDebtSnowball, finalizeBillPayment, applyDebtSnowballPayment, removeDebtSnowballPayment, month, selectedYear]);
 
   const finalizeBillAtActualForMonth = useCallback(async (prompt: { bill: Bill; actual: number; paidDate: string }) => {
     await finalizeBillPayment(prompt.bill.id, month, selectedYear, prompt.actual, prompt.paidDate);
@@ -1036,6 +1044,7 @@ export default function MonthlyScreen() {
                           const canReschedule = bill.frequency === "monthly";
                           const paidKey = `${bill.id}-overlay-paid`;
                           const showPaid = editingPaid[paidKey] !== undefined ? editingPaid[paidKey] : paid > 0 ? paid.toFixed(2) : "";
+                          const paidEditing = editingPaid[paidKey] !== undefined;
                           return (
                             <View key={`overlay-bill-${bill.id}`} style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: isPaid ? c.success + "40" : isPartial ? c.warning + "45" : c.border }]}>
                               <View style={styles.dayBillTop}>
@@ -1058,8 +1067,14 @@ export default function MonthlyScreen() {
                                     <Text style={[styles.dayBillPaidDollar, { color: showPaid ? c.success : c.mutedForeground }]}>$</Text>
                                     <TextInput
                                       value={showPaid}
-                                      onChangeText={text => setEditingPaid(current => ({ ...current, [paidKey]: text }))}
-                                      onFocus={() => setEditingPaid(current => ({ ...current, [paidKey]: showPaid || "" }))}
+                                      onChangeText={text => {
+                                        editingPaidRef.current = { ...editingPaidRef.current, [paidKey]: text };
+                                        setEditingPaid(current => ({ ...current, [paidKey]: text }));
+                                      }}
+                                      onFocus={() => {
+                                        editingPaidRef.current = { ...editingPaidRef.current, [paidKey]: showPaid || "" };
+                                        setEditingPaid(current => ({ ...current, [paidKey]: showPaid || "" }));
+                                      }}
                                       onBlur={() => handlePaidBlur(bill.id, paidKey)}
                                       onEndEditing={event => handlePaidBlur(bill.id, paidKey, event.nativeEvent.text)}
                                       onSubmitEditing={event => handlePaidBlur(bill.id, paidKey, event.nativeEvent.text)}
@@ -1071,6 +1086,16 @@ export default function MonthlyScreen() {
                                       selectTextOnFocus
                                       style={[styles.dayBillPaidInput, { color: showPaid ? c.success : c.mutedForeground }]}
                                     />
+                                    {paidEditing ? (
+                                      <Pressable
+                                        disabled={savingPaidKey === paidKey}
+                                        onPress={() => handlePaidBlur(bill.id, paidKey, editingPaidRef.current[paidKey] ?? showPaid)}
+                                        hitSlop={8}
+                                        style={[styles.dayBillPaidSave, { backgroundColor: c.primary + "22", opacity: savingPaidKey === paidKey ? 0.5 : 1 }]}
+                                      >
+                                        <Feather name="check" size={12} color={c.primary} />
+                                      </Pressable>
+                                    ) : null}
                                   </View>
                                 </View>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
@@ -1597,6 +1622,7 @@ const styles = StyleSheet.create({
   dayBillPaidInputRow: { flexDirection: "row", alignItems: "center", marginTop: 1 },
   dayBillPaidDollar: { fontSize: 13, fontFamily: "Inter_800ExtraBold", marginRight: 1 },
   dayBillPaidInput: { flex: 1, minWidth: 42, paddingHorizontal: 0, paddingVertical: 0, fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  dayBillPaidSave: { width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center", marginLeft: 4 },
   dayBillActions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   dayBillAction: { flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
   dayBillActionText: { fontSize: 12, fontFamily: "Inter_700Bold" },
