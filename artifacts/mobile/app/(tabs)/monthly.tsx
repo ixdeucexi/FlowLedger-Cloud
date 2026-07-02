@@ -355,13 +355,25 @@ export default function MonthlyScreen() {
     setEditingPaid(p => { const n = { ...p }; delete n[key]; return n; });
   }, [editingPaid, setPaidAmount, bills, overrides, getBillMonthlyTotal, getCustomDueDay, getExtraPayment, previewDebtSnowball, finalizeBillPayment, applyDebtSnowballPayment, removeDebtSnowballPayment, month, selectedYear]);
 
+  const finalizeBillAtActualForMonth = useCallback(async (prompt: { bill: Bill; actual: number; paidDate: string }) => {
+    await finalizeBillPayment(prompt.bill.id, month, selectedYear, prompt.actual, prompt.paidDate);
+    if (!prompt.bill.is_debt && prompt.bill.frequency === "monthly") {
+      await setCustomAmount(
+        prompt.bill.id,
+        month,
+        selectedYear,
+        Math.abs(prompt.actual - prompt.bill.amount) < 0.005 ? undefined : prompt.actual,
+      );
+    }
+  }, [finalizeBillPayment, month, selectedYear, setCustomAmount]);
+
   const keepBillSurplus = async () => {
     if (!surplusPrompt) return;
     const existing = getExtraPayment(month, selectedYear);
     const sources = (existing?.sources ?? []).filter(source => !(source.type === "bill_surplus" && source.billId === surplusPrompt.bill.id));
     const total = sources.reduce((sum, source) => sum + source.amount, 0);
     const preview = previewDebtSnowball(month, selectedYear, total);
-    await finalizeBillPayment(surplusPrompt.bill.id, month, selectedYear, surplusPrompt.actual, surplusPrompt.paidDate);
+    await finalizeBillAtActualForMonth(surplusPrompt);
     if ((existing?.sources?.length ?? 0) !== sources.length) {
       if (total > 0.005) await applyDebtSnowballPayment(preview, sources);
       else await removeDebtSnowballPayment(month, selectedYear);
@@ -396,7 +408,6 @@ export default function MonthlyScreen() {
 
   const addBillSurplusToSnowball = async () => {
     if (!surplusPrompt || !surplusSnowballOffer) return;
-    const prompt = surplusPrompt;
     const surplus = surplusPrompt.budgeted - surplusPrompt.actual;
     const existing = getExtraPayment(month, selectedYear);
     const otherSources = (existing?.sources ?? [{ type: "manual" as const, amount: existing?.amount ?? 0 }])
@@ -404,11 +415,9 @@ export default function MonthlyScreen() {
     const sources = [...otherSources, { type: "bill_surplus" as const, amount: surplus, billId: surplusPrompt.bill.id, billName: surplusPrompt.bill.name }]
       .filter(source => source.amount > 0.005);
     if (!surplusSnowballOffer.safe || !surplusSnowballOffer.preview.allocations.length) return;
-    await finalizeBillPayment(surplusPrompt.bill.id, month, selectedYear, surplusPrompt.actual, surplusPrompt.paidDate);
-    let surplusApplied = false;
+    await finalizeBillAtActualForMonth(surplusPrompt);
     try {
       await applyDebtSnowballPayment(surplusSnowballOffer.preview, sources);
-      surplusApplied = true;
     } catch {
       Alert.alert(
         "Bill Finalized",
@@ -416,7 +425,6 @@ export default function MonthlyScreen() {
       );
     }
     setSurplusPrompt(null);
-    if (surplusApplied) askToMatchBillAmountToPaid(prompt);
   };
 
   const handleAmtBlur = useCallback((bill: { id: string; amount: number }, key: string) => {
@@ -1045,7 +1053,10 @@ export default function MonthlyScreen() {
                                       onChangeText={text => setEditingPaid(current => ({ ...current, [paidKey]: text }))}
                                       onFocus={() => setEditingPaid(current => ({ ...current, [paidKey]: showPaid || "" }))}
                                       onBlur={() => handlePaidBlur(bill.id, paidKey)}
+                                      onSubmitEditing={() => handlePaidBlur(bill.id, paidKey)}
                                       keyboardType="decimal-pad"
+                                      returnKeyType="done"
+                                      blurOnSubmit
                                       placeholder="0.00"
                                       placeholderTextColor={c.mutedForeground}
                                       selectTextOnFocus

@@ -32,9 +32,16 @@ export function BillSurplusModal({ visible, billName, budgeted, actual, targetDe
       <Pressable style={styles.overlay} onPress={onClose}>
         <Pressable style={[styles.sheet, { backgroundColor: c.background }]} onPress={() => {}}>
           <View style={[styles.handle, { backgroundColor: c.border }]} />
-          <View style={styles.iconRow}><View style={[styles.icon, { backgroundColor: c.success + "18" }]}><Feather name="trending-down" size={22} color={c.success} /></View></View>
+          <View style={styles.iconRow}>
+            <View style={[styles.icon, { backgroundColor: c.primary + "18" }]}>
+              <Text style={[styles.floIconText, { color: c.primary }]}>F</Text>
+            </View>
+          </View>
+          <Text style={[styles.eyebrow, { color: c.primary }]}>Flo found leftover money</Text>
           <Text style={[styles.title, { color: c.foreground }]}>${difference.toFixed(2)} under budget</Text>
-          <Text style={[styles.sub, { color: c.mutedForeground }]}>{billName} was budgeted at ${budgeted.toFixed(2)} and finalized at ${actual.toFixed(2)}.</Text>
+          <Text style={[styles.sub, { color: c.mutedForeground }]}>
+            {billName} came in lower this month. I can mark it paid at ${actual.toFixed(2)} and help you decide where the extra ${difference.toFixed(2)} should go.
+          </Text>
           <View style={[styles.breakdown, { backgroundColor: c.card }]}> 
             <View style={styles.row}><Text style={[styles.rowLabel, { color: c.mutedForeground }]}>Budgeted</Text><Text style={[styles.rowValue, { color: c.foreground }]}>${budgeted.toFixed(2)}</Text></View>
             <View style={styles.row}><Text style={[styles.rowLabel, { color: c.mutedForeground }]}>Actual</Text><Text style={[styles.rowValue, { color: c.foreground }]}>${actual.toFixed(2)}</Text></View>
@@ -54,9 +61,9 @@ export function BillSurplusModal({ visible, billName, budgeted, actual, targetDe
           {targetDebt && paymentDateValid && !snowballSafe && <Text style={[styles.note, { color: c.warning }]}>Keep this money available to preserve your ${safetyFloor.toFixed(0)} floor across {forecastHorizonMonths} months.</Text>}
           <Pressable disabled={!targetDebt || !snowballSafe} onPress={onSnowball} style={[styles.primary, { backgroundColor: targetDebt && snowballSafe ? c.primary : c.muted }]}> 
             <Feather name="zap" size={16} color={targetDebt && snowballSafe ? c.primaryForeground : c.mutedForeground} />
-            <Text style={[styles.primaryText, { color: targetDebt && snowballSafe ? c.primaryForeground : c.mutedForeground }]}>Add ${difference.toFixed(2)} to {targetDebt ?? "Snowball"}</Text>
+            <Text style={[styles.primaryText, { color: targetDebt && snowballSafe ? c.primaryForeground : c.mutedForeground }]}>Yes, send ${difference.toFixed(2)} to {targetDebt ?? "Snowball"}</Text>
           </Pressable>
-          <Pressable onPress={onKeep} style={[styles.secondary, { borderColor: c.border }]}><Text style={[styles.secondaryText, { color: c.foreground }]}>Keep ${difference.toFixed(2)} available</Text></Pressable>
+          <Pressable onPress={onKeep} style={[styles.secondary, { borderColor: c.border }]}><Text style={[styles.secondaryText, { color: c.foreground }]}>No, keep ${difference.toFixed(2)} available</Text></Pressable>
         </Pressable>
       </Pressable>
     </Modal>
@@ -67,6 +74,8 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.55)" },
   sheet: { borderTopLeftRadius: 26, borderTopRightRadius: 26, padding: 20, paddingTop: 12, paddingBottom: 34 },
   handle: { width: 38, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 18 }, iconRow: { alignItems: "center" }, icon: { width: 50, height: 50, borderRadius: 25, alignItems: "center", justifyContent: "center" },
+  floIconText: { fontSize: 20, fontFamily: "Inter_800ExtraBold" },
+  eyebrow: { fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.1, textTransform: "uppercase", textAlign: "center", marginTop: 12 },
   title: { fontSize: 24, fontFamily: "Inter_700Bold", textAlign: "center", marginTop: 10 }, sub: { fontSize: 13, lineHeight: 18, textAlign: "center", marginTop: 5 },
   breakdown: { borderRadius: 12, padding: 14, gap: 9, marginTop: 16 }, row: { flexDirection: "row", justifyContent: "space-between" }, rowLabel: { fontSize: 13 }, rowValue: { fontSize: 13, fontFamily: "Inter_700Bold" },
   dateHelp: { fontSize: 11, lineHeight: 16, marginTop: 5 },
