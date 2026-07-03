@@ -465,7 +465,7 @@ export default function FloScreen() {
   }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getDailyBalances, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, getTransactionsForMonth, transactions, upcoming, decisions, forecastConfidence, categoryPlan, paycheckPlan, billDateMoves, bills, decisionHistory, decisionRiskAlerts, now, incomes, goals, decisionHubSettings]);
 
   const quickPrompts = useMemo(() => {
-    const categoryPrompts = isAlgorithmEnabled(decisionHubSettings, "spendingPattern") ? buildFloCategoryQuickPrompts(categoryPlan) : [];
+    const categoryPrompts = decisionHubSettings.algorithmSuiteEnabled ? buildFloCategoryQuickPrompts(categoryPlan) : [];
     const paycheckPrompts = isAlgorithmEnabled(decisionHubSettings, "paydaySplit") ? ["What can I spend until payday?", "What bill should I move?"] : [];
     return [
       ...(decisionHistory.due.length ? ["What decisions need review?"] : []),
@@ -566,7 +566,7 @@ export default function FloScreen() {
         setDecisionSaveState(previous => ({ ...previous, [replyId]: "idle" as const }));
       }
     }
-    const categoryMove = isAlgorithmEnabled(decisionHubSettings, "spendingPattern") ? evaluateFloCategoryMove(clean, facts) : null;
+    const categoryMove = decisionHubSettings.algorithmSuiteEnabled ? evaluateFloCategoryMove(clean, facts) : null;
     if (categoryMove?.allowed) {
       setCategoryMoveByMessageId(previous => ({ ...previous, [replyId]: categoryMove }));
       setCategoryMoveState(previous => ({ ...previous, [replyId]: "idle" }));

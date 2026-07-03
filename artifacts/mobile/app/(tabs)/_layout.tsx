@@ -275,7 +275,7 @@ function TabContent() {
       ? buildDecisionRiskAlerts(decisions, forecastDays, settings.safety_floor, today).length
       : 0;
     const sensitivityBuffer = 150;
-    const lowNextWeek = isAlgorithmEnabled(decisionHubSettings, "lowBalanceWarning")
+    const lowNextWeek = decisionHubSettings.algorithmSuiteEnabled
       && forecastDays.some(day => day.date >= today && day.date <= weekEnd && day.balance < settings.safety_floor + sensitivityBuffer);
     return Math.min(9, history.due.length + risky + (lowNextWeek ? 1 : 0));
   }, [decisionHubSettings, decisions, getDailyBalances, loading, settings.forecast_horizon_months, settings.safety_floor]);

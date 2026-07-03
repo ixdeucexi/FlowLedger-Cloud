@@ -126,7 +126,7 @@ export interface AlgorithmSuiteResult {
   billShock: { count: number; items: string[] };
   cashFlowGap: { startDay: number | null; endDay: number | null; lowestBalance: number; detail: string };
   incomeStability: { score: number; label: string; detail: string };
-  savingsSweep: { amount: number; detail: string };
+  extraMoneyRouter: { amount: number; detail: string; recommendation: "debt" | "savings" | "bill" | "available" };
   riskDay: { safe: number; watch: number; risk: number };
   smartReminder: { reminders: string[] };
   monthlyHealth: { score: number; grade: string; summary: string };
@@ -172,7 +172,14 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
   const billShock = findBillShock(input.bills, input.cashFlow.monthlyIncome);
   const spendingPattern = summarizeSpendingPattern(input.categoryPlan ?? [], input.transactions);
   const goalAcceleration = buildGoalAcceleration(input.goals, safeCushionAmount);
-  const savingsSweepAmount = roundCurrency(safeCushionAmount > 250 ? Math.min(safeCushionAmount * 0.35, Math.max(25, input.cashFlow.remaining * 0.25)) : 0);
+  const extraMoneyAmount = roundCurrency(safeCushionAmount > 250 ? Math.min(safeCushionAmount * 0.35, Math.max(25, input.cashFlow.remaining * 0.25)) : 0);
+  const extraMoneyRecommendation = debtTotal > 0
+    ? "debt" as const
+    : input.cashFlow.totalBillsDue > input.cashFlow.totalPaid
+      ? "bill" as const
+      : input.goals.some(goal => goal.goal_type === "savings" && goal.current_amount < goal.target_amount)
+        ? "savings" as const
+        : "available" as const;
   const paydaySplit = buildPaydaySplit(input.cashFlow.monthlyIncome, input.cashFlow.totalBillsDue, input.cashFlow.goalAllocations, debtTotal, safeCushionAmount);
   const cashFlowGap = findCashFlowGap(balances, input.safetyFloor);
   const riskDayCounts = balances.reduce(
@@ -223,7 +230,8 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     safeCushionAmount,
     lowBalanceWarning,
     billPriority,
-    savingsSweepAmount,
+    extraMoneyAmount,
+    extraMoneyRecommendation,
     spendingLimits,
     subscriptionCreep,
     billShock,
@@ -270,7 +278,19 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     billShock,
     cashFlowGap,
     incomeStability,
-    savingsSweep: { amount: savingsSweepAmount, detail: savingsSweepAmount > 0 ? `Move up to $${savingsSweepAmount.toFixed(0)} safely without crossing the floor.` : "No safe leftover sweep is available yet." },
+    extraMoneyRouter: {
+      amount: extraMoneyAmount,
+      recommendation: extraMoneyRecommendation,
+      detail: extraMoneyAmount > 0
+        ? extraMoneyRecommendation === "debt"
+          ? `Up to $${extraMoneyAmount.toFixed(0)} can safely speed up debt without crossing the floor.`
+          : extraMoneyRecommendation === "bill"
+            ? `Up to $${extraMoneyAmount.toFixed(0)} can safely cover upcoming bills before extra spending.`
+            : extraMoneyRecommendation === "savings"
+              ? `Up to $${extraMoneyAmount.toFixed(0)} can safely move toward savings after the plan is protected.`
+              : `Up to $${extraMoneyAmount.toFixed(0)} can safely stay available without crossing the floor.`
+        : "No safe extra money is available to route yet.",
+    },
     riskDay: riskDayCounts,
     smartReminder: { reminders },
     monthlyHealth: { score: flowScore, grade: flowGrade, summary: `${flowLabel} plan based on cushion, bills, forecast confidence, and risk days.` },
@@ -620,7 +640,8 @@ function buildInsights(
     safeCushionAmount: number;
     lowBalanceWarning: AlgorithmSuiteResult["lowBalanceWarning"];
     billPriority: AlgorithmSuiteResult["billPriority"];
-    savingsSweepAmount: number;
+    extraMoneyAmount: number;
+    extraMoneyRecommendation: "debt" | "savings" | "bill" | "available";
     spendingLimits: { daily: number; weekly: number };
     subscriptionCreep: { count: number; items: string[] };
     billShock: { count: number; items: string[] };
@@ -661,12 +682,18 @@ function buildInsights(
       tone: priority.score >= 65 ? "risk" : priority.score >= 40 ? "watch" : "info",
     });
   }
-  if (facts.savingsSweepAmount > 0) {
+  if (facts.extraMoneyAmount > 0) {
     insights.push({
-      id: "savingsSweep",
-      algorithm: "Savings Sweep",
-      title: `$${facts.savingsSweepAmount.toFixed(0)} could move to savings`,
-      detail: "The sweep keeps your projected balance above the safety floor.",
+      id: "extraMoneyRouter",
+      algorithm: "Extra Money Router",
+      title: `$${facts.extraMoneyAmount.toFixed(0)} can be routed safely`,
+      detail: facts.extraMoneyRecommendation === "debt"
+        ? "Debt payoff is the best first route while the safety floor stays protected."
+        : facts.extraMoneyRecommendation === "bill"
+          ? "Upcoming bills should be protected before extra spending."
+          : facts.extraMoneyRecommendation === "savings"
+            ? "Savings is a safe route after bills and the floor are protected."
+            : "Keeping it available is safest right now.",
       tone: "safe",
     });
   }

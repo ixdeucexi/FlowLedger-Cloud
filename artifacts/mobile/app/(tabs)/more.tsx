@@ -506,7 +506,7 @@ export default function MoreScreen() {
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[styles.switchLabel, { color: c.foreground }]}>Algorithm Suite</Text>
-          <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Flow Score, Safe Cushion, warnings, category decisions, and risk tools.</Text>
+          <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Focused tools for debt payoff, safer spending, paycheck planning, and extra-money decisions.</Text>
         </View>
         <Feather name={showAlgorithmSuite ? "chevron-up" : "chevron-down"} size={20} color={c.mutedForeground} />
       </Pressable>
@@ -524,7 +524,7 @@ export default function MoreScreen() {
           <View style={styles.switchInfo}>
             <Text style={[styles.switchLabel, { color: c.foreground }]}>FlowLedger Algo</Text>
             <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>
-              Deterministic financial algorithms for scoring, forecasts, decisions, reminders, and risk.
+              Deterministic money guidance to protect your floor, route extra cash, and make better debt decisions.
             </Text>
           </View>
           <View style={[styles.toggleTrack, { backgroundColor: decisionHubSettings.algorithmSuiteEnabled ? c.primary : c.muted }]}>
@@ -535,7 +535,7 @@ export default function MoreScreen() {
         <View style={[styles.algorithmStageBox, { borderTopColor: c.border }]}>
           <Text style={[styles.switchLabel, { color: c.foreground }]}>Account growth stage</Text>
           <Text style={[styles.switchDesc, { color: c.mutedForeground, marginBottom: 10 }]}>
-            Higher stages unlock more algorithms as the account setup becomes more complete.
+            Higher stages unlock deeper tools once the basics are working.
           </Text>
           <View style={styles.algoStageGrid}>
             {GROWTH_STAGE_ORDER.map(stage => {

@@ -379,7 +379,7 @@ export default function DashboardScreen() {
     remaining: totals.remaining + row.remaining,
   }), { budgeted: 0, spent: 0, remaining: 0 }), [categoryPlan]);
   const categoryDecisionAlert = useMemo(() => {
-    if (!isAlgorithmEnabled(decisionHubSettings, "spendingPattern")) return null;
+    if (!decisionHubSettings.algorithmSuiteEnabled) return null;
     const over = categoryPlan
       .filter(row => row.remaining < -0.005)
       .sort((left, right) => left.remaining - right.remaining)[0];
@@ -814,7 +814,7 @@ export default function DashboardScreen() {
     today,
   ]);
   const nextWeekRisk = useMemo(() => {
-    if (!isAlgorithmEnabled(decisionHubSettings, "lowBalanceWarning")) return null;
+    if (!decisionHubSettings.algorithmSuiteEnabled) return null;
     const weekEndDate = new Date(now);
     weekEndDate.setDate(now.getDate() + 7);
     const weekEnd = `${weekEndDate.getFullYear()}-${String(weekEndDate.getMonth() + 1).padStart(2, "0")}-${String(weekEndDate.getDate()).padStart(2, "0")}`;
@@ -1194,7 +1194,7 @@ export default function DashboardScreen() {
               <Text style={styles.algoMiniValue}>${algorithmSuite.spendingLimit.daily.toFixed(0)}</Text>
             </View>
             <View style={styles.algoMiniMetric}>
-              <Text style={styles.algoMiniLabel}>Risk Days</Text>
+              <Text style={styles.algoMiniLabel}>Tight Days</Text>
               <Text style={[styles.algoMiniValue, { color: algorithmSuite.riskDay.risk ? "#fb7185" : "#4ade80" }]}>{algorithmSuite.riskDay.risk}</Text>
             </View>
           </View>

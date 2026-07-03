@@ -13,17 +13,13 @@ export const ALGORITHM_CATALOG = [
   { id: "flowScore", name: "Flow Score", stage: "starter", icon: "activity", desc: "A 0-100 view of plan health with the next best action." },
   { id: "safeCushion", name: "Safe Cushion", stage: "starter", icon: "shield", desc: "Money safely available after your forecast and floor." },
   { id: "purchaseDecision", name: "Purchase Decision", stage: "starter", icon: "shopping-bag", desc: "Shows whether a purchase is safe, tight, or should wait." },
-  { id: "billPriority", name: "Bill Priority", stage: "starter", icon: "file-text", desc: "Ranks bills by urgency, due date, amount, and risk." },
-  { id: "lowBalanceWarning", name: "Low Balance Warning", stage: "starter", icon: "alert-triangle", desc: "Warns before balances get too low or negative." },
+  { id: "billPriority", name: "Bill Priority", stage: "starter", icon: "file-text", desc: "Ranks bills by timing, unpaid status, due date, and forecast pressure." },
 
   { id: "paydaySplit", name: "Payday Split", stage: "growing", icon: "git-branch", desc: "Recommends how each paycheck should be divided." },
   { id: "debtPayoff", name: "Debt Payoff", stage: "growing", icon: "trending-down", desc: "Compares snowball, avalanche, and cash-flow payoff options." },
   { id: "spendingLimit", name: "Spending Limit", stage: "growing", icon: "sliders", desc: "Recommends safe daily and weekly spending limits." },
-  { id: "savingsSweep", name: "Savings Sweep", stage: "growing", icon: "corner-up-right", desc: "Suggests safe leftover money to move into savings." },
 
-  { id: "goalAcceleration", name: "Goal Acceleration", stage: "advanced", icon: "target", desc: "Shows how to reach goals faster with safe extra savings." },
-  { id: "spendingPattern", name: "Spending Pattern", stage: "advanced", icon: "pie-chart", desc: "Detects category spikes and spending habits." },
-  { id: "billShock", name: "Bill Shock", stage: "advanced", icon: "zap", desc: "Flags bills that are unusually higher than normal." },
+  { id: "extraMoneyRouter", name: "Extra Money Router", stage: "advanced", icon: "corner-up-right", desc: "Helps route safe leftover money to debt, savings, upcoming bills, or available cash." },
 ] as const;
 
 export type AlgorithmId = typeof ALGORITHM_CATALOG[number]["id"];
@@ -53,7 +49,8 @@ export function normalizeAlgorithmToggles(value: unknown): Record<AlgorithmId, b
   const defaults = defaultAlgorithmToggles();
   const parsed = value && typeof value === "object" ? value as Partial<Record<string, unknown>> : {};
   ALGORITHM_CATALOG.forEach(algorithm => {
-    defaults[algorithm.id] = parsed[algorithm.id] !== false;
+    const legacyValue = algorithm.id === "extraMoneyRouter" ? parsed.savingsSweep : undefined;
+    defaults[algorithm.id] = (parsed[algorithm.id] ?? legacyValue) !== false;
   });
   return defaults;
 }

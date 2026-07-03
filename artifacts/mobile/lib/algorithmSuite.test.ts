@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ALGORITHM_CATALOG, defaultAlgorithmToggles, normalizeAlgorithmGrowthStage } from "./algorithmCatalog";
+import { ALGORITHM_CATALOG, defaultAlgorithmToggles, normalizeAlgorithmGrowthStage, normalizeAlgorithmToggles } from "./algorithmCatalog";
 import { buildAlgorithmSuite, type AlgorithmSuiteInput } from "./algorithmSuite";
 
 function baseInput(overrides: Partial<AlgorithmSuiteInput> = {}): AlgorithmSuiteInput {
@@ -105,16 +105,13 @@ test("visible algorithm catalog is trimmed to user-facing suite", () => {
     "safeCushion",
     "purchaseDecision",
     "billPriority",
-    "lowBalanceWarning",
     "paydaySplit",
     "debtPayoff",
     "spendingLimit",
-    "savingsSweep",
-    "goalAcceleration",
-    "spendingPattern",
-    "billShock",
+    "extraMoneyRouter",
   ]);
   assert.equal(normalizeAlgorithmGrowthStage("missing"), "starter");
+  assert.equal(normalizeAlgorithmToggles({ savingsSweep: false }).extraMoneyRouter, false);
 });
 
 test("respects growth stage and disabled algorithm toggles", () => {
