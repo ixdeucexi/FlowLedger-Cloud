@@ -111,7 +111,7 @@ export default function TransactionsScreen() {
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
-  const listBottomPadding = insets.bottom + (Platform.OS === "web" ? 156 : 132);
+  const listBottomPadding = insets.bottom + (Platform.OS === "web" ? 128 : 118);
 
   // ── Build unified activity feed ───────────────────────────────────────────
   const allActivity = useMemo((): ActivityItem[] => {

@@ -305,13 +305,19 @@ function TabContent() {
           },
           tabBarStyle: {
             position: "absolute",
-            left: 12,
-            right: 12,
-            bottom: isIosWeb ? 6 : isWeb ? 12 : 10,
-            borderRadius: 28,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            borderTopLeftRadius: 28,
+            borderTopRightRadius: 28,
+            borderBottomLeftRadius: 0,
+            borderBottomRightRadius: 0,
             backgroundColor: isIOS ? "transparent" : "rgba(2,6,23,0.90)",
             borderWidth: 1,
             borderTopWidth: 1,
+            borderBottomWidth: 0,
+            borderLeftWidth: 0,
+            borderRightWidth: 0,
             borderColor: "rgba(148,163,184,0.18)",
             shadowColor: "#7c3aed",
             shadowOffset: { width: 0, height: 14 },
@@ -320,13 +326,13 @@ function TabContent() {
             elevation: 14,
             paddingHorizontal: 6,
             ...(isWeb ? {
-              height: isIosWeb ? 60 : 76,
-              paddingTop: isIosWeb ? 0 : undefined,
-              paddingBottom: isIosWeb ? 0 : undefined,
+              height: isIosWeb ? 72 : 82,
+              paddingTop: isIosWeb ? 6 : 8,
+              paddingBottom: isIosWeb ? 12 : 10,
             } : {
-              height: 76,
+              height: 86,
               paddingTop: 6,
-              paddingBottom: 8,
+              paddingBottom: 14,
             }),
           },
           tabBarBackground: () =>
@@ -337,7 +343,7 @@ function TabContent() {
                 style={StyleSheet.absoluteFill}
               />
             ) : isWeb ? (
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(2,6,23,0.92)", borderRadius: 28 }]} />
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(2,6,23,0.96)", borderTopLeftRadius: 28, borderTopRightRadius: 28 }]} />
             ) : null,
         }}
       >
