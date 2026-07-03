@@ -772,10 +772,10 @@ const styles = StyleSheet.create({
   filterCount: { position: "absolute", top: -5, right: -5, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, alignItems: "center", justifyContent: "center" },
   filterCountText: { color: "#fff", fontSize: 10, fontFamily: "Inter_700Bold" },
 
-  quickChipScroller: { marginBottom: 6, flexGrow: 0 },
-  quickChipRow: { paddingHorizontal: 16, gap: 7, paddingBottom: 3 },
-  quickChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
-  quickChipText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
+  quickChipScroller: { height: 38, marginBottom: 8, flexGrow: 0 },
+  quickChipRow: { paddingHorizontal: 16, gap: 7, alignItems: "center", paddingBottom: 2 },
+  quickChip: { minHeight: 28, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, alignItems: "center", justifyContent: "center" },
+  quickChipText: { fontSize: 11, lineHeight: 14, fontFamily: "Inter_800ExtraBold" },
 
   filterOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.55)" },
   filterSheet: { borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32, maxHeight: "88%" },
