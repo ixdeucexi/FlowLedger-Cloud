@@ -10,6 +10,7 @@ import colors from "@/constants/colors";
 import type { Goal } from "@/context/BudgetContext";
 import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
+import { useBackDismiss } from "@/hooks/useBackDismiss";
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
 
@@ -27,6 +28,7 @@ interface Props {
 
 export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Props) {
   const c = useColors();
+  useBackDismiss(visible, onClose);
 
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
@@ -95,7 +97,7 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Prop
   const lbl   = [styles.label, { color: c.mutedForeground }];
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
         <View style={[styles.container, { backgroundColor: c.background }]}>
           <View style={styles.handle} />

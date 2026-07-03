@@ -19,6 +19,7 @@ import { DatePickerField } from "@/components/DatePickerField";
 import type { Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
+import { useBackDismiss } from "@/hooks/useBackDismiss";
 
 interface Props {
   visible: boolean;
@@ -31,6 +32,7 @@ interface Props {
 
 export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx, defaultDate }: Props) {
   const c = useColors();
+  useBackDismiss(visible, onClose);
   const { categories, accounts, bills, transactions } = useBudget();
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Other");
@@ -150,7 +152,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
   const labelStyle = [styles.label, { color: c.mutedForeground }];
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
         <View style={[styles.container, { backgroundColor: c.background }]}>
           <View style={styles.header}>

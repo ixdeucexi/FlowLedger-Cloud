@@ -7,6 +7,7 @@ import colors from "@/constants/colors";
 import type { IncomeAmountEntry, IncomeItem } from "@/context/BudgetContext";
 import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
+import { useBackDismiss } from "@/hooks/useBackDismiss";
 
 const FREQUENCIES: { key: IncomeItem["frequency"]; label: string; desc: string }[] = [
   { key: "monthly",  label: "Monthly",  desc: "×1/mo"   },
@@ -30,6 +31,7 @@ interface Props {
 
 export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
   const c = useColors();
+  useBackDismiss(visible, onClose);
   const [name,            setName]            = useState("");
   const [amount,          setAmount]          = useState("");
   const [frequency,       setFrequency]       = useState<IncomeItem["frequency"]>("monthly");
@@ -145,7 +147,7 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
   })();
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
         <View style={[styles.container, { backgroundColor: c.background }]}>
           <View style={styles.handle} />

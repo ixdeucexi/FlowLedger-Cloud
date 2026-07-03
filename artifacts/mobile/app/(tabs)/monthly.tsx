@@ -18,6 +18,7 @@ import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
 import colors from "@/constants/colors";
 import type { Bill, BillDateMove, DecisionRecord, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
+import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
 import { groupForecastEvents } from "@/lib/forecastDisplay";
@@ -109,6 +110,16 @@ export default function MonthlyScreen() {
     fallback: string;
   } | null>(null);
 
+  useBackDismiss(txModalVisible, () => {
+    setTxModalVisible(false);
+    setEditTx(null);
+    setTransactionDefaultDate(undefined);
+  });
+  useBackDismiss(Boolean(dueDayPickerBill), () => setDueDayPickerBill(null));
+  useBackDismiss(Boolean(monthSummaryDetail), () => setMonthSummaryDetail(null));
+  useBackDismiss(Boolean(editPlan), () => setEditPlan(null));
+  useBackDismiss(showSnowballResults, () => setShowSnowballResults(false));
+
   useEffect(() => {
     if (dashboardFilter === "paid" || dashboardFilter === "unpaid") setDashboardFilter(null);
   }, [dashboardFilter, setDashboardFilter]);
@@ -145,12 +156,34 @@ export default function MonthlyScreen() {
         setSurplusPrompt(null);
         return true;
       }
+      if (editPlan) {
+        setEditPlan(null);
+        return true;
+      }
+      if (monthSummaryDetail) {
+        setMonthSummaryDetail(null);
+        return true;
+      }
       if (dueDayPickerBill) {
         setDueDayPickerBill(null);
         return true;
       }
+      if (txModalVisible) {
+        setTxModalVisible(false);
+        setEditTx(null);
+        setTransactionDefaultDate(undefined);
+        return true;
+      }
+      if (snowballModalVisible) {
+        setSnowballModalVisible(false);
+        return true;
+      }
       if (snowballPreview) {
         setSnowballPreview(null);
+        return true;
+      }
+      if (showSnowballResults) {
+        setShowSnowballResults(false);
         return true;
       }
       if (selectedDate) {
@@ -171,7 +204,7 @@ export default function MonthlyScreen() {
     const onPopState = () => setSelectedDate(null);
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [dueDayPickerBill, selectedDate, snowballPreview, surplusPrompt]);
+  }, [dueDayPickerBill, editPlan, monthSummaryDetail, selectedDate, showSnowballResults, snowballModalVisible, snowballPreview, surplusPrompt, txModalVisible]);
 
   const monthBills = useMemo(() => getMonthlyBills(month, selectedYear), [getMonthlyBills, month, selectedYear]);
 

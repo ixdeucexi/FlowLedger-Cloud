@@ -22,6 +22,7 @@ import { useBudget } from "@/context/BudgetContext";
 import { useAuth } from "@/context/AuthContext";
 import { type ThemeMode, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
+import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { parseStatementCsv } from "@/lib/accounts";
 import {
   ALGORITHM_CATALOG,
@@ -75,6 +76,7 @@ export default function MoreScreen() {
   const [forecastHorizonText, setForecastHorizonText] = useState(settings.forecast_horizon_months.toString());
   const [decisionHubSettings, setDecisionHubSettings] = useState<DecisionHubSettings>(() => readDecisionHubSettings());
   const [selectedAlgorithm, setSelectedAlgorithm] = useState<AlgorithmCatalogItem | null>(null);
+  useBackDismiss(Boolean(selectedAlgorithm), () => setSelectedAlgorithm(null));
   const [showAlgorithmSuite, setShowAlgorithmSuite] = useState(false);
   const [backupExported, setBackupExported] = useState(() => {
     try { return Platform.OS === "web" && globalThis.localStorage?.getItem(BACKUP_COMPLETE_KEY) === "true"; }

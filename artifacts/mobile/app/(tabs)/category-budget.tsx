@@ -9,6 +9,7 @@ import colors from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
+import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { applyCategoryBudgetMove, buildCategoryPlan, type CategoryPlanRow } from "@/lib/categoryPlanning";
 import { CATEGORY_BUDGETS_EVENT, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets } from "@/lib/categoryBudgetStore";
 
@@ -43,6 +44,7 @@ export default function CategoryBudgetScreen() {
   const [moveSource, setMoveSource] = useState("");
   const [moveAmount, setMoveAmount] = useState("");
   const [moveError, setMoveError] = useState("");
+  useBackDismiss(!!moveTarget, () => setMoveTarget(null));
   const editableCategories = useMemo(() => categories.filter(category => category !== "Debt"), [categories]);
 
   useEffect(() => {

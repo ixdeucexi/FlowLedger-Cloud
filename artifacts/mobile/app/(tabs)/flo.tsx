@@ -20,6 +20,7 @@ import { useBudget, type DecisionRecord } from "@/context/BudgetContext";
 import { DatePickerField } from "@/components/DatePickerField";
 import { FloLogo } from "@/components/FloLogo";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
+import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
 import { askFlo, loadFloMemory, updateFloMemory, type FloFacts } from "@/lib/flo";
 import {
@@ -102,6 +103,10 @@ export default function FloScreen() {
   const handledPromptRef = useRef<string | null>(null);
   const now = useMemo(() => new Date(), []);
   const today = now.toISOString().slice(0, 10);
+
+  useBackDismiss(Boolean(completePlan), () => setCompletePlan(null));
+  useBackDismiss(Boolean(postponePlan), () => setPostponePlan(null));
+  useBackDismiss(Boolean(lowerPlan), () => setLowerPlan(null));
 
   useEffect(() => {
     if (user) void loadFloMemory(user.id).then(setSummary);

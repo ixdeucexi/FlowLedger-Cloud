@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useMemo, useState } from "react";
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
+import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
 
 type DeferredInstallPrompt = Event & {
@@ -40,6 +41,7 @@ export function PwaInstallPrompt() {
   const [visible, setVisible] = useState(false);
   const [installEvent, setInstallEvent] = useState<DeferredInstallPrompt | null>(null);
   const [installed, setInstalled] = useState(false);
+  useBackDismiss(visible, () => setVisible(false));
 
   const platform = useMemo(() => {
     if (Platform.OS !== "web" || typeof navigator === "undefined") return "other";

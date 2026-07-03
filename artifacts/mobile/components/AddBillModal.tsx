@@ -12,6 +12,7 @@ import type { Bill } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
+import { useBackDismiss } from "@/hooks/useBackDismiss";
 
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
@@ -26,6 +27,7 @@ interface AddBillModalProps {
 
 export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, forceDebt }: AddBillModalProps) {
   const c = useColors();
+  useBackDismiss(visible, onClose);
   const { categories } = useBudget();
 
   const [name,          setName]          = useState("");
@@ -158,7 +160,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
   const lbl = [styles.label, { color: c.mutedForeground }];
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
         <View style={[styles.container, { backgroundColor: c.background }]}>
           <View style={styles.handle} />

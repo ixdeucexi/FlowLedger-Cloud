@@ -19,6 +19,7 @@ import type { Bill, DashboardFilter, Goal } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { applyCategoryBudgetMove, buildCategoryPlan } from "@/lib/categoryPlanning";
 import { CATEGORY_BUDGETS_EVENT, categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets as saveCategoryBudgetsRemote } from "@/lib/categoryBudgetStore";
 import { DECISION_HUB_SETTINGS_EVENT, loadDecisionHubSettings, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
@@ -144,6 +145,17 @@ export default function DashboardScreen() {
   const algorithmCarouselRef = useRef<ScrollView | null>(null);
   const algorithmSnapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startupAlertShownRef = useRef(false);
+
+  useBackDismiss(actionModalVisible, () => setActionModalVisible(false));
+  useBackDismiss(expenseNameModal, () => setExpenseNameModal(false));
+  useBackDismiss(negCalendarVisible, () => setNegCalendarVisible(false));
+  useBackDismiss(savingsModalVisible, () => setSavingsModalVisible(false));
+  useBackDismiss(categoryBudgetModalVisible, () => setCategoryBudgetModalVisible(false));
+  useBackDismiss(Boolean(selectedCategory), () => setSelectedCategory(null));
+  useBackDismiss(moveMoneyVisible, () => setMoveMoneyVisible(false));
+  useBackDismiss(flowScoreVisible, () => setFlowScoreVisible(false));
+  useBackDismiss(safeCushionVisible, () => setSafeCushionVisible(false));
+  useBackDismiss(startupAlertVisible, () => setStartupAlertVisible(false));
 
   useFocusEffect(useCallback(() => {
     setIsFocused(true);

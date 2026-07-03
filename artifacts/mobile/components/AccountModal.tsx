@@ -5,6 +5,7 @@ import { DatePickerField } from "@/components/DatePickerField";
 import type { Account } from "@/context/BudgetContext";
 import type { AccountType } from "@/lib/accounts";
 import { useColors } from "@/hooks/useColors";
+import { useBackDismiss } from "@/hooks/useBackDismiss";
 
 const TYPES: { value: AccountType; label: string }[] = [
   { value: "checking", label: "Checking" }, { value: "savings", label: "Savings" },
@@ -20,6 +21,7 @@ export function AccountModal({ visible, account, mode, onClose, onSave, onReconc
   onReconcile: (balance: number, asOfDate: string) => void | Promise<void>;
 }) {
   const c = useColors();
+  useBackDismiss(visible, onClose);
   const [name, setName] = useState("");
   const [type, setType] = useState<AccountType>("checking");
   const [balance, setBalance] = useState("");
@@ -45,7 +47,7 @@ export function AccountModal({ visible, account, mode, onClose, onSave, onReconc
       setSaving(false);
     }
   };
-  return <Modal visible={visible} animationType="slide" transparent>
+  return <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
       <View style={[styles.sheet, { backgroundColor: c.background }]}>
         <View style={styles.header}><Text style={[styles.title, { color: c.foreground }]}>{mode === "reconcile" ? `Reconcile ${account?.name ?? "Account"}` : account ? "Edit Account" : "Add Account"}</Text><Pressable onPress={onClose}><Feather name="x" size={22} color={c.mutedForeground} /></Pressable></View>

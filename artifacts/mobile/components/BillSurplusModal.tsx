@@ -5,6 +5,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { DatePickerField } from "@/components/DatePickerField";
 import { FloLogo } from "@/components/FloLogo";
 import { useColors } from "@/hooks/useColors";
+import { useBackDismiss } from "@/hooks/useBackDismiss";
 
 interface Props {
   visible: boolean;
@@ -28,6 +29,7 @@ interface Props {
 
 export function BillSurplusModal({ visible, billName, itemType = "bill", budgeted, actual, targetDebt, snowballSafe, safetyFloor = 200, forecastHorizonMonths = 6, paymentDate, paymentDateValid, paymentDateMin, paymentDateMax, onPaymentDateChange, onKeep, onSnowball, onClose }: Props) {
   const c = useColors();
+  useBackDismiss(visible, onClose);
   const difference = Math.max(0, budgeted - actual);
   const itemLabel = itemType === "debt" ? "debt payment" : "bill";
   return (

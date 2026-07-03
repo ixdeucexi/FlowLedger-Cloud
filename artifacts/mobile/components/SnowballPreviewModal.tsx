@@ -4,6 +4,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { useColors } from "@/hooks/useColors";
+import { useBackDismiss } from "@/hooks/useBackDismiss";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -22,6 +23,7 @@ interface Props {
 
 export function SnowballPreviewModal({ visible, preview, amount, existingPayment, safetyFloor = 200, forecastHorizonMonths = 6, onAmountChange, onClose, onConfirm, onRemove }: Props) {
   const c = useColors();
+  useBackDismiss(visible, onClose);
   const requested = Number.parseFloat(amount) || 0;
   const valid = !!preview && requested > 0 && requested <= preview.safeMaximum + 0.005 && preview.allocations.length > 0;
 

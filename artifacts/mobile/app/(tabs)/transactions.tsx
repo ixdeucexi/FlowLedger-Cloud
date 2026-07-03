@@ -13,6 +13,7 @@ import colors from "@/constants/colors";
 import type { Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
+import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { debtPaymentStatusLabel } from "@/lib/forecastDisplay";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -109,6 +110,8 @@ export default function TransactionsScreen() {
   const [sortOrder, setSortOrder]               = useState<SortOrder>("desc");
   const [search, setSearch]                     = useState("");
   const [filterModalVisible, setFilterModalVisible] = useState(false);
+  useBackDismiss(!!detailItem, () => setDetailItem(null));
+  useBackDismiss(filterModalVisible, () => setFilterModalVisible(false));
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
   const listBottomPadding = insets.bottom + (Platform.OS === "web" ? 128 : 118);

@@ -16,6 +16,7 @@ import {
 import colors from "@/constants/colors";
 import type { SnowballAllocation } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
+import { useBackDismiss } from "@/hooks/useBackDismiss";
 
 interface Props {
   visible: boolean;
@@ -26,6 +27,7 @@ interface Props {
 
 export function SnowballModal({ visible, onClose, method, onRun }: Props) {
   const c = useColors();
+  useBackDismiss(visible, onClose);
   const [amount, setAmount] = useState("");
   const [results, setResults] = useState<SnowballAllocation[]>([]);
   const [ran, setRan] = useState(false);
@@ -47,7 +49,7 @@ export function SnowballModal({ visible, onClose, method, onRun }: Props) {
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
         <View style={[styles.container, { backgroundColor: c.background }]}>
           <View style={styles.header}>

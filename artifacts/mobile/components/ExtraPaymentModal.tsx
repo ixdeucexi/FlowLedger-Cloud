@@ -14,6 +14,7 @@ import {
 
 import colors from "@/constants/colors";
 import { useColors } from "@/hooks/useColors";
+import { useBackDismiss } from "@/hooks/useBackDismiss";
 
 interface ExtraPaymentModalProps {
   visible: boolean;
@@ -23,6 +24,7 @@ interface ExtraPaymentModalProps {
 
 export function ExtraPaymentModal({ visible, onClose, onApply }: ExtraPaymentModalProps) {
   const c = useColors();
+  useBackDismiss(visible, onClose);
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<"smallest" | "priority">("smallest");
 
@@ -36,7 +38,7 @@ export function ExtraPaymentModal({ visible, onClose, onApply }: ExtraPaymentMod
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.overlay}
