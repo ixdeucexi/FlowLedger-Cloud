@@ -10,7 +10,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useCallback, useEffect, useRef } from "react";
-import { Image, Platform, StyleSheet, Text, View } from "react-native";
+import { Alert, BackHandler, Image, Platform, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -85,6 +85,7 @@ function StartupScreen() {
 function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSplash: () => void }) {
   const { loading: authLoading } = useAuth();
   const { ready: themeReady } = useThemeMode();
+  const router = useRouter();
   const appReady = fontsReady && !authLoading && themeReady;
 
   useEffect(() => {
@@ -95,6 +96,39 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
     const t = setTimeout(hideSplash, 3000);
     return () => clearTimeout(t);
   }, [hideSplash]);
+
+  useEffect(() => {
+    if (!appReady) return;
+
+    if (Platform.OS === "web") {
+      if (typeof window === "undefined") return;
+      const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+        event.preventDefault();
+        event.returnValue = "";
+      };
+      window.addEventListener("beforeunload", handleBeforeUnload);
+      return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+    }
+
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (router.canGoBack()) {
+        router.back();
+        return true;
+      }
+
+      Alert.alert(
+        "Exit FlowLedger?",
+        "Are you sure you want to close the app?",
+        [
+          { text: "Stay", style: "cancel" },
+          { text: "Exit", style: "destructive", onPress: () => BackHandler.exitApp() },
+        ],
+      );
+      return true;
+    });
+
+    return () => subscription.remove();
+  }, [appReady, router]);
 
   if (!appReady) return <StartupScreen />;
 

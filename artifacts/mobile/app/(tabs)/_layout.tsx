@@ -286,6 +286,7 @@ function TabContent() {
   return (
     <>
       <Tabs
+        backBehavior="history"
         detachInactiveScreens={false}
         screenOptions={{
           animation: "none",
