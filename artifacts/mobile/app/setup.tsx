@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AccountModal } from "@/components/AccountModal";
 import { AddBillModal } from "@/components/AddBillModal";
+import { FlowWaveBackground } from "@/components/FlowWaveBackground";
 import { FloLogo } from "@/components/FloLogo";
 import { IncomeModal } from "@/components/IncomeModal";
 import { BudgetProvider, useBudget, type Account, type Bill, type IncomeItem } from "@/context/BudgetContext";
@@ -200,6 +201,7 @@ function SetupWizard() {
 
   return (
     <LinearGradient colors={["#070b16", "#0f172a"]} style={styles.root}>
+      <FlowWaveBackground variant="purple" intensity="soft" />
       <ScrollView
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 18, paddingBottom: insets.bottom + 28 }]}
         showsVerticalScrollIndicator={false}

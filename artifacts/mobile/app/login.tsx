@@ -9,6 +9,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
+import { FlowWaveBackground } from "@/components/FlowWaveBackground";
 import { useAuth } from "@/context/AuthContext";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 
@@ -91,6 +92,7 @@ export default function LoginScreen() {
 
   return (
     <LinearGradient colors={["#0a0e1a", "#0f172a"]} style={{ flex: 1 }}>
+      <FlowWaveBackground variant="purple" intensity="soft" />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
