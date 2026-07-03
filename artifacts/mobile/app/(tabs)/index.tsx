@@ -140,6 +140,7 @@ export default function DashboardScreen() {
   const [flowScoreVisible, setFlowScoreVisible] = useState(false);
   const [safeCushionVisible, setSafeCushionVisible] = useState(false);
   const [activeAlgoCard, setActiveAlgoCard] = useState(0);
+  const algorithmCarouselRef = useRef<ScrollView | null>(null);
 
   useFocusEffect(useCallback(() => {
     setIsFocused(true);
@@ -893,6 +894,7 @@ export default function DashboardScreen() {
     router.push({ pathname: "/(tabs)/flo", params: { prompt } } as any);
   };
   const algorithmCardWidth = isCommandWide ? 500 : Math.max(286, viewportWidth - 68);
+  const algorithmSnapInterval = algorithmCardWidth + 12;
   const algorithmCards = useMemo(() => {
     const safeTone = algoToneColor(algorithmSuite.safeCushion.status);
     return [
@@ -988,9 +990,18 @@ export default function DashboardScreen() {
       },
     ];
   }, [algorithmSuite]);
-  const handleAlgoCarouselScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const index = Math.round(event.nativeEvent.contentOffset.x / Math.max(1, algorithmCardWidth + 12));
-    setActiveAlgoCard(Math.max(0, Math.min(algorithmCards.length - 1, index)));
+  const syncActiveAlgorithmCard = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const index = Math.round(event.nativeEvent.contentOffset.x / Math.max(1, algorithmSnapInterval));
+    const nextIndex = Math.max(0, Math.min(algorithmCards.length - 1, index));
+    setActiveAlgoCard(current => current === nextIndex ? current : nextIndex);
+  };
+  const jumpToAlgorithmCard = (index: number) => {
+    const nextIndex = Math.max(0, Math.min(algorithmCards.length - 1, index));
+    setActiveAlgoCard(nextIndex);
+    algorithmCarouselRef.current?.scrollTo({
+      x: nextIndex * algorithmSnapInterval,
+      animated: true,
+    });
   };
 
   return (
@@ -1194,16 +1205,25 @@ export default function DashboardScreen() {
               <Text style={styles.referenceInsightTitle}>Algorithm Suite</Text>
               <Text style={styles.referenceAlgoSubtitle}>Swipe through the engines guiding your money plan.</Text>
             </View>
-            <Text style={styles.referenceAlgoCount}>{activeAlgoCard + 1}/{algorithmCards.length}</Text>
+            <View style={styles.referenceAlgoCountPill}>
+              <Text style={styles.referenceAlgoCountActive}>{String(activeAlgoCard + 1).padStart(2, "0")}</Text>
+              <Text style={styles.referenceAlgoCountTotal}>/{String(algorithmCards.length).padStart(2, "0")}</Text>
+            </View>
           </View>
 
           <ScrollView
+            ref={algorithmCarouselRef}
             horizontal
             showsHorizontalScrollIndicator={false}
             decelerationRate="fast"
-            snapToInterval={algorithmCardWidth + 12}
+            snapToInterval={algorithmSnapInterval}
+            snapToAlignment="start"
+            disableIntervalMomentum
+            scrollEventThrottle={16}
             contentContainerStyle={styles.referenceAlgoScrollContent}
-            onMomentumScrollEnd={handleAlgoCarouselScroll}
+            onScroll={syncActiveAlgorithmCard}
+            onScrollEndDrag={syncActiveAlgorithmCard}
+            onMomentumScrollEnd={syncActiveAlgorithmCard}
           >
             {algorithmCards.map(card => (
               <Pressable
@@ -1234,12 +1254,16 @@ export default function DashboardScreen() {
 
           <View style={styles.referenceAlgoDots}>
             {algorithmCards.map((card, index) => (
-              <View
+              <Pressable
                 key={card.id}
+                onPress={() => jumpToAlgorithmCard(index)}
+                hitSlop={8}
                 style={[
                   styles.referenceAlgoDot,
                   index === activeAlgoCard && styles.referenceAlgoDotActive,
                 ]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: index === activeAlgoCard }}
               />
             ))}
           </View>
@@ -2818,6 +2842,9 @@ const styles = StyleSheet.create({
   referenceAlgoHeaderRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 10 },
   referenceAlgoSubtitle: { color: "#94a3b8", fontSize: 11, fontFamily: "Inter_600SemiBold", lineHeight: 15, marginTop: 2 },
   referenceAlgoCount: { color: "#a78bfa", fontSize: 12, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
+  referenceAlgoCountPill: { minWidth: 64, height: 30, borderRadius: 999, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(37,99,235,0.16)", borderWidth: 1, borderColor: "rgba(96,165,250,0.28)" },
+  referenceAlgoCountActive: { color: "#dbeafe", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  referenceAlgoCountTotal: { color: "#818cf8", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   referenceAlgoScrollContent: { gap: 12, paddingRight: 4 },
   referenceAlgorithmCard: { minHeight: 148, borderRadius: 22, borderWidth: 1, backgroundColor: "rgba(2,6,23,0.62)", padding: 14, flexDirection: "row", gap: 12, alignItems: "flex-start" },
   referenceAlgorithmIcon: { width: 42, height: 42, borderRadius: 15, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(226,232,240,0.08)" },
@@ -2825,9 +2852,9 @@ const styles = StyleSheet.create({
   referenceAlgorithmValue: { fontSize: 22, fontFamily: "Inter_800ExtraBold", marginTop: 4 },
   referenceAlgorithmDetail: { color: "#cbd5e1", fontSize: 12, fontFamily: "Inter_600SemiBold", lineHeight: 17, marginTop: 4 },
   referenceAlgorithmAction: { color: "#a78bfa", fontSize: 11, fontFamily: "Inter_800ExtraBold", marginTop: 8 },
-  referenceAlgoDots: { flexDirection: "row", justifyContent: "center", gap: 6, marginTop: 10 },
-  referenceAlgoDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "rgba(148,163,184,0.32)" },
-  referenceAlgoDotActive: { width: 18, backgroundColor: "#8b5cf6" },
+  referenceAlgoDots: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 7, marginTop: 10 },
+  referenceAlgoDot: { width: 7, height: 7, borderRadius: 999, backgroundColor: "rgba(148,163,184,0.34)" },
+  referenceAlgoDotActive: { width: 24, backgroundColor: "#60a5fa", shadowColor: "#60a5fa", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 8, elevation: 4 },
   referenceInsightCard: { flex: 1.45, minHeight: 130, borderRadius: 24, borderWidth: 1, borderColor: "rgba(168,85,247,0.22)", backgroundColor: "rgba(15,23,42,0.72)", padding: 16, flexDirection: "row", alignItems: "center", gap: 12, shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.22, shadowRadius: 26 },
   referenceInsightIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.28)" },
   referenceInsightTitle: { color: "#d8b4fe", fontSize: 14, fontFamily: "Inter_800ExtraBold", marginBottom: 6 },
