@@ -26,7 +26,7 @@ import { buildDecisionHistory } from "@/lib/decisionHistory";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { buildAlgorithmSuite, type AlgorithmInsight } from "@/lib/algorithmSuite";
-import { isAlgorithmEnabled } from "@/lib/algorithmCatalog";
+import { isAlgorithmEnabled, type AlgorithmId } from "@/lib/algorithmCatalog";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const MONTH_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -140,8 +140,10 @@ export default function DashboardScreen() {
   const [flowScoreVisible, setFlowScoreVisible] = useState(false);
   const [safeCushionVisible, setSafeCushionVisible] = useState(false);
   const [activeAlgoCard, setActiveAlgoCard] = useState(0);
+  const [startupAlertVisible, setStartupAlertVisible] = useState(false);
   const algorithmCarouselRef = useRef<ScrollView | null>(null);
   const algorithmSnapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startupAlertShownRef = useRef(false);
 
   useFocusEffect(useCallback(() => {
     setIsFocused(true);
@@ -204,6 +206,13 @@ export default function DashboardScreen() {
   const now          = new Date();
   const currentMonth = now.getMonth();
   const today        = now.getDate();
+  const timeGreeting = now.getHours() < 5
+    ? "Good night"
+    : now.getHours() < 12
+    ? "Good morning"
+    : now.getHours() < 17
+    ? "Good afternoon"
+    : "Good evening";
 
   // ── Afford date picker ─────────────────────────────────────────────────────
   const [affordDate, setAffordDate] = useState<string>(
@@ -897,6 +906,12 @@ export default function DashboardScreen() {
       reducePlanPrompt: "Which planned decisions should I reduce or postpone?",
     };
   }, [decisionForecastDays, decisionHubSettings, now, settings.safety_floor, todayIso]);
+  useEffect(() => {
+    if (nextWeekRisk && !startupAlertShownRef.current) {
+      startupAlertShownRef.current = true;
+      setStartupAlertVisible(true);
+    }
+  }, [nextWeekRisk]);
   const openFloWithPrompt = (prompt: string) => {
     router.push({ pathname: "/(tabs)/flo", params: { prompt } } as any);
   };
@@ -904,9 +919,10 @@ export default function DashboardScreen() {
   const algorithmSnapInterval = algorithmCardWidth + 12;
   const algorithmCards = useMemo(() => {
     const safeTone = algoToneColor(algorithmSuite.safeCushion.status);
-    return [
+    const cards = [
       {
-        id: "flow-score",
+        id: "flowScore",
+        settingId: "flowScore" as AlgorithmId,
         title: "Flow Score",
         value: `${algorithmSuite.flowScore.score} · ${algorithmSuite.flowScore.label}`,
         detail: algorithmSuite.flowScore.topReason,
@@ -916,7 +932,8 @@ export default function DashboardScreen() {
         prompt: `Why is my Flow Score ${algorithmSuite.flowScore.score}? ${algorithmSuite.flowScore.topReason} ${algorithmSuite.flowScore.topAction}`,
       },
       {
-        id: "safe-cushion",
+        id: "safeCushion",
+        settingId: "safeCushion" as AlgorithmId,
         title: "Safe Cushion",
         value: `$${algorithmSuite.safeCushion.amount.toFixed(0)}`,
         detail: algorithmSuite.safeCushion.compactReason,
@@ -926,7 +943,8 @@ export default function DashboardScreen() {
         prompt: "What is my Safe Cushion and what can I safely do with it?",
       },
       {
-        id: "purchase",
+        id: "purchaseDecision",
+        settingId: "purchaseDecision" as AlgorithmId,
         title: "Purchase Decision",
         value: `$${algorithmSuite.purchaseDecision.safeNowLimit.toFixed(0)} safe now`,
         detail: algorithmSuite.purchaseDecision.detail,
@@ -936,7 +954,8 @@ export default function DashboardScreen() {
         prompt: "What purchase amount is safe right now and when should I wait?",
       },
       {
-        id: "bill-priority",
+        id: "billPriority",
+        settingId: "billPriority" as AlgorithmId,
         title: "Bill Priority",
         value: algorithmSuite.billPriority.nextBill?.name ?? "All clear",
         detail: algorithmSuite.billPriority.summary,
@@ -946,42 +965,46 @@ export default function DashboardScreen() {
         prompt: "Which bill should I handle first and why?",
       },
       {
-        id: "debt-payoff",
+        id: "debtPayoff",
+        settingId: "debtPayoff" as AlgorithmId,
         title: "Debt Payoff",
         value: algorithmSuite.debtPayoff.nextDebtName ?? "No debt target",
         detail: algorithmSuite.debtPayoff.detail,
         action: algorithmSuite.debtPayoff.nextMove,
-        icon: "zap" as const,
+        icon: "trending-down" as const,
         color: "#fb7185",
         prompt: "What is my best next debt payoff move?",
       },
       {
-        id: "risk-day",
-        title: "Risk Day",
-        value: `${algorithmSuite.riskDay.risk} risk · ${algorithmSuite.riskDay.watch} watch`,
-        detail: algorithmSuite.lowBalanceWarning.message,
-        action: algorithmSuite.planDelay.detail,
-        icon: "alert-triangle" as const,
-        color: algorithmSuite.riskDay.risk > 0 ? "#fb7185" : "#22c55e",
-        prompt: "Which days are risky this month and what should I change?",
+        id: "paydaySplit",
+        settingId: "paydaySplit" as AlgorithmId,
+        title: "Payday Split",
+        value: algorithmSuite.paydaySplit.summary,
+        detail: algorithmSuite.paydaySplit.nextMove,
+        action: `${algorithmSuite.paydaySplit.bills.toFixed(0)}% bills / ${algorithmSuite.paydaySplit.debt.toFixed(0)}% debt`,
+        icon: "git-branch" as const,
+        color: "#818cf8",
+        prompt: "How should my next paycheck be split?",
       },
       {
-        id: "spending-limit",
+        id: "spendingLimit",
+        settingId: "spendingLimit" as AlgorithmId,
         title: "Spending Limit",
         value: `$${algorithmSuite.spendingLimit.daily.toFixed(0)}/day`,
         detail: algorithmSuite.spendingLimit.detail,
         action: `$${algorithmSuite.spendingLimit.weekly.toFixed(0)} weekly limit`,
-        icon: "compass" as const,
+        icon: "sliders" as const,
         color: "#60a5fa",
         prompt: "What can I safely spend daily and weekly?",
       },
       {
-        id: "savings-sweep",
-        title: "Savings Sweep",
+        id: "extraMoneyRouter",
+        settingId: "extraMoneyRouter" as AlgorithmId,
+        title: "Extra Money Router",
         value: `$${algorithmSuite.extraMoneyRouter.amount.toFixed(0)}`,
         detail: algorithmSuite.extraMoneyRouter.detail,
         action: algorithmSuite.extraMoneyRouter.nextMove,
-        icon: "corner-right-up" as const,
+        icon: "corner-up-right" as const,
         color: "#34d399",
         prompt: "Where should extra money go right now: debt, savings, bills, or available cash?",
       },
@@ -996,7 +1019,18 @@ export default function DashboardScreen() {
         prompt: "Review my monthly health and tell me the cleanest next move.",
       },
     ];
-  }, [algorithmSuite]);
+    return cards
+      .filter((card): card is typeof card & { settingId: AlgorithmId } => Boolean(card.settingId))
+      .filter(card => isAlgorithmEnabled(decisionHubSettings, card.settingId));
+  }, [algorithmSuite, decisionHubSettings]);
+  const activeAlgorithmCardNumber = algorithmCards.length ? Math.min(activeAlgoCard + 1, algorithmCards.length) : 0;
+  useEffect(() => {
+    if (algorithmCards.length === 0 && activeAlgoCard !== 0) {
+      setActiveAlgoCard(0);
+    } else if (algorithmCards.length > 0 && activeAlgoCard >= algorithmCards.length) {
+      setActiveAlgoCard(algorithmCards.length - 1);
+    }
+  }, [activeAlgoCard, algorithmCards.length]);
   const syncActiveAlgorithmCard = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const index = Math.round(event.nativeEvent.contentOffset.x / Math.max(1, algorithmSnapInterval));
     const nextIndex = Math.max(0, Math.min(algorithmCards.length - 1, index));
@@ -1145,39 +1179,92 @@ export default function DashboardScreen() {
         </View>;
       })()}
 
-      {nextWeekRisk ? (
+      <Modal
+        visible={startupAlertVisible && !!nextWeekRisk}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setStartupAlertVisible(false)}
+      >
+        <View style={styles.startupAlertBackdrop}>
+          {nextWeekRisk && (
+            <View style={[styles.startupAlertCard, { borderColor: nextWeekRisk.tone === "risk" ? c.destructive + "80" : c.warning + "80" }]}>
+              <View style={styles.startupAlertHandle} />
+              <View style={styles.startupAlertHeader}>
+                <View style={[styles.proactiveAlertIcon, { backgroundColor: nextWeekRisk.tone === "risk" ? c.destructive + "18" : c.warning + "18" }]}>
+                  <Feather name="alert-triangle" size={18} color={nextWeekRisk.tone === "risk" ? c.destructive : c.warning} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.proactiveAlertTitle, { color: c.foreground }]}>{nextWeekRisk.title}</Text>
+                  <Text style={[styles.proactiveAlertText, { color: c.mutedForeground }]}>{nextWeekRisk.detail}</Text>
+                </View>
+                <Pressable onPress={() => setStartupAlertVisible(false)} hitSlop={10}>
+                  <Feather name="x" size={20} color={c.mutedForeground} />
+                </Pressable>
+              </View>
+              <View style={styles.proactiveActionRow}>
+                <Pressable
+                  onPress={() => {
+                    setStartupAlertVisible(false);
+                    openFloWithPrompt(nextWeekRisk.prompt);
+                  }}
+                  style={({ pressed }) => [styles.proactiveActionButton, { backgroundColor: c.primary + "18", opacity: pressed ? 0.75 : 1 }]}
+                >
+                  <Text style={[styles.proactiveActionText, { color: c.primary }]}>Show why</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    setStartupAlertVisible(false);
+                    openFloWithPrompt(nextWeekRisk.saferBillPrompt);
+                  }}
+                  style={({ pressed }) => [styles.proactiveActionButton, { backgroundColor: c.warning + "18", opacity: pressed ? 0.75 : 1 }]}
+                >
+                  <Text style={[styles.proactiveActionText, { color: c.warning }]}>Find safer bill date</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setStartupAlertVisible(false)}
+                  style={({ pressed }) => [styles.proactiveActionButton, { backgroundColor: "rgba(148,163,184,0.12)", opacity: pressed ? 0.75 : 1 }]}
+                >
+                  <Text style={[styles.proactiveActionText, { color: c.mutedForeground }]}>Not now</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+        </View>
+      </Modal>
+
+      {false ? (
         <Pressable
-          onPress={() => openFloWithPrompt(nextWeekRisk.prompt)}
+          onPress={() => openFloWithPrompt(nextWeekRisk!.prompt)}
           style={({ pressed }) => [
             styles.proactiveAlertCard,
             {
-              backgroundColor: nextWeekRisk.tone === "risk" ? c.destructive + "12" : c.warning + "14",
-              borderColor: nextWeekRisk.tone === "risk" ? c.destructive + "70" : c.warning + "70",
+              backgroundColor: nextWeekRisk!.tone === "risk" ? c.destructive + "12" : c.warning + "14",
+              borderColor: nextWeekRisk!.tone === "risk" ? c.destructive + "70" : c.warning + "70",
               opacity: pressed ? 0.82 : 1,
             },
           ]}
         >
-          <View style={[styles.proactiveAlertIcon, { backgroundColor: nextWeekRisk.tone === "risk" ? c.destructive + "18" : c.warning + "18" }]}>
-            <Feather name="alert-triangle" size={17} color={nextWeekRisk.tone === "risk" ? c.destructive : c.warning} />
+          <View style={[styles.proactiveAlertIcon, { backgroundColor: nextWeekRisk!.tone === "risk" ? c.destructive + "18" : c.warning + "18" }]}>
+            <Feather name="alert-triangle" size={17} color={nextWeekRisk!.tone === "risk" ? c.destructive : c.warning} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.proactiveAlertTitle, { color: c.foreground }]}>{nextWeekRisk.title}</Text>
-            <Text style={[styles.proactiveAlertText, { color: c.mutedForeground }]}>{nextWeekRisk.detail}</Text>
+            <Text style={[styles.proactiveAlertTitle, { color: c.foreground }]}>{nextWeekRisk!.title}</Text>
+            <Text style={[styles.proactiveAlertText, { color: c.mutedForeground }]}>{nextWeekRisk!.detail}</Text>
             <View style={styles.proactiveActionRow}>
               <Pressable
-                onPress={() => openFloWithPrompt(nextWeekRisk.prompt)}
+                onPress={() => openFloWithPrompt(nextWeekRisk!.prompt)}
                 style={({ pressed }) => [styles.proactiveActionButton, { backgroundColor: c.primary + "18", opacity: pressed ? 0.75 : 1 }]}
               >
                 <Text style={[styles.proactiveActionText, { color: c.primary }]}>Show why</Text>
               </Pressable>
               <Pressable
-                onPress={() => openFloWithPrompt(nextWeekRisk.saferBillPrompt)}
+                onPress={() => openFloWithPrompt(nextWeekRisk!.saferBillPrompt)}
                 style={({ pressed }) => [styles.proactiveActionButton, { backgroundColor: c.warning + "18", opacity: pressed ? 0.75 : 1 }]}
               >
                 <Text style={[styles.proactiveActionText, { color: c.warning }]}>Find safer bill date</Text>
               </Pressable>
               <Pressable
-                onPress={() => openFloWithPrompt(nextWeekRisk.reducePlanPrompt)}
+                onPress={() => openFloWithPrompt(nextWeekRisk!.reducePlanPrompt)}
                 style={({ pressed }) => [styles.proactiveActionButton, { backgroundColor: c.destructive + "12", opacity: pressed ? 0.75 : 1 }]}
               >
                 <Text style={[styles.proactiveActionText, { color: c.destructive }]}>Reduce planned spending</Text>
@@ -1192,7 +1279,7 @@ export default function DashboardScreen() {
 
       <View style={[styles.referenceCommandHero, isCommandWide && styles.referenceCommandHeroWide]}>
         <View style={styles.referenceHeroCopy}>
-          <Text style={styles.referenceGreeting}>Good morning 👋</Text>
+          <Text style={styles.referenceGreeting}>{timeGreeting} 👋</Text>
           <Text style={styles.referenceGreetingSub}>Here’s your financial flow for {MONTH_FULL[currentMonth]}.</Text>
           <Text style={styles.referenceHeroLabel}>Available to spend</Text>
           <Text style={styles.referenceHeroAmount}>
@@ -1215,12 +1302,16 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        <View style={styles.referenceScorePanel}>
+        <Pressable
+          onPress={() => setFlowScoreVisible(true)}
+          style={({ pressed }) => [styles.referenceScorePanel, { opacity: pressed ? 0.86 : 1 }]}
+        >
           <FlowScoreGauge score={algorithmSuite.flowScore.score} />
           <Text style={styles.referenceScoreStatus}>{algorithmSuite.flowScore.label}</Text>
           <View style={styles.referenceScoreUnderline} />
           <Text style={styles.referenceScoreReason} numberOfLines={2}>{algorithmSuite.flowScore.topReason}</Text>
-        </View>
+          <Text style={styles.referenceScoreTapHint}>Tap for details</Text>
+        </Pressable>
       </View>
 
       <View style={[styles.referenceLowerGrid, isCommandWide && styles.referenceLowerGridWide]}>
@@ -1231,7 +1322,7 @@ export default function DashboardScreen() {
               <Text style={styles.referenceAlgoSubtitle}>Swipe through the engines guiding your money plan.</Text>
             </View>
             <View style={styles.referenceAlgoCountPill}>
-              <Text style={styles.referenceAlgoCountActive}>{String(activeAlgoCard + 1).padStart(2, "0")}</Text>
+              <Text style={styles.referenceAlgoCountActive}>{String(activeAlgorithmCardNumber).padStart(2, "0")}</Text>
               <Text style={styles.referenceAlgoCountTotal}>/{String(algorithmCards.length).padStart(2, "0")}</Text>
             </View>
           </View>
@@ -2825,6 +2916,10 @@ const styles = StyleSheet.create({
   proactiveActionText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   askFloPill: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999 },
   askFloPillText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
+  startupAlertBackdrop: { flex: 1, backgroundColor: "rgba(2,6,23,0.72)", alignItems: "center", justifyContent: "center", padding: 22 },
+  startupAlertCard: { width: "100%", maxWidth: 480, borderRadius: 28, borderWidth: 1, backgroundColor: "rgba(15,23,42,0.96)", padding: 18, shadowColor: "#000", shadowOffset: { width: 0, height: 22 }, shadowOpacity: 0.38, shadowRadius: 34, elevation: 16 },
+  startupAlertHandle: { alignSelf: "center", width: 44, height: 4, borderRadius: 999, backgroundColor: "rgba(148,163,184,0.45)", marginBottom: 16 },
+  startupAlertHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   confidenceTitle: { fontSize: 13, fontFamily: "Inter_700Bold" },
   confidenceDesc: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
 
@@ -2861,6 +2956,7 @@ const styles = StyleSheet.create({
   referenceScoreStatus: { color: "#4ade80", fontSize: 14, fontFamily: "Inter_800ExtraBold", marginTop: 10 },
   referenceScoreUnderline: { width: 86, height: 3, borderRadius: 3, backgroundColor: "#22c55e", marginTop: 8, marginBottom: 8 },
   referenceScoreReason: { color: "#94a3b8", maxWidth: 220, textAlign: "center", fontSize: 12, fontFamily: "Inter_600SemiBold", lineHeight: 17 },
+  referenceScoreTapHint: { color: "#60a5fa", fontSize: 11, fontFamily: "Inter_800ExtraBold", marginTop: 8 },
   referenceLowerGrid: { gap: 12, marginBottom: 14 },
   referenceLowerGridWide: { flexDirection: "row" },
   referenceAlgoCarouselPanel: { flex: 1.45, borderRadius: 24, borderWidth: 1, borderColor: "rgba(168,85,247,0.22)", backgroundColor: "rgba(15,23,42,0.72)", padding: 14, shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.22, shadowRadius: 26, elevation: 8 },
