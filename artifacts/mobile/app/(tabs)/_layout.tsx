@@ -301,9 +301,9 @@ function TabContent() {
             borderTopColor: colors.border,
             elevation: 0,
             ...(isWeb ? {
-              height: isIosWeb ? 70 : 84,
-              paddingTop: isIosWeb ? 3 : undefined,
-              paddingBottom: isIosWeb ? 3 : undefined,
+              height: isIosWeb ? 58 : 84,
+              paddingTop: isIosWeb ? 0 : undefined,
+              paddingBottom: isIosWeb ? 0 : undefined,
             } : {}),
           },
           tabBarBackground: () =>
