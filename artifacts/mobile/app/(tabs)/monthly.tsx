@@ -752,6 +752,7 @@ export default function MonthlyScreen() {
       <PremiumBackdrop variant="purple" />
       <View style={[styles.header, { paddingTop: insets.top + 12 + webTopPad }]}>
         <View>
+          <Text style={[styles.calendarBrand, { color: c.primary }]}>FLOWLEDGER ALGO</Text>
           <Text style={[styles.title, { color: c.foreground }]}>{MONTH_FULL[month]} {selectedYear}</Text>
           {isFuture && <Text style={[styles.forecastTag, { color: c.primary }]}>Forecast Mode</Text>}
         </View>
@@ -773,7 +774,7 @@ export default function MonthlyScreen() {
         </Pressable>
         <View style={styles.monthCenterLabel}>
           <Text style={[styles.monthShortTitle, { color: c.foreground }]}>{MONTH_FULL[month].slice(0, 3).toUpperCase()}</Text>
-          <Text style={[styles.monthSwipeHint, { color: c.mutedForeground }]}>Swipe left or right</Text>
+          <Text style={[styles.monthSwipeHint, { color: c.mutedForeground }]}>Month view · swipe left or right</Text>
         </View>
         <Pressable
           onPress={() => changeMonth(1)}
@@ -1081,7 +1082,7 @@ export default function MonthlyScreen() {
             >
               <Pressable style={styles.dayOverlayBackdrop} onPress={() => setSelectedDate(null)}>
                 <Pressable
-                  style={[styles.dayOverlayCard, { backgroundColor: c.background, borderColor: c.border }]}
+                  style={[styles.dayOverlayCard, { backgroundColor: "rgba(8,13,30,0.96)", borderColor: "rgba(148,163,184,0.20)" }]}
                   onPress={e => e.stopPropagation()}
                 >
                   <View style={styles.dayOverlayHeader}>
@@ -1583,14 +1584,15 @@ export default function MonthlyScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingBottom: 10 },
-  title: { fontSize: 34, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.1 },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 22, paddingBottom: 12 },
+  calendarBrand: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 2.2, marginBottom: 3, textTransform: "uppercase" },
+  title: { fontSize: 36, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.2, textShadowColor: "rgba(34,211,238,0.22)", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 12 },
   forecastTag: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginTop: 1 },
-  iconBtn: { width: 52, height: 52, borderRadius: 18, alignItems: "center", justifyContent: "center", shadowColor: "#2563eb", shadowOpacity: 0.32, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
-  calendarMonthBar: { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
-  monthArrowBtn: { width: 44, height: 38, alignItems: "center", justifyContent: "center" },
+  iconBtn: { width: 58, height: 58, borderRadius: 21, alignItems: "center", justifyContent: "center", shadowColor: "#8b5cf6", shadowOpacity: 0.46, shadowRadius: 22, shadowOffset: { width: 0, height: 10 }, elevation: 10, borderWidth: 1, borderColor: "rgba(34,211,238,0.28)" },
+  calendarMonthBar: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginHorizontal: 22, marginTop: 2, marginBottom: 12, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", backgroundColor: "rgba(2,6,23,0.42)", borderRadius: 24, paddingHorizontal: 8, paddingVertical: 12 },
+  monthArrowBtn: { width: 46, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: "rgba(15,23,42,0.66)" },
   monthCenterLabel: { flex: 1, alignItems: "center", justifyContent: "center" },
-  monthShortTitle: { fontSize: 22, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.4 },
+  monthShortTitle: { fontSize: 26, fontFamily: "Inter_800ExtraBold", letterSpacing: 2.4 },
   monthSwipeHint: { fontSize: 10, fontFamily: "Inter_500Medium", marginTop: 1 },
   tabBar: { flexDirection: "row", padding: 4, gap: 4 },
   tabBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 9 },
@@ -1640,7 +1642,7 @@ const styles = StyleSheet.create({
   dueDayInput: { width: 42, height: 30, borderRadius: 6, textAlign: "center", fontSize: 14, fontFamily: "Inter_600SemiBold", borderWidth: 1 },
   calScroll: { paddingTop: 8 },
   calFixed: { flex: 1, paddingTop: 8 },
-  calInner: { flex: 1, paddingHorizontal: 16 },
+  calInner: { flex: 1, paddingHorizontal: 12 },
   weeklyChip: { flexDirection: "row", alignItems: "center", gap: 5, marginHorizontal: 12, marginTop: 2, marginBottom: 6, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   weeklyChipText: { fontSize: 11, fontFamily: "Inter_500Medium" },
   balanceBar: { flexDirection: "row", padding: 12, marginBottom: 0 },
@@ -1680,19 +1682,19 @@ const styles = StyleSheet.create({
   forecastSourceRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 5 },
   forecastSourceName: { flex: 1, fontSize: 11, fontFamily: "Inter_400Regular" },
   forecastSourceAmount: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
-  dayOverlayBackdrop: { flex: 1, justifyContent: "center", padding: 20, backgroundColor: "rgba(0,0,0,0.48)" },
+  dayOverlayBackdrop: { flex: 1, justifyContent: "center", padding: 18, backgroundColor: "rgba(0,0,0,0.64)" },
   dayOverlayCard: {
     width: "100%",
     maxWidth: 560,
     alignSelf: "center",
     borderWidth: 1,
-    borderRadius: 28,
+    borderRadius: 30,
     padding: 18,
     maxHeight: "82%",
-    shadowColor: "#000",
-    shadowOpacity: 0.42,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 12 },
+    shadowColor: "#8b5cf6",
+    shadowOpacity: 0.38,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 16 },
     elevation: 12,
   },
   dayOverlayHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 14 },

@@ -4,9 +4,10 @@ import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated, Image, Keyboard, Modal, Platform, Pressable,
-  ScrollView, StyleSheet, Text, TextInput, View,
+  ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from "react-native-svg";
 
 import { AddBillModal } from "@/components/AddBillModal";
 import { DatePickerField } from "@/components/DatePickerField";
@@ -45,11 +46,61 @@ function algoToneColor(tone: AlgorithmInsight["tone"]) {
   return "#38bdf8";
 }
 
+function FlowScoreGauge({ score }: { score: number }) {
+  const size = 152;
+  const stroke = 10;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const clamped = Math.max(0, Math.min(100, score));
+  const dash = (clamped / 100) * circumference;
+
+  return (
+    <View style={styles.referenceGaugeWrap}>
+      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <Defs>
+          <SvgLinearGradient id="flowScoreGradient" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor="#a855f7" stopOpacity="1" />
+            <Stop offset="0.52" stopColor="#22d3ee" stopOpacity="1" />
+            <Stop offset="1" stopColor="#22c55e" stopOpacity="1" />
+          </SvgLinearGradient>
+        </Defs>
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke="rgba(148,163,184,0.18)"
+          strokeWidth={stroke}
+          fill="rgba(2,6,23,0.48)"
+        />
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke="url(#flowScoreGradient)"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          fill="transparent"
+          strokeDasharray={`${dash} ${circumference}`}
+          rotation="-90"
+          originX={size / 2}
+          originY={size / 2}
+        />
+      </Svg>
+      <View style={styles.referenceGaugeCenter}>
+        <Text style={styles.referenceGaugeScore}>{score}</Text>
+        <Text style={styles.referenceGaugeLabel}>Flow Score</Text>
+      </View>
+    </View>
+  );
+}
+
 export default function DashboardScreen() {
   const c = useColors();
   const [isFocused, setIsFocused] = useState(true);
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { width: viewportWidth } = useWindowDimensions();
+  const isCommandWide = Platform.OS === "web" && viewportWidth >= 900;
   const isIosWeb = Platform.OS === "web" && typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent);
   const dashboardTopPadding = Platform.OS === "web" ? (isIosWeb ? 72 : 16) : insets.top + 16;
   const dashboardBottomPadding = Platform.OS === "web" ? (isIosWeb ? 60 : 100) : insets.bottom + 100;
@@ -844,7 +895,7 @@ export default function DashboardScreen() {
   return (
     <ScrollView
       style={[styles.screen, styles.dashboardStage]}
-      contentContainerStyle={[styles.content, { paddingTop: dashboardTopPadding, paddingBottom: dashboardBottomPadding }]}
+      contentContainerStyle={[styles.content, isCommandWide && styles.contentWide, { paddingTop: dashboardTopPadding, paddingBottom: dashboardBottomPadding }]}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
@@ -886,6 +937,41 @@ export default function DashboardScreen() {
         />
         <View style={styles.stormGrid} />
       </View>
+      {isCommandWide ? (
+        <View style={[styles.referenceDesktopRail, { top: dashboardTopPadding }]}>
+          <View style={styles.referenceRailLogoRow}>
+            <Image source={FLOWLEDGER_LOGO} style={styles.referenceRailLogo} resizeMode="cover" />
+            <View>
+              <Text style={styles.referenceRailBrand}>FlowLedger</Text>
+              <Text style={styles.referenceRailAlgo}>ALGO</Text>
+            </View>
+          </View>
+          {[
+            { label: "Dashboard", icon: "home" as const, active: true, to: "/(tabs)" },
+            { label: "Calendar", icon: "calendar" as const, to: "/(tabs)/monthly" },
+            { label: "Bills", icon: "file-text" as const, to: "/(tabs)/bills" },
+            { label: "Transactions", icon: "repeat" as const, to: "/(tabs)/transactions" },
+            { label: "Flo", icon: "message-circle" as const, to: "/(tabs)/flo" },
+            { label: "Settings", icon: "settings" as const, to: "/(tabs)/more" },
+          ].map(item => (
+            <Pressable
+              key={item.label}
+              onPress={() => router.push(item.to as any)}
+              style={({ pressed }) => [styles.referenceRailItem, item.active && styles.referenceRailItemActive, { opacity: pressed ? 0.8 : 1 }]}
+            >
+              <Feather name={item.icon} size={17} color={item.active ? "#f8fafc" : "#94a3b8"} />
+              <Text style={[styles.referenceRailText, item.active && styles.referenceRailTextActive]}>{item.label}</Text>
+            </Pressable>
+          ))}
+          <Pressable onPress={() => router.push("/(tabs)/flo" as any)} style={styles.referenceRailFlo}>
+            <Feather name="cpu" size={18} color="#22d3ee" />
+            <View>
+              <Text style={styles.referenceRailFloTitle}>Flo</Text>
+              <Text style={styles.referenceRailFloSub}>Decision co-pilot</Text>
+            </View>
+          </Pressable>
+        </View>
+      ) : null}
       <View style={styles.dashboardHeader}>
         <View style={styles.brandLockup}>
           <View style={styles.brandMark}>
@@ -967,8 +1053,83 @@ export default function DashboardScreen() {
         </Pressable>
       ) : null}
 
+      <View style={[styles.referenceCommandHero, isCommandWide && styles.referenceCommandHeroWide]}>
+        <View style={styles.referenceHeroCopy}>
+          <Text style={styles.referenceGreeting}>Good morning 👋</Text>
+          <Text style={styles.referenceGreetingSub}>Here’s your financial flow for {MONTH_FULL[currentMonth]}.</Text>
+          <Text style={styles.referenceHeroLabel}>Available to spend</Text>
+          <Text style={styles.referenceHeroAmount}>
+            {(balanceMetrics?.currentBalance ?? cashFlow.remaining) < 0 ? "−" : ""}$
+            {Math.abs(balanceMetrics?.currentBalance ?? cashFlow.remaining).toLocaleString("en-US", { maximumFractionDigits: 2 })}
+          </Text>
+          <Text style={styles.referenceHeroHint}>After bills, planned moves, and your safety floor.</Text>
+
+          <View style={styles.referenceSummaryRow}>
+            {[
+              { label: "Income", value: `$${monthlyIncome.toLocaleString("en-US", { maximumFractionDigits: 0 })}`, color: "#22c55e" },
+              { label: "Bills", value: `$${stats.totalDue.toLocaleString("en-US", { maximumFractionDigits: 0 })}`, color: "#60a5fa" },
+              { label: "Available", value: `$${Math.max(0, algorithmSuite.safeCushion.amount).toLocaleString("en-US", { maximumFractionDigits: 0 })}`, color: "#a855f7" },
+            ].map(item => (
+              <View key={item.label} style={styles.referenceSummaryCard}>
+                <Text style={[styles.referenceSummaryLabel, { color: item.color }]}>{item.label}</Text>
+                <Text style={styles.referenceSummaryValue}>{item.value}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.referenceScorePanel}>
+          <FlowScoreGauge score={algorithmSuite.flowScore.score} />
+          <Text style={styles.referenceScoreStatus}>{algorithmSuite.flowScore.label}</Text>
+          <View style={styles.referenceScoreUnderline} />
+          <Text style={styles.referenceScoreReason} numberOfLines={2}>{algorithmSuite.flowScore.topReason}</Text>
+        </View>
+      </View>
+
+      <View style={[styles.referenceLowerGrid, isCommandWide && styles.referenceLowerGridWide]}>
+        <Pressable
+          onPress={() => openFloWithPrompt(`Explain my ${MONTH_FULL[currentMonth]} flow and the best next move.`)}
+          style={({ pressed }) => [styles.referenceInsightCard, { opacity: pressed ? 0.82 : 1 }]}
+        >
+          <View style={styles.referenceInsightIcon}>
+            <Feather name="zap" size={18} color="#e9d5ff" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.referenceInsightTitle}>Algo Insight</Text>
+            <Text style={styles.referenceInsightText}>{algorithmSuite.flowScore.topAction}</Text>
+            <Text style={styles.referenceInsightLink}>See details →</Text>
+          </View>
+          <View style={styles.referenceMiniChart}>
+            {[14, 28, 18, 42, 34, 58, 46, 74].map((height, index) => (
+              <View key={index} style={[styles.referenceMiniBar, { height }]} />
+            ))}
+          </View>
+        </Pressable>
+
+        <View style={styles.referenceQuickPanel}>
+          <Text style={styles.referenceQuickTitle}>Quick Actions</Text>
+          <View style={styles.referenceQuickGrid}>
+            {[
+              { label: "Can I Afford This?", icon: "shield" as const, color: "#22d3ee", action: () => router.push({ pathname: "/(tabs)/flo", params: { prompt: "Can I afford this?" } } as any) },
+              { label: "Plan a Purchase", icon: "shopping-bag" as const, color: "#60a5fa", action: () => setActionModalVisible(true) },
+              { label: "Add Income", icon: "arrow-down" as const, color: "#a855f7", action: () => router.push("/(tabs)/more" as any) },
+              { label: "View Forecast", icon: "trending-up" as const, color: "#8b5cf6", action: () => router.push("/(tabs)/monthly" as any) },
+            ].map(item => (
+              <Pressable
+                key={item.label}
+                onPress={item.action}
+                style={({ pressed }) => [styles.referenceQuickTile, { opacity: pressed ? 0.78 : 1 }]}
+              >
+                <Feather name={item.icon} size={20} color={item.color} />
+                <Text style={styles.referenceQuickText}>{item.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      </View>
+
       {/* ── HERO: flip card — front = Balance Today, back = Savings ── */}
-      {(() => {
+      {false && (() => {
         const cur = balanceMetrics?.currentBalance ?? cashFlow.remaining;
         const isNeg = cur < 0;
         const isLow = !isNeg && cur < settings.safety_floor;
@@ -1044,7 +1205,7 @@ export default function DashboardScreen() {
                     }]}>
                       {(balanceMetrics?.lowestBalance ?? 0) < 0 ? "−" : ""}
                       ${Math.abs(balanceMetrics?.lowestBalance ?? 0).toFixed(0)}
-                      {balanceMetrics ? ` · ${MONTH_NAMES[currentMonth]} ${balanceMetrics.lowestDay}` : ""}
+                      {balanceMetrics ? ` · ${MONTH_NAMES[currentMonth]} ${balanceMetrics?.lowestDay ?? ""}` : ""}
                     </Text>
                   </View>
                 </View>
@@ -1162,7 +1323,7 @@ export default function DashboardScreen() {
 
       {/* ── Stat Pill Cards ── */}
       {/* Row 1: Bills · Paid · Unpaid */}
-      {decisionHubSettings.algorithmSuiteEnabled && (
+      {false && decisionHubSettings.algorithmSuiteEnabled && (
         <Pressable
           onPress={() => setFlowScoreVisible(true)}
           style={({ pressed }) => [styles.algoSuiteCard, { opacity: pressed ? 0.9 : 1 }]}
@@ -2393,6 +2554,32 @@ const styles = StyleSheet.create({
   screen:  { flex: 1 },
   dashboardStage: { backgroundColor: "#030712" },
   content: { paddingHorizontal: 16, position: "relative", overflow: "hidden" },
+  contentWide: { paddingLeft: 220, paddingRight: 28, maxWidth: 1320, alignSelf: "center", width: "100%" },
+  referenceDesktopRail: {
+    position: "absolute",
+    left: 18,
+    width: 184,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.16)",
+    backgroundColor: "rgba(2,6,23,0.74)",
+    borderRadius: 24,
+    padding: 12,
+    shadowColor: "#7c3aed",
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.26,
+    shadowRadius: 30,
+  },
+  referenceRailLogoRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 18 },
+  referenceRailLogo: { width: 38, height: 38, borderRadius: 12 },
+  referenceRailBrand: { color: "#f8fafc", fontSize: 16, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.3 },
+  referenceRailAlgo: { color: "#a78bfa", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 5 },
+  referenceRailItem: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 11, marginBottom: 5 },
+  referenceRailItemActive: { backgroundColor: "rgba(79,70,229,0.48)", borderWidth: 1, borderColor: "rgba(34,211,238,0.28)" },
+  referenceRailText: { color: "#94a3b8", fontSize: 13, fontFamily: "Inter_700Bold" },
+  referenceRailTextActive: { color: "#f8fafc" },
+  referenceRailFlo: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 14, borderRadius: 18, borderWidth: 1, borderColor: "rgba(34,211,238,0.16)", backgroundColor: "rgba(15,23,42,0.70)", padding: 11 },
+  referenceRailFloTitle: { color: "#e0f2fe", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  referenceRailFloSub: { color: "#94a3b8", fontSize: 10, fontFamily: "Inter_500Medium" },
   stormBackdrop: { position: "absolute", top: 0, left: 0, right: 0, height: 820 },
   stormBase: { ...StyleSheet.absoluteFillObject },
   stormOrb: { position: "absolute", width: 330, height: 330, borderRadius: 165, opacity: 0.32 },
@@ -2431,6 +2618,54 @@ const styles = StyleSheet.create({
   askFloPillText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   confidenceTitle: { fontSize: 13, fontFamily: "Inter_700Bold" },
   confidenceDesc: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
+
+  referenceCommandHero: {
+    borderRadius: 32,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.14)",
+    backgroundColor: "rgba(2,6,23,0.42)",
+    padding: 18,
+    marginBottom: 14,
+    overflow: "hidden",
+    shadowColor: "#22d3ee",
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.24,
+    shadowRadius: 34,
+    elevation: 10,
+  },
+  referenceCommandHeroWide: { flexDirection: "row", minHeight: 320, padding: 30, alignItems: "center", gap: 22 },
+  referenceHeroCopy: { flex: 1 },
+  referenceGreeting: { color: "#f8fafc", fontSize: 23, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.7 },
+  referenceGreetingSub: { color: "#94a3b8", fontSize: 13, fontFamily: "Inter_500Medium", marginTop: 4, marginBottom: 24 },
+  referenceHeroLabel: { color: "#cbd5e1", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.4, textTransform: "uppercase" },
+  referenceHeroAmount: { color: "#ffffff", fontSize: 54, lineHeight: 61, fontFamily: "Inter_800ExtraBold", letterSpacing: -2.2, textShadowColor: "rgba(34,211,238,0.25)", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 18 },
+  referenceHeroHint: { color: "#94a3b8", fontSize: 13, fontFamily: "Inter_600SemiBold", marginTop: 4, marginBottom: 20 },
+  referenceSummaryRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  referenceSummaryCard: { flexGrow: 1, flexBasis: "30%", minWidth: 96, borderRadius: 15, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", backgroundColor: "rgba(15,23,42,0.62)", padding: 12 },
+  referenceSummaryLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 7 },
+  referenceSummaryValue: { color: "#f8fafc", fontSize: 18, fontFamily: "Inter_800ExtraBold" },
+  referenceScorePanel: { alignItems: "center", justifyContent: "center", paddingTop: 14 },
+  referenceGaugeWrap: { width: 152, height: 152, alignItems: "center", justifyContent: "center", shadowColor: "#a855f7", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.55, shadowRadius: 22 },
+  referenceGaugeCenter: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
+  referenceGaugeScore: { color: "#ffffff", fontSize: 42, fontFamily: "Inter_800ExtraBold", lineHeight: 47 },
+  referenceGaugeLabel: { color: "#cbd5e1", fontSize: 11, fontFamily: "Inter_700Bold" },
+  referenceScoreStatus: { color: "#4ade80", fontSize: 14, fontFamily: "Inter_800ExtraBold", marginTop: 10 },
+  referenceScoreUnderline: { width: 86, height: 3, borderRadius: 3, backgroundColor: "#22c55e", marginTop: 8, marginBottom: 8 },
+  referenceScoreReason: { color: "#94a3b8", maxWidth: 220, textAlign: "center", fontSize: 12, fontFamily: "Inter_600SemiBold", lineHeight: 17 },
+  referenceLowerGrid: { gap: 12, marginBottom: 14 },
+  referenceLowerGridWide: { flexDirection: "row" },
+  referenceInsightCard: { flex: 1.45, minHeight: 130, borderRadius: 24, borderWidth: 1, borderColor: "rgba(168,85,247,0.22)", backgroundColor: "rgba(15,23,42,0.72)", padding: 16, flexDirection: "row", alignItems: "center", gap: 12, shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.22, shadowRadius: 26 },
+  referenceInsightIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.28)" },
+  referenceInsightTitle: { color: "#d8b4fe", fontSize: 14, fontFamily: "Inter_800ExtraBold", marginBottom: 6 },
+  referenceInsightText: { color: "#f8fafc", fontSize: 13, fontFamily: "Inter_600SemiBold", lineHeight: 18 },
+  referenceInsightLink: { color: "#c084fc", fontSize: 12, fontFamily: "Inter_800ExtraBold", marginTop: 8 },
+  referenceMiniChart: { flexDirection: "row", alignItems: "flex-end", gap: 4, height: 82, width: 90 },
+  referenceMiniBar: { width: 6, borderRadius: 5, backgroundColor: "#8b5cf6", shadowColor: "#a855f7", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 10 },
+  referenceQuickPanel: { flex: 1, borderRadius: 24, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", backgroundColor: "rgba(2,6,23,0.50)", padding: 14 },
+  referenceQuickTitle: { color: "#f8fafc", fontSize: 14, fontFamily: "Inter_800ExtraBold", marginBottom: 10 },
+  referenceQuickGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  referenceQuickTile: { width: "48%", minHeight: 82, borderRadius: 18, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", backgroundColor: "rgba(15,23,42,0.72)", alignItems: "center", justifyContent: "center", gap: 8, padding: 10 },
+  referenceQuickText: { color: "#e2e8f0", textAlign: "center", fontSize: 11, lineHeight: 14, fontFamily: "Inter_800ExtraBold" },
 
   // Hero
   heroCard:          { borderRadius: 36, padding: 24, marginBottom: 14, minHeight: 255, borderWidth: 1, borderColor: "rgba(34,211,238,0.26)", shadowColor: "#7c3aed", shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.46, shadowRadius: 34, elevation: 16 },

@@ -66,13 +66,44 @@ export function PremiumBackdrop({ variant = "blue" }: Props) {
               <Stop offset="0.88" stopColor="#06b6d4" stopOpacity="0.26" />
               <Stop offset="1" stopColor="#22c55e" stopOpacity="0" />
             </SvgLinearGradient>
+            <SvgLinearGradient id="flowC" x1="0" y1="0" x2="1" y2="0">
+              <Stop offset="0" stopColor="#22d3ee" stopOpacity="0" />
+              <Stop offset="0.2" stopColor="#22d3ee" stopOpacity="0.55" />
+              <Stop offset="0.52" stopColor="#7c3aed" stopOpacity="0.62" />
+              <Stop offset="0.78" stopColor="#06b6d4" stopOpacity="0.42" />
+              <Stop offset="1" stopColor="#22c55e" stopOpacity="0" />
+            </SvgLinearGradient>
           </Defs>
+          <Path
+            d={`M ${-180} ${svgHeight * 0.20} C ${svgWidth * 0.16} ${svgHeight * 0.03}, ${svgWidth * 0.48} ${svgHeight * 0.36}, ${svgWidth + 180} ${svgHeight * 0.10}`}
+            stroke="url(#flowC)"
+            strokeWidth="34"
+            strokeLinecap="round"
+            fill="none"
+            opacity="0.12"
+          />
           <Path
             d={`M ${-120} ${svgHeight * 0.28} C ${svgWidth * 0.18} ${svgHeight * 0.04}, ${svgWidth * 0.48} ${svgHeight * 0.48}, ${svgWidth + 120} ${svgHeight * 0.16}`}
             stroke="url(#flowA)"
-            strokeWidth="7"
+            strokeWidth="9"
             strokeLinecap="round"
             fill="none"
+          />
+          <Path
+            d={`M ${-100} ${svgHeight * 0.31} C ${svgWidth * 0.18} ${svgHeight * 0.09}, ${svgWidth * 0.50} ${svgHeight * 0.42}, ${svgWidth + 160} ${svgHeight * 0.18}`}
+            stroke="url(#flowC)"
+            strokeWidth="2"
+            strokeLinecap="round"
+            fill="none"
+            opacity="0.92"
+          />
+          <Path
+            d={`M ${-130} ${svgHeight * 0.24} C ${svgWidth * 0.16} ${svgHeight * 0.00}, ${svgWidth * 0.42} ${svgHeight * 0.42}, ${svgWidth + 130} ${svgHeight * 0.12}`}
+            stroke="#38bdf8"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            fill="none"
+            opacity="0.36"
           />
           <Path
             d={`M ${-160} ${svgHeight * 0.36} C ${svgWidth * 0.18} ${svgHeight * 0.10}, ${svgWidth * 0.55} ${svgHeight * 0.44}, ${svgWidth + 170} ${svgHeight * 0.20}`}
@@ -89,6 +120,14 @@ export function PremiumBackdrop({ variant = "blue" }: Props) {
             strokeLinecap="round"
             fill="none"
             opacity="0.32"
+          />
+          <Path
+            d={`M ${-90} ${svgHeight * 0.70} C ${svgWidth * 0.20} ${svgHeight * 0.48}, ${svgWidth * 0.58} ${svgHeight * 0.84}, ${svgWidth + 100} ${svgHeight * 0.63}`}
+            stroke="#a855f7"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            fill="none"
+            opacity="0.28"
           />
           {Array.from({ length: 34 }).map((_, index) => {
             const x = (index * 67) % svgWidth;
