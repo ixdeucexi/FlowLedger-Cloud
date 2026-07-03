@@ -46,6 +46,10 @@ function money(amount: number, sign: "auto" | "none" = "none") {
   return `${prefix}$${Math.abs(amount).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
 
+function debtSurplusTransactionImportHash(sourceDebtId: string, month: number, year: number) {
+  return `flowledger:debt-surplus:${sourceDebtId}:${year}-${String(month + 1).padStart(2, "0")}`;
+}
+
 function PayStatus({ paid, partial }: { paid: boolean; partial: boolean }) {
   const c = useColors();
   if (paid) return <View style={[ps.badge, { backgroundColor: c.success + "25" }]}><Text style={[ps.text, { color: c.success }]}>PAID</Text></View>;
@@ -113,6 +117,28 @@ export default function MonthlyScreen() {
     editingPaidRef.current = editingPaid;
   }, [editingPaid]);
 
+  const getDebtSurplusCreditForMonth = useCallback((sourceDebtId: string, targetMonth = month, targetYear = selectedYear) => {
+    const key = debtSurplusTransactionImportHash(sourceDebtId, targetMonth, targetYear);
+    return transactions
+      .filter(transaction => transaction.import_hash === key)
+      .reduce((sum, transaction) => sum + Math.abs(Number(transaction.amount) || 0), 0);
+  }, [transactions, month, selectedYear]);
+
+  const getEffectivePaidAmount = useCallback((bill: Bill, targetMonth = month, targetYear = selectedYear) => {
+    const directPaid = getPaidAmount(bill.id, targetMonth, targetYear);
+    return directPaid + (bill.is_debt ? getDebtSurplusCreditForMonth(bill.id, targetMonth, targetYear) : 0);
+  }, [getPaidAmount, getDebtSurplusCreditForMonth, month, selectedYear]);
+
+  const debtSurplusTransactionKey = useCallback((sourceDebtId: string) =>
+    debtSurplusTransactionImportHash(sourceDebtId, month, selectedYear),
+  [month, selectedYear]);
+
+  const removeDebtSurplusTransaction = useCallback(async (sourceDebtId: string) => {
+    const key = debtSurplusTransactionKey(sourceDebtId);
+    const existingTx = transactions.find(transaction => transaction.import_hash === key);
+    if (existingTx) await deleteTransaction(existingTx.id);
+  }, [debtSurplusTransactionKey, deleteTransaction, transactions]);
+
   useEffect(() => {
     const closeTopOverlay = () => {
       if (surplusPrompt) {
@@ -156,9 +182,10 @@ export default function MonthlyScreen() {
       const monthlyAmount = getBillMonthlyTotal(b, month, selectedYear);
       const perOccurrence = getAmount(b, month, selectedYear);
       const paid = getPaidAmount(b.id, month, selectedYear);
-      const isPaid = monthlyAmount > 0 && paid >= monthlyAmount;
-      const isPartial = paid > 0 && !isPaid;
-      return { bill: b, amount: monthlyAmount, perOccurrence, paid, isPaid, isPartial };
+      const effectivePaid = getEffectivePaidAmount(b, month, selectedYear);
+      const isPaid = monthlyAmount > 0 && effectivePaid >= monthlyAmount - 0.005;
+      const isPartial = effectivePaid > 0 && !isPaid;
+      return { bill: b, amount: monthlyAmount, perOccurrence, paid, effectivePaid, isPaid, isPartial };
     })
     .filter(x => {
       if (billFilter === "paid") return x.isPaid;
@@ -166,13 +193,13 @@ export default function MonthlyScreen() {
       return true;
     })
     .sort((a, b) => a.bill.due_day - b.bill.due_day);
-  }, [monthBills, getAmount, getPaidAmount, month, selectedYear, billFilter]);
+  }, [monthBills, getAmount, getPaidAmount, getEffectivePaidAmount, month, selectedYear, billFilter]);
 
   const billSummary = useMemo(() => summarizeMonthlyBills(
     monthBills,
     bill => getBillMonthlyTotal(bill, month, selectedYear),
-    bill => getPaidAmount(bill.id, month, selectedYear),
-  ), [monthBills, getPaidAmount, getBillMonthlyTotal, month, selectedYear]);
+    bill => getEffectivePaidAmount(bill, month, selectedYear),
+  ), [monthBills, getEffectivePaidAmount, getBillMonthlyTotal, month, selectedYear]);
   const totalDue = billSummary.totalDue;
   const totalPaid = billSummary.totalPaid;
 
@@ -388,6 +415,7 @@ export default function MonthlyScreen() {
   const finalizeBillAtActualForMonth = useCallback(async (prompt: { bill: Bill; actual: number; paidDate: string }) => {
     if (prompt.bill.is_debt) {
       await setPaidAmount(prompt.bill.id, month, selectedYear, prompt.actual);
+      await finalizeBillPayment(prompt.bill.id, month, selectedYear, prompt.actual, prompt.paidDate);
       return;
     }
     await finalizeBillPayment(prompt.bill.id, month, selectedYear, prompt.actual, prompt.paidDate);
@@ -400,16 +428,6 @@ export default function MonthlyScreen() {
       );
     }
   }, [finalizeBillPayment, month, selectedYear, setCustomAmount, setPaidAmount]);
-
-  const debtSurplusTransactionKey = useCallback((sourceDebtId: string) =>
-    `flowledger:debt-surplus:${sourceDebtId}:${selectedYear}-${String(month + 1).padStart(2, "0")}`,
-  [month, selectedYear]);
-
-  const removeDebtSurplusTransaction = useCallback(async (sourceDebtId: string) => {
-    const key = debtSurplusTransactionKey(sourceDebtId);
-    const existingTx = transactions.find(transaction => transaction.import_hash === key);
-    if (existingTx) await deleteTransaction(existingTx.id);
-  }, [debtSurplusTransactionKey, deleteTransaction, transactions]);
 
   const upsertDebtSurplusTransaction = useCallback(async (
     sourceDebt: Bill,
@@ -544,10 +562,11 @@ export default function MonthlyScreen() {
   }, [savingDueDay, setCustomDueDay, month, selectedYear]);
 
 
-  const handleQuickPaid = useCallback((billId: string, amount: number, isPaid: boolean) => {
+  const handleQuickPaid = useCallback(async (billId: string, amount: number, isPaid: boolean) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setPaidAmount(billId, month, selectedYear, isPaid ? 0 : amount);
-  }, [setPaidAmount, month, selectedYear]);
+    if (isPaid) await removeDebtSurplusTransaction(billId);
+    await setPaidAmount(billId, month, selectedYear, isPaid ? 0 : amount);
+  }, [setPaidAmount, removeDebtSurplusTransaction, month, selectedYear]);
 
   const handleApplyExtra = () => {
     const amt = parseFloat(extraPayment);
@@ -879,7 +898,7 @@ export default function MonthlyScreen() {
                 </View>
               </>
             }
-            renderItem={({ item: { bill, amount, perOccurrence, paid, isPaid, isPartial } }) => {
+            renderItem={({ item: { bill, amount, perOccurrence, paid, effectivePaid, isPaid, isPartial } }) => {
               const borderColor = isPaid ? c.success : isPartial ? c.warning : c.destructive;
               const amtKey = `${bill.id}-${month}-${selectedYear}-amt`;
               const paidKey = `${bill.id}-${month}-${selectedYear}-paid`;
@@ -890,7 +909,7 @@ export default function MonthlyScreen() {
               const editableAmt = isWeekly ? perOccurrence : amount;
               const showAmt = editingAmounts[amtKey] !== undefined ? editingAmounts[amtKey] : editableAmt.toFixed(2);
               const showPaid = editingPaid[paidKey] !== undefined ? editingPaid[paidKey] : paid > 0 ? paid.toFixed(2) : "";
-              const remaining = Math.max(0, amount - paid);
+              const remaining = Math.max(0, amount - effectivePaid);
               const customDay = getCustomDueDay(bill.id, month, selectedYear);
               const effectiveDueDay = customDay ?? bill.due_day;
               const WEEKDAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
@@ -1116,9 +1135,10 @@ export default function MonthlyScreen() {
                         {scheduledBillsForDay.map(bill => {
                           const amount = getAmount(bill, month, selectedYear);
                           const paid = getPaidAmount(bill.id, month, selectedYear);
-                          const isPaid = amount > 0 && paid >= amount;
-                          const isPartial = paid > 0 && !isPaid;
-                          const remaining = Math.max(0, amount - paid);
+                          const effectivePaid = getEffectivePaidAmount(bill, month, selectedYear);
+                          const isPaid = amount > 0 && effectivePaid >= amount - 0.005;
+                          const isPartial = effectivePaid > 0 && !isPaid;
+                          const remaining = Math.max(0, amount - effectivePaid);
                           const movedIn = movedInByBillId.get(bill.id);
                           const canReschedule = bill.frequency === "monthly";
                           const paidKey = `${bill.id}-overlay-paid`;

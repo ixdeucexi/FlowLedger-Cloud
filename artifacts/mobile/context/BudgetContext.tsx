@@ -1170,7 +1170,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const setPaidAmount = useCallback(
     async (billId: string, month: number, year: number, amount: number) => {
       const prevPaid = overridesRef.current.find(o => o.bill_id === billId && o.month === month && o.year === year)?.paid_amount ?? 0;
-      await upsertOverride(billId, month, year, { paid_amount: Math.max(0, amount) });
+      const cleanAmount = Math.max(0, amount);
+      await upsertOverride(billId, month, year, cleanAmount <= 0.005
+        ? { paid_amount: 0, actual_amount: undefined, paid_date: undefined }
+        : { paid_amount: cleanAmount }
+      );
       const delta = amount - prevPaid;
       if (delta !== 0 && user) {
         const bill = bills.find(b => b.id === billId);
