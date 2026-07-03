@@ -1406,26 +1406,6 @@ export default function DashboardScreen() {
         </Pressable>
         )}
 
-        <View style={styles.referenceQuickPanel}>
-          <Text style={styles.referenceQuickTitle}>Quick Actions</Text>
-          <View style={styles.referenceQuickGrid}>
-            {[
-              { label: "Can I Afford This?", icon: "shield" as const, color: "#22d3ee", action: () => router.push({ pathname: "/(tabs)/flo", params: { prompt: "Can I afford this?" } } as any) },
-              { label: "Plan a Purchase", icon: "shopping-bag" as const, color: "#60a5fa", action: () => setActionModalVisible(true) },
-              { label: "Add Income", icon: "arrow-down" as const, color: "#a855f7", action: () => router.push("/(tabs)/more" as any) },
-              { label: "View Forecast", icon: "trending-up" as const, color: "#8b5cf6", action: () => router.push("/(tabs)/monthly" as any) },
-            ].map(item => (
-              <Pressable
-                key={item.label}
-                onPress={item.action}
-                style={({ pressed }) => [styles.referenceQuickTile, { opacity: pressed ? 0.78 : 1 }]}
-              >
-                <Feather name={item.icon} size={20} color={item.color} />
-                <Text style={styles.referenceQuickText}>{item.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
       </View>
 
       {/* ── HERO: flip card — front = Balance Today, back = Savings ── */}
