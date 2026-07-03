@@ -524,7 +524,7 @@ export default function TransactionsScreen() {
       <SectionList
         sections={sections}
         keyExtractor={item => item.id}
-        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 100 }]}
+        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 88 }]}
         stickySectionHeadersEnabled
         ListEmptyComponent={
           <EmptyState
@@ -748,34 +748,34 @@ export default function TransactionsScreen() {
 
 const styles = StyleSheet.create({
   screen:   { flex: 1 },
-  header:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingBottom: 14 },
-  title:    { fontSize: 34, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.1 },
-  subtitle: { fontSize: 13, fontFamily: "Inter_500Medium", marginTop: 3, letterSpacing: 0.2 },
-  addBtn:   { width: 52, height: 52, borderRadius: 18, alignItems: "center", justifyContent: "center", shadowColor: "#2563eb", shadowOpacity: 0.32, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
+  header:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 18, paddingBottom: 10 },
+  title:    { fontSize: 30, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.9 },
+  subtitle: { fontSize: 12, fontFamily: "Inter_500Medium", marginTop: 2, letterSpacing: 0.1 },
+  addBtn:   { width: 46, height: 46, borderRadius: 16, alignItems: "center", justifyContent: "center", shadowColor: "#2563eb", shadowOpacity: 0.28, shadowRadius: 14, shadowOffset: { width: 0, height: 7 }, elevation: 7 },
 
-  activityHero: { marginHorizontal: 16, marginBottom: 12, borderWidth: 1, borderRadius: 24, padding: 16, shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 20, shadowOffset: { width: 0, height: 12 }, elevation: 5 },
-  activityHeroTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 15 },
-  activityHeroLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.1, textTransform: "uppercase" },
-  activityHeroTitle: { fontSize: 21, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.4, marginTop: 3 },
-  activityHeroBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
-  activityHeroBadgeText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
+  activityHero: { marginHorizontal: 16, marginBottom: 9, borderWidth: 1, borderRadius: 20, padding: 12, shadowColor: "#000", shadowOpacity: 0.16, shadowRadius: 16, shadowOffset: { width: 0, height: 9 }, elevation: 4 },
+  activityHeroTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 10 },
+  activityHeroLabel: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 1, textTransform: "uppercase" },
+  activityHeroTitle: { fontSize: 18, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.3, marginTop: 2 },
+  activityHeroBadge: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999 },
+  activityHeroBadgeText: { fontSize: 10, fontFamily: "Inter_800ExtraBold" },
   heroStats: { flexDirection: "row", alignItems: "center" },
   heroStat: { flex: 1 },
-  heroStatValue: { fontSize: 21, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.5 },
-  heroStatLabel: { fontSize: 10, fontFamily: "Inter_700Bold", letterSpacing: 0.7, textTransform: "uppercase", marginTop: 3 },
-  heroDivider: { width: 1, height: 34, marginHorizontal: 12 },
+  heroStatValue: { fontSize: 18, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.4 },
+  heroStatLabel: { fontSize: 9, fontFamily: "Inter_700Bold", letterSpacing: 0.6, textTransform: "uppercase", marginTop: 2 },
+  heroDivider: { width: 1, height: 28, marginHorizontal: 10 },
 
   searchWrap:  { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16 },
-  searchBox:   { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 12 },
-  searchInput: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", padding: 0 },
-  filterIconButton: { width: 48, height: 48, borderRadius: 16, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  searchBox:   { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 16, paddingHorizontal: 13, paddingVertical: 10 },
+  searchInput: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", padding: 0 },
+  filterIconButton: { width: 44, height: 44, borderRadius: 15, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   filterCount: { position: "absolute", top: -5, right: -5, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, alignItems: "center", justifyContent: "center" },
   filterCountText: { color: "#fff", fontSize: 10, fontFamily: "Inter_700Bold" },
 
-  quickChipScroller: { marginBottom: 8, flexGrow: 0 },
-  quickChipRow: { paddingHorizontal: 16, gap: 8, paddingBottom: 4 },
-  quickChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 9 },
-  quickChipText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
+  quickChipScroller: { marginBottom: 6, flexGrow: 0 },
+  quickChipRow: { paddingHorizontal: 16, gap: 7, paddingBottom: 3 },
+  quickChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
+  quickChipText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
 
   filterOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.55)" },
   filterSheet: { borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32, maxHeight: "88%" },
@@ -792,29 +792,23 @@ const styles = StyleSheet.create({
   filterActionButton: { flex: 1, minHeight: 48, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 10 },
   filterActionText: { fontSize: 14, fontFamily: "Inter_700Bold" },
 
-  summaryRow:     { flexDirection: "row", paddingVertical: 16, borderWidth: 1, borderColor: "rgba(148,163,184,0.10)", shadowColor: "#000", shadowOpacity: 0.16, shadowRadius: 18, shadowOffset: { width: 0, height: 10 }, elevation: 4 },
-  summaryStat:    { flex: 1, alignItems: "center", gap: 4 },
-  summaryValue:   { fontSize: 18, fontFamily: "Inter_700Bold" },
-  summaryLabel:   { fontSize: 10, fontFamily: "Inter_600SemiBold", letterSpacing: 0.4, textTransform: "uppercase" },
-  summaryDivider: { width: 1 },
-
   list:          { paddingHorizontal: 16 },
-  sectionHeader: { paddingTop: 10, paddingBottom: 8 },
-  sectionTitle:  { fontSize: 13, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8 },
+  sectionHeader: { paddingTop: 8, paddingBottom: 6 },
+  sectionTitle:  { fontSize: 12, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.7 },
 
-  txRow:          { flexDirection: "row", alignItems: "center", padding: 14, gap: 12, borderWidth: 1, borderColor: "rgba(148,163,184,0.10)", overflow: "hidden", shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 3 },
-  rowAccent:      { position: "absolute", left: 0, top: 0, bottom: 0, width: 4 },
-  sourceIcon:     { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
+  txRow:          { flexDirection: "row", alignItems: "center", padding: 11, gap: 10, borderWidth: 1, borderColor: "rgba(148,163,184,0.10)", overflow: "hidden", shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 2 },
+  rowAccent:      { position: "absolute", left: 0, top: 0, bottom: 0, width: 3 },
+  sourceIcon:     { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
   txMid:          { flex: 1 },
-  txNote:         { fontSize: 14, fontFamily: "Inter_600SemiBold", marginBottom: 4 },
-  txMeta:         { flexDirection: "row", gap: 6, alignItems: "center", flexWrap: "wrap" },
-  sourceBadge:    { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
-  sourceBadgeText:{ fontSize: 10, fontFamily: "Inter_700Bold" },
-  catBadge:       { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
-  catBadgeText:   { fontSize: 10, fontFamily: "Inter_600SemiBold" },
-  txDate:         { fontSize: 10, fontFamily: "Inter_400Regular" },
+  txNote:         { fontSize: 13, fontFamily: "Inter_700Bold", marginBottom: 3 },
+  txMeta:         { flexDirection: "row", gap: 5, alignItems: "center", flexWrap: "wrap" },
+  sourceBadge:    { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5 },
+  sourceBadgeText:{ fontSize: 9, fontFamily: "Inter_700Bold" },
+  catBadge:       { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5 },
+  catBadgeText:   { fontSize: 9, fontFamily: "Inter_600SemiBold" },
+  txDate:         { fontSize: 9, fontFamily: "Inter_400Regular" },
   txRight:        { alignItems: "flex-end" },
-  txAmount:       { fontSize: 15, fontFamily: "Inter_700Bold" },
+  txAmount:       { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
 
   // Detail bottom sheet
   sheetOverlay:    { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.55)" },
