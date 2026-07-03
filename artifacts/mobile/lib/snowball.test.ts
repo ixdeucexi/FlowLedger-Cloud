@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { allocateSnowballExtra, effectiveDebtMinimum, orderDebts, scheduledDebtPaymentAmount, simulateSnowballPayoff, type SnowballDebtInput } from "./snowball";
+import { allocateSnowballExtra, effectiveDebtMinimum, orderDebts, projectSnowballMonth, scheduledDebtPaymentAmount, simulateSnowballPayoff, type SnowballDebtInput } from "./snowball";
 
 const debts: SnowballDebtInput[] = [
   { id: "large", name: "Large", balance: 1_000, minimum: 100, apr: 12, dueDay: 15, included: true },
@@ -29,9 +29,114 @@ describe("debt ordering and allocation", () => {
     assert.equal(result.balances.get("excluded"), 50);
     assert.deepEqual(result.payoffOrder, ["Small"]);
   });
+
+  it("targets the smallest active included balance first", () => {
+    const active = debts.filter(debt => debt.included && debt.balance > 0);
+    assert.deepEqual(orderDebts(active, "snowball").map(item => item.id), ["small", "large"]);
+  });
 });
 
 describe("payoff simulation", () => {
+  it("keeps paying minimum payments on all active debts", () => {
+    const result = projectSnowballMonth({
+      debts,
+      method: "snowball",
+      extraPayment: 0,
+    });
+    const byId = new Map(result.payments.map(payment => [payment.billId, payment]));
+    assert.equal(byId.get("small")?.scheduledPayment, 25);
+    assert.equal(byId.get("large")?.scheduledPayment, 100);
+    assert.equal(byId.get("excluded")?.scheduledPayment, 10);
+  });
+
+  it("rolls a paid-off debt minimum into the next smallest debt next month", () => {
+    const monthOne = projectSnowballMonth({
+      debts: [
+        { id: "small", name: "Small", balance: 25, minimum: 25, apr: 0, dueDay: 10, included: true },
+        { id: "large", name: "Large", balance: 1_000, minimum: 100, apr: 0, dueDay: 15, included: true },
+      ],
+      method: "snowball",
+    });
+    assert.deepEqual(monthOne.paidOffNames, ["Small"]);
+    assert.equal(monthOne.rolledPayment, 25);
+
+    const monthTwo = projectSnowballMonth({
+      debts: [
+        { id: "small", name: "Small", balance: 0, minimum: 25, apr: 0, dueDay: 10, included: true },
+        { id: "large", name: "Large", balance: 900, minimum: 100, apr: 0, dueDay: 15, included: true },
+      ],
+      method: "snowball",
+      startingBalances: monthOne.balances,
+      rolledPayment: monthOne.rolledPayment,
+    });
+    const largePayment = monthTwo.payments.find(payment => payment.billId === "large");
+    assert.equal(largePayment?.scheduledPayment, 125);
+    assert.equal(monthTwo.payments.some(payment => payment.billId === "small"), false);
+  });
+
+  it("pushes unused payoff amount into the next debt in the same month", () => {
+    const result = projectSnowballMonth({
+      debts: [
+        { id: "small", name: "Small", balance: 10, minimum: 25, apr: 0, dueDay: 10, included: true },
+        { id: "large", name: "Large", balance: 1_000, minimum: 100, apr: 0, dueDay: 15, included: true },
+      ],
+      method: "snowball",
+    });
+    const byId = new Map(result.payments.map(payment => [payment.billId, payment]));
+    assert.equal(byId.get("small")?.scheduledPayment, 10);
+    assert.equal(byId.get("large")?.scheduledPayment, 115);
+    assert.equal(result.scheduledPayments, 125);
+  });
+
+  it("exposes scheduled payments for forecast and calendar projections", () => {
+    const monthOne = projectSnowballMonth({
+      debts: [
+        { id: "camera", name: "Camera", balance: 20, minimum: 20, apr: 0, dueDay: 4, included: true },
+        { id: "concert", name: "Concert", balance: 400, minimum: 35, apr: 0, dueDay: 29, included: true },
+      ],
+      method: "snowball",
+      extraPayment: 20,
+    });
+    assert.equal(monthOne.balances.get("camera"), 0);
+    assert.equal(monthOne.balances.get("concert"), 345);
+
+    const monthTwo = projectSnowballMonth({
+      debts: [
+        { id: "camera", name: "Camera", balance: 0, minimum: 20, apr: 0, dueDay: 4, included: true },
+        { id: "concert", name: "Concert", balance: 395, minimum: 35, apr: 0, dueDay: 29, included: true },
+      ],
+      method: "snowball",
+      startingBalances: monthOne.balances,
+      rolledPayment: monthOne.rolledPayment,
+    });
+    const byId = new Map(monthTwo.payments.map(payment => [payment.billId, payment]));
+    assert.equal(byId.has("camera"), false);
+    assert.equal(byId.get("concert")?.scheduledPayment, 55);
+  });
+
+  it("carries current-month payoff minimums into future simulation", () => {
+    const first = allocateSnowballExtra([
+      { id: "small", name: "Small", balance: 20, minimum: 20, apr: 0, dueDay: 4, included: true },
+      { id: "large", name: "Large", balance: 200, minimum: 50, apr: 0, dueDay: 15, included: true },
+    ], 20, "snowball", "2026-06-04");
+    const result = simulateSnowballPayoff({
+      debts: [
+        { id: "small", name: "Small", balance: 20, minimum: 20, apr: 0, dueDay: 4, included: true },
+        { id: "large", name: "Large", balance: 200, minimum: 50, apr: 0, dueDay: 15, included: true },
+      ],
+      method: "snowball",
+      startMonth: 5,
+      startYear: 2026,
+      firstMonthBalances: first.balances,
+      firstPayoffOrder: first.payoffOrder,
+      initialRolledPayment: 20,
+      getExtraForMonth: () => ({ extra: 0, lowestBalance: 200 }),
+    });
+    assert.equal(result.months[0].minimumPayments, 50);
+    assert.equal(result.months[0].rolledPayment, 20);
+    assert.equal(result.months[0].endingDebt, 130);
+  });
+
   it("applies monthly interest, minimums and rolled payments", () => {
     const first = allocateSnowballExtra(debts, 0, "snowball", "2026-06-10");
     const result = simulateSnowballPayoff({
