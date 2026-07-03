@@ -2013,7 +2013,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         const occ = getBillOccurrencesInMonth(b, m, y);
         if (occ.length === 0) return s;
         const override = overrides.find(item => item.bill_id === b.id && item.month === m && item.year === y);
-        const projectedDebtTotal = b.is_debt && override?.actual_amount === undefined
+        const projectedDebtTotal = b.is_debt && debtPlan && override?.actual_amount === undefined
           ? projectedDebtScheduledPayments.get(b.id) ?? 0
           : undefined;
         const total = projectedDebtTotal !== undefined ? projectedDebtTotal : getBillEffectiveMonthlyTotal(b, m, y);
@@ -2102,7 +2102,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       let occ = getBillOccurrencesInMonth(b, month, year);
       if (occ.length === 0) return;
       const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
-      const projectedDebtTotal = b.is_debt && o?.actual_amount === undefined
+      const projectedDebtTotal = b.is_debt && debtPlan && o?.actual_amount === undefined
         ? projectedDebtScheduledPayments.get(b.id) ?? 0
         : undefined;
       const total = projectedDebtTotal !== undefined ? projectedDebtTotal : getBillEffectiveMonthlyTotal(b, month, year);
