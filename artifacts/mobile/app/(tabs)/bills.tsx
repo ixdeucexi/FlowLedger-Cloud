@@ -3,7 +3,7 @@ import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert, FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View,
+  Alert, FlatList, Platform, Pressable, StyleSheet, Text, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -401,13 +401,16 @@ export default function BillsScreen() {
 
       {/* ════════════════════ DEBT VIEW ════════════════════ */}
       {activeTab === "debt" && (
-        <ScrollView
+        <FlatList
+          data={debts}
+          keyExtractor={item => item.id}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={[styles.debtScrollContent, { paddingBottom: insets.bottom + 118 }]}
-        >
+          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 118 }]}
+          ListHeaderComponent={(
+            <>
           {/* Safe Snowball Banner */}
           {debts.length > 0 && (
-            <View style={[styles.extraBanner, { backgroundColor: safeSnowballAmount > 0 ? c.success + "15" : c.muted, marginHorizontal: 16, borderRadius: colors.radius }]}>
+            <View style={[styles.extraBanner, { backgroundColor: safeSnowballAmount > 0 ? c.success + "15" : c.muted, marginHorizontal: 0, borderRadius: colors.radius }]}>
               <View style={styles.extraTopRow}>
                 <View style={styles.extraLeft}>
                   <Feather name="shield" size={20} color={safeSnowballAmount > 0 ? c.success : c.mutedForeground} />
@@ -436,7 +439,7 @@ export default function BillsScreen() {
           )}
 
           {debts.length > 0 && (
-            <View style={[styles.statsRow, { marginHorizontal: 16, gap: 10 }]}>
+            <View style={[styles.statsRow, { marginHorizontal: 0, gap: 10 }]}>
               {[
                 { label: "Total Debt", value: `$${totalDebt.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, color: c.destructive, icon: "trending-down" as const },
                 { label: "Min/Month",  value: `$${totalMinPayments.toFixed(0)}`,                                        color: c.warning,     icon: "calendar"     as const },
@@ -452,7 +455,7 @@ export default function BillsScreen() {
           )}
 
           {debts.length > 0 && (
-            <View style={[styles.debtAlgoCard, { backgroundColor: c.card, borderColor: c.border, marginHorizontal: 16, borderRadius: colors.radius }]}>
+            <View style={[styles.debtAlgoCard, { backgroundColor: c.card, borderColor: c.border, marginHorizontal: 0, borderRadius: colors.radius }]}>
               <View style={styles.debtAlgoHeader}>
                 <View style={[styles.dataIcon, { backgroundColor: c.primary + "18" }]}>
                   <Feather name="trending-down" size={17} color={c.primary} />
@@ -490,7 +493,7 @@ export default function BillsScreen() {
             </View>
           )}
 
-          <View style={[styles.methodRow, { marginHorizontal: 16, marginTop: 10 }]}>
+          <View style={[styles.methodRow, { marginHorizontal: 0, marginTop: 10 }]}>
             <View style={[styles.methodToggle, { backgroundColor: c.muted, borderRadius: 10 }]}>
               {(["snowball", "avalanche"] as const).map(m => (
                 <Pressable
@@ -520,22 +523,18 @@ export default function BillsScreen() {
               ))}
             </View>
           </View>
-
-          <FlatList
-            data={debts}
-            keyExtractor={item => item.id}
-            scrollEnabled={false}
-            contentContainerStyle={[styles.list, { paddingBottom: 0 }]}
-            ListEmptyComponent={
-              <EmptyState
-                icon="credit-card"
-                title="No Debts Tracked"
-                message="Add credit cards, loans, or any debt to track payoff progress and get snowball/avalanche recommendations."
-                actionLabel="Add Debt"
-                onAction={() => { setEditBill(null); setModalVisible(true); }}
-              />
-            }
-            renderItem={({ item }) => {
+            </>
+          )}
+          ListEmptyComponent={
+            <EmptyState
+              icon="credit-card"
+              title="No Debts Tracked"
+              message="Add credit cards, loans, or any debt to track payoff progress and get snowball/avalanche recommendations."
+              actionLabel="Add Debt"
+              onAction={() => { setEditBill(null); setModalVisible(true); }}
+            />
+          }
+          renderItem={({ item }) => {
               const priorityColor = priorityColors[Math.min(item.priority - 1, priorityColors.length - 1)] ?? c.primary;
               const effectiveMinimum = item.amount + Number(item.snowball_minimum_boost ?? 0);
               const originalBalance = item.balance + item.amount * 12;
@@ -613,9 +612,8 @@ export default function BillsScreen() {
                   </View>
                 </Pressable>
               );
-            }}
-          />
-        </ScrollView>
+          }}
+        />
       )}
 
       <AddBillModal
