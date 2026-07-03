@@ -448,6 +448,16 @@ export default function FloScreen() {
         topReason: algorithmSuite.safeCushion.topReason,
         topAction: algorithmSuite.safeCushion.topAction,
       },
+      debtPayoff: {
+        nextDebtName: algorithmSuite.debtPayoff.nextDebtName,
+        snowballBalance: algorithmSuite.debtPayoff.snowballBalance,
+        avalancheName: algorithmSuite.debtPayoff.avalancheName,
+        cashFlowReliefName: algorithmSuite.debtPayoff.cashFlowReliefName,
+        cashFlowReliefAmount: algorithmSuite.debtPayoff.cashFlowReliefAmount,
+        nextMove: algorithmSuite.debtPayoff.nextMove,
+        status: algorithmSuite.debtPayoff.status,
+        detail: algorithmSuite.debtPayoff.detail,
+      },
       decisionHistory: {
         due: decisionHistory.due,
         upcoming: decisionHistory.upcoming,

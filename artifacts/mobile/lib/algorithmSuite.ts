@@ -117,7 +117,17 @@ export interface AlgorithmSuiteResult {
   purchaseDecision: { safeNowLimit: number; action: "safe" | "wait" | "split" | "avoid"; detail: string };
   billPriority: { bills: { id: string; name: string; amount: number; dueDay: number; score: number; reason: string }[] };
   paydaySplit: { bills: number; spending: number; savings: number; debt: number; goals: number };
-  debtPayoff: { nextDebtName: string | null; snowballBalance: number; avalancheName: string | null; detail: string };
+  debtPayoff: {
+    nextDebtName: string | null;
+    snowballBalance: number;
+    avalancheName: string | null;
+    cashFlowReliefName: string | null;
+    cashFlowReliefAmount: number;
+    nextMove: string;
+    status: "ready" | "hold" | "done";
+    detail: string;
+    comparison: { method: "snowball" | "avalanche" | "cashFlow"; targetName: string | null; reason: string }[];
+  };
   forecastConfidence: { score: number; label: string; reason: string };
   lowBalanceWarning: { status: "safe" | "watch" | "risk"; day: number | null; balance: number | null; message: string };
   subscriptionCreep: { count: number; items: string[] };
@@ -161,8 +171,16 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
   const flowLabel = scoreLabel(flowScore);
   const lowBalanceWarning = buildLowBalanceWarning(lowestBalance, lowestDay, input.safetyFloor);
   const billPriority = prioritizeBills(input.bills, input.todayDay, input.safetyFloor, lowestDay);
-  const topDebtSnowball = input.bills.filter(bill => bill.is_debt && (bill.balance ?? 0) > 0).sort((a, b) => (a.balance ?? 0) - (b.balance ?? 0))[0] ?? null;
-  const topDebtAvalanche = input.bills.filter(bill => bill.is_debt && (bill.balance ?? 0) > 0).sort((a, b) => (b.interest_rate ?? 0) - (a.interest_rate ?? 0))[0] ?? null;
+  const activeDebts = input.bills.filter(bill => bill.is_debt && (bill.balance ?? 0) > 0.009);
+  const topDebtSnowball = activeDebts.slice().sort((a, b) => (a.balance ?? 0) - (b.balance ?? 0) || a.name.localeCompare(b.name))[0] ?? null;
+  const topDebtAvalanche = activeDebts.slice().sort((a, b) => (b.interest_rate ?? 0) - (a.interest_rate ?? 0) || (a.balance ?? 0) - (b.balance ?? 0) || a.name.localeCompare(b.name))[0] ?? null;
+  const topDebtCashFlow = activeDebts.slice().sort((a, b) => {
+    const aMinimum = Math.max(0.01, a.amount);
+    const bMinimum = Math.max(0.01, b.amount);
+    const aMonths = (a.balance ?? 0) / aMinimum;
+    const bMonths = (b.balance ?? 0) / bMinimum;
+    return aMonths - bMonths || bMinimum - aMinimum || (a.balance ?? 0) - (b.balance ?? 0) || a.name.localeCompare(b.name);
+  })[0] ?? null;
   const spendingLimits = {
     daily: roundCurrency(safeCushionAmount / Math.max(1, remainingBalances.length || 1)),
     weekly: roundCurrency((safeCushionAmount / Math.max(1, remainingBalances.length || 1)) * 7),
@@ -262,14 +280,12 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     purchaseDecision,
     billPriority,
     paydaySplit,
-    debtPayoff: {
-      nextDebtName: topDebtSnowball?.name ?? null,
-      snowballBalance: roundCurrency(topDebtSnowball?.balance ?? 0),
-      avalancheName: topDebtAvalanche?.name ?? null,
-      detail: topDebtSnowball
-        ? `Snowball targets ${topDebtSnowball.name}; avalanche targets ${topDebtAvalanche?.name ?? topDebtSnowball.name}.`
-        : "No active debt payoff target found.",
-    },
+    debtPayoff: buildDebtPayoffDetails({
+      snowball: topDebtSnowball,
+      avalanche: topDebtAvalanche,
+      cashFlow: topDebtCashFlow,
+      safeCushionAmount,
+    }),
     forecastConfidence: { score: confidenceScore, label: input.forecastConfidence.label, reason: input.forecastConfidence.reasons[0] ?? "Forecast inputs look current." },
     lowBalanceWarning,
     subscriptionCreep,
@@ -348,6 +364,66 @@ function buildPaydaySplit(monthlyIncome: number, bills: number, goals: number, d
   const savingsShare = safeCushion > 250 ? 10 : safeCushion > 75 ? 5 : 0;
   const spendingShare = Math.max(0, 100 - billShare - goalsShare - debtShare - savingsShare);
   return { bills: billShare, spending: spendingShare, savings: savingsShare, debt: debtShare, goals: goalsShare };
+}
+
+function buildDebtPayoffDetails(targets: {
+  snowball: AlgorithmBill | null;
+  avalanche: AlgorithmBill | null;
+  cashFlow: AlgorithmBill | null;
+  safeCushionAmount: number;
+}): AlgorithmSuiteResult["debtPayoff"] {
+  if (!targets.snowball) {
+    return {
+      nextDebtName: null,
+      snowballBalance: 0,
+      avalancheName: null,
+      cashFlowReliefName: null,
+      cashFlowReliefAmount: 0,
+      status: "done",
+      nextMove: "No active debt payoff target found.",
+      detail: "No active debt payoff target found.",
+      comparison: [
+        { method: "snowball", targetName: null, reason: "No active debt balance found." },
+        { method: "avalanche", targetName: null, reason: "No active debt balance found." },
+        { method: "cashFlow", targetName: null, reason: "No active debt balance found." },
+      ],
+    };
+  }
+
+  const cashFlowReliefAmount = roundCurrency(targets.cashFlow?.amount ?? 0);
+  const status: AlgorithmSuiteResult["debtPayoff"]["status"] = targets.safeCushionAmount > 0 ? "ready" : "hold";
+  const nextMove = status === "ready"
+    ? `Send safe extra money to ${targets.snowball.name} first.`
+    : `Hold extra debt payments until the Safe Cushion is above the floor, then target ${targets.snowball.name}.`;
+  const detail = `Snowball targets ${targets.snowball.name}; avalanche targets ${targets.avalanche?.name ?? targets.snowball.name}; cash-flow relief targets ${targets.cashFlow?.name ?? targets.snowball.name}.`;
+
+  return {
+    nextDebtName: targets.snowball.name,
+    snowballBalance: roundCurrency(targets.snowball.balance ?? 0),
+    avalancheName: targets.avalanche?.name ?? targets.snowball.name,
+    cashFlowReliefName: targets.cashFlow?.name ?? targets.snowball.name,
+    cashFlowReliefAmount,
+    status,
+    nextMove,
+    detail,
+    comparison: [
+      {
+        method: "snowball",
+        targetName: targets.snowball.name,
+        reason: `Smallest balance at $${(targets.snowball.balance ?? 0).toFixed(0)} keeps momentum high.`,
+      },
+      {
+        method: "avalanche",
+        targetName: targets.avalanche?.name ?? targets.snowball.name,
+        reason: `${(targets.avalanche?.interest_rate ?? targets.snowball.interest_rate ?? 0).toFixed(2)}% APR has the highest interest pressure.`,
+      },
+      {
+        method: "cashFlow",
+        targetName: targets.cashFlow?.name ?? targets.snowball.name,
+        reason: `Closing it frees about $${cashFlowReliefAmount.toFixed(0)}/month the fastest.`,
+      },
+    ],
+  };
 }
 
 function scoreIncomeStability(incomes: AlgorithmIncome[]) {

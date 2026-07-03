@@ -68,6 +68,11 @@ test("builds Flow Score, Safe Cushion, and practical algorithm outputs", () => {
   assert.equal(suite.lowBalanceWarning.status, "safe");
   assert.equal(suite.billPriority.bills[0].name, "Phone");
   assert.equal(suite.debtPayoff.nextDebtName, "Credit Card");
+  assert.equal(suite.debtPayoff.status, "ready");
+  assert.equal(suite.debtPayoff.avalancheName, "Credit Card");
+  assert.equal(suite.debtPayoff.cashFlowReliefName, "Credit Card");
+  assert.match(suite.debtPayoff.nextMove, /Credit Card/);
+  assert.equal(suite.extraMoneyRouter.recommendation, "debt");
   assert.ok(suite.spendingLimit.daily > 0);
   assert.ok(suite.insights.some(insight => insight.algorithm === "Flow Score"));
 });

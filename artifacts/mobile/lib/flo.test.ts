@@ -99,6 +99,16 @@ const facts: FloFacts = {
     topReason: "Your lowest forecast stays $600 above the $200 floor.",
     topAction: "Ask Flo what this cushion can safely do.",
   },
+  debtPayoff: {
+    nextDebtName: "Camera",
+    snowballBalance: 143.64,
+    avalancheName: "Concert",
+    cashFlowReliefName: "Camera",
+    cashFlowReliefAmount: 38.27,
+    nextMove: "Send safe extra money to Camera first.",
+    status: "ready",
+    detail: "Snowball targets Camera; avalanche targets Concert; cash-flow relief targets Camera.",
+  },
 };
 const days = [{ date: "2026-06-24", balance: 1000 }, { date: "2026-07-01", balance: 800 }];
 
@@ -137,6 +147,12 @@ test("Flo explains Safe Cushion from deterministic facts", () => {
   assert.match(localFloAnswer("What is my Safe Cushion?", facts, days) ?? "", /\$600/);
   assert.match(localFloAnswer("How much can I safely spend?", facts, days) ?? "", /reserving/);
   assert.match(localFloAnswer("Why is my cushion low?", { ...facts, safeCushion: { ...facts.safeCushion!, amount: 80, label: "thin cushion", status: "watch" } }, days) ?? "", /lowest projected balance/i);
+});
+
+test("Flo explains Debt Payoff from deterministic facts", () => {
+  assert.match(localFloAnswer("Which debt should I pay off first?", facts, days) ?? "", /Camera/);
+  assert.match(localFloAnswer("What is my avalanche target?", facts, days) ?? "", /Concert/);
+  assert.match(localFloAnswer("What debt helps cash-flow relief?", facts, days) ?? "", /\$38\/month/);
 });
 
 test("Flo answers category budget questions from verified facts", () => {

@@ -111,6 +111,22 @@ export default function BillsScreen() {
     .filter(debt => debt.balance > 0.009)
     .reduce((sum, debt) => sum + debt.amount + Number(debt.snowball_minimum_boost ?? 0), 0);
   const highestAPR       = debts.length ? Math.max(...debts.map(b => b.interest_rate)) : 0;
+  const activeDebts = debts.filter(debt => debt.balance > 0.009);
+  const snowballTarget = sortDebtsLeastToGreatest(activeDebts)[0] ?? null;
+  const avalancheTarget = activeDebts.slice().sort((a, b) => b.interest_rate - a.interest_rate || a.balance - b.balance || a.name.localeCompare(b.name))[0] ?? null;
+  const cashFlowTarget = activeDebts.slice().sort((a, b) => {
+    const aMin = Math.max(0.01, a.amount + Number(a.snowball_minimum_boost ?? 0));
+    const bMin = Math.max(0.01, b.amount + Number(b.snowball_minimum_boost ?? 0));
+    return (a.balance / aMin) - (b.balance / bMin) || bMin - aMin || a.balance - b.balance || a.name.localeCompare(b.name);
+  })[0] ?? null;
+  const activeDebtTarget = settings.paymentMethod === "avalanche" ? avalancheTarget ?? snowballTarget : snowballTarget;
+  const activeDebtMinimum = activeDebtTarget ? activeDebtTarget.amount + Number(activeDebtTarget.snowball_minimum_boost ?? 0) : 0;
+  const activeDebtMonths = activeDebtTarget && activeDebtMinimum > 0 ? Math.ceil(activeDebtTarget.balance / activeDebtMinimum) : 0;
+  const debtAlgoCopy = activeDebtTarget
+    ? safeSnowballAmount > 0
+      ? `Next best move: send safe extra money to ${activeDebtTarget.name}.`
+      : `Hold extra payments until the Safe Cushion opens up, then target ${activeDebtTarget.name}.`
+    : "Add debts to unlock payoff guidance.";
 
   const priorityColors = ["#22c55e", "#f0b429", "#ef4444", "#8b5cf6", "#ec4899"];
   const todayIso = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -386,6 +402,45 @@ export default function BillsScreen() {
             </View>
           )}
 
+          {debts.length > 0 && (
+            <View style={[styles.debtAlgoCard, { backgroundColor: c.card, borderColor: c.border, marginHorizontal: 16, borderRadius: colors.radius }]}>
+              <View style={styles.debtAlgoHeader}>
+                <View style={[styles.dataIcon, { backgroundColor: c.primary + "18" }]}>
+                  <Feather name="trending-down" size={17} color={c.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.debtAlgoEyebrow, { color: c.primary }]}>Debt Payoff Algo</Text>
+                  <Text style={[styles.debtAlgoTitle, { color: c.foreground }]}>
+                    {activeDebtTarget ? `${activeDebtTarget.name} is the move` : "No active target"}
+                  </Text>
+                </View>
+                <View style={[styles.debtAlgoBadge, { backgroundColor: safeSnowballAmount > 0 ? c.success + "18" : c.warning + "18" }]}>
+                  <Text style={[styles.debtAlgoBadgeText, { color: safeSnowballAmount > 0 ? c.success : c.warning }]}>
+                    {safeSnowballAmount > 0 ? "Ready" : "Hold"}
+                  </Text>
+                </View>
+              </View>
+              <Text style={[styles.debtAlgoCopy, { color: c.mutedForeground }]}>{debtAlgoCopy}</Text>
+              {activeDebtTarget && (
+                <Text style={[styles.debtAlgoMeta, { color: c.mutedForeground }]}>
+                  ${activeDebtTarget.balance.toFixed(0)} balance · ${activeDebtMinimum.toFixed(0)}/mo min{activeDebtMonths > 0 ? ` · ~${activeDebtMonths} mo at minimum` : ""}
+                </Text>
+              )}
+              <View style={styles.debtAlgoCompareRow}>
+                {[
+                  { label: "Snowball", value: snowballTarget?.name ?? "None", color: c.success },
+                  { label: "Avalanche", value: avalancheTarget?.name ?? "None", color: c.primary },
+                  { label: "Cash-flow", value: cashFlowTarget ? `${cashFlowTarget.name} frees $${(cashFlowTarget.amount + Number(cashFlowTarget.snowball_minimum_boost ?? 0)).toFixed(0)}/mo` : "None", color: c.warning },
+                ].map(item => (
+                  <View key={item.label} style={[styles.debtAlgoChip, { backgroundColor: item.color + "12", borderColor: item.color + "28" }]}>
+                    <Text style={[styles.debtAlgoChipLabel, { color: item.color }]}>{item.label}</Text>
+                    <Text style={[styles.debtAlgoChipValue, { color: c.foreground }]} numberOfLines={2}>{item.value}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
           <View style={[styles.methodRow, { marginHorizontal: 16, marginTop: 10 }]}>
             <View style={[styles.methodToggle, { backgroundColor: c.muted, borderRadius: 10 }]}>
               {(["snowball", "avalanche"] as const).map(m => (
@@ -594,6 +649,19 @@ const styles = StyleSheet.create({
   applyBtn:       { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
   applyBtnText:   { fontSize: 13, fontFamily: "Inter_700Bold" },
   cappedNote:     { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 10, lineHeight: 15 },
+  debtAlgoCard:   { borderWidth: 1, padding: 14, marginTop: 10, marginBottom: 2, gap: 10 },
+  debtAlgoHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  dataIcon:       { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  debtAlgoEyebrow:{ fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8 },
+  debtAlgoTitle:  { fontSize: 17, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
+  debtAlgoBadge:  { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999 },
+  debtAlgoBadgeText: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.5 },
+  debtAlgoCopy:   { fontSize: 13, fontFamily: "Inter_600SemiBold", lineHeight: 18 },
+  debtAlgoMeta:   { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: -4 },
+  debtAlgoCompareRow: { flexDirection: "row", gap: 8 },
+  debtAlgoChip:   { flex: 1, borderWidth: 1, borderRadius: 12, padding: 9, minHeight: 62 },
+  debtAlgoChipLabel: { fontSize: 9, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 },
+  debtAlgoChipValue: { fontSize: 11, fontFamily: "Inter_700Bold", lineHeight: 14 },
   methodRow:      { flexDirection: "row", gap: 8, alignItems: "center", marginBottom: 6 },
   methodToggle:   { flex: 1, flexDirection: "row", padding: 4, gap: 4 },
   methodBtn:      { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingVertical: 9 },

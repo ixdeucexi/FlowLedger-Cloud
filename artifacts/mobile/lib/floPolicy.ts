@@ -54,6 +54,16 @@ export interface FloFacts {
     topReason: string;
     topAction: string;
   };
+  debtPayoff?: {
+    nextDebtName: string | null;
+    snowballBalance: number;
+    avalancheName: string | null;
+    cashFlowReliefName: string | null;
+    cashFlowReliefAmount: number;
+    nextMove: string;
+    status: "ready" | "hold" | "done";
+    detail: string;
+  };
 }
 
 export interface FloDebtFact {
@@ -309,6 +319,16 @@ export function sanitizeFloFacts(facts: FloFacts): FloFacts {
       topReason: String(facts.safeCushion.topReason ?? "").slice(0, 180),
       topAction: String(facts.safeCushion.topAction ?? "").slice(0, 120),
     } : undefined,
+    debtPayoff: facts.debtPayoff ? {
+      nextDebtName: facts.debtPayoff.nextDebtName === null ? null : String(facts.debtPayoff.nextDebtName ?? "").slice(0, 80),
+      snowballBalance: Math.max(0, num(facts.debtPayoff.snowballBalance)),
+      avalancheName: facts.debtPayoff.avalancheName === null ? null : String(facts.debtPayoff.avalancheName ?? "").slice(0, 80),
+      cashFlowReliefName: facts.debtPayoff.cashFlowReliefName === null ? null : String(facts.debtPayoff.cashFlowReliefName ?? "").slice(0, 80),
+      cashFlowReliefAmount: Math.max(0, num(facts.debtPayoff.cashFlowReliefAmount)),
+      nextMove: String(facts.debtPayoff.nextMove ?? "").slice(0, 160),
+      status: facts.debtPayoff.status === "ready" || facts.debtPayoff.status === "hold" || facts.debtPayoff.status === "done" ? facts.debtPayoff.status : "hold",
+      detail: String(facts.debtPayoff.detail ?? "").slice(0, 220),
+    } : undefined,
   };
 }
 
@@ -331,6 +351,12 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
       return `Your Safe Cushion is $${facts.safeCushion.amount.toFixed(0)} - ${facts.safeCushion.label}. ${facts.safeCushion.topReason} Your lowest projected balance is $${facts.safeCushion.lowestBalance.toFixed(0)}${dayText}, with a $${facts.safeCushion.safetyFloor.toFixed(0)} floor. ${facts.safeCushion.topAction}`;
     }
     return `Your Safe Cushion is $${facts.safeCushion.amount.toFixed(0)} - ${facts.safeCushion.label}. ${facts.safeCushion.topReason} FlowLedger is already reserving about $${facts.safeCushion.reservedAmount.toFixed(0)} for the current plan. ${facts.safeCushion.topAction}`;
+  }
+  const asksDebtPayoff = /\b(debt payoff|payoff plan|snowball target|avalanche target|which debt|what debt|pay off first|next debt)\b/.test(lower);
+  if (asksDebtPayoff && facts.debtPayoff) {
+    if (facts.debtPayoff.status === "done") return "I don't see an active debt balance right now. Add a debt in Bills if you want payoff guidance.";
+    const hold = facts.debtPayoff.status === "hold" ? " I would hold extra payments until your Safe Cushion is protected." : "";
+    return `${facts.debtPayoff.nextMove}${hold} Snowball target: ${facts.debtPayoff.nextDebtName ?? "none"}${facts.debtPayoff.nextDebtName ? ` ($${facts.debtPayoff.snowballBalance.toFixed(0)} balance)` : ""}. Avalanche target: ${facts.debtPayoff.avalancheName ?? "none"}. Cash-flow relief target: ${facts.debtPayoff.cashFlowReliefName ?? "none"}${facts.debtPayoff.cashFlowReliefAmount > 0 ? `, freeing about $${facts.debtPayoff.cashFlowReliefAmount.toFixed(0)}/month when closed` : ""}.`;
   }
   const debtPayment = evaluateFloDebtPayment(message, facts);
   if (debtPayment) {
