@@ -57,7 +57,7 @@ function FlowScoreGauge({ score }: { score: number }) {
 
   return (
     <View style={styles.referenceGaugeWrap}>
-      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={styles.referenceGaugeSvg}>
         <Defs>
           <SvgLinearGradient id="flowScoreGradient" x1="0" y1="0" x2="1" y2="1">
             <Stop offset="0" stopColor="#a855f7" stopOpacity="1" />
@@ -71,7 +71,7 @@ function FlowScoreGauge({ score }: { score: number }) {
           r={radius}
           stroke="rgba(148,163,184,0.18)"
           strokeWidth={stroke}
-          fill="rgba(2,6,23,0.48)"
+          fill="rgba(2,6,23,0.22)"
         />
         <Circle
           cx={size / 2}
@@ -2941,7 +2941,8 @@ const styles = StyleSheet.create({
   referenceSummaryLabel: { fontSize: 9, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 5 },
   referenceSummaryValue: { color: "#f8fafc", fontSize: 17, fontFamily: "Inter_800ExtraBold" },
   referenceScorePanel: { alignItems: "center", justifyContent: "center", paddingTop: 7 },
-  referenceGaugeWrap: { width: 112, height: 112, alignItems: "center", justifyContent: "center", shadowColor: "#a855f7", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.55, shadowRadius: 22 },
+  referenceGaugeWrap: { width: 112, height: 112, alignItems: "center", justifyContent: "center", backgroundColor: "transparent", shadowColor: "#a855f7", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.55, shadowRadius: 22 },
+  referenceGaugeSvg: { backgroundColor: "transparent" },
   referenceGaugeCenter: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
   referenceGaugeScore: { color: "#ffffff", fontSize: 32, fontFamily: "Inter_800ExtraBold", lineHeight: 36 },
   referenceGaugeLabel: { color: "#cbd5e1", fontSize: 10, fontFamily: "Inter_700Bold" },

@@ -415,7 +415,7 @@ export default function BillsScreen() {
                 <View style={styles.extraLeft}>
                   <Feather name="shield" size={20} color={safeSnowballAmount > 0 ? c.success : c.mutedForeground} />
                   <View>
-                    <Text style={[styles.extraLabel, { color: c.mutedForeground }]}>Safe to Apply</Text>
+                    <Text style={[styles.extraLabel, { color: c.mutedForeground }]}>Safe Extra Payment</Text>
                     <Text style={[styles.extraValue, { color: safeSnowballAmount > 0 ? c.success : c.mutedForeground }]}>
                       ${safeSnowballAmount.toFixed(2)}
                     </Text>
@@ -434,7 +434,9 @@ export default function BillsScreen() {
                   </Text>
                 </Pressable>
               </View>
-              <Text style={[styles.cappedNote, { color: c.mutedForeground }]}>Keeps your {settings.forecast_horizon_months}-month projected balance at or above ${settings.safety_floor.toFixed(0)}</Text>
+              <Text style={[styles.cappedNote, { color: c.mutedForeground }]}>
+                Current extra debt room only — keeps the forecast at or above ${settings.safety_floor.toFixed(0)}
+              </Text>
             </View>
           )}
 
