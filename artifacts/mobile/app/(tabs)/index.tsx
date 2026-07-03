@@ -1187,6 +1187,7 @@ export default function DashboardScreen() {
             >
               <Text style={styles.algoMiniLabel}>Safe Cushion</Text>
               <Text style={styles.algoMiniValue}>${algorithmSuite.safeCushion.amount.toFixed(0)}</Text>
+              <Text style={styles.algoMiniHint} numberOfLines={1}>{algorithmSuite.safeCushion.compactReason}</Text>
             </Pressable>
             <View style={styles.algoMiniMetric}>
               <Text style={styles.algoMiniLabel}>Daily Limit</Text>
@@ -1769,7 +1770,29 @@ export default function DashboardScreen() {
           <Pressable style={[styles.actionSheet, { backgroundColor: c.card }]} onPress={() => {}}>
             <View style={[styles.sheetHandle, { backgroundColor: c.muted }]} />
             <Text style={[styles.sheetTitle, { color: c.foreground }]}>Safe Cushion</Text>
-            <Text style={[styles.sheetSub, { color: c.mutedForeground }]}>{algorithmSuite.safeCushion.topReason}</Text>
+            <Text style={[styles.sheetSub, { color: c.mutedForeground }]}>
+              The calm number: what is still safe after your plan protects the floor.
+            </Text>
+
+            <View style={[
+              styles.safeCushionHero,
+              {
+                backgroundColor: algoToneColor(algorithmSuite.safeCushion.status) + "16",
+                borderColor: algoToneColor(algorithmSuite.safeCushion.status) + "38",
+              },
+            ]}>
+              <View>
+                <Text style={[styles.flowScoreColumnTitle, { color: algoToneColor(algorithmSuite.safeCushion.status) }]}>
+                  {algorithmSuite.safeCushion.label}
+                </Text>
+                <Text style={[styles.safeCushionHeroAmount, { color: c.foreground }]}>
+                  ${algorithmSuite.safeCushion.amount.toFixed(0)}
+                </Text>
+              </View>
+              <Text style={[styles.safeCushionHeroCopy, { color: c.mutedForeground }]}>
+                {algorithmSuite.safeCushion.topReason}
+              </Text>
+            </View>
 
             <View style={styles.flowScoreBreakdown}>
               {algorithmSuite.safeCushion.breakdownItems.map(item => (
@@ -1784,6 +1807,7 @@ export default function DashboardScreen() {
               <Text style={[styles.flowScoreColumnTitle, { color: c.primary }]}>What this means</Text>
               <Text style={[styles.flowScoreFactor, { color: c.foreground }]}>{algorithmSuite.safeCushion.reservedLabel}</Text>
               <Text style={[styles.flowScoreFactor, { color: c.foreground, marginTop: 6 }]}>{algorithmSuite.safeCushion.topAction}</Text>
+              <Text style={[styles.flowScoreFactor, { color: c.mutedForeground, marginTop: 6 }]}>{algorithmSuite.safeCushion.calendarHint}</Text>
             </View>
 
             <Pressable
@@ -2446,6 +2470,7 @@ const styles = StyleSheet.create({
   algoMiniMetric: { flex: 1, borderRadius: 16, padding: 10, backgroundColor: "rgba(15,23,42,0.72)", borderWidth: 1, borderColor: "rgba(148,163,184,0.12)" },
   algoMiniLabel: { color: "#94a3b8", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7, textTransform: "uppercase", marginBottom: 4 },
   algoMiniValue: { color: "#f8fafc", fontSize: 17, fontFamily: "Inter_800ExtraBold" },
+  algoMiniHint: { color: "#64748b", fontSize: 9, fontFamily: "Inter_700Bold", marginTop: 2 },
   algoActionButton: { marginTop: 12, minHeight: 44, borderRadius: 16, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "rgba(37,99,235,0.28)", borderWidth: 1, borderColor: "rgba(147,197,253,0.24)" },
   algoActionText: { color: "#dbeafe", fontSize: 12, fontFamily: "Inter_800ExtraBold", textAlign: "center", flexShrink: 1 },
   algoInsightStack: { gap: 8, marginTop: 12 },
@@ -2471,6 +2496,9 @@ const styles = StyleSheet.create({
   flowScoreColumnTitle: { fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7, textTransform: "uppercase", marginBottom: 7 },
   flowScoreFactor: { fontSize: 12, fontFamily: "Inter_600SemiBold", lineHeight: 17 },
   flowScoreNextMove: { borderWidth: 1, borderRadius: 16, padding: 12, marginTop: 10 },
+  safeCushionHero: { borderWidth: 1, borderRadius: 20, padding: 14, marginTop: -2, marginBottom: 8, gap: 8 },
+  safeCushionHeroAmount: { fontSize: 34, fontFamily: "Inter_800ExtraBold", letterSpacing: -1 },
+  safeCushionHeroCopy: { fontSize: 13, fontFamily: "Inter_600SemiBold", lineHeight: 18 },
   flowScoreBreakdown: { marginTop: 8 },
   flowScoreBreakdownRow: { borderTopWidth: 1, paddingVertical: 9, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   flowScoreBreakdownLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold" },

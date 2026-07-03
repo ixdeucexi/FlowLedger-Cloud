@@ -108,6 +108,8 @@ export interface AlgorithmSuiteResult {
     safetyFloor: number;
     reservedAmount: number;
     reservedLabel: string;
+    compactReason: string;
+    calendarHint: string;
     topReason: string;
     topAction: string;
     breakdownItems: { label: string; value: string; tone: "safe" | "watch" | "risk" | "info" }[];
@@ -448,6 +450,8 @@ function buildSafeCushionDetails(
   const remainingBills = Math.max(0, input.cashFlow.totalBillsDue - input.cashFlow.totalPaid);
   const plannedOutflow = Math.max(0, -input.cashFlow.netTransactions) + Math.max(0, input.cashFlow.goalAllocations);
   const reservedAmount = roundCurrency(remainingBills + plannedOutflow);
+  const lowestLabel = facts.lowestDay ? `day ${facts.lowestDay}` : "the low point";
+  const floorGap = roundCurrency(facts.lowestBalance - input.safetyFloor);
   const status: AlgorithmSuiteResult["safeCushion"]["status"] = facts.safeCushionAmount <= 0
     ? "risk"
     : facts.safeCushionAmount < 250
@@ -457,16 +461,24 @@ function buildSafeCushionDetails(
   const reservedLabel = reservedAmount > 0
     ? `$${reservedAmount.toFixed(0)} is already reserved for bills, spending, and goals in this month.`
     : "No remaining planned outflow is reserved in this month.";
+  const compactReason = status === "safe"
+    ? `${lowestLabel} stays protected`
+    : status === "watch"
+      ? `tightest on ${lowestLabel}`
+      : `below floor on ${lowestLabel}`;
+  const calendarHint = facts.lowestDay
+    ? `Monthly will point you to day ${facts.lowestDay}, where the cushion is tightest.`
+    : "Monthly will show the first date that starts to pressure your cushion.";
   const topReason = status === "safe"
     ? `Your lowest forecast stays $${facts.safeCushionAmount.toFixed(0)} above the $${input.safetyFloor.toFixed(0)} floor.`
     : status === "watch"
       ? `Your lowest forecast leaves only $${facts.safeCushionAmount.toFixed(0)} above the $${input.safetyFloor.toFixed(0)} floor.`
       : facts.lowBalanceWarning.message;
   const topAction = status === "safe"
-    ? "Ask Flo what this cushion can safely do."
+    ? "Use this as the limit before adding new spending, extra debt payments, or savings moves."
     : status === "watch"
-      ? "Keep extra money available until the tight day passes."
-      : "Ask Flo how to protect your safety floor.";
+      ? "Keep extra money available until the tight day passes, or ask Flo to find a safer date."
+      : "Pause new spending and ask Flo how to protect the floor from the bill, plan, or debt move creating pressure.";
   return {
     label,
     status,
@@ -475,13 +487,16 @@ function buildSafeCushionDetails(
     safetyFloor: input.safetyFloor,
     reservedAmount,
     reservedLabel,
+    compactReason,
+    calendarHint,
     topReason,
     topAction,
     breakdownItems: [
       { label: "Safe amount", value: `$${facts.safeCushionAmount.toFixed(0)}`, tone: status },
       { label: "Lowest balance", value: `$${facts.lowestBalance.toFixed(0)}${facts.lowestDay ? ` day ${facts.lowestDay}` : ""}`, tone: facts.lowestBalance < input.safetyFloor ? "risk" : "info" },
       { label: "Safety floor", value: `$${input.safetyFloor.toFixed(0)}`, tone: "info" },
-      { label: "Reserved", value: `$${reservedAmount.toFixed(0)}`, tone: reservedAmount > facts.safeCushionAmount ? "watch" : "info" },
+      { label: "Room vs floor", value: floorGap >= 0 ? `+$${floorGap.toFixed(0)}` : `-$${Math.abs(floorGap).toFixed(0)}`, tone: floorGap > 250 ? "safe" : floorGap > 0 ? "watch" : "risk" },
+      { label: "Reserved plan", value: `$${reservedAmount.toFixed(0)}`, tone: reservedAmount > facts.safeCushionAmount ? "watch" : "info" },
     ],
   };
 }
