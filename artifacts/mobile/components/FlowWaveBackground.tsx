@@ -10,10 +10,20 @@ type Props = {
   intensity?: "soft" | "standard";
 };
 
+type FlowLine = {
+  key: string;
+  path: string;
+  color: string;
+  opacity: number;
+  width: number;
+  dash?: string;
+};
+
 export function FlowWaveBackground({ intensity = "standard" }: Props) {
   const { width, height } = useWindowDimensions();
   const [reduceMotion, setReduceMotion] = useState(false);
-  const flowAnim = useRef(new Animated.Value(0)).current;
+  const driftAnim = useRef(new Animated.Value(0)).current;
+  const counterDriftAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -30,22 +40,23 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
 
   useEffect(() => {
     if (reduceMotion) {
-      flowAnim.setValue(0.35);
-      pulseAnim.setValue(0.25);
+      driftAnim.setValue(0.42);
+      counterDriftAnim.setValue(0.32);
+      pulseAnim.setValue(0.35);
       return;
     }
 
-    const flowLoop = Animated.loop(
+    const driftLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(flowAnim, {
+        Animated.timing(driftAnim, {
           toValue: 1,
-          duration: 16000,
+          duration: 22000,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.timing(flowAnim, {
+        Animated.timing(driftAnim, {
           toValue: 0,
-          duration: 16000,
+          duration: 22000,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
@@ -55,172 +66,197 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
       Animated.sequence([
         Animated.timing(pulseAnim, {
           toValue: 1,
-          duration: 2400,
-          easing: Easing.out(Easing.quad),
+          duration: 3600,
+          easing: Easing.inOut(Easing.quad),
           useNativeDriver: true,
         }),
         Animated.timing(pulseAnim, {
           toValue: 0,
-          duration: 5200,
+          duration: 6200,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    const counterLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(counterDriftAnim, {
+          toValue: 1,
+          duration: 28000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(counterDriftAnim, {
+          toValue: 0,
+          duration: 28000,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
       ]),
     );
 
-    flowLoop.start();
+    driftLoop.start();
     pulseLoop.start();
+    counterLoop.start();
     return () => {
-      flowLoop.stop();
+      driftLoop.stop();
       pulseLoop.stop();
+      counterLoop.stop();
     };
-  }, [flowAnim, pulseAnim, reduceMotion]);
+  }, [counterDriftAnim, driftAnim, pulseAnim, reduceMotion]);
 
   const svgWidth = Math.max(width, 390);
   const svgHeight = Math.max(height, 760);
-  const particleCount = intensity === "soft" ? 22 : 36;
-  const translateX = flowAnim.interpolate({ inputRange: [0, 1], outputRange: [-34, 34] });
-  const translateY = flowAnim.interpolate({ inputRange: [0, 1], outputRange: [14, -22] });
-  const lightningOpacity = pulseAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.34, 0.82, 0.42] });
+  const density = intensity === "soft" ? 0.72 : 1;
+  const translateX = driftAnim.interpolate({ inputRange: [0, 1], outputRange: [-22, 28] });
+  const translateY = driftAnim.interpolate({ inputRange: [0, 1], outputRange: [16, -18] });
+  const counterTranslateX = counterDriftAnim.interpolate({ inputRange: [0, 1], outputRange: [30, -26] });
+  const counterTranslateY = counterDriftAnim.interpolate({ inputRange: [0, 1], outputRange: [-10, 18] });
+  const streamOpacity = pulseAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.72, 1, 0.78] });
+  const dotOpacity = pulseAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.42, 0.86, 0.50] });
 
-  const particles = useMemo(() => (
-    Array.from({ length: particleCount }).map((_, index) => {
-      const x = (index * 73 + 29) % svgWidth;
-      const y = (index * 127 + 41) % Math.max(1, svgHeight * 0.76);
-      const radius = index % 6 === 0 ? 2.1 : index % 4 === 0 ? 1.45 : 0.95;
-      const color = index % 3 === 0 ? "#22d3ee" : index % 3 === 1 ? "#8b5cf6" : "#60a5fa";
-      const opacity = index % 5 === 0 ? 0.42 : 0.20;
-      return { key: index, x, y: y + 36, radius, color, opacity };
-    })
-  ), [particleCount, svgHeight, svgWidth]);
+  const { flowLines, particles } = useMemo(() => {
+    const baseY = svgHeight * 0.60;
+    const lines: FlowLine[] = [];
+    const total = Math.round(18 * density);
+
+    for (let index = 0; index < total; index += 1) {
+      const offset = (index - total / 2) * 13;
+      const startY = baseY + offset + (index % 4) * 9;
+      const lift = svgHeight * (0.18 + (index % 5) * 0.018);
+      const endY = startY - lift - (index % 3) * 26;
+      const controlOneY = startY - svgHeight * (0.04 + (index % 3) * 0.018);
+      const controlTwoY = endY + svgHeight * (0.13 + (index % 4) * 0.015);
+      const color = index % 5 === 0 ? "#c084fc" : index % 3 === 0 ? "#38bdf8" : "#0ea5e9";
+
+      lines.push({
+        key: `fiber-${index}`,
+        path: `M ${-svgWidth * 0.16} ${startY} C ${svgWidth * 0.18} ${controlOneY}, ${svgWidth * 0.54} ${controlTwoY}, ${svgWidth * 1.18} ${endY}`,
+        color,
+        opacity: index % 5 === 0 ? 0.22 : 0.16,
+        width: index % 6 === 0 ? 2.4 : 1.1,
+      });
+    }
+
+    for (let index = 0; index < Math.round(9 * density); index += 1) {
+      const offset = (index - 4) * 24;
+      const startY = baseY + offset + svgHeight * 0.08;
+      const endY = startY - svgHeight * 0.32 - (index % 4) * 20;
+      const color = index % 3 === 0 ? "#22d3ee" : index % 3 === 1 ? "#a855f7" : "#60a5fa";
+      lines.push({
+        key: `dotted-${index}`,
+        path: `M ${-svgWidth * 0.12} ${startY} C ${svgWidth * 0.20} ${startY - svgHeight * 0.10}, ${svgWidth * 0.52} ${endY + svgHeight * 0.18}, ${svgWidth * 1.12} ${endY}`,
+        color,
+        opacity: index % 3 === 0 ? 0.72 : 0.54,
+        width: index % 2 === 0 ? 3.2 : 2.2,
+        dash: index % 2 === 0 ? "1 16" : "1 11",
+      });
+    }
+
+    const dots = Array.from({ length: Math.round(56 * density) }).map((_, index) => {
+      const along = (index * 47 + 19) % Math.max(1, svgWidth);
+      const band = (index * 31 + 11) % Math.max(1, svgHeight * 0.52);
+      const curveBias = Math.sin(index * 0.75) * 42;
+      const x = along;
+      const y = svgHeight * 0.16 + band + curveBias;
+      const radius = index % 11 === 0 ? 2.5 : index % 5 === 0 ? 1.7 : 1.05;
+      const color = index % 7 === 0 ? "#c084fc" : index % 4 === 0 ? "#60a5fa" : "#22d3ee";
+      const opacity = index % 9 === 0 ? 0.62 : 0.28;
+      return { key: index, x, y, radius, color, opacity };
+    });
+
+    return { flowLines: lines, particles: dots };
+  }, [density, svgHeight, svgWidth]);
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
       <LinearGradient
-        colors={["#01030a", "#050817", "#071326", "#02030a"]}
+        colors={["#01030b", "#020817", "#031225", "#01020a"]}
+        locations={[0, 0.38, 0.72, 1]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFillObject}
       />
 
-      <Animated.View style={[styles.flowLayer, { transform: [{ translateX }, { translateY }] }]}>
+      <Animated.View style={[styles.flowLayer, { opacity: streamOpacity, transform: [{ translateX }, { translateY }] }]}>
         <Svg width={svgWidth} height={svgHeight} viewBox={`0 0 ${svgWidth} ${svgHeight}`} preserveAspectRatio="none">
           <Defs>
-            <SvgLinearGradient id="waveGlow" x1="0" y1="0" x2="1" y2="0">
+            <SvgLinearGradient id="fiberGlow" x1="0" y1="0" x2="1" y2="0">
               <Stop offset="0" stopColor="#22d3ee" stopOpacity="0" />
-              <Stop offset="0.28" stopColor="#22d3ee" stopOpacity="0.32" />
-              <Stop offset="0.54" stopColor="#8b5cf6" stopOpacity="0.48" />
-              <Stop offset="0.78" stopColor="#2563eb" stopOpacity="0.28" />
+              <Stop offset="0.24" stopColor="#22d3ee" stopOpacity="0.20" />
+              <Stop offset="0.58" stopColor="#38bdf8" stopOpacity="0.36" />
+              <Stop offset="0.82" stopColor="#a855f7" stopOpacity="0.26" />
               <Stop offset="1" stopColor="#22d3ee" stopOpacity="0" />
             </SvgLinearGradient>
-            <SvgLinearGradient id="lightningBlue" x1="0" y1="0" x2="1" y2="0">
-              <Stop offset="0" stopColor="#38bdf8" stopOpacity="0" />
-              <Stop offset="0.42" stopColor="#38bdf8" stopOpacity="0.72" />
-              <Stop offset="0.60" stopColor="#c084fc" stopOpacity="0.68" />
-              <Stop offset="1" stopColor="#60a5fa" stopOpacity="0" />
-            </SvgLinearGradient>
-            <SvgLinearGradient id="deepPurple" x1="0" y1="0" x2="1" y2="0">
-              <Stop offset="0" stopColor="#312e81" stopOpacity="0" />
-              <Stop offset="0.44" stopColor="#7c3aed" stopOpacity="0.42" />
-              <Stop offset="0.88" stopColor="#06b6d4" stopOpacity="0.18" />
-              <Stop offset="1" stopColor="#020617" stopOpacity="0" />
+            <SvgLinearGradient id="purpleFiber" x1="0" y1="0" x2="1" y2="0">
+              <Stop offset="0" stopColor="#7c3aed" stopOpacity="0" />
+              <Stop offset="0.42" stopColor="#8b5cf6" stopOpacity="0.30" />
+              <Stop offset="0.72" stopColor="#22d3ee" stopOpacity="0.18" />
+              <Stop offset="1" stopColor="#0f172a" stopOpacity="0" />
             </SvgLinearGradient>
           </Defs>
 
           <Path
-            d={`M ${-180} ${svgHeight * 0.18} C ${svgWidth * 0.12} ${svgHeight * 0.02}, ${svgWidth * 0.48} ${svgHeight * 0.38}, ${svgWidth + 180} ${svgHeight * 0.12}`}
-            stroke="url(#waveGlow)"
-            strokeWidth="38"
+            d={`M ${-svgWidth * 0.24} ${svgHeight * 0.76} C ${svgWidth * 0.18} ${svgHeight * 0.56}, ${svgWidth * 0.52} ${svgHeight * 0.70}, ${svgWidth * 1.24} ${svgHeight * 0.28}`}
+            stroke="url(#fiberGlow)"
+            strokeWidth="42"
             strokeLinecap="round"
             fill="none"
-            opacity="0.11"
+            opacity="0.08"
           />
           <Path
-            d={`M ${-120} ${svgHeight * 0.28} C ${svgWidth * 0.20} ${svgHeight * 0.04}, ${svgWidth * 0.48} ${svgHeight * 0.46}, ${svgWidth + 120} ${svgHeight * 0.16}`}
-            stroke="url(#waveGlow)"
-            strokeWidth="8"
+            d={`M ${-svgWidth * 0.18} ${svgHeight * 0.82} C ${svgWidth * 0.18} ${svgHeight * 0.64}, ${svgWidth * 0.60} ${svgHeight * 0.72}, ${svgWidth * 1.24} ${svgHeight * 0.34}`}
+            stroke="url(#purpleFiber)"
+            strokeWidth="32"
             strokeLinecap="round"
             fill="none"
-            opacity="0.72"
-          />
-          <Path
-            d={`M ${-110} ${svgHeight * 0.32} C ${svgWidth * 0.20} ${svgHeight * 0.10}, ${svgWidth * 0.54} ${svgHeight * 0.42}, ${svgWidth + 140} ${svgHeight * 0.20}`}
-            stroke="url(#lightningBlue)"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            fill="none"
-            opacity="0.82"
-          />
-          <Path
-            d={`M ${-150} ${svgHeight * 0.39} C ${svgWidth * 0.18} ${svgHeight * 0.11}, ${svgWidth * 0.54} ${svgHeight * 0.50}, ${svgWidth + 160} ${svgHeight * 0.23}`}
-            stroke="url(#deepPurple)"
-            strokeWidth="20"
-            strokeLinecap="round"
-            fill="none"
-            opacity="0.24"
-          />
-          <Path
-            d={`M ${-120} ${svgHeight * 0.68} C ${svgWidth * 0.24} ${svgHeight * 0.43}, ${svgWidth * 0.58} ${svgHeight * 0.88}, ${svgWidth + 130} ${svgHeight * 0.62}`}
-            stroke="url(#waveGlow)"
-            strokeWidth="3"
-            strokeLinecap="round"
-            fill="none"
-            opacity="0.24"
+            opacity="0.08"
           />
 
-          {particles.map(dot => (
-            <Circle key={dot.key} cx={dot.x} cy={dot.y} r={dot.radius} fill={dot.color} opacity={dot.opacity} />
+          {flowLines.map(line => (
+            <Path
+              key={line.key}
+              d={line.path}
+              stroke={line.color}
+              strokeWidth={line.width}
+              strokeLinecap="round"
+              fill="none"
+              opacity={line.opacity}
+              strokeDasharray={line.dash}
+            />
           ))}
         </Svg>
       </Animated.View>
 
-      <Animated.View style={[styles.lightningLayer, { opacity: lightningOpacity }]}>
+      <Animated.View style={[styles.counterFlowLayer, { transform: [{ translateX: counterTranslateX }, { translateY: counterTranslateY }] }]}>
         <Svg width={svgWidth} height={svgHeight} viewBox={`0 0 ${svgWidth} ${svgHeight}`} preserveAspectRatio="none">
-          <Defs>
-            <SvgLinearGradient id="boltCore" x1="0" y1="0" x2="1" y2="0">
-              <Stop offset="0" stopColor="#22d3ee" stopOpacity="0" />
-              <Stop offset="0.30" stopColor="#7dd3fc" stopOpacity="0.90" />
-              <Stop offset="0.52" stopColor="#c084fc" stopOpacity="0.95" />
-              <Stop offset="0.78" stopColor="#60a5fa" stopOpacity="0.80" />
-              <Stop offset="1" stopColor="#22d3ee" stopOpacity="0" />
-            </SvgLinearGradient>
-          </Defs>
-          <Path
-            d={`M ${svgWidth * -0.08} ${svgHeight * 0.18} L ${svgWidth * 0.18} ${svgHeight * 0.13} L ${svgWidth * 0.12} ${svgHeight * 0.18} L ${svgWidth * 0.44} ${svgHeight * 0.09} L ${svgWidth * 0.36} ${svgHeight * 0.16} L ${svgWidth * 1.06} ${svgHeight * 0.03}`}
-            stroke="url(#boltCore)"
-            strokeWidth="5.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            fill="none"
-            opacity="0.22"
-          />
-          <Path
-            d={`M ${svgWidth * -0.08} ${svgHeight * 0.18} L ${svgWidth * 0.18} ${svgHeight * 0.13} L ${svgWidth * 0.12} ${svgHeight * 0.18} L ${svgWidth * 0.44} ${svgHeight * 0.09} L ${svgWidth * 0.36} ${svgHeight * 0.16} L ${svgWidth * 1.06} ${svgHeight * 0.03}`}
-            stroke="url(#boltCore)"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            fill="none"
-            opacity="0.92"
-          />
-          <Path
-            d={`M ${svgWidth * 0.10} ${svgHeight * 0.22} L ${svgWidth * 0.34} ${svgHeight * 0.16} L ${svgWidth * 0.28} ${svgHeight * 0.22} L ${svgWidth * 0.58} ${svgHeight * 0.13} L ${svgWidth * 0.45} ${svgHeight * 0.24} L ${svgWidth * 0.86} ${svgHeight * 0.10}`}
-            stroke="#38bdf8"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            fill="none"
-            opacity="0.62"
-          />
-          <Path
-            d={`M ${svgWidth * 0.02} ${svgHeight * 0.54} L ${svgWidth * 0.28} ${svgHeight * 0.49} L ${svgWidth * 0.22} ${svgHeight * 0.55} L ${svgWidth * 0.52} ${svgHeight * 0.48} L ${svgWidth * 0.44} ${svgHeight * 0.57} L ${svgWidth * 0.92} ${svgHeight * 0.45}`}
-            stroke="#a855f7"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            fill="none"
-            opacity="0.42"
-          />
+          {flowLines.filter((_, index) => index % 3 === 0).map(line => (
+            <Path
+              key={`counter-${line.key}`}
+              d={line.path}
+              stroke={line.color}
+              strokeWidth={Math.max(0.8, line.width * 0.65)}
+              strokeLinecap="round"
+              fill="none"
+              opacity={line.dash ? 0.30 : 0.10}
+              strokeDasharray={line.dash ? "1 18" : undefined}
+            />
+          ))}
+        </Svg>
+      </Animated.View>
+
+      <Animated.View style={[styles.particleLayer, { opacity: dotOpacity }]}>
+        <Svg width={svgWidth} height={svgHeight} viewBox={`0 0 ${svgWidth} ${svgHeight}`} preserveAspectRatio="none">
+          {particles.map(dot => (
+            <Circle
+              key={dot.key}
+              cx={dot.x}
+              cy={dot.y}
+              r={dot.radius}
+              fill={dot.color}
+              opacity={dot.opacity}
+            />
+          ))}
         </Svg>
       </Animated.View>
 
@@ -233,17 +269,20 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
 const styles = StyleSheet.create({
   flowLayer: {
     ...StyleSheet.absoluteFillObject,
-    opacity: 0.94,
   },
-  lightningLayer: {
+  counterFlowLayer: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.62,
+  },
+  particleLayer: {
     ...StyleSheet.absoluteFillObject,
   },
   vignette: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.20)",
+    backgroundColor: "rgba(0,0,0,0.24)",
   },
   readabilityWash: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(2,6,23,0.18)",
+    backgroundColor: "rgba(2,6,23,0.20)",
   },
 });
