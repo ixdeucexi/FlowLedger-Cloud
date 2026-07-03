@@ -47,8 +47,8 @@ function algoToneColor(tone: AlgorithmInsight["tone"]) {
 }
 
 function FlowScoreGauge({ score }: { score: number }) {
-  const size = 152;
-  const stroke = 10;
+  const size = 112;
+  const stroke = 8;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const clamped = Math.max(0, Math.min(100, score));
@@ -103,7 +103,7 @@ export default function DashboardScreen() {
   const isCommandWide = Platform.OS === "web" && viewportWidth >= 900;
   const isIosWeb = Platform.OS === "web" && typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent);
   const dashboardTopPadding = Platform.OS === "web" ? (isIosWeb ? 72 : 16) : insets.top + 16;
-  const dashboardBottomPadding = Platform.OS === "web" ? (isIosWeb ? 60 : 100) : insets.bottom + 100;
+  const dashboardBottomPadding = Platform.OS === "web" ? (isIosWeb ? 18 : 72) : insets.bottom + 72;
   const { user } = useAuth();
   const {
     bills, getPaidAmount, getBillMonthlyTotal, getMonthlyBills, selectedYear, setDashboardFilter,
@@ -2904,12 +2904,12 @@ const styles = StyleSheet.create({
   confidenceDesc: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
 
   referenceCommandHero: {
-    borderRadius: 32,
+    borderRadius: 28,
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.14)",
     backgroundColor: "rgba(2,6,23,0.42)",
-    padding: 18,
-    marginBottom: 14,
+    padding: 14,
+    marginBottom: 10,
     overflow: "hidden",
     shadowColor: "#22d3ee",
     shadowOffset: { width: 0, height: 18 },
@@ -2919,41 +2919,41 @@ const styles = StyleSheet.create({
   },
   referenceCommandHeroWide: { flexDirection: "row", minHeight: 320, padding: 30, alignItems: "center", gap: 22 },
   referenceHeroCopy: { flex: 1 },
-  referenceGreeting: { color: "#f8fafc", fontSize: 23, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.7 },
-  referenceGreetingSub: { color: "#94a3b8", fontSize: 13, fontFamily: "Inter_500Medium", marginTop: 4, marginBottom: 24 },
+  referenceGreeting: { color: "#f8fafc", fontSize: 21, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.7 },
+  referenceGreetingSub: { color: "#94a3b8", fontSize: 12, fontFamily: "Inter_500Medium", marginTop: 3, marginBottom: 14 },
   referenceHeroLabel: { color: "#cbd5e1", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.4, textTransform: "uppercase" },
-  referenceHeroAmount: { color: "#ffffff", fontSize: 54, lineHeight: 61, fontFamily: "Inter_800ExtraBold", letterSpacing: -2.2, textShadowColor: "rgba(34,211,238,0.25)", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 18 },
-  referenceHeroHint: { color: "#94a3b8", fontSize: 13, fontFamily: "Inter_600SemiBold", marginTop: 4, marginBottom: 20 },
+  referenceHeroAmount: { color: "#ffffff", fontSize: 44, lineHeight: 49, fontFamily: "Inter_800ExtraBold", letterSpacing: -2.2, textShadowColor: "rgba(34,211,238,0.25)", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 18 },
+  referenceHeroHint: { color: "#94a3b8", fontSize: 12, fontFamily: "Inter_600SemiBold", marginTop: 2, marginBottom: 12 },
   referenceSummaryRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  referenceSummaryCard: { flexGrow: 1, flexBasis: "30%", minWidth: 96, borderRadius: 15, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", backgroundColor: "rgba(15,23,42,0.62)", padding: 12 },
-  referenceSummaryLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 7 },
-  referenceSummaryValue: { color: "#f8fafc", fontSize: 18, fontFamily: "Inter_800ExtraBold" },
-  referenceScorePanel: { alignItems: "center", justifyContent: "center", paddingTop: 14 },
-  referenceGaugeWrap: { width: 152, height: 152, alignItems: "center", justifyContent: "center", shadowColor: "#a855f7", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.55, shadowRadius: 22 },
+  referenceSummaryCard: { flexGrow: 1, flexBasis: "30%", minWidth: 88, borderRadius: 14, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", backgroundColor: "rgba(15,23,42,0.62)", paddingVertical: 10, paddingHorizontal: 11 },
+  referenceSummaryLabel: { fontSize: 9, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 5 },
+  referenceSummaryValue: { color: "#f8fafc", fontSize: 17, fontFamily: "Inter_800ExtraBold" },
+  referenceScorePanel: { alignItems: "center", justifyContent: "center", paddingTop: 10 },
+  referenceGaugeWrap: { width: 112, height: 112, alignItems: "center", justifyContent: "center", shadowColor: "#a855f7", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.55, shadowRadius: 22 },
   referenceGaugeCenter: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
-  referenceGaugeScore: { color: "#ffffff", fontSize: 42, fontFamily: "Inter_800ExtraBold", lineHeight: 47 },
-  referenceGaugeLabel: { color: "#cbd5e1", fontSize: 11, fontFamily: "Inter_700Bold" },
-  referenceScoreStatus: { color: "#4ade80", fontSize: 14, fontFamily: "Inter_800ExtraBold", marginTop: 10 },
-  referenceScoreUnderline: { width: 86, height: 3, borderRadius: 3, backgroundColor: "#22c55e", marginTop: 8, marginBottom: 8 },
-  referenceScoreReason: { color: "#94a3b8", maxWidth: 220, textAlign: "center", fontSize: 12, fontFamily: "Inter_600SemiBold", lineHeight: 17 },
-  referenceScoreTapHint: { color: "#60a5fa", fontSize: 11, fontFamily: "Inter_800ExtraBold", marginTop: 8 },
-  referenceLowerGrid: { gap: 12, marginBottom: 14 },
+  referenceGaugeScore: { color: "#ffffff", fontSize: 32, fontFamily: "Inter_800ExtraBold", lineHeight: 36 },
+  referenceGaugeLabel: { color: "#cbd5e1", fontSize: 10, fontFamily: "Inter_700Bold" },
+  referenceScoreStatus: { color: "#4ade80", fontSize: 13, fontFamily: "Inter_800ExtraBold", marginTop: 6 },
+  referenceScoreUnderline: { width: 70, height: 3, borderRadius: 3, backgroundColor: "#22c55e", marginTop: 6, marginBottom: 6 },
+  referenceScoreReason: { color: "#94a3b8", maxWidth: 220, textAlign: "center", fontSize: 11, fontFamily: "Inter_600SemiBold", lineHeight: 15 },
+  referenceScoreTapHint: { color: "#60a5fa", fontSize: 10, fontFamily: "Inter_800ExtraBold", marginTop: 5 },
+  referenceLowerGrid: { gap: 10, marginBottom: 8 },
   referenceLowerGridWide: { flexDirection: "row" },
-  referenceAlgoCarouselPanel: { flex: 1.45, borderRadius: 24, borderWidth: 1, borderColor: "rgba(168,85,247,0.22)", backgroundColor: "rgba(15,23,42,0.72)", padding: 14, shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.22, shadowRadius: 26, elevation: 8 },
-  referenceAlgoHeaderRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 10 },
-  referenceAlgoSubtitle: { color: "#94a3b8", fontSize: 11, fontFamily: "Inter_600SemiBold", lineHeight: 15, marginTop: 2 },
+  referenceAlgoCarouselPanel: { flex: 1.45, borderRadius: 22, borderWidth: 1, borderColor: "rgba(168,85,247,0.22)", backgroundColor: "rgba(15,23,42,0.72)", padding: 12, shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.22, shadowRadius: 26, elevation: 8 },
+  referenceAlgoHeaderRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 8 },
+  referenceAlgoSubtitle: { color: "#94a3b8", fontSize: 10, fontFamily: "Inter_600SemiBold", lineHeight: 14, marginTop: 1 },
   referenceAlgoCount: { color: "#a78bfa", fontSize: 12, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
   referenceAlgoCountPill: { minWidth: 64, height: 30, borderRadius: 999, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(37,99,235,0.16)", borderWidth: 1, borderColor: "rgba(96,165,250,0.28)" },
   referenceAlgoCountActive: { color: "#dbeafe", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   referenceAlgoCountTotal: { color: "#818cf8", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   referenceAlgoScrollContent: { gap: 12, paddingRight: 4 },
-  referenceAlgorithmCard: { minHeight: 148, borderRadius: 22, borderWidth: 1, backgroundColor: "rgba(2,6,23,0.62)", padding: 14, flexDirection: "row", gap: 12, alignItems: "flex-start" },
-  referenceAlgorithmIcon: { width: 42, height: 42, borderRadius: 15, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(226,232,240,0.08)" },
-  referenceAlgorithmTitle: { color: "#e2e8f0", fontSize: 12, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.8, textTransform: "uppercase" },
-  referenceAlgorithmValue: { fontSize: 22, fontFamily: "Inter_800ExtraBold", marginTop: 4 },
-  referenceAlgorithmDetail: { color: "#cbd5e1", fontSize: 12, fontFamily: "Inter_600SemiBold", lineHeight: 17, marginTop: 4 },
-  referenceAlgorithmAction: { color: "#a78bfa", fontSize: 11, fontFamily: "Inter_800ExtraBold", marginTop: 8 },
-  referenceAlgoDots: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 7, marginTop: 10 },
+  referenceAlgorithmCard: { minHeight: 104, borderRadius: 18, borderWidth: 1, backgroundColor: "rgba(2,6,23,0.62)", padding: 12, flexDirection: "row", gap: 10, alignItems: "flex-start" },
+  referenceAlgorithmIcon: { width: 36, height: 36, borderRadius: 13, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(226,232,240,0.08)" },
+  referenceAlgorithmTitle: { color: "#e2e8f0", fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.8, textTransform: "uppercase" },
+  referenceAlgorithmValue: { fontSize: 18, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
+  referenceAlgorithmDetail: { color: "#cbd5e1", fontSize: 11, fontFamily: "Inter_600SemiBold", lineHeight: 15, marginTop: 2 },
+  referenceAlgorithmAction: { color: "#a78bfa", fontSize: 10, fontFamily: "Inter_800ExtraBold", marginTop: 5 },
+  referenceAlgoDots: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 7, marginTop: 7 },
   referenceAlgoDot: { width: 7, height: 7, borderRadius: 999, backgroundColor: "rgba(148,163,184,0.34)" },
   referenceAlgoDotActive: { width: 24, backgroundColor: "#60a5fa", shadowColor: "#60a5fa", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 8, elevation: 4 },
   referenceInsightCard: { flex: 1.45, minHeight: 130, borderRadius: 24, borderWidth: 1, borderColor: "rgba(168,85,247,0.22)", backgroundColor: "rgba(15,23,42,0.72)", padding: 16, flexDirection: "row", alignItems: "center", gap: 12, shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.22, shadowRadius: 26 },

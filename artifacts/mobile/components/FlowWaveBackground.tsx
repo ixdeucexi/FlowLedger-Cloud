@@ -10,13 +10,7 @@ type Props = {
   intensity?: "soft" | "standard";
 };
 
-const variantGlow: Record<FlowWaveVariant, readonly [string, string, string]> = {
-  blue: ["rgba(37,99,235,0.30)", "rgba(14,165,233,0.10)", "rgba(2,6,23,0)"],
-  green: ["rgba(34,197,94,0.20)", "rgba(20,184,166,0.10)", "rgba(2,6,23,0)"],
-  purple: ["rgba(124,58,237,0.30)", "rgba(37,99,235,0.12)", "rgba(2,6,23,0)"],
-};
-
-export function FlowWaveBackground({ variant = "purple", intensity = "standard" }: Props) {
+export function FlowWaveBackground({ intensity = "standard" }: Props) {
   const { width, height } = useWindowDimensions();
   const [reduceMotion, setReduceMotion] = useState(false);
   const flowAnim = useRef(new Animated.Value(0)).current;
@@ -87,8 +81,7 @@ export function FlowWaveBackground({ variant = "purple", intensity = "standard" 
   const particleCount = intensity === "soft" ? 22 : 36;
   const translateX = flowAnim.interpolate({ inputRange: [0, 1], outputRange: [-34, 34] });
   const translateY = flowAnim.interpolate({ inputRange: [0, 1], outputRange: [14, -22] });
-  const lightningOpacity = pulseAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.18, 0.48, 0.22] });
-  const glowScale = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
+  const lightningOpacity = pulseAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.34, 0.82, 0.42] });
 
   const particles = useMemo(() => (
     Array.from({ length: particleCount }).map((_, index) => {
@@ -183,10 +176,37 @@ export function FlowWaveBackground({ variant = "purple", intensity = "standard" 
 
       <Animated.View style={[styles.lightningLayer, { opacity: lightningOpacity }]}>
         <Svg width={svgWidth} height={svgHeight} viewBox={`0 0 ${svgWidth} ${svgHeight}`} preserveAspectRatio="none">
+          <Defs>
+            <SvgLinearGradient id="boltCore" x1="0" y1="0" x2="1" y2="0">
+              <Stop offset="0" stopColor="#22d3ee" stopOpacity="0" />
+              <Stop offset="0.30" stopColor="#7dd3fc" stopOpacity="0.90" />
+              <Stop offset="0.52" stopColor="#c084fc" stopOpacity="0.95" />
+              <Stop offset="0.78" stopColor="#60a5fa" stopOpacity="0.80" />
+              <Stop offset="1" stopColor="#22d3ee" stopOpacity="0" />
+            </SvgLinearGradient>
+          </Defs>
+          <Path
+            d={`M ${svgWidth * -0.08} ${svgHeight * 0.18} L ${svgWidth * 0.18} ${svgHeight * 0.13} L ${svgWidth * 0.12} ${svgHeight * 0.18} L ${svgWidth * 0.44} ${svgHeight * 0.09} L ${svgWidth * 0.36} ${svgHeight * 0.16} L ${svgWidth * 1.06} ${svgHeight * 0.03}`}
+            stroke="url(#boltCore)"
+            strokeWidth="5.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill="none"
+            opacity="0.22"
+          />
+          <Path
+            d={`M ${svgWidth * -0.08} ${svgHeight * 0.18} L ${svgWidth * 0.18} ${svgHeight * 0.13} L ${svgWidth * 0.12} ${svgHeight * 0.18} L ${svgWidth * 0.44} ${svgHeight * 0.09} L ${svgWidth * 0.36} ${svgHeight * 0.16} L ${svgWidth * 1.06} ${svgHeight * 0.03}`}
+            stroke="url(#boltCore)"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill="none"
+            opacity="0.92"
+          />
           <Path
             d={`M ${svgWidth * 0.10} ${svgHeight * 0.22} L ${svgWidth * 0.34} ${svgHeight * 0.16} L ${svgWidth * 0.28} ${svgHeight * 0.22} L ${svgWidth * 0.58} ${svgHeight * 0.13} L ${svgWidth * 0.45} ${svgHeight * 0.24} L ${svgWidth * 0.86} ${svgHeight * 0.10}`}
             stroke="#38bdf8"
-            strokeWidth="1.2"
+            strokeWidth="1.8"
             strokeLinecap="round"
             strokeLinejoin="round"
             fill="none"
@@ -195,7 +215,7 @@ export function FlowWaveBackground({ variant = "purple", intensity = "standard" 
           <Path
             d={`M ${svgWidth * 0.02} ${svgHeight * 0.54} L ${svgWidth * 0.28} ${svgHeight * 0.49} L ${svgWidth * 0.22} ${svgHeight * 0.55} L ${svgWidth * 0.52} ${svgHeight * 0.48} L ${svgWidth * 0.44} ${svgHeight * 0.57} L ${svgWidth * 0.92} ${svgHeight * 0.45}`}
             stroke="#a855f7"
-            strokeWidth="1"
+            strokeWidth="1.5"
             strokeLinecap="round"
             strokeLinejoin="round"
             fill="none"
@@ -204,15 +224,6 @@ export function FlowWaveBackground({ variant = "purple", intensity = "standard" 
         </Svg>
       </Animated.View>
 
-      <Animated.View style={{ transform: [{ scale: glowScale }] }}>
-        <LinearGradient colors={variantGlow[variant]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.orb, styles.orbOne]} />
-      </Animated.View>
-      <LinearGradient
-        colors={["rgba(59,130,246,0.16)", "rgba(168,85,247,0.08)", "rgba(2,6,23,0)"]}
-        start={{ x: 1, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={[styles.orb, styles.orbTwo]}
-      />
       <View style={styles.vignette} />
       <View style={styles.readabilityWash} />
     </View>
@@ -227,14 +238,6 @@ const styles = StyleSheet.create({
   lightningLayer: {
     ...StyleSheet.absoluteFillObject,
   },
-  orb: {
-    position: "absolute",
-    width: 340,
-    height: 340,
-    borderRadius: 170,
-  },
-  orbOne: { top: -120, right: -110 },
-  orbTwo: { bottom: 56, left: -160 },
   vignette: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.20)",
