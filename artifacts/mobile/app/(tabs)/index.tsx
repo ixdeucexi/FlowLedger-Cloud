@@ -141,6 +141,7 @@ export default function DashboardScreen() {
   const [safeCushionVisible, setSafeCushionVisible] = useState(false);
   const [activeAlgoCard, setActiveAlgoCard] = useState(0);
   const algorithmCarouselRef = useRef<ScrollView | null>(null);
+  const algorithmSnapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useFocusEffect(useCallback(() => {
     setIsFocused(true);
@@ -148,6 +149,12 @@ export default function DashboardScreen() {
   }, []));
 
   // ── Hero card flip ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      if (algorithmSnapTimerRef.current) clearTimeout(algorithmSnapTimerRef.current);
+    };
+  }, []);
+
   const flipAnim   = useRef(new Animated.Value(0)).current;
   const [flipped, setFlipped] = useState(false);
   const [cardHeight, setCardHeight] = useState(0);
@@ -995,8 +1002,26 @@ export default function DashboardScreen() {
     const nextIndex = Math.max(0, Math.min(algorithmCards.length - 1, index));
     setActiveAlgoCard(current => current === nextIndex ? current : nextIndex);
   };
+  const snapAlgorithmCarouselToNearest = (offsetX: number, animated = true) => {
+    const index = Math.round(offsetX / Math.max(1, algorithmSnapInterval));
+    const nextIndex = Math.max(0, Math.min(algorithmCards.length - 1, index));
+    setActiveAlgoCard(current => current === nextIndex ? current : nextIndex);
+    algorithmCarouselRef.current?.scrollTo({
+      x: nextIndex * algorithmSnapInterval,
+      animated,
+    });
+  };
+  const scheduleAlgorithmCarouselSnap = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offsetX = event.nativeEvent.contentOffset.x;
+    syncActiveAlgorithmCard(event);
+    if (algorithmSnapTimerRef.current) clearTimeout(algorithmSnapTimerRef.current);
+    algorithmSnapTimerRef.current = setTimeout(() => {
+      snapAlgorithmCarouselToNearest(offsetX, true);
+    }, 110);
+  };
   const jumpToAlgorithmCard = (index: number) => {
     const nextIndex = Math.max(0, Math.min(algorithmCards.length - 1, index));
+    if (algorithmSnapTimerRef.current) clearTimeout(algorithmSnapTimerRef.current);
     setActiveAlgoCard(nextIndex);
     algorithmCarouselRef.current?.scrollTo({
       x: nextIndex * algorithmSnapInterval,
@@ -1221,9 +1246,9 @@ export default function DashboardScreen() {
             disableIntervalMomentum
             scrollEventThrottle={16}
             contentContainerStyle={styles.referenceAlgoScrollContent}
-            onScroll={syncActiveAlgorithmCard}
-            onScrollEndDrag={syncActiveAlgorithmCard}
-            onMomentumScrollEnd={syncActiveAlgorithmCard}
+            onScroll={scheduleAlgorithmCarouselSnap}
+            onScrollEndDrag={(event) => snapAlgorithmCarouselToNearest(event.nativeEvent.contentOffset.x)}
+            onMomentumScrollEnd={(event) => snapAlgorithmCarouselToNearest(event.nativeEvent.contentOffset.x)}
           >
             {algorithmCards.map(card => (
               <Pressable
