@@ -1213,9 +1213,18 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   );
 
   const setCustomDueDay = useCallback(
-    async (billId: string, month: number, year: number, day: number | undefined) =>
-      upsertOverride(billId, month, year, { custom_due_day: day }),
-    [upsertOverride]
+    async (billId: string, month: number, year: number, day: number | undefined) => {
+      const existing = overridesRef.current.find(o => o.bill_id === billId && o.month === month && o.year === year);
+      const bill = bills.find(item => item.id === billId);
+      const patch: Partial<Omit<MonthlyOverride, "id" | "bill_id" | "month" | "year">> = { custom_due_day: day };
+      if (bill && (existing?.actual_amount !== undefined || (existing?.paid_amount ?? 0) > 0.005)) {
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const effectiveDay = Math.min(daysInMonth, day ?? bill.due_day);
+        patch.paid_date = dateFromParts(year, month, effectiveDay);
+      }
+      await upsertOverride(billId, month, year, patch);
+    },
+    [upsertOverride, bills]
   );
 
   // ─── Bill scheduling helpers ──────────────────────────────────────────────────
@@ -2018,9 +2027,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           : undefined;
         const total = projectedDebtTotal !== undefined ? projectedDebtTotal : getBillEffectiveMonthlyTotal(b, m, y);
         if (total <= 0.005) return s;
-        const dates = override?.actual_amount !== undefined && override.paid_date
-          ? [override.paid_date]
-          : occ.map(day => `${monthPrefix}-${String(day).padStart(2, "0")}`);
+        const dates = occ.map(day => `${monthPrefix}-${String(day).padStart(2, "0")}`);
         const amountPerOccurrence = total / dates.length;
         return s + dates.filter(includeDate).length * amountPerOccurrence;
       }, 0);
@@ -2108,17 +2115,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const total = projectedDebtTotal !== undefined ? projectedDebtTotal : getBillEffectiveMonthlyTotal(b, month, year);
       if (total <= 0.005) return;
       const amt = occ.length > 0 ? total / occ.length : 0;
-      if (o?.actual_amount !== undefined && o.paid_date) {
-        const [paidYear, paidMonth, paidDay] = o.paid_date.split("-").map(Number);
-        if (paidYear === year && paidMonth === month + 1) {
-          billsByDay[paidDay] = (billsByDay[paidDay] ?? 0) + total;
+      if (o?.actual_amount !== undefined) {
+        occ.forEach(d => {
+          billsByDay[d] = (billsByDay[d] ?? 0) + amt;
           financialEvents.push({
-            id: `bill:${b.id}:${year}-${month + 1}-${paidDay}`, sourceType: "bill", sourceId: b.id,
-            date: `${year}-${String(month + 1).padStart(2, "0")}-${String(paidDay).padStart(2, "0")}`,
-            kind: "bill", amount: -total, status: "finalized", name: b.name,
+            id: `bill:${b.id}:${year}-${month + 1}-${d}`, sourceType: "bill", sourceId: b.id,
+            date: `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`,
+            kind: "bill", amount: -amt, status: "finalized", name: b.name,
           });
-          return;
-        }
+        });
+        return;
       }
       occ.forEach(d => {
         billsByDay[d] = (billsByDay[d] ?? 0) + amt;
