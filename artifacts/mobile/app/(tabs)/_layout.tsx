@@ -240,6 +240,7 @@ function TabContent() {
   const isDark = colorScheme === "dark";
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
+  const isIosWeb = isWeb && typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent);
   const [decisionHubSettings, setDecisionHubSettings] = React.useState<DecisionHubSettings>(() => readDecisionHubSettings());
 
   React.useEffect(() => {
@@ -299,7 +300,11 @@ function TabContent() {
             borderTopWidth: isWeb ? 1 : 0,
             borderTopColor: colors.border,
             elevation: 0,
-            ...(isWeb ? { height: 84 } : {}),
+            ...(isWeb ? {
+              height: isIosWeb ? 70 : 84,
+              paddingTop: isIosWeb ? 3 : undefined,
+              paddingBottom: isIosWeb ? 3 : undefined,
+            } : {}),
           },
           tabBarBackground: () =>
             isIOS ? (
