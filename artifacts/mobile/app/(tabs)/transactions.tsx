@@ -111,6 +111,7 @@ export default function TransactionsScreen() {
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
+  const listBottomPadding = insets.bottom + (Platform.OS === "web" ? 156 : 132);
 
   // ── Build unified activity feed ───────────────────────────────────────────
   const allActivity = useMemo((): ActivityItem[] => {
@@ -524,7 +525,8 @@ export default function TransactionsScreen() {
       <SectionList
         sections={sections}
         keyExtractor={item => item.id}
-        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 88 }]}
+        contentContainerStyle={[styles.list, { paddingBottom: listBottomPadding }]}
+        scrollIndicatorInsets={{ bottom: listBottomPadding }}
         stickySectionHeadersEnabled
         ListEmptyComponent={
           <EmptyState
