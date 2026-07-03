@@ -49,6 +49,8 @@ export default function DashboardScreen() {
   const [isFocused, setIsFocused] = useState(true);
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const isIosWeb = Platform.OS === "web" && typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const dashboardTopPadding = Platform.OS === "web" ? (isIosWeb ? 58 : 16) : insets.top + 16;
   const { user } = useAuth();
   const {
     bills, getPaidAmount, getBillMonthlyTotal, getMonthlyBills, selectedYear, setDashboardFilter,
@@ -840,7 +842,7 @@ export default function DashboardScreen() {
   return (
     <ScrollView
       style={[styles.screen, styles.dashboardStage]}
-      contentContainerStyle={[styles.content, { paddingTop: Platform.OS === "web" ? 16 : insets.top + 16, paddingBottom: insets.bottom + 100 }]}
+      contentContainerStyle={[styles.content, { paddingTop: dashboardTopPadding, paddingBottom: insets.bottom + 100 }]}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
