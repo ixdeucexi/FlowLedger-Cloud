@@ -54,6 +54,30 @@ export interface FloFacts {
     topReason: string;
     topAction: string;
   };
+  purchaseDecision?: {
+    safeNowLimit: number;
+    action: "safe" | "wait" | "split" | "avoid";
+    detail: string;
+    nextMove: string;
+    bestDay: number | null;
+    confidence: "high" | "medium" | "low";
+  };
+  billPriority?: {
+    nextBill: { name: string; amount: number; dueDay: number; reason: string; urgency: "now" | "soon" | "planned" } | null;
+    summary: string;
+    nextMove: string;
+    bills: { name: string; amount: number; dueDay: number; reason: string; urgency: "now" | "soon" | "planned" }[];
+  };
+  paydaySplitAlgo?: {
+    bills: number;
+    spending: number;
+    savings: number;
+    debt: number;
+    goals: number;
+    dollars: { bills: number; spending: number; savings: number; debt: number; goals: number };
+    summary: string;
+    nextMove: string;
+  };
   debtPayoff?: {
     nextDebtName: string | null;
     snowballBalance: number;
@@ -63,6 +87,21 @@ export interface FloFacts {
     nextMove: string;
     status: "ready" | "hold" | "done";
     detail: string;
+  };
+  spendingLimit?: {
+    daily: number;
+    weekly: number;
+    status: "safe" | "watch" | "risk";
+    paceLabel: string;
+    remainingDays: number;
+    detail: string;
+  };
+  extraMoneyRouter?: {
+    amount: number;
+    recommendation: "debt" | "savings" | "bill" | "available";
+    targetLabel: string;
+    detail: string;
+    nextMove: string;
   };
 }
 
@@ -319,6 +358,48 @@ export function sanitizeFloFacts(facts: FloFacts): FloFacts {
       topReason: String(facts.safeCushion.topReason ?? "").slice(0, 180),
       topAction: String(facts.safeCushion.topAction ?? "").slice(0, 120),
     } : undefined,
+    purchaseDecision: facts.purchaseDecision ? {
+      safeNowLimit: Math.max(0, num(facts.purchaseDecision.safeNowLimit)),
+      action: ["safe", "wait", "split", "avoid"].includes(String(facts.purchaseDecision.action)) ? facts.purchaseDecision.action : "wait",
+      detail: String(facts.purchaseDecision.detail ?? "").slice(0, 180),
+      nextMove: String(facts.purchaseDecision.nextMove ?? "").slice(0, 160),
+      bestDay: facts.purchaseDecision.bestDay === null ? null : Math.max(1, Math.min(31, Math.round(num(facts.purchaseDecision.bestDay)))),
+      confidence: facts.purchaseDecision.confidence === "high" || facts.purchaseDecision.confidence === "medium" || facts.purchaseDecision.confidence === "low" ? facts.purchaseDecision.confidence : "low",
+    } : undefined,
+    billPriority: facts.billPriority ? {
+      nextBill: facts.billPriority.nextBill ? {
+        name: String(facts.billPriority.nextBill.name ?? "Bill").slice(0, 80),
+        amount: Math.max(0, num(facts.billPriority.nextBill.amount)),
+        dueDay: Math.max(1, Math.min(31, Math.round(num(facts.billPriority.nextBill.dueDay) || 1))),
+        reason: String(facts.billPriority.nextBill.reason ?? "").slice(0, 80),
+        urgency: facts.billPriority.nextBill.urgency === "now" || facts.billPriority.nextBill.urgency === "soon" || facts.billPriority.nextBill.urgency === "planned" ? facts.billPriority.nextBill.urgency : "planned",
+      } : null,
+      summary: String(facts.billPriority.summary ?? "").slice(0, 160),
+      nextMove: String(facts.billPriority.nextMove ?? "").slice(0, 160),
+      bills: (facts.billPriority.bills ?? []).slice(0, 5).map(bill => ({
+        name: String(bill.name ?? "Bill").slice(0, 80),
+        amount: Math.max(0, num(bill.amount)),
+        dueDay: Math.max(1, Math.min(31, Math.round(num(bill.dueDay) || 1))),
+        reason: String(bill.reason ?? "").slice(0, 80),
+        urgency: bill.urgency === "now" || bill.urgency === "soon" || bill.urgency === "planned" ? bill.urgency : "planned",
+      })),
+    } : undefined,
+    paydaySplitAlgo: facts.paydaySplitAlgo ? {
+      bills: Math.max(0, num(facts.paydaySplitAlgo.bills)),
+      spending: Math.max(0, num(facts.paydaySplitAlgo.spending)),
+      savings: Math.max(0, num(facts.paydaySplitAlgo.savings)),
+      debt: Math.max(0, num(facts.paydaySplitAlgo.debt)),
+      goals: Math.max(0, num(facts.paydaySplitAlgo.goals)),
+      dollars: {
+        bills: Math.max(0, num(facts.paydaySplitAlgo.dollars?.bills)),
+        spending: Math.max(0, num(facts.paydaySplitAlgo.dollars?.spending)),
+        savings: Math.max(0, num(facts.paydaySplitAlgo.dollars?.savings)),
+        debt: Math.max(0, num(facts.paydaySplitAlgo.dollars?.debt)),
+        goals: Math.max(0, num(facts.paydaySplitAlgo.dollars?.goals)),
+      },
+      summary: String(facts.paydaySplitAlgo.summary ?? "").slice(0, 180),
+      nextMove: String(facts.paydaySplitAlgo.nextMove ?? "").slice(0, 160),
+    } : undefined,
     debtPayoff: facts.debtPayoff ? {
       nextDebtName: facts.debtPayoff.nextDebtName === null ? null : String(facts.debtPayoff.nextDebtName ?? "").slice(0, 80),
       snowballBalance: Math.max(0, num(facts.debtPayoff.snowballBalance)),
@@ -328,6 +409,21 @@ export function sanitizeFloFacts(facts: FloFacts): FloFacts {
       nextMove: String(facts.debtPayoff.nextMove ?? "").slice(0, 160),
       status: facts.debtPayoff.status === "ready" || facts.debtPayoff.status === "hold" || facts.debtPayoff.status === "done" ? facts.debtPayoff.status : "hold",
       detail: String(facts.debtPayoff.detail ?? "").slice(0, 220),
+    } : undefined,
+    spendingLimit: facts.spendingLimit ? {
+      daily: Math.max(0, num(facts.spendingLimit.daily)),
+      weekly: Math.max(0, num(facts.spendingLimit.weekly)),
+      status: facts.spendingLimit.status === "safe" || facts.spendingLimit.status === "watch" || facts.spendingLimit.status === "risk" ? facts.spendingLimit.status : "risk",
+      paceLabel: String(facts.spendingLimit.paceLabel ?? "").slice(0, 40),
+      remainingDays: Math.max(1, Math.round(num(facts.spendingLimit.remainingDays) || 1)),
+      detail: String(facts.spendingLimit.detail ?? "").slice(0, 180),
+    } : undefined,
+    extraMoneyRouter: facts.extraMoneyRouter ? {
+      amount: Math.max(0, num(facts.extraMoneyRouter.amount)),
+      recommendation: facts.extraMoneyRouter.recommendation === "debt" || facts.extraMoneyRouter.recommendation === "savings" || facts.extraMoneyRouter.recommendation === "bill" || facts.extraMoneyRouter.recommendation === "available" ? facts.extraMoneyRouter.recommendation : "available",
+      targetLabel: String(facts.extraMoneyRouter.targetLabel ?? "available cash").slice(0, 80),
+      detail: String(facts.extraMoneyRouter.detail ?? "").slice(0, 180),
+      nextMove: String(facts.extraMoneyRouter.nextMove ?? "").slice(0, 160),
     } : undefined,
   };
 }
@@ -343,6 +439,35 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
     if (lower.includes("hurt")) return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. What hurt it: ${hurt} Best next move: ${facts.flowScore.topAction}`;
     if (lower.includes("help")) return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. What helped it: ${helped}`;
     return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. ${facts.flowScore.topReason} What helped: ${helped} What hurt: ${hurt} Best next move: ${facts.flowScore.topAction}`;
+  }
+  const asksSpendingLimit = /\b(daily limit|weekly limit|spending limit|safe pace|safe daily|safe weekly|how much.*spend.*day|how much.*spend.*week)\b/.test(lower);
+  if (asksSpendingLimit && facts.spendingLimit) {
+    return facts.spendingLimit.status === "risk"
+      ? `Your Spending Limit is $0 right now. ${facts.spendingLimit.detail} I would keep money available until the cushion improves.`
+      : `Your Spending Limit is about $${facts.spendingLimit.daily.toFixed(2)}/day or $${facts.spendingLimit.weekly.toFixed(2)}/week. That is a ${facts.spendingLimit.paceLabel} for the next ${facts.spendingLimit.remainingDays} day${facts.spendingLimit.remainingDays === 1 ? "" : "s"}.`;
+  }
+  const asksBillPriority = /\b(priority bill|bill priority|which bill.*first|what bill.*first|which bill.*pay|what bill.*pay|bill.*attention|review.*bill)\b/.test(lower);
+  if (asksBillPriority && facts.billPriority) {
+    const next = facts.billPriority.nextBill;
+    return next
+      ? `${facts.billPriority.summary} ${facts.billPriority.nextMove} ${next.name} has $${next.amount.toFixed(2)} left and is ${next.reason}.`
+      : facts.billPriority.summary || "No unpaid bills need priority attention right now.";
+  }
+  const asksPaydaySplitAlgo = /\b(payday split|split.*paycheck|divide.*paycheck|paycheck breakdown|where should my paycheck go)\b/.test(lower);
+  if (asksPaydaySplitAlgo && facts.paydaySplitAlgo) {
+    const split = facts.paydaySplitAlgo;
+    return `${split.summary} In dollars, that is about $${split.dollars.bills.toFixed(0)} bills, $${split.dollars.spending.toFixed(0)} spending, $${split.dollars.savings.toFixed(0)} savings, $${split.dollars.debt.toFixed(0)} debt, and $${split.dollars.goals.toFixed(0)} goals. ${split.nextMove}`;
+  }
+  const asksExtraMoneyRouter = /\b(extra money|leftover|money left|available money|route money|where should.*money|what should i do with.*money|safe leftover)\b/.test(lower);
+  if (asksExtraMoneyRouter && facts.extraMoneyRouter) {
+    return facts.extraMoneyRouter.amount > 0
+      ? `${facts.extraMoneyRouter.detail} Best route: ${facts.extraMoneyRouter.targetLabel}. ${facts.extraMoneyRouter.nextMove}`
+      : `${facts.extraMoneyRouter.detail} I would not route extra money yet because the forecast needs protection first.`;
+  }
+  const asksPurchaseDecision = /\b(purchase decision|plan purchase|buy|purchase|should i wait|best date|safer date)\b/.test(lower) && !/\$?\s*\d/.test(lower);
+  if (asksPurchaseDecision && facts.purchaseDecision) {
+    const bestDay = facts.purchaseDecision.bestDay ? ` A safer date may be around day ${facts.purchaseDecision.bestDay}.` : "";
+    return `${facts.purchaseDecision.detail} ${facts.purchaseDecision.nextMove}${bestDay}`;
   }
   const asksSafeCushion = lower.includes("safe cushion") || lower.includes("cushion") || /safely spend|safe to spend|how much can i spend|available to spend/.test(lower);
   if (asksSafeCushion && facts.safeCushion) {

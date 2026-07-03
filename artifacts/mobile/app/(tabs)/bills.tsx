@@ -89,6 +89,7 @@ export default function BillsScreen() {
   const now          = new Date();
   const currentMonth = now.getMonth();
   const currentYear  = now.getFullYear();
+  const currentDay   = now.getDate();
 
   const baseSnowballPreview = useMemo(
     () => previewDebtSnowball(currentMonth, currentYear),
@@ -167,6 +168,32 @@ export default function BillsScreen() {
     if (dismissedBillPromptKey === key) return null;
     return { bill, saferDate, key };
   }, [decisionHubSettings, dismissedBillPromptKey, paycheckPlan]);
+  const billPrioritySummary = useMemo(() => {
+    if (!isAlgorithmEnabled(decisionHubSettings, "billPriority")) return null;
+    const unpaid = nonDebtBills
+      .map(bill => {
+        const remaining = Math.max(0, bill.amount - getPaidAmount(bill.id, currentMonth, currentYear));
+        const daysUntilDue = bill.due_day - currentDay;
+        const urgency = daysUntilDue <= 0 ? 40 : daysUntilDue <= 3 ? 30 : daysUntilDue <= 7 ? 18 : 6;
+        const score = urgency + Math.min(25, remaining / 40);
+        return { bill, remaining, daysUntilDue, score };
+      })
+      .filter(item => item.remaining > 0.005)
+      .sort((left, right) => right.score - left.score || left.bill.due_day - right.bill.due_day);
+    const target = unpaid[0];
+    if (!target) return null;
+    const dueText = target.daysUntilDue <= 0
+      ? "due now"
+      : target.daysUntilDue === 1
+        ? "due tomorrow"
+        : `due in ${target.daysUntilDue} days`;
+    return {
+      bill: target.bill,
+      amount: target.remaining,
+      dueText,
+      count: unpaid.length,
+    };
+  }, [currentDay, currentMonth, currentYear, decisionHubSettings, getPaidAmount, nonDebtBills]);
 
   // ── Handlers ────────────────────────────────────────────────────
   const handleSave = useCallback((data: Omit<Bill, "id" | "created_at"> | Bill) => {
@@ -286,6 +313,25 @@ export default function BillsScreen() {
       {/* ════════════════════ BILLS VIEW ════════════════════ */}
       {activeTab === "bills" && (
         <>
+          {billPrioritySummary ? (
+            <Pressable
+              onPress={() => router.push({ pathname: "/(tabs)/flo", params: { prompt: "What bill should I pay first?" } } as any)}
+              style={({ pressed }) => [
+                styles.billPromptCard,
+                { backgroundColor: c.card, borderColor: c.primary + "45", opacity: pressed ? 0.84 : 1 },
+              ]}
+            >
+              <Feather name="file-text" size={17} color={c.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.billPromptTitle, { color: c.foreground }]}>Bill Priority: {billPrioritySummary.bill.name}</Text>
+                <Text style={[styles.billPromptText, { color: c.mutedForeground }]}>
+                  ${billPrioritySummary.amount.toFixed(0)} left Â· {billPrioritySummary.dueText}. Tap to ask Flo why.
+                </Text>
+              </View>
+              <Feather name="chevron-right" size={16} color={c.mutedForeground} />
+            </Pressable>
+          ) : null}
+
           <View style={styles.filterRow}>
             {(["all", "recurring", "one-time"] as Filter[]).map(f => (
               <Pressable

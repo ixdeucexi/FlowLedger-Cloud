@@ -99,6 +99,30 @@ const facts: FloFacts = {
     topReason: "Your lowest forecast stays $600 above the $200 floor.",
     topAction: "Ask Flo what this cushion can safely do.",
   },
+  purchaseDecision: {
+    safeNowLimit: 600,
+    action: "safe",
+    detail: "Purchases up to $600 keep the safety floor intact.",
+    nextMove: "Use Flo to test the exact amount and date before committing.",
+    bestDay: 12,
+    confidence: "high",
+  },
+  billPriority: {
+    nextBill: { name: "Power", amount: 120, dueDay: 28, reason: "due soon", urgency: "soon" },
+    summary: "Power is the next priority bill.",
+    nextMove: "Keep Power visible before day 28.",
+    bills: [{ name: "Power", amount: 120, dueDay: 28, reason: "due soon", urgency: "soon" }],
+  },
+  paydaySplitAlgo: {
+    bills: 50,
+    spending: 32,
+    savings: 10,
+    debt: 8,
+    goals: 0,
+    dollars: { bills: 2000, spending: 1280, savings: 400, debt: 320, goals: 0 },
+    summary: "Suggested split: 50% bills, 32% spending, 10% savings, 8% debt, 0% goals.",
+    nextMove: "After bills are covered, route safe extra money toward the debt target.",
+  },
   debtPayoff: {
     nextDebtName: "Camera",
     snowballBalance: 143.64,
@@ -108,6 +132,21 @@ const facts: FloFacts = {
     nextMove: "Send safe extra money to Camera first.",
     status: "ready",
     detail: "Snowball targets Camera; avalanche targets Concert; cash-flow relief targets Camera.",
+  },
+  spendingLimit: {
+    daily: 25,
+    weekly: 175,
+    status: "safe",
+    paceLabel: "safe pace",
+    remainingDays: 24,
+    detail: "About $25/day or $175/week is safe from the current cushion.",
+  },
+  extraMoneyRouter: {
+    amount: 210,
+    recommendation: "debt",
+    targetLabel: "Camera",
+    detail: "Up to $210 can safely speed up Camera without crossing the floor.",
+    nextMove: "Ask Flo to preview adding $210 to Camera.",
   },
 };
 const days = [{ date: "2026-06-24", balance: 1000 }, { date: "2026-07-01", balance: 800 }];
@@ -132,7 +171,7 @@ test("Flo answers unallocated spending questions from verified facts", () => {
 test("Flo answers phase 2 planning questions without AI", () => {
   assert.match(localFloAnswer("What bills are left?", facts, days) ?? "", /2 bills left/);
   assert.match(localFloAnswer("What changed since last month?", facts, days) ?? "", /income changed by \+\$200\.00/);
-  assert.match(localFloAnswer("What should I do with leftover money?", facts, days) ?? "", /\$750\.00 left/);
+  assert.match(localFloAnswer("What should I do with leftover money?", facts, days) ?? "", /Camera/);
   assert.match(localFloAnswer("How do I fix this forecast?", { ...facts, forecastConfidence: "low" }, days) ?? "", /reconciliation/i);
 });
 
@@ -153,6 +192,14 @@ test("Flo explains Debt Payoff from deterministic facts", () => {
   assert.match(localFloAnswer("Which debt should I pay off first?", facts, days) ?? "", /Camera/);
   assert.match(localFloAnswer("What is my avalanche target?", facts, days) ?? "", /Concert/);
   assert.match(localFloAnswer("What debt helps cash-flow relief?", facts, days) ?? "", /\$38\/month/);
+});
+
+test("Flo explains the clean Algorithm Suite from deterministic facts", () => {
+  assert.match(localFloAnswer("What bill should I pay first?", facts, days) ?? "", /Power/);
+  assert.match(localFloAnswer("What is my daily spending limit?", facts, days) ?? "", /\$25\.00\/day/);
+  assert.match(localFloAnswer("How should I split my paycheck?", facts, days) ?? "", /50% bills/);
+  assert.match(localFloAnswer("What should I do with extra money?", facts, days) ?? "", /Camera/);
+  assert.match(localFloAnswer("Tell me my purchase decision", facts, days) ?? "", /Purchases up to \$600/);
 });
 
 test("Flo answers category budget questions from verified facts", () => {

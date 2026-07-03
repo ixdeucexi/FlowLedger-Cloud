@@ -448,6 +448,44 @@ export default function FloScreen() {
         topReason: algorithmSuite.safeCushion.topReason,
         topAction: algorithmSuite.safeCushion.topAction,
       },
+      purchaseDecision: {
+        safeNowLimit: algorithmSuite.purchaseDecision.safeNowLimit,
+        action: algorithmSuite.purchaseDecision.action,
+        detail: algorithmSuite.purchaseDecision.detail,
+        nextMove: algorithmSuite.purchaseDecision.nextMove,
+        bestDay: algorithmSuite.purchaseDecision.bestDay,
+        confidence: algorithmSuite.purchaseDecision.confidence,
+      },
+      billPriority: {
+        nextBill: algorithmSuite.billPriority.nextBill
+          ? {
+            name: algorithmSuite.billPriority.nextBill.name,
+            amount: algorithmSuite.billPriority.nextBill.amount,
+            dueDay: algorithmSuite.billPriority.nextBill.dueDay,
+            reason: algorithmSuite.billPriority.nextBill.reason,
+            urgency: algorithmSuite.billPriority.nextBill.urgency,
+          }
+          : null,
+        summary: algorithmSuite.billPriority.summary,
+        nextMove: algorithmSuite.billPriority.nextMove,
+        bills: algorithmSuite.billPriority.bills.map(bill => ({
+          name: bill.name,
+          amount: bill.amount,
+          dueDay: bill.dueDay,
+          reason: bill.reason,
+          urgency: bill.urgency,
+        })),
+      },
+      paydaySplitAlgo: {
+        bills: algorithmSuite.paydaySplit.bills,
+        spending: algorithmSuite.paydaySplit.spending,
+        savings: algorithmSuite.paydaySplit.savings,
+        debt: algorithmSuite.paydaySplit.debt,
+        goals: algorithmSuite.paydaySplit.goals,
+        dollars: algorithmSuite.paydaySplit.dollars,
+        summary: algorithmSuite.paydaySplit.summary,
+        nextMove: algorithmSuite.paydaySplit.nextMove,
+      },
       debtPayoff: {
         nextDebtName: algorithmSuite.debtPayoff.nextDebtName,
         snowballBalance: algorithmSuite.debtPayoff.snowballBalance,
@@ -457,6 +495,21 @@ export default function FloScreen() {
         nextMove: algorithmSuite.debtPayoff.nextMove,
         status: algorithmSuite.debtPayoff.status,
         detail: algorithmSuite.debtPayoff.detail,
+      },
+      spendingLimit: {
+        daily: algorithmSuite.spendingLimit.daily,
+        weekly: algorithmSuite.spendingLimit.weekly,
+        status: algorithmSuite.spendingLimit.status,
+        paceLabel: algorithmSuite.spendingLimit.paceLabel,
+        remainingDays: algorithmSuite.spendingLimit.remainingDays,
+        detail: algorithmSuite.spendingLimit.detail,
+      },
+      extraMoneyRouter: {
+        amount: algorithmSuite.extraMoneyRouter.amount,
+        recommendation: algorithmSuite.extraMoneyRouter.recommendation,
+        targetLabel: algorithmSuite.extraMoneyRouter.targetLabel,
+        detail: algorithmSuite.extraMoneyRouter.detail,
+        nextMove: algorithmSuite.extraMoneyRouter.nextMove,
       },
       decisionHistory: {
         due: decisionHistory.due,
