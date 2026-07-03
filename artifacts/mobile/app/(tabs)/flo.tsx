@@ -448,15 +448,15 @@ export default function FloScreen() {
         topReason: algorithmSuite.safeCushion.topReason,
         topAction: algorithmSuite.safeCushion.topAction,
       },
-      purchaseDecision: {
+      purchaseDecision: isAlgorithmEnabled(decisionHubSettings, "purchaseDecision") ? {
         safeNowLimit: algorithmSuite.purchaseDecision.safeNowLimit,
         action: algorithmSuite.purchaseDecision.action,
         detail: algorithmSuite.purchaseDecision.detail,
         nextMove: algorithmSuite.purchaseDecision.nextMove,
         bestDay: algorithmSuite.purchaseDecision.bestDay,
         confidence: algorithmSuite.purchaseDecision.confidence,
-      },
-      billPriority: {
+      } : undefined,
+      billPriority: isAlgorithmEnabled(decisionHubSettings, "billPriority") ? {
         nextBill: algorithmSuite.billPriority.nextBill
           ? {
             name: algorithmSuite.billPriority.nextBill.name,
@@ -475,8 +475,8 @@ export default function FloScreen() {
           reason: bill.reason,
           urgency: bill.urgency,
         })),
-      },
-      paydaySplitAlgo: {
+      } : undefined,
+      paydaySplitAlgo: isAlgorithmEnabled(decisionHubSettings, "paydaySplit") ? {
         bills: algorithmSuite.paydaySplit.bills,
         spending: algorithmSuite.paydaySplit.spending,
         savings: algorithmSuite.paydaySplit.savings,
@@ -485,8 +485,8 @@ export default function FloScreen() {
         dollars: algorithmSuite.paydaySplit.dollars,
         summary: algorithmSuite.paydaySplit.summary,
         nextMove: algorithmSuite.paydaySplit.nextMove,
-      },
-      debtPayoff: {
+      } : undefined,
+      debtPayoff: isAlgorithmEnabled(decisionHubSettings, "debtPayoff") ? {
         nextDebtName: algorithmSuite.debtPayoff.nextDebtName,
         snowballBalance: algorithmSuite.debtPayoff.snowballBalance,
         avalancheName: algorithmSuite.debtPayoff.avalancheName,
@@ -495,22 +495,22 @@ export default function FloScreen() {
         nextMove: algorithmSuite.debtPayoff.nextMove,
         status: algorithmSuite.debtPayoff.status,
         detail: algorithmSuite.debtPayoff.detail,
-      },
-      spendingLimit: {
+      } : undefined,
+      spendingLimit: isAlgorithmEnabled(decisionHubSettings, "spendingLimit") ? {
         daily: algorithmSuite.spendingLimit.daily,
         weekly: algorithmSuite.spendingLimit.weekly,
         status: algorithmSuite.spendingLimit.status,
         paceLabel: algorithmSuite.spendingLimit.paceLabel,
         remainingDays: algorithmSuite.spendingLimit.remainingDays,
         detail: algorithmSuite.spendingLimit.detail,
-      },
-      extraMoneyRouter: {
+      } : undefined,
+      extraMoneyRouter: isAlgorithmEnabled(decisionHubSettings, "extraMoneyRouter") ? {
         amount: algorithmSuite.extraMoneyRouter.amount,
         recommendation: algorithmSuite.extraMoneyRouter.recommendation,
         targetLabel: algorithmSuite.extraMoneyRouter.targetLabel,
         detail: algorithmSuite.extraMoneyRouter.detail,
         nextMove: algorithmSuite.extraMoneyRouter.nextMove,
-      },
+      } : undefined,
       decisionHistory: {
         due: decisionHistory.due,
         upcoming: decisionHistory.upcoming,

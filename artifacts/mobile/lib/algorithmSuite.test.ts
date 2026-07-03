@@ -112,6 +112,50 @@ test("Flow Score only flags bills when due or overdue", () => {
   assert.ok(suite.flowScore.negativeFactors.some(factor => /overdue bill/i.test(factor)));
 });
 
+test("spending and purchase algorithms require monthly room, not cushion alone", () => {
+  const suite = buildAlgorithmSuite(baseInput({
+    cashFlow: {
+      monthlyIncome: 3000,
+      totalBillsDue: 1400,
+      totalPaid: 900,
+      netTransactions: -1800,
+      remaining: -200,
+      goalAllocations: 0,
+    },
+    dailyBalances: [
+      { day: 1, income: 3000, bills: 0, expense: 0, net: 3000, balance: 3000 },
+      { day: 20, income: 0, bills: 0, expense: 0, net: 0, balance: 1600 },
+    ],
+  }));
+
+  assert.equal(suite.safeCushion.amount, 1400);
+  assert.equal(suite.purchaseDecision.safeNowLimit, 0);
+  assert.equal(suite.purchaseDecision.action, "avoid");
+  assert.equal(suite.spendingLimit.daily, 0);
+  assert.equal(suite.spendingLimit.status, "risk");
+  assert.equal(suite.extraMoneyRouter.amount, 0);
+});
+
+test("debt pressure uses monthly minimums instead of total balance", () => {
+  const suite = buildAlgorithmSuite(baseInput({
+    cashFlow: {
+      monthlyIncome: 10000,
+      totalBillsDue: 1500,
+      totalPaid: 1500,
+      netTransactions: -500,
+      remaining: 8000,
+      goalAllocations: 0,
+    },
+    bills: [
+      { id: "mortgage", name: "Mortgage", amount: 500, category: "Debt", due_day: 1, is_debt: true, is_recurring: true, balance: 500000, interest_rate: 4.5, paidAmount: 500 },
+    ],
+  }));
+
+  assert.ok(suite.flowScore.score > 70);
+  assert.equal(suite.flowScore.breakdownItems.find(item => item.label === "Debt Pressure")?.value, "$500/mo");
+  assert.ok(suite.flowScore.negativeFactors.every(factor => !/large part|500000/i.test(factor)));
+});
+
 test("visible algorithm catalog is trimmed to user-facing suite", () => {
   assert.deepEqual(ALGORITHM_CATALOG.map(item => item.id), [
     "flowScore",

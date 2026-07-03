@@ -188,7 +188,12 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
   const incomeStability = scoreIncomeStability(input.incomes);
   const confidenceScore = input.forecastConfidence.level === "high" ? 92 : input.forecastConfidence.level === "medium" ? 68 : 42;
   const debtTotal = input.bills.filter(bill => bill.is_debt).reduce((sum, bill) => sum + Math.max(0, bill.balance ?? bill.amount), 0);
-  const debtPressure = input.cashFlow.monthlyIncome > 0 ? Math.min(25, (debtTotal / input.cashFlow.monthlyIncome) * 2) : debtTotal > 0 ? 18 : 0;
+  const monthlyDebtMinimums = input.bills
+    .filter(bill => bill.is_debt && (bill.balance ?? bill.amount) > 0)
+    .reduce((sum, bill) => sum + Math.max(0, bill.amount), 0);
+  const debtPressure = input.cashFlow.monthlyIncome > 0
+    ? Math.min(25, (monthlyDebtMinimums / input.cashFlow.monthlyIncome) * 75)
+    : monthlyDebtMinimums > 0 ? 18 : 0;
   const lowBalancePenalty = lowestBalance < 0 ? 35 : lowestBalance < input.safetyFloor ? 22 : safeCushionAmount < 100 ? 10 : 0;
   const flowScore = clamp(
     Math.round(42 + confidenceScore * 0.2 + billReadiness * 18 + incomeStability.score * 0.14 + Math.min(16, safeCushionAmount / 60) - lowBalancePenalty - debtPressure),
@@ -210,20 +215,24 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     return aMonths - bMonths || bMinimum - aMinimum || (a.balance ?? 0) - (b.balance ?? 0) || a.name.localeCompare(b.name);
   })[0] ?? null;
   const remainingDays = Math.max(1, remainingBalances.length || 1);
-  const spendingLimits = buildSpendingLimitDetails(safeCushionAmount, remainingDays);
+  const monthlyFreeCash = roundCurrency(Math.max(0, input.cashFlow.remaining));
+  const decisionRoom = roundCurrency(Math.min(safeCushionAmount, monthlyFreeCash));
+  const spendingLimits = buildSpendingLimitDetails(decisionRoom, remainingDays);
   const planDelayDay = findPlanDelayDay(remainingBalances, input.safetyFloor);
   const subscriptionCreep = findSubscriptionCreep(input.bills);
   const billShock = findBillShock(input.bills, input.cashFlow.monthlyIncome);
   const spendingPattern = summarizeSpendingPattern(input.categoryPlan ?? [], input.transactions);
   const goalAcceleration = buildGoalAcceleration(input.goals, safeCushionAmount);
-  const extraMoneyAmount = roundCurrency(safeCushionAmount > 250 ? Math.min(safeCushionAmount * 0.35, Math.max(25, input.cashFlow.remaining * 0.25)) : 0);
-  const extraMoneyRecommendation = debtTotal > 0
-    ? "debt" as const
-    : input.cashFlow.totalBillsDue > input.cashFlow.totalPaid
+  const rawExtraMoneyAmount = decisionRoom > 250 ? Math.min(decisionRoom * 0.35, monthlyFreeCash * 0.25) : 0;
+  const extraMoneyAmount = roundCurrency(rawExtraMoneyAmount >= 25 ? rawExtraMoneyAmount : 0);
+  const priorityBillNeedsProtection = Boolean(billPriority.nextBill && billPriority.nextBill.urgency === "now");
+  const extraMoneyRecommendation = priorityBillNeedsProtection
       ? "bill" as const
-      : input.goals.some(goal => goal.goal_type === "savings" && goal.current_amount < goal.target_amount)
-        ? "savings" as const
-        : "available" as const;
+      : debtTotal > 0
+        ? "debt" as const
+        : input.goals.some(goal => goal.goal_type === "savings" && goal.current_amount < goal.target_amount)
+          ? "savings" as const
+          : "available" as const;
   const paydaySplit = buildPaydaySplit(input.cashFlow.monthlyIncome, input.cashFlow.totalBillsDue, input.cashFlow.goalAllocations, debtTotal, safeCushionAmount);
   const cashFlowGap = findCashFlowGap(balances, input.safetyFloor);
   const riskDayCounts = balances.reduce(
@@ -235,7 +244,7 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     },
     { safe: 0, watch: 0, risk: 0 },
   );
-  const purchaseDecision = buildPurchaseDecisionDetails(safeCushionAmount, planDelayDay, input.forecastConfidence.level);
+  const purchaseDecision = buildPurchaseDecisionDetails(decisionRoom, planDelayDay, input.forecastConfidence.level, monthlyFreeCash, safeCushionAmount);
 
   const reminders = buildSmartReminders(lowBalanceWarning, billPriority.bills, goalAcceleration.goalName);
   const safeCushionDetails = buildSafeCushionDetails(input, {
@@ -257,6 +266,7 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     paidDueBills,
     overdueBillsCount: overdueBills.length,
     debtPressure,
+    monthlyDebtMinimums,
     lowBalanceWarning,
     categoryPressure,
     confidenceScore,
@@ -288,9 +298,9 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
       breakdownItems: flowScoreDetails.breakdownItems,
       confidence: input.forecastConfidence.level,
       factors: [
-        `Forecast confidence: ${input.forecastConfidence.label}`,
-        `Lowest balance: $${lowestBalance.toFixed(0)}${lowestDay ? ` on day ${lowestDay}` : ""}`,
-        dueBills.length ? `${paidDueBills}/${dueBills.length} due bills cleared` : "No bills are due yet",
+      `Forecast confidence: ${input.forecastConfidence.label}`,
+      `Lowest balance: $${lowestBalance.toFixed(0)}${lowestDay ? ` on day ${lowestDay}` : ""}`,
+      dueBills.length ? `${paidDueBills}/${dueBills.length} due bills cleared` : "No bills are due yet",
       ],
     },
     safeCushion: {
@@ -423,23 +433,35 @@ function buildPaydaySplit(monthlyIncome: number, bills: number, goals: number, d
 }
 
 function buildPurchaseDecisionDetails(
-  safeCushionAmount: number,
+  decisionRoom: number,
   planDelayDay: number | null,
   confidence: AlgorithmSuiteResult["purchaseDecision"]["confidence"],
+  monthlyFreeCash: number,
+  safeCushionAmount: number,
 ): AlgorithmSuiteResult["purchaseDecision"] {
-  if (safeCushionAmount >= 250) {
+  if (monthlyFreeCash <= 0) {
     return {
-      safeNowLimit: safeCushionAmount,
+      safeNowLimit: 0,
+      action: "avoid",
+      confidence,
+      bestDay: planDelayDay,
+      detail: "This month does not have free cash after the current plan, even if the balance still has cushion.",
+      nextMove: "Wait, lower another planned expense, or ask Flo which bill or plan is squeezing the month.",
+    };
+  }
+  if (decisionRoom >= 250) {
+    return {
+      safeNowLimit: decisionRoom,
       action: "safe",
       confidence,
       bestDay: planDelayDay,
-      detail: `Purchases up to $${safeCushionAmount.toFixed(0)} keep the safety floor intact.`,
+      detail: `Purchases up to $${decisionRoom.toFixed(0)} keep both the monthly plan and safety floor intact.`,
       nextMove: "Use Flo to test the exact amount and date before committing.",
     };
   }
-  if (safeCushionAmount >= 75) {
+  if (decisionRoom >= 75) {
     return {
-      safeNowLimit: safeCushionAmount,
+      safeNowLimit: decisionRoom,
       action: "split",
       confidence,
       bestDay: planDelayDay,
@@ -447,13 +469,13 @@ function buildPurchaseDecisionDetails(
       nextMove: planDelayDay ? `Try the purchase after day ${planDelayDay}, or split it into smaller pieces.` : "Split it smaller or wait for more cushion.",
     };
   }
-  if (safeCushionAmount > 0) {
+  if (decisionRoom > 0) {
     return {
-      safeNowLimit: safeCushionAmount,
+      safeNowLimit: decisionRoom,
       action: "wait",
       confidence,
       bestDay: planDelayDay,
-      detail: "This month is tight. Wait for more cushion before adding new spending.",
+      detail: `This month is tight. Only about $${decisionRoom.toFixed(0)} is safe after comparing free cash and cushion.`,
       nextMove: planDelayDay ? `Check again around day ${planDelayDay}.` : "Hold the purchase until the forecast improves.",
     };
   }
@@ -462,7 +484,7 @@ function buildPurchaseDecisionDetails(
     action: "avoid",
     confidence,
     bestDay: planDelayDay,
-    detail: "New spending is unsafe until the forecast improves.",
+    detail: safeCushionAmount <= 0 ? "New spending is unsafe until the forecast improves." : "The cushion exists, but the monthly plan does not have free spendable room.",
     nextMove: "Protect the safety floor before adding this purchase.",
   };
 }
@@ -765,6 +787,7 @@ function buildFlowScoreDetails(
     paidDueBills: number;
     overdueBillsCount: number;
     debtPressure: number;
+    monthlyDebtMinimums: number;
     lowBalanceWarning: AlgorithmSuiteResult["lowBalanceWarning"];
     categoryPressure: AlgorithmCategoryRow[];
     confidenceScore: number;
@@ -794,7 +817,7 @@ function buildFlowScoreDetails(
   if (input.forecastConfidence.level === "high") positiveFactors.push("Forecast confidence is high.");
   else negativeFactors.push(`Forecast confidence is ${input.forecastConfidence.label.toLowerCase()}.`);
 
-  if (facts.debtPressure > 15) negativeFactors.push("Debt pressure is using a large part of monthly income.");
+  if (facts.debtPressure > 15) negativeFactors.push(`Debt minimums use about $${facts.monthlyDebtMinimums.toFixed(0)} of monthly income.`);
   else if (input.bills.some(bill => bill.is_debt)) positiveFactors.push("Debt pressure is manageable in this plan.");
 
   if (facts.categoryPressure.length) {
@@ -819,7 +842,7 @@ function buildFlowScoreDetails(
   });
   breakdownItems.push({
     label: "Debt Pressure",
-    value: facts.debtPressure > 15 ? "High" : facts.debtPressure > 5 ? "Moderate" : "Low",
+    value: facts.monthlyDebtMinimums > 0 ? `$${facts.monthlyDebtMinimums.toFixed(0)}/mo` : "Low",
     tone: facts.debtPressure > 15 ? "risk" : facts.debtPressure > 5 ? "watch" : "safe",
   });
   if (facts.categoryPressure.length) {
