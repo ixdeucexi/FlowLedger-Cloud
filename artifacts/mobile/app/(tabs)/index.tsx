@@ -3,7 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Animated, Image, Keyboard, Modal, Platform, Pressable,
+  Animated, Image, Keyboard, Modal, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -139,6 +139,7 @@ export default function DashboardScreen() {
   const [moveError, setMoveError] = useState("");
   const [flowScoreVisible, setFlowScoreVisible] = useState(false);
   const [safeCushionVisible, setSafeCushionVisible] = useState(false);
+  const [activeAlgoCard, setActiveAlgoCard] = useState(0);
 
   useFocusEffect(useCallback(() => {
     setIsFocused(true);
@@ -891,6 +892,106 @@ export default function DashboardScreen() {
   const openFloWithPrompt = (prompt: string) => {
     router.push({ pathname: "/(tabs)/flo", params: { prompt } } as any);
   };
+  const algorithmCardWidth = isCommandWide ? 500 : Math.max(286, viewportWidth - 68);
+  const algorithmCards = useMemo(() => {
+    const safeTone = algoToneColor(algorithmSuite.safeCushion.status);
+    return [
+      {
+        id: "flow-score",
+        title: "Flow Score",
+        value: `${algorithmSuite.flowScore.score} · ${algorithmSuite.flowScore.label}`,
+        detail: algorithmSuite.flowScore.topReason,
+        action: algorithmSuite.flowScore.topAction,
+        icon: "activity" as const,
+        color: "#a855f7",
+        prompt: `Why is my Flow Score ${algorithmSuite.flowScore.score}? ${algorithmSuite.flowScore.topReason} ${algorithmSuite.flowScore.topAction}`,
+      },
+      {
+        id: "safe-cushion",
+        title: "Safe Cushion",
+        value: `$${algorithmSuite.safeCushion.amount.toFixed(0)}`,
+        detail: algorithmSuite.safeCushion.compactReason,
+        action: algorithmSuite.safeCushion.topAction,
+        icon: "shield" as const,
+        color: safeTone,
+        prompt: "What is my Safe Cushion and what can I safely do with it?",
+      },
+      {
+        id: "purchase",
+        title: "Purchase Decision",
+        value: `$${algorithmSuite.purchaseDecision.safeNowLimit.toFixed(0)} safe now`,
+        detail: algorithmSuite.purchaseDecision.detail,
+        action: algorithmSuite.purchaseDecision.nextMove,
+        icon: "shopping-bag" as const,
+        color: "#22d3ee",
+        prompt: "What purchase amount is safe right now and when should I wait?",
+      },
+      {
+        id: "bill-priority",
+        title: "Bill Priority",
+        value: algorithmSuite.billPriority.nextBill?.name ?? "All clear",
+        detail: algorithmSuite.billPriority.summary,
+        action: algorithmSuite.billPriority.nextMove,
+        icon: "file-text" as const,
+        color: "#fbbf24",
+        prompt: "Which bill should I handle first and why?",
+      },
+      {
+        id: "debt-payoff",
+        title: "Debt Payoff",
+        value: algorithmSuite.debtPayoff.nextDebtName ?? "No debt target",
+        detail: algorithmSuite.debtPayoff.detail,
+        action: algorithmSuite.debtPayoff.nextMove,
+        icon: "zap" as const,
+        color: "#fb7185",
+        prompt: "What is my best next debt payoff move?",
+      },
+      {
+        id: "risk-day",
+        title: "Risk Day",
+        value: `${algorithmSuite.riskDay.risk} risk · ${algorithmSuite.riskDay.watch} watch`,
+        detail: algorithmSuite.lowBalanceWarning.message,
+        action: algorithmSuite.planDelay.detail,
+        icon: "alert-triangle" as const,
+        color: algorithmSuite.riskDay.risk > 0 ? "#fb7185" : "#22c55e",
+        prompt: "Which days are risky this month and what should I change?",
+      },
+      {
+        id: "spending-limit",
+        title: "Spending Limit",
+        value: `$${algorithmSuite.spendingLimit.daily.toFixed(0)}/day`,
+        detail: algorithmSuite.spendingLimit.detail,
+        action: `$${algorithmSuite.spendingLimit.weekly.toFixed(0)} weekly limit`,
+        icon: "compass" as const,
+        color: "#60a5fa",
+        prompt: "What can I safely spend daily and weekly?",
+      },
+      {
+        id: "savings-sweep",
+        title: "Savings Sweep",
+        value: `$${algorithmSuite.extraMoneyRouter.amount.toFixed(0)}`,
+        detail: algorithmSuite.extraMoneyRouter.detail,
+        action: algorithmSuite.extraMoneyRouter.nextMove,
+        icon: "corner-right-up" as const,
+        color: "#34d399",
+        prompt: "Where should extra money go right now: debt, savings, bills, or available cash?",
+      },
+      {
+        id: "monthly-health",
+        title: "Monthly Health",
+        value: `${algorithmSuite.monthlyHealth.grade} · ${algorithmSuite.monthlyHealth.score}`,
+        detail: algorithmSuite.monthlyHealth.summary,
+        action: algorithmSuite.forecastConfidence.reason,
+        icon: "bar-chart-2" as const,
+        color: "#8b5cf6",
+        prompt: "Review my monthly health and tell me the cleanest next move.",
+      },
+    ];
+  }, [algorithmSuite]);
+  const handleAlgoCarouselScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const index = Math.round(event.nativeEvent.contentOffset.x / Math.max(1, algorithmCardWidth + 12));
+    setActiveAlgoCard(Math.max(0, Math.min(algorithmCards.length - 1, index)));
+  };
 
   return (
     <ScrollView
@@ -1087,6 +1188,64 @@ export default function DashboardScreen() {
       </View>
 
       <View style={[styles.referenceLowerGrid, isCommandWide && styles.referenceLowerGridWide]}>
+        <View style={styles.referenceAlgoCarouselPanel}>
+          <View style={styles.referenceAlgoHeaderRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.referenceInsightTitle}>Algorithm Suite</Text>
+              <Text style={styles.referenceAlgoSubtitle}>Swipe through the engines guiding your money plan.</Text>
+            </View>
+            <Text style={styles.referenceAlgoCount}>{activeAlgoCard + 1}/{algorithmCards.length}</Text>
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            decelerationRate="fast"
+            snapToInterval={algorithmCardWidth + 12}
+            contentContainerStyle={styles.referenceAlgoScrollContent}
+            onMomentumScrollEnd={handleAlgoCarouselScroll}
+          >
+            {algorithmCards.map(card => (
+              <Pressable
+                key={card.id}
+                onPress={() => openFloWithPrompt(card.prompt)}
+                style={({ pressed }) => [
+                  styles.referenceAlgorithmCard,
+                  {
+                    width: algorithmCardWidth,
+                    borderColor: `${card.color}55`,
+                    opacity: pressed ? 0.84 : 1,
+                  },
+                ]}
+              >
+                <View style={[styles.referenceAlgorithmIcon, { backgroundColor: `${card.color}22` }]}>
+                  <Feather name={card.icon} size={18} color={card.color} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.referenceAlgorithmTitle}>{card.title}</Text>
+                  <Text style={[styles.referenceAlgorithmValue, { color: card.color }]}>{card.value}</Text>
+                  <Text style={styles.referenceAlgorithmDetail} numberOfLines={2}>{card.detail}</Text>
+                  <Text style={styles.referenceAlgorithmAction} numberOfLines={1}>{card.action}</Text>
+                </View>
+                <Feather name="message-circle" size={16} color="rgba(226,232,240,0.72)" />
+              </Pressable>
+            ))}
+          </ScrollView>
+
+          <View style={styles.referenceAlgoDots}>
+            {algorithmCards.map((card, index) => (
+              <View
+                key={card.id}
+                style={[
+                  styles.referenceAlgoDot,
+                  index === activeAlgoCard && styles.referenceAlgoDotActive,
+                ]}
+              />
+            ))}
+          </View>
+        </View>
+
+        {false && (
         <Pressable
           onPress={() => openFloWithPrompt(`Explain my ${MONTH_FULL[currentMonth]} flow and the best next move.`)}
           style={({ pressed }) => [styles.referenceInsightCard, { opacity: pressed ? 0.82 : 1 }]}
@@ -1105,6 +1264,7 @@ export default function DashboardScreen() {
             ))}
           </View>
         </Pressable>
+        )}
 
         <View style={styles.referenceQuickPanel}>
           <Text style={styles.referenceQuickTitle}>Quick Actions</Text>
@@ -1376,7 +1536,7 @@ export default function DashboardScreen() {
         </Pressable>
       )}
 
-      <View style={styles.commandDeck}>
+      {false && <View style={styles.commandDeck}>
         <Pressable
           onPress={() => router.push("/(tabs)/flo" as any)}
           style={({ pressed }) => [styles.primaryCommandCard, { opacity: pressed ? 0.82 : 1 }]}
@@ -1417,9 +1577,9 @@ export default function DashboardScreen() {
             </Pressable>
           ))}
         </View>
-      </View>
+      </View>}
 
-      <View style={styles.moneyRadarCard}>
+      {false && <View style={styles.moneyRadarCard}>
         <View style={styles.moneyRadarHeader}>
           <View style={{ flex: 1 }}>
             <Text style={styles.moneyRadarEyebrow}>MONTHLY MONEY RADAR</Text>
@@ -1446,7 +1606,7 @@ export default function DashboardScreen() {
             </Pressable>
           ))}
         </View>
-      </View>
+      </View>}
 
       {false && <View style={[styles.statsPillRow, { marginBottom: 8 }]}>
         {statCards.slice(0, 3).map(card => (
@@ -1524,7 +1684,7 @@ export default function DashboardScreen() {
         </Pressable>
       )}
 
-      <View style={styles.monthlyReviewCard}>
+      {false && <View style={styles.monthlyReviewCard}>
         <View style={styles.monthlyReviewHeader}>
           <View style={styles.monthlyReviewIcon}>
             <Feather name="activity" size={17} color="#38bdf8" />
@@ -1587,7 +1747,7 @@ export default function DashboardScreen() {
             <Text style={[styles.monthlyReviewActionText, { color: c.success }]}>Ask Flo to review</Text>
           </Pressable>
         </View>
-      </View>
+      </View>}
 
       {false && <>
       {/* ── WHAT CAN I DO? button ── */}
@@ -1727,7 +1887,7 @@ export default function DashboardScreen() {
 
       </>}
       {/* ── Upcoming Bills ── */}
-      {upcomingBills.length > 0 && (
+      {false && upcomingBills.length > 0 && (
         <>
           <Text style={styles.sectionTitle}>Next 7 Days</Text>
           <View style={styles.upcomingCard}>
@@ -2654,6 +2814,20 @@ const styles = StyleSheet.create({
   referenceScoreReason: { color: "#94a3b8", maxWidth: 220, textAlign: "center", fontSize: 12, fontFamily: "Inter_600SemiBold", lineHeight: 17 },
   referenceLowerGrid: { gap: 12, marginBottom: 14 },
   referenceLowerGridWide: { flexDirection: "row" },
+  referenceAlgoCarouselPanel: { flex: 1.45, borderRadius: 24, borderWidth: 1, borderColor: "rgba(168,85,247,0.22)", backgroundColor: "rgba(15,23,42,0.72)", padding: 14, shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.22, shadowRadius: 26, elevation: 8 },
+  referenceAlgoHeaderRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 10 },
+  referenceAlgoSubtitle: { color: "#94a3b8", fontSize: 11, fontFamily: "Inter_600SemiBold", lineHeight: 15, marginTop: 2 },
+  referenceAlgoCount: { color: "#a78bfa", fontSize: 12, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
+  referenceAlgoScrollContent: { gap: 12, paddingRight: 4 },
+  referenceAlgorithmCard: { minHeight: 148, borderRadius: 22, borderWidth: 1, backgroundColor: "rgba(2,6,23,0.62)", padding: 14, flexDirection: "row", gap: 12, alignItems: "flex-start" },
+  referenceAlgorithmIcon: { width: 42, height: 42, borderRadius: 15, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(226,232,240,0.08)" },
+  referenceAlgorithmTitle: { color: "#e2e8f0", fontSize: 12, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.8, textTransform: "uppercase" },
+  referenceAlgorithmValue: { fontSize: 22, fontFamily: "Inter_800ExtraBold", marginTop: 4 },
+  referenceAlgorithmDetail: { color: "#cbd5e1", fontSize: 12, fontFamily: "Inter_600SemiBold", lineHeight: 17, marginTop: 4 },
+  referenceAlgorithmAction: { color: "#a78bfa", fontSize: 11, fontFamily: "Inter_800ExtraBold", marginTop: 8 },
+  referenceAlgoDots: { flexDirection: "row", justifyContent: "center", gap: 6, marginTop: 10 },
+  referenceAlgoDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "rgba(148,163,184,0.32)" },
+  referenceAlgoDotActive: { width: 18, backgroundColor: "#8b5cf6" },
   referenceInsightCard: { flex: 1.45, minHeight: 130, borderRadius: 24, borderWidth: 1, borderColor: "rgba(168,85,247,0.22)", backgroundColor: "rgba(15,23,42,0.72)", padding: 16, flexDirection: "row", alignItems: "center", gap: 12, shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.22, shadowRadius: 26 },
   referenceInsightIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.28)" },
   referenceInsightTitle: { color: "#d8b4fe", fontSize: 14, fontFamily: "Inter_800ExtraBold", marginBottom: 6 },
