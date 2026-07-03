@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AddBillModal } from "@/components/AddBillModal";
 import { DatePickerField } from "@/components/DatePickerField";
 import { GoalModal } from "@/components/GoalModal";
+import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 
 import colors from "@/constants/colors";
 import type { Bill, DashboardFilter, Goal } from "@/context/BudgetContext";
@@ -848,8 +849,9 @@ export default function DashboardScreen() {
       keyboardShouldPersistTaps="handled"
     >
       <View pointerEvents="none" style={styles.stormBackdrop}>
+        <PremiumBackdrop variant="purple" />
         <LinearGradient
-          colors={["#030712", "#07111f", "#0f172a"]}
+          colors={["rgba(3,7,18,0.32)", "rgba(8,13,32,0.10)", "rgba(15,23,42,0.16)"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.stormBase}
@@ -891,6 +893,7 @@ export default function DashboardScreen() {
           </View>
           <View>
             <Text style={styles.brandEyebrow}>FLOWLEDGER</Text>
+            <Text style={styles.brandAlgo}>ALGO</Text>
             <Text style={styles.heading}>Command Center</Text>
             <Text style={styles.subheading}>{MONTH_FULL[currentMonth]} {selectedYear} · live forecast</Text>
           </View>
@@ -970,10 +973,10 @@ export default function DashboardScreen() {
         const isNeg = cur < 0;
         const isLow = !isNeg && cur < settings.safety_floor;
         const gradColors: [string, string] = isNeg
-          ? ["#450a0a", "#991b1b"]
+          ? ["#210512", "#881337"]
           : isLow
-          ? ["#431407", "#92400e"]
-          : ["#031326", "#172554"];
+          ? ["#271406", "#7c2d12"]
+          : ["#020617", "#1e1b4b"];
         const statusLabel = isNeg ? "Risk" : isLow ? "Tight" : "On track";
         const statusColor = isNeg ? "#fb7185" : isLow ? "#fbbf24" : "#22c55e";
 
@@ -2403,10 +2406,11 @@ const styles = StyleSheet.create({
   brandLockup: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
   brandMark: { width: 48, height: 48, borderRadius: 17, alignItems: "center", justifyContent: "center", overflow: "hidden", borderWidth: 1, borderColor: "rgba(96,165,250,0.35)", backgroundColor: "#020617", shadowColor: "#38bdf8", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 18, elevation: 9 },
   brandMarkImage: { width: "100%", height: "100%" },
-  brandEyebrow: { color: "#60a5fa", fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.6, marginBottom: 2 },
-  heading:    { fontSize: 28, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.8, color: "#f8fafc" },
-  subheading: { fontSize: 12, fontFamily: "Inter_600SemiBold", marginTop: 2, color: "#94a3b8" },
-  headerActionButton: { width: 52, height: 52, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(37,99,235,0.78)", borderWidth: 1, borderColor: "rgba(147,197,253,0.35)", shadowColor: "#2563eb", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.42, shadowRadius: 18, elevation: 10 },
+  brandEyebrow: { color: "#38bdf8", fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 2.3, marginBottom: -1 },
+  brandAlgo: { color: "#a78bfa", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 7, marginBottom: 1, opacity: 0.9 },
+  heading:    { fontSize: 30, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.0, color: "#f8fafc", textShadowColor: "rgba(56,189,248,0.35)", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 12 },
+  subheading: { fontSize: 12, fontFamily: "Inter_600SemiBold", marginTop: 2, color: "#a5b4fc" },
+  headerActionButton: { width: 54, height: 54, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.82)", borderWidth: 1, borderColor: "rgba(34,211,238,0.38)", shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.52, shadowRadius: 22, elevation: 12 },
   setupCard: { borderWidth: 1, borderRadius: 18, padding: 14, marginBottom: 12 },
   setupHeader: { flexDirection: "row", alignItems: "flex-start", marginBottom: 8 },
   setupTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
@@ -2429,9 +2433,9 @@ const styles = StyleSheet.create({
   confidenceDesc: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
 
   // Hero
-  heroCard:          { borderRadius: 34, padding: 24, marginBottom: 14, minHeight: 255, borderWidth: 1, borderColor: "rgba(147,197,253,0.25)", shadowColor: "#2563eb", shadowOffset: { width: 0, height: 18 }, shadowOpacity: 0.42, shadowRadius: 30, elevation: 14 },
-  heroGlowTop:       { position: "absolute", top: -60, right: -40, width: 210, height: 210, borderRadius: 105, backgroundColor: "rgba(56,189,248,0.16)" },
-  heroGlowBottom:    { position: "absolute", bottom: -80, left: -40, width: 180, height: 180, borderRadius: 90, backgroundColor: "rgba(34,197,94,0.12)" },
+  heroCard:          { borderRadius: 36, padding: 24, marginBottom: 14, minHeight: 255, borderWidth: 1, borderColor: "rgba(34,211,238,0.26)", shadowColor: "#7c3aed", shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.46, shadowRadius: 34, elevation: 16 },
+  heroGlowTop:       { position: "absolute", top: -60, right: -40, width: 230, height: 230, borderRadius: 115, backgroundColor: "rgba(34,211,238,0.18)" },
+  heroGlowBottom:    { position: "absolute", bottom: -80, left: -40, width: 190, height: 190, borderRadius: 95, backgroundColor: "rgba(124,58,237,0.18)" },
   heroSignalLine:    { position: "absolute", left: 18, right: 18, bottom: 72, height: 1, backgroundColor: "rgba(125,211,252,0.18)" },
   heroTopRow:        { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 18 },
   heroStatusBadge:   { flexDirection: "row", alignItems: "center", gap: 7, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
@@ -2456,9 +2460,9 @@ const styles = StyleSheet.create({
   heroGoalTrack:     { flex: 1, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.2)", overflow: "hidden" },
   heroGoalFill:      { height: 4, borderRadius: 2, backgroundColor: "#6ee7b7" },
   heroGoalPct:       { fontSize: 10, fontFamily: "Inter_700Bold", color: "rgba(255,255,255,0.75)", width: 30, textAlign: "right" },
-  algoSuiteCard: { borderRadius: 28, padding: 15, marginBottom: 12, backgroundColor: "rgba(2,6,23,0.82)", borderWidth: 1, borderColor: "rgba(125,211,252,0.18)", shadowColor: "#38bdf8", shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 24, elevation: 8 },
+  algoSuiteCard: { borderRadius: 30, padding: 15, marginBottom: 12, backgroundColor: "rgba(2,6,23,0.72)", borderWidth: 1, borderColor: "rgba(168,85,247,0.24)", shadowColor: "#38bdf8", shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.22, shadowRadius: 26, elevation: 9 },
   algoSuiteHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
-  algoScoreRing: { width: 68, height: 68, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(37,99,235,0.2)", borderWidth: 1, borderColor: "rgba(96,165,250,0.38)" },
+  algoScoreRing: { width: 68, height: 68, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.24)", borderWidth: 1, borderColor: "rgba(34,211,238,0.42)" },
   algoScoreValue: { color: "#f8fafc", fontSize: 24, fontFamily: "Inter_800ExtraBold", lineHeight: 27 },
   algoScoreLabel: { color: "#93c5fd", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 1 },
   algoEyebrow: { color: "#38bdf8", fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.1, marginBottom: 2 },
@@ -2487,7 +2491,7 @@ const styles = StyleSheet.create({
   primaryCommandTitle: { color: "#ffffff", fontSize: 17, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.3 },
   primaryCommandSub: { color: "rgba(226,232,240,0.78)", fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 17, marginTop: 4 },
   quickCommandRow: { flexDirection: "row", gap: 9 },
-  quickCommand: { flex: 1, minHeight: 82, borderRadius: 22, padding: 11, justifyContent: "space-between", backgroundColor: "rgba(15,23,42,0.78)", borderWidth: 1, borderColor: "rgba(148,163,184,0.16)" },
+  quickCommand: { flex: 1, minHeight: 82, borderRadius: 22, padding: 11, justifyContent: "space-between", backgroundColor: "rgba(15,23,42,0.68)", borderWidth: 1, borderColor: "rgba(148,163,184,0.16)" },
   quickCommandIcon: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   quickCommandText: { color: "#e5edf8", fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   flowScoreSheetHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },

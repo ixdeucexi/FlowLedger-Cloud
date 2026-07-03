@@ -291,20 +291,43 @@ function TabContent() {
           animation: "none",
           freezeOnBlur: !isWeb,
           lazy: true,
-          tabBarActiveTintColor: "#22c55e",
+          tabBarActiveTintColor: "#8b5cf6",
           tabBarInactiveTintColor: colors.mutedForeground,
           headerShown: false,
+          tabBarLabelStyle: {
+            fontFamily: "Inter_600SemiBold",
+            fontSize: 10,
+            marginTop: 1,
+          },
+          tabBarItemStyle: {
+            paddingVertical: 6,
+            borderRadius: 18,
+          },
           tabBarStyle: {
             position: "absolute",
-            backgroundColor: isIOS ? "transparent" : colors.background,
-            borderTopWidth: isWeb ? 1 : 0,
-            borderTopColor: colors.border,
-            elevation: 0,
+            left: 12,
+            right: 12,
+            bottom: isIosWeb ? 6 : isWeb ? 12 : 10,
+            borderRadius: 28,
+            backgroundColor: isIOS ? "transparent" : "rgba(2,6,23,0.90)",
+            borderWidth: 1,
+            borderTopWidth: 1,
+            borderColor: "rgba(148,163,184,0.18)",
+            shadowColor: "#7c3aed",
+            shadowOffset: { width: 0, height: 14 },
+            shadowOpacity: 0.22,
+            shadowRadius: 26,
+            elevation: 14,
+            paddingHorizontal: 6,
             ...(isWeb ? {
-              height: isIosWeb ? 58 : 84,
+              height: isIosWeb ? 60 : 76,
               paddingTop: isIosWeb ? 0 : undefined,
               paddingBottom: isIosWeb ? 0 : undefined,
-            } : {}),
+            } : {
+              height: 76,
+              paddingTop: 6,
+              paddingBottom: 8,
+            }),
           },
           tabBarBackground: () =>
             isIOS ? (
@@ -314,7 +337,7 @@ function TabContent() {
                 style={StyleSheet.absoluteFill}
               />
             ) : isWeb ? (
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]} />
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(2,6,23,0.92)", borderRadius: 28 }]} />
             ) : null,
         }}
       >
