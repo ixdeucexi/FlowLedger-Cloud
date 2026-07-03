@@ -3,7 +3,7 @@ import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert, FlatList, Platform, Pressable, StyleSheet, Text, View,
+  Alert, FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -401,7 +401,10 @@ export default function BillsScreen() {
 
       {/* ════════════════════ DEBT VIEW ════════════════════ */}
       {activeTab === "debt" && (
-        <>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[styles.debtScrollContent, { paddingBottom: insets.bottom + 118 }]}
+        >
           {/* Safe Snowball Banner */}
           {debts.length > 0 && (
             <View style={[styles.extraBanner, { backgroundColor: safeSnowballAmount > 0 ? c.success + "15" : c.muted, marginHorizontal: 16, borderRadius: colors.radius }]}>
@@ -521,7 +524,8 @@ export default function BillsScreen() {
           <FlatList
             data={debts}
             keyExtractor={item => item.id}
-            contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 100 }]}
+            scrollEnabled={false}
+            contentContainerStyle={[styles.list, { paddingBottom: 0 }]}
             ListEmptyComponent={
               <EmptyState
                 icon="credit-card"
@@ -611,7 +615,7 @@ export default function BillsScreen() {
               );
             }}
           />
-        </>
+        </ScrollView>
       )}
 
       <AddBillModal
@@ -683,6 +687,7 @@ const styles = StyleSheet.create({
   amountSub: { fontSize: 10, fontFamily: "Inter_400Regular" },
 
   // Debt-specific
+  debtScrollContent: { paddingTop: 0 },
   statsRow:       { flexDirection: "row" },
   statCard:       { flex: 1, alignItems: "center", paddingVertical: 12, gap: 4 },
   statValue:      { fontSize: 16, fontFamily: "Inter_700Bold" },
