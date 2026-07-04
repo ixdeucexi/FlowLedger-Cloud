@@ -69,7 +69,7 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
 
     const primaryFlashLoop = Animated.loop(
       Animated.sequence([
-        Animated.delay(540),
+        Animated.delay(220),
         Animated.timing(primaryFlashAnim, {
           toValue: 1,
           duration: 48,
@@ -94,7 +94,7 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
           easing: Easing.out(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.delay(2500),
+        Animated.delay(1250),
         Animated.timing(primaryFlashAnim, {
           toValue: 0.72,
           duration: 60,
@@ -107,13 +107,13 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
           easing: Easing.out(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.delay(4200),
+        Animated.delay(1700),
       ]),
     );
 
     const secondaryFlashLoop = Animated.loop(
       Animated.sequence([
-        Animated.delay(1900),
+        Animated.delay(820),
         Animated.timing(secondaryFlashAnim, {
           toValue: 0.86,
           duration: 54,
@@ -126,7 +126,7 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
           easing: Easing.in(Easing.quad),
           useNativeDriver: true,
         }),
-        Animated.delay(150),
+        Animated.delay(80),
         Animated.timing(secondaryFlashAnim, {
           toValue: 0.58,
           duration: 42,
@@ -139,13 +139,13 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
           easing: Easing.out(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.delay(5200),
+        Animated.delay(2100),
       ]),
     );
 
     const skyPulseLoop = Animated.loop(
       Animated.sequence([
-        Animated.delay(560),
+        Animated.delay(230),
         Animated.timing(skyPulseAnim, {
           toValue: 1,
           duration: 62,
@@ -158,7 +158,7 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
           easing: Easing.out(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.delay(3000),
+        Animated.delay(1300),
         Animated.timing(skyPulseAnim, {
           toValue: 0.42,
           duration: 58,
@@ -171,7 +171,7 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
           easing: Easing.out(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.delay(4000),
+        Animated.delay(1900),
       ]),
     );
 
@@ -235,6 +235,34 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
         glowWidth: 16,
         opacity: 0.78,
       },
+      {
+        key: "center-fork-drop",
+        path: `M ${svgWidth * 0.48} ${-svgHeight * 0.04} L ${svgWidth * 0.42} ${svgHeight * 0.10} L ${svgWidth * 0.53} ${svgHeight * 0.18} L ${svgWidth * 0.35} ${svgHeight * 0.34} L ${svgWidth * 0.43} ${svgHeight * 0.43} L ${svgWidth * 0.21} ${svgHeight * 0.62} L ${svgWidth * 0.27} ${svgHeight * 0.71}`,
+        branches: [
+          `M ${svgWidth * 0.53} ${svgHeight * 0.18} L ${svgWidth * 0.67} ${svgHeight * 0.20} L ${svgWidth * 0.58} ${svgHeight * 0.30} L ${svgWidth * 0.76} ${svgHeight * 0.36}`,
+          `M ${svgWidth * 0.35} ${svgHeight * 0.34} L ${svgWidth * 0.22} ${svgHeight * 0.32} L ${svgWidth * 0.12} ${svgHeight * 0.40}`,
+          `M ${svgWidth * 0.43} ${svgHeight * 0.43} L ${svgWidth * 0.55} ${svgHeight * 0.51} L ${svgWidth * 0.49} ${svgHeight * 0.61}`,
+        ],
+        coreColor: "#ffffff",
+        glowColor: "#7dd3fc",
+        coreWidth: 2.4,
+        glowWidth: 18,
+        opacity: 0.88,
+      },
+      {
+        key: "right-side-split",
+        path: `M ${svgWidth * 1.08} ${svgHeight * 0.18} L ${svgWidth * 0.90} ${svgHeight * 0.27} L ${svgWidth * 0.97} ${svgHeight * 0.35} L ${svgWidth * 0.79} ${svgHeight * 0.45} L ${svgWidth * 0.87} ${svgHeight * 0.55} L ${svgWidth * 0.66} ${svgHeight * 0.69}`,
+        branches: [
+          `M ${svgWidth * 0.90} ${svgHeight * 0.27} L ${svgWidth * 0.73} ${svgHeight * 0.25} L ${svgWidth * 0.62} ${svgHeight * 0.34}`,
+          `M ${svgWidth * 0.79} ${svgHeight * 0.45} L ${svgWidth * 0.63} ${svgHeight * 0.48} L ${svgWidth * 0.52} ${svgHeight * 0.58}`,
+          `M ${svgWidth * 0.87} ${svgHeight * 0.55} L ${svgWidth * 1.02} ${svgHeight * 0.61} L ${svgWidth * 0.91} ${svgHeight * 0.74}`,
+        ],
+        coreColor: "#dff7ff",
+        glowColor: "#22d3ee",
+        coreWidth: 2,
+        glowWidth: 15,
+        opacity: 0.74,
+      },
     ];
 
     const secondary: LightningBolt[] = [
@@ -263,6 +291,33 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
         coreWidth: 1.8,
         glowWidth: 14,
         opacity: 0.70,
+      },
+      {
+        key: "top-purple-snap",
+        path: `M ${-svgWidth * 0.12} ${svgHeight * 0.15} L ${svgWidth * 0.05} ${svgHeight * 0.10} L ${svgWidth * 0.20} ${svgHeight * 0.14} L ${svgWidth * 0.38} ${svgHeight * 0.07} L ${svgWidth * 0.57} ${svgHeight * 0.12} L ${svgWidth * 0.77} ${svgHeight * 0.06}`,
+        branches: [
+          `M ${svgWidth * 0.20} ${svgHeight * 0.14} L ${svgWidth * 0.27} ${svgHeight * 0.25} L ${svgWidth * 0.18} ${svgHeight * 0.32}`,
+          `M ${svgWidth * 0.57} ${svgHeight * 0.12} L ${svgWidth * 0.64} ${svgHeight * 0.22} L ${svgWidth * 0.79} ${svgHeight * 0.25}`,
+        ],
+        coreColor: "#faf5ff",
+        glowColor: "#c084fc",
+        coreWidth: 1.7,
+        glowWidth: 13,
+        opacity: 0.68,
+      },
+      {
+        key: "low-blue-branch",
+        path: `M ${svgWidth * 0.02} ${svgHeight * 0.92} L ${svgWidth * 0.20} ${svgHeight * 0.80} L ${svgWidth * 0.35} ${svgHeight * 0.84} L ${svgWidth * 0.51} ${svgHeight * 0.73} L ${svgWidth * 0.68} ${svgHeight * 0.77} L ${svgWidth * 0.93} ${svgHeight * 0.64}`,
+        branches: [
+          `M ${svgWidth * 0.35} ${svgHeight * 0.84} L ${svgWidth * 0.28} ${svgHeight * 0.95} L ${svgWidth * 0.13} ${svgHeight * 1.02}`,
+          `M ${svgWidth * 0.51} ${svgHeight * 0.73} L ${svgWidth * 0.42} ${svgHeight * 0.65} L ${svgWidth * 0.29} ${svgHeight * 0.65}`,
+          `M ${svgWidth * 0.68} ${svgHeight * 0.77} L ${svgWidth * 0.82} ${svgHeight * 0.84} L ${svgWidth * 1.02} ${svgHeight * 0.82}`,
+        ],
+        coreColor: "#eff6ff",
+        glowColor: "#60a5fa",
+        coreWidth: 1.9,
+        glowWidth: 15,
+        opacity: 0.76,
       },
     ];
 
