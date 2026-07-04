@@ -90,7 +90,7 @@ export function SnowballPreviewModal({ visible, preview, amount, existingPayment
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.payoffTitle, { color: c.foreground }]}>Estimated debt-free date</Text>
                   <Text style={[styles.payoffValue, { color: c.primary }]}>{preview.debtFreeDate ?? "More than 30 years"}</Text>
-                  <Text style={[styles.payoffOrder, { color: c.mutedForeground }]}>{preview.payoffOrder.join(" â†’ ") || "No included debts"}</Text>
+                  <Text style={[styles.payoffOrder, { color: c.mutedForeground }]}>{preview.payoffOrder.join(" → ") || "No included debts"}</Text>
                 </View>
               </View>
             </ScrollView>

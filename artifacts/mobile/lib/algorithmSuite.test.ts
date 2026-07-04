@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ALGORITHM_CATALOG, defaultAlgorithmToggles, normalizeAlgorithmGrowthStage, normalizeAlgorithmToggles } from "./algorithmCatalog";
+import { ALGORITHM_CATALOG, defaultAlgorithmToggles, normalizeAlgorithmToggles } from "./algorithmCatalog";
 import { buildAlgorithmSuite, type AlgorithmSuiteInput } from "./algorithmSuite";
 
 function baseInput(overrides: Partial<AlgorithmSuiteInput> = {}): AlgorithmSuiteInput {
@@ -44,7 +44,6 @@ function baseInput(overrides: Partial<AlgorithmSuiteInput> = {}): AlgorithmSuite
     forecastConfidence: { level: "high", label: "High", reasons: ["Accounts and recurring cash flow are current"] },
     settings: {
       algorithmSuiteEnabled: true,
-      algorithmGrowthStage: "power",
       algorithmToggles: defaultAlgorithmToggles(),
     },
     ...overrides,
@@ -182,22 +181,21 @@ test("visible algorithm catalog is trimmed to user-facing suite", () => {
     "spendingLimit",
     "extraMoneyRouter",
   ]);
-  assert.equal(normalizeAlgorithmGrowthStage("missing"), "starter");
   assert.equal(normalizeAlgorithmToggles({ savingsSweep: false }).extraMoneyRouter, false);
 });
 
-test("respects growth stage and disabled algorithm toggles", () => {
+test("respects disabled algorithm toggles without growth-stage gating", () => {
   const toggles = defaultAlgorithmToggles();
   toggles.safeCushion = false;
   const suite = buildAlgorithmSuite(baseInput({
     settings: {
       algorithmSuiteEnabled: true,
-      algorithmGrowthStage: "starter",
       algorithmToggles: toggles,
     },
   }));
 
   assert.equal(suite.safeCushion.amount, 0);
+  assert.equal(suite.extraMoneyRouter.targetLabel, "Credit Card");
   assert.ok(suite.activeCount < 20);
   assert.ok(suite.insights.every(insight => insight.id !== "safeCushion"));
 });

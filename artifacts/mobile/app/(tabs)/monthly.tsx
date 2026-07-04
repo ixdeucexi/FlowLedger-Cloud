@@ -774,6 +774,20 @@ export default function MonthlyScreen() {
     },
   }), [changeMonth]);
 
+  const todayDate = new Date();
+  const todayMonth = todayDate.getMonth();
+  const todayYear = todayDate.getFullYear();
+  const todayDayNumber = todayDate.getDate();
+  const todayIso = `${todayYear}-${String(todayMonth + 1).padStart(2, "0")}-${String(todayDayNumber).padStart(2, "0")}`;
+  const isCurrentMonth = month === todayMonth && selectedYear === todayYear;
+
+  const jumpToToday = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedDate(todayIso);
+    setMonth(todayMonth);
+    if (selectedYear !== todayYear) setSelectedYear(todayYear);
+  }, [selectedYear, setSelectedYear, todayIso, todayMonth, todayYear]);
+
   const webTopPad = Platform.OS === "web" ? 4 : 0;
 
   return (
@@ -782,15 +796,34 @@ export default function MonthlyScreen() {
       <View style={[styles.header, { paddingTop: insets.top + 12 + webTopPad }]}>
         <View>
           <Text style={[styles.calendarBrand, { color: c.primary }]}>FLOWLEDGER ALGO</Text>
-          <Text style={[styles.title, { color: c.foreground }]}>{MONTH_FULL[month]} {selectedYear}</Text>
+          <Text style={[styles.calendarScreenLabel, { color: c.foreground }]}>Calendar</Text>
           {isFuture && <Text style={[styles.forecastTag, { color: c.primary }]}>Forecast Mode</Text>}
         </View>
-        <Pressable
-          onPress={() => openAddTransaction(selectedDate)}
-          style={({ pressed }) => [styles.iconBtn, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
-        >
-          <Feather name="plus" size={18} color={c.primaryForeground} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            onPress={jumpToToday}
+            accessibilityRole="button"
+            accessibilityLabel="Jump to today"
+            style={({ pressed }) => [
+              styles.todayChip,
+              {
+                borderColor: isCurrentMonth ? c.primary : "rgba(226,232,240,0.58)",
+                backgroundColor: isCurrentMonth ? c.primary : "rgba(2,6,23,0.58)",
+                opacity: pressed ? 0.78 : 1,
+              },
+            ]}
+          >
+            <Text style={[styles.todayChipText, { color: isCurrentMonth ? c.primaryForeground : c.foreground }]}>
+              {todayDayNumber}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => openAddTransaction(selectedDate)}
+            style={({ pressed }) => [styles.iconBtn, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
+          >
+            <Feather name="plus" size={18} color={c.primaryForeground} />
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.calendarMonthBar}>
@@ -803,7 +836,9 @@ export default function MonthlyScreen() {
         </Pressable>
         <View style={styles.monthCenterLabel}>
           <Text style={[styles.monthShortTitle, { color: c.foreground }]}>{MONTH_FULL[month].slice(0, 3).toUpperCase()}</Text>
-          <Text style={[styles.monthSwipeHint, { color: c.mutedForeground }]}>Month view · swipe left or right</Text>
+          {selectedYear !== todayYear && (
+            <Text style={[styles.monthSwipeHint, { color: c.mutedForeground }]}>{selectedYear}</Text>
+          )}
         </View>
         <Pressable
           onPress={() => changeMonth(1)}
@@ -1614,15 +1649,19 @@ export default function MonthlyScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 22, paddingBottom: 12 },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 22, paddingBottom: 10 },
   calendarBrand: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 2.2, marginBottom: 3, textTransform: "uppercase" },
+  calendarScreenLabel: { fontSize: 28, fontFamily: "Inter_700Bold", letterSpacing: -0.8 },
   title: { fontSize: 36, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.2, textShadowColor: "rgba(34,211,238,0.22)", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 12 },
   forecastTag: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginTop: 1 },
-  iconBtn: { width: 58, height: 58, borderRadius: 21, alignItems: "center", justifyContent: "center", shadowColor: "#8b5cf6", shadowOpacity: 0.46, shadowRadius: 22, shadowOffset: { width: 0, height: 10 }, elevation: 10, borderWidth: 1, borderColor: "rgba(34,211,238,0.28)" },
-  calendarMonthBar: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginHorizontal: 22, marginTop: 2, marginBottom: 12, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", backgroundColor: "rgba(2,6,23,0.42)", borderRadius: 24, paddingHorizontal: 8, paddingVertical: 12 },
-  monthArrowBtn: { width: 46, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: "rgba(15,23,42,0.66)" },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 10 },
+  todayChip: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", borderWidth: 2 },
+  todayChipText: { fontSize: 17, fontFamily: "Inter_800ExtraBold", lineHeight: 20 },
+  iconBtn: { width: 54, height: 54, borderRadius: 20, alignItems: "center", justifyContent: "center", shadowColor: "#8b5cf6", shadowOpacity: 0.46, shadowRadius: 22, shadowOffset: { width: 0, height: 10 }, elevation: 10, borderWidth: 1, borderColor: "rgba(34,211,238,0.28)" },
+  calendarMonthBar: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginHorizontal: 22, marginTop: 0, marginBottom: 12, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", backgroundColor: "rgba(2,6,23,0.32)", borderRadius: 24, paddingHorizontal: 8, paddingVertical: 10 },
+  monthArrowBtn: { width: 46, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: "rgba(15,23,42,0.58)" },
   monthCenterLabel: { flex: 1, alignItems: "center", justifyContent: "center" },
-  monthShortTitle: { fontSize: 26, fontFamily: "Inter_800ExtraBold", letterSpacing: 2.4 },
+  monthShortTitle: { fontSize: 28, fontFamily: "Inter_800ExtraBold", letterSpacing: 2.8 },
   monthSwipeHint: { fontSize: 10, fontFamily: "Inter_500Medium", marginTop: 1 },
   tabBar: { flexDirection: "row", padding: 4, gap: 4 },
   tabBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 9 },

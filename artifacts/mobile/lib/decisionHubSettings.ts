@@ -2,21 +2,17 @@ import { Platform } from "react-native";
 import { supabase } from "@/lib/supabase";
 import {
   defaultAlgorithmToggles,
-  normalizeAlgorithmGrowthStage,
   normalizeAlgorithmToggles,
-  type AlgorithmGrowthStage,
   type AlgorithmId,
 } from "@/lib/algorithmCatalog";
 
 export interface DecisionHubSettings {
   algorithmSuiteEnabled: boolean;
-  algorithmGrowthStage: AlgorithmGrowthStage;
   algorithmToggles: Record<AlgorithmId, boolean>;
 }
 
 export const DEFAULT_DECISION_HUB_SETTINGS: DecisionHubSettings = {
   algorithmSuiteEnabled: true,
-  algorithmGrowthStage: "starter",
   algorithmToggles: defaultAlgorithmToggles(),
 };
 
@@ -30,7 +26,6 @@ export function readDecisionHubSettings(): DecisionHubSettings {
     const parsed = raw ? JSON.parse(raw) as Partial<DecisionHubSettings> : {};
     return {
       algorithmSuiteEnabled: parsed.algorithmSuiteEnabled !== false,
-      algorithmGrowthStage: normalizeAlgorithmGrowthStage(parsed.algorithmGrowthStage),
       algorithmToggles: normalizeAlgorithmToggles(parsed.algorithmToggles),
     };
   } catch {
@@ -75,7 +70,6 @@ function normalizeDecisionHubSettings(value: unknown): DecisionHubSettings {
   const parsed = value && typeof value === "object" ? value as Partial<DecisionHubSettings> : {};
   return {
     algorithmSuiteEnabled: parsed.algorithmSuiteEnabled !== false,
-    algorithmGrowthStage: normalizeAlgorithmGrowthStage(parsed.algorithmGrowthStage),
     algorithmToggles: normalizeAlgorithmToggles(parsed.algorithmToggles),
   };
 }

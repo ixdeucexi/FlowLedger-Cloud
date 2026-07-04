@@ -132,12 +132,12 @@ export default function BillsScreen() {
     ? nextSnowballTarget.amount + Number(nextSnowballTarget.snowball_minimum_boost ?? 0) + activeDebtMinimum
     : 0;
   const debtRoomExplanation = safeSnowballAmount > 0
-    ? `Tests an extra debt payment across ${settings.forecast_horizon_months} months and keeps the lowest projected balance at or above $${settings.safety_floor.toFixed(0)}${existingSnowball ? " while editing this month's existing snowball payment" : ""}.`
-    : `No extra debt payment is safe until the ${settings.forecast_horizon_months}-month forecast stays above your $${settings.safety_floor.toFixed(0)} floor.`;
+    ? `FlowLedger says you can add this much to debt and still keep your ${settings.forecast_horizon_months}-month forecast above your $${settings.safety_floor.toFixed(0)} cushion.`
+    : `Keep extra cash available for now. Your ${settings.forecast_horizon_months}-month forecast needs to stay above your $${settings.safety_floor.toFixed(0)} cushion first.`;
   const debtAlgoCopy = activeDebtTarget
     ? safeSnowballAmount > 0
-      ? `Next best move: send safe extra money to ${activeDebtTarget.name}.`
-      : `Hold extra payments until the Safe Cushion opens up, then target ${activeDebtTarget.name}.`
+      ? `Next best move: put today's extra payoff money toward ${activeDebtTarget.name}.`
+      : `Hold extra payments until your Safe Cushion opens up, then target ${activeDebtTarget.name}.`
     : "Add debts to unlock payoff guidance.";
 
   const priorityColors = ["#22c55e", "#f0b429", "#ef4444", "#8b5cf6", "#ec4899"];
@@ -426,7 +426,7 @@ export default function BillsScreen() {
                 <View style={styles.extraLeft}>
                   <Feather name="shield" size={20} color={safeSnowballAmount > 0 ? c.success : c.mutedForeground} />
                   <View>
-                    <Text style={[styles.extraLabel, { color: c.mutedForeground }]}>Safe Extra Payment</Text>
+                    <Text style={[styles.extraLabel, { color: c.mutedForeground }]}>Extra You Can Send Now</Text>
                     <Text style={[styles.extraValue, { color: safeSnowballAmount > 0 ? c.success : c.mutedForeground }]}>
                       ${safeSnowballAmount.toFixed(2)}
                     </Text>

@@ -26,9 +26,6 @@ import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { parseStatementCsv } from "@/lib/accounts";
 import {
   ALGORITHM_CATALOG,
-  GROWTH_STAGE_LABELS,
-  GROWTH_STAGE_ORDER,
-  isAlgorithmAvailableForStage,
   type AlgorithmId,
 } from "@/lib/algorithmCatalog";
 import { buildDataIntegrityIssues } from "@/lib/dataIntegrity";
@@ -534,38 +531,9 @@ export default function MoreScreen() {
           </View>
         </Pressable>
 
-        <View style={[styles.algorithmStageBox, { borderTopColor: c.border }]}>
-          <Text style={[styles.switchLabel, { color: c.foreground }]}>Account growth stage</Text>
-          <Text style={[styles.switchDesc, { color: c.mutedForeground, marginBottom: 10 }]}>
-            Higher stages unlock deeper tools once the basics are working.
-          </Text>
-          <View style={styles.algoStageGrid}>
-            {GROWTH_STAGE_ORDER.map(stage => {
-              const active = decisionHubSettings.algorithmGrowthStage === stage;
-              return (
-                <Pressable
-                  key={stage}
-                  onPress={() => updateDecisionHubSetting({ algorithmGrowthStage: stage })}
-                  style={({ pressed }) => [
-                    styles.algoStagePill,
-                    {
-                      backgroundColor: active ? c.primary : c.muted,
-                      borderColor: active ? c.primary : c.border,
-                      opacity: pressed ? 0.75 : 1,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.algoStageText, { color: active ? "#fff" : c.mutedForeground }]}>{GROWTH_STAGE_LABELS[stage]}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
         <View style={[styles.algorithmList, { borderTopColor: c.border }]}>
           {ALGORITHM_CATALOG.map(algorithm => {
-            const available = isAlgorithmAvailableForStage(decisionHubSettings.algorithmGrowthStage, algorithm.id);
-            const enabled = decisionHubSettings.algorithmSuiteEnabled && available && decisionHubSettings.algorithmToggles[algorithm.id] !== false;
+            const enabled = decisionHubSettings.algorithmSuiteEnabled && decisionHubSettings.algorithmToggles[algorithm.id] !== false;
             return (
               <Pressable
                 key={algorithm.id}
@@ -573,27 +541,18 @@ export default function MoreScreen() {
                   setSelectedAlgorithm(algorithm);
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 }}
-                style={({ pressed }) => [styles.algorithmToggleRow, { borderTopColor: c.border, opacity: pressed ? 0.72 : available ? 1 : 0.62 }]}
+                style={({ pressed }) => [styles.algorithmToggleRow, { borderTopColor: c.border, opacity: pressed ? 0.72 : 1 }]}
               >
-                <View style={[styles.dataIcon, { backgroundColor: available ? c.primary + "16" : c.muted }]}>
-                  <Feather name={algorithm.icon as any} size={16} color={available ? c.primary : c.mutedForeground} />
+                <View style={[styles.dataIcon, { backgroundColor: c.primary + "16" }]}>
+                  <Feather name={algorithm.icon as any} size={16} color={c.primary} />
                 </View>
                 <View style={styles.switchInfo}>
-                  <View style={styles.algorithmTitleRow}>
-                    <Text style={[styles.switchLabel, { color: c.foreground }]}>{algorithm.name}</Text>
-                    <Text style={[styles.algorithmStageTag, { color: available ? c.primary : c.mutedForeground, backgroundColor: available ? c.primary + "12" : c.muted }]}>
-                      {GROWTH_STAGE_LABELS[algorithm.stage]}
-                    </Text>
-                  </View>
+                  <Text style={[styles.switchLabel, { color: c.foreground }]}>{algorithm.name}</Text>
                 </View>
                 <Pressable
                   onPress={(event) => {
                     event.stopPropagation();
-                    if (available) {
-                      updateAlgorithmToggle(algorithm.id, !enabled);
-                    } else {
-                      updateDecisionHubSetting({ algorithmGrowthStage: algorithm.stage });
-                    }
+                    updateAlgorithmToggle(algorithm.id, !enabled);
                   }}
                   style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
                 >
@@ -949,9 +908,7 @@ export default function MoreScreen() {
                     <Feather name={selectedAlgorithm.icon as any} size={20} color={c.primary} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.infoSheetEyebrow, { color: c.primary }]}>
-                      {GROWTH_STAGE_LABELS[selectedAlgorithm.stage]} Algorithm
-                    </Text>
+                    <Text style={[styles.infoSheetEyebrow, { color: c.primary }]}>Algorithm</Text>
                     <Text style={[styles.infoSheetTitle, { color: c.foreground }]}>{selectedAlgorithm.name}</Text>
                   </View>
                   <Pressable onPress={() => setSelectedAlgorithm(null)} style={[styles.infoCloseButton, { backgroundColor: c.muted }]}>
@@ -1096,14 +1053,8 @@ const styles = StyleSheet.create({
   decisionSettingRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   toggleTrack: { width: 48, height: 28, borderRadius: 999, padding: 3, justifyContent: "center" },
   toggleKnob: { width: 22, height: 22, borderRadius: 11 },
-  algorithmStageBox: { borderTopWidth: 1, marginTop: 14, paddingTop: 14 },
-  algoStageGrid: { flexDirection: "row", gap: 8 },
-  algoStagePill: { flex: 1, minHeight: 38, borderWidth: 1, borderRadius: 999, paddingHorizontal: 4, paddingVertical: 8, alignItems: "center", justifyContent: "center" },
-  algoStageText: { fontSize: 10, fontFamily: "Inter_700Bold", textAlign: "center" },
   algorithmList: { borderTopWidth: 1, marginTop: 14, paddingTop: 2 },
   algorithmToggleRow: { flexDirection: "row", alignItems: "center", gap: 12, borderTopWidth: 1, paddingTop: 12, marginTop: 12 },
-  algorithmTitleRow: { flexDirection: "row", alignItems: "center", gap: 7, flexWrap: "wrap" },
-  algorithmStageTag: { overflow: "hidden", borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3, fontSize: 9, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.5 },
   infoOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end", padding: 16 },
   infoSheet: { borderWidth: 1, borderRadius: 24, padding: 18, marginBottom: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.22, shadowRadius: 24, elevation: 12 },
   infoSheetHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },
