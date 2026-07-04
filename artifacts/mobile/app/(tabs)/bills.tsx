@@ -123,6 +123,16 @@ export default function BillsScreen() {
   const activeDebtTarget = settings.paymentMethod === "avalanche" ? avalancheTarget ?? snowballTarget : snowballTarget;
   const activeDebtMinimum = activeDebtTarget ? activeDebtTarget.amount + Number(activeDebtTarget.snowball_minimum_boost ?? 0) : 0;
   const activeDebtMonths = activeDebtTarget && activeDebtMinimum > 0 ? Math.ceil(activeDebtTarget.balance / activeDebtMinimum) : 0;
+  const snowballOrder = sortDebtsLeastToGreatest(activeDebts);
+  const nextSnowballTarget = activeDebtTarget
+    ? snowballOrder.find(debt => debt.id !== activeDebtTarget.id) ?? null
+    : null;
+  const nextTargetRolledMinimum = nextSnowballTarget && activeDebtTarget
+    ? nextSnowballTarget.amount + Number(nextSnowballTarget.snowball_minimum_boost ?? 0) + activeDebtMinimum
+    : 0;
+  const debtRoomExplanation = safeSnowballAmount > 0
+    ? `Tests an extra debt payment across ${settings.forecast_horizon_months} months and keeps the lowest projected balance at or above $${settings.safety_floor.toFixed(0)}${existingSnowball ? " while editing this month's existing snowball payment" : ""}.`
+    : `No extra debt payment is safe until the ${settings.forecast_horizon_months}-month forecast stays above your $${settings.safety_floor.toFixed(0)} floor.`;
   const debtAlgoCopy = activeDebtTarget
     ? safeSnowballAmount > 0
       ? `Next best move: send safe extra money to ${activeDebtTarget.name}.`
@@ -435,7 +445,7 @@ export default function BillsScreen() {
                 </Pressable>
               </View>
               <Text style={[styles.cappedNote, { color: c.mutedForeground }]}>
-                Current extra debt room only — keeps the forecast at or above ${settings.safety_floor.toFixed(0)}
+                {debtRoomExplanation}
               </Text>
             </View>
           )}
@@ -480,6 +490,14 @@ export default function BillsScreen() {
                   ${activeDebtTarget.balance.toFixed(0)} balance · ${activeDebtMinimum.toFixed(0)}/mo min{activeDebtMonths > 0 ? ` · ~${activeDebtMonths} mo at minimum` : ""}
                 </Text>
               )}
+              {activeDebtTarget && nextSnowballTarget ? (
+                <View style={[styles.rolloverCard, { backgroundColor: c.success + "10", borderColor: c.success + "24" }]}>
+                  <Feather name="repeat" size={13} color={c.success} />
+                  <Text style={[styles.rolloverText, { color: c.foreground }]}>
+                    After {activeDebtTarget.name} is paid off, its ${activeDebtMinimum.toFixed(0)}/mo rolls into {nextSnowballTarget.name}. New target payment: ${nextTargetRolledMinimum.toFixed(0)}/mo.
+                  </Text>
+                </View>
+              ) : null}
               <View style={styles.debtAlgoCompareRow}>
                 {[
                   { label: "Snowball", value: snowballTarget?.name ?? "None", color: c.success },
@@ -709,6 +727,8 @@ const styles = StyleSheet.create({
   debtAlgoBadgeText: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.5 },
   debtAlgoCopy:   { fontSize: 13, fontFamily: "Inter_600SemiBold", lineHeight: 18 },
   debtAlgoMeta:   { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: -4 },
+  rolloverCard:   { marginTop: 2, borderWidth: 1, borderRadius: 14, padding: 10, flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  rolloverText:   { flex: 1, fontSize: 11, fontFamily: "Inter_600SemiBold", lineHeight: 16 },
   debtAlgoCompareRow: { flexDirection: "row", gap: 8 },
   debtAlgoChip:   { flex: 1, borderWidth: 1, borderRadius: 12, padding: 9, minHeight: 62 },
   debtAlgoChipLabel: { fontSize: 9, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 },

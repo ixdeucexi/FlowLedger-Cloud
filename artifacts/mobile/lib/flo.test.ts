@@ -194,6 +194,14 @@ test("Flo explains Debt Payoff from deterministic facts", () => {
   assert.match(localFloAnswer("What debt helps cash-flow relief?", facts, days) ?? "", /\$38\/month/);
 });
 
+test("Flo explains snowball rollover after a debt is paid off", () => {
+  const answer = localFloAnswer("What happens after Camera is paid off?", facts, days) ?? "";
+  assert.match(answer, /Camera is paid off/);
+  assert.match(answer, /does not disappear/);
+  assert.match(answer, /Concert/);
+  assert.match(answer, /\$73\.68\/mo/);
+});
+
 test("Flo explains the clean Algorithm Suite from deterministic facts", () => {
   assert.match(localFloAnswer("What bill should I pay first?", facts, days) ?? "", /Power/);
   assert.match(localFloAnswer("What is my daily spending limit?", facts, days) ?? "", /\$25\.00\/day/);

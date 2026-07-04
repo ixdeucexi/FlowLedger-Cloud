@@ -477,9 +477,11 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
     }
     return `Your Safe Cushion is $${facts.safeCushion.amount.toFixed(0)} - ${facts.safeCushion.label}. ${facts.safeCushion.topReason} FlowLedger is already reserving about $${facts.safeCushion.reservedAmount.toFixed(0)} for the current plan. ${facts.safeCushion.topAction}`;
   }
-  const asksDebtPayoff = /\b(debt payoff|payoff plan|snowball target|avalanche target|which debt|what debt|pay off first|next debt)\b/.test(lower);
+  const asksDebtPayoff = /\b(debt payoff|payoff plan|snowball target|avalanche target|which debt|what debt|pay off first|next debt|paid off|payoff|roll over|rollover|closed)\b/.test(lower);
   if (asksDebtPayoff && facts.debtPayoff) {
     if (facts.debtPayoff.status === "done") return "I don't see an active debt balance right now. Add a debt in Bills if you want payoff guidance.";
+    const rolloverAnswer = localDebtRolloverAnswer(message, facts);
+    if (rolloverAnswer) return rolloverAnswer;
     const hold = facts.debtPayoff.status === "hold" ? " I would hold extra payments until your Safe Cushion is protected." : "";
     return `${facts.debtPayoff.nextMove}${hold} Snowball target: ${facts.debtPayoff.nextDebtName ?? "none"}${facts.debtPayoff.nextDebtName ? ` ($${facts.debtPayoff.snowballBalance.toFixed(0)} balance)` : ""}. Avalanche target: ${facts.debtPayoff.avalancheName ?? "none"}. Cash-flow relief target: ${facts.debtPayoff.cashFlowReliefName ?? "none"}${facts.debtPayoff.cashFlowReliefAmount > 0 ? `, freeing about $${facts.debtPayoff.cashFlowReliefAmount.toFixed(0)}/month when closed` : ""}.`;
   }
@@ -561,6 +563,23 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
       : "You have $0.00 in unallocated spending this month. Every recorded expense is linked to a bill, or there are no expense transactions yet.";
   }
   return null;
+}
+
+function localDebtRolloverAnswer(message: string, facts: FloFacts): string | null {
+  const lower = message.toLowerCase();
+  if (!/\b(after|when|once|next|roll over|rollover|paid off|closed)\b/.test(lower)) return null;
+  const debts = sanitizeDebtFacts(facts.debts).sort((left, right) => left.balance - right.balance || left.name.localeCompare(right.name));
+  if (!debts.length) return null;
+  const namedDebt = debts.find(debt => lower.includes(debt.name.toLowerCase()));
+  const current = namedDebt ?? debts.find(debt => debt.name === facts.debtPayoff?.nextDebtName) ?? debts[0];
+  if (!current) return null;
+  const currentIndex = debts.findIndex(debt => debt.id === current.id);
+  const next = currentIndex >= 0 ? debts[currentIndex + 1] : null;
+  if (!next) {
+    return `When ${current.name} is paid off, there is no next snowball debt in the current list. Its $${current.minimumPayment.toFixed(2)}/mo payment becomes cash-flow room unless you add another debt or route it to savings.`;
+  }
+  const rolledPayment = current.minimumPayment + next.minimumPayment;
+  return `When ${current.name} is paid off, its $${current.minimumPayment.toFixed(2)}/mo minimum does not disappear. FlowLedger rolls it into ${next.name}, so ${next.name}'s snowball payment becomes at least $${rolledPayment.toFixed(2)}/mo before any extra safe payment.`;
 }
 
 function sanitizeDebtFacts(debts?: FloDebtFact[]): FloDebtFact[] {
