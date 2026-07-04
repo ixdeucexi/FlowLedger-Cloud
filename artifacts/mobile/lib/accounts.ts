@@ -36,10 +36,10 @@ export function openingBalanceForReconciledDay(
   reconciliationDate: string,
   events: Array<{ date: string; amount: number }>,
 ): number {
-  const netThroughReconciliation = events
-    .filter(event => event.date <= reconciliationDate)
+  const netBeforeReconciliation = events
+    .filter(event => event.date < reconciliationDate)
     .reduce((sum, event) => sum + event.amount, 0);
-  return endOfDayBalance - netThroughReconciliation;
+  return endOfDayBalance - netBeforeReconciliation;
 }
 
 export function evaluateForecastConfidence(

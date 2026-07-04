@@ -2026,7 +2026,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       if (cached !== undefined) return cached;
       const monthPrefix = `${y}-${String(m + 1).padStart(2, "0")}`;
       const reconciliationDate = settings.starting_balance_date;
-      const includeDate = (date: string) => !reconciliationDate || !date.startsWith(monthPrefix) || date > reconciliationDate;
+      const includeDate = (date: string) => !reconciliationDate || !date.startsWith(monthPrefix) || date >= reconciliationDate;
       const inc = incomes.reduce((sum, income) => {
         const amount = getEffectiveIncomeAmount(income, m, y);
         const count = getIncomeOccurrenceDays(income, m, y)

@@ -8,14 +8,14 @@ const accounts: AccountSnapshot[] = [
 ];
 
 test("account total combines checking and savings", () => assert.equal(totalForecastBalance(accounts), 1500));
-test("reconciliation sets the selected day closing balance instead of adding to it", () => {
+test("account balance anchor starts the selected day and same-day entries still affect the close", () => {
   const opening = openingBalanceForReconciledDay(1000, "2026-06-24", [
     { date: "2026-06-20", amount: 500 },
     { date: "2026-06-24", amount: -100 },
     { date: "2026-06-25", amount: -50 },
   ]);
-  assert.equal(opening, 600);
-  assert.equal(opening + 500 - 100, 1000);
+  assert.equal(opening, 500);
+  assert.equal(opening - 100, 400);
 });
 test("confidence is high when balances and recurring inputs are current", () => {
   assert.equal(evaluateForecastConfidence(accounts, true, true, new Date("2026-06-24T12:00:00Z")).level, "high");
