@@ -749,9 +749,7 @@ export default function MonthlyScreen() {
   const displayedTxs = selectedDate
     ? txList.filter(t => t.date === selectedDate)
     : [];
-  const selectedVisibleItemCount = scheduledBillsForDay.length + selectedMovedAwayBills.length + displayedTxs.length + goalsForSelectedDay.length + plansForSelectedDay.length;
-  const selectedForecastItemCount = selectedForecastDay?.events?.length ?? 0;
-  const selectedDayItemCount = Math.max(selectedVisibleItemCount, selectedForecastItemCount);
+  const selectedDayItemCount = scheduledBillsForDay.length + selectedMovedAwayBills.length + displayedTxs.length + goalsForSelectedDay.length + plansForSelectedDay.length;
 
   const changeMonth = useCallback((delta: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1147,34 +1145,6 @@ export default function MonthlyScreen() {
                         <Text style={[styles.dayOverlayRiskText, { color: c.foreground }]}>
                           Projected below your ${settings.safety_floor.toFixed(0)} safety floor.
                         </Text>
-                      </View>
-                    ) : null}
-
-                    {selectedForecastDay ? (
-                      <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
-                        <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Balance math</Text>
-                        <Text style={[styles.dayOverlayEmptyText, { color: c.mutedForeground }]}>
-                          Net today {selectedForecastDay.net >= 0 ? "+" : "-"}${Math.abs(selectedForecastDay.net).toFixed(2)} · closes at ${selectedForecastDay.balance.toFixed(2)}
-                        </Text>
-                        {selectedForecastGroups.length > 0 ? selectedForecastGroups.map(group => (
-                          <View key={`forecast-group-${group.key}`} style={styles.dayOverlayGroup}>
-                            <Text style={[styles.dayOverlayGroupTitle, { color: c.mutedForeground }]}>{group.title}</Text>
-                            {group.events.map(item => (
-                              <View key={item.event.id} style={styles.dayOverlayRow}>
-                                <Text numberOfLines={1} style={[styles.dayOverlayRowName, { color: c.foreground }]}>
-                                  {item.label} · {item.statusLabel}
-                                </Text>
-                                <Text style={[styles.dayOverlayAmount, { color: item.event.amount >= 0 ? c.success : c.destructive }]}>
-                                  {item.amountLabel}
-                                </Text>
-                              </View>
-                            ))}
-                          </View>
-                        )) : (
-                          <Text style={[styles.dayOverlayEmptyText, { color: c.mutedForeground }]}>
-                            No dated income, bill, debt, plan, or transaction changed this day.
-                          </Text>
-                        )}
                       </View>
                     ) : null}
 
