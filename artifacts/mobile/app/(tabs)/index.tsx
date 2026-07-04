@@ -951,7 +951,7 @@ export default function DashboardScreen() {
         action: algorithmSuite.safeCushion.topAction,
         icon: "shield" as const,
         color: safeTone,
-        prompt: "What is my Safe Cushion and what can I safely do with it?",
+        prompt: "Flo, explain my Safe Cushion and what I should protect first.",
       },
       {
         id: "purchaseDecision",
@@ -962,7 +962,7 @@ export default function DashboardScreen() {
         action: algorithmSuite.purchaseDecision.nextMove,
         icon: "shopping-bag" as const,
         color: "#22d3ee",
-        prompt: "What purchase amount is safe right now and when should I wait?",
+        prompt: "Flo, explain my Purchase Decision and find the safest way to buy something.",
       },
       {
         id: "billPriority",
@@ -973,7 +973,20 @@ export default function DashboardScreen() {
         action: algorithmSuite.billPriority.nextMove,
         icon: "file-text" as const,
         color: "#fbbf24",
-        prompt: "Which bill should I handle first and why?",
+        prompt: "Flo, which bill should I handle first and why?",
+      },
+      {
+        id: "cashFlowGap",
+        settingId: "cashFlowGap" as AlgorithmId,
+        title: "Cash Flow Gap",
+        value: algorithmSuite.cashFlowGap.startDay && algorithmSuite.cashFlowGap.endDay
+          ? `${MONTH_NAMES[currentMonth]} ${algorithmSuite.cashFlowGap.startDay}-${algorithmSuite.cashFlowGap.endDay}`
+          : "No tight gap",
+        detail: algorithmSuite.cashFlowGap.detail,
+        action: `Low point $${algorithmSuite.cashFlowGap.lowestBalance.toFixed(0)}`,
+        icon: "clock" as const,
+        color: "#38bdf8",
+        prompt: "Flo, where is my tightest cash-flow stretch and how should I protect it?",
       },
       {
         id: "debtPayoff",
@@ -984,7 +997,7 @@ export default function DashboardScreen() {
         action: algorithmSuite.debtPayoff.nextMove,
         icon: "trending-down" as const,
         color: "#fb7185",
-        prompt: "What is my best next debt payoff move?",
+        prompt: "Flo, explain my debt payoff target and the next clean move.",
       },
       {
         id: "paydaySplit",
@@ -995,7 +1008,7 @@ export default function DashboardScreen() {
         action: `${algorithmSuite.paydaySplit.bills.toFixed(0)}% bills / ${algorithmSuite.paydaySplit.debt.toFixed(0)}% debt`,
         icon: "git-branch" as const,
         color: "#818cf8",
-        prompt: "How should my next paycheck be split?",
+        prompt: "Flo, how should my next paycheck be split so I stop living paycheck to paycheck?",
       },
       {
         id: "spendingLimit",
@@ -1006,7 +1019,7 @@ export default function DashboardScreen() {
         action: `$${algorithmSuite.spendingLimit.weekly.toFixed(0)} weekly limit`,
         icon: "sliders" as const,
         color: "#60a5fa",
-        prompt: "What can I safely spend daily and weekly?",
+        prompt: "Flo, what can I safely spend daily and weekly without breaking the plan?",
       },
       {
         id: "extraMoneyRouter",
@@ -1017,7 +1030,7 @@ export default function DashboardScreen() {
         action: algorithmSuite.extraMoneyRouter.nextMove,
         icon: "corner-up-right" as const,
         color: "#34d399",
-        prompt: "Where should extra money go right now: debt, savings, bills, or available cash?",
+        prompt: "Flo, route my extra money safely between debt, savings, bills, and available cash.",
       },
       {
         id: "monthly-health",
@@ -1033,7 +1046,7 @@ export default function DashboardScreen() {
     return cards
       .filter((card): card is typeof card & { settingId: AlgorithmId } => Boolean(card.settingId))
       .filter(card => isAlgorithmEnabled(decisionHubSettings, card.settingId));
-  }, [algorithmSuite, decisionHubSettings]);
+  }, [algorithmSuite, currentMonth, decisionHubSettings]);
   const activeAlgorithmCardNumber = algorithmCards.length ? Math.min(activeAlgoCard + 1, algorithmCards.length) : 0;
   useEffect(() => {
     if (algorithmCards.length === 0 && activeAlgoCard !== 0) {

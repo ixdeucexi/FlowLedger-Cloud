@@ -133,6 +133,12 @@ const facts: FloFacts = {
     summary: "Suggested split: 50% bills, 32% spending, 10% savings, 8% debt, 0% goals.",
     nextMove: "After bills are covered, route safe extra money toward the debt target.",
   },
+  cashFlowGap: {
+    startDay: 8,
+    endDay: 12,
+    lowestBalance: 640,
+    detail: "Tightest stretch runs Jul 8 through Jul 12.",
+  },
   debtPayoff: {
     nextDebtName: "Camera",
     snowballBalance: 143.64,
@@ -157,6 +163,14 @@ const facts: FloFacts = {
     targetLabel: "Camera",
     detail: "Up to $210 can safely speed up Camera without crossing the floor.",
     nextMove: "Ask Flo to preview adding $210 to Camera.",
+  },
+  monthlyHealth: {
+    score: 76,
+    grade: "B",
+    summary: "The month is stable, but the cushion is still thin before payday.",
+  },
+  smartReminder: {
+    reminders: ["Review low balance risk before Jul 8.", "Confirm Power before Jul 28."],
   },
 };
 const days = [{ date: "2026-06-24", balance: 1000 }, { date: "2026-07-01", balance: 800 }];
@@ -233,6 +247,16 @@ test("Flo explains the clean Algorithm Suite from deterministic facts", () => {
   assert.match(localFloAnswer("How should I split my paycheck?", facts, days) ?? "", /50% bills/);
   assert.match(localFloAnswer("What should I do with extra money?", facts, days) ?? "", /Camera/);
   assert.match(localFloAnswer("Tell me my purchase decision", facts, days) ?? "", /Purchases up to \$600/);
+});
+
+test("Flo explains cash-flow pressure and review list from deterministic facts", () => {
+  const gap = localFloAnswer("Where is my tightest cash-flow stretch?", facts, days) ?? "";
+  assert.match(gap, /Jul 8 through Jul 12/);
+  assert.match(gap, /protect that window/i);
+
+  const review = localFloAnswer("What needs attention?", facts, days) ?? "";
+  assert.match(review, /Review low balance risk/);
+  assert.match(review, /Confirm Power/);
 });
 
 test("Flo answers category budget questions from verified facts", () => {

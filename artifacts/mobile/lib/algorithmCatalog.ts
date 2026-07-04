@@ -16,6 +16,7 @@ export const ALGORITHM_CATALOG = [
   { id: "billPriority", name: "Bill Priority", stage: "starter", icon: "file-text", desc: "Ranks bills by timing, unpaid status, due date, and forecast pressure." },
 
   { id: "paydaySplit", name: "Payday Split", stage: "growing", icon: "git-branch", desc: "Recommends how each paycheck should be divided." },
+  { id: "cashFlowGap", name: "Cash Flow Gap", stage: "growing", icon: "clock", desc: "Finds the tightest stretch between paychecks so bills can be moved before the squeeze." },
   { id: "debtPayoff", name: "Debt Payoff", stage: "growing", icon: "trending-down", desc: "Compares snowball, avalanche, and cash-flow payoff options." },
   { id: "spendingLimit", name: "Spending Limit", stage: "growing", icon: "sliders", desc: "Recommends safe daily and weekly spending limits." },
 

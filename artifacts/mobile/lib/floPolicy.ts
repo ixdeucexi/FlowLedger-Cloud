@@ -91,6 +91,12 @@ export interface FloFacts {
     summary: string;
     nextMove: string;
   };
+  cashFlowGap?: {
+    startDay: number | null;
+    endDay: number | null;
+    lowestBalance: number;
+    detail: string;
+  };
   debtPayoff?: {
     nextDebtName: string | null;
     snowballBalance: number;
@@ -115,6 +121,14 @@ export interface FloFacts {
     targetLabel: string;
     detail: string;
     nextMove: string;
+  };
+  monthlyHealth?: {
+    score: number;
+    grade: string;
+    summary: string;
+  };
+  smartReminder?: {
+    reminders: string[];
   };
 }
 
@@ -424,6 +438,12 @@ export function sanitizeFloFacts(facts: FloFacts): FloFacts {
       summary: String(facts.paydaySplitAlgo.summary ?? "").slice(0, 180),
       nextMove: String(facts.paydaySplitAlgo.nextMove ?? "").slice(0, 160),
     } : undefined,
+    cashFlowGap: facts.cashFlowGap ? {
+      startDay: facts.cashFlowGap.startDay === null ? null : Math.max(1, Math.min(31, Math.round(num(facts.cashFlowGap.startDay)))),
+      endDay: facts.cashFlowGap.endDay === null ? null : Math.max(1, Math.min(31, Math.round(num(facts.cashFlowGap.endDay)))),
+      lowestBalance: num(facts.cashFlowGap.lowestBalance),
+      detail: String(facts.cashFlowGap.detail ?? "").slice(0, 180),
+    } : undefined,
     debtPayoff: facts.debtPayoff ? {
       nextDebtName: facts.debtPayoff.nextDebtName === null ? null : String(facts.debtPayoff.nextDebtName ?? "").slice(0, 80),
       snowballBalance: Math.max(0, num(facts.debtPayoff.snowballBalance)),
@@ -448,6 +468,14 @@ export function sanitizeFloFacts(facts: FloFacts): FloFacts {
       targetLabel: String(facts.extraMoneyRouter.targetLabel ?? "available cash").slice(0, 80),
       detail: String(facts.extraMoneyRouter.detail ?? "").slice(0, 180),
       nextMove: String(facts.extraMoneyRouter.nextMove ?? "").slice(0, 160),
+    } : undefined,
+    monthlyHealth: facts.monthlyHealth ? {
+      score: Math.max(0, Math.min(100, Math.round(num(facts.monthlyHealth.score)))),
+      grade: String(facts.monthlyHealth.grade ?? "").slice(0, 8),
+      summary: String(facts.monthlyHealth.summary ?? "").slice(0, 180),
+    } : undefined,
+    smartReminder: facts.smartReminder ? {
+      reminders: (facts.smartReminder.reminders ?? []).slice(0, 4).map(reminder => String(reminder).slice(0, 140)),
     } : undefined,
   };
 }
@@ -492,18 +520,26 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
   if (asksBillPriority && facts.billPriority) {
     const next = facts.billPriority.nextBill;
     return next
-      ? `${facts.billPriority.summary} ${replaceDayReferences(facts, facts.billPriority.nextMove)} ${next.name} has $${next.amount.toFixed(2)} left and is ${next.reason}.`
-      : facts.billPriority.summary || "No unpaid bills need priority attention right now.";
+      ? `I’m ranking bills by due date, unpaid amount, and whether they sit near the tightest forecast window. ${facts.billPriority.summary} ${replaceDayReferences(facts, facts.billPriority.nextMove)} ${next.name} has $${next.amount.toFixed(2)} left and is ${next.reason}.`
+      : facts.billPriority.summary || "I do not see an unpaid bill that needs priority attention right now.";
   }
   const asksPaydaySplitAlgo = /\b(payday split|split.*paycheck|divide.*paycheck|paycheck breakdown|where should my paycheck go)\b/.test(lower);
   if (asksPaydaySplitAlgo && facts.paydaySplitAlgo) {
     const split = facts.paydaySplitAlgo;
-    return `${split.summary} In dollars, that is about $${split.dollars.bills.toFixed(0)} bills, $${split.dollars.spending.toFixed(0)} spending, $${split.dollars.savings.toFixed(0)} savings, $${split.dollars.debt.toFixed(0)} debt, and $${split.dollars.goals.toFixed(0)} goals. ${split.nextMove}`;
+    return `I’m splitting the paycheck so bills and the safety floor are protected before spending. ${split.summary} In dollars, that is about $${split.dollars.bills.toFixed(0)} bills, $${split.dollars.spending.toFixed(0)} spending, $${split.dollars.savings.toFixed(0)} savings, $${split.dollars.debt.toFixed(0)} debt, and $${split.dollars.goals.toFixed(0)} goals. ${split.nextMove}`;
+  }
+  const asksCashFlowGap = /\b(cash flow gap|cash-flow gap|cash.?flow.*stretch|tight stretch|tightest.*stretch|between paychecks|paycheck pressure|cash flow pressure|why.*tight|when.*tight)\b/.test(lower);
+  if (asksCashFlowGap && facts.cashFlowGap) {
+    const starts = facts.cashFlowGap.startDay ? formatFloMonthDay(facts, facts.cashFlowGap.startDay) : null;
+    const ends = facts.cashFlowGap.endDay ? formatFloMonthDay(facts, facts.cashFlowGap.endDay) : null;
+    const windowText = starts && ends ? `The tightest window is ${starts} through ${ends}.` : "I do not see a clear tight cash-flow stretch right now.";
+    const lowText = `The low point in that pressure check is about $${facts.cashFlowGap.lowestBalance.toFixed(0)}.`;
+    return `I’m looking for the stretch where money is most likely to get squeezed between paychecks. ${replaceDayReferences(facts, facts.cashFlowGap.detail)} ${windowText} ${lowText} I’d protect that window first by moving a flexible bill after payday, reducing a planned purchase, or keeping extra cash available until it passes.`;
   }
   const asksExtraMoneyRouter = /\b(extra money|leftover|money left|available money|route money|where should.*money|what should i do with.*money|safe leftover)\b/.test(lower);
   if (asksExtraMoneyRouter && facts.extraMoneyRouter) {
     return facts.extraMoneyRouter.amount > 0
-      ? `${facts.extraMoneyRouter.detail} Best route: ${facts.extraMoneyRouter.targetLabel}. ${facts.extraMoneyRouter.nextMove}`
+      ? `I’m routing extra money only after the forecast and safety floor are protected. ${facts.extraMoneyRouter.detail} My best route is ${facts.extraMoneyRouter.targetLabel}. ${facts.extraMoneyRouter.nextMove}`
       : `${facts.extraMoneyRouter.detail} I would not route extra money yet because the forecast needs protection first.`;
   }
   const asksPurchaseDecision = /\b(purchase decision|plan purchase|buy|purchase|should i wait|best date|safer date)\b/.test(lower) && !/\$?\s*\d/.test(lower);
@@ -519,13 +555,23 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
     }
     return `I’m using Safe Cushion as your spendable breathing room after the current plan is protected. It is $${facts.safeCushion.amount.toFixed(0)} - ${facts.safeCushion.label}. ${replaceDayReferences(facts, facts.safeCushion.topReason)} I’m already reserving about $${facts.safeCushion.reservedAmount.toFixed(0)} for the current plan. ${replaceDayReferences(facts, facts.safeCushion.topAction)}`;
   }
+  const asksMonthlyHealth = /\b(monthly health|month health|financial grade|monthly grade|review my month)\b/.test(lower);
+  if (asksMonthlyHealth && facts.monthlyHealth) {
+    return `Iâ€™m grading the month by cushion, bill timing, debt pressure, and forecast confidence. This month is ${facts.monthlyHealth.grade} at ${facts.monthlyHealth.score}/100. ${facts.monthlyHealth.summary}`;
+  }
+  const asksSmartReminder = /\b(what needs attention|what should i review|reminders?|alerts?|watch list|attention list)\b/.test(lower);
+  if (asksSmartReminder && facts.smartReminder) {
+    return facts.smartReminder.reminders.length
+      ? `Iâ€™m keeping this as a review list, not a popup storm. Hereâ€™s what Iâ€™d check next: ${facts.smartReminder.reminders.map(item => replaceDayReferences(facts, item)).join(" ")}`
+      : "I do not see anything urgent on the review list right now.";
+  }
   const asksDebtPayoff = /\b(debt payoff|payoff plan|snowball target|avalanche target|which debt|what debt|pay off first|next debt|paid off|payoff|roll over|rollover|closed)\b/.test(lower);
   if (asksDebtPayoff && facts.debtPayoff) {
     if (facts.debtPayoff.status === "done") return "I don't see an active debt balance right now. Add a debt in Bills if you want payoff guidance.";
     const rolloverAnswer = localDebtRolloverAnswer(message, facts);
     if (rolloverAnswer) return rolloverAnswer;
     const hold = facts.debtPayoff.status === "hold" ? " I would hold extra payments until your Safe Cushion is protected." : "";
-    return `${facts.debtPayoff.nextMove}${hold} Snowball target: ${facts.debtPayoff.nextDebtName ?? "none"}${facts.debtPayoff.nextDebtName ? ` ($${facts.debtPayoff.snowballBalance.toFixed(0)} balance)` : ""}. Avalanche target: ${facts.debtPayoff.avalancheName ?? "none"}. Cash-flow relief target: ${facts.debtPayoff.cashFlowReliefName ?? "none"}${facts.debtPayoff.cashFlowReliefAmount > 0 ? `, freeing about $${facts.debtPayoff.cashFlowReliefAmount.toFixed(0)}/month when closed` : ""}.`;
+    return `I’m comparing the debt plan three ways: snowball for momentum, avalanche for interest, and cash-flow relief for freeing monthly room. ${facts.debtPayoff.nextMove}${hold} Snowball target: ${facts.debtPayoff.nextDebtName ?? "none"}${facts.debtPayoff.nextDebtName ? ` ($${facts.debtPayoff.snowballBalance.toFixed(0)} balance)` : ""}. Avalanche target: ${facts.debtPayoff.avalancheName ?? "none"}. Cash-flow relief target: ${facts.debtPayoff.cashFlowReliefName ?? "none"}${facts.debtPayoff.cashFlowReliefAmount > 0 ? `, freeing about $${facts.debtPayoff.cashFlowReliefAmount.toFixed(0)}/month when closed` : ""}.`;
   }
   const debtPayment = evaluateFloDebtPayment(message, facts);
   if (debtPayment) {

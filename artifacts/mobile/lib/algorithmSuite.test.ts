@@ -163,6 +163,7 @@ test("visible algorithm catalog is trimmed to user-facing suite", () => {
     "purchaseDecision",
     "billPriority",
     "paydaySplit",
+    "cashFlowGap",
     "debtPayoff",
     "spendingLimit",
     "extraMoneyRouter",

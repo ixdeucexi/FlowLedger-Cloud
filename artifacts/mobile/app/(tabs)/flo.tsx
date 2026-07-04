@@ -507,6 +507,12 @@ export default function FloScreen() {
         summary: algorithmSuite.paydaySplit.summary,
         nextMove: algorithmSuite.paydaySplit.nextMove,
       } : undefined,
+      cashFlowGap: isAlgorithmEnabled(decisionHubSettings, "cashFlowGap") ? {
+        startDay: algorithmSuite.cashFlowGap.startDay,
+        endDay: algorithmSuite.cashFlowGap.endDay,
+        lowestBalance: algorithmSuite.cashFlowGap.lowestBalance,
+        detail: algorithmSuite.cashFlowGap.detail,
+      } : undefined,
       debtPayoff: isAlgorithmEnabled(decisionHubSettings, "debtPayoff") ? {
         nextDebtName: algorithmSuite.debtPayoff.nextDebtName,
         snowballBalance: algorithmSuite.debtPayoff.snowballBalance,
@@ -532,6 +538,14 @@ export default function FloScreen() {
         detail: algorithmSuite.extraMoneyRouter.detail,
         nextMove: algorithmSuite.extraMoneyRouter.nextMove,
       } : undefined,
+      monthlyHealth: {
+        score: algorithmSuite.monthlyHealth.score,
+        grade: algorithmSuite.monthlyHealth.grade,
+        summary: algorithmSuite.monthlyHealth.summary,
+      },
+      smartReminder: {
+        reminders: algorithmSuite.smartReminder.reminders,
+      },
       decisionHistory: {
         due: decisionHistory.due,
         upcoming: decisionHistory.upcoming,
@@ -551,11 +565,13 @@ export default function FloScreen() {
   const quickPrompts = useMemo(() => {
     const categoryPrompts = decisionHubSettings.algorithmSuiteEnabled ? buildFloCategoryQuickPrompts(categoryPlan) : [];
     const paycheckPrompts = isAlgorithmEnabled(decisionHubSettings, "paydaySplit") ? ["What can I spend until payday?", "What bill should I move?"] : [];
+    const gapPrompts = isAlgorithmEnabled(decisionHubSettings, "cashFlowGap") ? ["Where is my tightest cash-flow stretch?"] : [];
     return [
       ...(decisionHistory.due.length ? ["What decisions need review?"] : []),
       ...(decisionRiskAlerts.length ? ["Are any planned decisions no longer safe?"] : []),
       ...(decisionHistory.upcoming.length ? ["What planned decisions are coming up?"] : []),
       ...paycheckPrompts,
+      ...gapPrompts,
       ...categoryPrompts,
       "Can I afford $500?",
       "What bills are due next?",
