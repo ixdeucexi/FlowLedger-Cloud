@@ -210,7 +210,7 @@ test("Flo explains how purchase decision safe amount is calculated", () => {
   const answer = localFloAnswer("How is purchase decision calculating safe amount?", facts, days) ?? "";
   assert.match(answer, /free cash/i);
   assert.match(answer, /safety floor/i);
-  assert.match(answer, /Purchase Decision card/i);
+  assert.match(answer, /I’m checking two things/i);
 });
 
 test("Flo explains Debt Payoff from deterministic facts", () => {

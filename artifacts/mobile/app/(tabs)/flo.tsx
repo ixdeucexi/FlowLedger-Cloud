@@ -65,6 +65,8 @@ const sampleQuestions = [
   "How do I add income?",
 ];
 
+const MIN_FLO_THINK_MS = 2000;
+
 const initialChat: FloChatState = { messages: [], sending: false };
 
 export default function FloScreen() {
@@ -617,11 +619,16 @@ export default function FloScreen() {
     if (!clean || chat.sending) return;
     setInput("");
     dispatch({ type: "submit", id: `u-${Date.now()}`, text: clean });
+    const thinkingStartedAt = Date.now();
     let reply = FLO_CONNECTION_ERROR_MESSAGE;
     try {
       reply = buildCalendarDayReply(clean) ?? await askFlo(clean, facts, summary, baseline);
     } catch {
       reply = FLO_CONNECTION_ERROR_MESSAGE;
+    }
+    const remainingThinkTime = MIN_FLO_THINK_MS - (Date.now() - thinkingStartedAt);
+    if (remainingThinkTime > 0) {
+      await new Promise(resolve => setTimeout(resolve, remainingThinkTime));
     }
     const replyId = `f-${Date.now()}`;
     dispatch({ type: "reply", id: replyId, text: reply });

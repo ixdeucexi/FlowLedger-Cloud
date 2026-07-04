@@ -477,10 +477,10 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
     const working = facts.flowScore.positiveFactors.length ? facts.flowScore.positiveFactors.join(" ") : "I don't see a major positive driver yet.";
     const attention = facts.flowScore.negativeFactors.length ? facts.flowScore.negativeFactors.join(" ") : "I don't see a major pressure point right now.";
     const topAction = replaceDayReferences(facts, facts.flowScore.topAction);
-    if (lower.includes("improve")) return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. This card is grading how much breathing room your plan has after bills, debt, spending, and the safety floor. Best next move: ${topAction} Needs attention: ${replaceDayReferences(facts, attention)}`;
-    if (lower.includes("hurt")) return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. Nothing is being judged as bad; these are the pressure points needing attention: ${replaceDayReferences(facts, attention)} Best next move: ${topAction}`;
+    if (lower.includes("improve")) return `I have your Flow Score at ${facts.flowScore.score} - ${facts.flowScore.label}. I’m grading how much breathing room your plan has after bills, debt, spending, and the safety floor. Best next move: ${topAction} Needs attention: ${replaceDayReferences(facts, attention)}`;
+    if (lower.includes("hurt")) return `I have your Flow Score at ${facts.flowScore.score} - ${facts.flowScore.label}. I’m not judging anything as bad — I’m pointing out pressure points needing attention so we can fix them. Needs attention: ${replaceDayReferences(facts, attention)} Best next move: ${topAction}`;
     if (lower.includes("help")) return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. Working well: ${working}`;
-    return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. This card summarizes your overall money pressure. ${replaceDayReferences(facts, facts.flowScore.topReason)} Working: ${working} Needs attention: ${replaceDayReferences(facts, attention)} Best next move: ${topAction}`;
+    return `I have your Flow Score at ${facts.flowScore.score} - ${facts.flowScore.label}. I’m using that card to summarize your overall money pressure. ${replaceDayReferences(facts, facts.flowScore.topReason)} Working: ${working} Needs attention: ${replaceDayReferences(facts, attention)} Best next move: ${topAction}`;
   }
   const asksSpendingLimit = /\b(daily limit|weekly limit|spending limit|safe pace|safe daily|safe weekly|how much.*spend.*day|how much.*spend.*week)\b/.test(lower);
   if (asksSpendingLimit && facts.spendingLimit) {
@@ -509,15 +509,15 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
   const asksPurchaseDecision = /\b(purchase decision|plan purchase|buy|purchase|should i wait|best date|safer date)\b/.test(lower) && !/\$?\s*\d/.test(lower);
   if (asksPurchaseDecision && facts.purchaseDecision) {
     const bestDay = facts.purchaseDecision.bestDay ? ` A safer date may be around ${formatFloMonthDay(facts, facts.purchaseDecision.bestDay)}.` : "";
-    return `The Purchase Decision card is checking two things at once: whether the month has free cash left, and whether the lowest forecast still stays above your safety floor. ${replaceDayReferences(facts, facts.purchaseDecision.detail)} ${replaceDayReferences(facts, facts.purchaseDecision.nextMove)}${bestDay}`;
+    return `I’m checking two things for the Purchase Decision: whether the month has free cash left, and whether the lowest forecast still stays above your safety floor. ${replaceDayReferences(facts, facts.purchaseDecision.detail)} ${replaceDayReferences(facts, facts.purchaseDecision.nextMove)}${bestDay}`;
   }
   const asksSafeCushion = lower.includes("safe cushion") || lower.includes("cushion") || /safely spend|safe to spend|how much can i spend|available to spend/.test(lower);
   if (asksSafeCushion && facts.safeCushion) {
     const dayText = facts.safeCushion.lowestDay ? ` on ${formatFloMonthDay(facts, facts.safeCushion.lowestDay)}` : "";
     if (lower.includes("low") || lower.includes("why")) {
-      return `Your Safe Cushion card shows the money left after protecting your floor. It is $${facts.safeCushion.amount.toFixed(0)} - ${facts.safeCushion.label}. ${replaceDayReferences(facts, facts.safeCushion.topReason)} Your lowest projected balance is $${facts.safeCushion.lowestBalance.toFixed(0)}${dayText}, with a $${facts.safeCushion.safetyFloor.toFixed(0)} floor. ${replaceDayReferences(facts, facts.safeCushion.topAction)}`;
+      return `I’m using Safe Cushion to show the money left after protecting your floor. It is $${facts.safeCushion.amount.toFixed(0)} - ${facts.safeCushion.label}. ${replaceDayReferences(facts, facts.safeCushion.topReason)} I see your lowest projected balance at $${facts.safeCushion.lowestBalance.toFixed(0)}${dayText}, with a $${facts.safeCushion.safetyFloor.toFixed(0)} floor. ${replaceDayReferences(facts, facts.safeCushion.topAction)}`;
     }
-    return `Your Safe Cushion card is the spendable breathing room after the current plan is protected. It is $${facts.safeCushion.amount.toFixed(0)} - ${facts.safeCushion.label}. ${replaceDayReferences(facts, facts.safeCushion.topReason)} FlowLedger is already reserving about $${facts.safeCushion.reservedAmount.toFixed(0)} for the current plan. ${replaceDayReferences(facts, facts.safeCushion.topAction)}`;
+    return `I’m using Safe Cushion as your spendable breathing room after the current plan is protected. It is $${facts.safeCushion.amount.toFixed(0)} - ${facts.safeCushion.label}. ${replaceDayReferences(facts, facts.safeCushion.topReason)} I’m already reserving about $${facts.safeCushion.reservedAmount.toFixed(0)} for the current plan. ${replaceDayReferences(facts, facts.safeCushion.topAction)}`;
   }
   const asksDebtPayoff = /\b(debt payoff|payoff plan|snowball target|avalanche target|which debt|what debt|pay off first|next debt|paid off|payoff|roll over|rollover|closed)\b/.test(lower);
   if (asksDebtPayoff && facts.debtPayoff) {
@@ -1158,9 +1158,9 @@ export function floResponseCards(message: string, facts: FloFacts, days: Decisio
   if (scenario) {
     const result = evaluateDecision(days, scenario, facts.safetyFloor);
     return [
-      { title: "Purchase Decision", value: result.verdict.toUpperCase(), detail: `Flo is testing whether this purchase keeps the plan above your $${facts.safetyFloor.toFixed(0)} floor. ${result.explanation}`, tone: result.verdict === "safe" ? "safe" : result.verdict === "caution" ? "caution" : "risk" },
-      { title: "Lowest Balance", value: `$${result.lowestBalance.toFixed(0)}`, detail: `This is the lowest projected balance after the purchase: ${result.lowestBalanceDate}.`, tone: result.lowestBalance < facts.safetyFloor ? "risk" : "info" },
-      { title: "Safer Amount", value: `$${result.saferAmount.toFixed(0)}`, detail: "This is the largest amount that still protects your safety floor on the tightest forecast date.", tone: "info" },
+      { title: "Purchase Decision", value: result.verdict.toUpperCase(), detail: `I’m testing whether this purchase keeps the plan above your $${facts.safetyFloor.toFixed(0)} floor. ${result.explanation}`, tone: result.verdict === "safe" ? "safe" : result.verdict === "caution" ? "caution" : "risk" },
+      { title: "Lowest Balance", value: `$${result.lowestBalance.toFixed(0)}`, detail: `I see this as the lowest projected balance after the purchase: ${result.lowestBalanceDate}.`, tone: result.lowestBalance < facts.safetyFloor ? "risk" : "info" },
+      { title: "Safer Amount", value: `$${result.saferAmount.toFixed(0)}`, detail: "I calculated this as the largest amount that still protects your safety floor on the tightest forecast date.", tone: "info" },
     ];
   }
   const categoryCards = floCategoryCards(message, facts);
@@ -1170,7 +1170,7 @@ export function floResponseCards(message: string, facts: FloFacts, days: Decisio
   if (lower.includes("why") && (lower.includes("negative") || lower.includes("balance"))) {
     return [
       { title: "Lowest Forecast", value: `$${facts.lowestBalance.toFixed(0)}`, detail: facts.lowestBalanceDate, tone: facts.lowestBalance < facts.safetyFloor ? "risk" : "caution" },
-      { title: "Safe Cushion", value: `$${(facts.lowestBalance - facts.safetyFloor).toFixed(0)}`, detail: `This is the room between your lowest forecast and your $${facts.safetyFloor.toFixed(0)} floor.`, tone: facts.lowestBalance < facts.safetyFloor ? "risk" : "safe" },
+      { title: "Safe Cushion", value: `$${(facts.lowestBalance - facts.safetyFloor).toFixed(0)}`, detail: `I’m showing the room between your lowest forecast and your $${facts.safetyFloor.toFixed(0)} floor.`, tone: facts.lowestBalance < facts.safetyFloor ? "risk" : "safe" },
     ];
   }
   if ((lower.includes("left") || lower.includes("remaining")) && lower.includes("bill")) {
