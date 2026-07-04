@@ -505,10 +505,10 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
     const working = facts.flowScore.positiveFactors.length ? facts.flowScore.positiveFactors.join(" ") : "I don't see a major positive driver yet.";
     const attention = facts.flowScore.negativeFactors.length ? facts.flowScore.negativeFactors.join(" ") : "I don't see a major pressure point right now.";
     const topAction = replaceDayReferences(facts, facts.flowScore.topAction);
-    if (lower.includes("improve")) return `I have your Flow Score at ${facts.flowScore.score} - ${facts.flowScore.label}. I’m grading how much breathing room your plan has after bills, debt, spending, and the safety floor. Best next move: ${topAction} Needs attention: ${replaceDayReferences(facts, attention)}`;
-    if (lower.includes("hurt")) return `I have your Flow Score at ${facts.flowScore.score} - ${facts.flowScore.label}. I’m not judging anything as bad — I’m pointing out pressure points needing attention so we can fix them. Needs attention: ${replaceDayReferences(facts, attention)} Best next move: ${topAction}`;
-    if (lower.includes("help")) return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. Working well: ${working}`;
-    return `I have your Flow Score at ${facts.flowScore.score} - ${facts.flowScore.label}. I’m using that card to summarize your overall money pressure. ${replaceDayReferences(facts, facts.flowScore.topReason)} Working: ${working} Needs attention: ${replaceDayReferences(facts, attention)} Best next move: ${topAction}`;
+    if (lower.includes("improve")) return `I have your Flow Score at ${facts.flowScore.score} - ${facts.flowScore.label}. I’m grading how much breathing room your plan has after bills, debt, spending, and the safety floor. What I’d do next: ${topAction} What I’m watching: ${replaceDayReferences(facts, attention)}`;
+    if (lower.includes("hurt")) return `I have your Flow Score at ${facts.flowScore.score} - ${facts.flowScore.label}. I’m not judging anything as bad — I’m pointing out pressure points needing attention so we can fix them. What I’m watching: ${replaceDayReferences(facts, attention)} What I’d do next: ${topAction}`;
+    if (lower.includes("help")) return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. Here’s what I see working: ${working}`;
+    return `I have your Flow Score at ${facts.flowScore.score} - ${facts.flowScore.label}. I use it to summarize your overall money pressure. ${replaceDayReferences(facts, facts.flowScore.topReason)} Here’s what I see working: ${working} What I’m watching: ${replaceDayReferences(facts, attention)} What I’d do next: ${topAction}`;
   }
   const asksSpendingLimit = /\b(daily limit|weekly limit|spending limit|safe pace|safe daily|safe weekly|how much.*spend.*day|how much.*spend.*week)\b/.test(lower);
   if (asksSpendingLimit && facts.spendingLimit) {
@@ -1164,7 +1164,10 @@ function formatFloMonthDay(facts: FloFacts, day: number) {
 }
 
 function replaceDayReferences(facts: FloFacts, text: string) {
-  return text.replace(/\bday (\d{1,2})\b/gi, (_, day) => formatFloMonthDay(facts, Number(day)));
+  return text
+    .replace(/\bday (\d{1,2})\b/gi, (_, day) => formatFloMonthDay(facts, Number(day)))
+    .replace(/\bask Flo to\b/gi, "ask me to")
+    .replace(/\bask Flo\b/gi, "ask me");
 }
 
 export function floResponseCards(message: string, facts: FloFacts, days: DecisionBaselineDay[]): FloResponseCard[] {

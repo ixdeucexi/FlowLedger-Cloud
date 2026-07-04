@@ -209,7 +209,7 @@ test("Flo answers phase 2 planning questions without AI", () => {
 
 test("Flo explains Flow Score from deterministic facts", () => {
   assert.match(localFloAnswer("Why is my Flow Score 72?", facts, days) ?? "", /72 - Stable/);
-  assert.match(localFloAnswer("How do I improve my Flow Score?", facts, days) ?? "", /Ask Flo why Jul 8 is tight/);
+  assert.match(localFloAnswer("How do I improve my Flow Score?", facts, days) ?? "", /ask me why Jul 8 is tight/i);
   assert.match(localFloAnswer("What hurt my Flow Score?", facts, days) ?? "", /Safe Cushion is thin/);
   assert.match(localFloAnswer("What helped my Flow Score?", facts, days) ?? "", /No negative days/);
 });
@@ -297,7 +297,7 @@ test("Flo answers paycheck planning questions from verified facts", () => {
 test("Flo explains Flow Score with neutral action language", () => {
   const answer = localFloAnswer("Why does my Flow Score hurt?", facts, days) ?? "";
   assert.match(answer, /pressure points needing attention/i);
-  assert.match(answer, /Best next move/i);
+  assert.match(answer, /What I’d do next/i);
   assert.doesNotMatch(answer, /What hurt it:/i);
 });
 

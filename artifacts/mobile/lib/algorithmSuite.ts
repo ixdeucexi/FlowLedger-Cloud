@@ -448,7 +448,7 @@ function buildPurchaseDecisionDetails(
       confidence,
       bestDay: planDelayDay,
       detail: "This month does not have free cash after the current plan, even if the balance still has cushion.",
-      nextMove: "Wait, lower another planned expense, or ask Flo which bill or plan is squeezing the month.",
+      nextMove: "Wait, lower another planned expense, or review which bill or plan is squeezing the month.",
     };
   }
   if (decisionRoom >= 250) {
@@ -458,7 +458,7 @@ function buildPurchaseDecisionDetails(
       confidence,
       bestDay: planDelayDay,
       detail: `Purchases up to $${decisionRoom.toFixed(0)} are safe because that is the smaller number between monthly free cash ($${monthlyFreeCash.toFixed(0)}) and Safe Cushion ($${safeCushionAmount.toFixed(0)}).`,
-      nextMove: "Use Flo to test the exact amount and date before committing.",
+      nextMove: "Test the exact amount and date before committing.",
     };
   }
   if (decisionRoom >= 75) {
@@ -528,11 +528,11 @@ function buildExtraMoneyRouterDetails(args: {
     : "No safe extra money is available to route yet.";
   const nextMove = amount > 0
     ? args.recommendation === "debt"
-      ? `Ask Flo to preview adding $${amount.toFixed(0)} to ${targetLabel}.`
+      ? `Preview adding $${amount.toFixed(0)} to ${targetLabel}.`
       : args.recommendation === "bill"
         ? `Use it to protect ${targetLabel} before spending it.`
         : args.recommendation === "savings"
-          ? `Ask Flo to move $${amount.toFixed(0)} toward ${targetLabel}.`
+          ? `Preview moving $${amount.toFixed(0)} toward ${targetLabel}.`
           : "Keep it available until the tightest forecast day passes."
     : "Keep extra cash available until FlowLedger shows safe room.";
   const options = amount > 0 ? [
@@ -760,8 +760,8 @@ function buildSafeCushionDetails(
   const topAction = status === "safe"
     ? "Use this as the limit before adding new spending, extra debt payments, or savings moves."
     : status === "watch"
-      ? "Keep extra money available until the tight day passes, or ask Flo to find a safer date."
-      : "Pause new spending and ask Flo how to protect the floor from the bill, plan, or debt move creating pressure.";
+      ? "Keep extra money available until the tight day passes, or find a safer date."
+      : "Pause new spending and protect the floor from the bill, plan, or debt move creating pressure.";
   return {
     label,
     status,
@@ -886,12 +886,12 @@ function flowScoreAction(
   },
   input: AlgorithmSuiteInput,
 ) {
-  if (facts.lowBalanceWarning.status !== "safe" && facts.lowBalanceWarning.day) return `Ask Flo why ${formatMonthDay(input, facts.lowBalanceWarning.day)} is tight.`;
-  if (facts.safeCushionAmount <= 0) return "Ask Flo how to protect your safety floor.";
+  if (facts.lowBalanceWarning.status !== "safe" && facts.lowBalanceWarning.day) return `Review why ${formatMonthDay(input, facts.lowBalanceWarning.day)} is tight.`;
+  if (facts.safeCushionAmount <= 0) return "Protect your safety floor before adding new spending.";
   const priorityBill = prioritizeBills(input.bills, input.todayDay, input.safetyFloor, facts.lowBalanceWarning.day, input).bills[0];
   if (priorityBill && facts.overdueBillsCount > 0) return `Review ${priorityBill.name} first.`;
   if (facts.categoryPressure.length) return `Review ${facts.categoryPressure[0].category} spending.`;
-  if (facts.safeCushionAmount > 250) return "Ask Flo what extra money can safely do.";
+  if (facts.safeCushionAmount > 250) return "Review what extra money can safely do.";
   return "No action needed right now.";
 }
 

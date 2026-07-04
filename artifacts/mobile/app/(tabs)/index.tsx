@@ -911,7 +911,7 @@ export default function DashboardScreen() {
     return {
       tone,
       title: tone === "risk" ? "Next week has a low balance risk" : "Next week is tight",
-      detail: `Lowest projected balance: $${lowest.balance.toFixed(0)} on ${formatShortDate(lowest.date)}. Ask Flo why before changing the plan.`,
+      detail: `Lowest projected balance: $${lowest.balance.toFixed(0)} on ${formatShortDate(lowest.date)}. Review the reason before changing the plan.`,
       prompt,
       saferBillPrompt: "Which bill should I move?",
       reducePlanPrompt: "Which planned decisions should I reduce or postpone?",
@@ -947,7 +947,7 @@ export default function DashboardScreen() {
         action: algorithmSuite.flowScore.topAction,
         icon: "activity" as const,
         color: "#a855f7",
-        prompt: `Why is my Flow Score ${algorithmSuite.flowScore.score}? ${algorithmSuite.flowScore.topReason} ${algorithmSuite.flowScore.topAction}`,
+        prompt: `Why is my Flow Score ${algorithmSuite.flowScore.score}?`,
       },
       {
         id: "safeCushion",
@@ -958,7 +958,7 @@ export default function DashboardScreen() {
         action: algorithmSuite.safeCushion.topAction,
         icon: "shield" as const,
         color: safeTone,
-        prompt: "Flo, explain my Safe Cushion and what I should protect first.",
+        prompt: "Can you explain my Safe Cushion and what I should protect first?",
       },
       {
         id: "purchaseDecision",
@@ -969,7 +969,7 @@ export default function DashboardScreen() {
         action: algorithmSuite.purchaseDecision.nextMove,
         icon: "shopping-bag" as const,
         color: "#22d3ee",
-        prompt: "Flo, explain my Purchase Decision and find the safest way to buy something.",
+        prompt: "Can you explain my Purchase Decision and help me find the safest way to buy something?",
       },
       {
         id: "billPriority",
@@ -980,7 +980,7 @@ export default function DashboardScreen() {
         action: algorithmSuite.billPriority.nextMove,
         icon: "file-text" as const,
         color: "#fbbf24",
-        prompt: "Flo, which bill should I handle first and why?",
+        prompt: "Which bill should I handle first, and why?",
       },
       {
         id: "cashFlowGap",
@@ -991,7 +991,7 @@ export default function DashboardScreen() {
         action: `Low point: $${algorithmSuite.cashFlowGap.lowestBalance.toFixed(0)}`,
         icon: "clock" as const,
         color: "#38bdf8",
-        prompt: "Flo, where is my tightest cash-flow stretch and how should I protect it?",
+        prompt: "Where is my tightest cash-flow stretch, and how should I protect it?",
       },
       {
         id: "debtPayoff",
@@ -1002,7 +1002,7 @@ export default function DashboardScreen() {
         action: algorithmSuite.debtPayoff.nextMove,
         icon: "trending-down" as const,
         color: "#fb7185",
-        prompt: "Flo, explain my debt payoff target and the next clean move.",
+        prompt: "Can you explain my debt payoff target and the next clean move?",
       },
       {
         id: "paydaySplit",
@@ -1013,7 +1013,7 @@ export default function DashboardScreen() {
         action: `${algorithmSuite.paydaySplit.bills.toFixed(0)}% bills / ${algorithmSuite.paydaySplit.debt.toFixed(0)}% debt`,
         icon: "git-branch" as const,
         color: "#818cf8",
-        prompt: "Flo, how should my next paycheck be split so I stop living paycheck to paycheck?",
+        prompt: "How should my next paycheck be split so I can stop living paycheck to paycheck?",
       },
       {
         id: "spendingLimit",
@@ -1024,7 +1024,7 @@ export default function DashboardScreen() {
         action: `$${algorithmSuite.spendingLimit.weekly.toFixed(0)} weekly limit`,
         icon: "sliders" as const,
         color: "#60a5fa",
-        prompt: "Flo, what can I safely spend daily and weekly without breaking the plan?",
+        prompt: "What can I safely spend daily and weekly without breaking the plan?",
       },
       {
         id: "extraMoneyRouter",
@@ -1035,7 +1035,7 @@ export default function DashboardScreen() {
         action: algorithmSuite.extraMoneyRouter.nextMove,
         icon: "corner-up-right" as const,
         color: "#34d399",
-        prompt: "Flo, route my extra money safely between debt, savings, bills, and available cash.",
+        prompt: "Where should my extra money go safely?",
       },
       {
         id: "monthly-health",
@@ -1658,7 +1658,7 @@ export default function DashboardScreen() {
           <Pressable
             onPress={(event) => {
               event.stopPropagation();
-              openFloWithPrompt(`Why is my Flow Score ${algorithmSuite.flowScore.score}? ${algorithmSuite.flowScore.topReason} ${algorithmSuite.flowScore.topAction}`);
+              openFloWithPrompt(`Why is my Flow Score ${algorithmSuite.flowScore.score}?`);
             }}
             style={({ pressed }) => [styles.algoActionButton, { opacity: pressed ? 0.78 : 1 }]}
           >
@@ -2205,7 +2205,7 @@ export default function DashboardScreen() {
             <Pressable
               onPress={() => {
                 setFlowScoreVisible(false);
-                openFloWithPrompt(`Why is my Flow Score ${algorithmSuite.flowScore.score}? ${algorithmSuite.flowScore.topReason} ${algorithmSuite.flowScore.topAction}`);
+                openFloWithPrompt(`Why is my Flow Score ${algorithmSuite.flowScore.score}?`);
               }}
               style={({ pressed }) => [styles.flowScoreFloButton, { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 }]}
             >
