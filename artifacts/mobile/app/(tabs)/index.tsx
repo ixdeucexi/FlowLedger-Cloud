@@ -1092,20 +1092,6 @@ export default function DashboardScreen() {
         />
         <Animated.View
           style={[
-            styles.stormOrb,
-            styles.stormOrbBlue,
-            { transform: [{ translateX: stormShift }, { translateY: stormLift }] },
-          ]}
-        />
-        <Animated.View
-          style={[
-            styles.stormOrb,
-            styles.stormOrbViolet,
-            { transform: [{ translateX: stormLift }, { translateY: stormShift }] },
-          ]}
-        />
-        <Animated.View
-          style={[
             styles.lightningBeam,
             styles.lightningBeamOne,
             { opacity: lightningOpacity, transform: [{ translateX: stormShift }, { rotate: "-24deg" }] },
@@ -1456,8 +1442,6 @@ export default function DashboardScreen() {
                 end={{ x: 1, y: 1 }}
                 style={[styles.heroCard, { overflow: "hidden", marginBottom: 0 }]}
               >
-                <View style={styles.heroGlowTop} />
-                <View style={styles.heroGlowBottom} />
                 <View style={styles.heroSignalLine} />
 
                 <View style={styles.heroTopRow}>
@@ -1537,8 +1521,6 @@ export default function DashboardScreen() {
                 end={{ x: 1, y: 1 }}
                 style={[styles.heroCard, { overflow: "hidden", marginBottom: 0, height: cardHeight || undefined }]}
               >
-                <View style={styles.heroGlowTop} />
-                <View style={styles.heroGlowBottom} />
                 <View style={styles.heroSignalLine} />
 
                 <View style={styles.heroTopRow}>
@@ -2874,9 +2856,6 @@ const styles = StyleSheet.create({
   referenceRailFloSub: { color: "#94a3b8", fontSize: 10, fontFamily: "Inter_500Medium" },
   stormBackdrop: { position: "absolute", top: 0, left: 0, right: 0, height: 820 },
   stormBase: { ...StyleSheet.absoluteFillObject },
-  stormOrb: { position: "absolute", width: 330, height: 330, borderRadius: 165, opacity: 0.32 },
-  stormOrbBlue: { top: -130, right: -150, backgroundColor: "#2563eb" },
-  stormOrbViolet: { top: 210, left: -190, backgroundColor: "#7c3aed" },
   lightningBeam: { position: "absolute", height: 2, borderRadius: 2, backgroundColor: "#93c5fd", shadowColor: "#38bdf8", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.9, shadowRadius: 14 },
   lightningBeamOne: { top: 116, left: -40, width: 300 },
   lightningBeamTwo: { top: 360, right: -80, width: 260, backgroundColor: "#a78bfa" },
@@ -2984,8 +2963,6 @@ const styles = StyleSheet.create({
 
   // Hero
   heroCard:          { borderRadius: 36, padding: 24, marginBottom: 14, minHeight: 255, borderWidth: 1, borderColor: "rgba(34,211,238,0.26)", shadowColor: "#7c3aed", shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.46, shadowRadius: 34, elevation: 16 },
-  heroGlowTop:       { position: "absolute", top: -60, right: -40, width: 230, height: 230, borderRadius: 115, backgroundColor: "rgba(34,211,238,0.18)" },
-  heroGlowBottom:    { position: "absolute", bottom: -80, left: -40, width: 190, height: 190, borderRadius: 95, backgroundColor: "rgba(124,58,237,0.18)" },
   heroSignalLine:    { position: "absolute", left: 18, right: 18, bottom: 72, height: 1, backgroundColor: "rgba(125,211,252,0.18)" },
   heroTopRow:        { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 18 },
   heroStatusBadge:   { flexDirection: "row", alignItems: "center", gap: 7, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
