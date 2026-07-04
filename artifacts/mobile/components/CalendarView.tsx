@@ -215,10 +215,11 @@ export function CalendarView({
       </ScrollView>
       <View style={styles.legendRow}>
         {[
-          { label: "Good Day", color: CALENDAR.green },
-          { label: "Watch Day", color: CALENDAR.amber },
-          { label: "Risk Day", color: CALENDAR.red },
-          { label: "Payday", color: "#3b82f6" },
+          { label: "Income", color: CALENDAR.green },
+          { label: "Bills", color: "#f59e0b" },
+          { label: "Spending", color: "#8b5cf6" },
+          { label: "Plans", color: "#3b82f6" },
+          { label: "Risk", color: CALENDAR.red },
         ].map(item => (
           <View key={item.label} style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: item.color }]} />
