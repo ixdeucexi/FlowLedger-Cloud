@@ -95,7 +95,7 @@ export default function TransactionsScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const {
-    transactions, addTransaction, updateTransaction, deleteTransaction,
+    transactions, addTransaction, updateTransaction, deleteTransaction, deleteTransfer,
     bills, overrides, extraPayments,
     getIncomeOccurrencesInMonth,
   } = useBudget();
@@ -309,8 +309,14 @@ export default function TransactionsScreen() {
     return addTransaction(data);
   };
 
-  const handleDelete = (id: string) => {
-    deleteTransaction(id);
+  const handleDelete = async (id: string) => {
+    await deleteTransaction(id);
+    setEditModalVisible(false);
+    setEditTx(null);
+  };
+
+  const handleDeleteTransfer = async (transferGroupId: string) => {
+    await deleteTransfer(transferGroupId);
     setEditModalVisible(false);
     setEditTx(null);
   };
@@ -742,6 +748,7 @@ export default function TransactionsScreen() {
         onClose={() => { setEditModalVisible(false); setEditTx(null); }}
         onSave={handleSave}
         onDelete={handleDelete}
+        onDeleteTransfer={handleDeleteTransfer}
         editTx={editTx}
       />
 

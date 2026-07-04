@@ -26,11 +26,12 @@ interface Props {
   onClose: () => void;
   onSave: (tx: Omit<Transaction, "id"> | Transaction) => void | Promise<unknown>;
   onDelete?: (id: string) => void | Promise<unknown>;
+  onDeleteTransfer?: (transferGroupId: string) => void | Promise<unknown>;
   editTx?: Transaction | null;
   defaultDate?: string;
 }
 
-export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx, defaultDate }: Props) {
+export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDeleteTransfer, editTx, defaultDate }: Props) {
   const c = useColors();
   useBackDismiss(visible, onClose);
   const { categories, accounts, bills, transactions } = useBudget();
@@ -148,6 +149,35 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
     }
   };
 
+  const handleDelete = async () => {
+    if (!editTx || !onDelete || saving) return;
+    const isEditingTransfer = Boolean(editTx.transfer_group_id);
+    const runDelete = async () => {
+      setSaving(true);
+      try {
+        if (isEditingTransfer && editTx.transfer_group_id && onDeleteTransfer) await onDeleteTransfer(editTx.transfer_group_id);
+        else await onDelete(editTx.id);
+        onClose();
+      } catch (error) {
+        Alert.alert(isEditingTransfer ? "Couldn’t delete transfer" : "Couldn’t delete transaction", error instanceof Error ? error.message : "Please try again.");
+      } finally {
+        setSaving(false);
+      }
+    };
+    if (Platform.OS === "web") {
+      await runDelete();
+      return;
+    }
+    Alert.alert(
+      isEditingTransfer ? "Delete Transfer" : "Delete Transaction",
+      isEditingTransfer ? "Remove both sides of this transfer?" : "Remove this transaction?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => { void runDelete(); } },
+      ],
+    );
+  };
+
   const inputStyle = [styles.input, { backgroundColor: c.card, color: c.foreground, borderColor: c.border }];
   const labelStyle = [styles.label, { color: c.mutedForeground }];
 
@@ -242,22 +272,11 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, editTx
 
             {editTx && onDelete && (
               <Pressable
-                onPress={async () => {
-                  if (saving) return;
-                  setSaving(true);
-                  try {
-                    await onDelete(editTx.id);
-                    onClose();
-                  } catch (error) {
-                    Alert.alert("Couldn’t delete transaction", error instanceof Error ? error.message : "Please try again.");
-                  } finally {
-                    setSaving(false);
-                  }
-                }}
+                onPress={handleDelete}
                 style={({ pressed }) => [styles.deleteBtn, { borderColor: c.destructive, opacity: pressed ? 0.8 : 1 }]}
               >
                 <Feather name="trash-2" size={15} color={c.destructive} />
-                <Text style={[styles.deleteBtnText, { color: c.destructive }]}>Delete Transaction</Text>
+                <Text style={[styles.deleteBtnText, { color: c.destructive }]}>{editTx.transfer_group_id ? "Delete Transfer" : "Delete Transaction"}</Text>
               </Pressable>
             )}
 

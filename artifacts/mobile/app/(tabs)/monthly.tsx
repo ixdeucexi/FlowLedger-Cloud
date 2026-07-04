@@ -629,9 +629,11 @@ export default function MonthlyScreen() {
   };
 
   const handleDeleteTx = (id: string) => {
+    const tx = transactions.find(transaction => transaction.id === id);
+    const isTransfer = Boolean(tx?.transfer_group_id);
     const doDelete = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); deleteTransaction(id); };
     if (Platform.OS === "web") { doDelete(); return; }
-    Alert.alert("Delete Transaction", "Remove this transaction?", [
+    Alert.alert(isTransfer ? "Delete Transfer" : "Delete Transaction", isTransfer ? "Remove both sides of this transfer?" : "Remove this transaction?", [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: doDelete },
     ]);
@@ -1091,7 +1093,7 @@ export default function MonthlyScreen() {
             }}
           />
       ) : (
-        <View style={[styles.calFixed, { paddingBottom: insets.bottom + 76 }]}>
+        <View style={[styles.calFixed, { paddingBottom: insets.bottom + 64 }]}>
           <View style={styles.calInner}>
             <View {...calendarSwipeResponder.panHandlers}>
               <CalendarView

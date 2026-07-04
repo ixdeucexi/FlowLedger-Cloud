@@ -258,6 +258,7 @@ interface BudgetContextType {
   addTransaction: (tx: Omit<Transaction, "id">) => Promise<string>;
   updateTransaction: (tx: Transaction) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
+  deleteTransfer: (transferGroupId: string) => Promise<void>;
   getTransactionsForMonth: (month: number, year: number) => Transaction[];
 
   addIncome: (item: Omit<IncomeItem, "id">) => Promise<string>;
@@ -1776,10 +1777,32 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, transactions, syncDebtTransactionsAndRefresh, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed]);
 
+  const deleteTransfer = useCallback(async (transferGroupId: string) => {
+    if (!user) return;
+    const idsToDelete = transactions
+      .filter(transaction => transaction.transfer_group_id === transferGroupId)
+      .map(transaction => transaction.id);
+    if (idsToDelete.length === 0) return;
+    if (demoMode) {
+      setTransactions(prev => prev.filter(t => !idsToDelete.includes(t.id)));
+      return;
+    }
+    await ensureSaved(
+      supabase.from("transactions").delete().eq("user_id", user.id).eq("transfer_group_id", transferGroupId),
+      "Delete transfer",
+    );
+    setTransactions(prev => prev.filter(t => !idsToDelete.includes(t.id)));
+    if (idsToDelete.some(txId => transactions.find(transaction => transaction.id === txId)?.debt_applied_bill_id)) await syncDebtTransactionsAndRefresh();
+  }, [user, transactions, syncDebtTransactionsAndRefresh, demoMode]);
+
   const deleteTransaction = useCallback(async (id: string) => {
     if (!user) return;
     const existing = transactions.find(transaction => transaction.id === id);
     const groupId = existing?.transfer_group_id;
+    if (groupId) {
+      await deleteTransfer(groupId);
+      return;
+    }
     const idsToDelete = groupId
       ? transactions.filter(transaction => transaction.transfer_group_id === groupId).map(transaction => transaction.id)
       : [id];
@@ -1787,14 +1810,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setTransactions(prev => prev.filter(t => !idsToDelete.includes(t.id)));
       return;
     }
-    if (groupId) {
-      await ensureSaved(supabase.from("transactions").delete().eq("user_id", user.id).eq("transfer_group_id", groupId), "Delete transfer");
-    } else {
-      await ensureSaved(supabase.from("transactions").delete().eq("id", id).eq("user_id", user.id), "Delete transaction");
-    }
+    await ensureSaved(supabase.from("transactions").delete().eq("id", id).eq("user_id", user.id), "Delete transaction");
     setTransactions(prev => prev.filter(t => !idsToDelete.includes(t.id)));
     if (idsToDelete.some(txId => transactions.find(transaction => transaction.id === txId)?.debt_applied_bill_id)) await syncDebtTransactionsAndRefresh();
-  }, [user, transactions, syncDebtTransactionsAndRefresh, demoMode]);
+  }, [user, transactions, syncDebtTransactionsAndRefresh, demoMode, deleteTransfer]);
 
   const getTransactionsForMonth = useCallback(
     (month: number, year: number) =>
@@ -2620,7 +2639,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence, getBillDateMovesForMonth,
       getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal,
       runSnowball, previewDebtSnowball, applyDebtSnowballPayment, saveExtraPayment, getExtraPayment, deleteExtraPayment, removeDebtSnowballPayment, finalizeBillPayment,
-      addTransaction, updateTransaction, deleteTransaction, getTransactionsForMonth,
+      addTransaction, updateTransaction, deleteTransaction, deleteTransfer, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome, getIncomeOccurrencesInMonth,
       addGoal, updateGoal, deleteGoal, checkGoalAffordability,
       getCashFlow, getDailyBalances,
