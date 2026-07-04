@@ -44,7 +44,7 @@ const facts: FloFacts = {
   forecastConfidence: "high",
   sourceTypes: ["forecast", "bill", "transaction", "account", "debt", "goal", "decision"],
   todayForecast: {
-    date: "2026-06-24",
+    date: "2026-07-04",
     projectedClose: 1000,
     net: -250,
     sources: [
@@ -94,7 +94,7 @@ const facts: FloFacts = {
     score: 72,
     label: "Stable",
     topReason: "July 8 is tight because bills hit before payday.",
-    topAction: "Ask Flo why day 8 is tight.",
+    topAction: "Ask Flo why Jul 8 is tight.",
     positiveFactors: ["No negative days are showing."],
     negativeFactors: ["Safe Cushion is thin."],
   },
@@ -120,7 +120,7 @@ const facts: FloFacts = {
   billPriority: {
     nextBill: { name: "Power", amount: 120, dueDay: 28, reason: "due soon", urgency: "soon" },
     summary: "Power is the next priority bill.",
-    nextMove: "Keep Power visible before day 28.",
+    nextMove: "Keep Power visible before Jul 28.",
     bills: [{ name: "Power", amount: 120, dueDay: 28, reason: "due soon", urgency: "soon" }],
   },
   paydaySplitAlgo: {
@@ -195,7 +195,7 @@ test("Flo answers phase 2 planning questions without AI", () => {
 
 test("Flo explains Flow Score from deterministic facts", () => {
   assert.match(localFloAnswer("Why is my Flow Score 72?", facts, days) ?? "", /72 - Stable/);
-  assert.match(localFloAnswer("How do I improve my Flow Score?", facts, days) ?? "", /Ask Flo why day 8 is tight/);
+  assert.match(localFloAnswer("How do I improve my Flow Score?", facts, days) ?? "", /Ask Flo why Jul 8 is tight/);
   assert.match(localFloAnswer("What hurt my Flow Score?", facts, days) ?? "", /Safe Cushion is thin/);
   assert.match(localFloAnswer("What helped my Flow Score?", facts, days) ?? "", /No negative days/);
 });
@@ -204,6 +204,13 @@ test("Flo explains Safe Cushion from deterministic facts", () => {
   assert.match(localFloAnswer("What is my Safe Cushion?", facts, days) ?? "", /\$600/);
   assert.match(localFloAnswer("How much can I safely spend?", facts, days) ?? "", /reserving/);
   assert.match(localFloAnswer("Why is my cushion low?", { ...facts, safeCushion: { ...facts.safeCushion!, amount: 80, label: "thin cushion", status: "watch" } }, days) ?? "", /lowest projected balance/i);
+});
+
+test("Flo explains how purchase decision safe amount is calculated", () => {
+  const answer = localFloAnswer("How is purchase decision calculating safe amount?", facts, days) ?? "";
+  assert.match(answer, /free cash/i);
+  assert.match(answer, /safety floor/i);
+  assert.match(answer, /Purchase Decision card/i);
 });
 
 test("Flo explains Debt Payoff from deterministic facts", () => {

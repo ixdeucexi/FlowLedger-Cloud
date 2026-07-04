@@ -16,7 +16,7 @@ const TABS = [
   { name: "index",        title: "Dashboard",    icon: "bar-chart-2"     },
   { name: "bills",        title: "Bills",        icon: "file-text"       },
   { name: "flo",          title: "Flo",          icon: "message-circle"  },
-  { name: "transactions", title: "Transactions", icon: "repeat"          },
+  { name: "transactions", title: "Activity",     icon: "repeat"          },
   { name: "monthly",      title: "Monthly",      icon: "calendar"        },
   { name: "more",         title: "More",         icon: "more-horizontal" },
 ] as const;
@@ -43,17 +43,17 @@ const DEMO_TOUR_STEPS = [
     route: "bills",
     title: "Bills",
     path: "/(tabs)/bills",
-    nextLabel: "Open Transactions",
+    nextLabel: "Open Activity",
     short: "This is where obligations are set up.",
     detail: "Bills holds recurring bills and debts. This is where a user manages due dates, minimum payments, snowball settings, and recurring obligations.",
   },
   {
     route: "transactions",
-    title: "Transactions",
+    title: "Activity",
     path: "/(tabs)/transactions",
     nextLabel: "Open Flo",
     short: "This is what actually happened.",
-    detail: "Transactions is the activity log. It shows spending, income, transfers, debt payments, and anything imported or manually added so the forecast can stay honest.",
+    detail: "Activity is the log of what actually happened. It shows spending, income, transfers, debt payments, and anything imported or manually added so the forecast can stay honest.",
   },
   {
     route: "flo",
@@ -130,7 +130,7 @@ function routeKeyFromSegments(segments: string[]) {
 function demoHintForRoute(routeName: string) {
   if (routeName === "monthly") return "Monthly is the plan view. Tap a day to see the balance, bills, income, and decisions behind it.";
   if (routeName === "bills") return "Bills is where obligations and debts live. Try the demo snowball and due-date tools.";
-  if (routeName === "transactions") return "Transactions is the activity trail. These are fake entries so you can explore safely.";
+  if (routeName === "transactions") return "Activity is the transaction trail. These are fake entries so you can explore safely.";
   if (routeName === "flo") return "Ask Flo: “Can I afford $500 on July 15?” She will preview the decision before anything applies.";
   if (routeName === "more") return "More is where settings, setup, accounts, imports, and app controls live.";
   return "Dashboard shows the story at a glance: balance, lowest forecast, bills, debt, and what needs attention.";

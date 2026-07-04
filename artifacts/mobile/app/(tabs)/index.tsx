@@ -1118,7 +1118,7 @@ export default function DashboardScreen() {
             { label: "Dashboard", icon: "home" as const, active: true, to: "/(tabs)" },
             { label: "Calendar", icon: "calendar" as const, to: "/(tabs)/monthly" },
             { label: "Bills", icon: "file-text" as const, to: "/(tabs)/bills" },
-            { label: "Transactions", icon: "repeat" as const, to: "/(tabs)/transactions" },
+            { label: "Activity", icon: "repeat" as const, to: "/(tabs)/transactions" },
             { label: "Flo", icon: "message-circle" as const, to: "/(tabs)/flo" },
             { label: "Settings", icon: "settings" as const, to: "/(tabs)/more" },
           ].map(item => (
@@ -2422,7 +2422,7 @@ export default function DashboardScreen() {
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.categoryDetailItemName, { color: c.foreground }]}>{bill.name}</Text>
                         <Text style={[styles.categoryDetailItemMeta, { color: c.mutedForeground }]}>
-                          Due day {bill.dueDay}{bill.paid > 0 ? ` · $${bill.paid.toFixed(0)} paid` : ""}
+                          Due {MONTH_FULL[currentMonth].slice(0, 3)} {bill.dueDay}{bill.paid > 0 ? ` · $${bill.paid.toFixed(0)} paid` : ""}
                         </Text>
                       </View>
                       <Text style={[styles.categoryDetailItemAmount, { color: c.foreground }]}>${bill.amount.toFixed(0)}</Text>
@@ -2431,7 +2431,7 @@ export default function DashboardScreen() {
                     <Text style={[styles.categoryDetailEmpty, { color: c.mutedForeground }]}>No planned bills in this category.</Text>
                   )}
 
-                  <Text style={[styles.categoryDetailSectionTitle, { color: c.mutedForeground, marginTop: 14 }]}>Transactions</Text>
+                  <Text style={[styles.categoryDetailSectionTitle, { color: c.mutedForeground, marginTop: 14 }]}>Activity</Text>
                   {categoryDetail.categoryTransactions.length ? categoryDetail.categoryTransactions.slice(0, 6).map(transaction => (
                     <View key={transaction.id} style={[styles.categoryDetailItem, { borderTopColor: c.border }]}>
                       <View style={{ flex: 1 }}>
@@ -2470,7 +2470,7 @@ export default function DashboardScreen() {
                     style={({ pressed }) => [styles.categoryDetailAction, { backgroundColor: c.muted, opacity: pressed ? 0.75 : 1 }]}
                   >
                     <Feather name="list" size={14} color={c.foreground} />
-                    <Text style={[styles.categoryDetailActionText, { color: c.foreground }]}>Transactions</Text>
+                    <Text style={[styles.categoryDetailActionText, { color: c.foreground }]}>Activity</Text>
                   </Pressable>
                 </View>
               </>

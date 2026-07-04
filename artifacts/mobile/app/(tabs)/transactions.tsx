@@ -161,7 +161,7 @@ export default function TransactionsScreen() {
         category: bill.category,
         source:   "bill_payment",
         editable: false,
-        detail:   `${regularPaid.toFixed(2)} paid on day ${day} of ${MONTH_NAMES_LONG[override.month]} ${override.year}`,
+        detail:   `${regularPaid.toFixed(2)} paid on ${MONTH_NAMES_LONG[override.month]} ${day}, ${override.year}`,
       });
     }
 
@@ -439,7 +439,7 @@ export default function TransactionsScreen() {
         <View style={styles.activityHeroTop}>
           <View>
             <Text style={[styles.activityHeroLabel, { color: c.mutedForeground }]}>{currentPeriodLabel}</Text>
-            <Text style={[styles.activityHeroTitle, { color: c.foreground }]}>Transaction flow</Text>
+            <Text style={[styles.activityHeroTitle, { color: c.foreground }]}>Activity flow</Text>
           </View>
           <View style={[styles.activityHeroBadge, { backgroundColor: net >= 0 ? c.success + "18" : c.destructive + "18" }]}>
             <Text style={[styles.activityHeroBadgeText, { color: net >= 0 ? c.success : c.destructive }]}>
@@ -486,7 +486,7 @@ export default function TransactionsScreen() {
           )}
         </View>
         <Pressable
-          accessibilityLabel="Filter transactions"
+          accessibilityLabel="Filter activity"
           onPress={() => setFilterModalVisible(true)}
           style={({ pressed }) => [
             styles.filterIconButton,
@@ -546,7 +546,7 @@ export default function TransactionsScreen() {
                 ? "Nothing matches your filters."
                 : "Mark bills paid or add income sources to see your activity here."
             }
-            actionLabel={hasActiveFilters ? "Clear filters" : "Add Transaction"}
+            actionLabel={hasActiveFilters ? "Clear filters" : "Add Activity"}
             onAction={hasActiveFilters ? clearFilters : () => { setEditTx(null); setEditModalVisible(true); }}
           />
         }
@@ -631,7 +631,7 @@ export default function TransactionsScreen() {
             <View style={[styles.filterHandle, { backgroundColor: c.border }]} />
             <View style={styles.filterSheetHeader}>
               <View>
-                <Text style={[styles.filterSheetTitle, { color: c.foreground }]}>Filter transactions</Text>
+                <Text style={[styles.filterSheetTitle, { color: c.foreground }]}>Filter activity</Text>
                 <Text style={[styles.filterSheetSub, { color: c.mutedForeground }]}>Choose any combination</Text>
               </View>
               <Pressable accessibilityLabel="Close filters" onPress={() => setFilterModalVisible(false)} hitSlop={8}>

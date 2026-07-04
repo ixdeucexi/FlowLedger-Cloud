@@ -30,6 +30,7 @@ const CAT_COLORS: Record<string, string> = {
 type Tab    = "bills" | "debt";
 type Filter = "all" | "recurring" | "one-time";
 type SortMode = "priority" | "balance" | "interest";
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export default function BillsScreen() {
   const c = useColors();
@@ -380,7 +381,7 @@ export default function BillsScreen() {
                           <View style={[styles.tag, { backgroundColor: catColor + "18" }]}>
                             <Text style={[styles.tagText, { color: catColor }]}>{item.category}</Text>
                           </View>
-                          <Text style={[styles.metaText, { color: c.mutedForeground }]}>Due day {item.due_day}</Text>
+                          <Text style={[styles.metaText, { color: c.mutedForeground }]}>Due {MONTH_SHORT[currentMonth]} {item.due_day}</Text>
                           {beforePayday ? (
                             <View style={[styles.tag, { backgroundColor: c.warning + "18" }]}>
                               <Text style={[styles.tagText, { color: c.warning }]}>Before payday</Text>
@@ -582,7 +583,7 @@ export default function BillsScreen() {
                               <Text style={[styles.aprText, { color: c.destructive }]}>{item.interest_rate}% APR</Text>
                             </View>
                           )}
-                          <Text style={[styles.metaText, { color: c.mutedForeground }]}>Due day {item.due_day}</Text>
+                          <Text style={[styles.metaText, { color: c.mutedForeground }]}>Due {MONTH_SHORT[currentMonth]} {item.due_day}</Text>
                           {monthsToPayoff > 0 && (
                             <Text style={[styles.metaText, { color: c.mutedForeground }]}>~{monthsToPayoff} mo left</Text>
                           )}

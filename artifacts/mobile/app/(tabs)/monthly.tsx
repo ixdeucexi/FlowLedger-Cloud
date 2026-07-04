@@ -732,7 +732,7 @@ export default function MonthlyScreen() {
                 balance: 0,
                 interest_rate: 0,
               });
-              Alert.alert("Bill Added", `"${displayName}" has been added as a monthly recurring bill on day ${dueDay}.`);
+              Alert.alert("Bill Added", `"${displayName}" has been added as a monthly recurring bill on ${MONTH_FULL[month].slice(0, 3)} ${dueDay}.`);
             },
           },
         ]
@@ -952,7 +952,7 @@ export default function MonthlyScreen() {
                       <Text style={[styles.entryMeta, { color: c.mutedForeground }]}>
                         {isWeekly
                           ? `Every ${WEEKDAY_NAMES[bill.day_of_week ?? 0]} · ×${occCount} this month · ${bill.category}`
-                          : `Due day ${effectiveDueDay}${customDay !== undefined ? " *" : ""} · ${bill.category}`}
+                          : `Due ${MONTH_FULL[month].slice(0, 3)} ${effectiveDueDay}${customDay !== undefined ? " *" : ""} · ${bill.category}`}
                       </Text>
                     </View>
                     <View style={styles.entryRight}>
@@ -1042,7 +1042,7 @@ export default function MonthlyScreen() {
                     <View style={styles.dueDayRow}>
                       <Feather name="calendar" size={11} color={customDay !== undefined ? c.primary : c.mutedForeground} style={{ marginRight: 6 }} />
                       <Text style={[styles.fieldLabel, { color: customDay !== undefined ? c.primary : c.mutedForeground, marginBottom: 0, marginRight: 8 }]}>
-                        {customDay !== undefined ? "Due day this month:" : "Due day (this month only):"}
+                        {customDay !== undefined ? "Due date this month:" : "Due date (this month only):"}
                       </Text>
                       <Pressable
                         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setDueDayPickerBill(bill); }}
@@ -1283,7 +1283,7 @@ export default function MonthlyScreen() {
 
                     {displayedTxs.length > 0 ? (
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
-                        <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Transactions</Text>
+                        <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Activity</Text>
                         {displayedTxs.map(tx => (
                           <Pressable
                             key={`overlay-tx-${tx.id}`}
@@ -1363,7 +1363,7 @@ export default function MonthlyScreen() {
                     <View>
                       <Text style={[styles.pickerTitle, { color: c.foreground }]}>{dueDayPickerBill.name}</Text>
                       <Text style={[styles.pickerSub, { color: c.mutedForeground }]}>
-                        {MONTH_FULL[month]} {selectedYear} · Currently day {effectiveDay}
+                        {MONTH_FULL[month]} {selectedYear} · Currently {MONTH_FULL[month].slice(0, 3)} {effectiveDay}
                         {customDay !== undefined ? " (custom)" : " (default)"}
                       </Text>
                     </View>
@@ -1428,7 +1428,7 @@ export default function MonthlyScreen() {
                     >
                       <Feather name="rotate-ccw" size={14} color={c.mutedForeground} />
                       <Text style={[styles.pickerResetText, { color: c.mutedForeground }]}>
-                        Reset to default day {dueDayPickerBill.due_day}
+                        Reset to default {MONTH_FULL[month].slice(0, 3)} {dueDayPickerBill.due_day}
                       </Text>
                     </Pressable>
                   )}
