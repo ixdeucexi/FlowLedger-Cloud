@@ -81,6 +81,25 @@ export function groupForecastEvents(events: FinancialEvent[] = []): ForecastEven
     .filter(group => group.events.length > 0);
 }
 
+export function buildDayForecastFloPrompt(dateLabel: string, isoDate: string, projectedClose?: number, groups: ForecastEventGroup[] = []): string {
+  const balanceText = projectedClose === undefined
+    ? "I do not have a projected close for that day."
+    : `Projected close is $${projectedClose.toFixed(2)}.`;
+  const sourceText = groups.length
+    ? groups
+        .map(group => {
+          const entries = group.events
+            .slice(0, 6)
+            .map(item => `${item.label} ${item.amountLabel} (${item.statusLabel})`)
+            .join(", ");
+          const more = group.events.length > 6 ? `, plus ${group.events.length - 6} more` : "";
+          return `${group.title}: ${entries}${more}`;
+        })
+        .join("; ")
+    : "No dated income, bills, transactions, goals, debt payments, or saved plans are on this day.";
+  return `Review my FlowLedger calendar for ${dateLabel} (${isoDate}). ${balanceText} Day activity: ${sourceText}. Explain what is driving this day and what I should check before changing the plan.`;
+}
+
 export function debtPaymentStatusLabel(paymentDate: string, pendingBalanceApply?: boolean, today = new Date()): "scheduled" | "applied" {
   const localToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   return pendingBalanceApply || paymentDate > localToday ? "scheduled" : "applied";

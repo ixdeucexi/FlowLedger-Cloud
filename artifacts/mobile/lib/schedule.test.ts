@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isValidDateInMonth } from "./schedule";
+import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isValidDateInMonth } from "./schedule";
 
 describe("bill scheduling", () => {
   it("validates a selected calendar date inside the intended month", () => {
@@ -25,6 +25,22 @@ describe("bill scheduling", () => {
   it("finds every weekly occurrence including overlapping month boundaries", () => {
     const bill = { frequency: "weekly" as const, due_day: 1, day_of_week: 1 };
     assert.deepEqual(getBillOccurrenceDays(bill, 5, 2026), [1, 8, 15, 22, 29]);
+  });
+
+  it("moves a bill occurrence to the new day without leaving it on the old day", () => {
+    const moved = applyBillDateMovesToOccurrenceDays("utilities", 6, 2026, [4], [
+      { bill_id: "utilities", from_date: "2026-07-04", to_date: "2026-07-03" },
+    ]);
+
+    assert.deepEqual(moved, [3]);
+  });
+
+  it("ignores unrelated bill date moves", () => {
+    const moved = applyBillDateMovesToOccurrenceDays("utilities", 6, 2026, [4], [
+      { bill_id: "mortgage", from_date: "2026-07-04", to_date: "2026-07-03" },
+    ]);
+
+    assert.deepEqual(moved, [4]);
   });
 });
 

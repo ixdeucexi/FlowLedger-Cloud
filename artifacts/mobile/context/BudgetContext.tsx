@@ -17,7 +17,7 @@ import { diagnosticErrorCode } from "@/lib/diagnosticPolicy";
 import { decisionDbPayload } from "@/lib/decisionPersistence";
 import { recordDiagnostic } from "@/lib/diagnostics";
 import { isDevDemoMode } from "@/lib/demoMode";
-import { getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isIncomeActiveForMonth } from "@/lib/schedule";
+import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isIncomeActiveForMonth } from "@/lib/schedule";
 import { evaluateForecastConfidence, openingBalanceForReconciledDay, totalForecastBalance, type AccountSnapshot, type AccountType, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
 import { scenarioDates, type DecisionResult, type DecisionScenario, type DecisionType } from "@/lib/decisions";
 
@@ -1322,17 +1322,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed]);
 
-  const applyBillDateMovesToOccurrences = useCallback((bill: Bill, month: number, year: number, occurrences: number[]): number[] => {
-    const key = monthKey(year, month);
-    const kept = occurrences.filter(day => !billDateMoves.some(move =>
-      move.bill_id === bill.id && move.from_date === dateFromParts(year, month, day)
-    ));
-    const movedIn = billDateMoves
-      .filter(move => move.bill_id === bill.id && move.to_date.startsWith(key))
-      .map(move => Number(move.to_date.slice(8, 10)))
-      .filter(day => Number.isFinite(day));
-    return Array.from(new Set([...kept, ...movedIn])).sort((a, b) => a - b);
-  }, [billDateMoves]);
+  const applyBillDateMovesToOccurrences = useCallback((bill: Bill, month: number, year: number, occurrences: number[]): number[] =>
+    applyBillDateMovesToOccurrenceDays(bill.id, month, year, occurrences, billDateMoves),
+  [billDateMoves]);
 
   const getBillOccurrencesInMonth = useCallback(
     (bill: Bill, month: number, year: number): number[] => {

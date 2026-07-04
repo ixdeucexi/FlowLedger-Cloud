@@ -21,7 +21,7 @@ import { useBudget } from "@/context/BudgetContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
-import { groupForecastEvents } from "@/lib/forecastDisplay";
+import { buildDayForecastFloPrompt, groupForecastEvents } from "@/lib/forecastDisplay";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { isValidDateInMonth } from "@/lib/schedule";
@@ -334,14 +334,6 @@ export default function MonthlyScreen() {
     if (selectedDay === null) return [];
     return monthBills.filter(b => getBillOccurrencesInMonth(b, month, selectedYear).includes(selectedDay));
   }, [monthBills, getBillOccurrencesInMonth, selectedDay, month, selectedYear]);
-
-  const selectedMovedAwayBills = useMemo(() => {
-    if (!selectedDate) return [];
-    return billDateMoves
-      .filter(move => move.from_date === selectedDate)
-      .map(move => ({ move, bill: bills.find(bill => bill.id === move.bill_id) }))
-      .filter((item): item is { move: BillDateMove; bill: Bill } => Boolean(item.bill));
-  }, [billDateMoves, bills, selectedDate]);
 
   const movedInByBillId = useMemo(() => {
     if (!selectedDate) return new Map<string, BillDateMove>();
@@ -751,7 +743,9 @@ export default function MonthlyScreen() {
   const displayedTxs = selectedDate
     ? txList.filter(t => t.date === selectedDate)
     : [];
-  const selectedDayItemCount = scheduledBillsForDay.length + selectedMovedAwayBills.length + displayedTxs.length + goalsForSelectedDay.length + plansForSelectedDay.length;
+  const selectedForecastEventCount = selectedForecastGroups.reduce((sum, group) => sum + group.events.length, 0);
+  const selectedVisibleItemCount = scheduledBillsForDay.length + displayedTxs.length + goalsForSelectedDay.length + plansForSelectedDay.length;
+  const selectedDayItemCount = Math.max(selectedForecastEventCount, selectedVisibleItemCount);
 
   const changeMonth = useCallback((delta: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1320,10 +1314,11 @@ export default function MonthlyScreen() {
                         const date = selectedDate;
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                         setSelectedDate(null);
+                        const dayLabel = formatLongDate(date);
                         router.push({
                           pathname: "/(tabs)/flo",
                           params: {
-                            prompt: `Give me a calendar overview for ${formatLongDate(date)} (${date}).`,
+                            prompt: buildDayForecastFloPrompt(dayLabel, date, selectedForecastDay?.balance, selectedForecastGroups),
                             promptId: `${date}-${Date.now()}`,
                           },
                         } as never);
