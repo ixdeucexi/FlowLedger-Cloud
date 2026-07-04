@@ -2157,13 +2157,13 @@ export default function DashboardScreen() {
 
             <View style={styles.flowScoreColumns}>
               <View style={[styles.flowScoreColumn, { backgroundColor: c.muted }]}>
-                <Text style={[styles.flowScoreColumnTitle, { color: c.success }]}>Helped</Text>
+                <Text style={[styles.flowScoreColumnTitle, { color: c.success }]}>Working</Text>
                 {(algorithmSuite.flowScore.positiveFactors.length ? algorithmSuite.flowScore.positiveFactors : ["Your plan has enough data to create a Flow Score."]).slice(0, 3).map(item => (
                   <Text key={item} style={[styles.flowScoreFactor, { color: c.foreground }]}>- {item}</Text>
                 ))}
               </View>
               <View style={[styles.flowScoreColumn, { backgroundColor: c.muted }]}>
-                <Text style={[styles.flowScoreColumnTitle, { color: c.warning }]}>Hurt</Text>
+                <Text style={[styles.flowScoreColumnTitle, { color: c.warning }]}>Needs attention</Text>
                 {(algorithmSuite.flowScore.negativeFactors.length ? algorithmSuite.flowScore.negativeFactors : ["No major pressure points are showing right now."]).slice(0, 3).map(item => (
                   <Text key={item} style={[styles.flowScoreFactor, { color: c.foreground }]}>- {item}</Text>
                 ))}

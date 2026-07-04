@@ -225,6 +225,13 @@ test("Flo answers paycheck planning questions from verified facts", () => {
   assert.match(localFloAnswer("What bills are due before my next paycheck?", facts, days) ?? "", /Power/);
 });
 
+test("Flo explains Flow Score with neutral action language", () => {
+  const answer = localFloAnswer("Why does my Flow Score hurt?", facts, days) ?? "";
+  assert.match(answer, /pressure points needing attention/i);
+  assert.match(answer, /Best next move/i);
+  assert.doesNotMatch(answer, /What hurt it:/i);
+});
+
 test("Flo recommends and parses bill date moves from paycheck facts", () => {
   const recommendation = localFloAnswer("What bill should I move?", facts, days) ?? "";
   assert.match(recommendation, /Power/);

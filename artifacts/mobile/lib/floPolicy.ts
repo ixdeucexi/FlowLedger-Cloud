@@ -433,12 +433,12 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
   const lower = message.toLowerCase();
   const asksFlowScore = lower.includes("flow score") || (lower.includes("score") && (lower.includes("why") || lower.includes("improve") || lower.includes("hurt") || lower.includes("help")));
   if (asksFlowScore && facts.flowScore) {
-    const helped = facts.flowScore.positiveFactors.length ? facts.flowScore.positiveFactors.join(" ") : "I don't see a major positive driver yet.";
-    const hurt = facts.flowScore.negativeFactors.length ? facts.flowScore.negativeFactors.join(" ") : "I don't see a major pressure point right now.";
-    if (lower.includes("improve")) return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. Best next move: ${facts.flowScore.topAction} What hurt it most: ${hurt}`;
-    if (lower.includes("hurt")) return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. What hurt it: ${hurt} Best next move: ${facts.flowScore.topAction}`;
-    if (lower.includes("help")) return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. What helped it: ${helped}`;
-    return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. ${facts.flowScore.topReason} What helped: ${helped} What hurt: ${hurt} Best next move: ${facts.flowScore.topAction}`;
+    const working = facts.flowScore.positiveFactors.length ? facts.flowScore.positiveFactors.join(" ") : "I don't see a major positive driver yet.";
+    const attention = facts.flowScore.negativeFactors.length ? facts.flowScore.negativeFactors.join(" ") : "I don't see a major pressure point right now.";
+    if (lower.includes("improve")) return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. Best next move: ${facts.flowScore.topAction} Needs attention: ${attention}`;
+    if (lower.includes("hurt")) return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. Nothing is being judged as bad; these are the pressure points needing attention: ${attention} Best next move: ${facts.flowScore.topAction}`;
+    if (lower.includes("help")) return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. Working well: ${working}`;
+    return `Your Flow Score is ${facts.flowScore.score} - ${facts.flowScore.label}. ${facts.flowScore.topReason} Working: ${working} Needs attention: ${attention} Best next move: ${facts.flowScore.topAction}`;
   }
   const asksSpendingLimit = /\b(daily limit|weekly limit|spending limit|safe pace|safe daily|safe weekly|how much.*spend.*day|how much.*spend.*week)\b/.test(lower);
   if (asksSpendingLimit && facts.spendingLimit) {
