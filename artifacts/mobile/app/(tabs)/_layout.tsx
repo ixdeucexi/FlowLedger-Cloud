@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Tabs, useRouter, useSegments } from "expo-router";
 import React from "react";
-import { Image, Platform, Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
+import { Image, PanResponder, Platform, Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
 
 import { useAuth } from "@/context/AuthContext";
 import { BudgetProvider, useBudget } from "@/context/BudgetContext";
@@ -20,6 +20,12 @@ const TABS = [
   { name: "monthly",      title: "Monthly",      icon: "calendar"        },
   { name: "more",         title: "More",         icon: "more-horizontal" },
 ] as const;
+
+const TAB_ROUTES = TABS.map(tab => tab.name);
+
+function pathForTab(tabName: typeof TABS[number]["name"]) {
+  return tabName === "index" ? "/(tabs)" : `/(tabs)/${tabName}`;
+}
 
 const DEMO_TOUR_KEY = "flowledger_demo_tour_step";
 const DEMO_TOUR_STEPS = [
@@ -232,96 +238,135 @@ function DemoModeBanner() {
 function TabContent() {
   const colors = useColors();
   const { loading, loadError, retryBudgetLoad, demoMode } = useBudget();
+  const router = useRouter();
+  const segments = useSegments();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
   const isIosWeb = isWeb && typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const activeTab = React.useMemo(() => {
+    const segmentNames = segments.map(String);
+    return TAB_ROUTES.find(route => segmentNames.includes(route)) ?? "index";
+  }, [segments]);
+  const activeTabRef = React.useRef(activeTab);
+  const lastSwipeAtRef = React.useRef(0);
+
+  React.useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
+  const swipeResponder = React.useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_, gesture) => {
+      const horizontal = Math.abs(gesture.dx);
+      const vertical = Math.abs(gesture.dy);
+      return horizontal > 68 && horizontal > vertical * 1.55;
+    },
+    onPanResponderRelease: (_, gesture) => {
+      const horizontal = Math.abs(gesture.dx);
+      const vertical = Math.abs(gesture.dy);
+      if (horizontal <= 68 || horizontal <= vertical * 1.55) return;
+
+      const now = Date.now();
+      if (now - lastSwipeAtRef.current < 450) return;
+      lastSwipeAtRef.current = now;
+
+      const currentIndex = TAB_ROUTES.indexOf(activeTabRef.current);
+      if (currentIndex < 0) return;
+
+      const nextIndex = gesture.dx < 0 ? currentIndex + 1 : currentIndex - 1;
+      if (nextIndex < 0 || nextIndex >= TAB_ROUTES.length) return;
+
+      router.push(pathForTab(TAB_ROUTES[nextIndex]) as any);
+    },
+  }), [router]);
 
   if (loading) return <BudgetLoadingScreen />;
   if (loadError) return <BudgetLoadErrorScreen message={loadError} onRetry={retryBudgetLoad} />;
 
   return (
     <>
-      <Tabs
-        backBehavior="history"
-        detachInactiveScreens={false}
-        screenOptions={{
-          animation: "none",
-          freezeOnBlur: !isWeb,
-          lazy: true,
-          tabBarActiveTintColor: "#8b5cf6",
-          tabBarInactiveTintColor: colors.mutedForeground,
-          headerShown: false,
-          tabBarLabelStyle: {
-            fontFamily: "Inter_600SemiBold",
-            fontSize: 10,
-            marginTop: 1,
-          },
-          tabBarItemStyle: {
-            paddingVertical: 6,
-            borderRadius: 18,
-          },
-          tabBarStyle: {
-            position: "absolute",
-            left: 0,
-            right: 0,
-            bottom: 0,
-            borderTopLeftRadius: 28,
-            borderTopRightRadius: 28,
-            borderBottomLeftRadius: 0,
-            borderBottomRightRadius: 0,
-            backgroundColor: isIOS ? "transparent" : "rgba(2,6,23,0.90)",
-            borderWidth: 1,
-            borderTopWidth: 1,
-            borderBottomWidth: 0,
-            borderLeftWidth: 0,
-            borderRightWidth: 0,
-            borderColor: "rgba(148,163,184,0.18)",
-            shadowColor: "#7c3aed",
-            shadowOffset: { width: 0, height: 14 },
-            shadowOpacity: 0.22,
-            shadowRadius: 26,
-            elevation: 14,
-            paddingHorizontal: 6,
-            ...(isWeb ? {
-              height: isIosWeb ? 72 : 82,
-              paddingTop: isIosWeb ? 6 : 8,
-              paddingBottom: isIosWeb ? 12 : 10,
-            } : {
-              height: 86,
-              paddingTop: 6,
-              paddingBottom: 14,
-            }),
-          },
-          tabBarBackground: () =>
-            isIOS ? (
-              <BlurView
-                intensity={100}
-                tint={isDark ? "dark" : "light"}
-                style={StyleSheet.absoluteFill}
-              />
-            ) : isWeb ? (
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(2,6,23,0.96)", borderTopLeftRadius: 28, borderTopRightRadius: 28 }]} />
-            ) : null,
-        }}
-      >
-        {TABS.map(tab => (
-          <Tabs.Screen
-            key={tab.name}
-            name={tab.name}
-            options={{
-              title: tab.title,
-              tabBarActiveTintColor: tab.name === "flo" ? colors.primary : undefined,
-              tabBarInactiveTintColor: tab.name === "flo" ? colors.primary : undefined,
-              tabBarIcon: ({ color }) => tab.name === "flo"
-                ? <FloLogo size={24} ring={false} />
-                : <Feather name={tab.icon} size={22} color={color} />,
-            }}
-          />
-        ))}
-        <Tabs.Screen name="category-budget" options={{ href: null }} />
-      </Tabs>
+      <View style={styles.tabsRoot} {...swipeResponder.panHandlers}>
+        <Tabs
+          backBehavior="history"
+          detachInactiveScreens={false}
+          screenOptions={{
+            animation: "none",
+            freezeOnBlur: !isWeb,
+            lazy: true,
+            tabBarActiveTintColor: "#8b5cf6",
+            tabBarInactiveTintColor: colors.mutedForeground,
+            headerShown: false,
+            tabBarLabelStyle: {
+              fontFamily: "Inter_600SemiBold",
+              fontSize: 10,
+              marginTop: 1,
+            },
+            tabBarItemStyle: {
+              paddingVertical: 6,
+              borderRadius: 18,
+            },
+            tabBarStyle: {
+              position: "absolute",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              borderTopLeftRadius: 28,
+              borderTopRightRadius: 28,
+              borderBottomLeftRadius: 0,
+              borderBottomRightRadius: 0,
+              backgroundColor: isIOS ? "transparent" : "rgba(2,6,23,0.90)",
+              borderWidth: 1,
+              borderTopWidth: 1,
+              borderBottomWidth: 0,
+              borderLeftWidth: 0,
+              borderRightWidth: 0,
+              borderColor: "rgba(148,163,184,0.18)",
+              shadowColor: "#7c3aed",
+              shadowOffset: { width: 0, height: 14 },
+              shadowOpacity: 0.22,
+              shadowRadius: 26,
+              elevation: 14,
+              paddingHorizontal: 6,
+              ...(isWeb ? {
+                height: isIosWeb ? 72 : 82,
+                paddingTop: isIosWeb ? 6 : 8,
+                paddingBottom: isIosWeb ? 12 : 10,
+              } : {
+                height: 86,
+                paddingTop: 6,
+                paddingBottom: 14,
+              }),
+            },
+            tabBarBackground: () =>
+              isIOS ? (
+                <BlurView
+                  intensity={100}
+                  tint={isDark ? "dark" : "light"}
+                  style={StyleSheet.absoluteFill}
+                />
+              ) : isWeb ? (
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(2,6,23,0.96)", borderTopLeftRadius: 28, borderTopRightRadius: 28 }]} />
+              ) : null,
+          }}
+        >
+          {TABS.map(tab => (
+            <Tabs.Screen
+              key={tab.name}
+              name={tab.name}
+              options={{
+                title: tab.title,
+                tabBarActiveTintColor: tab.name === "flo" ? colors.primary : undefined,
+                tabBarInactiveTintColor: tab.name === "flo" ? colors.primary : undefined,
+                tabBarIcon: ({ color }) => tab.name === "flo"
+                  ? <FloLogo size={24} ring={false} />
+                  : <Feather name={tab.icon} size={22} color={color} />,
+              }}
+            />
+          ))}
+          <Tabs.Screen name="category-budget" options={{ href: null }} />
+        </Tabs>
+      </View>
       {demoMode ? <DemoModeBanner /> : null}
       <SaveStatusBanner />
       <DecisionDueModal />
@@ -338,6 +383,9 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
+  tabsRoot: {
+    flex: 1,
+  },
   loadingScreen: {
     flex: 1,
     alignItems: "center",
