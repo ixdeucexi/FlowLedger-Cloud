@@ -19,12 +19,23 @@ type FlowLine = {
   dash?: string;
 };
 
+type LightningBolt = {
+  key: string;
+  path: string;
+  color: string;
+  glowColor: string;
+  width: number;
+  glowWidth: number;
+  opacity: number;
+};
+
 export function FlowWaveBackground({ intensity = "standard" }: Props) {
   const { width, height } = useWindowDimensions();
   const [reduceMotion, setReduceMotion] = useState(false);
   const driftAnim = useRef(new Animated.Value(0)).current;
   const counterDriftAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(0)).current;
+  const flashAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     let mounted = true;
@@ -43,6 +54,7 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
       driftAnim.setValue(0.42);
       counterDriftAnim.setValue(0.32);
       pulseAnim.setValue(0.35);
+      flashAnim.setValue(0.24);
       return;
     }
 
@@ -94,16 +106,61 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
         }),
       ]),
     );
+    const flashLoop = Animated.loop(
+      Animated.sequence([
+        Animated.delay(900),
+        Animated.timing(flashAnim, {
+          toValue: 1,
+          duration: 58,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(flashAnim, {
+          toValue: 0.18,
+          duration: 92,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(flashAnim, {
+          toValue: 0.84,
+          duration: 48,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(flashAnim, {
+          toValue: 0.08,
+          duration: 210,
+          easing: Easing.out(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.delay(2600),
+        Animated.timing(flashAnim, {
+          toValue: 0.62,
+          duration: 76,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(flashAnim, {
+          toValue: 0.06,
+          duration: 260,
+          easing: Easing.out(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.delay(3600),
+      ]),
+    );
 
     driftLoop.start();
     pulseLoop.start();
     counterLoop.start();
+    flashLoop.start();
     return () => {
       driftLoop.stop();
       pulseLoop.stop();
       counterLoop.stop();
+      flashLoop.stop();
     };
-  }, [counterDriftAnim, driftAnim, pulseAnim, reduceMotion]);
+  }, [counterDriftAnim, driftAnim, flashAnim, pulseAnim, reduceMotion]);
 
   const svgWidth = Math.max(width, 390);
   const svgHeight = Math.max(height, 760);
@@ -114,10 +171,41 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
   const counterTranslateY = counterDriftAnim.interpolate({ inputRange: [0, 1], outputRange: [-10, 18] });
   const streamOpacity = pulseAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.72, 1, 0.78] });
   const dotOpacity = pulseAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.42, 0.86, 0.50] });
+  const lightningOpacity = flashAnim.interpolate({ inputRange: [0, 0.18, 0.62, 1], outputRange: [0.08, 0.20, 0.72, 1] });
+  const lightningShift = flashAnim.interpolate({ inputRange: [0, 1], outputRange: [-4, 5] });
 
-  const { flowLines, particles } = useMemo(() => {
+  const { flowLines, particles, lightningBolts } = useMemo(() => {
     const baseY = svgHeight * 0.60;
     const lines: FlowLine[] = [];
+    const bolts: LightningBolt[] = [
+      {
+        key: "storm-front-main",
+        path: `M ${-svgWidth * 0.10} ${svgHeight * 0.38} L ${svgWidth * 0.16} ${svgHeight * 0.30} L ${svgWidth * 0.35} ${svgHeight * 0.34} L ${svgWidth * 0.52} ${svgHeight * 0.26} L ${svgWidth * 0.76} ${svgHeight * 0.30} L ${svgWidth * 1.10} ${svgHeight * 0.18}`,
+        color: "#dbeafe",
+        glowColor: "#38bdf8",
+        width: 1.8,
+        glowWidth: 9,
+        opacity: 0.82,
+      },
+      {
+        key: "storm-purple-cut",
+        path: `M ${-svgWidth * 0.16} ${svgHeight * 0.58} L ${svgWidth * 0.12} ${svgHeight * 0.50} L ${svgWidth * 0.30} ${svgHeight * 0.53} L ${svgWidth * 0.49} ${svgHeight * 0.45} L ${svgWidth * 0.70} ${svgHeight * 0.49} L ${svgWidth * 1.06} ${svgHeight * 0.36}`,
+        color: "#f5d0fe",
+        glowColor: "#a855f7",
+        width: 1.6,
+        glowWidth: 8,
+        opacity: 0.66,
+      },
+      {
+        key: "storm-lower-arc",
+        path: `M ${svgWidth * 0.08} ${svgHeight * 0.74} L ${svgWidth * 0.26} ${svgHeight * 0.68} L ${svgWidth * 0.43} ${svgHeight * 0.70} L ${svgWidth * 0.60} ${svgHeight * 0.62} L ${svgWidth * 0.82} ${svgHeight * 0.66} L ${svgWidth * 1.16} ${svgHeight * 0.54}`,
+        color: "#cffafe",
+        glowColor: "#22d3ee",
+        width: 1.4,
+        glowWidth: 7,
+        opacity: 0.56,
+      },
+    ];
     const total = Math.round(18 * density);
 
     for (let index = 0; index < total; index += 1) {
@@ -165,7 +253,7 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
       return { key: index, x, y, radius, color, opacity };
     });
 
-    return { flowLines: lines, particles: dots };
+    return { flowLines: lines, particles: dots, lightningBolts: bolts };
   }, [density, svgHeight, svgWidth]);
 
   return (
@@ -245,6 +333,47 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
         </Svg>
       </Animated.View>
 
+      <Animated.View
+        style={[
+          styles.lightningLayer,
+          { opacity: lightningOpacity, transform: [{ translateX: lightningShift }, { translateY }] },
+        ]}
+      >
+        <Svg width={svgWidth} height={svgHeight} viewBox={`0 0 ${svgWidth} ${svgHeight}`} preserveAspectRatio="none">
+          {lightningBolts.map(bolt => (
+            <React.Fragment key={bolt.key}>
+              <Path
+                d={bolt.path}
+                stroke={bolt.glowColor}
+                strokeWidth={bolt.glowWidth}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+                opacity={bolt.opacity * 0.18}
+              />
+              <Path
+                d={bolt.path}
+                stroke={bolt.glowColor}
+                strokeWidth={Math.max(3.5, bolt.width * 2.6)}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+                opacity={bolt.opacity * 0.34}
+              />
+              <Path
+                d={bolt.path}
+                stroke={bolt.color}
+                strokeWidth={bolt.width}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+                opacity={bolt.opacity}
+              />
+            </React.Fragment>
+          ))}
+        </Svg>
+      </Animated.View>
+
       <Animated.View style={[styles.particleLayer, { opacity: dotOpacity }]}>
         <Svg width={svgWidth} height={svgHeight} viewBox={`0 0 ${svgWidth} ${svgHeight}`} preserveAspectRatio="none">
           {particles.map(dot => (
@@ -273,6 +402,9 @@ const styles = StyleSheet.create({
   counterFlowLayer: {
     ...StyleSheet.absoluteFillObject,
     opacity: 0.62,
+  },
+  lightningLayer: {
+    ...StyleSheet.absoluteFillObject,
   },
   particleLayer: {
     ...StyleSheet.absoluteFillObject,
