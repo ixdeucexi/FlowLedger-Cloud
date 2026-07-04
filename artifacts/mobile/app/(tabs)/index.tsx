@@ -2920,7 +2920,7 @@ const styles = StyleSheet.create({
   referenceSummaryLabel: { fontSize: 9, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 5 },
   referenceSummaryValue: { color: "#f8fafc", fontSize: 17, fontFamily: "Inter_800ExtraBold" },
   referenceScorePanel: { alignItems: "center", justifyContent: "center", paddingTop: 7 },
-  referenceGaugeWrap: { width: 112, height: 112, alignItems: "center", justifyContent: "center", backgroundColor: "transparent", shadowColor: "#a855f7", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.55, shadowRadius: 22 },
+  referenceGaugeWrap: { width: 112, height: 112, alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
   referenceGaugeSvg: { backgroundColor: "transparent" },
   referenceGaugeCenter: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
   referenceGaugeScore: { color: "#ffffff", fontSize: 32, fontFamily: "Inter_800ExtraBold", lineHeight: 36 },
