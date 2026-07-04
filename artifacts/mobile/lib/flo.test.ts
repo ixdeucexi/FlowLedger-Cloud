@@ -43,6 +43,16 @@ const facts: FloFacts = {
   activePlans: 0,
   forecastConfidence: "high",
   sourceTypes: ["forecast", "bill", "transaction", "account", "debt", "goal", "decision"],
+  todayForecast: {
+    date: "2026-06-24",
+    projectedClose: 1000,
+    net: -250,
+    sources: [
+      { group: "Income", label: "Paycheck", amount: 1500, status: "scheduled" },
+      { group: "Bills", label: "Utilities", amount: -350, status: "finalized" },
+      { group: "Transactions", label: "Groceries", amount: -140, status: "actual" },
+    ],
+  },
   decisionHistory: {
     due: [{ name: "Fireworks", date: "2026-07-03", plannedAmount: 500, status: "due" }],
     upcoming: [{ name: "School clothes", date: "2026-07-20", plannedAmount: 250, status: "upcoming" }],
@@ -160,6 +170,14 @@ test("all Flo quick prompts work without AI", () => {
   assert.match(localFloAnswer("What bills are due next?", facts, days) ?? "", /Power/);
   assert.match(localFloAnswer("Why does my balance run low?", facts, days) ?? "", /lowest point/);
   assert.match(localFloAnswer("How do I add income?", facts, days) ?? "", /Add Income/);
+});
+
+test("Flo explains today's dashboard balance from verified forecast sources", () => {
+  const answer = localFloAnswer("Why is my available today number this?", facts, days) ?? "";
+  assert.match(answer, /Today's projected close is \$1000\.00/);
+  assert.match(answer, /Income: Paycheck \+\$1500\.00/);
+  assert.match(answer, /Bills: Utilities -\$350\.00/);
+  assert.match(answer, /Transactions: Groceries -\$140\.00/);
 });
 
 test("Flo answers unallocated spending questions from verified facts", () => {

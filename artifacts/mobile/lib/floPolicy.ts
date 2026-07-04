@@ -9,6 +9,18 @@ export interface FloBillMoveFact {
   toDate: string;
 }
 
+export interface FloTodayForecastFact {
+  date: string;
+  projectedClose: number;
+  net: number;
+  sources: {
+    group: string;
+    label: string;
+    amount: number;
+    status: string;
+  }[];
+}
+
 export interface FloFacts {
   balanceToday: number;
   lowestBalance: number;
@@ -29,6 +41,7 @@ export interface FloFacts {
   activePlans: number;
   forecastConfidence: string;
   sourceTypes: string[];
+  todayForecast?: FloTodayForecastFact;
   categoryPlan?: FloCategoryFact[];
   decisionHistory?: FloDecisionHistoryFacts;
   paycheckPlan?: PaycheckPlanResult;
@@ -321,6 +334,17 @@ export function sanitizeFloFacts(facts: FloFacts): FloFacts {
     activePlans: Math.max(0, Math.round(num(facts.activePlans))),
     forecastConfidence: ["high", "medium", "low"].includes(String(facts.forecastConfidence)) ? String(facts.forecastConfidence) : "low",
     sourceTypes: Array.from(new Set((facts.sourceTypes ?? []).map(source => String(source)).filter(source => ALLOWED_SOURCE_TYPES.has(source)))).slice(0, 12),
+    todayForecast: facts.todayForecast ? {
+      date: String(facts.todayForecast.date ?? "").slice(0, 10),
+      projectedClose: num(facts.todayForecast.projectedClose),
+      net: num(facts.todayForecast.net),
+      sources: (facts.todayForecast.sources ?? []).slice(0, 20).map(source => ({
+        group: String(source.group ?? "Activity").slice(0, 40),
+        label: String(source.label ?? "Item").slice(0, 80),
+        amount: num(source.amount),
+        status: String(source.status ?? "").slice(0, 30),
+      })),
+    } : undefined,
     categoryPlan: (facts.categoryPlan ?? []).slice(0, 20).map(item => ({
       category: String(item.category ?? "Other").slice(0, 50),
       budgeted: num(item.budgeted),
@@ -431,6 +455,23 @@ export function sanitizeFloFacts(facts: FloFacts): FloFacts {
 export function localFloAnswer(message: string, facts: FloFacts, days: DecisionBaselineDay[]): string | null {
   if (isUnsafeFloRequest(message)) return FLO_SECURITY_REFUSAL_MESSAGE;
   const lower = message.toLowerCase();
+  const asksTodayForecast = /\b(today|available today|balance today|current balance|today's balance|dashboard number|command balance)\b/.test(lower)
+    && /\b(why|balance|available|number|forecast|close|source|explain)\b/.test(lower);
+  if (asksTodayForecast && facts.todayForecast) {
+    const sources = facts.todayForecast.sources;
+    const grouped = sources.reduce<Record<string, typeof sources>>((acc, source) => {
+      acc[source.group] = [...(acc[source.group] ?? []), source];
+      return acc;
+    }, {});
+    const sourceText = Object.entries(grouped)
+      .slice(0, 5)
+      .map(([group, items]) => `${group}: ${items.slice(0, 4).map(item => `${item.label} ${formatSignedDollars(item.amount)}`).join(", ")}`)
+      .join("; ");
+    const netText = facts.todayForecast.net === 0 ? "no net change" : `${formatSignedDollars(facts.todayForecast.net)} net change`;
+    return sources.length
+      ? `Today's projected close is $${facts.todayForecast.projectedClose.toFixed(2)} on ${facts.todayForecast.date}. I get there from ${netText}. Sources: ${sourceText}.`
+      : `Today's projected close is $${facts.todayForecast.projectedClose.toFixed(2)} on ${facts.todayForecast.date}. I don't see dated income, bills, transactions, debt payments, goals, or plans on today, so it is mainly carrying forward the previous day.`;
+  }
   const asksFlowScore = lower.includes("flow score") || (lower.includes("score") && (lower.includes("why") || lower.includes("improve") || lower.includes("hurt") || lower.includes("help")));
   if (asksFlowScore && facts.flowScore) {
     const working = facts.flowScore.positiveFactors.length ? facts.flowScore.positiveFactors.join(" ") : "I don't see a major positive driver yet.";

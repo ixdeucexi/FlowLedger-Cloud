@@ -55,6 +55,7 @@ import { DECISION_HUB_SETTINGS_EVENT, loadDecisionHubSettings, readDecisionHubSe
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { buildAlgorithmSuite } from "@/lib/algorithmSuite";
 import { isAlgorithmEnabled } from "@/lib/algorithmCatalog";
+import { groupForecastEvents } from "@/lib/forecastDisplay";
 
 const sampleQuestions = [
   "Ask Flo anything…",
@@ -336,6 +337,8 @@ export default function FloScreen() {
     );
     const month = now.getMonth();
     const year = now.getFullYear();
+    const todayForecastDay = getDailyBalances(month, year).find(day => day.day === now.getDate());
+    const todayForecastGroups = groupForecastEvents(todayForecastDay?.events ?? []);
     const algorithmSuite = buildAlgorithmSuite({
       month,
       year,
@@ -407,6 +410,17 @@ export default function FloScreen() {
       activePlans: decisions.filter(decision => decision.status === "planned" || decision.status === "calendar").length,
       forecastConfidence: forecastConfidence.level,
       sourceTypes: ["forecast", "bill", "transaction", "account", "debt", "goal", "decision"],
+      todayForecast: {
+        date: today,
+        projectedClose: todayForecastDay?.balance ?? baseline[0]?.balance ?? 0,
+        net: todayForecastDay?.net ?? 0,
+        sources: todayForecastGroups.flatMap(group => group.events.map(item => ({
+          group: group.title,
+          label: item.label,
+          amount: item.event.amount,
+          status: item.statusLabel,
+        }))),
+      },
       categoryPlan,
       paycheckPlan,
       billDateMoves: billDateMoves.map(move => ({

@@ -28,6 +28,7 @@ import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { buildAlgorithmSuite, type AlgorithmInsight } from "@/lib/algorithmSuite";
 import { isAlgorithmEnabled, type AlgorithmId } from "@/lib/algorithmCatalog";
+import { buildDayForecastFloPrompt, groupForecastEvents } from "@/lib/forecastDisplay";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const MONTH_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -218,6 +219,7 @@ export default function DashboardScreen() {
   const now          = new Date();
   const currentMonth = now.getMonth();
   const today        = now.getDate();
+  const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const timeGreeting = now.getHours() < 5
     ? "Good night"
     : now.getHours() < 12
@@ -256,6 +258,18 @@ export default function DashboardScreen() {
     const firstNegEntry = currentMonthBalances.find(db => db.balance < 0);
     return { currentBalance, endOfMonthBalance, lowestBalance, lowestDay, firstNegDay: firstNegEntry?.day ?? null };
   }, [currentMonthBalances, today]);
+  const todayForecastDay = useMemo(
+    () => currentMonthBalances.find(db => db.day === today),
+    [currentMonthBalances, today],
+  );
+  const todayForecastGroups = useMemo(
+    () => groupForecastEvents(todayForecastDay?.events ?? []),
+    [todayForecastDay],
+  );
+  const todayForecastPrompt = useMemo(
+    () => buildDayForecastFloPrompt("today", todayIso, todayForecastDay?.balance, todayForecastGroups),
+    [todayForecastDay, todayForecastGroups, todayIso],
+  );
 
   // ── 12-month negative schedule ─────────────────────────────────────────────
   type OutlookMonth = { month: number; year: number; label: string; firstNegDay: number | null; lowestBalance: number };
@@ -712,7 +726,6 @@ export default function DashboardScreen() {
     : "";
   const breakdownText =
     `$${cashFlow.monthlyIncome.toFixed(0)} income − $${cashFlow.totalBillsDue.toFixed(0)} bills${txDisplay} = $${Math.abs(cashFlow.remaining).toFixed(0)} ${cashFlow.remaining >= 0 ? "left" : "short"}`;
-  const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const currentYear = now.getFullYear();
   const paycheckPlan = useMemo(() => {
     if (!isAlgorithmEnabled(decisionHubSettings, "paydaySplit")) return null;
@@ -1280,11 +1293,16 @@ export default function DashboardScreen() {
           <Text style={styles.referenceGreeting}>{timeGreeting} 👋</Text>
           <Text style={styles.referenceGreetingSub}>Here’s your financial flow for {MONTH_FULL[currentMonth]}.</Text>
           <Text style={styles.referenceHeroLabel}>Available to spend</Text>
-          <Text style={styles.referenceHeroAmount}>
-            {(balanceMetrics?.currentBalance ?? cashFlow.remaining) < 0 ? "−" : ""}$
-            {Math.abs(balanceMetrics?.currentBalance ?? cashFlow.remaining).toLocaleString("en-US", { maximumFractionDigits: 2 })}
-          </Text>
-          <Text style={styles.referenceHeroHint}>After bills, planned moves, and your safety floor.</Text>
+          <Pressable
+            onPress={() => openFloWithPrompt(todayForecastPrompt)}
+            style={({ pressed }) => [styles.referenceHeroAmountTap, { opacity: pressed ? 0.82 : 1 }]}
+          >
+            <Text style={styles.referenceHeroAmount}>
+              {(balanceMetrics?.currentBalance ?? cashFlow.remaining) < 0 ? "−" : ""}$
+              {Math.abs(balanceMetrics?.currentBalance ?? cashFlow.remaining).toLocaleString("en-US", { maximumFractionDigits: 2 })}
+            </Text>
+            <Text style={styles.referenceHeroHint}>Tap for exact sources behind today.</Text>
+          </Pressable>
 
           <View style={styles.referenceSummaryRow}>
             {[
@@ -2913,6 +2931,7 @@ const styles = StyleSheet.create({
   referenceGreeting: { color: "#f8fafc", fontSize: 21, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.7 },
   referenceGreetingSub: { color: "#94a3b8", fontSize: 12, fontFamily: "Inter_500Medium", marginTop: 2, marginBottom: 10 },
   referenceHeroLabel: { color: "#cbd5e1", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.4, textTransform: "uppercase" },
+  referenceHeroAmountTap: { alignSelf: "flex-start" },
   referenceHeroAmount: { color: "#ffffff", fontSize: 44, lineHeight: 49, fontFamily: "Inter_800ExtraBold", letterSpacing: -2.2, textShadowColor: "rgba(34,211,238,0.25)", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 18 },
   referenceHeroHint: { color: "#94a3b8", fontSize: 12, fontFamily: "Inter_600SemiBold", marginTop: 1, marginBottom: 9 },
   referenceSummaryRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
