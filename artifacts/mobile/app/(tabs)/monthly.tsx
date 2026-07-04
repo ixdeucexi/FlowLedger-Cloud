@@ -684,7 +684,7 @@ export default function MonthlyScreen() {
       setSelectedDate(editPlanDate);
       setEditPlan(null);
     } catch (error) {
-      Alert.alert("Couldn't save plan", error instanceof Error ? error.message : "Please try again.");
+      Alert.alert("Couldn’t save plan", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSavingPlan(false);
     }

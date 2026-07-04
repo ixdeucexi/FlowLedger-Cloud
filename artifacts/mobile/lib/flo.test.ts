@@ -181,8 +181,8 @@ test("Flo affordability uses deterministic result", () => {
 
 test("all Flo quick prompts work without AI", () => {
   assert.match(localFloAnswer("Can I afford $500?", facts, days) ?? "", /Yes/);
-  assert.match(localFloAnswer("What bills are due next?", facts, days) ?? "", /Power/);
-  assert.match(localFloAnswer("Why does my balance run low?", facts, days) ?? "", /lowest point/);
+  assert.match(localFloAnswer("Which bills are due next?", facts, days) ?? "", /Power/);
+  assert.match(localFloAnswer("Why is my balance getting low?", facts, days) ?? "", /lowest point/);
   assert.match(localFloAnswer("How do I add income?", facts, days) ?? "", /Add Income/);
 });
 
@@ -201,7 +201,7 @@ test("Flo answers unallocated spending questions from verified facts", () => {
 });
 
 test("Flo answers phase 2 planning questions without AI", () => {
-  assert.match(localFloAnswer("What bills are left?", facts, days) ?? "", /2 bills left/);
+  assert.match(localFloAnswer("Which bills are left?", facts, days) ?? "", /2 bills left/);
   assert.match(localFloAnswer("What changed since last month?", facts, days) ?? "", /income changed by \+\$200\.00/);
   assert.match(localFloAnswer("What should I do with leftover money?", facts, days) ?? "", /Camera/);
   assert.match(localFloAnswer("How do I fix this forecast?", { ...facts, forecastConfidence: "low" }, days) ?? "", /reconciliation/i);
@@ -242,7 +242,7 @@ test("Flo explains snowball rollover after a debt is paid off", () => {
 });
 
 test("Flo explains the clean Algorithm Suite from deterministic facts", () => {
-  assert.match(localFloAnswer("What bill should I pay first?", facts, days) ?? "", /Power/);
+  assert.match(localFloAnswer("Which bill should I pay first?", facts, days) ?? "", /Power/);
   assert.match(localFloAnswer("What is my daily spending limit?", facts, days) ?? "", /\$25\.00\/day/);
   assert.match(localFloAnswer("How should I split my paycheck?", facts, days) ?? "", /50% bills/);
   assert.match(localFloAnswer("What should I do with extra money?", facts, days) ?? "", /Camera/);
@@ -254,6 +254,18 @@ test("Flo explains cash-flow pressure and review list from deterministic facts",
   assert.match(gap, /Jul 8 through Jul 12/);
   assert.match(gap, /protect that window/i);
 
+  const oneDayGap = localFloAnswer("Where is my tightest cash-flow stretch?", {
+    ...facts,
+    cashFlowGap: {
+      startDay: 8,
+      endDay: 8,
+      lowestBalance: 272,
+      detail: "Tightest stretch is Jul 8.",
+    },
+  }, days) ?? "";
+  assert.match(oneDayGap, /tightest window is Jul 8\./i);
+  assert.doesNotMatch(oneDayGap, /Jul 8 through Jul 8|Jul 8-8/);
+
   const review = localFloAnswer("What needs attention?", facts, days) ?? "";
   assert.match(review, /Review low balance risk/);
   assert.match(review, /Confirm Power/);
@@ -263,12 +275,12 @@ test("Flo answers category budget questions from verified facts", () => {
   assert.match(localFloAnswer("Why is Food over?", facts, days) ?? "", /Food is over by \$60\.00/);
   assert.match(localFloAnswer("How much do I have left for Utilities?", facts, days) ?? "", /Utilities has \$40\.00 left/);
   assert.match(localFloAnswer("Which categories need attention?", facts, days) ?? "", /Food/);
-  assert.match(localFloAnswer("What category has the most room left?", facts, days) ?? "", /Entertainment/);
+  assert.match(localFloAnswer("Which category has the most room left?", facts, days) ?? "", /Entertainment/);
 });
 
 test("Flo answers decision history questions from verified facts", () => {
-  assert.match(localFloAnswer("What decisions need review?", facts, days) ?? "", /Fireworks/);
-  assert.match(localFloAnswer("What planned decisions are coming up?", facts, days) ?? "", /School clothes/);
+  assert.match(localFloAnswer("Which decisions need review?", facts, days) ?? "", /Fireworks/);
+  assert.match(localFloAnswer("Which planned decisions are coming up?", facts, days) ?? "", /School clothes/);
   assert.match(localFloAnswer("How did my last decision go?", facts, days) ?? "", /Dinner/);
   assert.match(localFloAnswer("Show my cancelled decisions", facts, days) ?? "", /Trip/);
   assert.match(localFloAnswer("Are any planned decisions no longer safe?", facts, days) ?? "", /Concert/);
@@ -278,8 +290,8 @@ test("Flo answers decision history questions from verified facts", () => {
 
 test("Flo answers paycheck planning questions from verified facts", () => {
   assert.match(localFloAnswer("What can I spend until payday?", facts, days) ?? "", /\$600\.00/);
-  assert.match(localFloAnswer("What bills are due before my next paycheck?", facts, days) ?? "", /2 bills/);
-  assert.match(localFloAnswer("What bills are due before my next paycheck?", facts, days) ?? "", /Power/);
+  assert.match(localFloAnswer("Which bills are due before my next paycheck?", facts, days) ?? "", /2 bills/);
+  assert.match(localFloAnswer("Which bills are due before my next paycheck?", facts, days) ?? "", /Power/);
 });
 
 test("Flo explains Flow Score with neutral action language", () => {
@@ -290,7 +302,7 @@ test("Flo explains Flow Score with neutral action language", () => {
 });
 
 test("Flo recommends and parses bill date moves from paycheck facts", () => {
-  const recommendation = localFloAnswer("What bill should I move?", facts, days) ?? "";
+  const recommendation = localFloAnswer("Which bill should I move?", facts, days) ?? "";
   assert.match(recommendation, /Power/);
   assert.match(recommendation, /safer date/);
 
@@ -336,7 +348,7 @@ test("Flo builds dynamic category quick prompts", () => {
   const prompts = buildFloCategoryQuickPrompts(facts.categoryPlan ?? []);
   assert.equal(prompts[0], "Can I move $60 from Entertainment to Food?");
   assert.equal(prompts.includes("Why is Food over?"), true);
-  assert.equal(prompts.includes("What category has the most room left?"), true);
+  assert.equal(prompts.includes("Which category has the most room left?"), true);
 });
 
 test("Flo does not fall through to AI when category move facts are missing", () => {
@@ -367,7 +379,7 @@ test("Flo creates deterministic response cards for supported finance questions",
   assert.equal(affordabilityCards[0]?.title, "Purchase Decision");
   assert.equal(affordabilityCards.length, 3);
 
-  const billsLeftCards = floResponseCards("What bills are left?", facts, days);
+  const billsLeftCards = floResponseCards("Which bills are left?", facts, days);
   assert.equal(billsLeftCards[0]?.title, "Bills Left");
   assert.equal(billsLeftCards[0]?.value, "2");
 
@@ -470,7 +482,7 @@ test("AI quota and billing failures use the friendly fallback", () => {
 test("Edge Function failures never leak technical errors into chat", () => {
   assert.equal(
     normalizeFloError("Failed to send a request to the Edge Function"),
-    "Flo couldn't connect just now. Your FlowLedger calculations are still available, so please try again.",
+    "Flo couldn’t connect just now. Your FlowLedger calculations are still available, so please try again.",
   );
 });
 

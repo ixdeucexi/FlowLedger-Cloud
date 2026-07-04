@@ -691,11 +691,20 @@ function findCashFlowGap(balances: AlgorithmDailyBalance[], safetyFloor: number,
       currentStart = null;
     }
   });
+  const stretchLabel = startDay && endDay
+    ? startDay === endDay
+      ? formatMonthDay(input, startDay)
+      : `${formatMonthDay(input, startDay)} through ${formatMonthDay(input, endDay)}`
+    : null;
   return {
     startDay,
     endDay,
     lowestBalance: lowest?.balance ?? 0,
-    detail: startDay ? `Tightest stretch runs ${formatMonthDay(input, startDay)} through ${formatMonthDay(input, endDay)}.` : "No tight cash-flow stretch detected.",
+    detail: stretchLabel
+      ? startDay === endDay
+        ? `Tightest stretch is ${stretchLabel}.`
+        : `Tightest stretch runs ${stretchLabel}.`
+      : "No tight cash-flow stretch detected.",
   };
 }
 

@@ -326,7 +326,7 @@ export default function BillsScreen() {
         <>
           {billPrioritySummary ? (
             <Pressable
-              onPress={() => router.push({ pathname: "/(tabs)/flo", params: { prompt: "What bill should I pay first?" } } as any)}
+              onPress={() => router.push({ pathname: "/(tabs)/flo", params: { prompt: "Which bill should I pay first?" } } as any)}
               style={({ pressed }) => [
                 styles.billPromptCard,
                 { backgroundColor: c.card, borderColor: c.primary + "45", opacity: pressed ? 0.84 : 1 },
@@ -336,7 +336,7 @@ export default function BillsScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.billPromptTitle, { color: c.foreground }]}>Bill Priority: {billPrioritySummary.bill.name}</Text>
                 <Text style={[styles.billPromptText, { color: c.mutedForeground }]}>
-                  ${billPrioritySummary.amount.toFixed(0)} left Â· {billPrioritySummary.dueText}. Tap to ask Flo why.
+                  ${billPrioritySummary.amount.toFixed(0)} left · {billPrioritySummary.dueText}. Tap to ask Flo why.
                 </Text>
               </View>
               <Feather name="chevron-right" size={16} color={c.mutedForeground} />

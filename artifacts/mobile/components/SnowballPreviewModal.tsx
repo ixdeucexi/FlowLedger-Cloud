@@ -60,7 +60,7 @@ export function SnowballPreviewModal({ visible, preview, amount, existingPayment
                 <Text style={[styles.error, { color: c.destructive }]}>That amount would move the projected balance below your ${safetyFloor.toFixed(0)} safety floor.</Text>
               )}
 
-              <Text style={[styles.label, { color: c.mutedForeground }]}>THIS PAYMENT Â· {preview.paymentDate}</Text>
+              <Text style={[styles.label, { color: c.mutedForeground }]}>THIS PAYMENT · {preview.paymentDate}</Text>
               <View style={[styles.card, { backgroundColor: c.card }]}>
                 {preview.allocations.map(item => (
                   <View key={item.billId} style={styles.row}>

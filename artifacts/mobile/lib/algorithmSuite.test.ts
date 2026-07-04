@@ -85,6 +85,20 @@ test("builds Flow Score, Safe Cushion, and practical algorithm outputs", () => {
   assert.ok(suite.insights.some(insight => insight.algorithm === "Flow Score"));
 });
 
+test("cash-flow gap wording handles a one-day tight stretch", () => {
+  const suite = buildAlgorithmSuite(baseInput({
+    dailyBalances: [
+      { day: 1, income: 3000, bills: 0, expense: 0, net: 3000, balance: 3000 },
+      { day: 8, income: 0, bills: 0, expense: 0, net: 0, balance: 272 },
+      { day: 9, income: 0, bills: 0, expense: 0, net: 0, balance: 600 },
+    ],
+  }));
+
+  assert.equal(suite.cashFlowGap.startDay, 8);
+  assert.equal(suite.cashFlowGap.endDay, 8);
+  assert.equal(suite.cashFlowGap.detail, "Tightest stretch is Jul 8.");
+});
+
 test("Flow Score treats future bills as planned, not negative", () => {
   const suite = buildAlgorithmSuite(baseInput({
     todayDay: 1,

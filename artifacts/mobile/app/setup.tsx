@@ -79,7 +79,7 @@ function SetupWizard() {
       {
         key: "bills" as const,
         done: billsDone,
-        title: "What bills have to be paid?",
+        title: "Which bills need to be paid?",
         ask: "Next, tell me what bills usually hit your account.",
         body: "Rent, utilities, subscriptions, insurance, and transfers all shape your forecast. I’ll use those dates to spot tight weeks before they happen.",
         button: billsDone ? "Add Another Bill" : "Add Bill",

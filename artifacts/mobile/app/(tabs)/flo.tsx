@@ -60,8 +60,8 @@ import { groupForecastEvents } from "@/lib/forecastDisplay";
 const sampleQuestions = [
   "Ask Flo anything…",
   "Can I afford $500?",
-  "What bills are due next?",
-  "Why does my balance run low?",
+  "Which bills are due next?",
+  "Why is my balance getting low?",
   "How do I add income?",
 ];
 
@@ -564,18 +564,18 @@ export default function FloScreen() {
 
   const quickPrompts = useMemo(() => {
     const categoryPrompts = decisionHubSettings.algorithmSuiteEnabled ? buildFloCategoryQuickPrompts(categoryPlan) : [];
-    const paycheckPrompts = isAlgorithmEnabled(decisionHubSettings, "paydaySplit") ? ["What can I spend until payday?", "What bill should I move?"] : [];
+    const paycheckPrompts = isAlgorithmEnabled(decisionHubSettings, "paydaySplit") ? ["What can I spend until payday?", "Which bill should I move?"] : [];
     const gapPrompts = isAlgorithmEnabled(decisionHubSettings, "cashFlowGap") ? ["Where is my tightest cash-flow stretch?"] : [];
     return [
-      ...(decisionHistory.due.length ? ["What decisions need review?"] : []),
+      ...(decisionHistory.due.length ? ["Which decisions need review?"] : []),
       ...(decisionRiskAlerts.length ? ["Are any planned decisions no longer safe?"] : []),
-      ...(decisionHistory.upcoming.length ? ["What planned decisions are coming up?"] : []),
+      ...(decisionHistory.upcoming.length ? ["Which planned decisions are coming up?"] : []),
       ...paycheckPrompts,
       ...gapPrompts,
       ...categoryPrompts,
       "Can I afford $500?",
-      "What bills are due next?",
-      "Why does my balance run low?",
+      "Which bills are due next?",
+      "Why is my balance getting low?",
     ].slice(0, 8);
   }, [categoryPlan, decisionHistory, decisionRiskAlerts, decisionHubSettings]);
 

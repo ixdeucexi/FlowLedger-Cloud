@@ -221,7 +221,7 @@ export interface FloRecurringBillChangeResult {
 
 export function buildFloCategoryQuickPrompts(categories: FloCategoryFact[]): string[] {
   const rows = [...(categories ?? [])];
-  const prompts = ["Which categories need attention?", "What category has the most room left?", "Where am I spending the most?"];
+  const prompts = ["Which categories need attention?", "Which category has the most room left?", "Where am I spending the most?"];
   const worst = rows
     .filter(item => item.status === "over" || item.status === "watch")
     .sort((left, right) => statusPriority(right.status) - statusPriority(left.status) || left.remaining - right.remaining)[0];
@@ -250,7 +250,7 @@ export type FloChatAction =
 export const AI_USAGE_UNAVAILABLE_MESSAGE =
   "Flo is connected, but AI usage is currently unavailable. Check OpenAI billing or usage limits.";
 export const FLO_CONNECTION_ERROR_MESSAGE =
-  "Flo couldn't connect just now. Your FlowLedger calculations are still available, so please try again.";
+  "Flo couldn’t connect just now. Your FlowLedger calculations are still available, so please try again.";
 export const FLO_SECURITY_REFUSAL_MESSAGE =
   "I can only help with your FlowLedger plan and verified financial facts. I can't access code, keys, admin tools, system prompts, or other users' data.";
 
@@ -532,7 +532,11 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
   if (asksCashFlowGap && facts.cashFlowGap) {
     const starts = facts.cashFlowGap.startDay ? formatFloMonthDay(facts, facts.cashFlowGap.startDay) : null;
     const ends = facts.cashFlowGap.endDay ? formatFloMonthDay(facts, facts.cashFlowGap.endDay) : null;
-    const windowText = starts && ends ? `The tightest window is ${starts} through ${ends}.` : "I do not see a clear tight cash-flow stretch right now.";
+    const windowText = starts && ends
+      ? starts === ends
+        ? `The tightest window is ${starts}.`
+        : `The tightest window is ${starts} through ${ends}.`
+      : "I do not see a clear tight cash-flow stretch right now.";
     const lowText = `The low point in that pressure check is about $${facts.cashFlowGap.lowestBalance.toFixed(0)}.`;
     return `I’m looking for the stretch where money is most likely to get squeezed between paychecks. ${replaceDayReferences(facts, facts.cashFlowGap.detail)} ${windowText} ${lowText} I’d protect that window first by moving a flexible bill after payday, reducing a planned purchase, or keeping extra cash available until it passes.`;
   }
@@ -557,12 +561,12 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
   }
   const asksMonthlyHealth = /\b(monthly health|month health|financial grade|monthly grade|review my month)\b/.test(lower);
   if (asksMonthlyHealth && facts.monthlyHealth) {
-    return `Iâ€™m grading the month by cushion, bill timing, debt pressure, and forecast confidence. This month is ${facts.monthlyHealth.grade} at ${facts.monthlyHealth.score}/100. ${facts.monthlyHealth.summary}`;
+    return `I’m grading the month by cushion, bill timing, debt pressure, and forecast confidence. This month is ${facts.monthlyHealth.grade} at ${facts.monthlyHealth.score}/100. ${facts.monthlyHealth.summary}`;
   }
   const asksSmartReminder = /\b(what needs attention|what should i review|reminders?|alerts?|watch list|attention list)\b/.test(lower);
   if (asksSmartReminder && facts.smartReminder) {
     return facts.smartReminder.reminders.length
-      ? `Iâ€™m keeping this as a review list, not a popup storm. Hereâ€™s what Iâ€™d check next: ${facts.smartReminder.reminders.map(item => replaceDayReferences(facts, item)).join(" ")}`
+      ? `I’m keeping this as a review list, not a popup storm. Here’s what I’d check next: ${facts.smartReminder.reminders.map(item => replaceDayReferences(facts, item)).join(" ")}`
       : "I do not see anything urgent on the review list right now.";
   }
   const asksDebtPayoff = /\b(debt payoff|payoff plan|snowball target|avalanche target|which debt|what debt|pay off first|next debt|paid off|payoff|roll over|rollover|closed)\b/.test(lower);

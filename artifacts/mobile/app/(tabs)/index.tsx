@@ -913,7 +913,7 @@ export default function DashboardScreen() {
       title: tone === "risk" ? "Next week has a low balance risk" : "Next week is tight",
       detail: `Lowest projected balance: $${lowest.balance.toFixed(0)} on ${formatShortDate(lowest.date)}. Ask Flo why before changing the plan.`,
       prompt,
-      saferBillPrompt: "What bill should I move?",
+      saferBillPrompt: "Which bill should I move?",
       reducePlanPrompt: "Which planned decisions should I reduce or postpone?",
     };
   }, [decisionForecastDays, decisionHubSettings, now, settings.safety_floor, todayIso]);
@@ -930,6 +930,13 @@ export default function DashboardScreen() {
   const algorithmSnapInterval = algorithmCardWidth + 12;
   const algorithmCards = useMemo(() => {
     const safeTone = algoToneColor(algorithmSuite.safeCushion.status);
+    const gapStart = algorithmSuite.cashFlowGap.startDay;
+    const gapEnd = algorithmSuite.cashFlowGap.endDay;
+    const gapDateLabel = gapStart && gapEnd
+      ? gapStart === gapEnd
+        ? `${MONTH_NAMES[currentMonth]} ${gapStart}`
+        : `${MONTH_NAMES[currentMonth]} ${gapStart}-${gapEnd}`
+      : "No tight gap";
     const cards = [
       {
         id: "flowScore",
@@ -979,11 +986,9 @@ export default function DashboardScreen() {
         id: "cashFlowGap",
         settingId: "cashFlowGap" as AlgorithmId,
         title: "Cash Flow Gap",
-        value: algorithmSuite.cashFlowGap.startDay && algorithmSuite.cashFlowGap.endDay
-          ? `${MONTH_NAMES[currentMonth]} ${algorithmSuite.cashFlowGap.startDay}-${algorithmSuite.cashFlowGap.endDay}`
-          : "No tight gap",
+        value: gapDateLabel,
         detail: algorithmSuite.cashFlowGap.detail,
-        action: `Low point $${algorithmSuite.cashFlowGap.lowestBalance.toFixed(0)}`,
+        action: `Low point: $${algorithmSuite.cashFlowGap.lowestBalance.toFixed(0)}`,
         icon: "clock" as const,
         color: "#38bdf8",
         prompt: "Flo, where is my tightest cash-flow stretch and how should I protect it?",
