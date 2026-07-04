@@ -45,5 +45,7 @@
     ,"lib/algorithmCatalog.ts"
     ,"lib/algorithmSuite.ts"
     ,"lib/algorithmSuite.test.ts"
+    ,"lib/onboarding.ts"
+    ,"lib/onboarding.test.ts"
   ]
 }

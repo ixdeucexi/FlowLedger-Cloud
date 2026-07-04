@@ -284,6 +284,30 @@ export default function TransactionsScreen() {
     return { totalIn, totalOut, net: totalIn - totalOut };
   }, [filtered]);
 
+  const monthlySummary = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const monthPrefix = `${year}-${String(month).padStart(2, "0")}-`;
+    const monthItems = allActivity.filter(item => item.date.startsWith(monthPrefix));
+    const income = monthItems.filter(item => item.amount > 0).reduce((sum, item) => sum + item.amount, 0);
+    const out = monthItems.filter(item => item.amount < 0).reduce((sum, item) => sum + Math.abs(item.amount), 0);
+    const weeks = [1, 8, 15, 22, 29]
+      .filter(start => start <= daysInMonth)
+      .map(start => {
+        const end = Math.min(start + 6, daysInMonth);
+        const total = monthItems
+          .filter(item => {
+            const day = Number(item.date.slice(8, 10));
+            return day >= start && day <= end;
+          })
+          .reduce((sum, item) => sum + item.amount, 0);
+        return { label: `${MONTH_NAMES[month - 1]} ${start}${end === start ? "" : `–${end}`}`, total };
+      });
+    return { title: `${MONTH_NAMES_LONG[month - 1]} ${year}`, income, out, net: income - out, weeks };
+  }, [allActivity]);
+
   const currentPeriodLabel = useMemo(() => {
     const now = new Date();
     if (dateFilter === "this_month") return `${MONTH_NAMES_LONG[now.getMonth()]} ${now.getFullYear()}`;
@@ -468,6 +492,38 @@ export default function TransactionsScreen() {
       </View>
 
       {/* ── Search + filter button ── */}
+      <View style={[styles.monthlySummaryCard, { backgroundColor: c.card, borderColor: c.border }]}>
+        <View style={styles.monthlySummaryHeader}>
+          <View>
+            <Text style={[styles.activityHeroLabel, { color: c.mutedForeground }]}>Monthly summary</Text>
+            <Text style={[styles.monthlySummaryTitle, { color: c.foreground }]}>{monthlySummary.title}</Text>
+          </View>
+          <Text style={[styles.monthlySummaryNet, { color: monthlySummary.net >= 0 ? c.success : c.destructive }]}>
+            {monthlySummary.net >= 0 ? "+" : "-"}${Math.abs(monthlySummary.net).toFixed(0)}
+          </Text>
+        </View>
+        <View style={styles.monthlySummaryStats}>
+          <View style={styles.monthlySummaryStat}>
+            <Text style={[styles.monthlySummaryValue, { color: c.success }]}>${monthlySummary.income.toFixed(0)}</Text>
+            <Text style={[styles.monthlySummaryLabel, { color: c.mutedForeground }]}>Income</Text>
+          </View>
+          <View style={styles.monthlySummaryStat}>
+            <Text style={[styles.monthlySummaryValue, { color: c.destructive }]}>${monthlySummary.out.toFixed(0)}</Text>
+            <Text style={[styles.monthlySummaryLabel, { color: c.mutedForeground }]}>Bills & spending</Text>
+          </View>
+        </View>
+        <View style={[styles.weekRows, { borderTopColor: c.border }]}>
+          {monthlySummary.weeks.map(week => (
+            <View key={week.label} style={styles.weekRow}>
+              <Text style={[styles.weekLabel, { color: c.mutedForeground }]}>{week.label}</Text>
+              <Text style={[styles.weekValue, { color: week.total >= 0 ? c.success : c.destructive }]}>
+                {week.total >= 0 ? "+" : "-"}${Math.abs(week.total).toFixed(0)}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
       <View style={[styles.searchWrap, { marginBottom: 10 }]}>
         <View style={[styles.searchBox, { backgroundColor: c.card, borderColor: c.border }]}>
           <Feather name="search" size={15} color={c.mutedForeground} />
@@ -776,6 +832,18 @@ const styles = StyleSheet.create({
   heroStatValue: { fontSize: 18, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.4 },
   heroStatLabel: { fontSize: 9, fontFamily: "Inter_700Bold", letterSpacing: 0.6, textTransform: "uppercase", marginTop: 2 },
   heroDivider: { width: 1, height: 28, marginHorizontal: 10 },
+  monthlySummaryCard: { marginHorizontal: 16, marginBottom: 10, borderWidth: 1, borderRadius: 20, padding: 12 },
+  monthlySummaryHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 10 },
+  monthlySummaryTitle: { fontSize: 17, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
+  monthlySummaryNet: { fontSize: 22, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.5 },
+  monthlySummaryStats: { flexDirection: "row", gap: 10, marginBottom: 10 },
+  monthlySummaryStat: { flex: 1, borderRadius: 14, backgroundColor: "rgba(15,23,42,0.42)", paddingHorizontal: 10, paddingVertical: 9 },
+  monthlySummaryValue: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
+  monthlySummaryLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.5, marginTop: 2 },
+  weekRows: { borderTopWidth: 1, paddingTop: 8, gap: 5 },
+  weekRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  weekLabel: { fontSize: 12, fontFamily: "Inter_700Bold" },
+  weekValue: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
 
   searchWrap:  { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16 },
   searchBox:   { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 16, paddingHorizontal: 13, paddingVertical: 10 },

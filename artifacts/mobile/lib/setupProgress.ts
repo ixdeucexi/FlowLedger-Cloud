@@ -1,6 +1,22 @@
 import { Platform } from "react-native";
 
-export type SetupStepKey = "welcome" | "account" | "money" | "income" | "bills" | "debts" | "safety" | "reconcile" | "finish";
+export type SetupStepKey =
+  | "welcome"
+  | "intro"
+  | "help"
+  | "goals_intro"
+  | "goals"
+  | "savings_goal"
+  | "plan"
+  | "account"
+  | "money"
+  | "income"
+  | "bills"
+  | "debts"
+  | "goal_setup"
+  | "safety"
+  | "reconcile"
+  | "finish";
 
 const SETUP_PROGRESS_KEY = "flowledger_setup_step_key";
 

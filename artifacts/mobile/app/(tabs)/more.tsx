@@ -386,6 +386,34 @@ export default function MoreScreen() {
         </View>
       </View>
 
+      <View style={styles.settingsGrid}>
+        {[
+          { icon: "credit-card" as const, label: "Accounts", onPress: () => openAccount("add") },
+          { icon: "cpu" as const, label: "Algorithms", onPress: () => setShowAlgorithmSuite(current => !current) },
+          { icon: "message-circle" as const, label: "Setup", onPress: () => { clearStoredSetupStep(); router.push("/setup" as any); } },
+          { icon: "download" as const, label: "Backup", onPress: handleExport },
+          { icon: "smartphone" as const, label: "Install", onPress: handleShowInstallPrompt },
+          { icon: "shield" as const, label: "Data Health", onPress: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light) },
+        ].map(item => (
+          <Pressable
+            key={item.label}
+            onPress={() => {
+              item.onPress();
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+            style={({ pressed }) => [
+              styles.settingsGridItem,
+              { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.76 : 1 },
+            ]}
+          >
+            <View style={[styles.settingsGridIcon, { backgroundColor: c.primary + "16" }]}>
+              <Feather name={item.icon} size={21} color={c.primary} />
+            </View>
+            <Text style={[styles.settingsGridText, { color: c.foreground }]}>{item.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+
       {shouldShowFloSetup && <>
       <SLabel c={c} text="Flo Setup" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
@@ -977,6 +1005,10 @@ const styles = StyleSheet.create({
   settingsHeroIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   settingsHeroTitle: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
   settingsHeroText: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 17, marginTop: 2 },
+  settingsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 20 },
+  settingsGridItem: { width: "31.7%", minHeight: 92, borderWidth: 1, borderRadius: 20, alignItems: "center", justifyContent: "center", padding: 10 },
+  settingsGridIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", marginBottom: 8 },
+  settingsGridText: { fontSize: 12, fontFamily: "Inter_800ExtraBold", textAlign: "center" },
   settingsLauncher: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 20, padding: 14, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.16, shadowRadius: 18, elevation: 4 },
   card: { padding: 16, marginBottom: 20, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", shadowColor: "#000", shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 22, elevation: 5 },
   emptyText: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", paddingVertical: 8 },
