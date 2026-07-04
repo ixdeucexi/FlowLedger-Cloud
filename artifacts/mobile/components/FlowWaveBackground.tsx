@@ -1,7 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, Animated, Easing, StyleSheet, useWindowDimensions, View } from "react-native";
-import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Path, Stop } from "react-native-svg";
+import Svg, { Path } from "react-native-svg";
 
 type FlowWaveVariant = "blue" | "green" | "purple";
 
@@ -10,21 +10,13 @@ type Props = {
   intensity?: "soft" | "standard";
 };
 
-type FlowLine = {
-  key: string;
-  path: string;
-  color: string;
-  opacity: number;
-  width: number;
-  dash?: string;
-};
-
 type LightningBolt = {
   key: string;
   path: string;
-  color: string;
+  branches: string[];
+  coreColor: string;
   glowColor: string;
-  width: number;
+  coreWidth: number;
   glowWidth: number;
   opacity: number;
 };
@@ -32,10 +24,10 @@ type LightningBolt = {
 export function FlowWaveBackground({ intensity = "standard" }: Props) {
   const { width, height } = useWindowDimensions();
   const [reduceMotion, setReduceMotion] = useState(false);
-  const driftAnim = useRef(new Animated.Value(0)).current;
-  const counterDriftAnim = useRef(new Animated.Value(0)).current;
-  const pulseAnim = useRef(new Animated.Value(0)).current;
-  const flashAnim = useRef(new Animated.Value(0)).current;
+  const stormDriftAnim = useRef(new Animated.Value(0)).current;
+  const primaryFlashAnim = useRef(new Animated.Value(0)).current;
+  const secondaryFlashAnim = useRef(new Animated.Value(0)).current;
+  const skyPulseAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     let mounted = true;
@@ -51,344 +43,333 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
 
   useEffect(() => {
     if (reduceMotion) {
-      driftAnim.setValue(0.42);
-      counterDriftAnim.setValue(0.32);
-      pulseAnim.setValue(0.35);
-      flashAnim.setValue(0.24);
+      stormDriftAnim.setValue(0.45);
+      primaryFlashAnim.setValue(0.20);
+      secondaryFlashAnim.setValue(0.12);
+      skyPulseAnim.setValue(0.18);
       return;
     }
 
-    const driftLoop = Animated.loop(
+    const stormDriftLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(driftAnim, {
+        Animated.timing(stormDriftAnim, {
           toValue: 1,
-          duration: 22000,
+          duration: 12000,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.timing(driftAnim, {
+        Animated.timing(stormDriftAnim, {
           toValue: 0,
-          duration: 22000,
+          duration: 13000,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
       ]),
     );
-    const pulseLoop = Animated.loop(
+
+    const primaryFlashLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, {
+        Animated.delay(540),
+        Animated.timing(primaryFlashAnim, {
           toValue: 1,
-          duration: 3600,
-          easing: Easing.inOut(Easing.quad),
+          duration: 48,
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
-        Animated.timing(pulseAnim, {
-          toValue: 0,
-          duration: 6200,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    const counterLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(counterDriftAnim, {
-          toValue: 1,
-          duration: 28000,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(counterDriftAnim, {
-          toValue: 0,
-          duration: 28000,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    const flashLoop = Animated.loop(
-      Animated.sequence([
-        Animated.delay(900),
-        Animated.timing(flashAnim, {
-          toValue: 1,
-          duration: 58,
-          easing: Easing.out(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(flashAnim, {
+        Animated.timing(primaryFlashAnim, {
           toValue: 0.18,
-          duration: 92,
+          duration: 70,
           easing: Easing.in(Easing.quad),
           useNativeDriver: true,
         }),
-        Animated.timing(flashAnim, {
-          toValue: 0.84,
-          duration: 48,
+        Animated.timing(primaryFlashAnim, {
+          toValue: 0.92,
+          duration: 42,
           easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
-        Animated.timing(flashAnim, {
-          toValue: 0.08,
-          duration: 210,
+        Animated.timing(primaryFlashAnim, {
+          toValue: 0,
+          duration: 230,
           easing: Easing.out(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.delay(2600),
-        Animated.timing(flashAnim, {
-          toValue: 0.62,
-          duration: 76,
-          easing: Easing.out(Easing.quad),
+        Animated.delay(2500),
+        Animated.timing(primaryFlashAnim, {
+          toValue: 0.72,
+          duration: 60,
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
-        Animated.timing(flashAnim, {
-          toValue: 0.06,
-          duration: 260,
+        Animated.timing(primaryFlashAnim, {
+          toValue: 0,
+          duration: 270,
           easing: Easing.out(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.delay(3600),
+        Animated.delay(4200),
       ]),
     );
 
-    driftLoop.start();
-    pulseLoop.start();
-    counterLoop.start();
-    flashLoop.start();
+    const secondaryFlashLoop = Animated.loop(
+      Animated.sequence([
+        Animated.delay(1900),
+        Animated.timing(secondaryFlashAnim, {
+          toValue: 0.86,
+          duration: 54,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(secondaryFlashAnim, {
+          toValue: 0.10,
+          duration: 120,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.delay(150),
+        Animated.timing(secondaryFlashAnim, {
+          toValue: 0.58,
+          duration: 42,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(secondaryFlashAnim, {
+          toValue: 0,
+          duration: 240,
+          easing: Easing.out(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.delay(5200),
+      ]),
+    );
+
+    const skyPulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.delay(560),
+        Animated.timing(skyPulseAnim, {
+          toValue: 1,
+          duration: 62,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(skyPulseAnim, {
+          toValue: 0,
+          duration: 420,
+          easing: Easing.out(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.delay(3000),
+        Animated.timing(skyPulseAnim, {
+          toValue: 0.42,
+          duration: 58,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(skyPulseAnim, {
+          toValue: 0,
+          duration: 340,
+          easing: Easing.out(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.delay(4000),
+      ]),
+    );
+
+    stormDriftLoop.start();
+    primaryFlashLoop.start();
+    secondaryFlashLoop.start();
+    skyPulseLoop.start();
     return () => {
-      driftLoop.stop();
-      pulseLoop.stop();
-      counterLoop.stop();
-      flashLoop.stop();
+      stormDriftLoop.stop();
+      primaryFlashLoop.stop();
+      secondaryFlashLoop.stop();
+      skyPulseLoop.stop();
     };
-  }, [counterDriftAnim, driftAnim, flashAnim, pulseAnim, reduceMotion]);
+  }, [primaryFlashAnim, reduceMotion, secondaryFlashAnim, skyPulseAnim, stormDriftAnim]);
 
   const svgWidth = Math.max(width, 390);
   const svgHeight = Math.max(height, 760);
-  const density = intensity === "soft" ? 0.72 : 1;
-  const translateX = driftAnim.interpolate({ inputRange: [0, 1], outputRange: [-22, 28] });
-  const translateY = driftAnim.interpolate({ inputRange: [0, 1], outputRange: [16, -18] });
-  const counterTranslateX = counterDriftAnim.interpolate({ inputRange: [0, 1], outputRange: [30, -26] });
-  const counterTranslateY = counterDriftAnim.interpolate({ inputRange: [0, 1], outputRange: [-10, 18] });
-  const streamOpacity = pulseAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.72, 1, 0.78] });
-  const dotOpacity = pulseAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.42, 0.86, 0.50] });
-  const lightningOpacity = flashAnim.interpolate({ inputRange: [0, 0.18, 0.62, 1], outputRange: [0.08, 0.20, 0.72, 1] });
-  const lightningShift = flashAnim.interpolate({ inputRange: [0, 1], outputRange: [-4, 5] });
+  const stormStrength = intensity === "soft" ? 0.72 : 1;
+  const stormTranslateX = stormDriftAnim.interpolate({ inputRange: [0, 1], outputRange: [-18, 18] });
+  const stormTranslateY = stormDriftAnim.interpolate({ inputRange: [0, 1], outputRange: [10, -14] });
+  const stormScale = stormDriftAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 1.025, 1] });
+  const primaryOpacity = primaryFlashAnim.interpolate({
+    inputRange: [0, 0.18, 0.72, 1],
+    outputRange: [0.06, 0.18, 0.88, 1],
+  });
+  const secondaryOpacity = secondaryFlashAnim.interpolate({
+    inputRange: [0, 0.22, 0.86],
+    outputRange: [0.04, 0.18, 0.78],
+  });
+  const skyFlashOpacity = skyPulseAnim.interpolate({
+    inputRange: [0, 0.42, 1],
+    outputRange: [0, 0.06, 0.13],
+  });
 
-  const { flowLines, particles, lightningBolts } = useMemo(() => {
-    const baseY = svgHeight * 0.60;
-    const lines: FlowLine[] = [];
-    const bolts: LightningBolt[] = [
+  const { primaryBolts, secondaryBolts } = useMemo(() => {
+    const primary: LightningBolt[] = [
       {
-        key: "storm-front-main",
-        path: `M ${-svgWidth * 0.10} ${svgHeight * 0.38} L ${svgWidth * 0.16} ${svgHeight * 0.30} L ${svgWidth * 0.35} ${svgHeight * 0.34} L ${svgWidth * 0.52} ${svgHeight * 0.26} L ${svgWidth * 0.76} ${svgHeight * 0.30} L ${svgWidth * 1.10} ${svgHeight * 0.18}`,
-        color: "#dbeafe",
+        key: "main-sky-tear",
+        path: `M ${svgWidth * 0.84} ${-svgHeight * 0.06} L ${svgWidth * 0.76} ${svgHeight * 0.10} L ${svgWidth * 0.82} ${svgHeight * 0.17} L ${svgWidth * 0.64} ${svgHeight * 0.31} L ${svgWidth * 0.70} ${svgHeight * 0.39} L ${svgWidth * 0.48} ${svgHeight * 0.56} L ${svgWidth * 0.56} ${svgHeight * 0.64} L ${svgWidth * 0.32} ${svgHeight * 0.86} L ${svgWidth * 0.38} ${svgHeight * 0.98}`,
+        branches: [
+          `M ${svgWidth * 0.64} ${svgHeight * 0.31} L ${svgWidth * 0.49} ${svgHeight * 0.28} L ${svgWidth * 0.56} ${svgHeight * 0.38} L ${svgWidth * 0.39} ${svgHeight * 0.46}`,
+          `M ${svgWidth * 0.48} ${svgHeight * 0.56} L ${svgWidth * 0.34} ${svgHeight * 0.57} L ${svgWidth * 0.41} ${svgHeight * 0.66} L ${svgWidth * 0.25} ${svgHeight * 0.74}`,
+          `M ${svgWidth * 0.56} ${svgHeight * 0.64} L ${svgWidth * 0.72} ${svgHeight * 0.67} L ${svgWidth * 0.64} ${svgHeight * 0.75} L ${svgWidth * 0.79} ${svgHeight * 0.82}`,
+        ],
+        coreColor: "#f8fbff",
         glowColor: "#38bdf8",
-        width: 1.8,
-        glowWidth: 9,
-        opacity: 0.82,
+        coreWidth: 2.6,
+        glowWidth: 20,
+        opacity: 1,
       },
       {
-        key: "storm-purple-cut",
-        path: `M ${-svgWidth * 0.16} ${svgHeight * 0.58} L ${svgWidth * 0.12} ${svgHeight * 0.50} L ${svgWidth * 0.30} ${svgHeight * 0.53} L ${svgWidth * 0.49} ${svgHeight * 0.45} L ${svgWidth * 0.70} ${svgHeight * 0.49} L ${svgWidth * 1.06} ${svgHeight * 0.36}`,
-        color: "#f5d0fe",
-        glowColor: "#a855f7",
-        width: 1.6,
-        glowWidth: 8,
-        opacity: 0.66,
-      },
-      {
-        key: "storm-lower-arc",
-        path: `M ${svgWidth * 0.08} ${svgHeight * 0.74} L ${svgWidth * 0.26} ${svgHeight * 0.68} L ${svgWidth * 0.43} ${svgHeight * 0.70} L ${svgWidth * 0.60} ${svgHeight * 0.62} L ${svgWidth * 0.82} ${svgHeight * 0.66} L ${svgWidth * 1.16} ${svgHeight * 0.54}`,
-        color: "#cffafe",
-        glowColor: "#22d3ee",
-        width: 1.4,
-        glowWidth: 7,
-        opacity: 0.56,
+        key: "left-crawl",
+        path: `M ${-svgWidth * 0.08} ${svgHeight * 0.33} L ${svgWidth * 0.16} ${svgHeight * 0.23} L ${svgWidth * 0.29} ${svgHeight * 0.27} L ${svgWidth * 0.46} ${svgHeight * 0.17} L ${svgWidth * 0.66} ${svgHeight * 0.21} L ${svgWidth * 1.05} ${svgHeight * 0.08}`,
+        branches: [
+          `M ${svgWidth * 0.29} ${svgHeight * 0.27} L ${svgWidth * 0.23} ${svgHeight * 0.37} L ${svgWidth * 0.09} ${svgHeight * 0.43}`,
+          `M ${svgWidth * 0.66} ${svgHeight * 0.21} L ${svgWidth * 0.74} ${svgHeight * 0.31} L ${svgWidth * 0.91} ${svgHeight * 0.32}`,
+        ],
+        coreColor: "#dbeafe",
+        glowColor: "#60a5fa",
+        coreWidth: 2.2,
+        glowWidth: 16,
+        opacity: 0.78,
       },
     ];
-    const total = Math.round(18 * density);
 
-    for (let index = 0; index < total; index += 1) {
-      const offset = (index - total / 2) * 13;
-      const startY = baseY + offset + (index % 4) * 9;
-      const lift = svgHeight * (0.18 + (index % 5) * 0.018);
-      const endY = startY - lift - (index % 3) * 26;
-      const controlOneY = startY - svgHeight * (0.04 + (index % 3) * 0.018);
-      const controlTwoY = endY + svgHeight * (0.13 + (index % 4) * 0.015);
-      const color = index % 5 === 0 ? "#c084fc" : index % 3 === 0 ? "#38bdf8" : "#0ea5e9";
+    const secondary: LightningBolt[] = [
+      {
+        key: "purple-ground-flash",
+        path: `M ${svgWidth * 0.08} ${svgHeight * 0.78} L ${svgWidth * 0.24} ${svgHeight * 0.68} L ${svgWidth * 0.41} ${svgHeight * 0.72} L ${svgWidth * 0.57} ${svgHeight * 0.60} L ${svgWidth * 0.76} ${svgHeight * 0.64} L ${svgWidth * 1.12} ${svgHeight * 0.49}`,
+        branches: [
+          `M ${svgWidth * 0.41} ${svgHeight * 0.72} L ${svgWidth * 0.33} ${svgHeight * 0.84} L ${svgWidth * 0.20} ${svgHeight * 0.90}`,
+          `M ${svgWidth * 0.57} ${svgHeight * 0.60} L ${svgWidth * 0.49} ${svgHeight * 0.50} L ${svgWidth * 0.36} ${svgHeight * 0.47}`,
+        ],
+        coreColor: "#f5d0fe",
+        glowColor: "#a855f7",
+        coreWidth: 2.1,
+        glowWidth: 17,
+        opacity: 0.84,
+      },
+      {
+        key: "distant-blue-crack",
+        path: `M ${svgWidth * 0.96} ${svgHeight * 0.22} L ${svgWidth * 0.82} ${svgHeight * 0.31} L ${svgWidth * 0.88} ${svgHeight * 0.39} L ${svgWidth * 0.70} ${svgHeight * 0.51} L ${svgWidth * 0.77} ${svgHeight * 0.57}`,
+        branches: [
+          `M ${svgWidth * 0.82} ${svgHeight * 0.31} L ${svgWidth * 0.68} ${svgHeight * 0.32} L ${svgWidth * 0.58} ${svgHeight * 0.39}`,
+          `M ${svgWidth * 0.70} ${svgHeight * 0.51} L ${svgWidth * 0.58} ${svgHeight * 0.58} L ${svgWidth * 0.48} ${svgHeight * 0.57}`,
+        ],
+        coreColor: "#cffafe",
+        glowColor: "#22d3ee",
+        coreWidth: 1.8,
+        glowWidth: 14,
+        opacity: 0.70,
+      },
+    ];
 
-      lines.push({
-        key: `fiber-${index}`,
-        path: `M ${-svgWidth * 0.16} ${startY} C ${svgWidth * 0.18} ${controlOneY}, ${svgWidth * 0.54} ${controlTwoY}, ${svgWidth * 1.18} ${endY}`,
-        color,
-        opacity: index % 5 === 0 ? 0.22 : 0.16,
-        width: index % 6 === 0 ? 2.4 : 1.1,
-      });
-    }
+    return { primaryBolts: primary, secondaryBolts: secondary };
+  }, [svgHeight, svgWidth]);
 
-    for (let index = 0; index < Math.round(9 * density); index += 1) {
-      const offset = (index - 4) * 24;
-      const startY = baseY + offset + svgHeight * 0.08;
-      const endY = startY - svgHeight * 0.32 - (index % 4) * 20;
-      const color = index % 3 === 0 ? "#22d3ee" : index % 3 === 1 ? "#a855f7" : "#60a5fa";
-      lines.push({
-        key: `dotted-${index}`,
-        path: `M ${-svgWidth * 0.12} ${startY} C ${svgWidth * 0.20} ${startY - svgHeight * 0.10}, ${svgWidth * 0.52} ${endY + svgHeight * 0.18}, ${svgWidth * 1.12} ${endY}`,
-        color,
-        opacity: index % 3 === 0 ? 0.72 : 0.54,
-        width: index % 2 === 0 ? 3.2 : 2.2,
-        dash: index % 2 === 0 ? "1 16" : "1 11",
-      });
-    }
-
-    const dots = Array.from({ length: Math.round(56 * density) }).map((_, index) => {
-      const along = (index * 47 + 19) % Math.max(1, svgWidth);
-      const band = (index * 31 + 11) % Math.max(1, svgHeight * 0.52);
-      const curveBias = Math.sin(index * 0.75) * 42;
-      const x = along;
-      const y = svgHeight * 0.16 + band + curveBias;
-      const radius = index % 11 === 0 ? 2.5 : index % 5 === 0 ? 1.7 : 1.05;
-      const color = index % 7 === 0 ? "#c084fc" : index % 4 === 0 ? "#60a5fa" : "#22d3ee";
-      const opacity = index % 9 === 0 ? 0.62 : 0.28;
-      return { key: index, x, y, radius, color, opacity };
-    });
-
-    return { flowLines: lines, particles: dots, lightningBolts: bolts };
-  }, [density, svgHeight, svgWidth]);
+  const renderBolt = (bolt: LightningBolt) => (
+    <React.Fragment key={bolt.key}>
+      <Path
+        d={bolt.path}
+        stroke={bolt.glowColor}
+        strokeWidth={bolt.glowWidth}
+        strokeLinecap="butt"
+        strokeLinejoin="miter"
+        fill="none"
+        opacity={bolt.opacity * stormStrength * 0.18}
+      />
+      <Path
+        d={bolt.path}
+        stroke={bolt.glowColor}
+        strokeWidth={Math.max(5, bolt.coreWidth * 3.2)}
+        strokeLinecap="butt"
+        strokeLinejoin="miter"
+        fill="none"
+        opacity={bolt.opacity * stormStrength * 0.42}
+      />
+      <Path
+        d={bolt.path}
+        stroke={bolt.coreColor}
+        strokeWidth={bolt.coreWidth}
+        strokeLinecap="butt"
+        strokeLinejoin="miter"
+        fill="none"
+        opacity={bolt.opacity * stormStrength}
+      />
+      {bolt.branches.map((branch, index) => (
+        <React.Fragment key={`${bolt.key}-branch-${index}`}>
+          <Path
+            d={branch}
+            stroke={bolt.glowColor}
+            strokeWidth={Math.max(7, bolt.glowWidth * 0.62)}
+            strokeLinecap="butt"
+            strokeLinejoin="miter"
+            fill="none"
+            opacity={bolt.opacity * stormStrength * 0.13}
+          />
+          <Path
+            d={branch}
+            stroke={bolt.coreColor}
+            strokeWidth={Math.max(1.25, bolt.coreWidth * 0.72)}
+            strokeLinecap="butt"
+            strokeLinejoin="miter"
+            fill="none"
+            opacity={bolt.opacity * stormStrength * 0.68}
+          />
+        </React.Fragment>
+      ))}
+    </React.Fragment>
+  );
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
       <LinearGradient
-        colors={["#01030b", "#020817", "#031225", "#01020a"]}
-        locations={[0, 0.38, 0.72, 1]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+        colors={["#02030b", "#040817", "#020617", "#010108"]}
+        locations={[0, 0.36, 0.72, 1]}
+        start={{ x: 0.18, y: 0 }}
+        end={{ x: 0.86, y: 1 }}
         style={StyleSheet.absoluteFillObject}
       />
 
-      <Animated.View style={[styles.flowLayer, { opacity: streamOpacity, transform: [{ translateX }, { translateY }] }]}>
+      <Animated.View style={[styles.skyFlash, { opacity: skyFlashOpacity }]} />
+
+      <Animated.View
+        style={[
+          styles.lightningLayer,
+          {
+            opacity: primaryOpacity,
+            transform: [{ translateX: stormTranslateX }, { translateY: stormTranslateY }, { scale: stormScale }],
+          },
+        ]}
+      >
         <Svg width={svgWidth} height={svgHeight} viewBox={`0 0 ${svgWidth} ${svgHeight}`} preserveAspectRatio="none">
-          <Defs>
-            <SvgLinearGradient id="fiberGlow" x1="0" y1="0" x2="1" y2="0">
-              <Stop offset="0" stopColor="#22d3ee" stopOpacity="0" />
-              <Stop offset="0.24" stopColor="#22d3ee" stopOpacity="0.20" />
-              <Stop offset="0.58" stopColor="#38bdf8" stopOpacity="0.36" />
-              <Stop offset="0.82" stopColor="#a855f7" stopOpacity="0.26" />
-              <Stop offset="1" stopColor="#22d3ee" stopOpacity="0" />
-            </SvgLinearGradient>
-            <SvgLinearGradient id="purpleFiber" x1="0" y1="0" x2="1" y2="0">
-              <Stop offset="0" stopColor="#7c3aed" stopOpacity="0" />
-              <Stop offset="0.42" stopColor="#8b5cf6" stopOpacity="0.30" />
-              <Stop offset="0.72" stopColor="#22d3ee" stopOpacity="0.18" />
-              <Stop offset="1" stopColor="#0f172a" stopOpacity="0" />
-            </SvgLinearGradient>
-          </Defs>
-
-          <Path
-            d={`M ${-svgWidth * 0.24} ${svgHeight * 0.76} C ${svgWidth * 0.18} ${svgHeight * 0.56}, ${svgWidth * 0.52} ${svgHeight * 0.70}, ${svgWidth * 1.24} ${svgHeight * 0.28}`}
-            stroke="url(#fiberGlow)"
-            strokeWidth="42"
-            strokeLinecap="round"
-            fill="none"
-            opacity="0.08"
-          />
-          <Path
-            d={`M ${-svgWidth * 0.18} ${svgHeight * 0.82} C ${svgWidth * 0.18} ${svgHeight * 0.64}, ${svgWidth * 0.60} ${svgHeight * 0.72}, ${svgWidth * 1.24} ${svgHeight * 0.34}`}
-            stroke="url(#purpleFiber)"
-            strokeWidth="32"
-            strokeLinecap="round"
-            fill="none"
-            opacity="0.08"
-          />
-
-          {flowLines.map(line => (
-            <Path
-              key={line.key}
-              d={line.path}
-              stroke={line.color}
-              strokeWidth={line.width}
-              strokeLinecap="round"
-              fill="none"
-              opacity={line.opacity}
-              strokeDasharray={line.dash}
-            />
-          ))}
-        </Svg>
-      </Animated.View>
-
-      <Animated.View style={[styles.counterFlowLayer, { transform: [{ translateX: counterTranslateX }, { translateY: counterTranslateY }] }]}>
-        <Svg width={svgWidth} height={svgHeight} viewBox={`0 0 ${svgWidth} ${svgHeight}`} preserveAspectRatio="none">
-          {flowLines.filter((_, index) => index % 3 === 0).map(line => (
-            <Path
-              key={`counter-${line.key}`}
-              d={line.path}
-              stroke={line.color}
-              strokeWidth={Math.max(0.8, line.width * 0.65)}
-              strokeLinecap="round"
-              fill="none"
-              opacity={line.dash ? 0.30 : 0.10}
-              strokeDasharray={line.dash ? "1 18" : undefined}
-            />
-          ))}
+          {primaryBolts.map(renderBolt)}
         </Svg>
       </Animated.View>
 
       <Animated.View
         style={[
           styles.lightningLayer,
-          { opacity: lightningOpacity, transform: [{ translateX: lightningShift }, { translateY }] },
+          {
+            opacity: secondaryOpacity,
+            transform: [{ translateX: stormTranslateY }, { translateY: stormTranslateX }],
+          },
         ]}
       >
         <Svg width={svgWidth} height={svgHeight} viewBox={`0 0 ${svgWidth} ${svgHeight}`} preserveAspectRatio="none">
-          {lightningBolts.map(bolt => (
-            <React.Fragment key={bolt.key}>
-              <Path
-                d={bolt.path}
-                stroke={bolt.glowColor}
-                strokeWidth={bolt.glowWidth}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="none"
-                opacity={bolt.opacity * 0.18}
-              />
-              <Path
-                d={bolt.path}
-                stroke={bolt.glowColor}
-                strokeWidth={Math.max(3.5, bolt.width * 2.6)}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="none"
-                opacity={bolt.opacity * 0.34}
-              />
-              <Path
-                d={bolt.path}
-                stroke={bolt.color}
-                strokeWidth={bolt.width}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="none"
-                opacity={bolt.opacity}
-              />
-            </React.Fragment>
-          ))}
+          {secondaryBolts.map(renderBolt)}
         </Svg>
       </Animated.View>
 
-      <Animated.View style={[styles.particleLayer, { opacity: dotOpacity }]}>
-        <Svg width={svgWidth} height={svgHeight} viewBox={`0 0 ${svgWidth} ${svgHeight}`} preserveAspectRatio="none">
-          {particles.map(dot => (
-            <Circle
-              key={dot.key}
-              cx={dot.x}
-              cy={dot.y}
-              r={dot.radius}
-              fill={dot.color}
-              opacity={dot.opacity}
-            />
-          ))}
-        </Svg>
-      </Animated.View>
-
+      <LinearGradient
+        colors={["rgba(2,6,23,0.14)", "rgba(2,6,23,0.58)", "rgba(0,0,0,0.30)"]}
+        locations={[0, 0.66, 1]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
       <View style={styles.vignette} />
       <View style={styles.readabilityWash} />
     </View>
@@ -396,25 +377,19 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
 }
 
 const styles = StyleSheet.create({
-  flowLayer: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  counterFlowLayer: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.62,
-  },
   lightningLayer: {
     ...StyleSheet.absoluteFillObject,
   },
-  particleLayer: {
+  skyFlash: {
     ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#7dd3fc",
   },
   vignette: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.24)",
+    backgroundColor: "rgba(0,0,0,0.20)",
   },
   readabilityWash: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(2,6,23,0.20)",
+    backgroundColor: "rgba(2,6,23,0.24)",
   },
 });
