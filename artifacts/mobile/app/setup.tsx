@@ -14,8 +14,10 @@ import { IncomeModal } from "@/components/IncomeModal";
 import { useAuth } from "@/context/AuthContext";
 import { BudgetProvider, useBudget, type Account, type Bill, type Goal, type IncomeItem } from "@/context/BudgetContext";
 import {
+  buildSetupCompletionMessage,
   buildPersonalizedSetupKeys,
   describeSetupPlan,
+  getSetupPathItem,
   shouldAskSavingsGoal,
   type MoneySetupKey,
   type OnboardingPreferences,
@@ -72,6 +74,18 @@ function isPreferenceStep(key: SetupStepKey) {
 function toggleArrayValue<T extends string>(values: T[], value: T): T[] {
   return values.includes(value) ? values.filter(item => item !== value) : [...values, value];
 }
+
+const TRUST_CARDS: { icon: React.ComponentProps<typeof Feather>["name"]; title: string; text: string }[] = [
+  { icon: "shield", title: "Your real data stays safe", text: "Setup questions personalize the path. They do not create or overwrite money records." },
+  { icon: "zap", title: "Flo guides the order", text: "Debt, savings, bills, and spending goals each get a different setup path." },
+  { icon: "compass", title: "Built for decisions", text: "The goal is a forecast you can use before purchases, bill moves, and debt payments." },
+];
+
+const FINISH_CARDS: { icon: React.ComponentProps<typeof Feather>["name"]; title: string; text: string }[] = [
+  { icon: "shopping-bag", title: "Ask before spending", text: "Flo can check purchases against your forecast and safety cushion." },
+  { icon: "calendar", title: "See tight dates early", text: "Calendar and bills show when cash flow gets squeezed." },
+  { icon: "trending-down", title: "Move debt faster", text: "Extra money can be tested before it goes toward the snowball." },
+];
 
 function SetupWizard() {
   const router = useRouter();
@@ -130,8 +144,8 @@ function SetupWizard() {
       money: {
         done: moneyDone,
         title: "How much money is in it today?",
-        ask: "Let’s anchor your forecast.",
-        body: "Tell me what your account shows today. I’ll use that number as the starting point for balances, bills, and decisions.",
+        ask: "Let's anchor your forecast.",
+        body: "Tell me what your account shows today. I'll use that number as the starting point for balances, bills, and decisions.",
         button: moneyDone ? "Review Balance" : "Add Starting Money",
       },
       income: {
@@ -145,27 +159,27 @@ function SetupWizard() {
         done: billsDone,
         title: "Which bills need to be paid?",
         ask: "Next, tell me what bills usually hit your account.",
-        body: "Rent, utilities, subscriptions, insurance, and transfers all shape your forecast. I’ll use those dates to spot tight weeks before they happen.",
+        body: "Rent, utilities, subscriptions, insurance, and transfers all shape your forecast. I'll use those dates to spot tight weeks before they happen.",
         button: billsDone ? "Add Another Bill" : "Add Bill",
       },
       debts: {
         done: debtsDone,
         title: "What debts should I know about?",
-        ask: "If you’re paying down debt, add it here.",
+        ask: "If you're paying down debt, add it here.",
         body: "Balances, minimums, due dates, and APRs help me show what is safe to send extra toward without hurting the rest of your month.",
         button: debtsDone ? "Add Another Debt" : "Add Debt",
       },
       goals: {
         done: goalsDone,
         title: "What are you saving toward?",
-        ask: "Let’s give your extra money a purpose.",
+        ask: "Let's give your extra money a purpose.",
         body: "Add a savings goal so I can protect it in your forecast and help you decide when money can safely move there.",
         button: goalsDone ? "Add Another Goal" : "Add Goal",
       },
       safety: {
         done: true,
         title: "How much cushion should I protect?",
-        ask: "Let’s choose your comfort zone.",
+        ask: "Let's choose your comfort zone.",
         body: "This is the floor I try not to let your forecast cross. The default is $200, but you can set the cushion that feels right.",
         button: "Save Safety Settings",
       },
@@ -178,9 +192,9 @@ function SetupWizard() {
       },
       finish: {
         done: false,
-        title: "You’re ready to use Flo.",
+        title: "You're ready to use Flo.",
         ask: "Now ask me before money decisions.",
-        body: "Let’s try one together. I’ll use the setup you just built to answer a real affordability question.",
+        body: buildSetupCompletionMessage(preferences),
         button: "Ask Flo if I can afford $100",
       },
     };
@@ -190,25 +204,25 @@ function SetupWizard() {
         key: "welcome",
         done: false,
         title: "Welcome to FlowLedger Algo",
-        ask: "Let’s build your money command center.",
-        body: "I’m Flo. I’ll learn what you want help with first, then I’ll walk you through the exact setup steps that match your goals.",
+        ask: "Let's build your money command center.",
+        body: "I'm Flo. I'll learn what you want help with first, then I'll walk you through the exact setup steps that match your goals.",
         button: "Get Started",
         kind: "intro",
       },
       {
         key: "intro",
         done: false,
-        title: "Together, we’ll build your forecast.",
-        ask: "You bring the real numbers. I’ll keep the path clear.",
+        title: "Together, we'll build your forecast.",
+        ask: "You bring the real numbers. I'll keep the path clear.",
         body: "I will never create fake money records or change your existing bills, debts, or transactions from these setup questions.",
-        button: "I’m Ready",
+        button: "I'm Ready",
         kind: "intro",
       },
       {
         key: "help",
         done: preferences.help.length > 0,
         title: "How can I help?",
-        ask: "Choose as many options as you’d like.",
+        ask: "Choose as many options as you'd like.",
         body: "Your answers help me decide which setup steps should come first.",
         button: "Continue",
         kind: "multi",
@@ -218,7 +232,7 @@ function SetupWizard() {
         done: preferences.goals.length > 0,
         title: "What are your top financial goals?",
         ask: "Pick the goals that matter most right now.",
-        body: "I’ll use this to make FlowLedger feel less like a form and more like a plan.",
+        body: "I'll use this to make FlowLedger feel less like a form and more like a plan.",
         button: "Continue",
         kind: "multi",
       },
@@ -239,8 +253,8 @@ function SetupWizard() {
     introSteps.push({
       key: "plan",
       done: true,
-      title: "Here’s the setup path I’ll use.",
-      ask: "I’ve got the plan.",
+      title: "Here's the setup path I'll use.",
+      ask: "I've got the plan.",
       body: describeSetupPlan(preferences),
       button: "Build My Forecast",
       kind: "plan",
@@ -256,6 +270,16 @@ function SetupWizard() {
 
   const current = steps[Math.min(index, steps.length - 1)] ?? steps[0];
   const progressIndex = Math.min(index + 1, steps.length);
+  const setupPathItems = useMemo(
+    () => buildPersonalizedSetupKeys(preferences).map(getSetupPathItem),
+    [preferences],
+  );
+  const currentPathItem = setupPathItems.find(item => moneyKeyToStepKey(item.key) === current.key) ?? null;
+  const completedSetupPathCount = setupPathItems.filter(item => {
+    const key = moneyKeyToStepKey(item.key);
+    return steps.find(step => step.key === key)?.done;
+  }).length;
+  const preferenceChoiceCount = preferences.help.length + preferences.goals.length + (preferences.savingsGoal ? 1 : 0);
   const savePreferences = (next = preferences) => saveOnboardingPreferences(user?.id, next).catch(() => undefined);
 
   useEffect(() => {
@@ -315,7 +339,7 @@ function SetupWizard() {
         return;
       case "plan":
         await savePreferences();
-        setFloConfirmation("Great. I’ll only ask for real money details from here.");
+        setFloConfirmation("Great. I'll only ask for real money details from here.");
         goNext();
         return;
       case "account":
@@ -342,7 +366,7 @@ function SetupWizard() {
         setSafetyFloorText(String(floor));
         setHorizonText(String(horizon));
         await updateSettings({ safety_floor: floor, forecast_horizon_months: horizon });
-        confirmAndNext(`Got it — I’ll protect a $${floor.toFixed(0)} cushion across ${horizon} month${horizon === 1 ? "" : "s"}.`);
+        confirmAndNext(`Got it — I'll protect a $${floor.toFixed(0)} cushion across ${horizon} month${horizon === 1 ? "" : "s"}.`);
         return;
       }
       case "reconcile":
@@ -415,27 +439,84 @@ function SetupWizard() {
 
   const renderPlanCards = () => {
     if (current.key !== "plan") return null;
-    return buildPersonalizedSetupKeys(preferences).map((key, planIndex) => {
-      const label: Record<MoneySetupKey, string> = {
-        account: "Add an account",
-        money: "Add today’s balance",
-        income: "Add income",
-        bills: "Add recurring bills",
-        debts: "Add debts",
-        goals: "Add a savings goal",
-        safety: "Choose safety cushion",
-        reconcile: "Confirm balance",
-        finish: "Ask Flo a decision",
-      };
+    return setupPathItems.map((item, planIndex) => {
       return (
-        <View key={key} style={styles.planRow}>
+        <View key={item.key} style={styles.planRow}>
           <View style={styles.planNumber}>
             <Text style={styles.planNumberText}>{planIndex + 1}</Text>
           </View>
-          <Text style={styles.planText}>{label[key]}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.planText}>{item.title}</Text>
+            <Text style={styles.planDetail}>{item.detail}</Text>
+          </View>
         </View>
       );
     });
+  };
+
+  const renderTrustCards = () => {
+    if (current.kind !== "intro") return null;
+    return TRUST_CARDS.map(card => (
+      <View key={card.title} style={styles.trustCard}>
+        <View style={styles.trustIcon}>
+          <Feather name={card.icon} size={16} color="#38bdf8" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.trustTitle}>{card.title}</Text>
+          <Text style={styles.trustText}>{card.text}</Text>
+        </View>
+      </View>
+    ));
+  };
+
+  const renderActionPathCard = () => {
+    if (current.kind !== "action" || !currentPathItem) return null;
+    return (
+      <View style={styles.pathCard}>
+        <View style={styles.pathCardHeader}>
+          <Text style={styles.pathEyebrow}>Flo's setup path</Text>
+          <Text style={styles.pathCount}>{completedSetupPathCount}/{setupPathItems.length}</Text>
+        </View>
+        <View style={styles.pathCurrentRow}>
+          <View style={styles.pathCurrentIcon}>
+            <Feather name="target" size={17} color="#c084fc" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.pathCurrentTitle}>{currentPathItem.title}</Text>
+            <Text style={styles.pathCurrentText}>{currentPathItem.detail}</Text>
+          </View>
+        </View>
+        <View style={styles.pathPills}>
+          {setupPathItems.slice(0, 6).map(item => {
+            const step = steps.find(candidate => candidate.key === moneyKeyToStepKey(item.key));
+            const active = item.key === currentPathItem.key;
+            const done = Boolean(step?.done);
+            return (
+              <View key={item.key} style={[styles.pathPill, active && styles.pathPillActive, done && styles.pathPillDone]}>
+                <Text style={[styles.pathPillText, active && styles.pathPillTextActive, done && styles.pathPillTextDone]}>
+                  {item.shortLabel}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
+
+  const renderFinishCards = () => {
+    if (current.key !== "finish") return null;
+    return FINISH_CARDS.map(card => (
+      <View key={card.title} style={styles.finishCard}>
+        <View style={styles.finishIcon}>
+          <Feather name={card.icon} size={16} color="#c084fc" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.finishTitle}>{card.title}</Text>
+          <Text style={styles.finishText}>{card.text}</Text>
+        </View>
+      </View>
+    ));
   };
 
   return (
@@ -467,6 +548,11 @@ function SetupWizard() {
           <View style={styles.bubble}>
             <View style={styles.bubbleHeader}>
               <Text style={styles.bubbleLabel}>Flo asks</Text>
+              {(current.kind === "multi" || current.kind === "single") && preferenceChoiceCount > 0 ? (
+                <View style={styles.choicePill}>
+                  <Text style={styles.choicePillText}>{preferenceChoiceCount} selected</Text>
+                </View>
+              ) : null}
               {current.kind !== "intro" && (
                 <Pressable onPress={() => setCoachVisible(true)} hitSlop={10}>
                   <Feather name="help-circle" size={17} color="#38bdf8" />
@@ -485,8 +571,17 @@ function SetupWizard() {
         </View>
 
         <View style={styles.optionStack}>
+          {renderTrustCards()}
+          {renderActionPathCard()}
           {renderOptions()}
           {renderPlanCards()}
+          {renderFinishCards()}
+          {(current.kind === "multi" || current.kind === "single") ? (
+            <View style={styles.safeNote}>
+              <Feather name="lock" size={13} color="#38bdf8" />
+              <Text style={styles.safeNoteText}>These choices personalize Flo only. Your account balances, bills, debts, and goals stay unchanged.</Text>
+            </View>
+          ) : null}
         </View>
 
         {current.key === "safety" && (
@@ -556,12 +651,12 @@ function SetupWizard() {
           if (selectedAccount) await updateAccount({ ...selectedAccount, ...value });
           else await addAccount({ ...value, is_active: true });
           setAccountModalVisible(false);
-          confirmAndNext("Got it — I’ll use that account as part of your forecast.");
+          confirmAndNext("Got it — I'll use that account as part of your forecast.");
         }}
         onReconcile={async (balance, date) => {
           if (selectedAccount) await reconcileAccount(selectedAccount.id, balance, date);
           setAccountModalVisible(false);
-          confirmAndNext(`Perfect — I’ll trust $${balance.toFixed(2)} as of ${date}.`);
+          confirmAndNext(`Perfect — I'll trust $${balance.toFixed(2)} as of ${date}.`);
         }}
       />
       <IncomeModal
@@ -570,7 +665,7 @@ function SetupWizard() {
         onSave={async data => {
           await addIncome(data as Omit<IncomeItem, "id">);
           setIncomeModalVisible(false);
-          confirmAndNext("Nice — I’ll include that income when I check future cash flow.");
+          confirmAndNext("Nice — I'll include that income when I check future cash flow.");
         }}
       />
       <AddBillModal
@@ -579,7 +674,7 @@ function SetupWizard() {
         onSave={async data => {
           await addBill(data as Omit<Bill, "id" | "created_at">);
           setBillModalVisible(false);
-          confirmAndNext("Got it — I’ll watch that bill date when I forecast your month.");
+          confirmAndNext("Got it — I'll watch that bill date when I forecast your month.");
         }}
       />
       <AddBillModal
@@ -589,7 +684,7 @@ function SetupWizard() {
         onSave={async data => {
           await addBill(data as Omit<Bill, "id" | "created_at">);
           setDebtModalVisible(false);
-          confirmAndNext("Debt added — I’ll use it for payoff and extra-payment decisions.");
+          confirmAndNext("Debt added — I'll use it for payoff and extra-payment decisions.");
         }}
       />
       <GoalModal
@@ -598,7 +693,7 @@ function SetupWizard() {
         onSave={async data => {
           await addGoal(data as Omit<Goal, "id" | "created_at">);
           setGoalModalVisible(false);
-          confirmAndNext("Goal added — I’ll protect it when I look ahead.");
+          confirmAndNext("Goal added — I'll protect it when I look ahead.");
         }}
       />
     </LinearGradient>
@@ -672,11 +767,19 @@ const styles = StyleSheet.create({
   bubble: { alignSelf: "stretch", backgroundColor: "rgba(15,23,42,0.9)", borderWidth: 1, borderColor: "rgba(139,92,246,0.35)", borderRadius: 24, padding: 18, marginTop: 22 },
   bubbleHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
   bubbleLabel: { color: "#a78bfa", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1, textTransform: "uppercase" },
+  choicePill: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4, backgroundColor: "rgba(56,189,248,0.12)", borderWidth: 1, borderColor: "rgba(56,189,248,0.22)", marginLeft: "auto", marginRight: 10 },
+  choicePillText: { color: "#bae6fd", fontSize: 10, fontFamily: "Inter_800ExtraBold" },
   ask: { color: "#f8fafc", fontSize: 20, lineHeight: 27, fontFamily: "Inter_800ExtraBold", textAlign: "center" },
   body: { color: "#94a3b8", fontSize: 15, lineHeight: 22, fontFamily: "Inter_500Medium", textAlign: "center", marginTop: 10 },
   confirmation: { alignSelf: "stretch", flexDirection: "row", alignItems: "center", gap: 9, backgroundColor: "rgba(34,197,94,0.12)", borderWidth: 1, borderColor: "rgba(34,197,94,0.28)", borderRadius: 16, padding: 12, marginTop: 14 },
   confirmationText: { flex: 1, color: "#bbf7d0", fontSize: 13, lineHeight: 18, fontFamily: "Inter_700Bold" },
   optionStack: { gap: 12, marginTop: 22 },
+  trustCard: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 18, borderWidth: 1, borderColor: "rgba(56,189,248,0.18)", backgroundColor: "rgba(15,23,42,0.74)", padding: 14 },
+  trustIcon: { width: 38, height: 38, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(56,189,248,0.12)" },
+  trustTitle: { color: "#f8fafc", fontSize: 14, fontFamily: "Inter_800ExtraBold" },
+  trustText: { color: "#94a3b8", fontSize: 12, lineHeight: 17, fontFamily: "Inter_500Medium", marginTop: 3 },
+  safeNote: { flexDirection: "row", alignItems: "flex-start", gap: 8, borderRadius: 16, borderWidth: 1, borderColor: "rgba(56,189,248,0.16)", backgroundColor: "rgba(2,132,199,0.10)", padding: 12 },
+  safeNoteText: { flex: 1, color: "#bae6fd", fontSize: 12, lineHeight: 17, fontFamily: "Inter_600SemiBold" },
   optionCard: { minHeight: 58, borderRadius: 18, borderWidth: 1, borderColor: "rgba(148,163,184,0.2)", backgroundColor: "rgba(15,23,42,0.82)", paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 14 },
   optionCardSelected: { borderColor: "rgba(139,92,246,0.8)", backgroundColor: "rgba(88,28,135,0.45)" },
   optionIcon: { width: 34, height: 34, borderRadius: 12, backgroundColor: "rgba(148,163,184,0.12)", alignItems: "center", justifyContent: "center" },
@@ -686,6 +789,26 @@ const styles = StyleSheet.create({
   planNumber: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(56,189,248,0.2)" },
   planNumberText: { color: "#38bdf8", fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   planText: { color: "#e2e8f0", fontSize: 15, fontFamily: "Inter_700Bold" },
+  planDetail: { color: "#94a3b8", fontSize: 12, lineHeight: 17, fontFamily: "Inter_500Medium", marginTop: 3 },
+  pathCard: { borderRadius: 22, borderWidth: 1, borderColor: "rgba(139,92,246,0.28)", backgroundColor: "rgba(15,23,42,0.82)", padding: 15 },
+  pathCardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
+  pathEyebrow: { color: "#a78bfa", fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 1 },
+  pathCount: { color: "#c4b5fd", fontSize: 12, fontFamily: "Inter_800ExtraBold" },
+  pathCurrentRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  pathCurrentIcon: { width: 40, height: 40, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(139,92,246,0.16)" },
+  pathCurrentTitle: { color: "#f8fafc", fontSize: 16, fontFamily: "Inter_800ExtraBold" },
+  pathCurrentText: { color: "#94a3b8", fontSize: 12, lineHeight: 17, fontFamily: "Inter_500Medium", marginTop: 3 },
+  pathPills: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginTop: 13 },
+  pathPill: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5, backgroundColor: "rgba(148,163,184,0.10)", borderWidth: 1, borderColor: "rgba(148,163,184,0.15)" },
+  pathPillActive: { backgroundColor: "rgba(139,92,246,0.22)", borderColor: "rgba(139,92,246,0.45)" },
+  pathPillDone: { backgroundColor: "rgba(34,197,94,0.12)", borderColor: "rgba(34,197,94,0.25)" },
+  pathPillText: { color: "#94a3b8", fontSize: 10, fontFamily: "Inter_800ExtraBold" },
+  pathPillTextActive: { color: "#ddd6fe" },
+  pathPillTextDone: { color: "#bbf7d0" },
+  finishCard: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 18, borderWidth: 1, borderColor: "rgba(192,132,252,0.22)", backgroundColor: "rgba(30,27,75,0.45)", padding: 14 },
+  finishIcon: { width: 38, height: 38, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(139,92,246,0.18)" },
+  finishTitle: { color: "#f8fafc", fontSize: 14, fontFamily: "Inter_800ExtraBold" },
+  finishText: { color: "#cbd5e1", fontSize: 12, lineHeight: 17, fontFamily: "Inter_500Medium", marginTop: 3 },
   safetyCard: { flexDirection: "row", gap: 10, marginTop: 20 },
   inputWrap: { flex: 1 },
   inputLabel: { color: "#94a3b8", fontSize: 11, fontFamily: "Inter_800ExtraBold", marginBottom: 6, textTransform: "uppercase" },

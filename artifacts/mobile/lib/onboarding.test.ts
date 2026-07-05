@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildSetupCompletionMessage,
   buildPersonalizedSetupKeys,
   describeSetupPlan,
+  getSetupPathItem,
   normalizeOnboardingPreferences,
   shouldAskSavingsGoal,
 } from "./onboarding";
@@ -53,4 +55,19 @@ test("summarizes the selected path for Flo", () => {
   assert.match(summary, /savings goals/);
   assert.match(summary, /bill review/);
   assert.match(summary, /spending and budget setup/);
+});
+
+test("labels setup path items for polished onboarding", () => {
+  const debt = getSetupPathItem("debts");
+  assert.equal(debt.shortLabel, "Debt");
+  assert.match(debt.detail, /snowball/i);
+});
+
+test("builds a completion message without changing money data", () => {
+  const message = buildSetupCompletionMessage(normalizeOnboardingPreferences({
+    help: ["pay_off_debt"],
+    goals: ["pay_off_debt"],
+  }));
+  assert.match(message, /debt payoff/);
+  assert.match(message, /real forecast/);
 });

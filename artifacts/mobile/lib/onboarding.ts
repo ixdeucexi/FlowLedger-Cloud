@@ -31,6 +31,13 @@ export type MoneySetupKey =
   | "reconcile"
   | "finish";
 
+export interface SetupPathItem {
+  key: MoneySetupKey;
+  title: string;
+  shortLabel: string;
+  detail: string;
+}
+
 export interface OnboardingPreferences {
   help: SetupHelpOption[];
   goals: SetupGoalOption[];
@@ -125,6 +132,74 @@ export function buildPersonalizedSetupKeys(preferences: OnboardingPreferences): 
   return keys;
 }
 
+export function getSetupPathItem(key: MoneySetupKey): SetupPathItem {
+  const items: Record<MoneySetupKey, SetupPathItem> = {
+    account: {
+      key,
+      title: "Connect the money source",
+      shortLabel: "Account",
+      detail: "Add the account FlowLedger should forecast from.",
+    },
+    money: {
+      key,
+      title: "Anchor today's balance",
+      shortLabel: "Balance",
+      detail: "Set the real starting point for the forecast.",
+    },
+    income: {
+      key,
+      title: "Add money coming in",
+      shortLabel: "Income",
+      detail: "Add paychecks, deposits, or recurring income.",
+    },
+    bills: {
+      key,
+      title: "Map monthly obligations",
+      shortLabel: "Bills",
+      detail: "Add recurring bills so tight weeks show early.",
+    },
+    debts: {
+      key,
+      title: "Build the payoff path",
+      shortLabel: "Debt",
+      detail: "Add debts so the snowball can protect cash flow.",
+    },
+    goals: {
+      key,
+      title: "Name the savings target",
+      shortLabel: "Goals",
+      detail: "Add savings goals so extra money has a job.",
+    },
+    safety: {
+      key,
+      title: "Choose the safety cushion",
+      shortLabel: "Cushion",
+      detail: "Tell Flo how much breathing room to protect.",
+    },
+    reconcile: {
+      key,
+      title: "Confirm the real balance",
+      shortLabel: "Confirm",
+      detail: "Match FlowLedger to the bank before decisions.",
+    },
+    finish: {
+      key,
+      title: "Ask the first decision",
+      shortLabel: "Ask Flo",
+      detail: "Use the setup to answer a real money question.",
+    },
+  };
+  return items[key];
+}
+
+export function buildSetupCompletionMessage(preferences: OnboardingPreferences): string {
+  const focus = describeSetupPlan(preferences);
+  const setupLabels = buildPersonalizedSetupKeys(preferences)
+    .filter(key => key !== "finish")
+    .map(key => getSetupPathItem(key).shortLabel.toLowerCase());
+  return `${focus} Once ${setupLabels.join(", ")} are in place, Flo can answer affordability, timing, and payoff questions from your real forecast.`;
+}
+
 export function describeSetupPlan(preferences: OnboardingPreferences): string {
   const parts: string[] = [];
   if (preferences.goals.includes("pay_off_debt") || preferences.help.includes("pay_off_debt")) {
@@ -137,6 +212,6 @@ export function describeSetupPlan(preferences: OnboardingPreferences): string {
   if (preferences.help.includes("track_spending") || preferences.help.includes("create_budget")) {
     parts.push("spending and budget setup");
   }
-  if (parts.length === 0) return "I’ll build the full forecast path: accounts, income, bills, debt, goals, and your safety cushion.";
-  return `I’ll focus setup around ${parts.join(", ")} while still protecting your forecast.`;
+  if (parts.length === 0) return "I'll build the full forecast path: accounts, income, bills, debt, goals, and your safety cushion.";
+  return `I'll focus setup around ${parts.join(", ")} while still protecting your forecast.`;
 }
