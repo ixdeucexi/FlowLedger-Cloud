@@ -10,7 +10,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { BackHandler, Image, Platform, StyleSheet, Text, View } from "react-native";
+import { Animated, BackHandler, Image, Platform, StyleSheet, StyleProp, Text, View, ViewStyle } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -70,16 +70,16 @@ function AuthObserver() {
   return null;
 }
 
-function StartupScreen() {
+function StartupScreen({ style }: { style?: StyleProp<ViewStyle> } = {}) {
   return (
-    <View style={styles.startup}>
+    <Animated.View style={[styles.startup, style]}>
       <Image
         source={require("../assets/images/startup_f_transparent.png")}
         style={styles.startupIcon}
         resizeMode="contain"
       />
       <Text style={styles.startupTitle}>FlowLedger Algo</Text>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -88,6 +88,9 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
   const { ready: themeReady } = useThemeMode();
   const router = useRouter();
   const [minimumStartupReady, setMinimumStartupReady] = useState(false);
+  const [showStartupOverlay, setShowStartupOverlay] = useState(true);
+  const startupOpacity = useRef(new Animated.Value(1)).current;
+  const appOpacity = useRef(new Animated.Value(0)).current;
   const servicesReady = fontsReady && !authLoading && themeReady;
   const appReady = servicesReady && minimumStartupReady;
 
@@ -97,8 +100,28 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
   }, []);
 
   useEffect(() => {
-    if (appReady) hideSplash();
-  }, [appReady, hideSplash]);
+    if (!appReady) {
+      startupOpacity.setValue(1);
+      appOpacity.setValue(0);
+      setShowStartupOverlay(true);
+      return;
+    }
+
+    hideSplash();
+    setShowStartupOverlay(true);
+    Animated.parallel([
+      Animated.timing(startupOpacity, {
+        toValue: 0,
+        duration: 560,
+        useNativeDriver: true,
+      }),
+      Animated.timing(appOpacity, {
+        toValue: 1,
+        duration: 560,
+        useNativeDriver: true,
+      }),
+    ]).start(() => setShowStartupOverlay(false));
+  }, [appReady, appOpacity, hideSplash, startupOpacity]);
 
   useEffect(() => {
     const t = setTimeout(hideSplash, 3000);
@@ -123,18 +146,23 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
   if (!appReady) return <StartupScreen />;
 
   return (
-    <>
-      <AuthObserver />
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="login" />
-          <Stack.Screen name="setup" />
-          <Stack.Screen name="(tabs)" />
-        </Stack>
-        <PwaInstallPrompt />
-      </GestureHandlerRootView>
-    </>
+    <View style={styles.transitionRoot}>
+      <Animated.View style={[styles.transitionContent, { opacity: appOpacity }]}>
+        <AuthObserver />
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="login" />
+            <Stack.Screen name="setup" />
+            <Stack.Screen name="(tabs)" />
+          </Stack>
+          <PwaInstallPrompt />
+        </GestureHandlerRootView>
+      </Animated.View>
+      {showStartupOverlay ? (
+        <StartupScreen style={[styles.startupOverlay, { opacity: startupOpacity }]} />
+      ) : null}
+    </View>
   );
 }
 
@@ -171,6 +199,16 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
+  transitionRoot: {
+    flex: 1,
+    backgroundColor: "#050816",
+  },
+  transitionContent: {
+    flex: 1,
+  },
+  startupOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
   startup: {
     flex: 1,
     alignItems: "center",

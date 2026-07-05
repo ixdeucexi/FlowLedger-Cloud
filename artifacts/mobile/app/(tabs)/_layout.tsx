@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Tabs, useRouter, useSegments } from "expo-router";
 import React from "react";
-import { Image, Modal, Platform, Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
+import { Animated, Image, Modal, Platform, Pressable, StyleSheet, StyleProp, Text, View, ViewStyle, useColorScheme } from "react-native";
 
 import { useAuth } from "@/context/AuthContext";
 import { BudgetProvider, useBudget } from "@/context/BudgetContext";
@@ -83,10 +83,10 @@ const DEMO_TOUR_STEPS = [
   },
 ] as const;
 
-function BudgetLoadingScreen() {
+function BudgetLoadingScreen({ style }: { style?: StyleProp<ViewStyle> } = {}) {
   const colors = useColors();
   return (
-    <View style={styles.loadingScreen}>
+    <Animated.View style={[styles.loadingScreen, style]}>
       <Image
         source={require("../../assets/images/startup_f_transparent.png")}
         style={styles.loadingLogo}
@@ -94,7 +94,7 @@ function BudgetLoadingScreen() {
       />
       <Text style={[styles.loadingTitle, { color: colors.foreground }]}>FlowLedger Algo</Text>
       <Text style={[styles.loadingSub, { color: colors.mutedForeground }]}>Preparing your forecast...</Text>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -351,6 +351,9 @@ function TabContent() {
   const colors = useColors();
   const { loading, loadError, retryBudgetLoad, demoMode } = useBudget();
   const [minimumBudgetLoadingReady, setMinimumBudgetLoadingReady] = React.useState(false);
+  const [showLoadingOverlay, setShowLoadingOverlay] = React.useState(true);
+  const loadingOpacity = React.useRef(new Animated.Value(1)).current;
+  const tabsOpacity = React.useRef(new Animated.Value(0)).current;
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const isIOS = Platform.OS === "ios";
@@ -362,95 +365,125 @@ function TabContent() {
     return () => clearTimeout(t);
   }, []);
 
-  if (loading || !minimumBudgetLoadingReady) return <BudgetLoadingScreen />;
+  const contentReady = !loading && minimumBudgetLoadingReady;
+
+  React.useEffect(() => {
+    if (!contentReady) {
+      loadingOpacity.setValue(1);
+      tabsOpacity.setValue(0);
+      setShowLoadingOverlay(true);
+      return;
+    }
+
+    setShowLoadingOverlay(true);
+    Animated.parallel([
+      Animated.timing(loadingOpacity, {
+        toValue: 0,
+        duration: 460,
+        useNativeDriver: true,
+      }),
+      Animated.timing(tabsOpacity, {
+        toValue: 1,
+        duration: 460,
+        useNativeDriver: true,
+      }),
+    ]).start(() => setShowLoadingOverlay(false));
+  }, [contentReady, loadingOpacity, tabsOpacity]);
+
+  if (!contentReady) return <BudgetLoadingScreen />;
   if (loadError) return <BudgetLoadErrorScreen message={loadError} onRetry={retryBudgetLoad} />;
 
   return (
-    <>
-      <Tabs
-        backBehavior="history"
-        detachInactiveScreens={false}
-        screenOptions={{
-          animation: "none",
-          freezeOnBlur: !isWeb,
-          lazy: true,
-          tabBarActiveTintColor: "#8b5cf6",
-          tabBarInactiveTintColor: colors.mutedForeground,
-          headerShown: false,
-          tabBarLabelStyle: {
-            fontFamily: "Inter_600SemiBold",
-            fontSize: 10,
-            marginTop: 1,
-          },
-          tabBarItemStyle: {
-            paddingVertical: 6,
-            borderRadius: 18,
-          },
-          tabBarStyle: {
-            position: "absolute",
-            left: 0,
-            right: 0,
-            bottom: 0,
-            borderTopLeftRadius: 28,
-            borderTopRightRadius: 28,
-            borderBottomLeftRadius: 0,
-            borderBottomRightRadius: 0,
-            backgroundColor: isIOS ? "transparent" : "rgba(2,6,23,0.90)",
-            borderWidth: 1,
-            borderTopWidth: 1,
-            borderBottomWidth: 0,
-            borderLeftWidth: 0,
-            borderRightWidth: 0,
-            borderColor: "rgba(148,163,184,0.18)",
-            shadowColor: "#7c3aed",
-            shadowOffset: { width: 0, height: 14 },
-            shadowOpacity: 0.22,
-            shadowRadius: 26,
-            elevation: 14,
-            paddingHorizontal: 6,
-            ...(isWeb ? {
-              height: isIosWeb ? 72 : 82,
-              paddingTop: isIosWeb ? 6 : 8,
-              paddingBottom: isIosWeb ? 12 : 10,
-            } : {
-              height: 86,
-              paddingTop: 6,
-              paddingBottom: 14,
-            }),
-          },
-          tabBarBackground: () =>
-            isIOS ? (
-              <BlurView
-                intensity={100}
-                tint={isDark ? "dark" : "light"}
-                style={StyleSheet.absoluteFill}
-              />
-            ) : isWeb ? (
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(2,6,23,0.96)", borderTopLeftRadius: 28, borderTopRightRadius: 28 }]} />
-            ) : null,
-        }}
-      >
-        {TABS.map(tab => (
-          <Tabs.Screen
-            key={tab.name}
-            name={tab.name}
-            options={{
-              title: tab.title,
-              tabBarActiveTintColor: tab.name === "flo" ? colors.primary : undefined,
-              tabBarInactiveTintColor: tab.name === "flo" ? colors.primary : undefined,
-              tabBarIcon: ({ color }) => tab.name === "flo"
-                ? <FloLogo size={24} ring={false} />
-                : <Feather name={tab.icon} size={22} color={color} />,
-            }}
-          />
-        ))}
-        <Tabs.Screen name="category-budget" options={{ href: null }} />
-      </Tabs>
-      {demoMode ? <DemoModeBanner /> : null}
-      <SaveStatusBanner />
-      <DecisionDueModal />
-      <FloLearningTour />
-    </>
+    <View style={styles.tabTransitionRoot}>
+      <Animated.View style={[styles.tabTransitionContent, { opacity: tabsOpacity }]}>
+        <Tabs
+          backBehavior="history"
+          detachInactiveScreens={false}
+          screenOptions={{
+            animation: "none",
+            freezeOnBlur: !isWeb,
+            lazy: true,
+            tabBarActiveTintColor: "#8b5cf6",
+            tabBarInactiveTintColor: colors.mutedForeground,
+            headerShown: false,
+            tabBarLabelStyle: {
+              fontFamily: "Inter_600SemiBold",
+              fontSize: 10,
+              marginTop: 1,
+            },
+            tabBarItemStyle: {
+              paddingVertical: 6,
+              borderRadius: 18,
+            },
+            tabBarStyle: {
+              position: "absolute",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              borderTopLeftRadius: 28,
+              borderTopRightRadius: 28,
+              borderBottomLeftRadius: 0,
+              borderBottomRightRadius: 0,
+              backgroundColor: isIOS ? "transparent" : "rgba(2,6,23,0.90)",
+              borderWidth: 1,
+              borderTopWidth: 1,
+              borderBottomWidth: 0,
+              borderLeftWidth: 0,
+              borderRightWidth: 0,
+              borderColor: "rgba(148,163,184,0.18)",
+              shadowColor: "#7c3aed",
+              shadowOffset: { width: 0, height: 14 },
+              shadowOpacity: 0.22,
+              shadowRadius: 26,
+              elevation: 14,
+              paddingHorizontal: 6,
+              ...(isWeb ? {
+                height: isIosWeb ? 72 : 82,
+                paddingTop: isIosWeb ? 6 : 8,
+                paddingBottom: isIosWeb ? 12 : 10,
+              } : {
+                height: 86,
+                paddingTop: 6,
+                paddingBottom: 14,
+              }),
+            },
+            tabBarBackground: () =>
+              isIOS ? (
+                <BlurView
+                  intensity={100}
+                  tint={isDark ? "dark" : "light"}
+                  style={StyleSheet.absoluteFill}
+                />
+              ) : isWeb ? (
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(2,6,23,0.96)", borderTopLeftRadius: 28, borderTopRightRadius: 28 }]} />
+              ) : null,
+          }}
+        >
+          {TABS.map(tab => (
+            <Tabs.Screen
+              key={tab.name}
+              name={tab.name}
+              options={{
+                title: tab.title,
+                tabBarActiveTintColor: tab.name === "flo" ? colors.primary : undefined,
+                tabBarInactiveTintColor: tab.name === "flo" ? colors.primary : undefined,
+                tabBarIcon: ({ color }) => tab.name === "flo"
+                  ? <FloLogo size={24} ring={false} />
+                  : <Feather name={tab.icon} size={22} color={color} />,
+              }}
+            />
+          ))}
+          <Tabs.Screen name="category-budget" options={{ href: null }} />
+        </Tabs>
+        {demoMode ? <DemoModeBanner /> : null}
+        <SaveStatusBanner />
+        <DecisionDueModal />
+        <FloLearningTour />
+      </Animated.View>
+      {showLoadingOverlay ? (
+        <BudgetLoadingScreen style={[styles.loadingOverlay, { opacity: loadingOpacity }]} />
+      ) : null}
+    </View>
   );
 }
 
@@ -463,6 +496,16 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
+  tabTransitionRoot: {
+    flex: 1,
+    backgroundColor: "#050816",
+  },
+  tabTransitionContent: {
+    flex: 1,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
   loadingScreen: {
     flex: 1,
     alignItems: "center",

@@ -932,7 +932,8 @@ export default function DashboardScreen() {
   useEffect(() => {
     if (nextWeekRisk && !startupAlertShownRef.current) {
       startupAlertShownRef.current = true;
-      setStartupAlertVisible(true);
+      const timer = setTimeout(() => setStartupAlertVisible(true), 650);
+      return () => clearTimeout(timer);
     }
   }, [nextWeekRisk]);
   const openFloWithPrompt = (prompt: string) => {
