@@ -1372,6 +1372,7 @@ export default function DashboardScreen() {
 
           <ScrollView
             ref={algorithmCarouselRef}
+            style={styles.referenceAlgoScroll}
             horizontal
             showsHorizontalScrollIndicator={false}
             decelerationRate="fast"
@@ -2267,17 +2268,18 @@ const styles = StyleSheet.create({
   referenceScoreUnderline: { width: 64, height: 3, borderRadius: 3, backgroundColor: "#22c55e", marginTop: 4, marginBottom: 4 },
   referenceScoreReason: { color: "#94a3b8", maxWidth: 220, textAlign: "center", fontSize: 10, fontFamily: "Inter_600SemiBold", lineHeight: 13 },
   referenceScoreTapHint: { color: "#60a5fa", fontSize: 9, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
-  referenceLowerGrid: { gap: 8, marginBottom: 2 },
+  referenceLowerGrid: { flex: 1, gap: 8, marginBottom: 0, minHeight: 190 },
   referenceLowerGridWide: { flexDirection: "row" },
-  referenceAlgoCarouselPanel: { flex: 1.45, borderRadius: 22, borderWidth: 1, borderColor: "rgba(168,85,247,0.22)", backgroundColor: "rgba(15,23,42,0.72)", padding: 9, paddingBottom: 11, shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.22, shadowRadius: 26, elevation: 8 },
+  referenceAlgoCarouselPanel: { flex: 1, borderRadius: 22, borderWidth: 1, borderColor: "rgba(168,85,247,0.22)", backgroundColor: "rgba(15,23,42,0.72)", padding: 10, paddingBottom: 12, shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.22, shadowRadius: 26, elevation: 8 },
   referenceAlgoHeaderRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 4 },
   referenceAlgoSubtitle: { color: "#94a3b8", fontSize: 9, fontFamily: "Inter_600SemiBold", lineHeight: 12, marginTop: 1 },
   referenceAlgoCount: { color: "#a78bfa", fontSize: 12, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
   referenceAlgoCountPill: { minWidth: 60, height: 28, borderRadius: 999, paddingHorizontal: 9, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(37,99,235,0.16)", borderWidth: 1, borderColor: "rgba(96,165,250,0.28)" },
   referenceAlgoCountActive: { color: "#dbeafe", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   referenceAlgoCountTotal: { color: "#818cf8", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
-  referenceAlgoScrollContent: { gap: 12, paddingRight: 4 },
-  referenceAlgorithmCard: { minHeight: 82, borderRadius: 17, borderWidth: 1, backgroundColor: "rgba(2,6,23,0.62)", padding: 9, flexDirection: "row", gap: 8, alignItems: "flex-start" },
+  referenceAlgoScroll: { flex: 1 },
+  referenceAlgoScrollContent: { flexGrow: 1, gap: 12, paddingRight: 4 },
+  referenceAlgorithmCard: { height: "100%", minHeight: 112, borderRadius: 17, borderWidth: 1, backgroundColor: "rgba(2,6,23,0.62)", padding: 10, flexDirection: "row", gap: 8, alignItems: "flex-start" },
   referenceAlgorithmIcon: { width: 32, height: 32, borderRadius: 12, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(226,232,240,0.08)" },
   referenceAlgorithmTitle: { color: "#e2e8f0", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.8, textTransform: "uppercase" },
   referenceAlgorithmValue: { fontSize: 16, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
