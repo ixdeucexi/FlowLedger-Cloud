@@ -33,6 +33,15 @@ function normalizeRole(role: unknown): HouseholdRole {
   return role === "viewer" || role === "editor" || role === "owner" ? role : "viewer";
 }
 
+function friendlyHouseholdError(message: string | undefined, fallback: string): string {
+  const lower = (message ?? "").toLowerCase();
+  if (lower.includes("only the household owner")) return "Only the household owner can create invite codes.";
+  if (lower.includes("invalid invite role")) return "Choose Can edit or View only, then try again.";
+  if (lower.includes("invite code is required")) return "Enter an invite code first.";
+  if (lower.includes("invalid or expired")) return "That invite code is invalid or expired.";
+  return fallback;
+}
+
 export async function readStoredActiveHouseholdId(userId?: string | null): Promise<string | null> {
   try {
     return await AsyncStorage.getItem(storageKey(userId));
@@ -158,7 +167,7 @@ export async function createHouseholdInviteCode(householdId: string, role: Exclu
     p_household_id: householdId,
     p_role: role,
   });
-  if (error) throw new Error(`Create household invite: ${error.message}`);
+  if (error) throw new Error(friendlyHouseholdError(error.message, "Couldn’t create invite code. Try again."));
   return String(data ?? "");
 }
 
@@ -166,6 +175,6 @@ export async function acceptHouseholdInviteCode(code: string): Promise<string> {
   const { data, error } = await supabase.rpc("accept_household_invite", {
     p_code: code,
   });
-  if (error) throw new Error(`Join household: ${error.message}`);
+  if (error) throw new Error(friendlyHouseholdError(error.message, "Couldn’t join that household. Try again."));
   return String(data ?? "");
 }

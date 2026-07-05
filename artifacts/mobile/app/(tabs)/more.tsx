@@ -167,7 +167,7 @@ export default function MoreScreen() {
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not create a household invite.";
+      const message = error instanceof Error ? error.message : "Couldn’t create invite code. Try again.";
       setHouseholdMessage(message);
       Alert.alert("Household invite", message);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -188,7 +188,7 @@ export default function MoreScreen() {
       setHouseholdMessage("Household joined. FlowLedger is now showing that household plan.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not join that household.";
+      const message = error instanceof Error ? error.message : "Couldn’t join that household. Try again.";
       setHouseholdMessage(message);
       Alert.alert("Join household", message);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -885,7 +885,7 @@ export default function MoreScreen() {
         </View>
 
         {!!householdMessage && (
-          <Text style={[styles.householdMessage, { color: householdMessage.toLowerCase().includes("could not") ? c.destructive : c.success }]}>
+          <Text style={[styles.householdMessage, { color: /couldn|invalid|expired|required|only/i.test(householdMessage) ? c.destructive : c.success }]}>
             {householdMessage}
           </Text>
         )}
