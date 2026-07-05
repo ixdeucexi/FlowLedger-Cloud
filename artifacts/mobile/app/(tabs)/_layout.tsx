@@ -20,6 +20,8 @@ import {
 } from "@/lib/learningTour";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 
+const MIN_BUDGET_LOADING_MS = 900;
+
 const TABS = [
   { name: "index",        title: "Dashboard",    icon: "bar-chart-2"     },
   { name: "bills",        title: "Bills",        icon: "file-text"       },
@@ -348,13 +350,19 @@ function FloLearningTour() {
 function TabContent() {
   const colors = useColors();
   const { loading, loadError, retryBudgetLoad, demoMode } = useBudget();
+  const [minimumBudgetLoadingReady, setMinimumBudgetLoadingReady] = React.useState(false);
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
   const isIosWeb = isWeb && typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-  if (loading) return <BudgetLoadingScreen />;
+  React.useEffect(() => {
+    const t = setTimeout(() => setMinimumBudgetLoadingReady(true), MIN_BUDGET_LOADING_MS);
+    return () => clearTimeout(t);
+  }, []);
+
+  if (loading || !minimumBudgetLoadingReady) return <BudgetLoadingScreen />;
   if (loadError) return <BudgetLoadErrorScreen message={loadError} onRetry={retryBudgetLoad} />;
 
   return (

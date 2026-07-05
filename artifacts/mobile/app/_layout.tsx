@@ -9,7 +9,7 @@ import { Feather } from "@expo/vector-icons";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler, Image, Platform, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -23,6 +23,7 @@ import { supabase } from "@/lib/supabase";
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
+const MIN_STARTUP_MS = 900;
 
 function AuthObserver() {
   const { session, loading } = useAuth();
@@ -86,7 +87,14 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
   const { loading: authLoading } = useAuth();
   const { ready: themeReady } = useThemeMode();
   const router = useRouter();
-  const appReady = fontsReady && !authLoading && themeReady;
+  const [minimumStartupReady, setMinimumStartupReady] = useState(false);
+  const servicesReady = fontsReady && !authLoading && themeReady;
+  const appReady = servicesReady && minimumStartupReady;
+
+  useEffect(() => {
+    const t = setTimeout(() => setMinimumStartupReady(true), MIN_STARTUP_MS);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     if (appReady) hideSplash();
