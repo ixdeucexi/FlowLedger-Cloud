@@ -268,12 +268,26 @@ export default function TransactionsScreen() {
         SOURCE_META[t.source].label.toLowerCase().includes(q)
       );
     }
-    list.sort((a, b) => sortOrder === "asc"
-      ? a.date.localeCompare(b.date)
-      : b.date.localeCompare(a.date)
-    );
+    if (!hasActiveFilters) {
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+      list = list.filter(t => t.date >= monthStart);
+      list.sort((a, b) => {
+        const aUpcoming = a.date >= today;
+        const bUpcoming = b.date >= today;
+        if (aUpcoming && bUpcoming) return a.date.localeCompare(b.date);
+        if (aUpcoming !== bUpcoming) return aUpcoming ? -1 : 1;
+        return b.date.localeCompare(a.date);
+      });
+    } else {
+      list.sort((a, b) => sortOrder === "asc"
+        ? a.date.localeCompare(b.date)
+        : b.date.localeCompare(a.date)
+      );
+    }
     return list;
-  }, [allActivity, typeFilter, sourceFilter, dateFilter, categoryFilter, search, sortOrder]);
+  }, [allActivity, typeFilter, sourceFilter, dateFilter, categoryFilter, search, sortOrder, hasActiveFilters]);
 
   const sections = useMemo(() => groupByMonth(filtered), [filtered]);
 
@@ -318,6 +332,10 @@ export default function TransactionsScreen() {
     if (dateFilter === "this_year") return `${now.getFullYear()}`;
     return "All activity";
   }, [dateFilter]);
+
+  const feedOrderLabel = hasActiveFilters
+    ? (sortOrder === "asc" ? "oldest first" : "newest first")
+    : "upcoming first";
 
   const quickChips = [
     { key: "all", label: "All", active: typeFilter === "all" && sourceFilter === "all", onPress: () => { setTypeFilter("all"); setSourceFilter("all"); } },
@@ -440,15 +458,13 @@ export default function TransactionsScreen() {
     );
   };
 
-  return (
-    <View style={[styles.screen, { backgroundColor: c.background }]}>
-      <PremiumBackdrop variant="green" />
-      {/* ── Header ── */}
+  const renderListHeader = () => (
+    <>
       <View style={[styles.header, { paddingTop: insets.top + 12 + webTopPad }]}>
         <View>
           <Text style={[styles.title, { color: c.foreground }]}>Activity</Text>
           <Text style={[styles.subtitle, { color: c.mutedForeground }]}>
-            {filtered.length} of {allActivity.length} entries · newest first
+            {filtered.length} of {allActivity.length} entries · {feedOrderLabel}
           </Text>
         </View>
         <Pressable
@@ -491,7 +507,6 @@ export default function TransactionsScreen() {
         </View>
       </View>
 
-      {/* ── Search + filter button ── */}
       <View style={[styles.monthlySummaryCard, { backgroundColor: c.card, borderColor: c.border }]}>
         <View style={styles.monthlySummaryHeader}>
           <View>
@@ -561,7 +576,7 @@ export default function TransactionsScreen() {
           )}
         </Pressable>
       </View>
-      {/* ── Summary bar ── */}
+
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -585,14 +600,19 @@ export default function TransactionsScreen() {
           </Pressable>
         ))}
       </ScrollView>
+    </>
+  );
 
-      {/* ── Grouped list ── */}
+  return (
+    <View style={[styles.screen, { backgroundColor: c.background }]}>
+      <PremiumBackdrop variant="green" />
       <SectionList
         sections={sections}
         keyExtractor={item => item.id}
         contentContainerStyle={[styles.list, { paddingBottom: listBottomPadding }]}
         scrollIndicatorInsets={{ bottom: listBottomPadding }}
         stickySectionHeadersEnabled
+        ListHeaderComponent={renderListHeader}
         ListEmptyComponent={
           <EmptyState
             icon="repeat"
@@ -872,11 +892,11 @@ const styles = StyleSheet.create({
   filterActionButton: { flex: 1, minHeight: 48, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 10 },
   filterActionText: { fontSize: 14, fontFamily: "Inter_700Bold" },
 
-  list:          { paddingHorizontal: 16 },
-  sectionHeader: { paddingTop: 8, paddingBottom: 6 },
+  list:          {},
+  sectionHeader: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6 },
   sectionTitle:  { fontSize: 12, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.7 },
 
-  txRow:          { flexDirection: "row", alignItems: "center", padding: 11, gap: 10, borderWidth: 1, borderColor: "rgba(148,163,184,0.10)", overflow: "hidden", shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 2 },
+  txRow:          { flexDirection: "row", alignItems: "center", marginHorizontal: 16, padding: 11, gap: 10, borderWidth: 1, borderColor: "rgba(148,163,184,0.10)", overflow: "hidden", shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 2 },
   rowAccent:      { position: "absolute", left: 0, top: 0, bottom: 0, width: 3 },
   sourceIcon:     { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
   txMid:          { flex: 1 },

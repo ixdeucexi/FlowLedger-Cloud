@@ -400,8 +400,8 @@ export default function MoreScreen() {
           <Feather name="sliders" size={20} color={c.primary} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.settingsHeroTitle, { color: c.foreground }]}>Control Center</Text>
-          <Text style={[styles.settingsHeroText, { color: c.mutedForeground }]}>Clean sections for setup, money, decisions, advanced tools, and data.</Text>
+          <Text style={[styles.settingsHeroTitle, { color: c.foreground }]}>Settings Hub</Text>
+          <Text style={[styles.settingsHeroText, { color: c.mutedForeground }]}>Accounts, algorithms, setup, backups, app install, and security in one clean place.</Text>
         </View>
       </View>
 
@@ -410,7 +410,7 @@ export default function MoreScreen() {
           { icon: "credit-card" as const, label: "Accounts", onPress: () => openAccount("add") },
           { icon: "cpu" as const, label: "Algorithms", onPress: () => setShowAlgorithmSuite(current => !current) },
           { icon: "message-circle" as const, label: "Setup", onPress: () => { clearStoredSetupStep(); router.push("/setup" as any); } },
-          { icon: "compass" as const, label: "Tour", onPress: () => { startLearningTour(); router.push("/(tabs)" as any); } },
+          { icon: "compass" as const, label: "Learning", onPress: () => { startLearningTour(); router.push("/(tabs)" as any); } },
           { icon: "download" as const, label: "Backup", onPress: handleExport },
           { icon: "smartphone" as const, label: "Install", onPress: handleShowInstallPrompt },
         ].map(item => (
@@ -539,7 +539,7 @@ export default function MoreScreen() {
         </View>
       </View>
 
-      <SLabel c={c} text="Advanced" />
+      <SLabel c={c} text="Algorithms" />
       <Pressable
         onPress={() => {
           setShowAlgorithmSuite(current => !current);
@@ -631,7 +631,7 @@ export default function MoreScreen() {
       </View>
       </>}
 
-      <SLabel c={c} text="Accounts" />
+      <SLabel c={c} text="Accounts & Balances" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View style={[styles.confidenceBox, { backgroundColor: forecastConfidence.level === "high" ? c.success + "14" : forecastConfidence.level === "medium" ? "#f59e0b18" : c.destructive + "12" }]}>
           <Feather name={forecastConfidence.level === "high" ? "check-circle" : "alert-circle"} size={16} color={forecastConfidence.level === "high" ? c.success : forecastConfidence.level === "medium" ? "#d97706" : c.destructive} />
@@ -653,7 +653,7 @@ export default function MoreScreen() {
       </View>
 
       {/* ── Income Sources ── */}
-      <SLabel c={c} text="Income Sources" />
+      <SLabel c={c} text="Income" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         {incomes.length === 0 ? (
           <Text style={[styles.emptyText, { color: c.mutedForeground }]}>No income sources added yet.</Text>
@@ -702,7 +702,7 @@ export default function MoreScreen() {
       </View>
 
       {/* ── Categories ── */}
-      <SLabel c={c} text="Categories" />
+      <SLabel c={c} text="Budget Categories" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <Pressable
           onPress={() => router.push("/(tabs)/category-budget" as any)}
@@ -821,7 +821,7 @@ export default function MoreScreen() {
       </View>
 
       {/* ── Behavior ── */}
-      <SLabel c={c} text="Behavior" />
+      <SLabel c={c} text="Forecast Controls" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View>
           <Text style={[styles.switchLabel, { color: c.foreground, marginBottom: 2 }]}>Forecast Safety</Text>
@@ -865,7 +865,7 @@ export default function MoreScreen() {
       </View>
 
       {/* ── Data ── */}
-      <SLabel c={c} text="Data" />
+      <SLabel c={c} text="Backup & Data" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         {[
           { icon: "upload" as const,   label: "Import Bills from CSV", desc: "Name, Amount, Category, Balance, Interest Rate…", onPress: handleImport, color: c.primary },
@@ -892,7 +892,7 @@ export default function MoreScreen() {
       </View>
 
       {/* ── Summary ── */}
-      <SLabel c={c} text="Data Health" />
+      <SLabel c={c} text="Health Check" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View style={[styles.confidenceBox, { backgroundColor: dataIntegrityIssues.length ? c.warning + "12" : c.success + "14" }]}>
           <Feather name={dataIntegrityIssues.length ? "alert-triangle" : "check-circle"} size={16} color={dataIntegrityIssues.length ? c.warning : c.success} />
@@ -912,24 +912,9 @@ export default function MoreScreen() {
         ))}
       </View>
 
-      <SLabel c={c} text="Summary" />
-      <View style={[styles.summaryCard, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        {[
-          { label: "Bills", val: bills.length },
-          { label: "Debts", val: bills.filter(b => b.is_debt).length },
-          { label: "Goals", val: goals.length },
-          { label: "Transactions", val: transactions.length },
-        ].map(s => (
-          <View key={s.label} style={styles.summaryItem}>
-            <Text style={[styles.summaryNum, { color: c.foreground }]}>{s.val}</Text>
-            <Text style={[styles.summaryLabel, { color: c.mutedForeground }]}>{s.label}</Text>
-          </View>
-        ))}
-      </View>
-
       {/* ── Account section ── */}
       <View style={{ marginTop: 8, marginBottom: 8 }}>
-        <SLabel c={c} text="Account" />
+      <SLabel c={c} text="Security & Profile" />
         <View style={[styles.card, { borderRadius: 14, backgroundColor: c.card }]}>
           <View style={{ flexDirection: "row", alignItems: "center", paddingBottom: 12, marginBottom: 12, borderBottomWidth: 1, borderBottomColor: c.border }}>
             <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: c.primary + "22", alignItems: "center", justifyContent: "center", marginRight: 12 }}>

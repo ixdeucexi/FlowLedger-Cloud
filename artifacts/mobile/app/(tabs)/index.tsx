@@ -1123,11 +1123,8 @@ export default function DashboardScreen() {
   };
 
   return (
-    <ScrollView
-      style={[styles.screen, styles.dashboardStage]}
-      contentContainerStyle={[styles.content, isCommandWide && styles.contentWide, { paddingTop: dashboardTopPadding, paddingBottom: dashboardBottomPadding }]}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
+    <View
+      style={[styles.screen, styles.dashboardStage, styles.content, isCommandWide && styles.contentWide, { paddingTop: dashboardTopPadding, paddingBottom: dashboardBottomPadding }]}
     >
       <View pointerEvents="none" style={styles.stormBackdrop}>
         <PremiumBackdrop variant="purple" />
@@ -2156,7 +2153,7 @@ export default function DashboardScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-    </ScrollView>
+    </View>
   );
 }
 
