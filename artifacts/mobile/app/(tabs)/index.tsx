@@ -1399,12 +1399,12 @@ export default function DashboardScreen() {
                 ]}
               >
                 <View style={[styles.referenceAlgorithmIcon, { backgroundColor: `${card.color}22` }]}>
-                  <Feather name={card.icon} size={18} color={card.color} />
+                  <Feather name={card.icon} size={20} color={card.color} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.referenceAlgorithmTitle}>{card.title}</Text>
                   <Text style={[styles.referenceAlgorithmValue, { color: card.color }]}>{card.value}</Text>
-                  <Text style={styles.referenceAlgorithmDetail} numberOfLines={2}>{card.detail}</Text>
+                  <Text style={styles.referenceAlgorithmDetail} numberOfLines={3}>{card.detail}</Text>
                   <Text style={styles.referenceAlgorithmAction} numberOfLines={1}>{card.action}</Text>
                 </View>
                 <Feather name="message-circle" size={16} color="rgba(226,232,240,0.72)" />
@@ -2270,22 +2270,22 @@ const styles = StyleSheet.create({
   referenceScoreTapHint: { color: "#60a5fa", fontSize: 9, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
   referenceLowerGrid: { flex: 1, gap: 8, marginBottom: 0, minHeight: 190 },
   referenceLowerGridWide: { flexDirection: "row" },
-  referenceAlgoCarouselPanel: { flex: 1, borderRadius: 22, borderWidth: 1, borderColor: "rgba(168,85,247,0.22)", backgroundColor: "rgba(15,23,42,0.72)", padding: 10, paddingBottom: 12, shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.22, shadowRadius: 26, elevation: 8 },
-  referenceAlgoHeaderRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 4 },
-  referenceAlgoSubtitle: { color: "#94a3b8", fontSize: 9, fontFamily: "Inter_600SemiBold", lineHeight: 12, marginTop: 1 },
+  referenceAlgoCarouselPanel: { flex: 1, position: "relative", borderRadius: 22, borderWidth: 1, borderColor: "rgba(168,85,247,0.22)", backgroundColor: "rgba(15,23,42,0.72)", padding: 12, paddingBottom: 24, shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.22, shadowRadius: 26, elevation: 8 },
+  referenceAlgoHeaderRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 7 },
+  referenceAlgoSubtitle: { color: "#94a3b8", fontSize: 10, fontFamily: "Inter_600SemiBold", lineHeight: 14, marginTop: 1 },
   referenceAlgoCount: { color: "#a78bfa", fontSize: 12, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
   referenceAlgoCountPill: { minWidth: 60, height: 28, borderRadius: 999, paddingHorizontal: 9, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(37,99,235,0.16)", borderWidth: 1, borderColor: "rgba(96,165,250,0.28)" },
   referenceAlgoCountActive: { color: "#dbeafe", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   referenceAlgoCountTotal: { color: "#818cf8", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
-  referenceAlgoScroll: { flex: 1 },
+  referenceAlgoScroll: { flex: 1, marginBottom: 12 },
   referenceAlgoScrollContent: { flexGrow: 1, gap: 12, paddingRight: 4 },
-  referenceAlgorithmCard: { height: "100%", minHeight: 112, borderRadius: 17, borderWidth: 1, backgroundColor: "rgba(2,6,23,0.62)", padding: 10, flexDirection: "row", gap: 8, alignItems: "flex-start" },
-  referenceAlgorithmIcon: { width: 32, height: 32, borderRadius: 12, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(226,232,240,0.08)" },
-  referenceAlgorithmTitle: { color: "#e2e8f0", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.8, textTransform: "uppercase" },
-  referenceAlgorithmValue: { fontSize: 16, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
-  referenceAlgorithmDetail: { color: "#cbd5e1", fontSize: 10, fontFamily: "Inter_600SemiBold", lineHeight: 13, marginTop: 1 },
-  referenceAlgorithmAction: { color: "#a78bfa", fontSize: 9, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
-  referenceAlgoProgressTrack: { height: 5, borderRadius: 999, overflow: "hidden", backgroundColor: "rgba(168,85,247,0.18)", marginTop: 7 },
+  referenceAlgorithmCard: { height: "100%", minHeight: 124, borderRadius: 18, borderWidth: 1, backgroundColor: "rgba(2,6,23,0.62)", padding: 12, flexDirection: "row", gap: 10, alignItems: "flex-start" },
+  referenceAlgorithmIcon: { width: 38, height: 38, borderRadius: 14, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(226,232,240,0.08)" },
+  referenceAlgorithmTitle: { color: "#e2e8f0", fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.8, textTransform: "uppercase" },
+  referenceAlgorithmValue: { fontSize: 21, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
+  referenceAlgorithmDetail: { color: "#cbd5e1", fontSize: 12, fontFamily: "Inter_600SemiBold", lineHeight: 16, marginTop: 2 },
+  referenceAlgorithmAction: { color: "#a78bfa", fontSize: 11, fontFamily: "Inter_800ExtraBold", marginTop: 5 },
+  referenceAlgoProgressTrack: { position: "absolute", left: 12, right: 12, bottom: 11, height: 6, borderRadius: 999, overflow: "hidden", backgroundColor: "rgba(168,85,247,0.22)" },
   referenceAlgoProgressFill: { height: "100%", borderRadius: 999, backgroundColor: "#8b5cf6", shadowColor: "#a855f7", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.75, shadowRadius: 8 },
   referenceInsightCard: { flex: 1.45, minHeight: 130, borderRadius: 24, borderWidth: 1, borderColor: "rgba(168,85,247,0.22)", backgroundColor: "rgba(15,23,42,0.72)", padding: 16, flexDirection: "row", alignItems: "center", gap: 12, shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.22, shadowRadius: 26 },
   referenceInsightIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.28)" },
