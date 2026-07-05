@@ -10,7 +10,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useCallback, useEffect, useRef } from "react";
-import { Alert, BackHandler, Image, Platform, StyleSheet, Text, View } from "react-native";
+import { BackHandler, Image, Platform, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -98,17 +98,7 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
   }, [hideSplash]);
 
   useEffect(() => {
-    if (!appReady) return;
-
-    if (Platform.OS === "web") {
-      if (typeof window === "undefined") return;
-      const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-        event.preventDefault();
-        event.returnValue = "";
-      };
-      window.addEventListener("beforeunload", handleBeforeUnload);
-      return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-    }
+    if (!appReady || Platform.OS === "web") return;
 
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
       if (router.canGoBack()) {
@@ -116,15 +106,7 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
         return true;
       }
 
-      Alert.alert(
-        "Exit FlowLedger?",
-        "Are you sure you want to close the app?",
-        [
-          { text: "Stay", style: "cancel" },
-          { text: "Exit", style: "destructive", onPress: () => BackHandler.exitApp() },
-        ],
-      );
-      return true;
+      return false;
     });
 
     return () => subscription.remove();
