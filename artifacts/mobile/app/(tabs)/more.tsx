@@ -426,16 +426,6 @@ export default function MoreScreen() {
       {activeSettingsSection === "overview" ? (
         <>
           <Text style={[styles.pageTitle, { color: c.foreground }]}>Settings</Text>
-          <View style={[styles.settingsHero, { backgroundColor: c.card, borderColor: c.border }]}>
-            <View style={[styles.settingsHeroIcon, { backgroundColor: c.primary + "18" }]}>
-              <Feather name="sliders" size={20} color={c.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.settingsHeroTitle, { color: c.foreground }]}>Settings Hub</Text>
-              <Text style={[styles.settingsHeroText, { color: c.mutedForeground }]}>Choose a section, update what you need, then come right back here.</Text>
-            </View>
-          </View>
-
           <View style={styles.settingsSectionList}>
             {SETTINGS_SECTIONS.map(section => (
               <Pressable
@@ -1118,14 +1108,6 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 16 },
   pageTitle:    { fontSize: 34, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.1, marginBottom: 14 },
   pageSubtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginBottom: 20 },
-  settingsHero: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 24, padding: 14, marginBottom: 18, shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.16, shadowRadius: 18, elevation: 4 },
-  settingsHeroIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  settingsHeroTitle: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
-  settingsHeroText: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 17, marginTop: 2 },
-  settingsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 20 },
-  settingsGridItem: { width: "31.7%", minHeight: 92, borderWidth: 1, borderRadius: 20, alignItems: "center", justifyContent: "center", padding: 10 },
-  settingsGridIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", marginBottom: 8 },
-  settingsGridText: { fontSize: 12, fontFamily: "Inter_800ExtraBold", textAlign: "center" },
   settingsSectionList: { gap: 10, marginBottom: 20 },
   settingsSectionCard: { minHeight: 82, borderWidth: 1, borderRadius: 22, padding: 14, flexDirection: "row", alignItems: "center", gap: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.14, shadowRadius: 18, elevation: 4 },
   settingsSectionIcon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
