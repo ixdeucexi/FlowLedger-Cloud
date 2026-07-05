@@ -56,6 +56,8 @@ import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { buildAlgorithmSuite } from "@/lib/algorithmSuite";
 import { isAlgorithmEnabled } from "@/lib/algorithmCatalog";
 import { groupForecastEvents } from "@/lib/forecastDisplay";
+import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
+import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
 
 const sampleQuestions = [
   "Ask Flo anything…",
@@ -91,6 +93,7 @@ export default function FloScreen() {
   const [billChangeState, setBillChangeState] = useState<Record<string, "idle" | "saving" | "saved" | "failed">>({});
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
   const [decisionHubSettings, setDecisionHubSettings] = useState<DecisionHubSettings>(() => readDecisionHubSettings());
+  const [onboardingPreferences, setOnboardingPreferences] = useState(() => readOnboardingPreferences());
   const [input, setInput] = useState("");
   const [summary, setSummary] = useState("");
   const [sampleIndex, setSampleIndex] = useState(0);
@@ -114,6 +117,16 @@ export default function FloScreen() {
   useEffect(() => {
     if (user) void loadFloMemory(user.id).then(setSummary);
   }, [user]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadOnboardingPreferences(user?.id).then(next => {
+      if (!cancelled) setOnboardingPreferences(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     const timer = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
@@ -562,11 +575,18 @@ export default function FloScreen() {
     };
   }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getDailyBalances, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, getTransactionsForMonth, transactions, upcoming, decisions, forecastConfidence, categoryPlan, paycheckPlan, billDateMoves, bills, decisionHistory, decisionRiskAlerts, now, incomes, goals, decisionHubSettings]);
 
+  const setupPersonalization = useMemo(
+    () => buildSetupPersonalization(onboardingPreferences),
+    [onboardingPreferences],
+  );
+  const hasSetupAnswers = onboardingPreferences.help.length > 0 || onboardingPreferences.goals.length > 0 || Boolean(onboardingPreferences.savingsGoal);
+
   const quickPrompts = useMemo(() => {
     const categoryPrompts = decisionHubSettings.algorithmSuiteEnabled ? buildFloCategoryQuickPrompts(categoryPlan) : [];
     const paycheckPrompts = isAlgorithmEnabled(decisionHubSettings, "paydaySplit") ? ["What can I spend until payday?", "Which bill should I move?"] : [];
     const gapPrompts = isAlgorithmEnabled(decisionHubSettings, "cashFlowGap") ? ["Where is my tightest cash-flow stretch?"] : [];
-    return [
+    return Array.from(new Set([
+      ...(hasSetupAnswers ? setupPersonalization.quickPrompts : []),
       ...(decisionHistory.due.length ? ["Which decisions need review?"] : []),
       ...(decisionRiskAlerts.length ? ["Are any planned decisions no longer safe?"] : []),
       ...(decisionHistory.upcoming.length ? ["Which planned decisions are coming up?"] : []),
@@ -576,8 +596,8 @@ export default function FloScreen() {
       "Can I afford $500?",
       "Which bills are due next?",
       "Why is my balance getting low?",
-    ].slice(0, 8);
-  }, [categoryPlan, decisionHistory, decisionRiskAlerts, decisionHubSettings]);
+    ])).slice(0, 8);
+  }, [categoryPlan, decisionHistory, decisionRiskAlerts, decisionHubSettings, hasSetupAnswers, setupPersonalization]);
 
   const buildCalendarDayReply = (prompt: string) => {
     const date = prompt.match(/\b(20\d{2}-\d{2}-\d{2})\b/)?.[1];

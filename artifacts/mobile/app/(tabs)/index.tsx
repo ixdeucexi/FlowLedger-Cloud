@@ -28,6 +28,8 @@ import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { buildAlgorithmSuite, type AlgorithmInsight } from "@/lib/algorithmSuite";
 import { isAlgorithmEnabled, type AlgorithmId } from "@/lib/algorithmCatalog";
+import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
+import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const MONTH_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -142,6 +144,7 @@ export default function DashboardScreen() {
   const [safeCushionVisible, setSafeCushionVisible] = useState(false);
   const [activeAlgoCard, setActiveAlgoCard] = useState(0);
   const [startupAlertVisible, setStartupAlertVisible] = useState(false);
+  const [onboardingPreferences, setOnboardingPreferences] = useState(() => readOnboardingPreferences());
   const algorithmCarouselRef = useRef<ScrollView | null>(null);
   const algorithmSnapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startupAlertShownRef = useRef(false);
@@ -207,6 +210,16 @@ export default function DashboardScreen() {
       lightningLoop.stop();
     };
   }, [lightningAnim, stormAnim]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadOnboardingPreferences(user?.id).then(next => {
+      if (!cancelled) setOnboardingPreferences(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const stormShift = stormAnim.interpolate({ inputRange: [0, 1], outputRange: [-70, 90] });
   const stormLift = stormAnim.interpolate({ inputRange: [0, 1], outputRange: [16, -22] });
@@ -926,6 +939,18 @@ export default function DashboardScreen() {
   const openFloWithPrompt = (prompt: string) => {
     router.push({ pathname: "/(tabs)/flo", params: { prompt } } as any);
   };
+  const setupPersonalization = useMemo(
+    () => buildSetupPersonalization(onboardingPreferences),
+    [onboardingPreferences],
+  );
+  const hasSetupAnswers = onboardingPreferences.help.length > 0 || onboardingPreferences.goals.length > 0 || Boolean(onboardingPreferences.savingsGoal);
+  const openPersonalizedNextAction = () => {
+    if (setupPersonalization.nextRoute === "/(tabs)/flo") {
+      openFloWithPrompt(setupPersonalization.nextActionPrompt);
+      return;
+    }
+    router.push(setupPersonalization.nextRoute as any);
+  };
   const algorithmCardWidth = isCommandWide ? 500 : Math.max(286, viewportWidth - 68);
   const algorithmSnapInterval = algorithmCardWidth + 12;
   const algorithmCards = useMemo(() => {
@@ -1329,6 +1354,34 @@ export default function DashboardScreen() {
           <Text style={styles.referenceScoreTapHint}>Tap for details</Text>
         </Pressable>
       </View>
+
+      {hasSetupAnswers ? (
+        <Pressable
+          onPress={openPersonalizedNextAction}
+          style={({ pressed }) => [styles.personalFocusCard, { opacity: pressed ? 0.84 : 1 }]}
+        >
+          <View style={styles.personalFocusHeader}>
+            <View style={styles.personalFocusIcon}>
+              <Feather name="compass" size={17} color="#c084fc" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.personalFocusEyebrow}>Your focus</Text>
+              <Text style={styles.personalFocusTitle}>{setupPersonalization.title}</Text>
+            </View>
+            <View style={styles.personalFocusActionPill}>
+              <Text style={styles.personalFocusActionText}>{setupPersonalization.nextActionLabel}</Text>
+            </View>
+          </View>
+          <Text style={styles.personalFocusSummary}>{setupPersonalization.summary}</Text>
+          <View style={styles.personalFocusChips}>
+            {setupPersonalization.recommendedAlgorithms.slice(0, 4).map(algorithm => (
+              <View key={algorithm} style={styles.personalFocusChip}>
+                <Text style={styles.personalFocusChipText}>{algorithm.replace(/([A-Z])/g, " $1").trim()}</Text>
+              </View>
+            ))}
+          </View>
+        </Pressable>
+      ) : null}
 
       <View style={[styles.referenceLowerGrid, isCommandWide && styles.referenceLowerGridWide]}>
         <View style={styles.referenceAlgoCarouselPanel}>
@@ -2322,6 +2375,62 @@ const styles = StyleSheet.create({
   quickCommand: { flex: 1, minHeight: 82, borderRadius: 22, padding: 11, justifyContent: "space-between", backgroundColor: "rgba(15,23,42,0.68)", borderWidth: 1, borderColor: "rgba(148,163,184,0.16)" },
   quickCommandIcon: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   quickCommandText: { color: "#e5edf8", fontSize: 12, fontFamily: "Inter_800ExtraBold" },
+  personalFocusCard: {
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: "rgba(192,132,252,0.32)",
+    backgroundColor: "rgba(15,23,42,0.68)",
+    padding: 16,
+    marginTop: 14,
+    shadowColor: "#8b5cf6",
+    shadowOpacity: 0.14,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+  },
+  personalFocusHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  personalFocusIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(139,92,246,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(192,132,252,0.22)",
+  },
+  personalFocusEyebrow: {
+    color: "#a78bfa",
+    fontSize: 10,
+    fontFamily: "Inter_800ExtraBold",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  personalFocusTitle: {
+    color: "#f8fafc",
+    fontSize: 17,
+    fontFamily: "Inter_800ExtraBold",
+    marginTop: 2,
+  },
+  personalFocusActionPill: {
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    backgroundColor: "rgba(139,92,246,0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(192,132,252,0.28)",
+  },
+  personalFocusActionText: { color: "#ddd6fe", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
+  personalFocusSummary: { color: "#cbd5e1", fontSize: 13, lineHeight: 19, fontFamily: "Inter_600SemiBold", marginTop: 12 },
+  personalFocusChips: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginTop: 12 },
+  personalFocusChip: {
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    backgroundColor: "rgba(56,189,248,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(56,189,248,0.18)",
+  },
+  personalFocusChipText: { color: "#bae6fd", fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "capitalize" },
   flowScoreSheetHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },
   flowScoreColumns: { flexDirection: "row", gap: 10, marginTop: 6 },
   flowScoreColumn: { flex: 1, borderRadius: 16, padding: 12 },

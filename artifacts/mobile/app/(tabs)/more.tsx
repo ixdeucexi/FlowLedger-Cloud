@@ -32,6 +32,8 @@ import { buildDataIntegrityIssues } from "@/lib/dataIntegrity";
 import { loadDecisionHubSettings, readDecisionHubSettings, saveDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { resetFloMemory } from "@/lib/flo";
 import { startLearningTour } from "@/lib/learningTour";
+import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
+import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
@@ -73,6 +75,7 @@ export default function MoreScreen() {
   const [safetyFloorText, setSafetyFloorText] = useState(settings.safety_floor.toString());
   const [forecastHorizonText, setForecastHorizonText] = useState(settings.forecast_horizon_months.toString());
   const [decisionHubSettings, setDecisionHubSettings] = useState<DecisionHubSettings>(() => readDecisionHubSettings());
+  const [onboardingPreferences, setOnboardingPreferences] = useState(() => readOnboardingPreferences());
   const [selectedAlgorithm, setSelectedAlgorithm] = useState<AlgorithmCatalogItem | null>(null);
   useBackDismiss(Boolean(selectedAlgorithm), () => setSelectedAlgorithm(null));
   const [showAlgorithmSuite, setShowAlgorithmSuite] = useState(false);
@@ -92,6 +95,16 @@ export default function MoreScreen() {
     setDecisionHubSettings(readDecisionHubSettings());
     void loadDecisionHubSettings(user?.id).then(next => {
       if (!cancelled) setDecisionHubSettings(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadOnboardingPreferences(user?.id).then(next => {
+      if (!cancelled) setOnboardingPreferences(next);
     });
     return () => {
       cancelled = true;
@@ -127,6 +140,11 @@ export default function MoreScreen() {
     () => buildDataIntegrityIssues({ accounts, bills, incomes, transactions }),
     [accounts, bills, incomes, transactions],
   );
+  const setupPersonalization = useMemo(
+    () => buildSetupPersonalization(onboardingPreferences),
+    [onboardingPreferences],
+  );
+  const hasSetupAnswers = onboardingPreferences.help.length > 0 || onboardingPreferences.goals.length > 0 || Boolean(onboardingPreferences.savingsGoal);
   const setupSteps = [
     { key: "account", label: "What account should I track first?", detail: "Tell me about your checking, savings, or cash account so I know where your money starts.", done: accounts.some(account => account.is_active), action: "Answer" },
     { key: "money", label: "How much money is in that account today?", detail: "Give me the current balance and date so my forecast starts from the right number.", done: accounts.some(account => account.is_active && Math.abs(account.current_balance) > 0), action: "Answer" },
@@ -559,6 +577,23 @@ export default function MoreScreen() {
             <View style={[styles.toggleKnob, { backgroundColor: "#fff", alignSelf: decisionHubSettings.algorithmSuiteEnabled ? "flex-end" : "flex-start" }]} />
           </View>
         </Pressable>
+
+        {hasSetupAnswers ? (
+          <View style={[styles.algorithmRecommendation, { borderColor: c.primary + "30", backgroundColor: c.primary + "10" }]}>
+            <View style={styles.algorithmRecommendationHeader}>
+              <Feather name="compass" size={14} color={c.primary} />
+              <Text style={[styles.algorithmRecommendationTitle, { color: c.foreground }]}>
+                Flo recommends for {setupPersonalization.title.toLowerCase()}
+              </Text>
+            </View>
+            <Text style={[styles.algorithmRecommendationText, { color: c.mutedForeground }]}>
+              {setupPersonalization.recommendedAlgorithms
+                .map(id => ALGORITHM_CATALOG.find(algorithm => algorithm.id === id)?.name ?? id)
+                .slice(0, 4)
+                .join(" • ")}
+            </Text>
+          </View>
+        ) : null}
 
         <View style={[styles.algorithmList, { borderTopColor: c.border }]}>
           {ALGORITHM_CATALOG.map(algorithm => {
@@ -1084,6 +1119,10 @@ const styles = StyleSheet.create({
   switchLabel: { fontSize: 15, fontFamily: "Inter_500Medium" },
   switchDesc: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   decisionSettingRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  algorithmRecommendation: { borderWidth: 1, borderRadius: 16, padding: 12, marginTop: 14 },
+  algorithmRecommendationHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  algorithmRecommendationTitle: { flex: 1, fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  algorithmRecommendationText: { fontSize: 12, fontFamily: "Inter_600SemiBold", lineHeight: 17, marginTop: 7 },
   toggleTrack: { width: 48, height: 28, borderRadius: 999, padding: 3, justifyContent: "center" },
   toggleKnob: { width: 22, height: 22, borderRadius: 11 },
   algorithmList: { borderTopWidth: 1, marginTop: 14, paddingTop: 2 },

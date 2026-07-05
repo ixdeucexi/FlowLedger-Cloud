@@ -47,6 +47,8 @@
     ,"lib/algorithmSuite.test.ts"
     ,"lib/onboarding.ts"
     ,"lib/onboarding.test.ts"
+    ,"lib/onboardingPersonalization.ts"
+    ,"lib/onboardingPersonalization.test.ts"
     ,"lib/learningTour.ts"
     ,"lib/learningTour.test.ts"
   ]
