@@ -88,7 +88,7 @@ function BudgetLoadingScreen() {
   return (
     <View style={styles.loadingScreen}>
       <Image
-        source={require("../../assets/images/icon.png")}
+        source={require("../../assets/images/startup_f_transparent.png")}
         style={styles.loadingLogo}
         resizeMode="contain"
       />
@@ -103,7 +103,7 @@ function BudgetLoadErrorScreen({ message, onRetry }: { message: string; onRetry:
   return (
     <View style={styles.loadingScreen}>
       <Image
-        source={require("../../assets/images/icon.png")}
+        source={require("../../assets/images/startup_f_transparent.png")}
         style={styles.loadingLogo}
         resizeMode="contain"
       />

@@ -10,7 +10,7 @@ module.exports = {
     newArchEnabled: true,
     updates: { enabled: false },
     splash: {
-      image: "./assets/images/icon.png",
+      image: "./assets/images/startup_f_transparent.png",
       resizeMode: "contain",
       backgroundColor: "#050816",
     },

@@ -5,7 +5,7 @@ export default function StartupRoute() {
   return (
     <View style={styles.root}>
       <Image
-        source={require("../assets/images/icon.png")}
+        source={require("../assets/images/startup_f_transparent.png")}
         style={styles.logo}
         resizeMode="contain"
       />

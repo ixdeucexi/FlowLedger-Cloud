@@ -74,7 +74,7 @@ function StartupScreen() {
   return (
     <View style={styles.startup}>
       <Image
-        source={require("../assets/images/icon.png")}
+        source={require("../assets/images/startup_f_transparent.png")}
         style={styles.startupIcon}
         resizeMode="contain"
       />
