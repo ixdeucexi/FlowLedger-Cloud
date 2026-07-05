@@ -88,6 +88,8 @@ export default function MoreScreen() {
     addIncome, updateIncome, deleteIncome, getMonthlyIncome,
     categories, addCategory, updateCategory, deleteCategory,
     addAccount, updateAccount, reconcileAccount, archiveAccount, importStatementTransactions,
+    households, activeHousehold, householdRole, canEditHousehold,
+    refreshHouseholds, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
   } = useBudget();
 
   const [incomeModalVisible, setIncomeModalVisible] = useState(false);
@@ -107,6 +109,11 @@ export default function MoreScreen() {
   const [showAlgorithmSuite, setShowAlgorithmSuite] = useState(false);
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("overview");
   useBackDismiss(activeSettingsSection !== "overview", () => setActiveSettingsSection("overview"));
+  const [householdInviteRole, setHouseholdInviteRole] = useState<"editor" | "viewer">("editor");
+  const [householdInviteCode, setHouseholdInviteCode] = useState("");
+  const [householdJoinCode, setHouseholdJoinCode] = useState("");
+  const [householdBusy, setHouseholdBusy] = useState(false);
+  const [householdMessage, setHouseholdMessage] = useState<string | null>(null);
   const [backupExported, setBackupExported] = useState(() => {
     try { return Platform.OS === "web" && globalThis.localStorage?.getItem(BACKUP_COMPLETE_KEY) === "true"; }
     catch { return false; }
@@ -146,6 +153,48 @@ export default function MoreScreen() {
     setForecastHorizonText(horizon.toString());
     updateSettings({ safety_floor: floor, forecast_horizon_months: horizon });
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handleCreateHouseholdInvite = async () => {
+    setHouseholdBusy(true);
+    setHouseholdMessage(null);
+    try {
+      const code = await createHouseholdInvite(householdInviteRole);
+      setHouseholdInviteCode(code);
+      setHouseholdMessage(`${householdInviteRole === "editor" ? "Editor" : "Viewer"} invite created. Share this code with the person you want to add.`);
+      if (Platform.OS === "web" && globalThis.navigator?.clipboard) {
+        await globalThis.navigator.clipboard.writeText(code).catch(() => undefined);
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not create a household invite.";
+      setHouseholdMessage(message);
+      Alert.alert("Household invite", message);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setHouseholdBusy(false);
+    }
+  };
+
+  const handleJoinHousehold = async () => {
+    const code = householdJoinCode.trim();
+    if (!code) return;
+    setHouseholdBusy(true);
+    setHouseholdMessage(null);
+    try {
+      await acceptHouseholdInvite(code);
+      await refreshHouseholds();
+      setHouseholdJoinCode("");
+      setHouseholdMessage("Household joined. FlowLedger is now showing that household plan.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not join that household.";
+      setHouseholdMessage(message);
+      Alert.alert("Join household", message);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setHouseholdBusy(false);
+    }
   };
 
   const updateDecisionHubSetting = (next: Partial<DecisionHubSettings>) => {
@@ -704,6 +753,144 @@ export default function MoreScreen() {
       </>}
 
       {activeSettingsSection === "accounts" && <>
+      <SLabel c={c} text="Household" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <View style={styles.householdHeader}>
+          <View style={[styles.settingsSectionIcon, { backgroundColor: c.primary + "16" }]}>
+            <Feather name="users" size={20} color={c.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.accountName, { color: c.foreground }]}>
+              {activeHousehold?.name ?? "Personal household"}
+            </Text>
+            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>
+              {householdRole ? `${householdRole.charAt(0).toUpperCase()}${householdRole.slice(1)} access` : "Your private FlowLedger plan"}
+              {canEditHousehold ? " • editing allowed" : " • view only"}
+            </Text>
+          </View>
+        </View>
+
+        {households.length > 1 && (
+          <View style={styles.householdChipWrap}>
+            {households.map(household => {
+              const selected = activeHousehold?.householdId === household.householdId;
+              return (
+                <Pressable
+                  key={household.householdId}
+                  onPress={async () => {
+                    if (selected || householdBusy) return;
+                    setHouseholdBusy(true);
+                    setHouseholdMessage(null);
+                    try {
+                      await switchHousehold(household.householdId);
+                      setHouseholdMessage(`Switched to ${household.name}.`);
+                    } catch (error) {
+                      const message = error instanceof Error ? error.message : "Could not switch households.";
+                      setHouseholdMessage(message);
+                    } finally {
+                      setHouseholdBusy(false);
+                    }
+                  }}
+                  style={({ pressed }) => [
+                    styles.householdChip,
+                    {
+                      backgroundColor: selected ? c.primary : c.muted,
+                      borderColor: selected ? c.primary : c.border,
+                      opacity: pressed ? 0.76 : 1,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.householdChipText, { color: selected ? c.primaryForeground : c.foreground }]}>
+                    {household.isPersonal ? "Personal" : household.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
+        <View style={[styles.householdPanel, { backgroundColor: c.muted, borderColor: c.border }]}>
+          <Text style={[styles.householdPanelTitle, { color: c.foreground }]}>Share this household</Text>
+          <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>
+            Invite someone to the active household. They’ll only see this household’s plan, not code, keys, or admin tools.
+          </Text>
+          {activeHousehold?.role === "owner" ? (
+            <>
+              <View style={styles.roleRow}>
+                {(["editor", "viewer"] as const).map(role => {
+                  const selected = householdInviteRole === role;
+                  return (
+                    <Pressable
+                      key={role}
+                      onPress={() => setHouseholdInviteRole(role)}
+                      style={[
+                        styles.roleButton,
+                        { backgroundColor: selected ? c.primary : c.card, borderColor: selected ? c.primary : c.border },
+                      ]}
+                    >
+                      <Text style={[styles.roleButtonText, { color: selected ? c.primaryForeground : c.foreground }]}>
+                        {role === "editor" ? "Can edit" : "View only"}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <Pressable
+                onPress={handleCreateHouseholdInvite}
+                disabled={householdBusy}
+                style={({ pressed }) => [
+                  styles.addBtn,
+                  { backgroundColor: c.primary + "18", borderRadius: 10, opacity: pressed || householdBusy ? 0.65 : 1 },
+                ]}
+              >
+                <Feather name="send" size={16} color={c.primary} />
+                <Text style={[styles.addBtnText, { color: c.primary }]}>Create invite code</Text>
+              </Pressable>
+              {!!householdInviteCode && (
+                <View style={[styles.inviteCodeBox, { backgroundColor: c.card, borderColor: c.border }]}>
+                  <Text style={[styles.inviteCodeLabel, { color: c.mutedForeground }]}>Invite code</Text>
+                  <Text selectable style={[styles.inviteCodeText, { color: c.foreground }]}>{householdInviteCode}</Text>
+                </View>
+              )}
+            </>
+          ) : (
+            <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Only the household owner can create invite codes.</Text>
+          )}
+        </View>
+
+        <View style={[styles.householdPanel, { backgroundColor: c.muted, borderColor: c.border }]}>
+          <Text style={[styles.householdPanelTitle, { color: c.foreground }]}>Join a household</Text>
+          <View style={styles.joinRow}>
+            <TextInput
+              style={[styles.renameInput, styles.joinInput, { backgroundColor: c.card, color: c.foreground, borderColor: c.border }]}
+              value={householdJoinCode}
+              onChangeText={text => setHouseholdJoinCode(text.toUpperCase())}
+              placeholder="Enter invite code"
+              placeholderTextColor={c.mutedForeground}
+              autoCapitalize="characters"
+              returnKeyType="done"
+              onSubmitEditing={handleJoinHousehold}
+            />
+            <Pressable
+              onPress={handleJoinHousehold}
+              disabled={householdBusy || !householdJoinCode.trim()}
+              style={({ pressed }) => [
+                styles.joinButton,
+                { backgroundColor: c.primary, opacity: pressed || householdBusy || !householdJoinCode.trim() ? 0.55 : 1 },
+              ]}
+            >
+              <Feather name="log-in" size={16} color={c.primaryForeground} />
+            </Pressable>
+          </View>
+        </View>
+
+        {!!householdMessage && (
+          <Text style={[styles.householdMessage, { color: householdMessage.toLowerCase().includes("could not") ? c.destructive : c.success }]}>
+            {householdMessage}
+          </Text>
+        )}
+      </View>
+
       <SLabel c={c} text="Accounts & Balances" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View style={[styles.confidenceBox, { backgroundColor: forecastConfidence.level === "high" ? c.success + "14" : forecastConfidence.level === "medium" ? "#f59e0b18" : c.destructive + "12" }]}>
@@ -1134,6 +1321,22 @@ const styles = StyleSheet.create({
   incomeTotalValue: { fontSize: 15, fontFamily: "Inter_700Bold" },
   addBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 11, marginTop: 10 },
   addBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  householdHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
+  householdChipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
+  householdChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
+  householdChipText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
+  householdPanel: { borderWidth: 1, borderRadius: 14, padding: 12, marginTop: 10 },
+  householdPanelTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold", marginBottom: 4 },
+  roleRow: { flexDirection: "row", gap: 8, marginTop: 12 },
+  roleButton: { flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 10, alignItems: "center" },
+  roleButtonText: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  inviteCodeBox: { borderWidth: 1, borderRadius: 12, padding: 12, marginTop: 10 },
+  inviteCodeLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 },
+  inviteCodeText: { fontSize: 22, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.8 },
+  joinRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 },
+  joinInput: { flex: 1, borderWidth: 1, height: 44 },
+  joinButton: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  householdMessage: { fontSize: 12, fontFamily: "Inter_700Bold", lineHeight: 17, marginTop: 10 },
   confidenceBox: { flexDirection: "row", alignItems: "flex-start", gap: 9, padding: 11, borderRadius: 10, marginBottom: 8 },
   accountRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12 },
   accountName: { fontSize: 14, fontFamily: "Inter_600SemiBold", textTransform: "capitalize" },

@@ -20,6 +20,17 @@ import { isDevDemoMode } from "@/lib/demoMode";
 import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isIncomeActiveForMonth } from "@/lib/schedule";
 import { evaluateForecastConfidence, openingBalanceForReconciledDay, totalForecastBalance, type AccountSnapshot, type AccountType, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
 import { scenarioDates, type DecisionResult, type DecisionScenario, type DecisionType } from "@/lib/decisions";
+import {
+  acceptHouseholdInviteCode,
+  createHouseholdInviteCode,
+  loadHouseholdMemberships,
+  loadRemoteActiveHouseholdId,
+  readStoredActiveHouseholdId,
+  saveActiveHouseholdId,
+  writeStoredActiveHouseholdId,
+  type HouseholdMembership,
+  type HouseholdRole,
+} from "@/lib/households";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -211,6 +222,10 @@ interface BudgetContextType {
   settings: Settings;
   accounts: Account[];
   decisions: DecisionRecord[];
+  households: HouseholdMembership[];
+  activeHousehold: HouseholdMembership | null;
+  householdRole: HouseholdRole | null;
+  canEditHousehold: boolean;
   forecastConfidence: ForecastConfidence;
   loading: boolean;
   loadError: string | null;
@@ -224,6 +239,10 @@ interface BudgetContextType {
   saveError: string | null;
   retryLastSave: () => Promise<void>;
   clearSaveError: () => void;
+  refreshHouseholds: () => Promise<void>;
+  switchHousehold: (householdId: string) => Promise<void>;
+  createHouseholdInvite: (role?: Exclude<HouseholdRole, "owner">) => Promise<string>;
+  acceptHouseholdInvite: (code: string) => Promise<void>;
 
   addBill: (bill: Omit<Bill, "id" | "created_at">) => Promise<string>;
   updateBill: (bill: Bill) => Promise<void>;
@@ -441,14 +460,14 @@ function parseYmd(date: string): { year: number; month: number; day: number } | 
   return { year, month: month - 1, day };
 }
 
-function billDateMoveStorageKey(userId?: string) {
-  return `flowledger-bill-date-moves-${userId ?? "local"}`;
+function billDateMoveStorageKey(userId?: string, householdId?: string | null) {
+  return `flowledger-bill-date-moves-${userId ?? "local"}-${householdId ?? "personal"}`;
 }
 
-function readStoredBillDateMoves(userId?: string): BillDateMove[] {
+function readStoredBillDateMoves(userId?: string, householdId?: string | null): BillDateMove[] {
   if (Platform.OS !== "web") return [];
   try {
-    const raw = globalThis.localStorage?.getItem(billDateMoveStorageKey(userId));
+    const raw = globalThis.localStorage?.getItem(billDateMoveStorageKey(userId, householdId));
     const parsed = raw ? JSON.parse(raw) as Partial<BillDateMove>[] : [];
     return parsed
       .filter(item => item.bill_id && item.from_date && item.to_date)
@@ -464,9 +483,9 @@ function readStoredBillDateMoves(userId?: string): BillDateMove[] {
   }
 }
 
-function writeStoredBillDateMoves(userId: string | undefined, moves: BillDateMove[]) {
+function writeStoredBillDateMoves(userId: string | undefined, moves: BillDateMove[], householdId?: string | null) {
   if (Platform.OS !== "web") return;
-  globalThis.localStorage?.setItem(billDateMoveStorageKey(userId), JSON.stringify(moves));
+  globalThis.localStorage?.setItem(billDateMoveStorageKey(userId, householdId), JSON.stringify(moves));
 }
 
 function normalizeBillDateMoveRow(row: any): BillDateMove {
@@ -496,23 +515,26 @@ function mergeBillDateMoves(primary: BillDateMove[], fallback: BillDateMove[]) {
   return merged.sort((a, b) => a.from_date.localeCompare(b.from_date) || a.to_date.localeCompare(b.to_date));
 }
 
-function billDateMoveDbPayload(move: Pick<BillDateMove, "bill_id" | "from_date" | "to_date">, userId: string) {
+function billDateMoveDbPayload(move: Pick<BillDateMove, "bill_id" | "from_date" | "to_date">, userId: string, scope?: HouseholdMembership | null) {
   return {
     user_id: userId,
     bill_id: move.bill_id,
     from_date: move.from_date.slice(0, 10),
     to_date: move.to_date.slice(0, 10),
     updated_at: new Date().toISOString(),
+    ...(scope ? { household_id: scope.householdId, budget_id: scope.budgetId } : {}),
   };
 }
 
-async function loadBillDateMoves(uid: string): Promise<BillDateMove[]> {
-  const stored = readStoredBillDateMoves(uid);
-  const remote = await supabase
-    .from("bill_date_moves")
-    .select("*")
-    .eq("user_id", uid)
-    .order("from_date");
+async function loadBillDateMoves(uid: string, scope?: HouseholdMembership | null): Promise<BillDateMove[]> {
+  const stored = readStoredBillDateMoves(uid, scope?.householdId);
+  const remoteBase = supabase.from("bill_date_moves").select("*");
+  const remoteQuery = scope
+    ? scope.isPersonal
+      ? remoteBase.or(`household_id.eq.${scope.householdId},and(household_id.is.null,user_id.eq.${uid})`)
+      : remoteBase.eq("household_id", scope.householdId)
+    : remoteBase.eq("user_id", uid);
+  const remote = await remoteQuery.order("from_date");
 
   if (remote.error) {
     return stored;
@@ -526,7 +548,7 @@ async function loadBillDateMoves(uid: string): Promise<BillDateMove[]> {
     const synced = await Promise.all(localOnly.map(async move => {
       const saved = await supabase
         .from("bill_date_moves")
-        .upsert(billDateMoveDbPayload(move, uid), { onConflict: "user_id,bill_id,from_date" })
+        .upsert(billDateMoveDbPayload(move, uid, scope), { onConflict: "user_id,bill_id,from_date" })
         .select("*")
         .single();
       return saved.error ? move : normalizeBillDateMoveRow(saved.data);
@@ -535,7 +557,7 @@ async function loadBillDateMoves(uid: string): Promise<BillDateMove[]> {
   }
 
   const merged = mergeBillDateMoves(remoteMoves, stored);
-  writeStoredBillDateMoves(uid, merged);
+  writeStoredBillDateMoves(uid, merged, scope?.householdId);
   return merged;
 }
 
@@ -656,6 +678,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [categories,    setCategories]    = useState<string[]>([]);
   const [accounts,      setAccounts]      = useState<Account[]>([]);
   const [decisions,     setDecisions]     = useState<DecisionRecord[]>([]);
+  const [households,    setHouseholds]    = useState<HouseholdMembership[]>([]);
+  const [activeHouseholdId, setActiveHouseholdId] = useState<string | null>(null);
   const [settings,      setSettings]      = useState<Settings>(DEFAULT_SETTINGS);
   const [loading,       setLoading]       = useState(true);
   const [loadError,     setLoadError]     = useState<string | null>(null);
@@ -670,8 +694,73 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const billDateMovesRef = useRef<BillDateMove[]>([]);
   const retrySaveRef = useRef<null | (() => Promise<void>)>(null);
   const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const householdScopeRef = useRef<HouseholdMembership | null>(null);
   useEffect(() => { overridesRef.current = overrides; }, [overrides]);
   useEffect(() => { billDateMovesRef.current = billDateMoves; }, [billDateMoves]);
+
+  const activeHousehold = useMemo(
+    () => households.find(household => household.householdId === activeHouseholdId) ?? null,
+    [households, activeHouseholdId],
+  );
+  const householdRole = activeHousehold?.role ?? null;
+  const canEditHousehold = !activeHousehold || activeHousehold.role !== "viewer";
+  useEffect(() => { householdScopeRef.current = activeHousehold; }, [activeHousehold]);
+
+  const scopedPayload = useCallback(<T extends Record<string, unknown>>(payload: T): T & { household_id?: string; budget_id?: string | null } => {
+    const scope = householdScopeRef.current;
+    if (!scope) return payload;
+    return {
+      ...payload,
+      household_id: scope.householdId,
+      budget_id: scope.budgetId,
+    };
+  }, []);
+
+  const applyHouseholdSelect = useCallback((query: any, uid: string) => {
+    const scope = householdScopeRef.current;
+    if (!scope) return query.eq("user_id", uid);
+    if (scope.isPersonal) {
+      return query.or(`household_id.eq.${scope.householdId},and(household_id.is.null,user_id.eq.${uid})`);
+    }
+    return query.eq("household_id", scope.householdId);
+  }, []);
+
+  const loadScopedSettings = useCallback(async (uid: string, scope?: HouseholdMembership | null) => {
+    if (scope) {
+      const householdResult = await supabase
+        .from("household_settings")
+        .select("*")
+        .eq("household_id", scope.householdId)
+        .maybeSingle();
+      if (!householdResult.error) return householdResult;
+      const message = householdResult.error.message.toLowerCase();
+      if (!message.includes("household_settings") && !message.includes("schema cache")) {
+        return householdResult;
+      }
+    }
+    return supabase.from("settings").select("*").eq("user_id", uid).maybeSingle();
+  }, []);
+
+  const resolveHouseholds = useCallback(async (uid: string) => {
+    const memberships = await loadHouseholdMemberships(uid);
+    setHouseholds(memberships);
+    if (memberships.length === 0) {
+      setActiveHouseholdId(null);
+      householdScopeRef.current = null;
+      return null;
+    }
+    const remoteActive = await loadRemoteActiveHouseholdId(uid);
+    const storedActive = await readStoredActiveHouseholdId(uid);
+    const next =
+      memberships.find(item => item.householdId === remoteActive) ??
+      memberships.find(item => item.householdId === storedActive) ??
+      memberships.find(item => item.isPersonal) ??
+      memberships[0];
+    setActiveHouseholdId(next.householdId);
+    householdScopeRef.current = next;
+    void writeStoredActiveHouseholdId(uid, next.householdId);
+    return next;
+  }, []);
 
   const markSaveStarted = useCallback(() => {
     if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
@@ -718,6 +807,36 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setLoadRetryNonce(value => value + 1);
   }, []);
 
+  const refreshHouseholds = useCallback(async () => {
+    if (!user || demoMode) return;
+    await resolveHouseholds(user.id);
+  }, [user, demoMode, resolveHouseholds]);
+
+  const switchHousehold = useCallback(async (householdId: string) => {
+    if (!user || demoMode) return;
+    const next = households.find(household => household.householdId === householdId);
+    if (!next) return;
+    setActiveHouseholdId(next.householdId);
+    householdScopeRef.current = next;
+    await saveActiveHouseholdId(user.id, next.householdId);
+    setLoadRetryNonce(value => value + 1);
+  }, [user, demoMode, households]);
+
+  const createHouseholdInvite = useCallback(async (role: Exclude<HouseholdRole, "owner"> = "editor") => {
+    if (!activeHousehold) throw new Error("Choose a household first.");
+    if (activeHousehold.role !== "owner") throw new Error("Only the household owner can invite people.");
+    return createHouseholdInviteCode(activeHousehold.householdId, role);
+  }, [activeHousehold]);
+
+  const acceptHouseholdInvite = useCallback(async (code: string) => {
+    if (!user) throw new Error("Sign in before joining a household.");
+    const householdId = await acceptHouseholdInviteCode(code);
+    await saveActiveHouseholdId(user.id, householdId);
+    setActiveHouseholdId(householdId);
+    await resolveHouseholds(user.id);
+    setLoadRetryNonce(value => value + 1);
+  }, [user, resolveHouseholds]);
+
   // ── Load from Supabase when user changes ────────────────────────────────────
   useEffect(() => {
     if (demoMode) {
@@ -744,6 +863,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setLoadError(null);
       setBills([]); setOverrides([]); setBillDateMoves([]); setTransactions([]); setIncomes([]);
       setGoals([]); setExtraPayments([]); setCategories([]); setAccounts([]); setDecisions([]); setSettings(DEFAULT_SETTINGS);
+      setHouseholds([]); setActiveHouseholdId(null); householdScopeRef.current = null;
       billDateMovesRef.current = [];
       loaded.current = false;
       setLoading(false);
@@ -756,6 +876,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const loadStarted = Date.now();
       try {
         const uid = user.id;
+        const scope = await resolveHouseholds(uid);
         void withLoadTimeout(
           supabase.rpc("sync_due_debt_transactions", { p_as_of_date: localDateString() }),
           8000,
@@ -767,16 +888,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         });
         const results = await withLoadTimeout(
           Promise.all([
-            supabase.from("bills").select("*").eq("user_id", uid),
-            supabase.from("monthly_overrides").select("*").eq("user_id", uid),
-            supabase.from("transactions").select("*").eq("user_id", uid),
-            supabase.from("incomes").select("*").eq("user_id", uid),
-            supabase.from("goals").select("*").eq("user_id", uid),
-            supabase.from("extra_payments").select("*").eq("user_id", uid),
-            supabase.from("settings").select("*").eq("user_id", uid).maybeSingle(),
-            supabase.from("categories").select("name").eq("user_id", uid),
-            supabase.from("accounts").select("*").eq("user_id", uid).order("created_at"),
-            supabase.from("decisions").select("*").eq("user_id", uid).order("created_at", { ascending: false }),
+            applyHouseholdSelect(supabase.from("bills").select("*"), uid),
+            applyHouseholdSelect(supabase.from("monthly_overrides").select("*"), uid),
+            applyHouseholdSelect(supabase.from("transactions").select("*"), uid),
+            applyHouseholdSelect(supabase.from("incomes").select("*"), uid),
+            applyHouseholdSelect(supabase.from("goals").select("*"), uid),
+            applyHouseholdSelect(supabase.from("extra_payments").select("*"), uid),
+            loadScopedSettings(uid, scope),
+            applyHouseholdSelect(supabase.from("categories").select("name"), uid),
+            applyHouseholdSelect(supabase.from("accounts").select("*"), uid).order("created_at"),
+            applyHouseholdSelect(supabase.from("decisions").select("*"), uid).order("created_at", { ascending: false }),
           ]),
           12000,
           "Load budget data",
@@ -805,7 +926,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           actual_amount: o.actual_amount !== null ? Number(o.actual_amount) : undefined,
           paid_date: o.paid_date ?? undefined,
         })));
-        const storedBillDateMoves = await withLoadTimeout(loadBillDateMoves(uid), 8000, "Load moved bill dates");
+        const storedBillDateMoves = await withLoadTimeout(loadBillDateMoves(uid, scope), 8000, "Load moved bill dates");
         setBillDateMoves(storedBillDateMoves);
         billDateMovesRef.current = storedBillDateMoves;
         setTransactions((tData ?? []).map(normalizeTransactionRow));
@@ -874,25 +995,27 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }).catch(() => undefined);
       }
     })();
-  }, [user, demoMode, loadRetryNonce]);
+  }, [user, demoMode, loadRetryNonce, resolveHouseholds, applyHouseholdSelect, loadScopedSettings]);
 
   useEffect(() => {
     if (!user || demoMode) return;
     const refreshAccountsAndSettings = async () => {
       const uid = user.id;
       let loadedAccounts: Account[] | null = null;
+      const scope = householdScopeRef.current;
       const [accountResult, settingsResult] = await Promise.all([
-        supabase.from("accounts").select("*").eq("user_id", uid).order("created_at"),
-        supabase.from("settings").select("*").eq("user_id", uid).maybeSingle(),
+        applyHouseholdSelect(supabase.from("accounts").select("*"), uid).order("created_at"),
+        loadScopedSettings(uid, scope),
       ]);
       if (!accountResult.error) {
-        loadedAccounts = (accountResult.data ?? []).filter((a: any) => a.account_type !== "credit_card").map((a: any) => ({
+        const nextAccounts = (accountResult.data ?? []).filter((a: any) => a.account_type !== "credit_card").map((a: any) => ({
           ...a,
           current_balance: Number(a.current_balance),
           last_reconciled_at: a.last_reconciled_at ?? undefined,
           is_active: a.is_active !== false,
         }));
-        setAccounts(loadedAccounts);
+        loadedAccounts = nextAccounts;
+        setAccounts(nextAccounts);
       }
       if (!settingsResult.error && settingsResult.data) {
         const sData = settingsResult.data;
@@ -925,7 +1048,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       if (state === "active") void refreshAccountsAndSettings();
     });
     return () => subscription.remove();
-  }, [user, demoMode, accounts]);
+  }, [user, demoMode, accounts, applyHouseholdSelect, loadScopedSettings]);
 
   // ─── Bills ────────────────────────────────────────────────────────────────────
 
@@ -936,10 +1059,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setBills(prev => reorderDebtPriorities([...prev, nb]));
       return nb.id;
     }
-    await ensureSaved(supabase.from("bills").insert({ ...nb, user_id: user.id }), "Add bill");
+    await ensureSaved(supabase.from("bills").insert(scopedPayload({ ...nb, user_id: user.id })), "Add bill");
     setBills(prev => reorderDebtPriorities([...prev, nb]));
     return nb.id;
-  }, [user, demoMode]);
+  }, [user, demoMode, scopedPayload]);
 
   const updateBill = useCallback(async (bill: Bill) => {
     if (!user) return;
@@ -974,7 +1097,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
                   ...(patch.custom_amount !== undefined ? { custom_amount: patch.custom_amount } : {}),
                   ...(patch.custom_due_day !== undefined ? { custom_due_day: patch.custom_due_day } : {}),
                 })
-                .eq("id", o.id).eq("user_id", user.id) as unknown as Promise<any>
+                .eq("id", o.id) as unknown as Promise<any>
             );
             return { ...o, ...patch };
           }
@@ -990,7 +1113,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           dbUpdates.push(
             supabase.from("monthly_overrides")
               .update(resetPatch)
-              .eq("id", o.id).eq("user_id", user.id) as unknown as Promise<any>
+              .eq("id", o.id) as unknown as Promise<any>
           );
           return {
             ...o,
@@ -1016,7 +1139,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         insertedOverrides.push(created);
         dbUpdates.push(
           supabase.from("monthly_overrides")
-            .insert({ ...monthlyOverrideDbPayload(created), user_id: user.id }) as unknown as Promise<any>
+            .insert(scopedPayload({ ...monthlyOverrideDbPayload(created), user_id: user.id })) as unknown as Promise<any>
         );
       });
 
@@ -1033,11 +1156,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const failed = results.find(result => result?.error);
       if (failed?.error) throw new Error(`Update monthly bill: ${failed.error.message}`);
     }
-      await ensureSaved(supabase.from("bills").update({ ...reviewedBill }).eq("id", bill.id).eq("user_id", user.id), "Update bill");
+      await ensureSaved(supabase.from("bills").update({ ...reviewedBill }).eq("id", bill.id), "Update bill");
       if (bill.is_debt && (existing.balance !== bill.balance || existing.amount !== bill.amount || existing.include_in_snowball !== bill.include_in_snowball)) {
         const rollover = await supabase.rpc("recalculate_debt_minimum_boosts");
         if (rollover.error) throw new Error(`Roll debt minimum: ${rollover.error.message}`);
-        const refreshed = await supabase.from("bills").select("*").eq("user_id", user.id);
+        const refreshed = await applyHouseholdSelect(supabase.from("bills").select("*"), user.id);
         if (refreshed.error) throw new Error(`Refresh debts: ${refreshed.error.message}`);
         setBills(reorderDebtPriorities((refreshed.data ?? []).map(normalizeBillRow)));
       }
@@ -1052,7 +1175,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       markSaveFailed(error, () => updateBill(bill));
       throw error;
     }
-  }, [user, bills, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed]);
+  }, [user, bills, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, scopedPayload, applyHouseholdSelect]);
 
   const deleteBill = useCallback(async (id: string) => {
     if (!user) return;
@@ -1071,14 +1194,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (shouldEndForwardOnly && deletedBill) {
       const endedBill = { ...deletedBill, end_date: forwardEndDate };
       await ensureSaved(
-        supabase.from("bills").update({ end_date: forwardEndDate, last_reviewed_at: new Date().toISOString() }).eq("id", id).eq("user_id", user.id),
+        supabase.from("bills").update({ end_date: forwardEndDate, last_reviewed_at: new Date().toISOString() }).eq("id", id),
         "Stop future bill"
       );
       setBills(prev => reorderDebtPriorities(prev.map(b => b.id === id ? endedBill : b)));
     } else {
       const results = await Promise.all([
-        supabase.from("bills").delete().eq("id", id).eq("user_id", user.id),
-        supabase.from("monthly_overrides").delete().eq("bill_id", id).eq("user_id", user.id),
+        supabase.from("bills").delete().eq("id", id),
+        supabase.from("monthly_overrides").delete().eq("bill_id", id),
       ]);
       const failed = results.find(result => result.error);
       if (failed?.error) throw new Error(`Delete bill: ${failed.error.message}`);
@@ -1088,11 +1211,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (deletedBill?.is_debt) {
       const rollover = await supabase.rpc("recalculate_debt_minimum_boosts");
       if (rollover.error) throw new Error(`Recalculate debt minimum: ${rollover.error.message}`);
-      const refreshed = await supabase.from("bills").select("*").eq("user_id", user.id);
+      const refreshed = await applyHouseholdSelect(supabase.from("bills").select("*"), user.id);
       if (refreshed.error) throw new Error(`Refresh debts: ${refreshed.error.message}`);
       setBills(reorderDebtPriorities((refreshed.data ?? []).map(normalizeBillRow)));
     }
-  }, [user, bills, demoMode]);
+  }, [user, bills, demoMode, applyHouseholdSelect]);
 
   const getBillById = useCallback((id: string) => bills.find(b => b.id === id), [bills]);
 
@@ -1139,11 +1262,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       try {
         if (existing) {
           await ensureSaved(
-            supabase.from("monthly_overrides").update(monthlyOverrideDbPayload(updated)).eq("id", existing.id).eq("user_id", user.id),
+            supabase.from("monthly_overrides").update(monthlyOverrideDbPayload(updated)).eq("id", existing.id),
             "Update monthly bill"
           );
         } else {
-          await ensureSaved(supabase.from("monthly_overrides").insert({ ...monthlyOverrideDbPayload(updated), user_id: user.id }), "Create monthly bill");
+          await ensureSaved(supabase.from("monthly_overrides").insert(scopedPayload({ ...monthlyOverrideDbPayload(updated), user_id: user.id })), "Create monthly bill");
         }
         markSaveCompleted();
         void recordDiagnostic(user.id, {
@@ -1166,7 +1289,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         throw error;
       }
     },
-    [user, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed]
+    [user, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, scopedPayload]
   );
 
   const setPaidAmount = useCallback(
@@ -1189,7 +1312,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
             return;
           }
           await ensureSaved(
-            supabase.from("bills").update({ balance: nextBalance }).eq("id", billId).eq("user_id", user.id),
+            supabase.from("bills").update({ balance: nextBalance }).eq("id", billId),
             "Update debt balance"
           );
           setBills(prev => reorderDebtPriorities(
@@ -1258,7 +1381,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       : [...billDateMovesRef.current, nextMove];
     billDateMovesRef.current = next;
     setBillDateMoves(next);
-    writeStoredBillDateMoves(user.id, next);
+    writeStoredBillDateMoves(user.id, next, householdScopeRef.current?.householdId);
     if (demoMode) {
       markSaveCompleted();
       return;
@@ -1267,7 +1390,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     try {
       const saved = await supabase
         .from("bill_date_moves")
-        .upsert(billDateMoveDbPayload(nextMove, user.id), { onConflict: "user_id,bill_id,from_date" })
+          .upsert(billDateMoveDbPayload(nextMove, user.id, householdScopeRef.current), { onConflict: "user_id,bill_id,from_date" })
         .select("*")
         .single();
       if (saved.error) throw new Error(`Move bill date: ${saved.error.message}`);
@@ -1277,14 +1400,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       );
       billDateMovesRef.current = finalMoves;
       setBillDateMoves(finalMoves);
-      writeStoredBillDateMoves(user.id, finalMoves);
+      writeStoredBillDateMoves(user.id, finalMoves, householdScopeRef.current?.householdId);
       markSaveCompleted();
     } catch (error) {
       const current = billDateMovesRef.current.find(move => move.bill_id === billId && move.from_date === cleanFrom);
       if (current?.to_date === cleanTo) {
         billDateMovesRef.current = previous;
         setBillDateMoves(previous);
-        writeStoredBillDateMoves(user.id, previous);
+        writeStoredBillDateMoves(user.id, previous, householdScopeRef.current?.householdId);
       }
       markSaveFailed(error, () => moveBillOccurrence(billId, fromDate, toDate));
       throw error;
@@ -1298,7 +1421,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const next = billDateMovesRef.current.filter(move => move.id !== id);
     billDateMovesRef.current = next;
     setBillDateMoves(next);
-    writeStoredBillDateMoves(user.id, next);
+    writeStoredBillDateMoves(user.id, next, householdScopeRef.current?.householdId);
     if (demoMode || !existing) {
       markSaveCompleted();
       return;
@@ -1308,7 +1431,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const removed = await supabase
         .from("bill_date_moves")
         .delete()
-        .eq("user_id", user.id)
         .eq("bill_id", existing.bill_id)
         .eq("from_date", existing.from_date);
       if (removed.error) throw new Error(`Restore bill date: ${removed.error.message}`);
@@ -1316,7 +1438,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       billDateMovesRef.current = previous;
       setBillDateMoves(previous);
-      writeStoredBillDateMoves(user.id, previous);
+      writeStoredBillDateMoves(user.id, previous, householdScopeRef.current?.householdId);
       markSaveFailed(error, () => removeBillOccurrenceMove(id));
       throw error;
     }
@@ -1392,16 +1514,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     if (existing) {
       await ensureSaved(
-        supabase.from("extra_payments").update(payload).eq("id", existing.id).eq("user_id", user.id),
+        supabase.from("extra_payments").update(payload).eq("id", existing.id),
         "Update extra payment"
       );
       setExtraPayments(prev => prev.map(ep => ep.id === existing.id ? { ...ep, ...payload } : ep));
     } else {
       const next: ExtraPayment = { id: genId(), month, year, ...payload };
-      await ensureSaved(supabase.from("extra_payments").insert({ ...next, user_id: user.id }), "Add extra payment");
+      await ensureSaved(supabase.from("extra_payments").insert(scopedPayload({ ...next, user_id: user.id })), "Add extra payment");
       setExtraPayments(prev => [...prev, next]);
     }
-  }, [user, extraPayments, demoMode]);
+  }, [user, extraPayments, demoMode, scopedPayload]);
 
   const getExtraPayment = useCallback(
     (month: number, year: number) => extraPayments.find(ep => ep.month === month && ep.year === year),
@@ -1463,7 +1585,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setExtraPayments(prev => prev.filter(ep => ep.id !== id));
       return;
     }
-    await ensureSaved(supabase.from("extra_payments").delete().eq("id", id).eq("user_id", user.id), "Delete extra payment");
+    await ensureSaved(supabase.from("extra_payments").delete().eq("id", id), "Delete extra payment");
     setExtraPayments(prev => prev.filter(ep => ep.id !== id));
   }, [user, demoMode]);
 
@@ -1528,8 +1650,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (rollover.error) throw new Error(`Roll debt minimum: ${rollover.error.message}`);
 
     const [overrideResult, billsResult] = await Promise.all([
-      supabase.from("monthly_overrides").select("*").eq("user_id", user.id).eq("month", month).eq("year", year),
-      supabase.from("bills").select("*").eq("user_id", user.id),
+      applyHouseholdSelect(supabase.from("monthly_overrides").select("*"), user.id).eq("month", month).eq("year", year),
+      applyHouseholdSelect(supabase.from("bills").select("*"), user.id),
     ]);
     if (overrideResult.error) throw new Error(`Refresh monthly bills: ${overrideResult.error.message}`);
     if (billsResult.error) throw new Error(`Refresh debts: ${billsResult.error.message}`);
@@ -1552,7 +1674,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setExtraPayments(prev => existing
       ? prev.map(ep => ep.id === existing.id ? nextPayment : ep)
       : [...prev, nextPayment]);
-  }, [user, extraPayments, saveExtraPayment, demoMode]);
+  }, [user, extraPayments, saveExtraPayment, demoMode, applyHouseholdSelect]);
 
   const removeDebtSnowballPayment = useCallback(async (month: number, year: number) => {
     const existing = extraPayments.find(ep => ep.month === month && ep.year === year);
@@ -1585,8 +1707,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const rollover = await supabase.rpc("recalculate_debt_minimum_boosts");
     if (rollover.error) throw new Error(`Restore debt minimum: ${rollover.error.message}`);
     const [overrideResult, billsResult] = await Promise.all([
-      supabase.from("monthly_overrides").select("*").eq("user_id", user.id).eq("month", month).eq("year", year),
-      supabase.from("bills").select("*").eq("user_id", user.id),
+      applyHouseholdSelect(supabase.from("monthly_overrides").select("*"), user.id).eq("month", month).eq("year", year),
+      applyHouseholdSelect(supabase.from("bills").select("*"), user.id),
     ]);
     if (overrideResult.error) throw new Error(`Refresh monthly bills: ${overrideResult.error.message}`);
     if (billsResult.error) throw new Error(`Refresh debts: ${billsResult.error.message}`);
@@ -1601,7 +1723,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setBills(reorderDebtPriorities((billsResult.data ?? []).map(normalizeBillRow)));
     setOverrides(prev => [...prev.filter(o => o.month !== month || o.year !== year), ...refreshedOverrides]);
     setExtraPayments(prev => prev.filter(ep => ep.id !== existing.id));
-  }, [user, extraPayments, deleteExtraPayment, demoMode]);
+  }, [user, extraPayments, deleteExtraPayment, demoMode, applyHouseholdSelect]);
 
   const syncingDueSnowballPayments = useRef(new Set<string>());
   useEffect(() => {
@@ -1651,7 +1773,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           if (!bill?.is_debt) continue;
           const nextBalance = Math.max(0, bill.balance + allocation.payment);
           await ensureSaved(
-            supabase.from("bills").update({ balance: nextBalance }).eq("id", allocation.billId).eq("user_id", user.id),
+            supabase.from("bills").update({ balance: nextBalance }).eq("id", allocation.billId),
             "Defer future snowball balance"
           );
           const override = overrides.find(item => item.bill_id === allocation.billId && item.month === payment.month && item.year === payment.year);
@@ -1659,8 +1781,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
             await ensureSaved(
               supabase.from("monthly_overrides")
                 .update({ paid_amount: Math.max(0, override.paid_amount - allocation.payment) })
-                .eq("id", override.id)
-                .eq("user_id", user.id),
+                .eq("id", override.id),
               "Defer future snowball paid amount"
             );
           }
@@ -1674,8 +1795,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           markSnowballSourcesPending(payment.sources ?? [{ type: "manual", amount: payment.amount }]),
         );
         const [billRows, overrideRows] = await Promise.all([
-          supabase.from("bills").select("*").eq("user_id", user.id),
-          supabase.from("monthly_overrides").select("*").eq("user_id", user.id).eq("month", payment.month).eq("year", payment.year),
+          applyHouseholdSelect(supabase.from("bills").select("*"), user.id),
+          applyHouseholdSelect(supabase.from("monthly_overrides").select("*"), user.id).eq("month", payment.month).eq("year", payment.year),
         ]);
         if (billRows.error) throw new Error(`Refresh deferred debts: ${billRows.error.message}`);
         if (overrideRows.error) throw new Error(`Refresh deferred overrides: ${overrideRows.error.message}`);
@@ -1695,7 +1816,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         .catch(error => markSaveFailed(error, async () => undefined))
         .finally(() => repairingFutureSnowballPayments.current.delete(payment.id));
     });
-  }, [user, extraPayments, bills, overrides, saveExtraPayment, markSaveFailed, demoMode]);
+  }, [user, extraPayments, bills, overrides, saveExtraPayment, markSaveFailed, demoMode, applyHouseholdSelect]);
 
   const finalizeBillPayment = useCallback(async (billId: string, month: number, year: number, actualAmount: number, paidDate: string) => {
     const bill = bills.find(b => b.id === billId);
@@ -1716,14 +1837,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     const [billRows, transactionRows] = await Promise.all([
-      supabase.from("bills").select("*").eq("user_id", user.id),
-      supabase.from("transactions").select("*").eq("user_id", user.id),
+      applyHouseholdSelect(supabase.from("bills").select("*"), user.id),
+      applyHouseholdSelect(supabase.from("transactions").select("*"), user.id),
     ]);
     if (billRows.error) throw new Error(`Refresh debts: ${billRows.error.message}`);
     if (transactionRows.error) throw new Error(`Refresh transactions: ${transactionRows.error.message}`);
     setBills(reorderDebtPriorities((billRows.data ?? []).map(normalizeBillRow)));
     setTransactions((transactionRows.data ?? []).map(normalizeTransactionRow));
-  }, [user, demoMode]);
+  }, [user, demoMode, applyHouseholdSelect]);
 
   useEffect(() => {
     if (!user || demoMode) return;
@@ -1747,11 +1868,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setTransactions(prev => [...prev, nt]);
       return nt.id;
     }
-    await ensureSaved(supabase.from("transactions").insert({ ...nt, user_id: user.id }), "Add transaction");
+    await ensureSaved(supabase.from("transactions").insert(scopedPayload({ ...nt, user_id: user.id })), "Add transaction");
     setTransactions(prev => [...prev, nt]);
     if (nt.linked_bill_id || nt.debt_applied_bill_id) await syncDebtTransactionsAndRefresh();
     return nt.id;
-  }, [user, accounts, syncDebtTransactionsAndRefresh, demoMode]);
+  }, [user, accounts, syncDebtTransactionsAndRefresh, demoMode, scopedPayload]);
 
   const updateTransaction = useCallback(async (tx: Transaction) => {
     if (!user) return;
@@ -1760,7 +1881,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (demoMode) return;
     markSaveStarted();
     try {
-      await ensureSaved(supabase.from("transactions").update({ ...tx }).eq("id", tx.id).eq("user_id", user.id), "Update transaction");
+      await ensureSaved(supabase.from("transactions").update({ ...tx }).eq("id", tx.id), "Update transaction");
       if (tx.linked_bill_id || existing?.linked_bill_id || existing?.debt_applied_bill_id) await syncDebtTransactionsAndRefresh();
       markSaveCompleted();
     } catch (error) {
@@ -1781,7 +1902,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     await ensureSaved(
-      supabase.from("transactions").delete().eq("user_id", user.id).eq("transfer_group_id", transferGroupId),
+      supabase.from("transactions").delete().eq("transfer_group_id", transferGroupId),
       "Delete transfer",
     );
     setTransactions(prev => prev.filter(t => !idsToDelete.includes(t.id)));
@@ -1803,7 +1924,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setTransactions(prev => prev.filter(t => !idsToDelete.includes(t.id)));
       return;
     }
-    await ensureSaved(supabase.from("transactions").delete().eq("id", id).eq("user_id", user.id), "Delete transaction");
+    await ensureSaved(supabase.from("transactions").delete().eq("id", id), "Delete transaction");
     setTransactions(prev => prev.filter(t => !idsToDelete.includes(t.id)));
     if (idsToDelete.some(txId => transactions.find(transaction => transaction.id === txId)?.debt_applied_bill_id)) await syncDebtTransactionsAndRefresh();
   }, [user, transactions, syncDebtTransactionsAndRefresh, demoMode, deleteTransfer]);
@@ -1826,7 +1947,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setIncomes(prev => [...prev, ni]);
       return ni.id;
     }
-    await ensureSaved(supabase.from("incomes").insert({ ...ni, amount_history: ni.amount_history ?? [], user_id: user.id }), "Add income");
+    await ensureSaved(supabase.from("incomes").insert(scopedPayload({ ...ni, amount_history: ni.amount_history ?? [], user_id: user.id })), "Add income");
     setIncomes(prev => [...prev, ni]);
     return ni.id;
   }, [user, demoMode]);
@@ -1839,7 +1960,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (demoMode) return;
     markSaveStarted();
     try {
-      await ensureSaved(supabase.from("incomes").update({ ...reviewedItem, amount_history: item.amount_history ?? [] }).eq("id", item.id).eq("user_id", user.id), "Update income");
+    await ensureSaved(supabase.from("incomes").update({ ...reviewedItem, amount_history: item.amount_history ?? [] }).eq("id", item.id), "Update income");
       markSaveCompleted();
     } catch (error) {
       if (existing) setIncomes(prev => prev.map(income => income.id === existing.id && income === item ? existing : income));
@@ -1854,7 +1975,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setIncomes(prev => prev.filter(i => i.id !== id));
       return;
     }
-    await ensureSaved(supabase.from("incomes").delete().eq("id", id).eq("user_id", user.id), "Delete income");
+    await ensureSaved(supabase.from("incomes").delete().eq("id", id), "Delete income");
     setIncomes(prev => prev.filter(i => i.id !== id));
   }, [user, demoMode]);
 
@@ -1894,7 +2015,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setGoals(prev => [...prev, ng]);
       return;
     }
-    await ensureSaved(supabase.from("goals").insert({ ...ng, user_id: user.id }), "Add goal");
+    await ensureSaved(supabase.from("goals").insert(scopedPayload({ ...ng, user_id: user.id })), "Add goal");
     setGoals(prev => [...prev, ng]);
   }, [user, demoMode]);
 
@@ -1905,7 +2026,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (demoMode) return;
     markSaveStarted();
     try {
-      await ensureSaved(supabase.from("goals").update({ ...goal }).eq("id", goal.id).eq("user_id", user.id), "Update goal");
+    await ensureSaved(supabase.from("goals").update({ ...goal }).eq("id", goal.id), "Update goal");
       markSaveCompleted();
     } catch (error) {
       if (existing) setGoals(prev => prev.map(item => item.id === existing.id && item === goal ? existing : item));
@@ -1920,7 +2041,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setGoals(prev => prev.filter(g => g.id !== id));
       return;
     }
-    await ensureSaved(supabase.from("goals").delete().eq("id", id).eq("user_id", user.id), "Delete goal");
+    await ensureSaved(supabase.from("goals").delete().eq("id", id), "Delete goal");
     setGoals(prev => prev.filter(g => g.id !== id));
   }, [user, demoMode]);
 
@@ -2328,9 +2449,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setCategories(prev => [...prev, trimmed]);
       return;
     }
-    await ensureSaved(supabase.from("categories").insert({ user_id: user.id, name: trimmed }), "Add category");
+    await ensureSaved(supabase.from("categories").insert(scopedPayload({ user_id: user.id, name: trimmed })), "Add category");
     setCategories(prev => [...prev, trimmed]);
-  }, [user, categories, demoMode]);
+  }, [user, categories, demoMode, scopedPayload]);
 
   const updateCategory = useCallback(async (oldName: string, newName: string) => {
     if (!user) return;
@@ -2345,9 +2466,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     const results = await Promise.all([
-      supabase.from("categories").update({ name: trimmed }).eq("user_id", user.id).eq("name", oldName),
-      ...affectedBills.map(b => supabase.from("bills").update({ category: trimmed }).eq("id", b.id).eq("user_id", user.id)),
-      ...affectedTransactions.map(t => supabase.from("transactions").update({ category: trimmed }).eq("id", t.id).eq("user_id", user.id)),
+      supabase.from("categories").update({ name: trimmed }).eq("name", oldName),
+      ...affectedBills.map(b => supabase.from("bills").update({ category: trimmed }).eq("id", b.id)),
+      ...affectedTransactions.map(t => supabase.from("transactions").update({ category: trimmed }).eq("id", t.id)),
     ]);
     const failed = results.find(result => result.error);
     if (failed?.error) throw new Error(`Rename category: ${failed.error.message}`);
@@ -2367,9 +2488,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     const results = await Promise.all([
-      supabase.from("categories").delete().eq("user_id", user.id).eq("name", name),
-      ...affectedBills.map(b => supabase.from("bills").update({ category: "Other" }).eq("id", b.id).eq("user_id", user.id)),
-      ...affectedTransactions.map(t => supabase.from("transactions").update({ category: "Other" }).eq("id", t.id).eq("user_id", user.id)),
+      supabase.from("categories").delete().eq("name", name),
+      ...affectedBills.map(b => supabase.from("bills").update({ category: "Other" }).eq("id", b.id)),
+      ...affectedTransactions.map(t => supabase.from("transactions").update({ category: "Other" }).eq("id", t.id)),
     ]);
     const failed = results.find(result => result.error);
     if (failed?.error) throw new Error(`Delete category: ${failed.error.message}`);
@@ -2380,6 +2501,39 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Settings ─────────────────────────────────────────────────────────────────
 
+  const saveSettingsRecord = useCallback(async (next: Settings) => {
+    if (!user) return;
+    const scope = householdScopeRef.current;
+    if (scope) {
+      const householdResult = await supabase.from("household_settings").upsert({
+        household_id: scope.householdId,
+        budget_id: scope.budgetId,
+        payment_method: next.paymentMethod,
+        starting_balance: next.starting_balance,
+        starting_balance_date: next.starting_balance_date ?? null,
+        safety_floor: next.safety_floor,
+        forecast_horizon_months: next.forecast_horizon_months,
+        onboarding_completed: next.onboarding_completed,
+        updated_at: new Date().toISOString(),
+      });
+      if (!householdResult.error) return;
+      const message = householdResult.error.message.toLowerCase();
+      if (!message.includes("household_settings") && !message.includes("schema cache")) {
+        throw new Error(`Update household settings: ${householdResult.error.message}`);
+      }
+    }
+
+    await ensureSaved(supabase.from("settings").upsert({
+      user_id:               user.id,
+      payment_method:        next.paymentMethod,
+      starting_balance:      next.starting_balance,
+      starting_balance_date: next.starting_balance_date ?? null,
+      safety_floor:          next.safety_floor,
+      forecast_horizon_months: next.forecast_horizon_months,
+      onboarding_completed:   next.onboarding_completed,
+    }), "Update settings");
+  }, [user]);
+
   const updateSettings = useCallback(async (s: Partial<Settings>) => {
     if (!user) return;
     const next = { ...settings, ...s };
@@ -2388,15 +2542,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const saveStarted = Date.now();
     markSaveStarted();
     try {
-      await ensureSaved(supabase.from("settings").upsert({
-        user_id:               user.id,
-        payment_method:        next.paymentMethod,
-        starting_balance:      next.starting_balance,
-        starting_balance_date: next.starting_balance_date ?? null,
-        safety_floor:          next.safety_floor,
-        forecast_horizon_months: next.forecast_horizon_months,
-        onboarding_completed:   next.onboarding_completed,
-      }), "Update settings");
+      await saveSettingsRecord(next);
       markSaveCompleted();
       void recordDiagnostic(user.id, {
         eventType: "performance", operation: "settings_save", platform: diagnosticPlatform(),
@@ -2407,7 +2553,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       markSaveFailed(error, () => updateSettings(s));
       throw error;
     }
-  }, [user, settings, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed]);
+  }, [user, settings, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, saveSettingsRecord]);
 
   const persistAccountAnchor = useCallback(async (nextAccounts: Account[], asOfDate: string) => {
     if (!user) return;
@@ -2415,16 +2561,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const nextSettings = { ...settings, starting_balance: nextBalance, starting_balance_date: asOfDate };
     setSettings(nextSettings);
     if (demoMode) return;
-    await ensureSaved(supabase.from("settings").upsert({
-      user_id: user.id,
-      payment_method: nextSettings.paymentMethod,
-      starting_balance: nextBalance,
-      starting_balance_date: asOfDate,
-      safety_floor: nextSettings.safety_floor,
-      forecast_horizon_months: nextSettings.forecast_horizon_months,
-      onboarding_completed: nextSettings.onboarding_completed,
-    }), "Update forecast balance");
-  }, [user, settings, demoMode]);
+    await saveSettingsRecord(nextSettings);
+  }, [user, settings, demoMode, saveSettingsRecord]);
 
   const addAccount = useCallback(async (input: Omit<Account, "id" | "created_at" | "last_reconciled_at">) => {
     if (!user) return;
@@ -2438,9 +2576,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     markSaveStarted();
     try {
-      await ensureSaved(supabase.from("accounts").insert({ ...account, user_id: user.id }), "Add account");
+      await ensureSaved(supabase.from("accounts").insert(scopedPayload({ ...account, user_id: user.id })), "Add account");
       await ensureSaved(supabase.from("account_balances").insert({
-        id: genId(), account_id: account.id, user_id: user.id, balance: account.current_balance,
+        ...scopedPayload({ id: genId(), account_id: account.id, user_id: user.id, balance: account.current_balance }),
         as_of_date: account.balance_as_of, source: "manual",
       }), "Save opening balance");
       const next = [...accounts, account];
@@ -2451,7 +2589,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       markSaveFailed(error, () => addAccount(input));
       throw error;
     }
-  }, [user, accounts, persistAccountAnchor, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed]);
+  }, [user, accounts, persistAccountAnchor, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, scopedPayload]);
 
   const updateAccount = useCallback(async (account: Account) => {
     if (!user) return;
@@ -2470,7 +2608,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         current_balance: account.current_balance,
         balance_as_of: account.balance_as_of,
         is_active: account.is_active,
-      }).eq("id", account.id).eq("user_id", user.id), "Update account");
+      }).eq("id", account.id), "Update account");
       try {
         await persistAccountAnchor(next, account.balance_as_of);
       } catch (anchorError) {
@@ -2502,9 +2640,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     try {
       await ensureSaved(supabase.from("accounts").update({
         current_balance: balance, balance_as_of: asOfDate, last_reconciled_at: reconciledAt,
-      }).eq("id", accountId).eq("user_id", user.id), "Reconcile account");
+      }).eq("id", accountId), "Reconcile account");
       const historyResult = await supabase.from("account_balances").insert({
-        id: genId(), account_id: accountId, user_id: user.id, balance, as_of_date: asOfDate, source: "reconciliation",
+        ...scopedPayload({ id: genId(), account_id: accountId, user_id: user.id, balance }),
+        as_of_date: asOfDate, source: "reconciliation",
       });
       if (historyResult.error) {
         void recordDiagnostic(user.id, {
@@ -2527,7 +2666,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       markSaveFailed(error, () => reconcileAccount(accountId, balance, asOfDate));
       throw error;
     }
-  }, [user, accounts, persistAccountAnchor, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed]);
+  }, [user, accounts, persistAccountAnchor, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, scopedPayload]);
 
   const archiveAccount = useCallback(async (accountId: string) => {
     const account = accounts.find(item => item.id === accountId);
@@ -2549,14 +2688,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       return { imported: fresh.length, duplicates: rows.length - fresh.length };
     }
     const hashes = rows.map(row => row.importHash);
-    const existingResult = await supabase.from("transactions").select("import_hash").eq("user_id", user.id).in("import_hash", hashes);
+    const existingResult = await applyHouseholdSelect(supabase.from("transactions").select("import_hash"), user.id).in("import_hash", hashes);
     if (existingResult.error) throw new Error(`Check statement duplicates: ${existingResult.error.message}`);
     const existing = new Set((existingResult.data ?? []).map((row: any) => row.import_hash));
     const seen = new Set<string>();
     const fresh = rows.filter(row => !existing.has(row.importHash) && !seen.has(row.importHash) && !!seen.add(row.importHash));
     if (fresh.length) {
       const records = fresh.map(row => ({
-        id: genId(), user_id: user.id, account_id: accountId, import_hash: row.importHash,
+        ...scopedPayload({ id: genId(), user_id: user.id, account_id: accountId, import_hash: row.importHash }),
         date: row.date, amount: row.amount, category: "Other", note: row.description,
       }));
       await ensureSaved(supabase.from("transactions").insert(records), "Import statement");
@@ -2564,7 +2703,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     void recordDiagnostic(user.id, { eventType: "performance", operation: "statement_import", platform: diagnosticPlatform() }).catch(() => undefined);
     return { imported: fresh.length, duplicates: rows.length - fresh.length };
-  }, [user, demoMode, transactions]);
+  }, [user, demoMode, transactions, scopedPayload, applyHouseholdSelect]);
 
   const saveDecision = useCallback(async (scenario: DecisionScenario, result: DecisionResult, status: DecisionRecord["status"] = "saved") => {
     if (!user) throw new Error("Sign in to save a decision");
@@ -2573,9 +2712,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setDecisions(previous => [decision, ...previous]);
       return decision;
     }
-    await ensureSaved(supabase.from("decisions").insert({ id: decision.id, user_id: user.id, created_at: decision.created_at, ...decisionDbPayload(decision) }), "Save decision");
+    await ensureSaved(supabase.from("decisions").insert(scopedPayload({ id: decision.id, user_id: user.id, created_at: decision.created_at, ...decisionDbPayload(decision) })), "Save decision");
     setDecisions(previous => [decision, ...previous]); return decision;
-  }, [user, demoMode]);
+  }, [user, demoMode, scopedPayload]);
 
   const updateDecision = useCallback(async (decision: DecisionRecord) => {
     if (!user) return;
@@ -2583,14 +2722,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setDecisions(previous => previous.map(item => item.id === decision.id ? decision : item));
       return;
     }
-    await ensureSaved(supabase.from("decisions").update({ ...decisionDbPayload(decision), updated_at: new Date().toISOString() }).eq("id", decision.id).eq("user_id", user.id), "Update decision");
+    await ensureSaved(supabase.from("decisions").update({ ...decisionDbPayload(decision), updated_at: new Date().toISOString() }).eq("id", decision.id), "Update decision");
     setDecisions(previous => previous.map(item => item.id === decision.id ? decision : item));
   }, [user, demoMode]);
 
   const deleteDecision = useCallback(async (id: string) => {
     if (!user) return;
     if (demoMode) { setDecisions(previous => previous.filter(item => item.id !== id)); return; }
-    await ensureSaved(supabase.from("decisions").delete().eq("id", id).eq("user_id", user.id), "Delete decision"); setDecisions(previous => previous.filter(item => item.id !== id));
+    await ensureSaved(supabase.from("decisions").delete().eq("id", id), "Delete decision"); setDecisions(previous => previous.filter(item => item.id !== id));
   }, [user, demoMode]);
 
   const forecastConfidence = useMemo(() => {
@@ -2616,15 +2755,17 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setBills(prev => reorderDebtPriorities([...prev, ...newBills]));
       return;
     }
-    await ensureSaved(supabase.from("bills").insert(newBills.map(b => ({ ...b, user_id: user.id }))), "Import bills");
+    await ensureSaved(supabase.from("bills").insert(newBills.map(b => scopedPayload({ ...b, user_id: user.id }))), "Import bills");
     setBills(prev => reorderDebtPriorities([...prev, ...newBills]));
-  }, [user, demoMode]);
+  }, [user, demoMode, scopedPayload]);
 
   // ─── Provider value ───────────────────────────────────────────────────────────
 
   return (
     <BudgetContext.Provider value={{
-      bills, overrides, billDateMoves, transactions, incomes, goals, extraPayments, categories, settings, accounts, decisions, forecastConfidence, loading, loadError, retryBudgetLoad, demoMode,
+      bills, overrides, billDateMoves, transactions, incomes, goals, extraPayments, categories, settings, accounts, decisions,
+      households, activeHousehold, householdRole, canEditHousehold, refreshHouseholds, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
+      forecastConfidence, loading, loadError, retryBudgetLoad, demoMode,
       saveStatus, saveError, retryLastSave, clearSaveError,
       dashboardFilter, setDashboardFilter,
       addBill, updateBill, deleteBill, getBillById,
