@@ -31,6 +31,7 @@ import {
 import { buildDataIntegrityIssues } from "@/lib/dataIntegrity";
 import { loadDecisionHubSettings, readDecisionHubSettings, saveDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { resetFloMemory } from "@/lib/flo";
+import { startLearningTour } from "@/lib/learningTour";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
@@ -391,9 +392,9 @@ export default function MoreScreen() {
           { icon: "credit-card" as const, label: "Accounts", onPress: () => openAccount("add") },
           { icon: "cpu" as const, label: "Algorithms", onPress: () => setShowAlgorithmSuite(current => !current) },
           { icon: "message-circle" as const, label: "Setup", onPress: () => { clearStoredSetupStep(); router.push("/setup" as any); } },
+          { icon: "compass" as const, label: "Tour", onPress: () => { startLearningTour(); router.push("/(tabs)" as any); } },
           { icon: "download" as const, label: "Backup", onPress: handleExport },
           { icon: "smartphone" as const, label: "Install", onPress: handleShowInstallPrompt },
-          { icon: "shield" as const, label: "Data Health", onPress: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light) },
         ].map(item => (
           <Pressable
             key={item.label}

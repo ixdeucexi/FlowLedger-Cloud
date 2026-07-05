@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Tabs, useRouter, useSegments } from "expo-router";
 import React from "react";
-import { Image, Platform, Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
+import { Image, Modal, Platform, Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
 
 import { useAuth } from "@/context/AuthContext";
 import { BudgetProvider, useBudget } from "@/context/BudgetContext";
@@ -10,6 +10,14 @@ import { SaveStatusBanner } from "@/components/SaveStatusBanner";
 import { DecisionDueModal } from "@/components/DecisionDueModal";
 import { FloLogo } from "@/components/FloLogo";
 import { useColors } from "@/hooks/useColors";
+import { useBackDismiss } from "@/hooks/useBackDismiss";
+import {
+  clearLearningTour,
+  LEARNING_TOUR_EVENT,
+  LEARNING_TOUR_STEPS,
+  readLearningTourState,
+  writeLearningTourState,
+} from "@/lib/learningTour";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 
 const TABS = [
@@ -229,6 +237,113 @@ function DemoModeBanner() {
   );
 }
 
+function FloLearningTour() {
+  const colors = useColors();
+  const router = useRouter();
+  const segments = useSegments();
+  const [state, setState] = React.useState(readLearningTourState);
+  const activeStep = LEARNING_TOUR_STEPS[state.stepIndex] ?? LEARNING_TOUR_STEPS[0];
+  const currentRoute = routeKeyFromSegments(segments.map(String));
+  const isOnStepRoute = currentRoute === activeStep.route;
+
+  const closeTour = React.useCallback(() => {
+    clearLearningTour();
+    setState({ active: false, stepIndex: 0 });
+  }, []);
+
+  useBackDismiss(state.active, closeTour);
+
+  React.useEffect(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined") return;
+    const onStart = () => {
+      const next = readLearningTourState();
+      setState(next);
+      const step = LEARNING_TOUR_STEPS[next.stepIndex] ?? LEARNING_TOUR_STEPS[0];
+      router.push(step.path as any);
+    };
+    window.addEventListener(LEARNING_TOUR_EVENT, onStart);
+    return () => window.removeEventListener(LEARNING_TOUR_EVENT, onStart);
+  }, [router]);
+
+  React.useEffect(() => {
+    if (!state.active || isOnStepRoute) return;
+    router.push(activeStep.path as any);
+  }, [activeStep.path, isOnStepRoute, router, state.active]);
+
+  const goToStep = (stepIndex: number) => {
+    const bounded = Math.max(0, Math.min(LEARNING_TOUR_STEPS.length - 1, stepIndex));
+    writeLearningTourState(true, bounded);
+    setState({ active: true, stepIndex: bounded });
+    router.push((LEARNING_TOUR_STEPS[bounded] ?? LEARNING_TOUR_STEPS[0]).path as any);
+  };
+
+  const next = () => {
+    if (state.stepIndex >= LEARNING_TOUR_STEPS.length - 1) {
+      closeTour();
+      return;
+    }
+    goToStep(state.stepIndex + 1);
+  };
+
+  if (!state.active) return null;
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={closeTour}>
+      <View style={styles.learningBackdrop}>
+        <Pressable style={styles.learningDismissZone} onPress={closeTour} />
+        <View style={[styles.learningSheet, { borderColor: colors.primary + "55" }]}>
+          <View style={styles.learningHeader}>
+            <FloLogo size={58} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.learningEyebrow}>Flo learning mode</Text>
+              <Text style={styles.learningTitle}>{activeStep.title}</Text>
+            </View>
+            <Pressable onPress={closeTour} style={styles.learningClose} hitSlop={8}>
+              <Feather name="x" size={18} color="#cbd5e1" />
+            </Pressable>
+          </View>
+
+          <View style={styles.learningFocusPill}>
+            <Feather name="crosshair" size={15} color="#38bdf8" />
+            <Text style={styles.learningFocusText}>{activeStep.focus}</Text>
+          </View>
+
+          <Text style={styles.learningBody}>{activeStep.floSays}</Text>
+          <Text style={styles.learningTry}>{activeStep.tryThis}</Text>
+
+          <View style={styles.learningDots}>
+            {LEARNING_TOUR_STEPS.map((step, index) => (
+              <Pressable
+                key={step.route}
+                onPress={() => goToStep(index)}
+                style={[
+                  styles.learningDot,
+                  index === state.stepIndex && styles.learningDotActive,
+                ]}
+              />
+            ))}
+          </View>
+
+          <View style={styles.learningActions}>
+            <Pressable
+              onPress={() => goToStep(state.stepIndex - 1)}
+              disabled={state.stepIndex === 0}
+              style={[styles.learningSecondary, { opacity: state.stepIndex === 0 ? 0.42 : 1 }]}
+            >
+              <Text style={styles.learningSecondaryText}>Back</Text>
+            </Pressable>
+            <Pressable onPress={next} style={[styles.learningPrimary, { backgroundColor: colors.primary }]}>
+              <Text style={[styles.learningPrimaryText, { color: colors.primaryForeground }]}>
+                {state.stepIndex >= LEARNING_TOUR_STEPS.length - 1 ? "Finish" : "Next"}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function TabContent() {
   const colors = useColors();
   const { loading, loadError, retryBudgetLoad, demoMode } = useBudget();
@@ -325,6 +440,7 @@ function TabContent() {
       {demoMode ? <DemoModeBanner /> : null}
       <SaveStatusBanner />
       <DecisionDueModal />
+      <FloLearningTour />
     </>
   );
 }
@@ -479,5 +595,131 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     textAlign: "center",
+  },
+  learningBackdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.62)",
+    padding: 16,
+  },
+  learningDismissZone: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  learningSheet: {
+    borderWidth: 1,
+    borderRadius: 28,
+    padding: 18,
+    marginBottom: 16,
+    backgroundColor: "rgba(15,23,42,0.97)",
+    shadowColor: "#8b5cf6",
+    shadowOpacity: 0.24,
+    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 16,
+  },
+  learningHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  learningEyebrow: {
+    color: "#a78bfa",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  learningTitle: {
+    color: "#f8fafc",
+    fontSize: 24,
+    fontWeight: "900",
+    marginTop: 2,
+  },
+  learningClose: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(148,163,184,0.12)",
+  },
+  learningFocusPill: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    backgroundColor: "rgba(56,189,248,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(56,189,248,0.24)",
+    marginTop: 16,
+  },
+  learningFocusText: {
+    color: "#bae6fd",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  learningBody: {
+    color: "#f8fafc",
+    fontSize: 16,
+    lineHeight: 23,
+    fontWeight: "700",
+    marginTop: 14,
+  },
+  learningTry: {
+    color: "#c4b5fd",
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "700",
+    marginTop: 10,
+  },
+  learningDots: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 7,
+    marginTop: 16,
+  },
+  learningDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(148,163,184,0.35)",
+  },
+  learningDotActive: {
+    width: 24,
+    backgroundColor: "#8b5cf6",
+  },
+  learningActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 16,
+  },
+  learningSecondary: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.22)",
+    backgroundColor: "rgba(15,23,42,0.72)",
+  },
+  learningSecondaryText: {
+    color: "#cbd5e1",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  learningPrimary: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  learningPrimaryText: {
+    fontSize: 14,
+    fontWeight: "900",
   },
 });

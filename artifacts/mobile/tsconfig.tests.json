@@ -47,5 +47,7 @@
     ,"lib/algorithmSuite.test.ts"
     ,"lib/onboarding.ts"
     ,"lib/onboarding.test.ts"
+    ,"lib/learningTour.ts"
+    ,"lib/learningTour.test.ts"
   ]
 }
