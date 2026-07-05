@@ -19,6 +19,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useBudget, type DecisionRecord } from "@/context/BudgetContext";
 import { DatePickerField } from "@/components/DatePickerField";
 import { FloLogo } from "@/components/FloLogo";
+import { FloSafetyStopModal } from "@/components/FloSafetyStopModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
@@ -58,6 +59,7 @@ import { isAlgorithmEnabled } from "@/lib/algorithmCatalog";
 import { groupForecastEvents } from "@/lib/forecastDisplay";
 import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
+import type { SafetyStopWarning } from "@/lib/safetyStop";
 
 const sampleQuestions = [
   "Ask Flo anything…",
@@ -105,6 +107,8 @@ export default function FloScreen() {
   const [lowerAmount, setLowerAmount] = useState("");
   const [historyActionState, setHistoryActionState] = useState<Record<string, "saving" | "failed">>({});
   const [reducePlanByMessageId, setReducePlanByMessageId] = useState<Record<string, DecisionHistoryItem>>({});
+  const [decisionSafetyStop, setDecisionSafetyStop] = useState<SafetyStopWarning | null>(null);
+  const [pendingUnsafeDecisionMessageId, setPendingUnsafeDecisionMessageId] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const handledPromptRef = useRef<string | null>(null);
   const now = useMemo(() => new Date(), []);
@@ -727,12 +731,27 @@ export default function FloScreen() {
     void send(cleanPrompt);
   }, [params.prompt, params.promptId, chat.sending]);
 
-  const addDecisionToCalendar = async (messageId: string) => {
+  const addDecisionToCalendar = async (messageId: string, allowUnsafe = false) => {
     const decision = decisionByMessageId[messageId];
     if (!decision || decisionSaveState[messageId] === "saving" || decisionSaveState[messageId] === "saved") return;
+    if (!allowUnsafe && decision.result.verdict === "unsafe") {
+      setPendingUnsafeDecisionMessageId(messageId);
+      setDecisionSafetyStop({
+        itemName: decision.scenario.name || "this plan",
+        amount: Math.abs(decision.scenario.amount),
+        scheduledDate: decision.scenario.date,
+        lowestBalance: decision.result.lowestBalance,
+        lowestBalanceDate: decision.result.lowestBalanceDate,
+        safetyFloor: settings.safety_floor,
+        shortfall: Math.max(0, settings.safety_floor - decision.result.lowestBalance),
+      });
+      return;
+    }
     setDecisionSaveState(previous => ({ ...previous, [messageId]: "saving" }));
     try {
       await saveDecision(decision.scenario, decision.result, "planned");
+      setPendingUnsafeDecisionMessageId(null);
+      setDecisionSafetyStop(null);
       setDecisionSaveState(previous => ({ ...previous, [messageId]: "saved" }));
     } catch {
       setDecisionSaveState(previous => ({ ...previous, [messageId]: "failed" }));
@@ -1380,6 +1399,16 @@ export default function FloScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <FloSafetyStopModal
+        visible={Boolean(decisionSafetyStop)}
+        warning={decisionSafetyStop}
+        onKeepEditing={() => {
+          setDecisionSafetyStop(null);
+          setPendingUnsafeDecisionMessageId(null);
+        }}
+        onScheduleAnyway={pendingUnsafeDecisionMessageId ? () => { void addDecisionToCalendar(pendingUnsafeDecisionMessageId, true); } : undefined}
+      />
 
       <View style={[styles.composerArea, { backgroundColor: colors.background, borderColor: colors.border, paddingBottom: composerBottom }]}>
         <ScrollView

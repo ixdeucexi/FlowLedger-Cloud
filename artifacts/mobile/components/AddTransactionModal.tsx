@@ -16,10 +16,12 @@ import {
 
 import colors from "@/constants/colors";
 import { DatePickerField } from "@/components/DatePickerField";
+import { FloSafetyStopModal } from "@/components/FloSafetyStopModal";
 import type { Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
+import { buildSafetyStop, type SafetyStopWarning } from "@/lib/safetyStop";
 
 interface Props {
   visible: boolean;
@@ -34,7 +36,7 @@ interface Props {
 export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDeleteTransfer, editTx, defaultDate }: Props) {
   const c = useColors();
   useBackDismiss(visible, onClose);
-  const { categories, accounts, bills, transactions } = useBudget();
+  const { categories, accounts, bills, transactions, settings, getDailyBalances } = useBudget();
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Other");
   const [note, setNote] = useState("");
@@ -45,6 +47,8 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
   const [transferToAccountId, setTransferToAccountId] = useState<string | undefined>();
   const [linkedBillId, setLinkedBillId] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
+  const [safetyStop, setSafetyStop] = useState<SafetyStopWarning | null>(null);
+  const [pendingStandardTx, setPendingStandardTx] = useState<Omit<Transaction, "id"> | Transaction | null>(null);
   const transferMate = editTx?.transfer_group_id
     ? transactions.find(transaction => transaction.transfer_group_id === editTx.transfer_group_id && transaction.id !== editTx.id)
     : undefined;
@@ -79,6 +83,58 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
       setLinkedBillId(undefined);
     }
   }, [editTx, visible, defaultDate, accounts, transferMate]);
+
+  const buildForecastBaseline = (startDate: string) => {
+    const [startYear, startMonth] = startDate.split("-").map(Number);
+    if (!startYear || !startMonth) return [];
+    const monthsToCheck = Math.max(1, settings.forecast_horizon_months || 6);
+    const output: { date: string; balance: number }[] = [];
+    for (let index = 0; index < monthsToCheck; index += 1) {
+      const target = new Date(startYear, startMonth - 1 + index, 1);
+      const month = target.getMonth();
+      const year = target.getFullYear();
+      getDailyBalances(month, year).forEach(day => {
+        const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(day.day).padStart(2, "0")}`;
+        if (key >= startDate) output.push({ date: key, balance: day.balance });
+      });
+    }
+    return output.sort((left, right) => left.date.localeCompare(right.date));
+  };
+
+  const previewSafetyStop = (tx: Omit<Transaction, "id"> | Transaction) => {
+    const expenseAmount = tx.amount < 0 ? Math.abs(tx.amount) : 0;
+    const existingExpense = editTx?.amount && editTx.amount < 0 ? Math.abs(editTx.amount) : 0;
+    const additionalExpense = editTx ? Math.max(0, expenseAmount - existingExpense) : expenseAmount;
+    if (additionalExpense <= 0) return null;
+    const linkedDebtName = tx.linked_bill_id ? bills.find(bill => bill.id === tx.linked_bill_id)?.name : undefined;
+    const itemName = tx.note?.trim() || linkedDebtName || tx.category || "this scheduled item";
+    return buildSafetyStop({
+      baseline: buildForecastBaseline(tx.date),
+      safetyFloor: settings.safety_floor,
+      scenario: {
+        type: tx.linked_bill_id ? "extra_debt_payment" : "one_time_purchase",
+        name: itemName,
+        amount: additionalExpense,
+        date: tx.date,
+        frequency: "once",
+      },
+    });
+  };
+
+  const saveStandardTransaction = async (payload: Omit<Transaction, "id"> | Transaction) => {
+    setSaving(true);
+    try {
+      await onSave(payload);
+      setPendingStandardTx(null);
+      setSafetyStop(null);
+      onClose();
+    } catch {
+      const error = new Error("Please try again.");
+      Alert.alert("Could not save transaction", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleSave = async () => {
     if (saving) return;
@@ -137,9 +193,19 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
       account_id: accountId,
       linked_bill_id: isExpense ? linkedBillId : undefined,
     };
+    const payload = editTx ? { ...data, id: editTx.id } : data;
+    const warning = previewSafetyStop(payload);
+    if (warning) {
+      setPendingStandardTx(payload);
+      setSafetyStop(warning);
+      return;
+    }
+    await saveStandardTransaction(payload);
+    return;
+    /*
     setSaving(true);
     try {
-      if (editTx) await onSave({ ...data, id: editTx.id });
+      if (editTx?.id) await onSave({ ...data, id: editTx.id });
       else await onSave(data);
       onClose();
     } catch (error) {
@@ -147,6 +213,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
     } finally {
       setSaving(false);
     }
+    */
   };
 
   const handleDelete = async () => {
@@ -289,6 +356,15 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
             </Pressable>
           </ScrollView>
         </View>
+        <FloSafetyStopModal
+          visible={Boolean(safetyStop)}
+          warning={safetyStop}
+          onKeepEditing={() => {
+            setSafetyStop(null);
+            setPendingStandardTx(null);
+          }}
+          onScheduleAnyway={pendingStandardTx ? () => { void saveStandardTransaction(pendingStandardTx); } : undefined}
+        />
       </KeyboardAvoidingView>
     </Modal>
   );
