@@ -45,6 +45,32 @@ const THEME_OPTIONS: { label: string; value: ThemeMode; icon: string }[] = [
 ];
 const BACKUP_COMPLETE_KEY = "flowledger_backup_exported";
 type AlgorithmCatalogItem = typeof ALGORITHM_CATALOG[number];
+type SettingsSectionId =
+  | "overview"
+  | "setup"
+  | "appearance"
+  | "algorithms"
+  | "accounts"
+  | "money"
+  | "backup"
+  | "health"
+  | "security";
+
+const SETTINGS_SECTIONS: Array<{
+  id: Exclude<SettingsSectionId, "overview">;
+  label: string;
+  description: string;
+  icon: string;
+}> = [
+  { id: "setup", label: "Setup walkthrough", description: "Restart Flo setup, learning mode, and onboarding help.", icon: "message-circle" },
+  { id: "accounts", label: "Accounts", description: "Manage balances, reconcile accounts, and account health.", icon: "credit-card" },
+  { id: "money", label: "Money plan", description: "Income, categories, forecast safety, and payoff method.", icon: "sliders" },
+  { id: "algorithms", label: "Algorithm Suite", description: "Turn financial engines on or off and learn what each one does.", icon: "cpu" },
+  { id: "appearance", label: "Appearance", description: "Light, dark, or automatic theme settings.", icon: "moon" },
+  { id: "backup", label: "Backup, import, and install", description: "CSV backup, statement import, app install, and Flo memory.", icon: "download" },
+  { id: "health", label: "Health check", description: "Find setup issues before they break the forecast.", icon: "check-circle" },
+  { id: "security", label: "Security and profile", description: "View the signed-in account and sign out.", icon: "lock" },
+];
 
 function csvCell(value: unknown): string {
   const text = String(value ?? "");
@@ -79,6 +105,8 @@ export default function MoreScreen() {
   const [selectedAlgorithm, setSelectedAlgorithm] = useState<AlgorithmCatalogItem | null>(null);
   useBackDismiss(Boolean(selectedAlgorithm), () => setSelectedAlgorithm(null));
   const [showAlgorithmSuite, setShowAlgorithmSuite] = useState(false);
+  const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("overview");
+  useBackDismiss(activeSettingsSection !== "overview", () => setActiveSettingsSection("overview"));
   const [backupExported, setBackupExported] = useState(() => {
     try { return Platform.OS === "web" && globalThis.localStorage?.getItem(BACKUP_COMPLETE_KEY) === "true"; }
     catch { return false; }
@@ -386,6 +414,7 @@ export default function MoreScreen() {
   };
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
+  const activeSettingsMeta = SETTINGS_SECTIONS.find(section => section.id === activeSettingsSection);
 
   return (
     <View style={[styles.screen, { backgroundColor: c.background }]}>
@@ -394,46 +423,60 @@ export default function MoreScreen() {
         style={styles.scroller}
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 + webTopPad, paddingBottom: insets.bottom + 100 }]}
       >
-      <Text style={[styles.pageTitle, { color: c.foreground }]}>Settings</Text>
-      <View style={[styles.settingsHero, { backgroundColor: c.card, borderColor: c.border }]}>
-        <View style={[styles.settingsHeroIcon, { backgroundColor: c.primary + "18" }]}>
-          <Feather name="sliders" size={20} color={c.primary} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.settingsHeroTitle, { color: c.foreground }]}>Settings Hub</Text>
-          <Text style={[styles.settingsHeroText, { color: c.mutedForeground }]}>Accounts, algorithms, setup, backups, app install, and security in one clean place.</Text>
-        </View>
-      </View>
-
-      <View style={styles.settingsGrid}>
-        {[
-          { icon: "credit-card" as const, label: "Accounts", onPress: () => openAccount("add") },
-          { icon: "cpu" as const, label: "Algorithms", onPress: () => setShowAlgorithmSuite(current => !current) },
-          { icon: "message-circle" as const, label: "Setup", onPress: () => { clearStoredSetupStep(); router.push("/setup" as any); } },
-          { icon: "compass" as const, label: "Learning", onPress: () => { startLearningTour(); router.push("/(tabs)" as any); } },
-          { icon: "download" as const, label: "Backup", onPress: handleExport },
-          { icon: "smartphone" as const, label: "Install", onPress: handleShowInstallPrompt },
-        ].map(item => (
-          <Pressable
-            key={item.label}
-            onPress={() => {
-              item.onPress();
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            }}
-            style={({ pressed }) => [
-              styles.settingsGridItem,
-              { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.76 : 1 },
-            ]}
-          >
-            <View style={[styles.settingsGridIcon, { backgroundColor: c.primary + "16" }]}>
-              <Feather name={item.icon} size={21} color={c.primary} />
+      {activeSettingsSection === "overview" ? (
+        <>
+          <Text style={[styles.pageTitle, { color: c.foreground }]}>Settings</Text>
+          <View style={[styles.settingsHero, { backgroundColor: c.card, borderColor: c.border }]}>
+            <View style={[styles.settingsHeroIcon, { backgroundColor: c.primary + "18" }]}>
+              <Feather name="sliders" size={20} color={c.primary} />
             </View>
-            <Text style={[styles.settingsGridText, { color: c.foreground }]}>{item.label}</Text>
-          </Pressable>
-        ))}
-      </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.settingsHeroTitle, { color: c.foreground }]}>Settings Hub</Text>
+              <Text style={[styles.settingsHeroText, { color: c.mutedForeground }]}>Choose a section, update what you need, then come right back here.</Text>
+            </View>
+          </View>
 
-      {shouldShowFloSetup && <>
+          <View style={styles.settingsSectionList}>
+            {SETTINGS_SECTIONS.map(section => (
+              <Pressable
+                key={section.id}
+                onPress={() => {
+                  if (section.id === "algorithms") setShowAlgorithmSuite(true);
+                  setActiveSettingsSection(section.id);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+                style={({ pressed }) => [
+                  styles.settingsSectionCard,
+                  { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.76 : 1 },
+                ]}
+              >
+                <View style={[styles.settingsSectionIcon, { backgroundColor: c.primary + "16" }]}>
+                  <Feather name={section.icon as any} size={20} color={c.primary} />
+                </View>
+                <View style={styles.settingsSectionCopy}>
+                  <Text style={[styles.settingsSectionTitle, { color: c.foreground }]}>{section.label}</Text>
+                  <Text style={[styles.settingsSectionDesc, { color: c.mutedForeground }]}>{section.description}</Text>
+                </View>
+                <Feather name="chevron-right" size={18} color={c.mutedForeground} />
+              </Pressable>
+            ))}
+          </View>
+        </>
+      ) : (
+        <>
+          <Pressable
+            onPress={() => setActiveSettingsSection("overview")}
+            style={({ pressed }) => [styles.settingsBackRow, { opacity: pressed ? 0.7 : 1 }]}
+          >
+            <Feather name="chevron-left" size={22} color={c.primary} />
+            <Text style={[styles.settingsBackText, { color: c.primary }]}>Settings</Text>
+          </Pressable>
+          <Text style={[styles.pageTitle, { color: c.foreground }]}>{activeSettingsMeta?.label ?? "Settings"}</Text>
+          <Text style={[styles.pageSubtitle, { color: c.mutedForeground }]}>{activeSettingsMeta?.description}</Text>
+        </>
+      )}
+
+      {activeSettingsSection === "setup" && shouldShowFloSetup && <>
       <SLabel c={c} text="Flo Setup" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View style={[styles.floSetupHero, { backgroundColor: c.primary + "10", borderColor: c.primary + "30" }]}>
@@ -520,7 +563,43 @@ export default function MoreScreen() {
       {/* ── Appearance ── */}
       </>}
 
-      <SLabel c={c} text="Appearance" />
+      {activeSettingsSection === "setup" && !shouldShowFloSetup && (
+        <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+          <View style={[styles.confidenceBox, { backgroundColor: c.success + "14" }]}>
+            <Feather name="check-circle" size={16} color={c.success} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.accountName, { color: c.foreground }]}>Setup is complete</Text>
+              <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>You can restart Flo setup or replay learning mode any time.</Text>
+            </View>
+          </View>
+          <Pressable
+            onPress={() => {
+              clearStoredSetupStep();
+              void updateSettings({ onboarding_completed: false });
+              router.push("/setup" as any);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+            style={({ pressed }) => [styles.addBtn, { backgroundColor: c.primary + "18", borderRadius: 10, opacity: pressed ? 0.7 : 1 }]}
+          >
+            <Feather name="refresh-cw" size={16} color={c.primary} />
+            <Text style={[styles.addBtnText, { color: c.primary }]}>Restart setup walkthrough</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              startLearningTour();
+              router.push("/(tabs)" as any);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+            style={({ pressed }) => [styles.addBtn, { backgroundColor: c.muted, borderRadius: 10, opacity: pressed ? 0.7 : 1 }]}
+          >
+            <Feather name="compass" size={16} color={c.primary} />
+            <Text style={[styles.addBtnText, { color: c.primary }]}>Replay learning mode</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {activeSettingsSection === "appearance" && <>
+      <SLabel c={c} text="Theme" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View style={[styles.themeRow, { backgroundColor: c.muted, borderRadius: 10 }]}>
           {THEME_OPTIONS.map(opt => {
@@ -538,7 +617,9 @@ export default function MoreScreen() {
           })}
         </View>
       </View>
+      </>}
 
+      {activeSettingsSection === "algorithms" && <>
       <SLabel c={c} text="Algorithms" />
       <Pressable
         onPress={() => {
@@ -630,7 +711,9 @@ export default function MoreScreen() {
         </View>
       </View>
       </>}
+      </>}
 
+      {activeSettingsSection === "accounts" && <>
       <SLabel c={c} text="Accounts & Balances" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View style={[styles.confidenceBox, { backgroundColor: forecastConfidence.level === "high" ? c.success + "14" : forecastConfidence.level === "medium" ? "#f59e0b18" : c.destructive + "12" }]}>
@@ -653,6 +736,9 @@ export default function MoreScreen() {
       </View>
 
       {/* ── Income Sources ── */}
+      </>}
+
+      {activeSettingsSection === "money" && <>
       <SLabel c={c} text="Income" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         {incomes.length === 0 ? (
@@ -865,6 +951,9 @@ export default function MoreScreen() {
       </View>
 
       {/* ── Data ── */}
+      </>}
+
+      {activeSettingsSection === "backup" && <>
       <SLabel c={c} text="Backup & Data" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         {[
@@ -892,6 +981,9 @@ export default function MoreScreen() {
       </View>
 
       {/* ── Summary ── */}
+      </>}
+
+      {activeSettingsSection === "health" && <>
       <SLabel c={c} text="Health Check" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View style={[styles.confidenceBox, { backgroundColor: dataIntegrityIssues.length ? c.warning + "12" : c.success + "14" }]}>
@@ -913,8 +1005,11 @@ export default function MoreScreen() {
       </View>
 
       {/* ── Account section ── */}
+      </>}
+
+      {activeSettingsSection === "security" && <>
       <View style={{ marginTop: 8, marginBottom: 8 }}>
-      <SLabel c={c} text="Security & Profile" />
+        <SLabel c={c} text="Security & Profile" />
         <View style={[styles.card, { borderRadius: 14, backgroundColor: c.card }]}>
           <View style={{ flexDirection: "row", alignItems: "center", paddingBottom: 12, marginBottom: 12, borderBottomWidth: 1, borderBottomColor: c.border }}>
             <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: c.primary + "22", alignItems: "center", justifyContent: "center", marginRight: 12 }}>
@@ -941,6 +1036,7 @@ export default function MoreScreen() {
           </Pressable>
         </View>
       </View>
+      </>}
 
       <Modal
         visible={Boolean(selectedAlgorithm)}
@@ -1030,6 +1126,14 @@ const styles = StyleSheet.create({
   settingsGridItem: { width: "31.7%", minHeight: 92, borderWidth: 1, borderRadius: 20, alignItems: "center", justifyContent: "center", padding: 10 },
   settingsGridIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", marginBottom: 8 },
   settingsGridText: { fontSize: 12, fontFamily: "Inter_800ExtraBold", textAlign: "center" },
+  settingsSectionList: { gap: 10, marginBottom: 20 },
+  settingsSectionCard: { minHeight: 82, borderWidth: 1, borderRadius: 22, padding: 14, flexDirection: "row", alignItems: "center", gap: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.14, shadowRadius: 18, elevation: 4 },
+  settingsSectionIcon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  settingsSectionCopy: { flex: 1, gap: 3 },
+  settingsSectionTitle: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
+  settingsSectionDesc: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 17 },
+  settingsBackRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10, alignSelf: "flex-start" },
+  settingsBackText: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   settingsLauncher: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 20, padding: 14, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.16, shadowRadius: 18, elevation: 4 },
   card: { padding: 16, marginBottom: 20, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", shadowColor: "#000", shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 22, elevation: 5 },
   emptyText: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", paddingVertical: 8 },

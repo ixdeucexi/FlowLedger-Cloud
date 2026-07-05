@@ -1436,6 +1436,14 @@ export default function DashboardScreen() {
               />
             ))}
           </View>
+          <View style={styles.referenceAlgoProgressTrack}>
+            <View
+              style={[
+                styles.referenceAlgoProgressFill,
+                { width: `${Math.round(((activeAlgoCard + 1) / Math.max(algorithmCards.length, 1)) * 100)}%` as any },
+              ]}
+            />
+          </View>
         </View>
 
       </View>
@@ -2303,6 +2311,8 @@ const styles = StyleSheet.create({
   referenceAlgoDots: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 7, marginTop: 5 },
   referenceAlgoDot: { width: 7, height: 7, borderRadius: 999, backgroundColor: "rgba(148,163,184,0.34)" },
   referenceAlgoDotActive: { width: 24, backgroundColor: "#60a5fa", shadowColor: "#60a5fa", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 8, elevation: 4 },
+  referenceAlgoProgressTrack: { height: 4, borderRadius: 999, overflow: "hidden", backgroundColor: "rgba(148,163,184,0.18)", marginTop: 7 },
+  referenceAlgoProgressFill: { height: "100%", borderRadius: 999, backgroundColor: "#8b5cf6", shadowColor: "#a855f7", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.75, shadowRadius: 8 },
   referenceInsightCard: { flex: 1.45, minHeight: 130, borderRadius: 24, borderWidth: 1, borderColor: "rgba(168,85,247,0.22)", backgroundColor: "rgba(15,23,42,0.72)", padding: 16, flexDirection: "row", alignItems: "center", gap: 12, shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.22, shadowRadius: 26 },
   referenceInsightIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.28)" },
   referenceInsightTitle: { color: "#d8b4fe", fontSize: 14, fontFamily: "Inter_800ExtraBold", marginBottom: 6 },
