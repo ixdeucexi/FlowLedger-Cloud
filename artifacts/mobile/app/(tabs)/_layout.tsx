@@ -84,13 +84,14 @@ const DEMO_TOUR_STEPS = [
 function BudgetLoadingScreen() {
   const colors = useColors();
   return (
-    <View style={[styles.loadingScreen, { backgroundColor: colors.background }]}>
+    <View style={styles.loadingScreen}>
       <Image
-        source={require("../../assets/images/logo_transparent.png")}
+        source={require("../../assets/images/icon.png")}
         style={styles.loadingLogo}
         resizeMode="contain"
       />
-      <Text style={[styles.loadingSub, { color: colors.mutedForeground }]}>Loading your plan…</Text>
+      <Text style={[styles.loadingTitle, { color: colors.foreground }]}>FlowLedger Algo</Text>
+      <Text style={[styles.loadingSub, { color: colors.mutedForeground }]}>Preparing your forecast...</Text>
     </View>
   );
 }
@@ -98,9 +99,9 @@ function BudgetLoadingScreen() {
 function BudgetLoadErrorScreen({ message, onRetry }: { message: string; onRetry: () => void }) {
   const colors = useColors();
   return (
-    <View style={[styles.loadingScreen, { backgroundColor: colors.background }]}>
+    <View style={styles.loadingScreen}>
       <Image
-        source={require("../../assets/images/logo_transparent.png")}
+        source={require("../../assets/images/icon.png")}
         style={styles.loadingLogo}
         resizeMode="contain"
       />
@@ -458,10 +459,21 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#050816",
   },
   loadingLogo: {
-    width: 260,
-    height: 108,
+    width: 118,
+    height: 118,
+    borderRadius: 30,
+    marginBottom: 14,
+    shadowColor: "#38bdf8",
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  loadingTitle: {
+    fontSize: 20,
+    fontWeight: "800",
     marginBottom: 4,
   },
   loadingSub: {

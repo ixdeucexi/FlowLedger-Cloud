@@ -10,7 +10,7 @@ module.exports = {
     newArchEnabled: true,
     updates: { enabled: false },
     splash: {
-      image: "./assets/images/logo_transparent.png",
+      image: "./assets/images/icon.png",
       resizeMode: "contain",
       backgroundColor: "#050816",
     },
@@ -20,7 +20,7 @@ module.exports = {
       versionCode: 1,
       adaptiveIcon: {
         foregroundImage: "./assets/images/icon.png",
-        backgroundColor: "#0a0e1a",
+        backgroundColor: "#050816",
       },
     },
     web: { favicon: "./assets/images/icon.png" },
