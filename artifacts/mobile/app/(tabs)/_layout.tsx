@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Tabs, useRouter, useSegments } from "expo-router";
 import React from "react";
-import { Animated, Image, Modal, Platform, Pressable, StyleSheet, StyleProp, Text, View, ViewStyle, useColorScheme } from "react-native";
+import { Animated, Easing, Image, Modal, Platform, Pressable, StyleSheet, StyleProp, Text, View, ViewStyle, useColorScheme } from "react-native";
 
 import { useAuth } from "@/context/AuthContext";
 import { BudgetProvider, useBudget } from "@/context/BudgetContext";
@@ -379,12 +379,14 @@ function TabContent() {
     Animated.parallel([
       Animated.timing(loadingOpacity, {
         toValue: 0,
-        duration: 460,
+        duration: 760,
+        easing: Easing.inOut(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(tabsOpacity, {
         toValue: 1,
-        duration: 460,
+        duration: 760,
+        easing: Easing.inOut(Easing.cubic),
         useNativeDriver: true,
       }),
     ]).start(() => setShowLoadingOverlay(false));

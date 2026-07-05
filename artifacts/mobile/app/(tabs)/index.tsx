@@ -932,7 +932,7 @@ export default function DashboardScreen() {
   useEffect(() => {
     if (nextWeekRisk && !startupAlertShownRef.current) {
       startupAlertShownRef.current = true;
-      const timer = setTimeout(() => setStartupAlertVisible(true), 650);
+      const timer = setTimeout(() => setStartupAlertVisible(true), 1150);
       return () => clearTimeout(timer);
     }
   }, [nextWeekRisk]);

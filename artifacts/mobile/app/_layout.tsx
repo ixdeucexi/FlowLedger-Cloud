@@ -10,7 +10,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, BackHandler, Image, Platform, StyleSheet, StyleProp, Text, View, ViewStyle } from "react-native";
+import { Animated, BackHandler, Easing, Image, Platform, StyleSheet, StyleProp, Text, View, ViewStyle } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -112,12 +112,14 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
     Animated.parallel([
       Animated.timing(startupOpacity, {
         toValue: 0,
-        duration: 560,
+        duration: 920,
+        easing: Easing.inOut(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(appOpacity, {
         toValue: 1,
-        duration: 560,
+        duration: 920,
+        easing: Easing.inOut(Easing.cubic),
         useNativeDriver: true,
       }),
     ]).start(() => setShowStartupOverlay(false));
