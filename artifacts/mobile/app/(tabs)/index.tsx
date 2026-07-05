@@ -27,7 +27,7 @@ import { buildDecisionHistory } from "@/lib/decisionHistory";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { buildAlgorithmSuite, type AlgorithmInsight } from "@/lib/algorithmSuite";
-import { isAlgorithmEnabled, type AlgorithmId } from "@/lib/algorithmCatalog";
+import { ALGORITHM_CATALOG, isAlgorithmEnabled, type AlgorithmId } from "@/lib/algorithmCatalog";
 import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
 
@@ -1073,10 +1073,17 @@ export default function DashboardScreen() {
         prompt: "Review my monthly health and tell me the cleanest next move.",
       },
     ];
+    const focusOrder = new Map(setupPersonalization.recommendedAlgorithms.map((id, index) => [id, index]));
     return cards
       .filter((card): card is typeof card & { settingId: AlgorithmId } => Boolean(card.settingId))
-      .filter(card => isAlgorithmEnabled(decisionHubSettings, card.settingId));
-  }, [algorithmSuite, currentMonth, decisionHubSettings]);
+      .filter(card => isAlgorithmEnabled(decisionHubSettings, card.settingId))
+      .sort((left, right) => {
+        const leftFocus = focusOrder.get(left.settingId) ?? 99;
+        const rightFocus = focusOrder.get(right.settingId) ?? 99;
+        if (leftFocus !== rightFocus) return leftFocus - rightFocus;
+        return cards.findIndex(card => card.id === left.id) - cards.findIndex(card => card.id === right.id);
+      });
+  }, [algorithmSuite, currentMonth, decisionHubSettings, setupPersonalization.recommendedAlgorithms]);
   const activeAlgorithmCardNumber = algorithmCards.length ? Math.min(activeAlgoCard + 1, algorithmCards.length) : 0;
   useEffect(() => {
     if (algorithmCards.length === 0 && activeAlgoCard !== 0) {
@@ -1343,45 +1350,44 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        <Pressable
-          onPress={() => setFlowScoreVisible(true)}
-          style={({ pressed }) => [styles.referenceScorePanel, { opacity: pressed ? 0.86 : 1 }]}
-        >
-          <FlowScoreGauge score={algorithmSuite.flowScore.score} />
-          <Text style={styles.referenceScoreStatus}>{algorithmSuite.flowScore.label}</Text>
-          <View style={styles.referenceScoreUnderline} />
-          <Text style={styles.referenceScoreReason} numberOfLines={2}>{algorithmSuite.flowScore.topReason}</Text>
-          <Text style={styles.referenceScoreTapHint}>Tap for details</Text>
-        </Pressable>
-      </View>
+        <View style={styles.referenceScoreStack}>
+          <Pressable
+            onPress={() => setFlowScoreVisible(true)}
+            style={({ pressed }) => [styles.referenceScorePanel, { opacity: pressed ? 0.86 : 1 }]}
+          >
+            <FlowScoreGauge score={algorithmSuite.flowScore.score} />
+            <Text style={styles.referenceScoreStatus}>{algorithmSuite.flowScore.label}</Text>
+            <View style={styles.referenceScoreUnderline} />
+            <Text style={styles.referenceScoreReason} numberOfLines={2}>{algorithmSuite.flowScore.topReason}</Text>
+            <Text style={styles.referenceScoreTapHint}>Tap for details</Text>
+          </Pressable>
 
-      {hasSetupAnswers ? (
-        <Pressable
-          onPress={openPersonalizedNextAction}
-          style={({ pressed }) => [styles.personalFocusCard, { opacity: pressed ? 0.84 : 1 }]}
-        >
-          <View style={styles.personalFocusHeader}>
-            <View style={styles.personalFocusIcon}>
-              <Feather name="compass" size={17} color="#c084fc" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.personalFocusEyebrow}>Your focus</Text>
-              <Text style={styles.personalFocusTitle}>{setupPersonalization.title}</Text>
-            </View>
-            <View style={styles.personalFocusActionPill}>
-              <Text style={styles.personalFocusActionText}>{setupPersonalization.nextActionLabel}</Text>
-            </View>
-          </View>
-          <Text style={styles.personalFocusSummary}>{setupPersonalization.summary}</Text>
-          <View style={styles.personalFocusChips}>
-            {setupPersonalization.recommendedAlgorithms.slice(0, 4).map(algorithm => (
-              <View key={algorithm} style={styles.personalFocusChip}>
-                <Text style={styles.personalFocusChipText}>{algorithm.replace(/([A-Z])/g, " $1").trim()}</Text>
+          {hasSetupAnswers ? (
+            <Pressable
+              onPress={openPersonalizedNextAction}
+              style={({ pressed }) => [styles.referenceFocusStrip, { opacity: pressed ? 0.82 : 1 }]}
+            >
+              <View style={styles.referenceFocusIcon}>
+                <Feather name="compass" size={13} color="#d8b4fe" />
               </View>
-            ))}
-          </View>
-        </Pressable>
-      ) : null}
+              <View style={styles.referenceFocusCopy}>
+                <Text style={styles.referenceFocusLabel}>Focus</Text>
+                <Text style={styles.referenceFocusTitle} numberOfLines={1}>{setupPersonalization.title}</Text>
+              </View>
+              <View style={styles.referenceFocusPills}>
+                {setupPersonalization.recommendedAlgorithms.slice(0, 2).map(algorithm => (
+                  <View key={algorithm} style={styles.referenceFocusPill}>
+                    <Text style={styles.referenceFocusPillText} numberOfLines={1}>
+                      {ALGORITHM_CATALOG.find(item => item.id === algorithm)?.name ?? algorithm}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+              <Feather name="chevron-right" size={15} color="rgba(216,180,254,0.84)" />
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
 
       <View style={[styles.referenceLowerGrid, isCommandWide && styles.referenceLowerGridWide]}>
         <View style={styles.referenceAlgoCarouselPanel}>
@@ -2273,6 +2279,7 @@ const styles = StyleSheet.create({
   referenceSummaryCard: { flexGrow: 1, flexBasis: "30%", minWidth: 88, borderRadius: 14, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", backgroundColor: "rgba(15,23,42,0.62)", paddingVertical: 10, paddingHorizontal: 11 },
   referenceSummaryLabel: { fontSize: 9, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 5 },
   referenceSummaryValue: { color: "#f8fafc", fontSize: 17, fontFamily: "Inter_800ExtraBold" },
+  referenceScoreStack: { alignItems: "center", justifyContent: "center", gap: 8 },
   referenceScorePanel: { alignItems: "center", justifyContent: "center", paddingTop: 7 },
   referenceGaugeWrap: { width: 112, height: 112, alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
   referenceGaugeSvg: { backgroundColor: "transparent" },
@@ -2283,6 +2290,34 @@ const styles = StyleSheet.create({
   referenceScoreUnderline: { width: 70, height: 3, borderRadius: 3, backgroundColor: "#22c55e", marginTop: 6, marginBottom: 6 },
   referenceScoreReason: { color: "#94a3b8", maxWidth: 220, textAlign: "center", fontSize: 11, fontFamily: "Inter_600SemiBold", lineHeight: 15 },
   referenceScoreTapHint: { color: "#60a5fa", fontSize: 10, fontFamily: "Inter_800ExtraBold", marginTop: 5 },
+  referenceFocusStrip: {
+    width: "100%",
+    maxWidth: 280,
+    minHeight: 46,
+    borderRadius: 17,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(88,28,135,0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(192,132,252,0.28)",
+  },
+  referenceFocusIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(139,92,246,0.24)",
+  },
+  referenceFocusCopy: { flex: 1, minWidth: 0 },
+  referenceFocusLabel: { color: "#a78bfa", fontSize: 8, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 1 },
+  referenceFocusTitle: { color: "#f8fafc", fontSize: 12, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
+  referenceFocusPills: { flexDirection: "row", gap: 4, maxWidth: 126 },
+  referenceFocusPill: { maxWidth: 62, borderRadius: 999, paddingHorizontal: 6, paddingVertical: 4, backgroundColor: "rgba(56,189,248,0.12)", borderWidth: 1, borderColor: "rgba(56,189,248,0.18)" },
+  referenceFocusPillText: { color: "#bae6fd", fontSize: 8, fontFamily: "Inter_800ExtraBold" },
   referenceLowerGrid: { gap: 8, marginBottom: 2 },
   referenceLowerGridWide: { flexDirection: "row" },
   referenceAlgoCarouselPanel: { flex: 1.45, borderRadius: 22, borderWidth: 1, borderColor: "rgba(168,85,247,0.22)", backgroundColor: "rgba(15,23,42,0.72)", padding: 10, shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.22, shadowRadius: 26, elevation: 8 },
@@ -2375,62 +2410,6 @@ const styles = StyleSheet.create({
   quickCommand: { flex: 1, minHeight: 82, borderRadius: 22, padding: 11, justifyContent: "space-between", backgroundColor: "rgba(15,23,42,0.68)", borderWidth: 1, borderColor: "rgba(148,163,184,0.16)" },
   quickCommandIcon: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   quickCommandText: { color: "#e5edf8", fontSize: 12, fontFamily: "Inter_800ExtraBold" },
-  personalFocusCard: {
-    borderRadius: 26,
-    borderWidth: 1,
-    borderColor: "rgba(192,132,252,0.32)",
-    backgroundColor: "rgba(15,23,42,0.68)",
-    padding: 16,
-    marginTop: 14,
-    shadowColor: "#8b5cf6",
-    shadowOpacity: 0.14,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-  },
-  personalFocusHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
-  personalFocusIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(139,92,246,0.18)",
-    borderWidth: 1,
-    borderColor: "rgba(192,132,252,0.22)",
-  },
-  personalFocusEyebrow: {
-    color: "#a78bfa",
-    fontSize: 10,
-    fontFamily: "Inter_800ExtraBold",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-  },
-  personalFocusTitle: {
-    color: "#f8fafc",
-    fontSize: 17,
-    fontFamily: "Inter_800ExtraBold",
-    marginTop: 2,
-  },
-  personalFocusActionPill: {
-    borderRadius: 999,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-    backgroundColor: "rgba(139,92,246,0.22)",
-    borderWidth: 1,
-    borderColor: "rgba(192,132,252,0.28)",
-  },
-  personalFocusActionText: { color: "#ddd6fe", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
-  personalFocusSummary: { color: "#cbd5e1", fontSize: 13, lineHeight: 19, fontFamily: "Inter_600SemiBold", marginTop: 12 },
-  personalFocusChips: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginTop: 12 },
-  personalFocusChip: {
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    backgroundColor: "rgba(56,189,248,0.10)",
-    borderWidth: 1,
-    borderColor: "rgba(56,189,248,0.18)",
-  },
-  personalFocusChipText: { color: "#bae6fd", fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "capitalize" },
   flowScoreSheetHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },
   flowScoreColumns: { flexDirection: "row", gap: 10, marginTop: 6 },
   flowScoreColumn: { flex: 1, borderRadius: 16, padding: 12 },
