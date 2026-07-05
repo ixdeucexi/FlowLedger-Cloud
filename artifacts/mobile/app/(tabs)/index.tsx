@@ -27,7 +27,7 @@ import { buildDecisionHistory } from "@/lib/decisionHistory";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { buildAlgorithmSuite, type AlgorithmInsight } from "@/lib/algorithmSuite";
-import { ALGORITHM_CATALOG, isAlgorithmEnabled, type AlgorithmId } from "@/lib/algorithmCatalog";
+import { isAlgorithmEnabled, type AlgorithmId } from "@/lib/algorithmCatalog";
 import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
 
@@ -112,7 +112,7 @@ export default function DashboardScreen() {
     bills, getPaidAmount, getBillMonthlyTotal, getMonthlyBills, selectedYear, setDashboardFilter,
     getBillOccurrencesInMonth, getIncomeOccurrencesInMonth,
     goals, addGoal, updateGoal, deleteGoal, checkGoalAffordability,
-    getCashFlow, getMonthlyIncome, addBill, addTransaction, getDailyBalances, getTransactionsForMonth, settings,
+    getCashFlow, addBill, addTransaction, getDailyBalances, getTransactionsForMonth, settings,
     accounts, incomes, decisions, updateSettings, forecastConfidence,
     categories,
   } = useBudget();
@@ -246,7 +246,6 @@ export default function DashboardScreen() {
   );
 
   const cashFlow      = useMemo(() => getCashFlow(currentMonth, selectedYear), [getCashFlow, currentMonth, selectedYear]);
-  const monthlyIncome = getMonthlyIncome();
 
   // ── Real daily balance metrics for current month ───────────────────────────
   const currentBalancesCache = useRef<ReturnType<typeof getDailyBalances>>([]);
@@ -943,7 +942,6 @@ export default function DashboardScreen() {
     () => buildSetupPersonalization(onboardingPreferences),
     [onboardingPreferences],
   );
-  const hasSetupAnswers = onboardingPreferences.help.length > 0 || onboardingPreferences.goals.length > 0 || Boolean(onboardingPreferences.savingsGoal);
   const openPersonalizedNextAction = () => {
     if (setupPersonalization.nextRoute === "/(tabs)/flo") {
       openFloWithPrompt(setupPersonalization.nextActionPrompt);
@@ -1336,57 +1334,40 @@ export default function DashboardScreen() {
             </Text>
           </>
 
-          <View style={styles.referenceSummaryRow}>
-            {[
-              { label: "Income", value: `$${monthlyIncome.toLocaleString("en-US", { maximumFractionDigits: 0 })}`, color: "#22c55e" },
-              { label: "Bills", value: `$${stats.totalDue.toLocaleString("en-US", { maximumFractionDigits: 0 })}`, color: "#60a5fa" },
-              { label: "Available", value: `$${Math.max(0, algorithmSuite.safeCushion.amount).toLocaleString("en-US", { maximumFractionDigits: 0 })}`, color: "#a855f7" },
-            ].map(item => (
-              <View key={item.label} style={styles.referenceSummaryCard}>
-                <Text style={[styles.referenceSummaryLabel, { color: item.color }]}>{item.label}</Text>
-                <Text style={styles.referenceSummaryValue}>{item.value}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.referenceScoreStack}>
           <Pressable
-            onPress={() => setFlowScoreVisible(true)}
-            style={({ pressed }) => [styles.referenceScorePanel, { opacity: pressed ? 0.86 : 1 }]}
+            onPress={openPersonalizedNextAction}
+            style={({ pressed }) => [styles.referencePlanSnapshot, { opacity: pressed ? 0.84 : 1 }]}
           >
-            <FlowScoreGauge score={algorithmSuite.flowScore.score} />
-            <Text style={styles.referenceScoreStatus}>{algorithmSuite.flowScore.label}</Text>
-            <View style={styles.referenceScoreUnderline} />
-            <Text style={styles.referenceScoreReason} numberOfLines={2}>{algorithmSuite.flowScore.topReason}</Text>
-            <Text style={styles.referenceScoreTapHint}>Tap for details</Text>
+            <View style={styles.referencePlanAmountBlock}>
+              <Text style={styles.referencePlanEyebrow}>Plan Snapshot</Text>
+              <Text style={styles.referencePlanLabel}>Available after plan</Text>
+              <Text style={styles.referencePlanAmount}>
+                ${Math.max(0, algorithmSuite.safeCushion.amount).toLocaleString("en-US", { maximumFractionDigits: 0 })}
+              </Text>
+            </View>
+            <View style={styles.referencePlanDivider} />
+            <View style={styles.referencePlanFocusBlock}>
+              <Text style={styles.referencePlanLabel}>Focus</Text>
+              <Text style={styles.referencePlanFocusTitle} numberOfLines={1}>{setupPersonalization.title}</Text>
+              <View style={styles.referencePlanNextRow}>
+                <Text style={styles.referencePlanNextLabel}>Next move</Text>
+                <Text style={styles.referencePlanNextText} numberOfLines={1}>{setupPersonalization.nextActionLabel}</Text>
+              </View>
+            </View>
+            <Feather name="chevron-right" size={16} color="rgba(216,180,254,0.86)" />
           </Pressable>
-
-          {hasSetupAnswers ? (
-            <Pressable
-              onPress={openPersonalizedNextAction}
-              style={({ pressed }) => [styles.referenceFocusStrip, { opacity: pressed ? 0.82 : 1 }]}
-            >
-              <View style={styles.referenceFocusIcon}>
-                <Feather name="compass" size={13} color="#d8b4fe" />
-              </View>
-              <View style={styles.referenceFocusCopy}>
-                <Text style={styles.referenceFocusLabel}>Focus</Text>
-                <Text style={styles.referenceFocusTitle} numberOfLines={1}>{setupPersonalization.title}</Text>
-              </View>
-              <View style={styles.referenceFocusPills}>
-                {setupPersonalization.recommendedAlgorithms.slice(0, 2).map(algorithm => (
-                  <View key={algorithm} style={styles.referenceFocusPill}>
-                    <Text style={styles.referenceFocusPillText} numberOfLines={1}>
-                      {ALGORITHM_CATALOG.find(item => item.id === algorithm)?.name ?? algorithm}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-              <Feather name="chevron-right" size={15} color="rgba(216,180,254,0.84)" />
-            </Pressable>
-          ) : null}
         </View>
+
+        <Pressable
+          onPress={() => setFlowScoreVisible(true)}
+          style={({ pressed }) => [styles.referenceScorePanel, { opacity: pressed ? 0.86 : 1 }]}
+        >
+          <FlowScoreGauge score={algorithmSuite.flowScore.score} />
+          <Text style={styles.referenceScoreStatus}>{algorithmSuite.flowScore.label}</Text>
+          <View style={styles.referenceScoreUnderline} />
+          <Text style={styles.referenceScoreReason} numberOfLines={2}>{algorithmSuite.flowScore.topReason}</Text>
+          <Text style={styles.referenceScoreTapHint}>Tap for details</Text>
+        </Pressable>
       </View>
 
       <View style={[styles.referenceLowerGrid, isCommandWide && styles.referenceLowerGridWide]}>
@@ -2275,11 +2256,27 @@ const styles = StyleSheet.create({
   referenceGreetingSub: { color: "#94a3b8", fontSize: 12, fontFamily: "Inter_500Medium", marginTop: 2, marginBottom: 10 },
   referenceHeroLabel: { color: "#cbd5e1", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.4, textTransform: "uppercase" },
   referenceHeroAmount: { color: "#ffffff", fontSize: 44, lineHeight: 49, fontFamily: "Inter_800ExtraBold", letterSpacing: -2.2, textShadowColor: "rgba(34,211,238,0.25)", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 18 },
-  referenceSummaryRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  referenceSummaryCard: { flexGrow: 1, flexBasis: "30%", minWidth: 88, borderRadius: 14, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", backgroundColor: "rgba(15,23,42,0.62)", paddingVertical: 10, paddingHorizontal: 11 },
-  referenceSummaryLabel: { fontSize: 9, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 5 },
-  referenceSummaryValue: { color: "#f8fafc", fontSize: 17, fontFamily: "Inter_800ExtraBold" },
-  referenceScoreStack: { alignItems: "center", justifyContent: "center", gap: 8 },
+  referencePlanSnapshot: {
+    marginTop: 10,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(192,132,252,0.26)",
+    backgroundColor: "rgba(15,23,42,0.62)",
+    padding: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  referencePlanAmountBlock: { minWidth: 108 },
+  referencePlanEyebrow: { color: "#a78bfa", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.1, textTransform: "uppercase", marginBottom: 5 },
+  referencePlanLabel: { color: "#94a3b8", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7, textTransform: "uppercase" },
+  referencePlanAmount: { color: "#f8fafc", fontSize: 24, lineHeight: 28, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.7, marginTop: 2 },
+  referencePlanDivider: { width: 1, alignSelf: "stretch", backgroundColor: "rgba(148,163,184,0.18)" },
+  referencePlanFocusBlock: { flex: 1, minWidth: 0 },
+  referencePlanFocusTitle: { color: "#f8fafc", fontSize: 14, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
+  referencePlanNextRow: { marginTop: 7, borderRadius: 999, alignSelf: "flex-start", maxWidth: "100%", paddingHorizontal: 8, paddingVertical: 5, backgroundColor: "rgba(139,92,246,0.22)", borderWidth: 1, borderColor: "rgba(192,132,252,0.24)" },
+  referencePlanNextLabel: { color: "#c4b5fd", fontSize: 8, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.7 },
+  referencePlanNextText: { color: "#f5f3ff", fontSize: 10, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
   referenceScorePanel: { alignItems: "center", justifyContent: "center", paddingTop: 7 },
   referenceGaugeWrap: { width: 112, height: 112, alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
   referenceGaugeSvg: { backgroundColor: "transparent" },
@@ -2290,34 +2287,6 @@ const styles = StyleSheet.create({
   referenceScoreUnderline: { width: 70, height: 3, borderRadius: 3, backgroundColor: "#22c55e", marginTop: 6, marginBottom: 6 },
   referenceScoreReason: { color: "#94a3b8", maxWidth: 220, textAlign: "center", fontSize: 11, fontFamily: "Inter_600SemiBold", lineHeight: 15 },
   referenceScoreTapHint: { color: "#60a5fa", fontSize: 10, fontFamily: "Inter_800ExtraBold", marginTop: 5 },
-  referenceFocusStrip: {
-    width: "100%",
-    maxWidth: 280,
-    minHeight: 46,
-    borderRadius: 17,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "rgba(88,28,135,0.22)",
-    borderWidth: 1,
-    borderColor: "rgba(192,132,252,0.28)",
-  },
-  referenceFocusIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 11,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(139,92,246,0.24)",
-  },
-  referenceFocusCopy: { flex: 1, minWidth: 0 },
-  referenceFocusLabel: { color: "#a78bfa", fontSize: 8, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 1 },
-  referenceFocusTitle: { color: "#f8fafc", fontSize: 12, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
-  referenceFocusPills: { flexDirection: "row", gap: 4, maxWidth: 126 },
-  referenceFocusPill: { maxWidth: 62, borderRadius: 999, paddingHorizontal: 6, paddingVertical: 4, backgroundColor: "rgba(56,189,248,0.12)", borderWidth: 1, borderColor: "rgba(56,189,248,0.18)" },
-  referenceFocusPillText: { color: "#bae6fd", fontSize: 8, fontFamily: "Inter_800ExtraBold" },
   referenceLowerGrid: { gap: 8, marginBottom: 2 },
   referenceLowerGridWide: { flexDirection: "row" },
   referenceAlgoCarouselPanel: { flex: 1.45, borderRadius: 22, borderWidth: 1, borderColor: "rgba(168,85,247,0.22)", backgroundColor: "rgba(15,23,42,0.72)", padding: 10, shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.22, shadowRadius: 26, elevation: 8 },
