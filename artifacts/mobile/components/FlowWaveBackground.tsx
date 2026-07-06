@@ -11,7 +11,15 @@ type Props = {
   flashesEnabled?: boolean;
 };
 
-type GridDot = {
+type TopologyPath = {
+  key: string;
+  d: string;
+  color: string;
+  opacity: number;
+  width: number;
+};
+
+type TopologyPoint = {
   key: string;
   cx: number;
   cy: number;
@@ -20,34 +28,67 @@ type GridDot = {
   opacity: number;
 };
 
-type Ripple = {
-  key: string;
-  cx: number;
-  cy: number;
-  color: string;
-  opacity: number;
-  radii: number[];
-};
-
 const VARIANT_ACCENTS: Record<FlowWaveVariant, { primary: string; secondary: string; tertiary: string }> = {
   blue: { primary: "#38bdf8", secondary: "#2563eb", tertiary: "#22c55e" },
   green: { primary: "#22c55e", secondary: "#38bdf8", tertiary: "#8b5cf6" },
   purple: { primary: "#a855f7", secondary: "#38bdf8", tertiary: "#22c55e" },
 };
 
-function softWave(width: number, height: number, y: number, lift: number) {
+function organicContourPath(
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  phase: number,
+  wobble = 0.12,
+) {
+  const count = 12;
+  const points = Array.from({ length: count }, (_, index) => {
+    const angle = (Math.PI * 2 * index) / count;
+    const pulse =
+      1 +
+      Math.sin(angle * 3 + phase) * wobble +
+      Math.cos(angle * 5 - phase * 0.8) * wobble * 0.52;
+
+    return {
+      x: cx + Math.cos(angle) * rx * pulse,
+      y: cy + Math.sin(angle) * ry * pulse,
+    };
+  });
+
+  const first = points[0];
+  const second = points[1];
+  const firstMid = {
+    x: (first.x + second.x) / 2,
+    y: (first.y + second.y) / 2,
+  };
+
+  const parts = [`M ${firstMid.x.toFixed(1)} ${firstMid.y.toFixed(1)}`];
+  for (let index = 1; index <= points.length; index += 1) {
+    const current = points[index % points.length];
+    const next = points[(index + 1) % points.length];
+    const mid = {
+      x: (current.x + next.x) / 2,
+      y: (current.y + next.y) / 2,
+    };
+    parts.push(`Q ${current.x.toFixed(1)} ${current.y.toFixed(1)} ${mid.x.toFixed(1)} ${mid.y.toFixed(1)}`);
+  }
+  parts.push("Z");
+  return parts.join(" ");
+}
+
+function ridgeLine(width: number, height: number, y: number, phase: number) {
   return [
-    `M ${-width * 0.10} ${height * y}`,
-    `C ${width * 0.14} ${height * (y - lift)}, ${width * 0.34} ${height * (y + lift)}, ${width * 0.54} ${height * (y - lift * 0.28)}`,
-    `S ${width * 0.84} ${height * (y + lift * 0.52)}, ${width * 1.12} ${height * (y - lift * 0.18)}`,
+    `M ${-width * 0.18} ${height * y}`,
+    `C ${width * 0.12} ${height * (y - 0.08 + phase)}, ${width * 0.28} ${height * (y + 0.08 - phase)}, ${width * 0.52} ${height * (y - 0.02)}`,
+    `S ${width * 0.82} ${height * (y + 0.07)}, ${width * 1.16} ${height * (y - 0.04 - phase)}`,
   ].join(" ");
 }
 
 export function FlowWaveBackground({ variant = "blue", intensity = "standard", flashesEnabled = true }: Props) {
   const { width, height } = useWindowDimensions();
   const [reduceMotion, setReduceMotion] = useState(false);
-  const rippleAnim = useRef(new Animated.Value(0)).current;
-  const driftAnim = useRef(new Animated.Value(0)).current;
+  const topologyAnim = useRef(new Animated.Value(0)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -64,40 +105,22 @@ export function FlowWaveBackground({ variant = "blue", intensity = "standard", f
 
   useEffect(() => {
     if (reduceMotion) {
-      rippleAnim.setValue(0.42);
-      driftAnim.setValue(0.34);
-      glowAnim.setValue(0.52);
+      topologyAnim.setValue(0.36);
+      glowAnim.setValue(0.48);
       return;
     }
 
-    const rippleLoop = Animated.loop(
+    const topologyLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(rippleAnim, {
+        Animated.timing(topologyAnim, {
           toValue: 1,
-          duration: flashesEnabled ? 3600 : 9000,
+          duration: 14000,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.timing(rippleAnim, {
+        Animated.timing(topologyAnim, {
           toValue: 0,
-          duration: flashesEnabled ? 3800 : 9000,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-
-    const driftLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(driftAnim, {
-          toValue: 1,
-          duration: 15500,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(driftAnim, {
-          toValue: 0,
-          duration: 16500,
+          duration: 16000,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
@@ -107,133 +130,133 @@ export function FlowWaveBackground({ variant = "blue", intensity = "standard", f
     const glowLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(glowAnim, {
-          toValue: flashesEnabled ? 1 : 0.54,
-          duration: flashesEnabled ? 2400 : 11000,
+          toValue: flashesEnabled ? 1 : 0.52,
+          duration: flashesEnabled ? 2600 : 11000,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
         Animated.timing(glowAnim, {
-          toValue: flashesEnabled ? 0.20 : 0.54,
-          duration: flashesEnabled ? 2800 : 11000,
+          toValue: flashesEnabled ? 0.18 : 0.52,
+          duration: flashesEnabled ? 3200 : 11000,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
       ]),
     );
 
-    rippleLoop.start();
-    driftLoop.start();
+    topologyLoop.start();
     glowLoop.start();
     return () => {
-      rippleLoop.stop();
-      driftLoop.stop();
+      topologyLoop.stop();
       glowLoop.stop();
     };
-  }, [driftAnim, flashesEnabled, glowAnim, reduceMotion, rippleAnim]);
+  }, [flashesEnabled, glowAnim, reduceMotion, topologyAnim]);
 
   const svgWidth = Math.max(width, 390);
   const svgHeight = Math.max(height, 760);
   const accents = VARIANT_ACCENTS[variant];
-  const strength = intensity === "soft" ? 0.82 : 1;
+  const strength = intensity === "soft" ? 0.78 : 1;
 
-  const rippleScale = rippleAnim.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1.18] });
-  const counterRippleScale = rippleAnim.interpolate({ inputRange: [0, 1], outputRange: [1.14, 0.96] });
-  const rippleOpacity = rippleAnim.interpolate({
-    inputRange: [0, 0.52, 1],
-    outputRange: [0.42 * strength, flashesEnabled ? 0.98 * strength : 0.62 * strength, 0.32 * strength],
-  });
-  const counterRippleOpacity = rippleAnim.interpolate({
-    inputRange: [0, 0.48, 1],
-    outputRange: [0.30 * strength, 0.58 * strength, flashesEnabled ? 0.86 * strength : 0.50 * strength],
-  });
-  const gridOpacity = glowAnim.interpolate({
+  const topologyShiftX = topologyAnim.interpolate({ inputRange: [0, 1], outputRange: [-22, 28] });
+  const topologyShiftY = topologyAnim.interpolate({ inputRange: [0, 1], outputRange: [18, -20] });
+  const counterShiftX = topologyAnim.interpolate({ inputRange: [0, 1], outputRange: [18, -24] });
+  const counterShiftY = topologyAnim.interpolate({ inputRange: [0, 1], outputRange: [-14, 18] });
+  const topologyScale = topologyAnim.interpolate({ inputRange: [0, 1], outputRange: [0.985, 1.045] });
+  const counterScale = topologyAnim.interpolate({ inputRange: [0, 1], outputRange: [1.035, 0.99] });
+  const topologyOpacity = glowAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.34 * strength, flashesEnabled ? 0.82 * strength : 0.48 * strength],
+    outputRange: [0.48 * strength, flashesEnabled ? 0.96 * strength : 0.62 * strength],
   });
   const glowOpacity = glowAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [0.12 * strength, flashesEnabled ? 0.44 * strength : 0.20 * strength],
   });
-  const driftX = driftAnim.interpolate({ inputRange: [0, 1], outputRange: [-18, 22] });
-  const driftY = driftAnim.interpolate({ inputRange: [0, 1], outputRange: [14, -16] });
-  const counterDriftX = driftAnim.interpolate({ inputRange: [0, 1], outputRange: [16, -20] });
-  const counterDriftY = driftAnim.interpolate({ inputRange: [0, 1], outputRange: [-10, 16] });
 
-  const { gridDots, ripples, wavePaths } = useMemo(() => {
-    const dotColors = [accents.secondary, "#22d3ee", accents.primary, accents.tertiary, "#c084fc"];
-    const dots: GridDot[] = [];
-    const columns = Math.max(7, Math.round(svgWidth / 58));
-    const rows = Math.max(10, Math.round(svgHeight / 70));
-
-    for (let row = 0; row < rows; row += 1) {
-      for (let col = 0; col < columns; col += 1) {
-        const offset = row % 2 ? 0.46 : 0;
-        const cx = ((col + 0.45 + offset) / columns) * svgWidth;
-        const cy = ((row + 0.44) / rows) * svgHeight;
-        const centerPull = 1 - Math.min(0.72, Math.abs(cy - svgHeight * 0.48) / svgHeight);
-        dots.push({
-          key: `water-grid-${row}-${col}`,
-          cx,
-          cy,
-          r: 0.8 + ((row + col) % 4) * 0.34,
-          color: dotColors[(row + col) % dotColors.length],
-          opacity: 0.18 + centerPull * 0.26,
-        });
-      }
-    }
-
-    const rippleSet: Ripple[] = [
-      {
-        key: "ripple-upper",
-        cx: svgWidth * 0.82,
-        cy: svgHeight * 0.22,
-        color: accents.secondary,
-        opacity: 0.58,
-        radii: [46, 104, 172, 252, 340],
-      },
-      {
-        key: "ripple-mid",
-        cx: svgWidth * 0.46,
-        cy: svgHeight * 0.48,
-        color: accents.primary,
-        opacity: 0.52,
-        radii: [58, 132, 218, 316, 430],
-      },
-      {
-        key: "ripple-lower",
-        cx: svgWidth * 0.18,
-        cy: svgHeight * 0.78,
-        color: accents.tertiary,
-        opacity: 0.40,
-        radii: [52, 122, 204, 300, 408],
-      },
+  const { frontContours, rearContours, points } = useMemo(() => {
+    const clusters = [
+      { cx: svgWidth * 0.78, cy: svgHeight * 0.20, rx: 46, ry: 34, color: accents.secondary, wobble: 0.12 },
+      { cx: svgWidth * 0.55, cy: svgHeight * 0.45, rx: 58, ry: 42, color: accents.primary, wobble: 0.15 },
+      { cx: svgWidth * 0.18, cy: svgHeight * 0.70, rx: 52, ry: 38, color: accents.tertiary, wobble: 0.13 },
+      { cx: svgWidth * 0.88, cy: svgHeight * 0.78, rx: 44, ry: 32, color: "#c084fc", wobble: 0.14 },
     ];
 
+    const contours: TopologyPath[] = [];
+    clusters.forEach((cluster, clusterIndex) => {
+      for (let ring = 0; ring < 8; ring += 1) {
+        const spread = 1 + ring * 0.42;
+        contours.push({
+          key: `topology-${clusterIndex}-${ring}`,
+          d: organicContourPath(
+            cluster.cx,
+            cluster.cy,
+            cluster.rx * spread,
+            cluster.ry * spread,
+            clusterIndex * 0.9 + ring * 0.42,
+            cluster.wobble,
+          ),
+          color: cluster.color,
+          opacity: Math.max(0.10, 0.64 - ring * 0.055),
+          width: ring % 3 === 0 ? 1.25 : 0.95,
+        });
+      }
+    });
+
+    const ridges: TopologyPath[] = [
+      { key: "ridge-a", d: ridgeLine(svgWidth, svgHeight, 0.28, 0.012), color: accents.secondary, opacity: 0.26, width: 1.1 },
+      { key: "ridge-b", d: ridgeLine(svgWidth, svgHeight, 0.40, -0.006), color: "#22d3ee", opacity: 0.22, width: 1.0 },
+      { key: "ridge-c", d: ridgeLine(svgWidth, svgHeight, 0.62, 0.010), color: accents.primary, opacity: 0.24, width: 1.0 },
+      { key: "ridge-d", d: ridgeLine(svgWidth, svgHeight, 0.82, -0.011), color: "#c084fc", opacity: 0.22, width: 1.0 },
+    ];
+
+    const dotSeeds: TopologyPoint[] = [];
+    const dotColors = [accents.secondary, "#22d3ee", accents.primary, accents.tertiary, "#c084fc"];
+    for (let i = 0; i < 36; i += 1) {
+      const column = i % 9;
+      const row = Math.floor(i / 9);
+      const jitterX = Math.sin(i * 2.17) * svgWidth * 0.025;
+      const jitterY = Math.cos(i * 1.73) * svgHeight * 0.022;
+      dotSeeds.push({
+        key: `topology-node-${i}`,
+        cx: svgWidth * (0.08 + column * 0.105) + jitterX,
+        cy: svgHeight * (0.13 + row * 0.20) + jitterY,
+        r: 0.8 + (i % 4) * 0.25,
+        color: dotColors[i % dotColors.length],
+        opacity: 0.18 + (i % 5) * 0.045,
+      });
+    }
+
     return {
-      gridDots: dots,
-      ripples: rippleSet,
-      wavePaths: [
-        { key: "waterline-a", d: softWave(svgWidth, svgHeight, 0.32, 0.05), color: accents.secondary, opacity: 0.34 },
-        { key: "waterline-b", d: softWave(svgWidth, svgHeight, 0.58, 0.06), color: accents.primary, opacity: 0.36 },
-        { key: "waterline-c", d: softWave(svgWidth, svgHeight, 0.73, 0.045), color: accents.tertiary, opacity: 0.24 },
-      ],
+      frontContours: [...contours, ...ridges],
+      rearContours: contours.slice().reverse().map(path => ({
+        ...path,
+        key: `${path.key}-rear`,
+        opacity: path.opacity * 0.55,
+        width: path.width * 0.85,
+      })),
+      points: dotSeeds,
     };
   }, [accents.primary, accents.secondary, accents.tertiary, svgHeight, svgWidth]);
 
-  const renderRipple = (ripple: Ripple) => (
-    <React.Fragment key={ripple.key}>
-      {ripple.radii.map((radius, index) => (
-        <Circle
-          key={`${ripple.key}-${radius}`}
-          cx={ripple.cx}
-          cy={ripple.cy}
-          r={radius}
-          stroke={ripple.color}
-          strokeWidth={index === 0 ? 1.4 : 1}
-          fill="none"
-          opacity={Math.max(0.05, ripple.opacity - index * 0.075)}
-        />
-      ))}
+  const renderPath = (path: TopologyPath) => (
+    <React.Fragment key={path.key}>
+      <Path
+        d={path.d}
+        stroke={path.color}
+        strokeWidth={path.width * 8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+        opacity={path.opacity * 0.10}
+      />
+      <Path
+        d={path.d}
+        stroke={path.color}
+        strokeWidth={path.width}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+        opacity={path.opacity}
+      />
     </React.Fragment>
   );
 
@@ -241,84 +264,59 @@ export function FlowWaveBackground({ variant = "blue", intensity = "standard", f
     <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
       <LinearGradient
         colors={["#01020a", "#031326", "#020617", "#01020a"]}
-        locations={[0, 0.34, 0.70, 1]}
-        start={{ x: 0.12, y: 0 }}
-        end={{ x: 0.88, y: 1 }}
+        locations={[0, 0.34, 0.72, 1]}
+        start={{ x: 0.10, y: 0 }}
+        end={{ x: 0.92, y: 1 }}
         style={StyleSheet.absoluteFillObject}
       />
 
-      <Animated.View style={[styles.waterGlow, { opacity: glowOpacity }]}>
+      <Animated.View style={[styles.topologyGlow, { opacity: glowOpacity }]}>
         <LinearGradient
-          colors={["rgba(34,211,238,0)", "rgba(34,211,238,0.34)", "rgba(168,85,247,0.28)", "rgba(34,197,94,0.15)", "rgba(34,211,238,0)"]}
-          locations={[0, 0.28, 0.54, 0.75, 1]}
-          start={{ x: 0.08, y: 0.18 }}
-          end={{ x: 0.90, y: 0.92 }}
+          colors={["rgba(34,211,238,0)", "rgba(34,211,238,0.30)", "rgba(168,85,247,0.32)", "rgba(34,197,94,0.18)", "rgba(34,211,238,0)"]}
+          locations={[0, 0.26, 0.52, 0.76, 1]}
+          start={{ x: 0.06, y: 0.20 }}
+          end={{ x: 0.92, y: 0.90 }}
           style={StyleSheet.absoluteFillObject}
         />
       </Animated.View>
 
       <Animated.View
         style={[
-          styles.rippleLayer,
+          styles.topologyLayer,
           {
-            opacity: rippleOpacity,
-            transform: [{ translateX: driftX }, { translateY: driftY }, { scale: rippleScale }],
+            opacity: topologyOpacity,
+            transform: [{ translateX: counterShiftX }, { translateY: counterShiftY }, { scale: counterScale }],
           },
         ]}
       >
         <Svg width={svgWidth} height={svgHeight} viewBox={`0 0 ${svgWidth} ${svgHeight}`} preserveAspectRatio="none">
-          {ripples.map(renderRipple)}
-          {wavePaths.map(path => (
-            <React.Fragment key={path.key}>
-              <Path
-                d={path.d}
-                stroke={path.color}
-                strokeWidth={12}
-                strokeLinecap="round"
-                fill="none"
-                opacity={path.opacity * 0.16}
-              />
-              <Path
-                d={path.d}
-                stroke={path.color}
-                strokeWidth={1.4}
-                strokeLinecap="round"
-                fill="none"
-                opacity={path.opacity}
-              />
-            </React.Fragment>
-          ))}
+          {rearContours.map(renderPath)}
         </Svg>
       </Animated.View>
 
       <Animated.View
         style={[
-          styles.rippleLayer,
+          styles.topologyLayer,
           {
-            opacity: counterRippleOpacity,
-            transform: [{ translateX: counterDriftX }, { translateY: counterDriftY }, { scale: counterRippleScale }],
+            opacity: topologyOpacity,
+            transform: [{ translateX: topologyShiftX }, { translateY: topologyShiftY }, { scale: topologyScale }],
           },
         ]}
       >
         <Svg width={svgWidth} height={svgHeight} viewBox={`0 0 ${svgWidth} ${svgHeight}`} preserveAspectRatio="none">
-          {ripples.slice().reverse().map(renderRipple)}
-        </Svg>
-      </Animated.View>
-
-      <Animated.View style={[styles.gridLayer, { opacity: gridOpacity }]}>
-        <Svg width={svgWidth} height={svgHeight} viewBox={`0 0 ${svgWidth} ${svgHeight}`} preserveAspectRatio="none">
-          {gridDots.map(dot => (
-            <React.Fragment key={dot.key}>
-              <Circle cx={dot.cx} cy={dot.cy} r={dot.r * 5} fill={dot.color} opacity={dot.opacity * 0.10} />
-              <Circle cx={dot.cx} cy={dot.cy} r={dot.r} fill={dot.color} opacity={dot.opacity} />
+          {frontContours.map(renderPath)}
+          {points.map(point => (
+            <React.Fragment key={point.key}>
+              <Circle cx={point.cx} cy={point.cy} r={point.r * 5.5} fill={point.color} opacity={point.opacity * 0.10} />
+              <Circle cx={point.cx} cy={point.cy} r={point.r} fill={point.color} opacity={point.opacity} />
             </React.Fragment>
           ))}
         </Svg>
       </Animated.View>
 
       <LinearGradient
-        colors={["rgba(2,6,23,0.02)", "rgba(2,6,23,0.22)", "rgba(0,0,0,0.20)"]}
-        locations={[0, 0.66, 1]}
+        colors={["rgba(2,6,23,0.02)", "rgba(2,6,23,0.22)", "rgba(0,0,0,0.22)"]}
+        locations={[0, 0.62, 1]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
         style={StyleSheet.absoluteFillObject}
@@ -330,15 +328,12 @@ export function FlowWaveBackground({ variant = "blue", intensity = "standard", f
 }
 
 const styles = StyleSheet.create({
-  rippleLayer: {
+  topologyLayer: {
     ...StyleSheet.absoluteFillObject,
   },
-  gridLayer: {
+  topologyGlow: {
     ...StyleSheet.absoluteFillObject,
-  },
-  waterGlow: {
-    ...StyleSheet.absoluteFillObject,
-    transform: [{ rotate: "-10deg" }, { scale: 1.18 }],
+    transform: [{ rotate: "-10deg" }, { scale: 1.16 }],
   },
   vignette: {
     ...StyleSheet.absoluteFillObject,
@@ -346,6 +341,6 @@ const styles = StyleSheet.create({
   },
   readabilityWash: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(2,6,23,0.08)",
+    backgroundColor: "rgba(2,6,23,0.06)",
   },
 });
