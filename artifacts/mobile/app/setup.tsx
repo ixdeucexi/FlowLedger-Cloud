@@ -17,6 +17,7 @@ import { useColors } from "@/hooks/useColors";
 import {
   buildSetupCompletionMessage,
   buildPersonalizedSetupKeys,
+  DEFAULT_ONBOARDING_PREFERENCES,
   describeSetupPlan,
   getSetupPathItem,
   shouldAskSavingsGoal,
@@ -26,7 +27,7 @@ import {
   type SetupGoalOption,
   type SetupHelpOption,
 } from "@/lib/onboarding";
-import { loadOnboardingPreferences, readOnboardingPreferences, saveOnboardingPreferences } from "@/lib/onboardingPreferences";
+import { saveOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { readStoredSetupStep, writeStoredSetupStep, type SetupStepKey } from "@/lib/setupProgress";
 
 interface SetupStep {
@@ -99,7 +100,7 @@ function SetupWizard() {
     addIncome, addBill, addGoal, updateSettings,
   } = useBudget();
 
-  const [preferences, setPreferences] = useState<OnboardingPreferences>(() => readOnboardingPreferences());
+  const [preferences, setPreferences] = useState<OnboardingPreferences>(DEFAULT_ONBOARDING_PREFERENCES);
   const [index, setIndex] = useState(0);
   const [accountModalVisible, setAccountModalVisible] = useState(false);
   const [accountMode, setAccountMode] = useState<"add" | "edit" | "reconcile">("add");
@@ -117,16 +118,6 @@ function SetupWizard() {
   const stepTranslate = useRef(new Animated.Value(0)).current;
 
   const activeAccount = accounts.find(account => account.is_active) ?? null;
-
-  useEffect(() => {
-    let cancelled = false;
-    void loadOnboardingPreferences(user?.id).then(next => {
-      if (!cancelled) setPreferences(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id]);
 
   const steps = useMemo<SetupStep[]>(() => {
     const accountDone = accounts.some(account => account.is_active);
@@ -295,17 +286,17 @@ function SetupWizard() {
 
   useEffect(() => {
     stepOpacity.setValue(0);
-    stepTranslate.setValue(14);
+    stepTranslate.setValue(30);
     Animated.parallel([
       Animated.timing(stepOpacity, {
         toValue: 1,
-        duration: 260,
+        duration: 460,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(stepTranslate, {
         toValue: 0,
-        duration: 260,
+        duration: 460,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
@@ -536,25 +527,26 @@ function SetupWizard() {
   return (
     <LinearGradient colors={colors.isDark ? ["#050711", "#0a0d1a", "#111827"] : ["#f8fafc", "#eef2ff", "#f8fafc"]} style={styles.root}>
       <PremiumBackdrop variant="purple" />
-      <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { paddingTop: insets.top + 18, paddingBottom: insets.bottom + 134 },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
+      <View style={[styles.fixedProgress, { top: insets.top + 22 }]}>
         <View style={styles.progressRow}>
           {steps.map((step, stepIndex) => (
             <View
               key={`${step.key}-${stepIndex}`}
               style={[
                 styles.progressBar,
-                { backgroundColor: stepIndex <= index ? "#8b5cf6" : "rgba(148,163,184,0.22)" },
+                { backgroundColor: stepIndex <= index ? "#9f5cff" : "rgba(148,163,184,0.24)" },
               ]}
             />
           ))}
         </View>
-
+      </View>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + 70, paddingBottom: insets.bottom + 134 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         <Animated.View style={{ opacity: stepOpacity, transform: [{ translateY: stepTranslate }] }}>
           <View style={styles.hero}>
             <FloLogo size={current.kind === "intro" ? 112 : 76} />
@@ -775,7 +767,8 @@ export default function SetupScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { flexGrow: 1, paddingHorizontal: 28 },
-  progressRow: { flexDirection: "row", gap: 6, marginBottom: 30 },
+  fixedProgress: { position: "absolute", left: 28, right: 28, zIndex: 20 },
+  progressRow: { flexDirection: "row", gap: 6 },
   progressBar: { flex: 1, height: 4, borderRadius: 999 },
   hero: { alignItems: "center" },
   stepCount: { color: "#38bdf8", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1, marginTop: 14, textTransform: "uppercase" },
