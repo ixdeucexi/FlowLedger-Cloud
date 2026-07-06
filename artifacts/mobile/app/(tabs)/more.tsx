@@ -77,6 +77,37 @@ function csvCell(value: unknown): string {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
+function formatMemberDate(value?: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function formatActivityTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function humanizeEntityType(value: string) {
+  return value.replace(/_/g, " ").replace(/\b\w/g, letter => letter.toUpperCase());
+}
+
+function activitySentence(action: string, entityType: string, entityLabel?: string | null) {
+  const item = entityLabel || humanizeEntityType(entityType);
+  switch (action) {
+    case "created": return `created ${item}`;
+    case "updated": return `updated ${item}`;
+    case "deleted": return `deleted ${item}`;
+    case "joined": return "joined the household";
+    case "invited": return "created an invite";
+    case "changed_role": return `changed access for ${item}`;
+    case "removed": return `removed ${item}`;
+    default: return `${action.replace(/_/g, " ")} ${item}`.trim();
+  }
+}
+
 export default function MoreScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
@@ -88,8 +119,9 @@ export default function MoreScreen() {
     addIncome, updateIncome, deleteIncome, getMonthlyIncome,
     categories, addCategory, updateCategory, deleteCategory,
     addAccount, updateAccount, reconcileAccount, archiveAccount, importStatementTransactions,
-    households, activeHousehold, householdRole, canEditHousehold,
-    refreshHouseholds, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
+    households, householdMembers, householdActivity, activeHousehold, householdRole, canEditHousehold,
+    refreshHouseholds, refreshHouseholdActivity, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
+    updateHouseholdMemberRole, removeHouseholdMember,
   } = useBudget();
 
   const [incomeModalVisible, setIncomeModalVisible] = useState(false);
@@ -195,6 +227,49 @@ export default function MoreScreen() {
     } finally {
       setHouseholdBusy(false);
     }
+  };
+
+  const handleUpdateHouseholdRole = async (memberUserId: string, role: "editor" | "viewer") => {
+    setHouseholdBusy(true);
+    setHouseholdMessage(null);
+    try {
+      await updateHouseholdMemberRole(memberUserId, role);
+      setHouseholdMessage(role === "editor" ? "Member can now edit this household." : "Member is now view only.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not update member access.";
+      setHouseholdMessage(message);
+      Alert.alert("Household member", message);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setHouseholdBusy(false);
+    }
+  };
+
+  const handleRemoveHouseholdMember = (memberUserId: string, label: string) => {
+    Alert.alert("Remove household member?", `${label} will no longer see this household plan.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          setHouseholdBusy(true);
+          setHouseholdMessage(null);
+          try {
+            await removeHouseholdMember(memberUserId);
+            setHouseholdMessage(`${label} was removed from this household.`);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Could not remove that member.";
+            setHouseholdMessage(message);
+            Alert.alert("Household member", message);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          } finally {
+            setHouseholdBusy(false);
+          }
+        },
+      },
+    ]);
   };
 
   const updateDecisionHubSetting = (next: Partial<DecisionHubSettings>) => {
@@ -810,6 +885,54 @@ export default function MoreScreen() {
         )}
 
         <View style={[styles.householdPanel, { backgroundColor: c.muted, borderColor: c.border }]}>
+          <View style={styles.householdPanelHeader}>
+            <View>
+              <Text style={[styles.householdPanelTitle, { color: c.foreground }]}>Members</Text>
+              <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Everyone here sees the same household plan.</Text>
+            </View>
+            <Pressable onPress={refreshHouseholds} disabled={householdBusy} hitSlop={10} style={({ pressed }) => ({ opacity: pressed || householdBusy ? 0.6 : 1 })}>
+              <Feather name="refresh-cw" size={16} color={c.primary} />
+            </Pressable>
+          </View>
+          {householdMembers.length === 0 ? (
+            <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Members will show here after the household syncs.</Text>
+          ) : householdMembers.map(member => {
+            const label = member.displayName || member.email || `Member ${member.userId.slice(0, 6)}`;
+            const ownerCanManage = activeHousehold?.role === "owner" && member.role !== "owner" && !member.isCurrentUser;
+            return (
+              <View key={member.userId} style={[styles.memberRow, { borderTopColor: c.border }]}>
+                <View style={[styles.memberAvatar, { backgroundColor: member.role === "owner" ? c.primary + "24" : c.card }]}>
+                  <Feather name={member.role === "owner" ? "star" : "user"} size={15} color={member.role === "owner" ? c.primary : c.mutedForeground} />
+                </View>
+                <View style={styles.memberInfo}>
+                  <Text style={[styles.memberName, { color: c.foreground }]} numberOfLines={1}>
+                    {label}{member.isCurrentUser ? " (you)" : ""}
+                  </Text>
+                  <Text style={[styles.memberMeta, { color: c.mutedForeground }]}>
+                    {member.role === "owner" ? "Owner" : member.role === "editor" ? "Can edit" : "View only"}
+                    {member.joinedAt ? ` • joined ${formatMemberDate(member.joinedAt)}` : ""}
+                  </Text>
+                </View>
+                {ownerCanManage && (
+                  <View style={styles.memberActions}>
+                    <Pressable
+                      onPress={() => handleUpdateHouseholdRole(member.userId, member.role === "editor" ? "viewer" : "editor")}
+                      disabled={householdBusy}
+                      style={[styles.memberActionPill, { backgroundColor: c.primary + "16" }]}
+                    >
+                      <Text style={[styles.memberActionText, { color: c.primary }]}>{member.role === "editor" ? "View only" : "Can edit"}</Text>
+                    </Pressable>
+                    <Pressable onPress={() => handleRemoveHouseholdMember(member.userId, label)} disabled={householdBusy} hitSlop={8}>
+                      <Feather name="x" size={17} color={c.destructive} />
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            );
+          })}
+        </View>
+
+        <View style={[styles.householdPanel, { backgroundColor: c.muted, borderColor: c.border }]}>
           <Text style={[styles.householdPanelTitle, { color: c.foreground }]}>Share this household</Text>
           <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>
             Invite someone to the active household. They’ll only see this household’s plan, not code, keys, or admin tools.
@@ -882,6 +1005,36 @@ export default function MoreScreen() {
               <Feather name="log-in" size={16} color={c.primaryForeground} />
             </Pressable>
           </View>
+        </View>
+
+        <View style={[styles.householdPanel, { backgroundColor: c.muted, borderColor: c.border }]}>
+          <View style={styles.householdPanelHeader}>
+            <View>
+              <Text style={[styles.householdPanelTitle, { color: c.foreground }]}>Recent activity</Text>
+              <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>A simple record of household changes.</Text>
+            </View>
+            <Pressable onPress={refreshHouseholdActivity} disabled={householdBusy} hitSlop={10} style={({ pressed }) => ({ opacity: pressed || householdBusy ? 0.6 : 1 })}>
+              <Feather name="refresh-cw" size={16} color={c.primary} />
+            </Pressable>
+          </View>
+          {householdActivity.length === 0 ? (
+            <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Edits will appear here after the activity table is available.</Text>
+          ) : householdActivity.slice(0, 8).map(activity => {
+            const actor = activity.actorName || activity.actorEmail || "A household member";
+            return (
+              <View key={activity.id} style={[styles.activityRow, { borderTopColor: c.border }]}>
+                <View style={[styles.activityIcon, { backgroundColor: c.primary + "14" }]}>
+                  <Feather name={activity.action === "deleted" ? "trash-2" : "clock"} size={14} color={activity.action === "deleted" ? c.destructive : c.primary} />
+                </View>
+                <View style={styles.activityInfo}>
+                  <Text style={[styles.activityText, { color: c.foreground }]} numberOfLines={2}>
+                    {actor} {activitySentence(activity.action, activity.entityType, activity.entityLabel)}
+                  </Text>
+                  <Text style={[styles.memberMeta, { color: c.mutedForeground }]}>{formatActivityTime(activity.createdAt)}</Text>
+                </View>
+              </View>
+            );
+          })}
         </View>
 
         {!!householdMessage && (
@@ -1326,7 +1479,20 @@ const styles = StyleSheet.create({
   householdChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   householdChipText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   householdPanel: { borderWidth: 1, borderRadius: 14, padding: 12, marginTop: 10 },
+  householdPanelHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 },
   householdPanelTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold", marginBottom: 4 },
+  memberRow: { flexDirection: "row", alignItems: "center", gap: 10, borderTopWidth: 1, paddingTop: 10, marginTop: 10 },
+  memberAvatar: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  memberInfo: { flex: 1, minWidth: 0 },
+  memberName: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  memberMeta: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
+  memberActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  memberActionPill: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 6 },
+  memberActionText: { fontSize: 10, fontFamily: "Inter_800ExtraBold" },
+  activityRow: { flexDirection: "row", alignItems: "flex-start", gap: 9, borderTopWidth: 1, paddingTop: 10, marginTop: 10 },
+  activityIcon: { width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  activityInfo: { flex: 1, minWidth: 0 },
+  activityText: { fontSize: 12, fontFamily: "Inter_700Bold", lineHeight: 17 },
   roleRow: { flexDirection: "row", gap: 8, marginTop: 12 },
   roleButton: { flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 10, alignItems: "center" },
   roleButtonText: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },

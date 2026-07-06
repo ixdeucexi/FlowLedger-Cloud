@@ -23,11 +23,17 @@ import { scenarioDates, type DecisionResult, type DecisionScenario, type Decisio
 import {
   acceptHouseholdInviteCode,
   createHouseholdInviteCode,
+  loadHouseholdActivity,
   loadHouseholdMemberships,
+  loadHouseholdMembers,
   loadRemoteActiveHouseholdId,
+  removeHouseholdMember as removeHouseholdMemberRecord,
   readStoredActiveHouseholdId,
   saveActiveHouseholdId,
+  updateHouseholdMemberRole as updateHouseholdMemberRoleRecord,
   writeStoredActiveHouseholdId,
+  type HouseholdActivity,
+  type HouseholdMember,
   type HouseholdMembership,
   type HouseholdRole,
 } from "@/lib/households";
@@ -223,6 +229,8 @@ interface BudgetContextType {
   accounts: Account[];
   decisions: DecisionRecord[];
   households: HouseholdMembership[];
+  householdMembers: HouseholdMember[];
+  householdActivity: HouseholdActivity[];
   activeHousehold: HouseholdMembership | null;
   householdRole: HouseholdRole | null;
   canEditHousehold: boolean;
@@ -240,9 +248,12 @@ interface BudgetContextType {
   retryLastSave: () => Promise<void>;
   clearSaveError: () => void;
   refreshHouseholds: () => Promise<void>;
+  refreshHouseholdActivity: () => Promise<void>;
   switchHousehold: (householdId: string) => Promise<void>;
   createHouseholdInvite: (role?: Exclude<HouseholdRole, "owner">) => Promise<string>;
   acceptHouseholdInvite: (code: string) => Promise<void>;
+  updateHouseholdMemberRole: (memberUserId: string, role: Exclude<HouseholdRole, "owner">) => Promise<void>;
+  removeHouseholdMember: (memberUserId: string) => Promise<void>;
 
   addBill: (bill: Omit<Bill, "id" | "created_at">) => Promise<string>;
   updateBill: (bill: Bill) => Promise<void>;
@@ -679,6 +690,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [accounts,      setAccounts]      = useState<Account[]>([]);
   const [decisions,     setDecisions]     = useState<DecisionRecord[]>([]);
   const [households,    setHouseholds]    = useState<HouseholdMembership[]>([]);
+  const [householdMembers, setHouseholdMembers] = useState<HouseholdMember[]>([]);
+  const [householdActivity, setHouseholdActivity] = useState<HouseholdActivity[]>([]);
   const [activeHouseholdId, setActiveHouseholdId] = useState<string | null>(null);
   const [settings,      setSettings]      = useState<Settings>(DEFAULT_SETTINGS);
   const [loading,       setLoading]       = useState(true);
@@ -741,12 +754,28 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     return supabase.from("settings").select("*").eq("user_id", uid).maybeSingle();
   }, []);
 
+  const refreshHouseholdDetails = useCallback(async (scope?: HouseholdMembership | null) => {
+    if (!scope) {
+      setHouseholdMembers([]);
+      setHouseholdActivity([]);
+      return;
+    }
+    const [members, activity] = await Promise.all([
+      loadHouseholdMembers(scope.householdId),
+      loadHouseholdActivity(scope.householdId, 12),
+    ]);
+    setHouseholdMembers(members);
+    setHouseholdActivity(activity);
+  }, []);
+
   const resolveHouseholds = useCallback(async (uid: string) => {
     const memberships = await loadHouseholdMemberships(uid);
     setHouseholds(memberships);
     if (memberships.length === 0) {
       setActiveHouseholdId(null);
       householdScopeRef.current = null;
+      setHouseholdMembers([]);
+      setHouseholdActivity([]);
       return null;
     }
     const remoteActive = await loadRemoteActiveHouseholdId(uid);
@@ -759,8 +788,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setActiveHouseholdId(next.householdId);
     householdScopeRef.current = next;
     void writeStoredActiveHouseholdId(uid, next.householdId);
+    void refreshHouseholdDetails(next);
     return next;
-  }, []);
+  }, [refreshHouseholdDetails]);
 
   const markSaveStarted = useCallback(() => {
     if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
@@ -812,6 +842,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     await resolveHouseholds(user.id);
   }, [user, demoMode, resolveHouseholds]);
 
+  const refreshHouseholdActivity = useCallback(async () => {
+    if (!activeHousehold) {
+      setHouseholdActivity([]);
+      return;
+    }
+    const activity = await loadHouseholdActivity(activeHousehold.householdId, 12);
+    setHouseholdActivity(activity);
+  }, [activeHousehold]);
+
   const switchHousehold = useCallback(async (householdId: string) => {
     if (!user || demoMode) return;
     const next = households.find(household => household.householdId === householdId);
@@ -819,8 +858,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setActiveHouseholdId(next.householdId);
     householdScopeRef.current = next;
     await saveActiveHouseholdId(user.id, next.householdId);
+    await refreshHouseholdDetails(next);
     setLoadRetryNonce(value => value + 1);
-  }, [user, demoMode, households]);
+  }, [user, demoMode, households, refreshHouseholdDetails]);
 
   const createHouseholdInvite = useCallback(async (role: Exclude<HouseholdRole, "owner"> = "editor") => {
     if (!activeHousehold) throw new Error("Choose a household first.");
@@ -836,6 +876,20 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     await resolveHouseholds(user.id);
     setLoadRetryNonce(value => value + 1);
   }, [user, resolveHouseholds]);
+
+  const updateHouseholdMemberRole = useCallback(async (memberUserId: string, role: Exclude<HouseholdRole, "owner">) => {
+    if (!activeHousehold) throw new Error("Choose a household first.");
+    if (activeHousehold.role !== "owner") throw new Error("Only the household owner can update member access.");
+    await updateHouseholdMemberRoleRecord(activeHousehold.householdId, memberUserId, role);
+    await refreshHouseholdDetails(activeHousehold);
+  }, [activeHousehold, refreshHouseholdDetails]);
+
+  const removeHouseholdMember = useCallback(async (memberUserId: string) => {
+    if (!activeHousehold) throw new Error("Choose a household first.");
+    if (activeHousehold.role !== "owner") throw new Error("Only the household owner can remove members.");
+    await removeHouseholdMemberRecord(activeHousehold.householdId, memberUserId);
+    await refreshHouseholdDetails(activeHousehold);
+  }, [activeHousehold, refreshHouseholdDetails]);
 
   // ── Load from Supabase when user changes ────────────────────────────────────
   useEffect(() => {
@@ -863,7 +917,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setLoadError(null);
       setBills([]); setOverrides([]); setBillDateMoves([]); setTransactions([]); setIncomes([]);
       setGoals([]); setExtraPayments([]); setCategories([]); setAccounts([]); setDecisions([]); setSettings(DEFAULT_SETTINGS);
-      setHouseholds([]); setActiveHouseholdId(null); householdScopeRef.current = null;
+      setHouseholds([]); setHouseholdMembers([]); setHouseholdActivity([]); setActiveHouseholdId(null); householdScopeRef.current = null;
       billDateMovesRef.current = [];
       loaded.current = false;
       setLoading(false);
@@ -2764,7 +2818,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   return (
     <BudgetContext.Provider value={{
       bills, overrides, billDateMoves, transactions, incomes, goals, extraPayments, categories, settings, accounts, decisions,
-      households, activeHousehold, householdRole, canEditHousehold, refreshHouseholds, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
+      households, householdMembers, householdActivity, activeHousehold, householdRole, canEditHousehold,
+      refreshHouseholds, refreshHouseholdActivity, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
+      updateHouseholdMemberRole, removeHouseholdMember,
       forecastConfidence, loading, loadError, retryBudgetLoad, demoMode,
       saveStatus, saveError, retryLastSave, clearSaveError,
       dashboardFilter, setDashboardFilter,

@@ -23,6 +23,28 @@ export interface HouseholdInvite {
   createdAt: string;
 }
 
+export interface HouseholdMember {
+  userId: string;
+  role: HouseholdRole;
+  joinedAt?: string;
+  email?: string | null;
+  displayName?: string | null;
+  isCurrentUser?: boolean;
+}
+
+export interface HouseholdActivity {
+  id: string;
+  householdId: string;
+  actorUserId?: string | null;
+  actorEmail?: string | null;
+  actorName?: string | null;
+  action: "created" | "updated" | "deleted" | "joined" | "invited" | "changed_role" | "removed" | string;
+  entityType: string;
+  entityId?: string | null;
+  entityLabel?: string | null;
+  createdAt: string;
+}
+
 const ACTIVE_HOUSEHOLD_KEY = "flowledger-active-household";
 
 function storageKey(userId?: string | null) {
@@ -177,4 +199,80 @@ export async function acceptHouseholdInviteCode(code: string): Promise<string> {
   });
   if (error) throw new Error(friendlyHouseholdError(error.message, "Couldn’t join that household. Try again."));
   return String(data ?? "");
+}
+
+export async function loadHouseholdMembers(householdId?: string | null): Promise<HouseholdMember[]> {
+  if (!householdId) return [];
+
+  const rpcResult = await supabase.rpc("get_household_members", { p_household_id: householdId });
+  if (!rpcResult.error && Array.isArray(rpcResult.data)) {
+    return rpcResult.data.map((row: any): HouseholdMember => ({
+      userId: String(row.user_id),
+      role: normalizeRole(row.role),
+      joinedAt: row.joined_at ? String(row.joined_at) : undefined,
+      email: row.email ?? null,
+      displayName: row.display_name ?? row.email ?? null,
+      isCurrentUser: Boolean(row.is_current_user),
+    }));
+  }
+
+  const fallback = await supabase
+    .from("household_members")
+    .select("user_id, role, created_at")
+    .eq("household_id", householdId)
+    .order("created_at", { ascending: true });
+
+  if (fallback.error) return [];
+  return (fallback.data ?? []).map((row: any): HouseholdMember => ({
+    userId: String(row.user_id),
+    role: normalizeRole(row.role),
+    joinedAt: row.created_at ? String(row.created_at) : undefined,
+    displayName: row.user_id ? `Member ${String(row.user_id).slice(0, 6)}` : "Household member",
+  }));
+}
+
+export async function loadHouseholdActivity(householdId?: string | null, limit = 12): Promise<HouseholdActivity[]> {
+  if (!householdId) return [];
+
+  const { data, error } = await supabase
+    .from("household_activity")
+    .select("id, household_id, actor_user_id, actor_email, actor_name, action, entity_type, entity_id, entity_label, created_at")
+    .eq("household_id", householdId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) return [];
+  return (data ?? []).map((row: any): HouseholdActivity => ({
+    id: String(row.id),
+    householdId: String(row.household_id),
+    actorUserId: row.actor_user_id ?? null,
+    actorEmail: row.actor_email ?? null,
+    actorName: row.actor_name ?? row.actor_email ?? null,
+    action: String(row.action ?? "updated"),
+    entityType: String(row.entity_type ?? "item"),
+    entityId: row.entity_id ?? null,
+    entityLabel: row.entity_label ?? null,
+    createdAt: String(row.created_at),
+  }));
+}
+
+export async function updateHouseholdMemberRole(
+  householdId: string,
+  memberUserId: string,
+  role: Exclude<HouseholdRole, "owner">,
+): Promise<void> {
+  const { error } = await supabase.rpc("update_household_member_role", {
+    p_household_id: householdId,
+    p_member_user_id: memberUserId,
+    p_role: role,
+  });
+  if (error) throw new Error(friendlyHouseholdError(error.message, "Couldn’t update that member. Try again."));
+}
+
+export async function removeHouseholdMember(householdId: string, memberUserId: string): Promise<void> {
+  const { error } = await supabase.rpc("remove_household_member", {
+    p_household_id: householdId,
+    p_member_user_id: memberUserId,
+  });
+  if (error) throw new Error(friendlyHouseholdError(error.message, "Couldn’t remove that member. Try again."));
 }
