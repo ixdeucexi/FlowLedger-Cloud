@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from "react-native-svg";
 
 import { AddBillModal } from "@/components/AddBillModal";
+import { AppText } from "@/components/AppText";
 import { DatePickerField } from "@/components/DatePickerField";
 import { GoalModal } from "@/components/GoalModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
@@ -90,8 +91,8 @@ function FlowScoreGauge({ score }: { score: number }) {
         />
       </Svg>
       <View style={styles.referenceGaugeCenter}>
-        <Text style={styles.referenceGaugeScore}>{score}</Text>
-        <Text style={styles.referenceGaugeLabel}>Flow Score</Text>
+        <AppText tone="number" style={styles.referenceGaugeScore}>{score}</AppText>
+        <AppText tone="label" style={styles.referenceGaugeLabel}>Flow Score</AppText>
       </View>
     </View>
   );
@@ -1170,8 +1171,8 @@ export default function DashboardScreen() {
           <Pressable onPress={() => router.push("/(tabs)/flo" as any)} style={styles.referenceRailFlo}>
             <Feather name="cpu" size={18} color="#22d3ee" />
             <View>
-              <Text style={styles.referenceRailFloTitle}>Flo</Text>
-              <Text style={styles.referenceRailFloSub}>Decision co-pilot</Text>
+              <AppText tone="title" style={styles.referenceRailFloTitle}>Flo</AppText>
+              <AppText style={styles.referenceRailFloSub}>Decision co-pilot</AppText>
             </View>
           </Pressable>
         </View>
@@ -1182,10 +1183,10 @@ export default function DashboardScreen() {
             <Image source={FLOWLEDGER_LOGO} style={styles.brandMarkImage} resizeMode="cover" />
           </View>
           <View>
-            <Text style={styles.brandEyebrow}>FLOWLEDGER</Text>
-            <Text style={styles.brandAlgo}>ALGO</Text>
-            <Text style={styles.heading}>Command Center</Text>
-            <Text style={styles.subheading}>{MONTH_FULL[currentMonth]} {selectedYear} · live forecast</Text>
+            <AppText tone="label" style={styles.brandEyebrow}>FLOWLEDGER</AppText>
+            <AppText tone="label" style={styles.brandAlgo}>ALGO</AppText>
+            <AppText tone="title" style={styles.heading}>Command Center</AppText>
+            <AppText style={styles.subheading}>{MONTH_FULL[currentMonth]} {selectedYear} · live forecast</AppText>
           </View>
         </View>
         <Pressable
@@ -1312,14 +1313,14 @@ export default function DashboardScreen() {
 
       <View style={[styles.referenceCommandHero, isCommandWide && styles.referenceCommandHeroWide]}>
         <View style={styles.referenceHeroCopy}>
-          <Text style={styles.referenceGreeting}>{timeGreeting} 👋</Text>
-          <Text style={styles.referenceGreetingSub}>Here’s your financial flow for {MONTH_FULL[currentMonth]}.</Text>
-          <Text style={styles.referenceHeroLabel}>Available to spend</Text>
+          <AppText tone="title" style={styles.referenceGreeting}>{timeGreeting} 👋</AppText>
+          <AppText style={styles.referenceGreetingSub}>Here’s your financial flow for {MONTH_FULL[currentMonth]}.</AppText>
+          <AppText tone="label" style={styles.referenceHeroLabel}>Available to spend</AppText>
           <>
-            <Text style={styles.referenceHeroAmount}>
+            <AppText tone="number" style={styles.referenceHeroAmount}>
               {(balanceMetrics?.currentBalance ?? cashFlow.remaining) < 0 ? "−" : ""}$
               {Math.abs(balanceMetrics?.currentBalance ?? cashFlow.remaining).toLocaleString("en-US", { maximumFractionDigits: 2 })}
-            </Text>
+            </AppText>
           </>
 
           <Pressable
@@ -1327,19 +1328,19 @@ export default function DashboardScreen() {
             style={({ pressed }) => [styles.referencePlanSnapshot, { opacity: pressed ? 0.84 : 1 }]}
           >
             <View style={styles.referencePlanAmountBlock}>
-              <Text style={styles.referencePlanEyebrow}>Plan Snapshot</Text>
-              <Text style={styles.referencePlanLabel}>Available after plan</Text>
-              <Text style={styles.referencePlanAmount}>
+              <AppText tone="label" style={styles.referencePlanEyebrow}>Plan Snapshot</AppText>
+              <AppText tone="label" style={styles.referencePlanLabel}>Available after plan</AppText>
+              <AppText tone="number" style={styles.referencePlanAmount}>
                 ${Math.max(0, algorithmSuite.safeCushion.amount).toLocaleString("en-US", { maximumFractionDigits: 0 })}
-              </Text>
+              </AppText>
             </View>
             <View style={styles.referencePlanDivider} />
             <View style={styles.referencePlanFocusBlock}>
-              <Text style={styles.referencePlanLabel}>Focus</Text>
-              <Text style={styles.referencePlanFocusTitle} numberOfLines={1}>{setupPersonalization.title}</Text>
+              <AppText tone="label" style={styles.referencePlanLabel}>Focus</AppText>
+              <AppText tone="title" style={styles.referencePlanFocusTitle} numberOfLines={1}>{setupPersonalization.title}</AppText>
               <View style={styles.referencePlanNextRow}>
-                <Text style={styles.referencePlanNextLabel}>Next move</Text>
-                <Text style={styles.referencePlanNextText} numberOfLines={1}>{setupPersonalization.nextActionLabel}</Text>
+                <AppText tone="label" style={styles.referencePlanNextLabel}>Next move</AppText>
+                <AppText style={styles.referencePlanNextText} numberOfLines={1}>{setupPersonalization.nextActionLabel}</AppText>
               </View>
             </View>
             <Feather name="chevron-right" size={16} color="rgba(216,180,254,0.86)" />
@@ -1351,10 +1352,10 @@ export default function DashboardScreen() {
           style={({ pressed }) => [styles.referenceScorePanel, { opacity: pressed ? 0.86 : 1 }]}
         >
           <FlowScoreGauge score={algorithmSuite.flowScore.score} />
-          <Text style={styles.referenceScoreStatus}>{algorithmSuite.flowScore.label}</Text>
+          <AppText tone="title" style={styles.referenceScoreStatus}>{algorithmSuite.flowScore.label}</AppText>
           <View style={styles.referenceScoreUnderline} />
-          <Text style={styles.referenceScoreReason} numberOfLines={2}>{algorithmSuite.flowScore.topReason}</Text>
-          <Text style={styles.referenceScoreTapHint}>Tap for details</Text>
+          <AppText style={styles.referenceScoreReason} numberOfLines={2}>{algorithmSuite.flowScore.topReason}</AppText>
+          <AppText style={styles.referenceScoreTapHint}>Tap for details</AppText>
         </Pressable>
       </View>
 
@@ -1362,12 +1363,12 @@ export default function DashboardScreen() {
         <View style={styles.referenceAlgoCarouselPanel}>
           <View style={styles.referenceAlgoHeaderRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.referenceInsightTitle}>Algorithm Suite</Text>
-              <Text style={styles.referenceAlgoSubtitle}>Swipe through the engines guiding your money plan.</Text>
+              <AppText tone="title" style={styles.referenceInsightTitle}>Algorithm Suite</AppText>
+              <AppText style={styles.referenceAlgoSubtitle}>Swipe through the engines guiding your money plan.</AppText>
             </View>
             <View style={styles.referenceAlgoCountPill}>
-              <Text style={styles.referenceAlgoCountActive}>{String(activeAlgorithmCardNumber).padStart(2, "0")}</Text>
-              <Text style={styles.referenceAlgoCountTotal}>/{String(algorithmCards.length).padStart(2, "0")}</Text>
+              <AppText tone="number" style={styles.referenceAlgoCountActive}>{String(activeAlgorithmCardNumber).padStart(2, "0")}</AppText>
+              <AppText style={styles.referenceAlgoCountTotal}>/{String(algorithmCards.length).padStart(2, "0")}</AppText>
             </View>
           </View>
 
@@ -1403,10 +1404,10 @@ export default function DashboardScreen() {
                   <Feather name={card.icon} size={20} color={card.color} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.referenceAlgorithmTitle}>{card.title}</Text>
-                  <Text style={[styles.referenceAlgorithmValue, { color: card.color }]}>{card.value}</Text>
-                  <Text style={styles.referenceAlgorithmDetail}>{card.detail}</Text>
-                  <Text style={styles.referenceAlgorithmAction}>{card.action}</Text>
+                  <AppText tone="label" style={styles.referenceAlgorithmTitle}>{card.title}</AppText>
+                  <AppText tone="title" style={[styles.referenceAlgorithmValue, { color: card.color }]}>{card.value}</AppText>
+                  <AppText style={styles.referenceAlgorithmDetail}>{card.detail}</AppText>
+                  <AppText style={styles.referenceAlgorithmAction}>{card.action}</AppText>
                 </View>
                 <Feather name="message-circle" size={16} color="rgba(226,232,240,0.72)" />
               </Pressable>
