@@ -822,8 +822,8 @@ export default function MoreScreen() {
             <Feather name="zap" size={17} color={c.primary} />
           </View>
           <View style={styles.switchInfo}>
-            <Text style={[styles.switchLabel, { color: c.foreground }]}>Lightning flashes</Text>
-            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Turn this off if flashing effects are uncomfortable.</Text>
+              <Text style={[styles.switchLabel, { color: c.foreground }]}>Flow shimmer</Text>
+              <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Turn this off if pulsing background motion is uncomfortable.</Text>
           </View>
           <View style={[styles.toggleTrack, { backgroundColor: lightningFlashesEnabled ? c.primary : c.muted }]}>
             <View style={[styles.toggleKnob, { backgroundColor: "#fff", alignSelf: lightningFlashesEnabled ? "flex-end" : "flex-start" }]} />

@@ -1,7 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, Animated, Easing, StyleSheet, useWindowDimensions, View } from "react-native";
-import Svg, { Path } from "react-native-svg";
+import Svg, { Circle, Path } from "react-native-svg";
 
 type FlowWaveVariant = "blue" | "green" | "purple";
 
@@ -11,24 +11,45 @@ type Props = {
   flashesEnabled?: boolean;
 };
 
-type LightningBolt = {
+type FlowPath = {
   key: string;
-  path: string;
-  branches: string[];
-  coreColor: string;
-  glowColor: string;
-  coreWidth: number;
-  glowWidth: number;
+  d: string;
+  color: string;
+  glow: string;
+  opacity: number;
+  width: number;
+  dash?: string;
+};
+
+type Droplet = {
+  key: string;
+  cx: number;
+  cy: number;
+  r: number;
+  color: string;
   opacity: number;
 };
 
-export function FlowWaveBackground({ intensity = "standard", flashesEnabled = true }: Props) {
+const VARIANT_ACCENTS: Record<FlowWaveVariant, { primary: string; secondary: string; tertiary: string }> = {
+  blue: { primary: "#38bdf8", secondary: "#2563eb", tertiary: "#22c55e" },
+  green: { primary: "#22c55e", secondary: "#38bdf8", tertiary: "#8b5cf6" },
+  purple: { primary: "#a855f7", secondary: "#38bdf8", tertiary: "#22c55e" },
+};
+
+function flowCurve(width: number, height: number, y: number, lift: number) {
+  return [
+    `M ${-width * 0.18} ${height * y}`,
+    `C ${width * 0.12} ${height * (y - lift)}, ${width * 0.28} ${height * (y + lift * 0.72)}, ${width * 0.50} ${height * (y - lift * 0.28)}`,
+    `S ${width * 0.82} ${height * (y - lift * 1.28)}, ${width * 1.18} ${height * (y - lift * 0.48)}`,
+  ].join(" ");
+}
+
+export function FlowWaveBackground({ variant = "blue", intensity = "standard", flashesEnabled = true }: Props) {
   const { width, height } = useWindowDimensions();
   const [reduceMotion, setReduceMotion] = useState(false);
-  const stormDriftAnim = useRef(new Animated.Value(0)).current;
-  const primaryFlashAnim = useRef(new Animated.Value(0)).current;
-  const secondaryFlashAnim = useRef(new Animated.Value(0)).current;
-  const skyPulseAnim = useRef(new Animated.Value(0)).current;
+  const driftAnim = useRef(new Animated.Value(0)).current;
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+  const slowPulseAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     let mounted = true;
@@ -43,385 +64,203 @@ export function FlowWaveBackground({ intensity = "standard", flashesEnabled = tr
   }, []);
 
   useEffect(() => {
-    if (reduceMotion || !flashesEnabled) {
-      stormDriftAnim.setValue(0.45);
-      primaryFlashAnim.setValue(flashesEnabled ? 0.20 : 0.05);
-      secondaryFlashAnim.setValue(flashesEnabled ? 0.12 : 0.04);
-      skyPulseAnim.setValue(flashesEnabled ? 0.18 : 0);
+    if (reduceMotion) {
+      driftAnim.setValue(0.34);
+      shimmerAnim.setValue(0.28);
+      slowPulseAnim.setValue(0.18);
       return;
     }
 
-    const stormDriftLoop = Animated.loop(
+    const driftLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(stormDriftAnim, {
+        Animated.timing(driftAnim, {
           toValue: 1,
-          duration: 12000,
+          duration: 18000,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.timing(stormDriftAnim, {
+        Animated.timing(driftAnim, {
           toValue: 0,
-          duration: 13000,
+          duration: 19000,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
       ]),
     );
 
-    const primaryFlashLoop = Animated.loop(
+    const shimmerLoop = Animated.loop(
       Animated.sequence([
-        Animated.delay(120),
-        Animated.timing(primaryFlashAnim, {
-          toValue: 1,
-          duration: 34,
-          easing: Easing.out(Easing.cubic),
+        Animated.timing(shimmerAnim, {
+          toValue: flashesEnabled ? 1 : 0.24,
+          duration: flashesEnabled ? 2600 : 9000,
+          easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.timing(primaryFlashAnim, {
-          toValue: 0.22,
-          duration: 52,
-          easing: Easing.in(Easing.quad),
+        Animated.timing(shimmerAnim, {
+          toValue: flashesEnabled ? 0.18 : 0.24,
+          duration: flashesEnabled ? 2400 : 9000,
+          easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.timing(primaryFlashAnim, {
-          toValue: 0.92,
-          duration: 32,
-          easing: Easing.out(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(primaryFlashAnim, {
-          toValue: 0,
-          duration: 160,
-          easing: Easing.out(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.delay(650),
-        Animated.timing(primaryFlashAnim, {
-          toValue: 0.72,
-          duration: 40,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(primaryFlashAnim, {
-          toValue: 0,
-          duration: 180,
-          easing: Easing.out(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.delay(900),
       ]),
     );
 
-    const secondaryFlashLoop = Animated.loop(
+    const pulseLoop = Animated.loop(
       Animated.sequence([
-        Animated.delay(420),
-        Animated.timing(secondaryFlashAnim, {
-          toValue: 0.86,
-          duration: 36,
-          easing: Easing.out(Easing.cubic),
+        Animated.timing(slowPulseAnim, {
+          toValue: flashesEnabled ? 1 : 0.20,
+          duration: flashesEnabled ? 5400 : 12000,
+          easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.timing(secondaryFlashAnim, {
-          toValue: 0.10,
-          duration: 90,
-          easing: Easing.in(Easing.quad),
+        Animated.timing(slowPulseAnim, {
+          toValue: flashesEnabled ? 0.12 : 0.20,
+          duration: flashesEnabled ? 5200 : 12000,
+          easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.delay(45),
-        Animated.timing(secondaryFlashAnim, {
-          toValue: 0.58,
-          duration: 30,
-          easing: Easing.out(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(secondaryFlashAnim, {
-          toValue: 0,
-          duration: 160,
-          easing: Easing.out(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.delay(1200),
       ]),
     );
 
-    const skyPulseLoop = Animated.loop(
-      Animated.sequence([
-        Animated.delay(130),
-        Animated.timing(skyPulseAnim, {
-          toValue: 1,
-          duration: 40,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(skyPulseAnim, {
-          toValue: 0,
-          duration: 260,
-          easing: Easing.out(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.delay(800),
-        Animated.timing(skyPulseAnim, {
-          toValue: 0.42,
-          duration: 38,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(skyPulseAnim, {
-          toValue: 0,
-          duration: 220,
-          easing: Easing.out(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.delay(1100),
-      ]),
-    );
-
-    stormDriftLoop.start();
-    primaryFlashLoop.start();
-    secondaryFlashLoop.start();
-    skyPulseLoop.start();
+    driftLoop.start();
+    shimmerLoop.start();
+    pulseLoop.start();
     return () => {
-      stormDriftLoop.stop();
-      primaryFlashLoop.stop();
-      secondaryFlashLoop.stop();
-      skyPulseLoop.stop();
+      driftLoop.stop();
+      shimmerLoop.stop();
+      pulseLoop.stop();
     };
-  }, [flashesEnabled, primaryFlashAnim, reduceMotion, secondaryFlashAnim, skyPulseAnim, stormDriftAnim]);
+  }, [driftAnim, flashesEnabled, reduceMotion, shimmerAnim, slowPulseAnim]);
 
   const svgWidth = Math.max(width, 390);
   const svgHeight = Math.max(height, 760);
-  const stormStrength = intensity === "soft" ? 0.72 : 1;
-  const stormTranslateX = stormDriftAnim.interpolate({ inputRange: [0, 1], outputRange: [-18, 18] });
-  const stormTranslateY = stormDriftAnim.interpolate({ inputRange: [0, 1], outputRange: [10, -14] });
-  const stormScale = stormDriftAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 1.025, 1] });
-  const primaryOpacity = primaryFlashAnim.interpolate({
-    inputRange: [0, 0.18, 0.72, 1],
-    outputRange: [0.08, 0.30, 1, 1],
-  });
-  const secondaryOpacity = secondaryFlashAnim.interpolate({
-    inputRange: [0, 0.22, 0.86],
-    outputRange: [0.05, 0.28, 0.95],
-  });
-  const skyFlashOpacity = skyPulseAnim.interpolate({
-    inputRange: [0, 0.42, 1],
-    outputRange: [0, 0.10, 0.22],
-  });
+  const accents = VARIANT_ACCENTS[variant];
+  const strength = intensity === "soft" ? 0.68 : 1;
 
-  const { primaryBolts, secondaryBolts } = useMemo(() => {
-    const primary: LightningBolt[] = [
-      {
-        key: "main-sky-tear",
-        path: `M ${svgWidth * 0.84} ${-svgHeight * 0.06} L ${svgWidth * 0.76} ${svgHeight * 0.10} L ${svgWidth * 0.82} ${svgHeight * 0.17} L ${svgWidth * 0.64} ${svgHeight * 0.31} L ${svgWidth * 0.70} ${svgHeight * 0.39} L ${svgWidth * 0.48} ${svgHeight * 0.56} L ${svgWidth * 0.56} ${svgHeight * 0.64} L ${svgWidth * 0.32} ${svgHeight * 0.86} L ${svgWidth * 0.38} ${svgHeight * 0.98}`,
-        branches: [
-          `M ${svgWidth * 0.64} ${svgHeight * 0.31} L ${svgWidth * 0.49} ${svgHeight * 0.28} L ${svgWidth * 0.56} ${svgHeight * 0.38} L ${svgWidth * 0.39} ${svgHeight * 0.46}`,
-          `M ${svgWidth * 0.48} ${svgHeight * 0.56} L ${svgWidth * 0.34} ${svgHeight * 0.57} L ${svgWidth * 0.41} ${svgHeight * 0.66} L ${svgWidth * 0.25} ${svgHeight * 0.74}`,
-          `M ${svgWidth * 0.56} ${svgHeight * 0.64} L ${svgWidth * 0.72} ${svgHeight * 0.67} L ${svgWidth * 0.64} ${svgHeight * 0.75} L ${svgWidth * 0.79} ${svgHeight * 0.82}`,
-        ],
-        coreColor: "#f8fbff",
-        glowColor: "#38bdf8",
-        coreWidth: 2.6,
-        glowWidth: 20,
-        opacity: 1,
-      },
-      {
-        key: "left-crawl",
-        path: `M ${-svgWidth * 0.08} ${svgHeight * 0.33} L ${svgWidth * 0.16} ${svgHeight * 0.23} L ${svgWidth * 0.29} ${svgHeight * 0.27} L ${svgWidth * 0.46} ${svgHeight * 0.17} L ${svgWidth * 0.66} ${svgHeight * 0.21} L ${svgWidth * 1.05} ${svgHeight * 0.08}`,
-        branches: [
-          `M ${svgWidth * 0.29} ${svgHeight * 0.27} L ${svgWidth * 0.23} ${svgHeight * 0.37} L ${svgWidth * 0.09} ${svgHeight * 0.43}`,
-          `M ${svgWidth * 0.66} ${svgHeight * 0.21} L ${svgWidth * 0.74} ${svgHeight * 0.31} L ${svgWidth * 0.91} ${svgHeight * 0.32}`,
-        ],
-        coreColor: "#dbeafe",
-        glowColor: "#60a5fa",
-        coreWidth: 2.2,
-        glowWidth: 16,
-        opacity: 0.78,
-      },
-      {
-        key: "center-fork-drop",
-        path: `M ${svgWidth * 0.48} ${-svgHeight * 0.04} L ${svgWidth * 0.42} ${svgHeight * 0.10} L ${svgWidth * 0.53} ${svgHeight * 0.18} L ${svgWidth * 0.35} ${svgHeight * 0.34} L ${svgWidth * 0.43} ${svgHeight * 0.43} L ${svgWidth * 0.21} ${svgHeight * 0.62} L ${svgWidth * 0.27} ${svgHeight * 0.71}`,
-        branches: [
-          `M ${svgWidth * 0.53} ${svgHeight * 0.18} L ${svgWidth * 0.67} ${svgHeight * 0.20} L ${svgWidth * 0.58} ${svgHeight * 0.30} L ${svgWidth * 0.76} ${svgHeight * 0.36}`,
-          `M ${svgWidth * 0.35} ${svgHeight * 0.34} L ${svgWidth * 0.22} ${svgHeight * 0.32} L ${svgWidth * 0.12} ${svgHeight * 0.40}`,
-          `M ${svgWidth * 0.43} ${svgHeight * 0.43} L ${svgWidth * 0.55} ${svgHeight * 0.51} L ${svgWidth * 0.49} ${svgHeight * 0.61}`,
-        ],
-        coreColor: "#ffffff",
-        glowColor: "#7dd3fc",
-        coreWidth: 2.4,
-        glowWidth: 18,
-        opacity: 0.88,
-      },
-      {
-        key: "right-side-split",
-        path: `M ${svgWidth * 1.08} ${svgHeight * 0.18} L ${svgWidth * 0.90} ${svgHeight * 0.27} L ${svgWidth * 0.97} ${svgHeight * 0.35} L ${svgWidth * 0.79} ${svgHeight * 0.45} L ${svgWidth * 0.87} ${svgHeight * 0.55} L ${svgWidth * 0.66} ${svgHeight * 0.69}`,
-        branches: [
-          `M ${svgWidth * 0.90} ${svgHeight * 0.27} L ${svgWidth * 0.73} ${svgHeight * 0.25} L ${svgWidth * 0.62} ${svgHeight * 0.34}`,
-          `M ${svgWidth * 0.79} ${svgHeight * 0.45} L ${svgWidth * 0.63} ${svgHeight * 0.48} L ${svgWidth * 0.52} ${svgHeight * 0.58}`,
-          `M ${svgWidth * 0.87} ${svgHeight * 0.55} L ${svgWidth * 1.02} ${svgHeight * 0.61} L ${svgWidth * 0.91} ${svgHeight * 0.74}`,
-        ],
-        coreColor: "#dff7ff",
-        glowColor: "#22d3ee",
-        coreWidth: 2,
-        glowWidth: 15,
-        opacity: 0.74,
-      },
+  const driftX = driftAnim.interpolate({ inputRange: [0, 1], outputRange: [-34, 34] });
+  const driftY = driftAnim.interpolate({ inputRange: [0, 1], outputRange: [18, -24] });
+  const reverseDriftX = driftAnim.interpolate({ inputRange: [0, 1], outputRange: [24, -30] });
+  const reverseDriftY = driftAnim.interpolate({ inputRange: [0, 1], outputRange: [-12, 18] });
+  const shimmerOpacity = shimmerAnim.interpolate({ inputRange: [0, 1], outputRange: [0.20, flashesEnabled ? 0.78 : 0.28] });
+  const pulseOpacity = slowPulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.05, flashesEnabled ? 0.22 : 0.08] });
+
+  const { primaryPaths, secondaryPaths, droplets } = useMemo(() => {
+    const primary: FlowPath[] = [
+      { key: "main-current-a", d: flowCurve(svgWidth, svgHeight, 0.38, 0.15), color: accents.primary, glow: accents.primary, opacity: 0.58, width: 1.8 },
+      { key: "main-current-b", d: flowCurve(svgWidth, svgHeight, 0.44, 0.13), color: accents.secondary, glow: accents.secondary, opacity: 0.44, width: 1.4 },
+      { key: "main-current-c", d: flowCurve(svgWidth, svgHeight, 0.51, 0.16), color: accents.tertiary, glow: accents.tertiary, opacity: 0.34, width: 1.3 },
+      { key: "main-dotted-a", d: flowCurve(svgWidth, svgHeight, 0.42, 0.14), color: accents.primary, glow: accents.primary, opacity: 0.75, width: 3.5, dash: "1 18" },
+      { key: "main-dotted-b", d: flowCurve(svgWidth, svgHeight, 0.56, 0.12), color: accents.tertiary, glow: accents.tertiary, opacity: 0.50, width: 3, dash: "1 22" },
+      { key: "main-dotted-c", d: flowCurve(svgWidth, svgHeight, 0.64, 0.18), color: "#c084fc", glow: "#c084fc", opacity: 0.48, width: 3, dash: "1 20" },
     ];
 
-    const secondary: LightningBolt[] = [
-      {
-        key: "purple-ground-flash",
-        path: `M ${svgWidth * 0.08} ${svgHeight * 0.78} L ${svgWidth * 0.24} ${svgHeight * 0.68} L ${svgWidth * 0.41} ${svgHeight * 0.72} L ${svgWidth * 0.57} ${svgHeight * 0.60} L ${svgWidth * 0.76} ${svgHeight * 0.64} L ${svgWidth * 1.12} ${svgHeight * 0.49}`,
-        branches: [
-          `M ${svgWidth * 0.41} ${svgHeight * 0.72} L ${svgWidth * 0.33} ${svgHeight * 0.84} L ${svgWidth * 0.20} ${svgHeight * 0.90}`,
-          `M ${svgWidth * 0.57} ${svgHeight * 0.60} L ${svgWidth * 0.49} ${svgHeight * 0.50} L ${svgWidth * 0.36} ${svgHeight * 0.47}`,
-        ],
-        coreColor: "#f5d0fe",
-        glowColor: "#a855f7",
-        coreWidth: 2.1,
-        glowWidth: 17,
-        opacity: 0.84,
-      },
-      {
-        key: "distant-blue-crack",
-        path: `M ${svgWidth * 0.96} ${svgHeight * 0.22} L ${svgWidth * 0.82} ${svgHeight * 0.31} L ${svgWidth * 0.88} ${svgHeight * 0.39} L ${svgWidth * 0.70} ${svgHeight * 0.51} L ${svgWidth * 0.77} ${svgHeight * 0.57}`,
-        branches: [
-          `M ${svgWidth * 0.82} ${svgHeight * 0.31} L ${svgWidth * 0.68} ${svgHeight * 0.32} L ${svgWidth * 0.58} ${svgHeight * 0.39}`,
-          `M ${svgWidth * 0.70} ${svgHeight * 0.51} L ${svgWidth * 0.58} ${svgHeight * 0.58} L ${svgWidth * 0.48} ${svgHeight * 0.57}`,
-        ],
-        coreColor: "#cffafe",
-        glowColor: "#22d3ee",
-        coreWidth: 1.8,
-        glowWidth: 14,
-        opacity: 0.70,
-      },
-      {
-        key: "top-purple-snap",
-        path: `M ${-svgWidth * 0.12} ${svgHeight * 0.15} L ${svgWidth * 0.05} ${svgHeight * 0.10} L ${svgWidth * 0.20} ${svgHeight * 0.14} L ${svgWidth * 0.38} ${svgHeight * 0.07} L ${svgWidth * 0.57} ${svgHeight * 0.12} L ${svgWidth * 0.77} ${svgHeight * 0.06}`,
-        branches: [
-          `M ${svgWidth * 0.20} ${svgHeight * 0.14} L ${svgWidth * 0.27} ${svgHeight * 0.25} L ${svgWidth * 0.18} ${svgHeight * 0.32}`,
-          `M ${svgWidth * 0.57} ${svgHeight * 0.12} L ${svgWidth * 0.64} ${svgHeight * 0.22} L ${svgWidth * 0.79} ${svgHeight * 0.25}`,
-        ],
-        coreColor: "#faf5ff",
-        glowColor: "#c084fc",
-        coreWidth: 1.7,
-        glowWidth: 13,
-        opacity: 0.68,
-      },
-      {
-        key: "low-blue-branch",
-        path: `M ${svgWidth * 0.02} ${svgHeight * 0.92} L ${svgWidth * 0.20} ${svgHeight * 0.80} L ${svgWidth * 0.35} ${svgHeight * 0.84} L ${svgWidth * 0.51} ${svgHeight * 0.73} L ${svgWidth * 0.68} ${svgHeight * 0.77} L ${svgWidth * 0.93} ${svgHeight * 0.64}`,
-        branches: [
-          `M ${svgWidth * 0.35} ${svgHeight * 0.84} L ${svgWidth * 0.28} ${svgHeight * 0.95} L ${svgWidth * 0.13} ${svgHeight * 1.02}`,
-          `M ${svgWidth * 0.51} ${svgHeight * 0.73} L ${svgWidth * 0.42} ${svgHeight * 0.65} L ${svgWidth * 0.29} ${svgHeight * 0.65}`,
-          `M ${svgWidth * 0.68} ${svgHeight * 0.77} L ${svgWidth * 0.82} ${svgHeight * 0.84} L ${svgWidth * 1.02} ${svgHeight * 0.82}`,
-        ],
-        coreColor: "#eff6ff",
-        glowColor: "#60a5fa",
-        coreWidth: 1.9,
-        glowWidth: 15,
-        opacity: 0.76,
-      },
+    const secondary: FlowPath[] = [
+      { key: "quiet-current-a", d: flowCurve(svgWidth, svgHeight, 0.18, 0.08), color: "#38bdf8", glow: "#38bdf8", opacity: 0.22, width: 1.1 },
+      { key: "quiet-current-b", d: flowCurve(svgWidth, svgHeight, 0.28, 0.10), color: "#818cf8", glow: "#818cf8", opacity: 0.25, width: 1.2 },
+      { key: "quiet-current-c", d: flowCurve(svgWidth, svgHeight, 0.74, 0.10), color: "#22d3ee", glow: "#22d3ee", opacity: 0.25, width: 1.1 },
+      { key: "quiet-current-d", d: flowCurve(svgWidth, svgHeight, 0.82, 0.12), color: "#8b5cf6", glow: "#8b5cf6", opacity: 0.26, width: 1.2 },
+      { key: "quiet-dotted-a", d: flowCurve(svgWidth, svgHeight, 0.24, 0.09), color: "#38bdf8", glow: "#38bdf8", opacity: 0.30, width: 2.6, dash: "1 24" },
+      { key: "quiet-dotted-b", d: flowCurve(svgWidth, svgHeight, 0.78, 0.11), color: "#a855f7", glow: "#a855f7", opacity: 0.34, width: 2.8, dash: "1 24" },
     ];
 
-    return { primaryBolts: primary, secondaryBolts: secondary };
-  }, [svgHeight, svgWidth]);
+    const seeds = [
+      [0.12, 0.62, 1.7, accents.primary, 0.52],
+      [0.23, 0.55, 1.2, accents.secondary, 0.38],
+      [0.35, 0.43, 1.5, accents.primary, 0.50],
+      [0.48, 0.50, 1.0, accents.tertiary, 0.36],
+      [0.57, 0.39, 1.7, "#c084fc", 0.52],
+      [0.68, 0.48, 1.2, accents.primary, 0.44],
+      [0.78, 0.34, 1.6, accents.secondary, 0.48],
+      [0.89, 0.42, 1.1, accents.tertiary, 0.36],
+      [0.16, 0.25, 1.0, "#38bdf8", 0.26],
+      [0.72, 0.77, 1.4, "#8b5cf6", 0.30],
+    ] as const;
 
-  const renderBolt = (bolt: LightningBolt) => (
-    <React.Fragment key={bolt.key}>
+    return {
+      primaryPaths: primary,
+      secondaryPaths: secondary,
+      droplets: seeds.map(([x, y, r, color, opacity], index): Droplet => ({
+        key: `drop-${index}`,
+        cx: svgWidth * x,
+        cy: svgHeight * y,
+        r,
+        color,
+        opacity,
+      })),
+    };
+  }, [accents.primary, accents.secondary, accents.tertiary, svgHeight, svgWidth]);
+
+  const renderFlowPath = (path: FlowPath) => (
+    <React.Fragment key={path.key}>
       <Path
-        d={bolt.path}
-        stroke={bolt.glowColor}
-        strokeWidth={bolt.glowWidth}
-        strokeLinecap="butt"
-        strokeLinejoin="miter"
+        d={path.d}
+        stroke={path.glow}
+        strokeWidth={path.width * 7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeDasharray={path.dash}
         fill="none"
-        opacity={bolt.opacity * stormStrength * 0.24}
+        opacity={path.opacity * strength * 0.12}
       />
       <Path
-        d={bolt.path}
-        stroke={bolt.glowColor}
-        strokeWidth={Math.max(5, bolt.coreWidth * 3.2)}
-        strokeLinecap="butt"
-        strokeLinejoin="miter"
+        d={path.d}
+        stroke={path.color}
+        strokeWidth={path.width}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeDasharray={path.dash}
         fill="none"
-        opacity={bolt.opacity * stormStrength * 0.56}
+        opacity={path.opacity * strength}
       />
-      <Path
-        d={bolt.path}
-        stroke={bolt.coreColor}
-        strokeWidth={bolt.coreWidth}
-        strokeLinecap="butt"
-        strokeLinejoin="miter"
-        fill="none"
-        opacity={bolt.opacity * stormStrength}
-      />
-      {bolt.branches.map((branch, index) => (
-        <React.Fragment key={`${bolt.key}-branch-${index}`}>
-          <Path
-            d={branch}
-            stroke={bolt.glowColor}
-            strokeWidth={Math.max(7, bolt.glowWidth * 0.62)}
-            strokeLinecap="butt"
-            strokeLinejoin="miter"
-            fill="none"
-            opacity={bolt.opacity * stormStrength * 0.18}
-          />
-          <Path
-            d={branch}
-            stroke={bolt.coreColor}
-            strokeWidth={Math.max(1.25, bolt.coreWidth * 0.72)}
-            strokeLinecap="butt"
-            strokeLinejoin="miter"
-            fill="none"
-            opacity={bolt.opacity * stormStrength * 0.82}
-          />
-        </React.Fragment>
-      ))}
     </React.Fragment>
   );
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
       <LinearGradient
-        colors={["#02030b", "#040817", "#020617", "#010108"]}
+        colors={["#02030b", "#040816", "#020617", "#01030a"]}
         locations={[0, 0.36, 0.72, 1]}
         start={{ x: 0.18, y: 0 }}
         end={{ x: 0.86, y: 1 }}
         style={StyleSheet.absoluteFillObject}
       />
 
-      <Animated.View style={[styles.skyFlash, { opacity: skyFlashOpacity }]} />
+      <Animated.View style={[styles.deepCurrentGlow, { opacity: pulseOpacity }]} />
 
       <Animated.View
         style={[
-          styles.lightningLayer,
+          styles.flowLayer,
           {
-            opacity: primaryOpacity,
-            transform: [{ translateX: stormTranslateX }, { translateY: stormTranslateY }, { scale: stormScale }],
+            opacity: shimmerOpacity,
+            transform: [{ translateX: driftX }, { translateY: driftY }],
           },
         ]}
       >
         <Svg width={svgWidth} height={svgHeight} viewBox={`0 0 ${svgWidth} ${svgHeight}`} preserveAspectRatio="none">
-          {primaryBolts.map(renderBolt)}
+          {primaryPaths.map(renderFlowPath)}
+          {droplets.map(drop => (
+            <Circle key={drop.key} cx={drop.cx} cy={drop.cy} r={drop.r} fill={drop.color} opacity={drop.opacity * strength} />
+          ))}
         </Svg>
       </Animated.View>
 
       <Animated.View
         style={[
-          styles.lightningLayer,
+          styles.flowLayer,
           {
-            opacity: secondaryOpacity,
-            transform: [{ translateX: stormTranslateY }, { translateY: stormTranslateX }],
+            opacity: 0.62,
+            transform: [{ translateX: reverseDriftX }, { translateY: reverseDriftY }],
           },
         ]}
       >
         <Svg width={svgWidth} height={svgHeight} viewBox={`0 0 ${svgWidth} ${svgHeight}`} preserveAspectRatio="none">
-          {secondaryBolts.map(renderBolt)}
+          {secondaryPaths.map(renderFlowPath)}
         </Svg>
       </Animated.View>
 
       <LinearGradient
-        colors={["rgba(2,6,23,0.14)", "rgba(2,6,23,0.58)", "rgba(0,0,0,0.30)"]}
-        locations={[0, 0.66, 1]}
+        colors={["rgba(2,6,23,0.08)", "rgba(2,6,23,0.48)", "rgba(0,0,0,0.36)"]}
+        locations={[0, 0.64, 1]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
         style={StyleSheet.absoluteFillObject}
@@ -433,19 +272,19 @@ export function FlowWaveBackground({ intensity = "standard", flashesEnabled = tr
 }
 
 const styles = StyleSheet.create({
-  lightningLayer: {
+  flowLayer: {
     ...StyleSheet.absoluteFillObject,
   },
-  skyFlash: {
+  deepCurrentGlow: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#7dd3fc",
+    backgroundColor: "#38bdf8",
   },
   vignette: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.20)",
+    backgroundColor: "rgba(0,0,0,0.18)",
   },
   readabilityWash: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(2,6,23,0.24)",
+    backgroundColor: "rgba(2,6,23,0.22)",
   },
 });
