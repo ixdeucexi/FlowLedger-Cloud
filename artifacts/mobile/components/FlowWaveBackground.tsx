@@ -33,7 +33,7 @@ export function FlowWaveBackground({ variant = "blue", intensity = "standard" }:
   const soft = intensity === "soft";
 
   return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
+    <View pointerEvents="none" style={styles.root}>
       <LinearGradient
         colors={["#01020a", "#020617", "#050816", "#01020a"]}
         locations={[0, 0.36, 0.72, 1]}
@@ -57,6 +57,10 @@ export function FlowWaveBackground({ variant = "blue", intensity = "standard" }:
 }
 
 const styles = StyleSheet.create({
+  root: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: "hidden",
+  },
   glowPrimary: {
     position: "absolute",
     top: -140,

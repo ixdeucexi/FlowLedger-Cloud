@@ -3,7 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator, KeyboardAvoidingView, Platform,
+  ActivityIndicator, Image, KeyboardAvoidingView, Platform,
   Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -106,9 +106,13 @@ export default function LoginScreen() {
           {/* Logo / hero */}
           <View style={styles.hero}>
             <View style={styles.logoRing}>
-              <Feather name="bar-chart-2" size={32} color="#22c55e" />
+              <Image
+                source={require("../assets/images/startup_f_transparent.png")}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </View>
-            <Text style={[styles.appName, { color: colors.foreground }]}>FlowLedger</Text>
+            <Text style={[styles.appName, { color: colors.foreground }]}>FlowLedger Algo</Text>
             <Text style={[styles.tagline, { color: colors.mutedForeground }]}>Your money, clearly.</Text>
           </View>
 
@@ -228,12 +232,13 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:     { flexGrow: 1, paddingHorizontal: 24, justifyContent: "center" },
-  hero:          { alignItems: "center", marginBottom: 32 },
-  logoRing:      { width: 72, height: 72, borderRadius: 36, backgroundColor: "rgba(34,197,94,0.15)", alignItems: "center", justifyContent: "center", marginBottom: 12, borderWidth: 1, borderColor: "rgba(34,197,94,0.3)" },
+  container:     { flexGrow: 1, width: "100%", minHeight: "100%", paddingHorizontal: 24, justifyContent: "center", alignItems: "center" },
+  hero:          { width: "100%", maxWidth: 420, alignItems: "center", marginBottom: 32 },
+  logoRing:      { width: 76, height: 76, borderRadius: 24, backgroundColor: "rgba(2,6,23,0.72)", alignItems: "center", justifyContent: "center", marginBottom: 12, borderWidth: 1, borderColor: "rgba(56,189,248,0.22)", shadowColor: "#38bdf8", shadowOpacity: 0.24, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
+  logoImage:     { width: 70, height: 70 },
   appName:       { fontSize: 32, fontFamily: "Inter_700Bold", color: "#f8fafc" },
   tagline:       { fontSize: 14, fontFamily: "Inter_400Regular", color: "#64748b", marginTop: 4 },
-  card:          { backgroundColor: "#111827", borderRadius: 20, padding: 24, borderWidth: 1, borderColor: "#1e293b" },
+  card:          { width: "100%", maxWidth: 420, alignSelf: "center", backgroundColor: "#111827", borderRadius: 20, padding: 24, borderWidth: 1, borderColor: "#1e293b" },
   tabs:          { flexDirection: "row", backgroundColor: "#0f172a", borderRadius: 10, padding: 3, marginBottom: 24 },
   tab:           { flex: 1, paddingVertical: 9, borderRadius: 8, alignItems: "center" },
   tabActive:     { backgroundColor: "#1e293b" },
