@@ -38,10 +38,13 @@ function useApplyAppFontStyle() {
       const styleEl = document.createElement("style");
       styleEl.id = GLOBAL_FONT_STYLE_ID;
       styleEl.textContent = `
-        html, body, body *, #root, #root * {
+        html, body, #root {
           font-family: ${fontFamilyForStyle(fontStyle)} !important;
         }
         input, textarea, button, select {
+          font-family: ${fontFamilyForStyle(fontStyle)} !important;
+        }
+        [style*="Inter_"], [style*="Inter,"], [style*="Inter;"], [style*="Inter "] {
           font-family: ${fontFamilyForStyle(fontStyle)} !important;
         }
       `;
