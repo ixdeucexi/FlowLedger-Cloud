@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AccountModal } from "@/components/AccountModal";
@@ -544,7 +544,7 @@ function SetupWizard() {
         </View>
 
         <View style={styles.hero}>
-          {current.key === "welcome" ? <FlowLedgerSetupLogo /> : <FloLogo size={current.kind === "intro" ? 112 : 76} />}
+          <FloLogo size={current.kind === "intro" ? 112 : 76} />
           <Text style={styles.stepCount}>{progressIndex} of {steps.length}</Text>
           <Text style={styles.title}>{current.title}</Text>
           <View style={styles.bubble}>
@@ -726,18 +726,6 @@ function OptionCard({ icon, label, selected, onPress }: {
   );
 }
 
-function FlowLedgerSetupLogo() {
-  return (
-    <View style={styles.brandLogoShell}>
-      <Image
-        source={require("../assets/brand/flowledger-dashboard-logo.jpg")}
-        style={styles.brandLogoImage}
-        resizeMode="cover"
-      />
-    </View>
-  );
-}
-
 function FloCoachOverlay({ visible, title, message, onClose }: {
   visible: boolean;
   title: string;
@@ -776,8 +764,6 @@ const styles = StyleSheet.create({
   progressRow: { flexDirection: "row", gap: 6, marginBottom: 30 },
   progressBar: { flex: 1, height: 4, borderRadius: 999 },
   hero: { alignItems: "center" },
-  brandLogoShell: { width: 118, height: 118, borderRadius: 34, overflow: "hidden", borderWidth: 1, borderColor: "rgba(56,189,248,0.55)", backgroundColor: "#020617", shadowColor: "#38bdf8", shadowOpacity: 0.25, shadowRadius: 18, shadowOffset: { width: 0, height: 8 } },
-  brandLogoImage: { width: 118, height: 118 },
   stepCount: { color: "#38bdf8", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1, marginTop: 14, textTransform: "uppercase" },
   title: { color: "#f8fafc", fontSize: 30, lineHeight: 37, textAlign: "center", fontFamily: "Inter_800ExtraBold", marginTop: 12 },
   bubble: { alignSelf: "stretch", backgroundColor: "rgba(15,23,42,0.9)", borderWidth: 1, borderColor: "rgba(139,92,246,0.35)", borderRadius: 24, padding: 18, marginTop: 22 },
