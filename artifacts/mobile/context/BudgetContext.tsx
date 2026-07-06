@@ -931,15 +931,20 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       try {
         const uid = user.id;
         const scope = await resolveHouseholds(uid);
-        void withLoadTimeout(
-          supabase.rpc("sync_due_debt_transactions", { p_as_of_date: localDateString() }),
-          8000,
-          "Sync scheduled debt payments",
-        ).then(({ error }) => {
-          if (error) console.warn("Scheduled debt sync skipped", error.message);
-        }, error => {
-          console.warn("Scheduled debt sync skipped", error);
-        });
+        if (scope?.role !== "viewer") {
+          void withLoadTimeout(
+            supabase.rpc("sync_due_debt_transactions", {
+              p_as_of_date: localDateString(),
+              p_household_id: scope?.householdId ?? null,
+            }),
+            8000,
+            "Sync scheduled debt payments",
+          ).then(({ error }) => {
+            if (error) console.warn("Scheduled debt sync skipped", error.message);
+          }, error => {
+            console.warn("Scheduled debt sync skipped", error);
+          });
+        }
         const results = await withLoadTimeout(
           Promise.all([
             applyHouseholdSelect(supabase.from("bills").select("*"), uid),
@@ -1212,7 +1217,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
       await ensureSaved(supabase.from("bills").update({ ...reviewedBill }).eq("id", bill.id), "Update bill");
       if (bill.is_debt && (existing.balance !== bill.balance || existing.amount !== bill.amount || existing.include_in_snowball !== bill.include_in_snowball)) {
-        const rollover = await supabase.rpc("recalculate_debt_minimum_boosts");
+        const rollover = await supabase.rpc("recalculate_debt_minimum_boosts", { p_household_id: householdScopeRef.current?.householdId ?? null });
         if (rollover.error) throw new Error(`Roll debt minimum: ${rollover.error.message}`);
         const refreshed = await applyHouseholdSelect(supabase.from("bills").select("*"), user.id);
         if (refreshed.error) throw new Error(`Refresh debts: ${refreshed.error.message}`);
@@ -1263,7 +1268,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setOverrides(prev => prev.filter(o => o.bill_id !== id));
     }
     if (deletedBill?.is_debt) {
-      const rollover = await supabase.rpc("recalculate_debt_minimum_boosts");
+      const rollover = await supabase.rpc("recalculate_debt_minimum_boosts", { p_household_id: householdScopeRef.current?.householdId ?? null });
       if (rollover.error) throw new Error(`Recalculate debt minimum: ${rollover.error.message}`);
       const refreshed = await applyHouseholdSelect(supabase.from("bills").select("*"), user.id);
       if (refreshed.error) throw new Error(`Refresh debts: ${refreshed.error.message}`);
@@ -1698,9 +1703,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       p_payment_date: preview.paymentDate,
       p_allocations: preview.allocations,
       p_sources: payloadSources,
+      p_household_id: householdScopeRef.current?.householdId ?? null,
     });
     if (error) throw new Error(`Apply debt snowball: ${error.message}`);
-    const rollover = await supabase.rpc("recalculate_debt_minimum_boosts");
+    const rollover = await supabase.rpc("recalculate_debt_minimum_boosts", { p_household_id: householdScopeRef.current?.householdId ?? null });
     if (rollover.error) throw new Error(`Roll debt minimum: ${rollover.error.message}`);
 
     const [overrideResult, billsResult] = await Promise.all([
@@ -1756,9 +1762,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       await deleteExtraPayment(existing.id);
       return;
     }
-    const { error } = await supabase.rpc("remove_debt_snowball_payment", { p_month: month, p_year: year });
+    const { error } = await supabase.rpc("remove_debt_snowball_payment", { p_month: month, p_year: year, p_household_id: householdScopeRef.current?.householdId ?? null });
     if (error) throw new Error(`Remove debt snowball: ${error.message}`);
-    const rollover = await supabase.rpc("recalculate_debt_minimum_boosts");
+    const rollover = await supabase.rpc("recalculate_debt_minimum_boosts", { p_household_id: householdScopeRef.current?.householdId ?? null });
     if (rollover.error) throw new Error(`Restore debt minimum: ${rollover.error.message}`);
     const [overrideResult, billsResult] = await Promise.all([
       applyHouseholdSelect(supabase.from("monthly_overrides").select("*"), user.id).eq("month", month).eq("year", year),
@@ -1885,7 +1891,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const syncDebtTransactionsAndRefresh = useCallback(async () => {
     if (!user || demoMode) return;
-    const synced = await supabase.rpc("sync_due_debt_transactions", { p_as_of_date: localDateString() });
+    if (!canEditHousehold) return;
+    const synced = await supabase.rpc("sync_due_debt_transactions", {
+      p_as_of_date: localDateString(),
+      p_household_id: householdScopeRef.current?.householdId ?? null,
+    });
     if (synced.error) {
       console.warn("Scheduled debt sync skipped", synced.error.message);
       return;
@@ -1898,7 +1908,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (transactionRows.error) throw new Error(`Refresh transactions: ${transactionRows.error.message}`);
     setBills(reorderDebtPriorities((billRows.data ?? []).map(normalizeBillRow)));
     setTransactions((transactionRows.data ?? []).map(normalizeTransactionRow));
-  }, [user, demoMode, applyHouseholdSelect]);
+  }, [user, demoMode, canEditHousehold, applyHouseholdSelect]);
 
   useEffect(() => {
     if (!user || demoMode) return;
