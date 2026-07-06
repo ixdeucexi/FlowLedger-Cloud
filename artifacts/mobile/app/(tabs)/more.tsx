@@ -36,6 +36,7 @@ import { startLearningTour } from "@/lib/learningTour";
 import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
+import { fontFamilyForStyle } from "@/lib/appTypography";
 
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
 
@@ -800,8 +801,8 @@ export default function MoreScreen() {
                 <Feather name={opt.icon as any} size={17} color={active ? c.primary : c.mutedForeground} />
               </View>
               <View style={styles.dataBody}>
-                <Text style={[styles.dataLabel, { color: c.foreground }]}>{opt.label}</Text>
-                <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{opt.desc}</Text>
+                <Text style={[styles.dataLabel, { color: c.foreground, fontFamily: fontFamilyForStyle(opt.value) }]}>{opt.label}</Text>
+                <Text style={[styles.dataDesc, { color: c.mutedForeground, fontFamily: fontFamilyForStyle(opt.value) }]}>{opt.desc}</Text>
               </View>
               <Feather name={active ? "check-circle" : "circle"} size={18} color={active ? c.primary : c.mutedForeground} />
             </Pressable>

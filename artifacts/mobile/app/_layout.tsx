@@ -10,7 +10,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, BackHandler, Easing, Image, Platform, StyleSheet, StyleProp, Text, View, ViewStyle } from "react-native";
+import { Animated, BackHandler, Easing, Image, Platform, StyleSheet, StyleProp, Text, TextInput, View, ViewStyle } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -18,12 +18,60 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PwaInstallPrompt } from "@/components/PwaInstallPrompt";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider, useThemeMode } from "@/context/ThemeContext";
+import { fontFamilyForStyle, nativeFontFamilyForStyle } from "@/lib/appTypography";
 import { supabase } from "@/lib/supabase";
 
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 const MIN_STARTUP_MS = 900;
+const GLOBAL_FONT_STYLE_ID = "flowledger-global-font-style";
+
+function useApplyAppFontStyle() {
+  const { fontStyle } = useThemeMode();
+
+  useEffect(() => {
+    if (Platform.OS === "web") {
+      if (typeof document === "undefined") return;
+      const existing = document.getElementById(GLOBAL_FONT_STYLE_ID);
+      if (existing) existing.remove();
+      const styleEl = document.createElement("style");
+      styleEl.id = GLOBAL_FONT_STYLE_ID;
+      styleEl.textContent = `
+        html, body, body *, #root, #root * {
+          font-family: ${fontFamilyForStyle(fontStyle)} !important;
+        }
+        input, textarea, button, select {
+          font-family: ${fontFamilyForStyle(fontStyle)} !important;
+        }
+      `;
+      document.head.appendChild(styleEl);
+      return () => {
+        styleEl.remove();
+      };
+    }
+
+    const nativeFamily = nativeFontFamilyForStyle(fontStyle);
+    const textAny = Text as any;
+    const inputAny = TextInput as any;
+    const priorTextDefaults = textAny.defaultProps;
+    const priorInputDefaults = inputAny.defaultProps;
+
+    textAny.defaultProps = {
+      ...(priorTextDefaults ?? {}),
+      style: [priorTextDefaults?.style, nativeFamily ? { fontFamily: nativeFamily } : undefined],
+    };
+    inputAny.defaultProps = {
+      ...(priorInputDefaults ?? {}),
+      style: [priorInputDefaults?.style, nativeFamily ? { fontFamily: nativeFamily } : undefined],
+    };
+
+    return () => {
+      textAny.defaultProps = priorTextDefaults;
+      inputAny.defaultProps = priorInputDefaults;
+    };
+  }, [fontStyle]);
+}
 
 function AuthObserver() {
   const { session, loading } = useAuth();
@@ -93,6 +141,7 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
   const appOpacity = useRef(new Animated.Value(0)).current;
   const servicesReady = fontsReady && !authLoading && themeReady;
   const appReady = servicesReady && minimumStartupReady;
+  useApplyAppFontStyle();
 
   useEffect(() => {
     const t = setTimeout(() => setMinimumStartupReady(true), MIN_STARTUP_MS);
