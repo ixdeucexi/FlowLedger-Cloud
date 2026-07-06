@@ -998,7 +998,7 @@ export default function FloScreen() {
         <FloLogo size={48} />
         <View style={styles.headerText}>
           <Text style={[styles.title, { color: colors.foreground }]}>Ask Flo</Text>
-          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Decision checks, plan actions, and history</Text>
+          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Ask questions, preview moves, and get help with your plan.</Text>
         </View>
         <Feather name="message-circle" size={24} color={colors.primaryForeground} />
       </LinearGradient>
@@ -1010,34 +1010,6 @@ export default function FloScreen() {
         keyboardShouldPersistTaps="handled"
         onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
       >
-        <View style={[styles.historyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.historyHeader}>
-            <View style={[styles.historyIcon, { backgroundColor: colors.primary + "18" }]}>
-              <Feather name="clock" size={17} color={colors.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.historyTitle, { color: colors.foreground }]}>Decision History</Text>
-              <Text style={[styles.historySub, { color: colors.mutedForeground }]}>The clean path for review, risky, upcoming, and completed plans.</Text>
-            </View>
-          </View>
-          <View style={styles.historyStats}>
-            <HistoryStat label="Review" value={decisionHistory.due.length} color={colors.warning} />
-            <HistoryStat label="Risky" value={decisionRiskAlerts.length} color={colors.destructive} />
-            <HistoryStat label="Upcoming" value={decisionHistory.upcoming.length} color={colors.primary} />
-            <HistoryStat label="Completed" value={decisionHistory.completed.length} color={colors.success} />
-          </View>
-          {decisionRiskAlerts.length + decisionHistory.due.length + decisionHistory.upcoming.length + decisionHistory.completed.length === 0 ? (
-            <Text style={[styles.historyEmpty, { color: colors.mutedForeground }]}>Ask Flo if you can afford something, then save it to start tracking decisions here.</Text>
-          ) : (
-            <View style={styles.historySections}>
-              <DecisionHistorySection title="No longer safe" items={riskyDecisionItems.slice(0, 4)} colors={colors} actionState={historyActionState} onComplete={openCompletePlan} onPostpone={openPostponePlan} onCancel={(id) => void cancelPlan(id)} />
-              <DecisionHistorySection title="Needs review" items={decisionHistory.due.slice(0, 4)} colors={colors} actionState={historyActionState} onComplete={openCompletePlan} onPostpone={openPostponePlan} onCancel={(id) => void cancelPlan(id)} />
-              <DecisionHistorySection title="Upcoming planned" items={decisionHistory.upcoming.slice(0, 4)} colors={colors} actionState={historyActionState} onComplete={openCompletePlan} onPostpone={openPostponePlan} onCancel={(id) => void cancelPlan(id)} />
-              <DecisionHistorySection title="Completed" items={decisionHistory.completed.slice(0, 3)} colors={colors} />
-            </View>
-          )}
-        </View>
-
         <View style={[styles.bubble, styles.floBubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.bubbleText, { color: colors.foreground }]}>Hi, my name&apos;s Flo! Ask me something.</Text>
         </View>
@@ -1472,7 +1444,7 @@ export default function FloScreen() {
 function formatDisplayDate(date: string): string {
   const parsed = new Date(`${date}T00:00:00Z`);
   if (Number.isNaN(parsed.getTime())) return date;
-  return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return parsed.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
 }
 
 function formatMoney(amount: number): string {
@@ -1482,85 +1454,6 @@ function formatMoney(amount: number): string {
 function formatSignedMoney(amount: number): string {
   const sign = amount < 0 ? "-" : "+";
   return `${sign}${formatMoney(amount)}`;
-}
-
-function HistoryStat({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <View style={styles.historyStat}>
-      <Text style={[styles.historyStatValue, { color }]}>{value}</Text>
-      <Text style={styles.historyStatLabel}>{label}</Text>
-    </View>
-  );
-}
-
-function DecisionHistorySection({
-  title,
-  items,
-  colors,
-  actionState = {},
-  onComplete,
-  onPostpone,
-  onCancel,
-}: {
-  title: string;
-  items: DecisionHistoryItem[];
-  colors: ReturnType<typeof useColors>;
-  actionState?: Record<string, "saving" | "failed">;
-  onComplete?: (id: string) => void;
-  onPostpone?: (id: string) => void;
-  onCancel?: (id: string) => void;
-}) {
-  if (!items.length) return null;
-  return (
-    <View style={styles.historySection}>
-      <Text style={[styles.historySectionTitle, { color: colors.mutedForeground }]}>{title}</Text>
-      {items.map(item => {
-        const canFollowUp = (item.status === "due" || item.status === "upcoming" || item.status === "saved") && onComplete && onPostpone && onCancel;
-        const busy = actionState[item.id] === "saving";
-        return (
-          <View key={item.id} style={[styles.historyRow, { borderColor: colors.border }]}>
-            <View style={[styles.historyStatusDot, { backgroundColor: statusColor(item.status, colors) }]} />
-            <View style={styles.historyRowBody}>
-              <View style={styles.historyRowTop}>
-                <Text numberOfLines={1} style={[styles.historyRowName, { color: colors.foreground }]}>{item.name}</Text>
-                <Text style={[styles.historyDate, { color: colors.mutedForeground }]}>{formatDisplayDate(item.date)}</Text>
-              </View>
-              <Text style={[styles.historyAmount, { color: colors.mutedForeground }]}>{item.amountLabel}</Text>
-              {item.varianceLabel ? (
-                <Text style={[styles.historyVariance, { color: item.varianceLabel.startsWith("+") ? colors.warning : colors.success }]}>
-                  {item.varianceLabel}
-                </Text>
-              ) : null}
-              {canFollowUp ? (
-                <View style={styles.historyActions}>
-                  <Pressable disabled={busy} onPress={() => onComplete(item.id)} style={[styles.historyActionButton, { backgroundColor: colors.success + "18", opacity: busy ? 0.55 : 1 }]}>
-                    <Text style={[styles.historyActionText, { color: colors.success }]}>Complete</Text>
-                  </Pressable>
-                  <Pressable disabled={busy} onPress={() => onPostpone(item.id)} style={[styles.historyActionButton, { backgroundColor: colors.primary + "18", opacity: busy ? 0.55 : 1 }]}>
-                    <Text style={[styles.historyActionText, { color: colors.primary }]}>Postpone</Text>
-                  </Pressable>
-                  <Pressable disabled={busy} onPress={() => onCancel(item.id)} style={[styles.historyActionButton, { backgroundColor: colors.destructive + "14", opacity: busy ? 0.55 : 1 }]}>
-                    <Text style={[styles.historyActionText, { color: colors.destructive }]}>{busy ? "Saving" : "Cancel"}</Text>
-                  </Pressable>
-                </View>
-              ) : null}
-              {actionState[item.id] === "failed" ? (
-                <Text style={[styles.saveDecisionError, { color: colors.destructive, textAlign: "left" }]}>Couldn&apos;t update this decision. Try again.</Text>
-              ) : null}
-            </View>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
-function statusColor(status: DecisionHistoryItem["status"], colors: ReturnType<typeof useColors>) {
-  if (status === "completed") return colors.success;
-  if (status === "cancelled") return colors.destructive;
-  if (status === "postponed") return colors.warning;
-  if (status === "due") return colors.warning;
-  return colors.primary;
 }
 
 function decisionStillHasSource(decision: { status: string; scenario: { type?: string }; applied_change?: Record<string, unknown> | null; actual_amount?: number | null }, transactions: { id: string }[]) {

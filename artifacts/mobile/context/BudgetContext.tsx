@@ -1289,7 +1289,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const getAmount = useCallback(
     (bill: Bill, month: number, year: number): number => {
       const o = overrides.find(o => o.bill_id === bill.id && o.month === month && o.year === year);
-      const base = bill.is_debt ? bill.amount : o?.custom_amount !== undefined ? o.custom_amount : bill.amount;
+      const base = o?.custom_amount !== undefined ? o.custom_amount : bill.amount;
       return bill.is_debt ? effectiveDebtMinimum(base, Number(bill.snowball_minimum_boost ?? 0)) : base;
     },
     [overrides]
@@ -2117,7 +2117,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           const occ = getBillOccurrenceDays(b, m, y);
           if (occ.length === 0) return s;
           const o = overrides.find(o => o.bill_id === b.id && o.month === m && o.year === y);
-          const amt = b.is_debt ? effectiveDebtMinimum(b.amount, Number(b.snowball_minimum_boost ?? 0)) : o?.custom_amount !== undefined ? o.custom_amount : b.amount;
+          const baseAmount = o?.custom_amount !== undefined ? o.custom_amount : b.amount;
+          const amt = b.is_debt ? effectiveDebtMinimum(baseAmount, Number(b.snowball_minimum_boost ?? 0)) : baseAmount;
           return s + amt * occ.length;
         }, 0);
         const tx = transactions

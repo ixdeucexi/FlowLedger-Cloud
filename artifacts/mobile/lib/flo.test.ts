@@ -209,7 +209,7 @@ test("Flo answers phase 2 planning questions without AI", () => {
 
 test("Flo explains Flow Score from deterministic facts", () => {
   assert.match(localFloAnswer("Why is my Flow Score 72?", facts, days) ?? "", /72 - Stable/);
-  assert.match(localFloAnswer("How do I improve my Flow Score?", facts, days) ?? "", /ask me why Jul 8 is tight/i);
+  assert.match(localFloAnswer("How do I improve my Flow Score?", facts, days) ?? "", /ask me why July 8, 2026 is tight/i);
   assert.match(localFloAnswer("What hurt my Flow Score?", facts, days) ?? "", /Safe Cushion is thin/);
   assert.match(localFloAnswer("What helped my Flow Score?", facts, days) ?? "", /No negative days/);
 });
@@ -251,7 +251,7 @@ test("Flo explains the clean Algorithm Suite from deterministic facts", () => {
 
 test("Flo explains cash-flow pressure and review list from deterministic facts", () => {
   const gap = localFloAnswer("Where is my tightest cash-flow stretch?", facts, days) ?? "";
-  assert.match(gap, /Jul 8 through Jul 12/);
+  assert.match(gap, /July 8, 2026 through July 12, 2026/);
   assert.match(gap, /protect that window/i);
 
   const oneDayGap = localFloAnswer("Where is my tightest cash-flow stretch?", {
@@ -263,8 +263,8 @@ test("Flo explains cash-flow pressure and review list from deterministic facts",
       detail: "Tightest stretch is Jul 8.",
     },
   }, days) ?? "";
-  assert.match(oneDayGap, /tightest window is Jul 8\./i);
-  assert.doesNotMatch(oneDayGap, /Jul 8 through Jul 8|Jul 8-8/);
+  assert.match(oneDayGap, /tightest window is July 8, 2026\./i);
+  assert.doesNotMatch(oneDayGap, /July 8, 2026 through July 8, 2026|July 8-8/);
 
   const review = localFloAnswer("What needs attention?", facts, days) ?? "";
   assert.match(review, /Review low balance risk/);

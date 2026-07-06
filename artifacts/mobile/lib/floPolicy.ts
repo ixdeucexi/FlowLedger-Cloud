@@ -947,7 +947,7 @@ function localDecisionHistoryAnswer(message: string, facts: FloFacts): string | 
   }
   if (/need.*review|review|past due|overdue/.test(lower)) {
     return history.due.length
-      ? `You have ${history.due.length} decision${history.due.length === 1 ? "" : "s"} needing review: ${list(history.due)}. Complete, postpone, or cancel them from Decision History.`
+      ? `You have ${history.due.length} decision${history.due.length === 1 ? "" : "s"} needing review: ${list(history.due)}. Open the plan action when it appears, then complete, postpone, or cancel it.`
       : "You don't have any planned decisions needing review right now.";
   }
   if (/coming up|upcoming|planned decisions?|what.*planned|next plans?/.test(lower)) {
@@ -957,7 +957,7 @@ function localDecisionHistoryAnswer(message: string, facts: FloFacts): string | 
   }
   if (/last decision|how.*last|last.*go/.test(lower)) {
     const last = [...history.completed].sort((left, right) => right.date.localeCompare(left.date))[0];
-    if (!last) return "I don't see a completed decision yet. Complete one from Decision History and I'll compare actual versus planned.";
+    if (!last) return "I don't see a completed decision yet. Complete one from its plan action and I'll compare actual versus planned.";
     const variance = last.varianceLabel ? ` ${last.varianceLabel}.` : "";
     return `${last.name} was completed on ${last.date}. It was planned at $${last.plannedAmount.toFixed(2)}${last.actualAmount === undefined ? "" : ` and actual was $${last.actualAmount.toFixed(2)}`}.${variance}`;
   }
@@ -1155,16 +1155,41 @@ function formatSignedDollars(amount: number): string {
   return `${sign}$${Math.abs(amount).toFixed(2)}`;
 }
 
-const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_FULL = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+const MONTH_ABBREVIATION_INDEX: Record<string, number> = {
+  jan: 0,
+  feb: 1,
+  mar: 2,
+  apr: 3,
+  may: 4,
+  jun: 5,
+  jul: 6,
+  aug: 7,
+  sep: 8,
+  oct: 9,
+  nov: 10,
+  dec: 11,
+};
 
 function formatFloMonthDay(facts: FloFacts, day: number) {
   const anchor = facts.todayForecast?.date || facts.lowestBalanceDate || facts.upcoming[0]?.date || "";
   const monthIndex = Number(anchor.slice(5, 7)) - 1;
-  return `${MONTH_SHORT[monthIndex] ?? "Month"} ${day}`;
+  const year = anchor.slice(0, 4);
+  return `${MONTH_FULL[monthIndex] ?? "Month"} ${day}${year ? `, ${year}` : ""}`;
 }
 
 function replaceDayReferences(facts: FloFacts, text: string) {
+  const anchor = facts.todayForecast?.date || facts.lowestBalanceDate || facts.upcoming[0]?.date || "";
+  const anchorYear = anchor.slice(0, 4);
   return text
+    .replace(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})(?:,\s*(\d{4}))?\b/gi, (_, month, day, year) => {
+      const monthIndex = MONTH_ABBREVIATION_INDEX[String(month).toLowerCase()];
+      const safeYear = year || anchorYear;
+      return `${MONTH_FULL[monthIndex] ?? month} ${Number(day)}${safeYear ? `, ${safeYear}` : ""}`;
+    })
     .replace(/\bday (\d{1,2})\b/gi, (_, day) => formatFloMonthDay(facts, Number(day)))
     .replace(/\bask Flo to\b/gi, "ask me to")
     .replace(/\bask Flo\b/gi, "ask me");

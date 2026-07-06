@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
@@ -20,7 +21,7 @@ import colors from "@/constants/colors";
 import type { Account, IncomeItem } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useAuth } from "@/context/AuthContext";
-import { type ThemeMode, useThemeMode } from "@/context/ThemeContext";
+import { type AppFontStyle, type ThemeMode, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { parseStatementCsv } from "@/lib/accounts";
@@ -43,7 +44,17 @@ const THEME_OPTIONS: { label: string; value: ThemeMode; icon: string }[] = [
   { label: "Dark",  value: "dark",  icon: "moon" },
   { label: "Auto",  value: "auto",  icon: "smartphone" },
 ];
+
+const FONT_OPTIONS: { label: string; value: AppFontStyle; icon: string; desc: string }[] = [
+  { label: "Flow", value: "default", icon: "type", desc: "Clean and balanced for everyday planning." },
+  { label: "Elegant", value: "elegant", icon: "feather", desc: "A softer, polished feel." },
+  { label: "Bold", value: "bold", icon: "bold", desc: "Blocky and high-contrast." },
+  { label: "Playful", value: "playful", icon: "smile", desc: "Friendly and fun." },
+  { label: "Soft", value: "soft", icon: "heart", desc: "Gentle and rounded." },
+];
+
 const BACKUP_COMPLETE_KEY = "flowledger_backup_exported";
+const HEALTH_CHECK_DONE_KEY = "flowledger_health_checked_items";
 type AlgorithmCatalogItem = typeof ALGORITHM_CATALOG[number];
 type SettingsSectionId =
   | "overview"
@@ -54,7 +65,8 @@ type SettingsSectionId =
   | "money"
   | "backup"
   | "health"
-  | "security";
+  | "security"
+  | "legal";
 
 const SETTINGS_SECTIONS: Array<{
   id: Exclude<SettingsSectionId, "overview">;
@@ -70,6 +82,7 @@ const SETTINGS_SECTIONS: Array<{
   { id: "backup", label: "Backup, import, and install", description: "CSV backup, statement import, app install, and Flo memory.", icon: "download" },
   { id: "health", label: "Health check", description: "Find setup issues before they break the forecast.", icon: "check-circle" },
   { id: "security", label: "Security and profile", description: "View the signed-in account and sign out.", icon: "lock" },
+  { id: "legal", label: "Legal", description: "Terms, privacy, and data-use notes.", icon: "file-text" },
 ];
 
 function csvCell(value: unknown): string {
@@ -81,13 +94,13 @@ function formatMemberDate(value?: string) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
 }
 
 function formatActivityTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
 }
 
 function humanizeEntityType(value: string) {
@@ -112,7 +125,14 @@ export default function MoreScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { themeMode, setThemeMode } = useThemeMode();
+  const {
+    themeMode,
+    setThemeMode,
+    fontStyle,
+    setFontStyle,
+    lightningFlashesEnabled,
+    setLightningFlashesEnabled,
+  } = useThemeMode();
   const { signOut, user } = useAuth();
   const {
     bills, transactions, overrides, incomes, goals, importBills, settings, updateSettings, accounts, forecastConfidence,
@@ -138,6 +158,9 @@ export default function MoreScreen() {
   const [onboardingPreferences, setOnboardingPreferences] = useState(() => readOnboardingPreferences());
   const [selectedAlgorithm, setSelectedAlgorithm] = useState<AlgorithmCatalogItem | null>(null);
   useBackDismiss(Boolean(selectedAlgorithm), () => setSelectedAlgorithm(null));
+  const [legalDoc, setLegalDoc] = useState<"terms" | "privacy" | null>(null);
+  useBackDismiss(Boolean(legalDoc), () => setLegalDoc(null));
+  const [checkedHealthItems, setCheckedHealthItems] = useState<Record<string, boolean>>({});
   const [showAlgorithmSuite, setShowAlgorithmSuite] = useState(false);
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("overview");
   useBackDismiss(activeSettingsSection !== "overview", () => setActiveSettingsSection("overview"));
@@ -177,6 +200,24 @@ export default function MoreScreen() {
       cancelled = true;
     };
   }, [user?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void AsyncStorage.getItem(HEALTH_CHECK_DONE_KEY).then(raw => {
+      if (cancelled || !raw) return;
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          setCheckedHealthItems(parsed);
+        }
+      } catch {
+        // Ignore old or malformed local data.
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const saveSafetySettings = () => {
     const floor = Math.max(0, parseFloat(safetyFloorText) || 0);
@@ -285,6 +326,14 @@ export default function MoreScreen() {
         [algorithmId]: enabled,
       },
     });
+  };
+
+  const healthIssueKey = (title: string, detail: string) => `${title}:${detail}`;
+  const toggleHealthItem = (key: string) => {
+    const next = { ...checkedHealthItems, [key]: !checkedHealthItems[key] };
+    setCheckedHealthItems(next);
+    void AsyncStorage.setItem(HEALTH_CHECK_DONE_KEY, JSON.stringify(next)).catch(() => undefined);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const totalMonthlyIncome = getMonthlyIncome();
@@ -730,6 +779,55 @@ export default function MoreScreen() {
             );
           })}
         </View>
+      </View>
+      <SLabel c={c} text="Text style" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        {FONT_OPTIONS.map((opt, index) => {
+          const active = fontStyle === opt.value;
+          return (
+            <Pressable
+              key={opt.value}
+              onPress={() => {
+                setFontStyle(opt.value);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              style={({ pressed }) => [
+                styles.dataRow,
+                { borderTopWidth: index ? 1 : 0, borderTopColor: c.border, opacity: pressed ? 0.75 : 1 },
+              ]}
+            >
+              <View style={[styles.dataIcon, { backgroundColor: active ? c.primary + "24" : c.muted }]}>
+                <Feather name={opt.icon as any} size={17} color={active ? c.primary : c.mutedForeground} />
+              </View>
+              <View style={styles.dataBody}>
+                <Text style={[styles.dataLabel, { color: c.foreground }]}>{opt.label}</Text>
+                <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{opt.desc}</Text>
+              </View>
+              <Feather name={active ? "check-circle" : "circle"} size={18} color={active ? c.primary : c.mutedForeground} />
+            </Pressable>
+          );
+        })}
+      </View>
+      <SLabel c={c} text="Motion & effects" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <Pressable
+          onPress={() => {
+            setLightningFlashesEnabled(!lightningFlashesEnabled);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          }}
+          style={({ pressed }) => [styles.decisionSettingRow, { opacity: pressed ? 0.75 : 1 }]}
+        >
+          <View style={[styles.dataIcon, { backgroundColor: c.primary + "18" }]}>
+            <Feather name="zap" size={17} color={c.primary} />
+          </View>
+          <View style={styles.switchInfo}>
+            <Text style={[styles.switchLabel, { color: c.foreground }]}>Lightning flashes</Text>
+            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Turn this off if flashing effects are uncomfortable.</Text>
+          </View>
+          <View style={[styles.toggleTrack, { backgroundColor: lightningFlashesEnabled ? c.primary : c.muted }]}>
+            <View style={[styles.toggleKnob, { backgroundColor: "#fff", alignSelf: lightningFlashesEnabled ? "flex-end" : "flex-start" }]} />
+          </View>
+        </Pressable>
       </View>
       </>}
 
@@ -1323,18 +1421,68 @@ export default function MoreScreen() {
             <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Checks accounts, bills, income, duplicate-looking bills, and unlinked transactions.</Text>
           </View>
         </View>
-        {dataIntegrityIssues.slice(0, 4).map((issue, index) => (
-          <View key={`${issue.title}-${index}`} style={[styles.dataHealthRow, { borderTopWidth: index ? 1 : 0, borderTopColor: c.border }]}>
-            <Feather name={issue.severity === "error" ? "x-circle" : issue.severity === "warning" ? "alert-circle" : "info"} size={15} color={issue.severity === "error" ? c.destructive : issue.severity === "warning" ? c.warning : c.primary} />
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.dataLabel, { color: c.foreground }]}>{issue.title}</Text>
-              <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{issue.detail}</Text>
-            </View>
-          </View>
-        ))}
+        {dataIntegrityIssues.slice(0, 4).map((issue, index) => {
+          const key = healthIssueKey(issue.title, issue.detail);
+          const checked = Boolean(checkedHealthItems[key]);
+          return (
+            <Pressable
+              key={`${issue.title}-${index}`}
+              onPress={() => toggleHealthItem(key)}
+              style={({ pressed }) => [
+                styles.dataHealthRow,
+                {
+                  borderTopWidth: index ? 1 : 0,
+                  borderTopColor: c.border,
+                  opacity: pressed ? 0.75 : checked ? 0.55 : 1,
+                },
+              ]}
+            >
+              <Feather
+                name={checked ? "check-circle" : issue.severity === "error" ? "x-circle" : issue.severity === "warning" ? "alert-circle" : "info"}
+                size={16}
+                color={checked ? c.success : issue.severity === "error" ? c.destructive : issue.severity === "warning" ? c.warning : c.primary}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.dataLabel, { color: c.foreground, textDecorationLine: checked ? "line-through" : "none" }]}>{issue.title}</Text>
+                <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{checked ? "Marked reviewed. Tap again if this still needs attention." : issue.detail}</Text>
+              </View>
+            </Pressable>
+          );
+        })}
       </View>
 
       {/* ── Account section ── */}
+      </>}
+
+      {activeSettingsSection === "legal" && <>
+      <SLabel c={c} text="Legal" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        {[
+          { id: "terms" as const, title: "Terms & Conditions", desc: "How FlowLedger Algo should be used and what users are responsible for.", icon: "file-text" },
+          { id: "privacy" as const, title: "Privacy Policy", desc: "What data FlowLedger uses to run forecasts, households, and Flo guidance.", icon: "shield" },
+        ].map((item, index) => (
+          <Pressable
+            key={item.id}
+            onPress={() => {
+              setLegalDoc(item.id);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+            style={({ pressed }) => [
+              styles.dataRow,
+              { borderTopWidth: index ? 1 : 0, borderTopColor: c.border, opacity: pressed ? 0.75 : 1 },
+            ]}
+          >
+            <View style={[styles.dataIcon, { backgroundColor: c.primary + "18" }]}>
+              <Feather name={item.icon as any} size={17} color={c.primary} />
+            </View>
+            <View style={styles.dataBody}>
+              <Text style={[styles.dataLabel, { color: c.foreground }]}>{item.title}</Text>
+              <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{item.desc}</Text>
+            </View>
+            <Feather name="chevron-right" size={16} color={c.mutedForeground} />
+          </Pressable>
+        ))}
+      </View>
       </>}
 
       {activeSettingsSection === "security" && <>
@@ -1399,6 +1547,45 @@ export default function MoreScreen() {
                 </Pressable>
               </>
             )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={Boolean(legalDoc)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLegalDoc(null)}
+      >
+        <Pressable style={styles.infoOverlay} onPress={() => setLegalDoc(null)}>
+          <Pressable style={[styles.infoSheet, { backgroundColor: c.card, borderColor: c.border, maxHeight: "78%" }]} onPress={() => undefined}>
+            <View style={styles.infoSheetHeader}>
+              <View style={[styles.infoSheetIcon, { backgroundColor: c.primary + "18" }]}>
+                <Feather name={legalDoc === "privacy" ? "shield" : "file-text"} size={20} color={c.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.infoSheetEyebrow, { color: c.primary }]}>FlowLedger Algo</Text>
+                <Text style={[styles.infoSheetTitle, { color: c.foreground }]}>
+                  {legalDoc === "privacy" ? "Privacy Policy" : "Terms & Conditions"}
+                </Text>
+              </View>
+              <Pressable onPress={() => setLegalDoc(null)} style={[styles.infoCloseButton, { backgroundColor: c.muted }]}>
+                <Feather name="x" size={18} color={c.mutedForeground} />
+              </Pressable>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={[styles.legalText, { color: c.mutedForeground }]}>
+                {legalDoc === "privacy"
+                  ? "FlowLedger uses your accounts, bills, income, transactions, goals, household roles, and setup preferences to calculate forecasts, display alerts, and help Flo explain your plan. Household sharing only exposes the active household plan to invited members based on their role. FlowLedger should never ask users for admin keys, code access, or private service credentials. Diagnostic and setup information should stay limited to what is needed to operate the app and improve reliability."
+                  : "FlowLedger Algo is a budgeting, planning, and forecasting tool. Its algorithms are designed to help you understand cash flow, bills, debt payoff, savings, and spending decisions, but they are not financial, tax, legal, or investment advice. You are responsible for confirming amounts, dates, balances, and real-world payments before making money decisions. Forecasts can change when income, bills, transactions, debt balances, or account balances change."}
+              </Text>
+            </ScrollView>
+            <Pressable
+              onPress={() => setLegalDoc(null)}
+              style={({ pressed }) => [styles.infoDoneButton, { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 }]}
+            >
+              <Text style={[styles.infoDoneText, { color: c.primaryForeground }]}>Got it</Text>
+            </Pressable>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1575,6 +1762,7 @@ const styles = StyleSheet.create({
   infoSheetTitle: { fontSize: 21, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.3 },
   infoCloseButton: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   infoSheetDesc: { fontSize: 14, fontFamily: "Inter_500Medium", lineHeight: 20 },
+  legalText: { fontSize: 14, fontFamily: "Inter_500Medium", lineHeight: 22 },
   infoDoneButton: { alignItems: "center", justifyContent: "center", minHeight: 46, borderRadius: 14, marginTop: 16 },
   infoDoneText: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   balanceDivider: { borderTopWidth: 1, marginTop: 14, paddingTop: 14 },

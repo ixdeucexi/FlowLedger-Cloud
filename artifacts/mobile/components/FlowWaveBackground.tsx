@@ -8,6 +8,7 @@ type FlowWaveVariant = "blue" | "green" | "purple";
 type Props = {
   variant?: FlowWaveVariant;
   intensity?: "soft" | "standard";
+  flashesEnabled?: boolean;
 };
 
 type LightningBolt = {
@@ -21,7 +22,7 @@ type LightningBolt = {
   opacity: number;
 };
 
-export function FlowWaveBackground({ intensity = "standard" }: Props) {
+export function FlowWaveBackground({ intensity = "standard", flashesEnabled = true }: Props) {
   const { width, height } = useWindowDimensions();
   const [reduceMotion, setReduceMotion] = useState(false);
   const stormDriftAnim = useRef(new Animated.Value(0)).current;
@@ -42,11 +43,11 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
   }, []);
 
   useEffect(() => {
-    if (reduceMotion) {
+    if (reduceMotion || !flashesEnabled) {
       stormDriftAnim.setValue(0.45);
-      primaryFlashAnim.setValue(0.20);
-      secondaryFlashAnim.setValue(0.12);
-      skyPulseAnim.setValue(0.18);
+      primaryFlashAnim.setValue(flashesEnabled ? 0.20 : 0.05);
+      secondaryFlashAnim.setValue(flashesEnabled ? 0.12 : 0.04);
+      skyPulseAnim.setValue(flashesEnabled ? 0.18 : 0);
       return;
     }
 
@@ -69,109 +70,109 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
 
     const primaryFlashLoop = Animated.loop(
       Animated.sequence([
-        Animated.delay(220),
+        Animated.delay(120),
         Animated.timing(primaryFlashAnim, {
           toValue: 1,
-          duration: 48,
+          duration: 34,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(primaryFlashAnim, {
-          toValue: 0.18,
-          duration: 70,
+          toValue: 0.22,
+          duration: 52,
           easing: Easing.in(Easing.quad),
           useNativeDriver: true,
         }),
         Animated.timing(primaryFlashAnim, {
           toValue: 0.92,
-          duration: 42,
+          duration: 32,
           easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
         Animated.timing(primaryFlashAnim, {
           toValue: 0,
-          duration: 230,
+          duration: 160,
           easing: Easing.out(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.delay(1250),
+        Animated.delay(650),
         Animated.timing(primaryFlashAnim, {
           toValue: 0.72,
-          duration: 60,
+          duration: 40,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(primaryFlashAnim, {
           toValue: 0,
-          duration: 270,
+          duration: 180,
           easing: Easing.out(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.delay(1700),
+        Animated.delay(900),
       ]),
     );
 
     const secondaryFlashLoop = Animated.loop(
       Animated.sequence([
-        Animated.delay(820),
+        Animated.delay(420),
         Animated.timing(secondaryFlashAnim, {
           toValue: 0.86,
-          duration: 54,
+          duration: 36,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(secondaryFlashAnim, {
           toValue: 0.10,
-          duration: 120,
+          duration: 90,
           easing: Easing.in(Easing.quad),
           useNativeDriver: true,
         }),
-        Animated.delay(80),
+        Animated.delay(45),
         Animated.timing(secondaryFlashAnim, {
           toValue: 0.58,
-          duration: 42,
+          duration: 30,
           easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
         Animated.timing(secondaryFlashAnim, {
           toValue: 0,
-          duration: 240,
+          duration: 160,
           easing: Easing.out(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.delay(2100),
+        Animated.delay(1200),
       ]),
     );
 
     const skyPulseLoop = Animated.loop(
       Animated.sequence([
-        Animated.delay(230),
+        Animated.delay(130),
         Animated.timing(skyPulseAnim, {
           toValue: 1,
-          duration: 62,
+          duration: 40,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(skyPulseAnim, {
           toValue: 0,
-          duration: 420,
+          duration: 260,
           easing: Easing.out(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.delay(1300),
+        Animated.delay(800),
         Animated.timing(skyPulseAnim, {
           toValue: 0.42,
-          duration: 58,
+          duration: 38,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(skyPulseAnim, {
           toValue: 0,
-          duration: 340,
+          duration: 220,
           easing: Easing.out(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.delay(1900),
+        Animated.delay(1100),
       ]),
     );
 
@@ -185,7 +186,7 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
       secondaryFlashLoop.stop();
       skyPulseLoop.stop();
     };
-  }, [primaryFlashAnim, reduceMotion, secondaryFlashAnim, skyPulseAnim, stormDriftAnim]);
+  }, [flashesEnabled, primaryFlashAnim, reduceMotion, secondaryFlashAnim, skyPulseAnim, stormDriftAnim]);
 
   const svgWidth = Math.max(width, 390);
   const svgHeight = Math.max(height, 760);
@@ -195,15 +196,15 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
   const stormScale = stormDriftAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 1.025, 1] });
   const primaryOpacity = primaryFlashAnim.interpolate({
     inputRange: [0, 0.18, 0.72, 1],
-    outputRange: [0.06, 0.18, 0.88, 1],
+    outputRange: [0.08, 0.30, 1, 1],
   });
   const secondaryOpacity = secondaryFlashAnim.interpolate({
     inputRange: [0, 0.22, 0.86],
-    outputRange: [0.04, 0.18, 0.78],
+    outputRange: [0.05, 0.28, 0.95],
   });
   const skyFlashOpacity = skyPulseAnim.interpolate({
     inputRange: [0, 0.42, 1],
-    outputRange: [0, 0.06, 0.13],
+    outputRange: [0, 0.10, 0.22],
   });
 
   const { primaryBolts, secondaryBolts } = useMemo(() => {
@@ -333,7 +334,7 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
         strokeLinecap="butt"
         strokeLinejoin="miter"
         fill="none"
-        opacity={bolt.opacity * stormStrength * 0.18}
+        opacity={bolt.opacity * stormStrength * 0.24}
       />
       <Path
         d={bolt.path}
@@ -342,7 +343,7 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
         strokeLinecap="butt"
         strokeLinejoin="miter"
         fill="none"
-        opacity={bolt.opacity * stormStrength * 0.42}
+        opacity={bolt.opacity * stormStrength * 0.56}
       />
       <Path
         d={bolt.path}
@@ -362,7 +363,7 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
             strokeLinecap="butt"
             strokeLinejoin="miter"
             fill="none"
-            opacity={bolt.opacity * stormStrength * 0.13}
+            opacity={bolt.opacity * stormStrength * 0.18}
           />
           <Path
             d={branch}
@@ -371,7 +372,7 @@ export function FlowWaveBackground({ intensity = "standard" }: Props) {
             strokeLinecap="butt"
             strokeLinejoin="miter"
             fill="none"
-            opacity={bolt.opacity * stormStrength * 0.68}
+            opacity={bolt.opacity * stormStrength * 0.82}
           />
         </React.Fragment>
       ))}

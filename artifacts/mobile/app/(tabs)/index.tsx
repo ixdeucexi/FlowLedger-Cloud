@@ -31,7 +31,7 @@ import { isAlgorithmEnabled, type AlgorithmId } from "@/lib/algorithmCatalog";
 import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
 
-const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const MONTH_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 const CAT_COLORS: Record<string, string> = {
@@ -820,7 +820,7 @@ export default function DashboardScreen() {
     const nextStep = overCategory
       ? `${overCategory.category} is over by $${Math.abs(overCategory.remaining).toFixed(0)}.`
       : lowestBalance < settings.safety_floor
-        ? `Lowest balance is $${lowestBalance.toFixed(0)} on ${MONTH_NAMES[currentMonth]} ${lowestDay}.`
+        ? `Lowest balance is $${lowestBalance.toFixed(0)} on ${formatMonthDay(currentMonth, selectedYear, lowestDay)}.`
         : bestCategory
           ? `${bestCategory.category} has $${bestCategory.remaining.toFixed(0)} left.`
           : "Looks steady. Keep updating actuals as bills clear.";
@@ -958,8 +958,8 @@ export default function DashboardScreen() {
     const gapEnd = algorithmSuite.cashFlowGap.endDay;
     const gapDateLabel = gapStart && gapEnd
       ? gapStart === gapEnd
-        ? `${MONTH_NAMES[currentMonth]} ${gapStart}`
-        : `${MONTH_NAMES[currentMonth]} ${gapStart}-${gapEnd}`
+        ? formatMonthDay(currentMonth, selectedYear, gapStart)
+        : `${formatMonthDay(currentMonth, selectedYear, gapStart)} to ${formatMonthDay(currentMonth, selectedYear, gapEnd)}`
       : "No tight gap";
     const cards = [
       {
@@ -1004,7 +1004,7 @@ export default function DashboardScreen() {
         action: algorithmSuite.billPriority.nextMove,
         icon: "file-text" as const,
         color: "#fbbf24",
-        prompt: "Which bill should I handle first, and why?",
+        prompt: "Flo, explain my Bill Priority card. Which bill should I handle first, why is it first, and what safer action should I take?",
       },
       {
         id: "cashFlowGap",
@@ -1405,8 +1405,8 @@ export default function DashboardScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.referenceAlgorithmTitle}>{card.title}</Text>
                   <Text style={[styles.referenceAlgorithmValue, { color: card.color }]}>{card.value}</Text>
-                  <Text style={styles.referenceAlgorithmDetail} numberOfLines={3}>{card.detail}</Text>
-                  <Text style={styles.referenceAlgorithmAction} numberOfLines={1}>{card.action}</Text>
+                  <Text style={styles.referenceAlgorithmDetail}>{card.detail}</Text>
+                  <Text style={styles.referenceAlgorithmAction}>{card.action}</Text>
                 </View>
                 <Feather name="message-circle" size={16} color="rgba(226,232,240,0.72)" />
               </Pressable>
@@ -1445,8 +1445,7 @@ export default function DashboardScreen() {
           <Text style={[styles.negWarningText, { color: c.destructive }]}>
             Your balance goes negative on{" "}
             <Text style={{ fontFamily: "Inter_700Bold" }}>
-              {MONTH_NAMES[firstYearNegEntry.month]} {firstYearNegEntry.firstNegDay}
-              {firstYearNegEntry.year !== selectedYear ? ` ${firstYearNegEntry.year}` : ""}
+              {formatMonthDay(firstYearNegEntry.month, firstYearNegEntry.year, firstYearNegEntry.firstNegDay)}
             </Text>
             {" "}— tap to see full outlook
           </Text>
@@ -1746,7 +1745,7 @@ export default function DashboardScreen() {
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.categoryDetailItemName, { color: c.foreground }]}>{bill.name}</Text>
                         <Text style={[styles.categoryDetailItemMeta, { color: c.mutedForeground }]}>
-                          Due {MONTH_FULL[currentMonth].slice(0, 3)} {bill.dueDay}{bill.paid > 0 ? ` · $${bill.paid.toFixed(0)} paid` : ""}
+                          Due {formatMonthDay(currentMonth, selectedYear, bill.dueDay)}{bill.paid > 0 ? ` · $${bill.paid.toFixed(0)} paid` : ""}
                         </Text>
                       </View>
                       <Text style={[styles.categoryDetailItemAmount, { color: c.foreground }]}>${bill.amount.toFixed(0)}</Text>
@@ -2022,7 +2021,7 @@ export default function DashboardScreen() {
                       <Text style={[styles.negSheetRowMonth, { color: c.foreground }]}>{entry.label}</Text>
                       <Text style={[styles.negSheetRowDetail, { color: isNeg ? c.destructive : isLow ? "#f0b429" : c.mutedForeground }]}>
                         {isNeg
-                          ? `Goes negative on ${MONTH_NAMES[entry.month]} ${entry.firstNegDay}`
+                          ? `Goes negative on ${formatMonthDay(entry.month, entry.year, entry.firstNegDay)}`
                           : isLow
                           ? `Low — floor $${entry.lowestBalance.toFixed(0)}`
                           : `Safe — floor $${entry.lowestBalance.toFixed(0)}`}
@@ -2145,7 +2144,12 @@ export default function DashboardScreen() {
 function formatShortDate(date: string): string {
   const parsed = new Date(`${date}T00:00:00Z`);
   if (Number.isNaN(parsed.getTime())) return date;
-  return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return parsed.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+}
+
+function formatMonthDay(month: number, year: number, day: number | null | undefined): string {
+  if (!day) return `${MONTH_FULL[month] ?? "Month"} ${year}`;
+  return `${MONTH_FULL[month] ?? "Month"} ${day}, ${year}`;
 }
 
 const styles = StyleSheet.create({

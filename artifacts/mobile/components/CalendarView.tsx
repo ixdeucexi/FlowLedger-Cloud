@@ -7,15 +7,15 @@ import { scenarioDates } from "@/lib/decisions";
 const DAY_NAMES = ["S", "M", "T", "W", "T", "F", "S"];
 
 const CALENDAR = {
-  surface: "rgba(3,7,18,0.78)",
-  cell: "rgba(8,13,30,0.58)",
-  selectedCell: "rgba(79,70,229,0.22)",
-  line: "rgba(148,163,184,0.16)",
+  surface: "rgba(4,8,22,0.70)",
+  cell: "rgba(8,13,30,0.42)",
+  selectedCell: "rgba(124,58,237,0.22)",
+  line: "rgba(168,85,247,0.16)",
   text: "#f8fafc",
-  muted: "#94a3b8",
+  muted: "#a7b0c3",
   faded: "#64748b",
-  selected: "#8b5cf6",
-  today: "#2563eb",
+  selected: "#a855f7",
+  today: "#7c3aed",
   green: "#22c55e",
   amber: "#fbbf24",
   red: "#fb7185",
@@ -42,12 +42,12 @@ function fmt(n: number) {
 }
 
 function chipPalette(kind: ChipKind) {
-  if (kind === "income") return { bg: "rgba(20,83,45,0.82)", border: "#22c55e", text: "#dcfce7" };
-  if (kind === "bill") return { bg: "rgba(120,53,15,0.82)", border: "#f59e0b", text: "#fffbeb" };
-  if (kind === "goal") return { bg: "rgba(88,28,135,0.82)", border: "#a855f7", text: "#f3e8ff" };
-  if (kind === "plan") return { bg: "rgba(30,64,175,0.82)", border: "#3b82f6", text: "#eff6ff" };
-  if (kind === "risk") return { bg: "rgba(136,19,55,0.86)", border: "#fb7185", text: "#fff1f2" };
-  return { bg: "rgba(76,29,149,0.82)", border: "#8b5cf6", text: "#ede9fe" };
+  if (kind === "income") return { bg: "rgba(34,197,94,0.18)", border: "rgba(34,197,94,0.78)", text: "#bbf7d0" };
+  if (kind === "bill") return { bg: "rgba(245,158,11,0.18)", border: "rgba(245,158,11,0.82)", text: "#fde68a" };
+  if (kind === "goal") return { bg: "rgba(168,85,247,0.20)", border: "rgba(168,85,247,0.82)", text: "#e9d5ff" };
+  if (kind === "plan") return { bg: "rgba(59,130,246,0.20)", border: "rgba(96,165,250,0.86)", text: "#bfdbfe" };
+  if (kind === "risk") return { bg: "rgba(244,63,94,0.20)", border: "rgba(251,113,133,0.90)", text: "#fecdd3" };
+  return { bg: "rgba(139,92,246,0.20)", border: "rgba(167,139,250,0.80)", text: "#ddd6fe" };
 }
 
 export function CalendarView({
@@ -200,7 +200,7 @@ export function CalendarView({
                   {visibleChips.map((chip, index) => {
                     const palette = chipPalette(chip.kind);
                     return (
-                      <View key={`${chip.label}-${index}`} style={[styles.eventChip, { backgroundColor: palette.bg, borderLeftColor: palette.border }]}>
+                      <View key={`${chip.label}-${index}`} style={[styles.eventChip, { backgroundColor: palette.bg, borderColor: palette.border }]}>
                         <Text style={[styles.eventChipText, { color: palette.text }]} numberOfLines={1}>{chip.label}</Text>
                       </View>
                     );
@@ -235,10 +235,10 @@ const styles = StyleSheet.create({
   container: {
     marginBottom: 10,
     backgroundColor: CALENDAR.surface,
-    borderRadius: 28,
+    borderRadius: 26,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.18)",
+    borderColor: "rgba(168,85,247,0.22)",
     padding: 8,
     shadowColor: "#7c3aed",
     shadowOffset: { width: 0, height: 16 },
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: CALENDAR.line,
   },
-  dayName: { flex: 1, textAlign: "center", fontSize: 11, fontFamily: "Inter_800ExtraBold", color: CALENDAR.muted, letterSpacing: 1 },
+  dayName: { flex: 1, textAlign: "center", fontSize: 11, fontFamily: "Inter_800ExtraBold", color: CALENDAR.muted, letterSpacing: 1.1 },
   gridScroll: { maxHeight: 530 },
   gridScrollContent: { paddingBottom: 4 },
   grid: { flexDirection: "row", flexWrap: "wrap", backgroundColor: CALENDAR.surface },
@@ -274,22 +274,22 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   selectedCell: {
-    backgroundColor: "rgba(37,99,235,0.18)",
+    backgroundColor: "rgba(124,58,237,0.24)",
     borderWidth: 1,
-    borderColor: "rgba(139,92,246,0.85)",
+    borderColor: "rgba(216,180,254,0.75)",
     shadowColor: "#8b5cf6",
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.42,
     shadowRadius: 14,
   },
-  todayCell: { backgroundColor: "rgba(15,23,42,0.95)" },
+  todayCell: { backgroundColor: "rgba(30,41,59,0.72)" },
   emptyCell: { opacity: 0.35 },
   dayTopRow: { alignItems: "center", gap: 1, minHeight: 27 },
   todayCircle: { minWidth: 22, height: 22, borderRadius: 7, alignItems: "center", justifyContent: "center", paddingHorizontal: 6, backgroundColor: CALENDAR.today },
   dayNum: { fontSize: 15 },
   balanceText: { fontSize: 9, fontFamily: "Inter_800ExtraBold" },
   eventStack: { marginTop: 5, gap: 3 },
-  eventChip: { borderRadius: 6, minHeight: 16, paddingHorizontal: 5, paddingVertical: 1, borderLeftWidth: 3 },
+  eventChip: { borderRadius: 7, minHeight: 17, paddingHorizontal: 5, paddingVertical: 1, borderWidth: 1 },
   eventChipText: { flex: 1, fontSize: 8, fontFamily: "Inter_800ExtraBold" },
   moreText: { fontSize: 8, fontFamily: "Inter_600SemiBold", textAlign: "center", color: CALENDAR.faded },
   legendRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, paddingTop: 12, paddingHorizontal: 2, paddingBottom: 2 },

@@ -15,7 +15,10 @@ const FREQUENCIES: { key: IncomeItem["frequency"]; label: string; desc: string }
   { key: "weekly",   label: "Weekly",   desc: "×4–5/mo" },
 ];
 
-const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
 
 function formatYYMM(ef: string) {
   const [y, m] = ef.split("-").map(Number);
@@ -237,7 +240,7 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
               </>
             )}
 
-            {/* ── Rate History ── */}
+            {/* Rate History */}
             <View style={[styles.historySection, { backgroundColor: c.card, borderRadius: 12 }]}>
               <View style={styles.historyHeader}>
                 <View style={styles.historyTitleRow}>

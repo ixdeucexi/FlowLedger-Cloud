@@ -95,7 +95,7 @@ test("cash-flow gap wording handles a one-day tight stretch", () => {
 
   assert.equal(suite.cashFlowGap.startDay, 8);
   assert.equal(suite.cashFlowGap.endDay, 8);
-  assert.equal(suite.cashFlowGap.detail, "Tightest stretch is Jul 8.");
+  assert.equal(suite.cashFlowGap.detail, "Tightest stretch is July 8, 2026.");
 });
 
 test("Flow Score treats future bills as planned, not negative", () => {

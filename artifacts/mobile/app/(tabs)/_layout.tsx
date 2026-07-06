@@ -664,8 +664,8 @@ const styles = StyleSheet.create({
   learningBackdrop: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.62)",
-    padding: 16,
+    backgroundColor: "rgba(2,6,23,0.34)",
+    padding: 14,
   },
   learningDismissZone: {
     ...StyleSheet.absoluteFillObject,
@@ -674,8 +674,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 28,
     padding: 18,
-    marginBottom: 16,
-    backgroundColor: "rgba(15,23,42,0.97)",
+    marginBottom: 78,
+    backgroundColor: "rgba(15,23,42,0.88)",
     shadowColor: "#8b5cf6",
     shadowOpacity: 0.24,
     shadowRadius: 26,

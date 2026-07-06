@@ -38,10 +38,6 @@ interface ActivityItem {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const MONTH_NAMES = [
-  "Jan","Feb","Mar","Apr","May","Jun",
-  "Jul","Aug","Sep","Oct","Nov","Dec",
-];
 const MONTH_NAMES_LONG = [
   "January","February","March","April","May","June",
   "July","August","September","October","November","December",
@@ -70,7 +66,7 @@ const SOURCE_META: Record<ActivitySource, {
 
 function formatDate(dateStr: string) {
   const [y, m, d] = dateStr.split("-").map(Number);
-  return `${MONTH_NAMES[m - 1]} ${d}, ${y}`;
+  return `${MONTH_NAMES_LONG[m - 1]} ${d}, ${y}`;
 }
 
 function formatDateLong(dateStr: string) {
@@ -82,7 +78,7 @@ function groupByMonth(items: ActivityItem[]): { title: string; data: ActivityIte
   const map = new Map<string, ActivityItem[]>();
   for (const item of items) {
     const [y, m] = item.date.split("-");
-    const key = `${MONTH_NAMES[parseInt(m, 10) - 1]} ${y}`;
+    const key = `${MONTH_NAMES_LONG[parseInt(m, 10) - 1]} ${y}`;
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(item);
   }
@@ -317,7 +313,12 @@ export default function TransactionsScreen() {
             return day >= start && day <= end;
           })
           .reduce((sum, item) => sum + item.amount, 0);
-        return { label: `${MONTH_NAMES[month - 1]} ${start}${end === start ? "" : `–${end}`}`, total };
+        return {
+          label: end === start
+            ? `${MONTH_NAMES_LONG[month - 1]} ${start}, ${year}`
+            : `${MONTH_NAMES_LONG[month - 1]} ${start}, ${year} to ${MONTH_NAMES_LONG[month - 1]} ${end}, ${year}`,
+          total,
+        };
       });
     return { title: `${MONTH_NAMES_LONG[month - 1]} ${year}`, income, out, net: income - out, weeks };
   }, [allActivity]);

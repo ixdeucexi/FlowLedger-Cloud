@@ -1019,11 +1019,14 @@ function roundCurrency(value: number) {
   return Math.round(value * 100) / 100;
 }
 
-const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_FULL = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
 
-function formatMonthDay(input: Pick<AlgorithmSuiteInput, "month">, day: number | null | undefined) {
+function formatMonthDay(input: Pick<AlgorithmSuiteInput, "month" | "year">, day: number | null | undefined) {
   if (!day) return "the low point";
-  return `${MONTH_SHORT[input.month] ?? "Month"} ${day}`;
+  return `${MONTH_FULL[input.month] ?? "Month"} ${day}, ${input.year}`;
 }
 
 function capitalize(value: string) {

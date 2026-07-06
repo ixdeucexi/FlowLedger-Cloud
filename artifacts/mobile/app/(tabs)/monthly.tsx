@@ -16,7 +16,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
 import colors from "@/constants/colors";
-import type { Bill, BillDateMove, DecisionRecord, Transaction } from "@/context/BudgetContext";
+import type { Bill, BillDateMove, DecisionRecord, IncomeItem, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
@@ -27,19 +27,20 @@ import type { SnowballProjectionResult } from "@/lib/snowball";
 import { isValidDateInMonth } from "@/lib/schedule";
 
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
 
 type TabView = "bills" | "calendar";
 
 function formatShortDate(date: string) {
   const parsed = new Date(`${date}T12:00:00`);
   if (Number.isNaN(parsed.getTime())) return date;
-  return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return parsed.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 
 function formatLongDate(date: string) {
   const parsed = new Date(`${date}T12:00:00`);
   if (Number.isNaN(parsed.getTime())) return date;
-  return parsed.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+  return parsed.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 }
 
 function money(amount: number, sign: "auto" | "none" = "none") {
@@ -72,7 +73,7 @@ export default function MonthlyScreen() {
     removeBillOccurrenceMove, getBillDateMoveForOccurrence,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, settings,
     selectedYear, setSelectedYear, dashboardFilter, setDashboardFilter,
-    getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill,
+    getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill, updateIncome,
     getCashFlow, getMonthlyIncome, getDailyBalances, getIncomeOccurrencesInMonth,
     previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, finalizeBillPayment, getExtraPayment,
     updateDecision, deleteDecision,
@@ -93,6 +94,8 @@ export default function MonthlyScreen() {
   const [showSnowballResults, setShowSnowballResults] = useState(false);
   const [dueDayPickerBill, setDueDayPickerBill] = useState<Bill | null>(null);
   const [savingDueDay, setSavingDueDay] = useState(false);
+  const [incomeDatePicker, setIncomeDatePicker] = useState<{ income: IncomeItem; day: number; amount: number } | null>(null);
+  const [savingIncomeDate, setSavingIncomeDate] = useState(false);
   const [snowballModalVisible, setSnowballModalVisible] = useState(false);
   const [snowballPreview, setSnowballPreview] = useState<SnowballProjectionResult | null>(null);
   const [surplusPrompt, setSurplusPrompt] = useState<{ bill: Bill; budgeted: number; actual: number; paidDate: string } | null>(null);
@@ -116,6 +119,7 @@ export default function MonthlyScreen() {
     setTransactionDefaultDate(undefined);
   });
   useBackDismiss(Boolean(dueDayPickerBill), () => setDueDayPickerBill(null));
+  useBackDismiss(Boolean(incomeDatePicker), () => setIncomeDatePicker(null));
   useBackDismiss(Boolean(monthSummaryDetail), () => setMonthSummaryDetail(null));
   useBackDismiss(Boolean(editPlan), () => setEditPlan(null));
   useBackDismiss(showSnowballResults, () => setShowSnowballResults(false));
@@ -168,6 +172,10 @@ export default function MonthlyScreen() {
         setDueDayPickerBill(null);
         return true;
       }
+      if (incomeDatePicker) {
+        setIncomeDatePicker(null);
+        return true;
+      }
       if (txModalVisible) {
         setTxModalVisible(false);
         setEditTx(null);
@@ -204,7 +212,7 @@ export default function MonthlyScreen() {
     const onPopState = () => setSelectedDate(null);
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [dueDayPickerBill, editPlan, monthSummaryDetail, selectedDate, showSnowballResults, snowballModalVisible, snowballPreview, surplusPrompt, txModalVisible]);
+  }, [dueDayPickerBill, editPlan, incomeDatePicker, monthSummaryDetail, selectedDate, showSnowballResults, snowballModalVisible, snowballPreview, surplusPrompt, txModalVisible]);
 
   const monthBills = useMemo(() => getMonthlyBills(month, selectedYear), [getMonthlyBills, month, selectedYear]);
 
@@ -240,9 +248,9 @@ export default function MonthlyScreen() {
   const dailyBalances = useMemo(() => getDailyBalances(month, selectedYear), [getDailyBalances, month, selectedYear]);
   const incomeOccurrences = useMemo(() => {
     const occurrences = getIncomeOccurrencesInMonth(month, selectedYear);
-    const flat: { day: number; name: string; amount: number; frequency: string; incomeId: string }[] = [];
+    const flat: { day: number; name: string; amount: number; frequency: string; incomeId: string; income: IncomeItem }[] = [];
     occurrences.forEach(({ income: inc, days, effectiveAmount }) => {
-      days.forEach(day => flat.push({ day, name: inc.name, amount: effectiveAmount, frequency: inc.frequency, incomeId: inc.id }));
+      days.forEach(day => flat.push({ day, name: inc.name, amount: effectiveAmount, frequency: inc.frequency, incomeId: inc.id, income: inc }));
     });
     return flat.sort((a, b) => a.day - b.day);
   }, [getIncomeOccurrencesInMonth, month, selectedYear]);
@@ -301,7 +309,7 @@ export default function MonthlyScreen() {
       .filter(event => event.amount < -0.005)
       .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
       .slice(0, 3)
-      .map(event => `${event.name || event.kind} ${money(event.amount, "auto")} on ${MONTH_FULL[month].slice(0, 3)} ${event.day}`);
+      .map(event => `${event.name || event.kind} ${money(event.amount, "auto")} on ${MONTH_FULL[month]} ${event.day}, ${selectedYear}`);
     const reason = biggestOutflows.length
       ? `${MONTH_FULL[month]} drops to ${money(monthSummary.lowest)} on ${MONTH_FULL[month]} ${monthSummary.lowestDay} after ${biggestOutflows.join(", ")}.`
       : `${MONTH_FULL[month]} drops to ${money(monthSummary.lowest)} on ${MONTH_FULL[month]} ${monthSummary.lowestDay}, below your ${money(settings.safety_floor)} safety floor.`;
@@ -328,6 +336,10 @@ export default function MonthlyScreen() {
   const selectedForecastGroups = useMemo(
     () => groupForecastEvents(selectedForecastDay?.events ?? []),
     [selectedForecastDay]
+  );
+  const incomeForSelectedDay = useMemo(
+    () => selectedDay === null ? [] : incomeOccurrences.filter(item => item.day === selectedDay),
+    [incomeOccurrences, selectedDay],
   );
 
   const scheduledBillsForDay = useMemo(() => {
@@ -586,6 +598,25 @@ export default function MonthlyScreen() {
     }
   }, [savingDueDay, setCustomDueDay, month, selectedYear]);
 
+  const saveIncomeDateChange = useCallback(async (income: IncomeItem, day: number) => {
+    if (savingIncomeDate) return;
+    setSavingIncomeDate(true);
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const date = `${selectedYear}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      await updateIncome({
+        ...income,
+        next_payment_date: date,
+        start_date: income.start_date ?? date,
+      });
+      setIncomeDatePicker(null);
+    } catch (error) {
+      Alert.alert("Couldn’t save payday", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSavingIncomeDate(false);
+    }
+  }, [month, savingIncomeDate, selectedYear, updateIncome]);
+
 
   const handleQuickPaid = useCallback(async (billId: string, amount: number, isPaid: boolean) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -732,7 +763,7 @@ export default function MonthlyScreen() {
                 balance: 0,
                 interest_rate: 0,
               });
-              Alert.alert("Bill Added", `"${displayName}" has been added as a monthly recurring bill on ${MONTH_FULL[month].slice(0, 3)} ${dueDay}.`);
+              Alert.alert("Bill Added", `"${displayName}" has been added as a monthly recurring bill on ${MONTH_FULL[month]} ${dueDay}, ${selectedYear}.`);
             },
           },
         ]
@@ -987,7 +1018,7 @@ export default function MonthlyScreen() {
                       <Text style={[styles.entryMeta, { color: c.mutedForeground }]}>
                         {isWeekly
                           ? `Every ${WEEKDAY_NAMES[bill.day_of_week ?? 0]} · ×${occCount} this month · ${bill.category}`
-                          : `Due ${MONTH_FULL[month].slice(0, 3)} ${effectiveDueDay}${customDay !== undefined ? " *" : ""} · ${bill.category}`}
+                          : `Due ${MONTH_FULL[month]} ${effectiveDueDay}, ${selectedYear}${customDay !== undefined ? " *" : ""} · ${bill.category}`}
                       </Text>
                     </View>
                     <View style={styles.entryRight}>
@@ -1179,18 +1210,29 @@ export default function MonthlyScreen() {
                       </View>
                     ) : null}
 
-                    {selectedForecastGroups.some(group => group.key.includes("income")) ? (
+                    {incomeForSelectedDay.length > 0 ? (
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
                         <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Income</Text>
-                        {selectedForecastGroups
-                          .filter(group => group.key.includes("income"))
-                          .flatMap(group => group.events)
-                          .map(item => (
-                            <View key={`overlay-income-${item.event.id}`} style={styles.dayOverlayRow}>
-                              <Text numberOfLines={1} style={[styles.dayOverlayRowName, { color: c.foreground }]}>{item.label}</Text>
-                              <Text style={[styles.dayOverlayAmount, { color: c.success }]}>{item.amountLabel}</Text>
+                        {incomeForSelectedDay.map(item => (
+                          <View key={`overlay-income-${item.incomeId}-${item.day}`} style={styles.dayIncomeRow}>
+                            <View style={{ flex: 1 }}>
+                              <Text numberOfLines={1} style={[styles.dayOverlayRowName, { color: c.foreground }]}>{item.name}</Text>
+                              <Text style={[styles.dayBillMeta, { color: c.mutedForeground }]}>{FREQ_LABELS[item.frequency] ?? item.frequency}</Text>
                             </View>
-                          ))}
+                            <Text style={[styles.dayOverlayAmount, { color: c.success }]}>+${item.amount.toFixed(2)}</Text>
+                            <Pressable
+                              onPress={() => {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                setSelectedDate(null);
+                                setIncomeDatePicker({ income: item.income, day: item.day, amount: item.amount });
+                              }}
+                              style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.primary + "16", borderColor: c.primary + "35", opacity: pressed ? 0.74 : 1 }]}
+                            >
+                              <Feather name="calendar" size={13} color={c.primary} />
+                              <Text style={[styles.dayBillActionText, { color: c.primary }]}>Change date</Text>
+                            </Pressable>
+                          </View>
+                        ))}
                       </View>
                     ) : null}
 
@@ -1206,6 +1248,9 @@ export default function MonthlyScreen() {
                           const remaining = Math.max(0, amount - effectivePaid);
                           const movedIn = movedInByBillId.get(bill.id);
                           const canReschedule = bill.frequency === "monthly";
+                          const amtKey = `${bill.id}-overlay-amount`;
+                          const showAmt = editingAmounts[amtKey] !== undefined ? editingAmounts[amtKey] : amount.toFixed(2);
+                          const amountEditing = editingAmounts[amtKey] !== undefined;
                           const paidKey = `${bill.id}-overlay-paid`;
                           const showPaid = editingPaid[paidKey] !== undefined ? editingPaid[paidKey] : paid > 0 ? paid.toFixed(2) : "";
                           const paidEditing = editingPaid[paidKey] !== undefined;
@@ -1221,9 +1266,35 @@ export default function MonthlyScreen() {
                                 <PayStatus paid={isPaid} partial={isPartial} />
                               </View>
                               <View style={styles.dayBillNumbers}>
-                                <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
+                                <View style={[styles.dayBillNumberTile, styles.dayBillPaidTile, { backgroundColor: c.background + "66", borderColor: amountEditing ? c.primary + "80" : c.border }]}>
                                   <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Amount</Text>
-                                  <Text style={[styles.dayBillNumberValue, { color: c.foreground }]}>${amount.toFixed(2)}</Text>
+                                  <View style={styles.dayBillPaidInputRow}>
+                                    <Text style={[styles.dayBillPaidDollar, { color: c.foreground }]}>$</Text>
+                                    <TextInput
+                                      value={showAmt}
+                                      onChangeText={text => setEditingAmounts(current => ({ ...current, [amtKey]: text }))}
+                                      onFocus={() => setEditingAmounts(current => ({ ...current, [amtKey]: showAmt || amount.toFixed(2) }))}
+                                      onBlur={() => handleAmtBlur({ id: bill.id, amount: bill.amount }, amtKey)}
+                                      onEndEditing={() => handleAmtBlur({ id: bill.id, amount: bill.amount }, amtKey)}
+                                      onSubmitEditing={() => handleAmtBlur({ id: bill.id, amount: bill.amount }, amtKey)}
+                                      keyboardType="decimal-pad"
+                                      returnKeyType="done"
+                                      blurOnSubmit
+                                      placeholder="0.00"
+                                      placeholderTextColor={c.mutedForeground}
+                                      selectTextOnFocus
+                                      style={[styles.dayBillPaidInput, { color: c.foreground }]}
+                                    />
+                                    {amountEditing ? (
+                                      <Pressable
+                                        onPress={() => handleAmtBlur({ id: bill.id, amount: bill.amount }, amtKey)}
+                                        hitSlop={8}
+                                        style={[styles.dayBillPaidSave, { backgroundColor: c.primary + "22" }]}
+                                      >
+                                        <Feather name="check" size={12} color={c.primary} />
+                                      </Pressable>
+                                    ) : null}
+                                  </View>
                                 </View>
                                 <View style={[styles.dayBillNumberTile, styles.dayBillPaidTile, { backgroundColor: c.background + "66", borderColor: editingPaid[paidKey] !== undefined ? c.primary + "80" : c.border }]}>
                                   <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Paid</Text>
@@ -1398,7 +1469,7 @@ export default function MonthlyScreen() {
                     <View>
                       <Text style={[styles.pickerTitle, { color: c.foreground }]}>{dueDayPickerBill.name}</Text>
                       <Text style={[styles.pickerSub, { color: c.mutedForeground }]}>
-                        {MONTH_FULL[month]} {selectedYear} · Currently {MONTH_FULL[month].slice(0, 3)} {effectiveDay}
+                        {MONTH_FULL[month]} {selectedYear} · Currently {MONTH_FULL[month]} {effectiveDay}, {selectedYear}
                         {customDay !== undefined ? " (custom)" : " (default)"}
                       </Text>
                     </View>
@@ -1463,10 +1534,81 @@ export default function MonthlyScreen() {
                     >
                       <Feather name="rotate-ccw" size={14} color={c.mutedForeground} />
                       <Text style={[styles.pickerResetText, { color: c.mutedForeground }]}>
-                        Reset to default {MONTH_FULL[month].slice(0, 3)} {dueDayPickerBill.due_day}
+                        Reset to default {MONTH_FULL[month]} {dueDayPickerBill.due_day}, {selectedYear}
                       </Text>
                     </Pressable>
                   )}
+                </>
+              );
+            })()}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={incomeDatePicker !== null}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setIncomeDatePicker(null)}
+      >
+        <Pressable style={styles.pickerOverlay} onPress={() => setIncomeDatePicker(null)}>
+          <Pressable style={[styles.pickerSheet, { backgroundColor: c.background }]} onPress={e => e.stopPropagation()}>
+            {incomeDatePicker && (() => {
+              const daysInMonth = new Date(selectedYear, month + 1, 0).getDate();
+              const effectiveDay = incomeDatePicker.day;
+              return (
+                <>
+                  <View style={styles.pickerHandle} />
+                  <View style={styles.pickerHeader}>
+                    <View>
+                      <Text style={[styles.pickerTitle, { color: c.foreground }]}>{incomeDatePicker.income.name}</Text>
+                      <Text style={[styles.pickerSub, { color: c.mutedForeground }]}>
+                        {MONTH_FULL[month]} {selectedYear} · Currently {MONTH_FULL[month]} {effectiveDay}, {selectedYear}
+                      </Text>
+                    </View>
+                    <Pressable onPress={() => setIncomeDatePicker(null)} hitSlop={8}>
+                      <Feather name="x" size={20} color={c.mutedForeground} />
+                    </Pressable>
+                  </View>
+
+                  <Text style={[styles.pickerLabel, { color: c.mutedForeground }]}>
+                    Select the new payday for this income schedule
+                  </Text>
+
+                  <View style={styles.pickerCalDowRow}>
+                    {["Su","Mo","Tu","We","Th","Fr","Sa"].map(d => (
+                      <Text key={d} style={[styles.pickerCalDowLabel, { color: c.mutedForeground }]}>{d}</Text>
+                    ))}
+                  </View>
+
+                  <View style={styles.pickerDayGrid}>
+                    {[
+                      ...Array(new Date(selectedYear, month, 1).getDay()).fill(null),
+                      ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+                    ].map((day, idx) => {
+                      if (day === null) return <View key={`income-empty-${idx}`} style={styles.pickerDayBtn} />;
+                      const isCurrent = day === effectiveDay;
+                      return (
+                        <Pressable
+                          key={day}
+                          disabled={savingIncomeDate}
+                          onPress={() => saveIncomeDateChange(incomeDatePicker.income, day)}
+                          style={({ pressed }) => [
+                            styles.pickerDayBtn,
+                            {
+                              backgroundColor: isCurrent ? c.primary : c.muted,
+                              opacity: pressed ? 0.7 : 1,
+                              borderRadius: 8,
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.pickerDayText, { color: isCurrent ? c.primaryForeground : c.foreground }]}>
+                            {day}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
                 </>
               );
             })()}
@@ -1780,6 +1922,7 @@ const styles = StyleSheet.create({
   dayOverlayGroup: { gap: 5 },
   dayOverlayGroupTitle: { fontSize: 11, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.6 },
   dayOverlayRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: 30 },
+  dayIncomeRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: 42, flexWrap: "wrap" },
   dayOverlayRowName: { flex: 1, fontSize: 13, fontFamily: "Inter_600SemiBold" },
   dayOverlayAmount: { fontSize: 13, fontFamily: "Inter_700Bold" },
   dayBillCard: { borderWidth: 1, borderRadius: 16, padding: 11, gap: 10 },
