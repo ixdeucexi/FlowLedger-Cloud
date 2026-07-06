@@ -2,6 +2,7 @@ import React from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import type { DailyBalance, DecisionRecord, Goal, GoalExpense, Transaction } from "@/context/BudgetContext";
+import { useColors } from "@/hooks/useColors";
 import { scenarioDates } from "@/lib/decisions";
 
 const DAY_NAMES = ["S", "M", "T", "W", "T", "F", "S"];
@@ -41,7 +42,15 @@ function fmt(n: number) {
   return abs.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
-function chipPalette(kind: ChipKind) {
+function chipPalette(kind: ChipKind, isDark: boolean) {
+  if (!isDark) {
+    if (kind === "income") return { bg: "#dcfce7", border: "#22c55e", text: "#166534" };
+    if (kind === "bill") return { bg: "#fef3c7", border: "#f59e0b", text: "#92400e" };
+    if (kind === "goal") return { bg: "#f3e8ff", border: "#a855f7", text: "#6b21a8" };
+    if (kind === "plan") return { bg: "#dbeafe", border: "#3b82f6", text: "#1d4ed8" };
+    if (kind === "risk") return { bg: "#ffe4e6", border: "#fb7185", text: "#be123c" };
+    return { bg: "#ede9fe", border: "#8b5cf6", text: "#5b21b6" };
+  }
   if (kind === "income") return { bg: "rgba(34,197,94,0.18)", border: "rgba(34,197,94,0.78)", text: "#bbf7d0" };
   if (kind === "bill") return { bg: "rgba(245,158,11,0.18)", border: "rgba(245,158,11,0.82)", text: "#fde68a" };
   if (kind === "goal") return { bg: "rgba(168,85,247,0.20)", border: "rgba(168,85,247,0.82)", text: "#e9d5ff" };
@@ -61,6 +70,40 @@ export function CalendarView({
   decisions = [],
   safetyFloor = 200,
 }: CalendarViewProps) {
+  const c = useColors();
+  const calendarTheme = c.isDark
+    ? {
+        surface: CALENDAR.surface,
+        cell: CALENDAR.cell,
+        selectedCell: CALENDAR.selectedCell,
+        selectedBorder: "rgba(216,180,254,0.75)",
+        todayCell: "rgba(30,41,59,0.72)",
+        line: CALENDAR.line,
+        text: CALENDAR.text,
+        muted: CALENDAR.muted,
+        faded: CALENDAR.faded,
+        today: CALENDAR.today,
+        green: CALENDAR.green,
+        amber: CALENDAR.amber,
+        red: CALENDAR.red,
+        shadow: "#7c3aed",
+      }
+    : {
+        surface: "rgba(255,255,255,0.90)",
+        cell: "rgba(255,255,255,0.86)",
+        selectedCell: "rgba(37,99,235,0.10)",
+        selectedBorder: "rgba(37,99,235,0.42)",
+        todayCell: "rgba(239,246,255,0.98)",
+        line: "rgba(15,23,42,0.10)",
+        text: c.foreground,
+        muted: c.mutedForeground,
+        faded: "#94a3b8",
+        today: c.primary,
+        green: c.success,
+        amber: c.warning,
+        red: c.destructive,
+        shadow: "#93c5fd",
+      };
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const today = new Date();
@@ -113,10 +156,19 @@ export function CalendarView({
     `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 
   return (
-    <View style={styles.container}>
-      <View style={styles.dayNames}>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: calendarTheme.surface,
+          borderColor: c.isDark ? "rgba(168,85,247,0.22)" : "rgba(15,23,42,0.10)",
+          shadowColor: calendarTheme.shadow,
+        },
+      ]}
+    >
+      <View style={[styles.dayNames, { borderBottomColor: calendarTheme.line }]}>
         {DAY_NAMES.map((d, index) => (
-          <Text key={`${d}-${index}`} style={styles.dayName}>{d}</Text>
+          <Text key={`${d}-${index}`} style={[styles.dayName, { color: calendarTheme.muted }]}>{d}</Text>
         ))}
       </View>
 
@@ -127,9 +179,9 @@ export function CalendarView({
         style={hasSixRows ? styles.gridScroll : undefined}
         contentContainerStyle={hasSixRows ? styles.gridScrollContent : undefined}
       >
-      <View style={styles.grid}>
+      <View style={[styles.grid, { backgroundColor: calendarTheme.surface }]}>
         {cells.map((day, i) => {
-          if (!day) return <View key={`empty-${i}`} style={[styles.cellOuter, styles.emptyCell]} />;
+          if (!day) return <View key={`empty-${i}`} style={[styles.cellOuter, styles.emptyCell, { borderColor: calendarTheme.line }]} />;
           const ds = dateStr(day);
           const isToday = ds === todayStr;
           const isSelected = ds === selectedDate;
@@ -165,17 +217,35 @@ export function CalendarView({
               onPress={() => onDayPress(ds)}
               style={({ pressed }) => [
                 styles.cellOuter,
+                { borderColor: calendarTheme.line },
                 { opacity: pressed ? 0.72 : 1 },
               ]}
             >
-              <View style={[styles.cellInner, isSelected ? styles.selectedCell : null, isToday ? styles.todayCell : null]}>
+              <View
+                style={[
+                  styles.cellInner,
+                  { backgroundColor: calendarTheme.cell },
+                  isToday ? { backgroundColor: calendarTheme.todayCell } : null,
+                  isSelected
+                    ? {
+                        backgroundColor: calendarTheme.selectedCell,
+                        borderWidth: 1,
+                        borderColor: calendarTheme.selectedBorder,
+                        shadowColor: c.primary,
+                        shadowOffset: { width: 0, height: 0 },
+                        shadowOpacity: c.isDark ? 0.42 : 0.14,
+                        shadowRadius: 14,
+                      }
+                    : null,
+                ]}
+              >
                 <View style={styles.dayTopRow}>
-                  <View style={isToday ? styles.todayCircle : undefined}>
+                  <View style={isToday ? [styles.todayCircle, { backgroundColor: calendarTheme.today }] : undefined}>
                     <Text
                       style={[
                         styles.dayNum,
                         {
-                          color: isToday ? "#ffffff" : CALENDAR.text,
+                          color: isToday ? "#ffffff" : calendarTheme.text,
                           fontFamily: isToday || isSelected ? "Inter_700Bold" : "Inter_500Medium",
                         },
                       ]}
@@ -187,7 +257,7 @@ export function CalendarView({
                     <Text
                       style={[
                         styles.balanceText,
-                        { color: db.balance >= safetyFloor ? CALENDAR.green : db.balance < 0 ? CALENDAR.red : CALENDAR.amber },
+                        { color: db.balance >= safetyFloor ? calendarTheme.green : db.balance < 0 ? calendarTheme.red : calendarTheme.amber },
                       ]}
                       numberOfLines={1}
                     >
@@ -198,14 +268,14 @@ export function CalendarView({
 
                 <View style={styles.eventStack}>
                   {visibleChips.map((chip, index) => {
-                    const palette = chipPalette(chip.kind);
+                    const palette = chipPalette(chip.kind, c.isDark);
                     return (
                       <View key={`${chip.label}-${index}`} style={[styles.eventChip, { backgroundColor: palette.bg, borderColor: palette.border }]}>
                         <Text style={[styles.eventChipText, { color: palette.text }]} numberOfLines={1}>{chip.label}</Text>
                       </View>
                     );
                   })}
-                  {hiddenCount > 0 ? <Text style={styles.moreText}>+{hiddenCount} more</Text> : null}
+                  {hiddenCount > 0 ? <Text style={[styles.moreText, { color: calendarTheme.faded }]}>+{hiddenCount} more</Text> : null}
                 </View>
               </View>
             </Pressable>
@@ -219,11 +289,11 @@ export function CalendarView({
           { label: "Bills", color: "#f59e0b" },
           { label: "Spending", color: "#8b5cf6" },
           { label: "Plans", color: "#3b82f6" },
-          { label: "Risk", color: CALENDAR.red },
+          { label: "Risk", color: calendarTheme.red },
         ].map(item => (
           <View key={item.label} style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-            <Text style={styles.legendText}>{item.label}</Text>
+            <Text style={[styles.legendText, { color: calendarTheme.muted }]}>{item.label}</Text>
           </View>
         ))}
       </View>

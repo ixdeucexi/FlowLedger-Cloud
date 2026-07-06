@@ -857,11 +857,25 @@ export default function MonthlyScreen() {
         </View>
       </View>
 
-      <View style={styles.calendarMonthBar}>
+      <View
+        style={[
+          styles.calendarMonthBar,
+          {
+            backgroundColor: c.isDark ? "rgba(2,6,23,0.32)" : "rgba(255,255,255,0.82)",
+            borderColor: c.isDark ? "rgba(148,163,184,0.12)" : "rgba(15,23,42,0.10)",
+          },
+        ]}
+      >
         <Pressable
           onPress={() => changeMonth(-1)}
           hitSlop={10}
-          style={({ pressed }) => [styles.monthArrowBtn, { opacity: pressed ? 0.55 : 1 }]}
+          style={({ pressed }) => [
+            styles.monthArrowBtn,
+            {
+              backgroundColor: c.isDark ? "rgba(15,23,42,0.58)" : "rgba(226,232,240,0.85)",
+              opacity: pressed ? 0.55 : 1,
+            },
+          ]}
         >
           <Feather name="chevron-left" size={24} color={c.mutedForeground} />
         </Pressable>
@@ -874,7 +888,13 @@ export default function MonthlyScreen() {
         <Pressable
           onPress={() => changeMonth(1)}
           hitSlop={10}
-          style={({ pressed }) => [styles.monthArrowBtn, { opacity: pressed ? 0.55 : 1 }]}
+          style={({ pressed }) => [
+            styles.monthArrowBtn,
+            {
+              backgroundColor: c.isDark ? "rgba(15,23,42,0.58)" : "rgba(226,232,240,0.85)",
+              opacity: pressed ? 0.55 : 1,
+            },
+          ]}
         >
           <Feather name="chevron-right" size={24} color={c.mutedForeground} />
         </Pressable>
@@ -1177,7 +1197,13 @@ export default function MonthlyScreen() {
             >
               <Pressable style={styles.dayOverlayBackdrop} onPress={() => setSelectedDate(null)}>
                 <Pressable
-                  style={[styles.dayOverlayCard, { backgroundColor: "rgba(8,13,30,0.96)", borderColor: "rgba(148,163,184,0.20)" }]}
+                  style={[
+                    styles.dayOverlayCard,
+                    {
+                      backgroundColor: c.isDark ? "rgba(8,13,30,0.96)" : "rgba(255,255,255,0.98)",
+                      borderColor: c.isDark ? "rgba(148,163,184,0.20)" : "rgba(15,23,42,0.12)",
+                    },
+                  ]}
                   onPress={e => e.stopPropagation()}
                 >
                   <View style={styles.dayOverlayHeader}>

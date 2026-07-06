@@ -519,11 +519,27 @@ export default function TransactionsScreen() {
           </Text>
         </View>
         <View style={styles.monthlySummaryStats}>
-          <View style={styles.monthlySummaryStat}>
+          <View
+            style={[
+              styles.monthlySummaryStat,
+              {
+                backgroundColor: c.isDark ? "rgba(15,23,42,0.42)" : "rgba(248,250,252,0.96)",
+                borderColor: c.isDark ? "rgba(148,163,184,0.10)" : "rgba(15,23,42,0.08)",
+              },
+            ]}
+          >
             <Text style={[styles.monthlySummaryValue, { color: c.success }]}>${monthlySummary.income.toFixed(0)}</Text>
             <Text style={[styles.monthlySummaryLabel, { color: c.mutedForeground }]}>Income</Text>
           </View>
-          <View style={styles.monthlySummaryStat}>
+          <View
+            style={[
+              styles.monthlySummaryStat,
+              {
+                backgroundColor: c.isDark ? "rgba(15,23,42,0.42)" : "rgba(248,250,252,0.96)",
+                borderColor: c.isDark ? "rgba(148,163,184,0.10)" : "rgba(15,23,42,0.08)",
+              },
+            ]}
+          >
             <Text style={[styles.monthlySummaryValue, { color: c.destructive }]}>${monthlySummary.out.toFixed(0)}</Text>
             <Text style={[styles.monthlySummaryLabel, { color: c.mutedForeground }]}>Bills & spending</Text>
           </View>
@@ -858,7 +874,7 @@ const styles = StyleSheet.create({
   monthlySummaryTitle: { fontSize: 17, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
   monthlySummaryNet: { fontSize: 22, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.5 },
   monthlySummaryStats: { flexDirection: "row", gap: 10, marginBottom: 10 },
-  monthlySummaryStat: { flex: 1, borderRadius: 14, backgroundColor: "rgba(15,23,42,0.42)", paddingHorizontal: 10, paddingVertical: 9 },
+  monthlySummaryStat: { flex: 1, borderRadius: 14, backgroundColor: "rgba(15,23,42,0.42)", borderWidth: 1, paddingHorizontal: 10, paddingVertical: 9 },
   monthlySummaryValue: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
   monthlySummaryLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.5, marginTop: 2 },
   weekRows: { borderTopWidth: 1, paddingTop: 8, gap: 5 },
