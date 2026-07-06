@@ -1,16 +1,11 @@
-import { useColorScheme } from "react-native";
-
 import colors from "@/constants/colors";
-import { useThemeMode } from "@/context/ThemeContext";
+import { useEffectiveThemeMode } from "@/hooks/useEffectiveThemeMode";
 
 export function useColors() {
-  const scheme = useColorScheme();
-  const { themeMode } = useThemeMode();
-
-  const effective = themeMode === "auto" ? scheme : themeMode;
+  const effective = useEffectiveThemeMode();
   const palette =
     effective === "dark" && "dark" in colors
       ? colors.dark
       : colors.light;
-  return { ...palette, radius: colors.radius };
+  return { ...palette, radius: colors.radius, mode: effective, isDark: effective === "dark" };
 }

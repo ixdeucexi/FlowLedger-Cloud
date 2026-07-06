@@ -9,8 +9,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
-import { FlowWaveBackground } from "@/components/FlowWaveBackground";
+import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { useAuth } from "@/context/AuthContext";
+import { useColors } from "@/hooks/useColors";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 
 function GoogleMark() {
@@ -30,6 +31,7 @@ export default function LoginScreen() {
   const { signIn, signUp, signInWithGoogle } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const colors = useColors();
 
   const [mode,     setMode]     = useState<"signin" | "signup">("signin");
   const [email,    setEmail]    = useState("");
@@ -91,8 +93,8 @@ export default function LoginScreen() {
   };
 
   return (
-    <LinearGradient colors={["#0a0e1a", "#0f172a"]} style={{ flex: 1 }}>
-      <FlowWaveBackground variant="purple" intensity="soft" />
+    <LinearGradient colors={colors.isDark ? ["#0a0e1a", "#0f172a"] : ["#f8fafc", "#eef2ff"]} style={{ flex: 1 }}>
+      <PremiumBackdrop variant="purple" />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -106,21 +108,21 @@ export default function LoginScreen() {
             <View style={styles.logoRing}>
               <Feather name="bar-chart-2" size={32} color="#22c55e" />
             </View>
-            <Text style={styles.appName}>FlowLedger</Text>
-            <Text style={styles.tagline}>Your money, clearly.</Text>
+            <Text style={[styles.appName, { color: colors.foreground }]}>FlowLedger</Text>
+            <Text style={[styles.tagline, { color: colors.mutedForeground }]}>Your money, clearly.</Text>
           </View>
 
           {/* Card */}
-          <View style={styles.card}>
+          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
             {/* Tab switcher */}
-            <View style={styles.tabs}>
+            <View style={[styles.tabs, { backgroundColor: colors.muted }]}>
               {(["signin", "signup"] as const).map(m => (
                 <Pressable
                   key={m}
-                  style={[styles.tab, mode === m && styles.tabActive]}
+                  style={[styles.tab, mode === m && { backgroundColor: colors.isDark ? "#1e293b" : "#ffffff" }]}
                   onPress={() => { setMode(m); setError(null); }}
                 >
-                  <Text style={[styles.tabText, mode === m && styles.tabTextActive]}>
+                  <Text style={[styles.tabText, { color: colors.mutedForeground }, mode === m && { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}>
                     {m === "signin" ? "Sign In" : "Create Account"}
                   </Text>
                 </Pressable>
@@ -129,11 +131,11 @@ export default function LoginScreen() {
 
             {/* Email */}
             <View style={styles.fieldWrap}>
-              <Text style={styles.label}>Email</Text>
-              <View style={styles.inputRow}>
+              <Text style={[styles.label, { color: colors.mutedForeground }]}>Email</Text>
+              <View style={[styles.inputRow, { backgroundColor: colors.isDark ? "#0f172a" : "#f8fafc", borderColor: colors.border }]}>
                 <Feather name="mail" size={16} color="#64748b" style={styles.inputIcon} />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: colors.foreground }]}
                   value={email}
                   onChangeText={setEmail}
                   placeholder="you@example.com"
@@ -147,11 +149,11 @@ export default function LoginScreen() {
 
             {/* Password */}
             <View style={styles.fieldWrap}>
-              <Text style={styles.label}>Password</Text>
-              <View style={styles.inputRow}>
+              <Text style={[styles.label, { color: colors.mutedForeground }]}>Password</Text>
+              <View style={[styles.inputRow, { backgroundColor: colors.isDark ? "#0f172a" : "#f8fafc", borderColor: colors.border }]}>
                 <Feather name="lock" size={16} color="#64748b" style={styles.inputIcon} />
                 <TextInput
-                  style={[styles.input, { flex: 1 }]}
+                  style={[styles.input, { flex: 1, color: colors.foreground }]}
                   value={password}
                   onChangeText={setPassword}
                   placeholder="••••••••"
@@ -168,11 +170,11 @@ export default function LoginScreen() {
             {/* Confirm password (signup only) */}
             {mode === "signup" && (
               <View style={styles.fieldWrap}>
-                <Text style={styles.label}>Confirm Password</Text>
-                <View style={styles.inputRow}>
+                <Text style={[styles.label, { color: colors.mutedForeground }]}>Confirm Password</Text>
+                <View style={[styles.inputRow, { backgroundColor: colors.isDark ? "#0f172a" : "#f8fafc", borderColor: colors.border }]}>
                   <Feather name="lock" size={16} color="#64748b" style={styles.inputIcon} />
                   <TextInput
-                    style={[styles.input, { flex: 1 }]}
+                    style={[styles.input, { flex: 1, color: colors.foreground }]}
                     value={confirm}
                     onChangeText={setConfirm}
                     placeholder="••••••••"
@@ -205,12 +207,12 @@ export default function LoginScreen() {
             </Pressable>
 
             <Pressable
-              style={({ pressed }) => [styles.googleBtn, { opacity: pressed || loading ? 0.85 : 1 }]}
+              style={({ pressed }) => [styles.googleBtn, { backgroundColor: colors.isDark ? "#0f172a" : "#ffffff", borderColor: colors.border, opacity: pressed || loading ? 0.85 : 1 }]}
               onPress={handleGoogle}
               disabled={loading}
             >
               <GoogleMark />
-              <Text style={styles.googleBtnText}>Continue with Google</Text>
+              <Text style={[styles.googleBtnText, { color: colors.foreground }]}>Continue with Google</Text>
             </Pressable>
 
             {mode === "signup" && (

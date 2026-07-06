@@ -18,6 +18,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PwaInstallPrompt } from "@/components/PwaInstallPrompt";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider, useThemeMode } from "@/context/ThemeContext";
+import { useColors } from "@/hooks/useColors";
 import { supabase } from "@/lib/supabase";
 
 SplashScreen.preventAutoHideAsync();
@@ -71,19 +72,21 @@ function AuthObserver() {
 }
 
 function StartupScreen({ style }: { style?: StyleProp<ViewStyle> } = {}) {
+  const colors = useColors();
   return (
-    <Animated.View style={[styles.startup, style]}>
+    <Animated.View style={[styles.startup, { backgroundColor: colors.background }, style]}>
       <Image
         source={require("../assets/images/startup_f_transparent.png")}
         style={styles.startupIcon}
         resizeMode="contain"
       />
-      <Text style={styles.startupTitle}>FlowLedger Algo</Text>
+      <Text style={[styles.startupTitle, { color: colors.foreground }]}>FlowLedger Algo</Text>
     </Animated.View>
   );
 }
 
 function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSplash: () => void }) {
+  const colors = useColors();
   const { loading: authLoading } = useAuth();
   const { ready: themeReady } = useThemeMode();
   const router = useRouter();
@@ -148,7 +151,7 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
   if (!appReady) return <StartupScreen />;
 
   return (
-    <View style={styles.transitionRoot}>
+    <View style={[styles.transitionRoot, { backgroundColor: colors.background }]}>
       <Animated.View style={[styles.transitionContent, { opacity: appOpacity }]}>
         <AuthObserver />
         <GestureHandlerRootView style={{ flex: 1 }}>

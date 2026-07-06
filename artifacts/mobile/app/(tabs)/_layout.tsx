@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Tabs, useRouter, useSegments } from "expo-router";
 import React from "react";
-import { Animated, Easing, Image, Modal, Platform, Pressable, StyleSheet, StyleProp, Text, View, ViewStyle, useColorScheme } from "react-native";
+import { Animated, Easing, Image, Modal, Platform, Pressable, StyleSheet, StyleProp, Text, View, ViewStyle } from "react-native";
 
 import { useAuth } from "@/context/AuthContext";
 import { BudgetProvider, useBudget } from "@/context/BudgetContext";
@@ -11,6 +11,7 @@ import { DecisionDueModal } from "@/components/DecisionDueModal";
 import { FloLogo } from "@/components/FloLogo";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
+import { useEffectiveThemeMode } from "@/hooks/useEffectiveThemeMode";
 import {
   clearLearningTour,
   LEARNING_TOUR_EVENT,
@@ -86,7 +87,7 @@ const DEMO_TOUR_STEPS = [
 function BudgetLoadingScreen({ style }: { style?: StyleProp<ViewStyle> } = {}) {
   const colors = useColors();
   return (
-    <Animated.View style={[styles.loadingScreen, style]}>
+    <Animated.View style={[styles.loadingScreen, { backgroundColor: colors.background }, style]}>
       <Image
         source={require("../../assets/images/startup_f_transparent.png")}
         style={styles.loadingLogo}
@@ -101,7 +102,7 @@ function BudgetLoadingScreen({ style }: { style?: StyleProp<ViewStyle> } = {}) {
 function BudgetLoadErrorScreen({ message, onRetry }: { message: string; onRetry: () => void }) {
   const colors = useColors();
   return (
-    <View style={styles.loadingScreen}>
+    <View style={[styles.loadingScreen, { backgroundColor: colors.background }]}>
       <Image
         source={require("../../assets/images/startup_f_transparent.png")}
         style={styles.loadingLogo}
@@ -354,8 +355,8 @@ function TabContent() {
   const [showLoadingOverlay, setShowLoadingOverlay] = React.useState(true);
   const loadingOpacity = React.useRef(new Animated.Value(1)).current;
   const tabsOpacity = React.useRef(new Animated.Value(0)).current;
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const themeMode = useEffectiveThemeMode();
+  const isDark = themeMode === "dark";
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
   const isIosWeb = isWeb && typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -396,7 +397,7 @@ function TabContent() {
   if (loadError) return <BudgetLoadErrorScreen message={loadError} onRetry={retryBudgetLoad} />;
 
   return (
-    <View style={styles.tabTransitionRoot}>
+    <View style={[styles.tabTransitionRoot, { backgroundColor: colors.background }]}>
       <Animated.View style={[styles.tabTransitionContent, { opacity: tabsOpacity }]}>
         <Tabs
           backBehavior="history"
@@ -405,7 +406,7 @@ function TabContent() {
             animation: "none",
             freezeOnBlur: !isWeb,
             lazy: true,
-            tabBarActiveTintColor: "#8b5cf6",
+            tabBarActiveTintColor: isDark ? "#8b5cf6" : colors.primary,
             tabBarInactiveTintColor: colors.mutedForeground,
             headerShown: false,
             tabBarLabelStyle: {
@@ -426,14 +427,14 @@ function TabContent() {
               borderTopRightRadius: 28,
               borderBottomLeftRadius: 0,
               borderBottomRightRadius: 0,
-              backgroundColor: isIOS ? "transparent" : "rgba(2,6,23,0.90)",
+              backgroundColor: isIOS ? "transparent" : isDark ? "rgba(2,6,23,0.90)" : "rgba(255,255,255,0.96)",
               borderWidth: 1,
               borderTopWidth: 1,
               borderBottomWidth: 0,
               borderLeftWidth: 0,
               borderRightWidth: 0,
-              borderColor: "rgba(148,163,184,0.18)",
-              shadowColor: "#7c3aed",
+              borderColor: isDark ? "rgba(148,163,184,0.18)" : "rgba(15,23,42,0.10)",
+              shadowColor: isDark ? "#7c3aed" : "#94a3b8",
               shadowOffset: { width: 0, height: 14 },
               shadowOpacity: 0.22,
               shadowRadius: 26,
@@ -457,7 +458,16 @@ function TabContent() {
                   style={StyleSheet.absoluteFill}
                 />
               ) : isWeb ? (
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(2,6,23,0.96)", borderTopLeftRadius: 28, borderTopRightRadius: 28 }]} />
+                <View
+                  style={[
+                    StyleSheet.absoluteFill,
+                    {
+                      backgroundColor: isDark ? "rgba(2,6,23,0.96)" : "rgba(255,255,255,0.96)",
+                      borderTopLeftRadius: 28,
+                      borderTopRightRadius: 28,
+                    },
+                  ]}
+                />
               ) : null,
           }}
         >

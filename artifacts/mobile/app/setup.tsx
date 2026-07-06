@@ -7,12 +7,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AccountModal } from "@/components/AccountModal";
 import { AddBillModal } from "@/components/AddBillModal";
-import { FlowWaveBackground } from "@/components/FlowWaveBackground";
 import { FloLogo } from "@/components/FloLogo";
+import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { GoalModal } from "@/components/GoalModal";
 import { IncomeModal } from "@/components/IncomeModal";
 import { useAuth } from "@/context/AuthContext";
 import { BudgetProvider, useBudget, type Account, type Bill, type Goal, type IncomeItem } from "@/context/BudgetContext";
+import { useColors } from "@/hooks/useColors";
 import {
   buildSetupCompletionMessage,
   buildPersonalizedSetupKeys,
@@ -91,6 +92,7 @@ function SetupWizard() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const colors = useColors();
   const {
     accounts, incomes, bills, goals, settings,
     addAccount, updateAccount, reconcileAccount,
@@ -520,8 +522,8 @@ function SetupWizard() {
   };
 
   return (
-    <LinearGradient colors={["#050711", "#0a0d1a", "#111827"]} style={styles.root}>
-      <FlowWaveBackground variant="purple" intensity="soft" />
+    <LinearGradient colors={colors.isDark ? ["#050711", "#0a0d1a", "#111827"] : ["#f8fafc", "#eef2ff", "#f8fafc"]} style={styles.root}>
+      <PremiumBackdrop variant="purple" />
       <ScrollView
         contentContainerStyle={[
           styles.content,
