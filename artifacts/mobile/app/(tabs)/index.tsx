@@ -1,5 +1,4 @@
 import { Feather } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -185,32 +184,6 @@ export default function DashboardScreen() {
 
   const frontRotate = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] });
   const backRotate  = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ["180deg", "360deg"] });
-  const stormAnim = useRef(new Animated.Value(0)).current;
-  const lightningAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const stormLoop = Animated.loop(
-      Animated.timing(stormAnim, {
-        toValue: 1,
-        duration: 14000,
-        useNativeDriver: true,
-      }),
-    );
-    const lightningLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(lightningAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
-        Animated.timing(lightningAnim, { toValue: 0, duration: 1700, useNativeDriver: true }),
-        Animated.timing(lightningAnim, { toValue: 1, duration: 180, useNativeDriver: true }),
-        Animated.timing(lightningAnim, { toValue: 0, duration: 5200, useNativeDriver: true }),
-      ]),
-    );
-    stormLoop.start();
-    lightningLoop.start();
-    return () => {
-      stormLoop.stop();
-      lightningLoop.stop();
-    };
-  }, [lightningAnim, stormAnim]);
 
   useEffect(() => {
     let cancelled = false;
@@ -221,13 +194,6 @@ export default function DashboardScreen() {
       cancelled = true;
     };
   }, [user?.id]);
-
-  const stormShift = stormAnim.interpolate({ inputRange: [0, 1], outputRange: [-70, 90] });
-  const stormLift = stormAnim.interpolate({ inputRange: [0, 1], outputRange: [16, -22] });
-  const lightningOpacity = lightningAnim.interpolate({
-    inputRange: [0, 0.35, 0.5, 0.68, 1],
-    outputRange: [0.05, 0.32, 0.1, 0.44, 0.06],
-  });
 
   const now          = new Date();
   const currentMonth = now.getMonth();
@@ -1118,30 +1084,7 @@ export default function DashboardScreen() {
     <View
       style={[styles.screen, styles.dashboardStage, styles.content, isCommandWide && styles.contentWide, { paddingTop: dashboardTopPadding, paddingBottom: dashboardBottomPadding }]}
     >
-      <View pointerEvents="none" style={styles.stormBackdrop}>
-        <PremiumBackdrop variant="purple" />
-        <LinearGradient
-          colors={["rgba(3,7,18,0.32)", "rgba(8,13,32,0.10)", "rgba(15,23,42,0.16)"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.stormBase}
-        />
-        <Animated.View
-          style={[
-            styles.lightningBeam,
-            styles.lightningBeamOne,
-            { opacity: lightningOpacity, transform: [{ translateX: stormShift }, { rotate: "-24deg" }] },
-          ]}
-        />
-        <Animated.View
-          style={[
-            styles.lightningBeam,
-            styles.lightningBeamTwo,
-            { opacity: lightningOpacity, transform: [{ translateX: stormLift }, { rotate: "18deg" }] },
-          ]}
-        />
-        <View style={styles.stormGrid} />
-      </View>
+      <PremiumBackdrop variant="purple" />
       {isCommandWide ? (
         <View style={[styles.referenceDesktopRail, { top: dashboardTopPadding }]}>
           <View style={styles.referenceRailLogoRow}>
@@ -2183,12 +2126,6 @@ const styles = StyleSheet.create({
   referenceRailFlo: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 14, borderRadius: 18, borderWidth: 1, borderColor: "rgba(34,211,238,0.16)", backgroundColor: "rgba(15,23,42,0.70)", padding: 11 },
   referenceRailFloTitle: { color: "#e0f2fe", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   referenceRailFloSub: { color: "#94a3b8", fontSize: 10, fontFamily: "Inter_500Medium" },
-  stormBackdrop: { position: "absolute", top: 0, left: 0, right: 0, height: 820 },
-  stormBase: { ...StyleSheet.absoluteFillObject },
-  lightningBeam: { position: "absolute", height: 2, borderRadius: 2, backgroundColor: "#93c5fd", shadowColor: "#38bdf8", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.9, shadowRadius: 14 },
-  lightningBeamOne: { top: 116, left: -40, width: 300 },
-  lightningBeamTwo: { top: 360, right: -80, width: 260, backgroundColor: "#a78bfa" },
-  stormGrid: { position: "absolute", top: 0, left: -20, right: -20, height: 740, borderWidth: 1, borderColor: "rgba(148,163,184,0.05)", opacity: 0.55 },
   dashboardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 14, marginBottom: 18 },
   brandLockup: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
   brandMark: { width: 48, height: 48, borderRadius: 17, alignItems: "center", justifyContent: "center", overflow: "hidden", borderWidth: 1, borderColor: "rgba(96,165,250,0.35)", backgroundColor: "#020617", shadowColor: "#38bdf8", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 18, elevation: 9 },
