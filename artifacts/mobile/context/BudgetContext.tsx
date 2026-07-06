@@ -74,6 +74,15 @@ export interface MonthlyOverride {
   paid_date?: string;
 }
 
+function billBaseAmountForMonth(bill: Bill, override?: MonthlyOverride): number {
+  const customAmount = override?.custom_amount;
+  if (customAmount === undefined || !Number.isFinite(customAmount)) return bill.amount;
+  // Debt bills should never disappear because of a stale/blank $0 override.
+  // Positive overrides still allow one-month debt payment changes from Monthly.
+  if (bill.is_debt && customAmount <= 0.005) return bill.amount;
+  return Math.max(0, customAmount);
+}
+
 export interface BillDateMove {
   id: string;
   bill_id: string;
@@ -1289,7 +1298,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const getAmount = useCallback(
     (bill: Bill, month: number, year: number): number => {
       const o = overrides.find(o => o.bill_id === bill.id && o.month === month && o.year === year);
-      const base = o?.custom_amount !== undefined ? o.custom_amount : bill.amount;
+      const base = billBaseAmountForMonth(bill, o);
       return bill.is_debt ? effectiveDebtMinimum(base, Number(bill.snowball_minimum_boost ?? 0)) : base;
     },
     [overrides]
@@ -2117,7 +2126,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           const occ = getBillOccurrenceDays(b, m, y);
           if (occ.length === 0) return s;
           const o = overrides.find(o => o.bill_id === b.id && o.month === m && o.year === y);
-          const baseAmount = o?.custom_amount !== undefined ? o.custom_amount : b.amount;
+          const baseAmount = billBaseAmountForMonth(b, o);
           const amt = b.is_debt ? effectiveDebtMinimum(baseAmount, Number(b.snowball_minimum_boost ?? 0)) : baseAmount;
           return s + amt * occ.length;
         }, 0);
