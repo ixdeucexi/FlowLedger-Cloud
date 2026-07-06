@@ -21,12 +21,13 @@
       "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
     },
     {
-      "source": "/:page(login|bills|monthly|flo|transactions|more)",
+      "source": "/:page(login|setup|bills|monthly|flo|transactions|more)",
       "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
     }
   ],
   "rewrites": [
     { "source": "/login", "destination": "/index.html" },
+    { "source": "/setup", "destination": "/index.html" },
     { "source": "/bills", "destination": "/index.html" },
     { "source": "/monthly", "destination": "/index.html" },
     { "source": "/flo", "destination": "/index.html" },

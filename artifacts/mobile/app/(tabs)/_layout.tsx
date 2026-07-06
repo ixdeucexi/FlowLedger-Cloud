@@ -21,7 +21,7 @@ import {
 } from "@/lib/learningTour";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 
-const MIN_BUDGET_LOADING_MS = 900;
+const MIN_BUDGET_LOADING_MS = 220;
 
 const TABS = [
   { name: "index",        title: "Dashboard",    icon: "bar-chart-2"     },
@@ -94,7 +94,7 @@ function BudgetLoadingScreen({ style }: { style?: StyleProp<ViewStyle> } = {}) {
         resizeMode="contain"
       />
       <Text style={[styles.loadingTitle, { color: colors.foreground }]}>FlowLedger Algo</Text>
-      <Text style={[styles.loadingSub, { color: colors.mutedForeground }]}>Preparing your forecast...</Text>
+      <Text style={[styles.loadingSub, { color: colors.mutedForeground }]}>Opening your plan...</Text>
     </Animated.View>
   );
 }
@@ -380,13 +380,13 @@ function TabContent() {
     Animated.parallel([
       Animated.timing(loadingOpacity, {
         toValue: 0,
-        duration: 760,
+        duration: 360,
         easing: Easing.inOut(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(tabsOpacity, {
         toValue: 1,
-        duration: 760,
+        duration: 360,
         easing: Easing.inOut(Easing.cubic),
         useNativeDriver: true,
       }),

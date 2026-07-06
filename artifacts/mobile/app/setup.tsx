@@ -1,8 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AccountModal } from "@/components/AccountModal";
@@ -78,8 +78,8 @@ function toggleArrayValue<T extends string>(values: T[], value: T): T[] {
 
 const TRUST_CARDS: { icon: React.ComponentProps<typeof Feather>["name"]; title: string; text: string }[] = [
   { icon: "shield", title: "Your real data stays safe", text: "Setup questions personalize the path. They do not create or overwrite money records." },
-  { icon: "zap", title: "Flo guides the order", text: "Debt, savings, bills, and spending goals each get a different setup path." },
-  { icon: "compass", title: "Built for decisions", text: "The goal is a forecast you can use before purchases, bill moves, and debt payments." },
+  { icon: "compass", title: "Your path follows your goals", text: "Debt, savings, bills, and spending goals can each move to the front of setup." },
+  { icon: "zap", title: "Built for decisions", text: "The goal is a forecast you can trust before purchases, bill moves, and debt payments." },
 ];
 
 const FINISH_CARDS: { icon: React.ComponentProps<typeof Feather>["name"]; title: string; text: string }[] = [
@@ -113,6 +113,8 @@ function SetupWizard() {
   const [floConfirmation, setFloConfirmation] = useState("");
   const [restoredProgress, setRestoredProgress] = useState(false);
   const [coachVisible, setCoachVisible] = useState(false);
+  const stepOpacity = useRef(new Animated.Value(1)).current;
+  const stepTranslate = useRef(new Animated.Value(0)).current;
 
   const activeAccount = accounts.find(account => account.is_active) ?? null;
 
@@ -207,17 +209,8 @@ function SetupWizard() {
         done: false,
         title: "Welcome to FlowLedger Algo",
         ask: "Let's build your money command center.",
-        body: "I'm Flo. I'll learn what you want help with first, then I'll walk you through the exact setup steps that match your goals.",
+        body: "I'm Flo. I'll learn what you want help with, keep your real data safe, and walk you through the setup steps that match your goals.",
         button: "Get Started",
-        kind: "intro",
-      },
-      {
-        key: "intro",
-        done: false,
-        title: "Together, we'll build your forecast.",
-        ask: "You bring the real numbers. I'll keep the path clear.",
-        body: "I will never create fake money records or change your existing bills, debts, or transactions from these setup questions.",
-        button: "I'm Ready",
         kind: "intro",
       },
       {
@@ -299,6 +292,25 @@ function SetupWizard() {
     if (!restoredProgress || !current) return;
     writeStoredSetupStep(current.key === "finish" ? null : current.key);
   }, [current, restoredProgress]);
+
+  useEffect(() => {
+    stepOpacity.setValue(0);
+    stepTranslate.setValue(14);
+    Animated.parallel([
+      Animated.timing(stepOpacity, {
+        toValue: 1,
+        duration: 260,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(stepTranslate, {
+        toValue: 0,
+        duration: 260,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [current.key, stepOpacity, stepTranslate]);
 
   const goNext = () => setIndex(value => {
     for (let i = value + 1; i < steps.length; i += 1) {
@@ -543,75 +555,77 @@ function SetupWizard() {
           ))}
         </View>
 
-        <View style={styles.hero}>
-          <FloLogo size={current.kind === "intro" ? 112 : 76} />
-          <Text style={styles.stepCount}>{progressIndex} of {steps.length}</Text>
-          <Text style={styles.title}>{current.title}</Text>
-          <View style={styles.bubble}>
-            <View style={styles.bubbleHeader}>
-              <Text style={styles.bubbleLabel}>Flo asks</Text>
-              {(current.kind === "multi" || current.kind === "single") && preferenceChoiceCount > 0 ? (
-                <View style={styles.choicePill}>
-                  <Text style={styles.choicePillText}>{preferenceChoiceCount} selected</Text>
-                </View>
-              ) : null}
-              {current.kind !== "intro" && (
-                <Pressable onPress={() => setCoachVisible(true)} hitSlop={10}>
-                  <Feather name="help-circle" size={17} color="#38bdf8" />
-                </Pressable>
-              )}
+        <Animated.View style={{ opacity: stepOpacity, transform: [{ translateY: stepTranslate }] }}>
+          <View style={styles.hero}>
+            <FloLogo size={current.kind === "intro" ? 112 : 76} />
+            <Text style={styles.stepCount}>{progressIndex} of {steps.length}</Text>
+            <Text style={styles.title}>{current.title}</Text>
+            <View style={styles.bubble}>
+              <View style={styles.bubbleHeader}>
+                <Text style={styles.bubbleLabel}>Flo asks</Text>
+                {(current.kind === "multi" || current.kind === "single") && preferenceChoiceCount > 0 ? (
+                  <View style={styles.choicePill}>
+                    <Text style={styles.choicePillText}>{preferenceChoiceCount} selected</Text>
+                  </View>
+                ) : null}
+                {current.kind !== "intro" && (
+                  <Pressable onPress={() => setCoachVisible(true)} hitSlop={10}>
+                    <Feather name="help-circle" size={17} color="#38bdf8" />
+                  </Pressable>
+                )}
+              </View>
+              <Text style={styles.ask}>{current.ask}</Text>
+              <Text style={styles.body}>{current.body}</Text>
             </View>
-            <Text style={styles.ask}>{current.ask}</Text>
-            <Text style={styles.body}>{current.body}</Text>
+            {floConfirmation ? (
+              <View style={styles.confirmation}>
+                <Feather name="check-circle" size={16} color="#22c55e" />
+                <Text style={styles.confirmationText}>{floConfirmation}</Text>
+              </View>
+            ) : null}
           </View>
-          {floConfirmation ? (
-            <View style={styles.confirmation}>
-              <Feather name="check-circle" size={16} color="#22c55e" />
-              <Text style={styles.confirmationText}>{floConfirmation}</Text>
-            </View>
-          ) : null}
-        </View>
 
-        <View style={styles.optionStack}>
-          {renderTrustCards()}
-          {renderActionPathCard()}
-          {renderOptions()}
-          {renderPlanCards()}
-          {renderFinishCards()}
-          {(current.kind === "multi" || current.kind === "single") ? (
-            <View style={styles.safeNote}>
-              <Feather name="lock" size={13} color="#38bdf8" />
-              <Text style={styles.safeNoteText}>These choices personalize Flo only. Your account balances, bills, debts, and goals stay unchanged.</Text>
-            </View>
-          ) : null}
-        </View>
-
-        {current.key === "safety" && (
-          <View style={styles.safetyCard}>
-            <View style={styles.inputWrap}>
-              <Text style={styles.inputLabel}>Safety cushion</Text>
-              <TextInput
-                value={safetyFloorText}
-                onChangeText={setSafetyFloorText}
-                keyboardType="decimal-pad"
-                style={styles.input}
-                placeholder="200"
-                placeholderTextColor="#64748b"
-              />
-            </View>
-            <View style={styles.inputWrap}>
-              <Text style={styles.inputLabel}>Forecast months</Text>
-              <TextInput
-                value={horizonText}
-                onChangeText={setHorizonText}
-                keyboardType="number-pad"
-                style={styles.input}
-                placeholder="6"
-                placeholderTextColor="#64748b"
-              />
-            </View>
+          <View style={styles.optionStack}>
+            {renderTrustCards()}
+            {renderActionPathCard()}
+            {renderOptions()}
+            {renderPlanCards()}
+            {renderFinishCards()}
+            {(current.kind === "multi" || current.kind === "single") ? (
+              <View style={styles.safeNote}>
+                <Feather name="lock" size={13} color="#38bdf8" />
+                <Text style={styles.safeNoteText}>These choices personalize Flo only. Your account balances, bills, debts, and goals stay unchanged.</Text>
+              </View>
+            ) : null}
           </View>
-        )}
+
+          {current.key === "safety" && (
+            <View style={styles.safetyCard}>
+              <View style={styles.inputWrap}>
+                <Text style={styles.inputLabel}>Safety cushion</Text>
+                <TextInput
+                  value={safetyFloorText}
+                  onChangeText={setSafetyFloorText}
+                  keyboardType="decimal-pad"
+                  style={styles.input}
+                  placeholder="200"
+                  placeholderTextColor="#64748b"
+                />
+              </View>
+              <View style={styles.inputWrap}>
+                <Text style={styles.inputLabel}>Forecast months</Text>
+                <TextInput
+                  value={horizonText}
+                  onChangeText={setHorizonText}
+                  keyboardType="number-pad"
+                  style={styles.input}
+                  placeholder="6"
+                  placeholderTextColor="#64748b"
+                />
+              </View>
+            </View>
+          )}
+        </Animated.View>
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 18 }]}>

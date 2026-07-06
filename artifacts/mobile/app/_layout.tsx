@@ -24,7 +24,7 @@ import { supabase } from "@/lib/supabase";
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
-const MIN_STARTUP_MS = 900;
+const MIN_STARTUP_MS = 450;
 
 function AuthObserver() {
   const { session, loading } = useAuth();
@@ -115,13 +115,13 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
     Animated.parallel([
       Animated.timing(startupOpacity, {
         toValue: 0,
-        duration: 920,
+        duration: 520,
         easing: Easing.inOut(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(appOpacity, {
         toValue: 1,
-        duration: 920,
+        duration: 520,
         easing: Easing.inOut(Easing.cubic),
         useNativeDriver: true,
       }),

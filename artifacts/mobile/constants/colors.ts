@@ -1,15 +1,15 @@
 const colors = {
   light: {
     text: "#1a1a2e",
-    tint: "#2563eb",
+    tint: "#2f6fff",
     background: "#f0f4f8",
     foreground: "#1a1a2e",
     card: "#ffffff",
     cardForeground: "#1a1a2e",
-    primary: "#2563eb",
+    primary: "#2f6fff",
     primaryForeground: "#ffffff",
     secondary: "#eff6ff",
-    secondaryForeground: "#2563eb",
+    secondaryForeground: "#2f6fff",
     muted: "#e2e8f0",
     mutedForeground: "#64748b",
     accent: "#f0b429",
@@ -26,15 +26,15 @@ const colors = {
 
   dark: {
     text: "#f8fafc",
-    tint: "#7c3aed",
+    tint: "#9f5cff",
     background: "#03040b",
     foreground: "#f8fafc",
     card: "rgba(15,23,42,0.86)",
     cardForeground: "#f8fafc",
-    primary: "#7c3aed",
+    primary: "#9f5cff",
     primaryForeground: "#ffffff",
     secondary: "rgba(37,99,235,0.18)",
-    secondaryForeground: "#bfdbfe",
+    secondaryForeground: "#dbeafe",
     muted: "rgba(15,23,42,0.72)",
     mutedForeground: "#94a3b8",
     accent: "#22d3ee",
@@ -52,11 +52,11 @@ const colors = {
   radius: 12,
 
   brand: {
-    blue: "#2563eb",
+    blue: "#2f6fff",
     green: "#22c55e",
-    purple: "#7c3aed",
+    purple: "#9f5cff",
     cyan: "#22d3ee",
-    gradient: ["#2563eb", "#7c3aed"] as [string, string],
+    gradient: ["#2f6fff", "#9f5cff"] as [string, string],
   },
 };
 
