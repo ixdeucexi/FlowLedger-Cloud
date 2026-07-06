@@ -114,13 +114,13 @@ export function FlowWaveBackground({ variant = "blue", intensity = "standard", f
       Animated.sequence([
         Animated.timing(topologyAnim, {
           toValue: 1,
-          duration: 14000,
+          duration: 10500,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
         Animated.timing(topologyAnim, {
           toValue: 0,
-          duration: 16000,
+          duration: 11500,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
@@ -157,12 +157,14 @@ export function FlowWaveBackground({ variant = "blue", intensity = "standard", f
   const accents = VARIANT_ACCENTS[variant];
   const strength = intensity === "soft" ? 0.78 : 1;
 
-  const topologyShiftX = topologyAnim.interpolate({ inputRange: [0, 1], outputRange: [-22, 28] });
-  const topologyShiftY = topologyAnim.interpolate({ inputRange: [0, 1], outputRange: [18, -20] });
-  const counterShiftX = topologyAnim.interpolate({ inputRange: [0, 1], outputRange: [18, -24] });
-  const counterShiftY = topologyAnim.interpolate({ inputRange: [0, 1], outputRange: [-14, 18] });
-  const topologyScale = topologyAnim.interpolate({ inputRange: [0, 1], outputRange: [0.985, 1.045] });
-  const counterScale = topologyAnim.interpolate({ inputRange: [0, 1], outputRange: [1.035, 0.99] });
+  const topologyShiftX = topologyAnim.interpolate({ inputRange: [0, 1], outputRange: [-38, 44] });
+  const topologyShiftY = topologyAnim.interpolate({ inputRange: [0, 1], outputRange: [28, -34] });
+  const counterShiftX = topologyAnim.interpolate({ inputRange: [0, 1], outputRange: [34, -40] });
+  const counterShiftY = topologyAnim.interpolate({ inputRange: [0, 1], outputRange: [-24, 30] });
+  const topologyScale = topologyAnim.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1.065] });
+  const counterScale = topologyAnim.interpolate({ inputRange: [0, 1], outputRange: [1.055, 0.975] });
+  const topologyRotate = topologyAnim.interpolate({ inputRange: [0, 1], outputRange: ["-1.8deg", "1.6deg"] });
+  const counterRotate = topologyAnim.interpolate({ inputRange: [0, 1], outputRange: ["1.3deg", "-1.5deg"] });
   const topologyOpacity = glowAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [0.48 * strength, flashesEnabled ? 0.96 * strength : 0.62 * strength],
@@ -285,7 +287,7 @@ export function FlowWaveBackground({ variant = "blue", intensity = "standard", f
           styles.topologyLayer,
           {
             opacity: topologyOpacity,
-            transform: [{ translateX: counterShiftX }, { translateY: counterShiftY }, { scale: counterScale }],
+            transform: [{ translateX: counterShiftX }, { translateY: counterShiftY }, { rotate: counterRotate }, { scale: counterScale }],
           },
         ]}
       >
@@ -299,7 +301,7 @@ export function FlowWaveBackground({ variant = "blue", intensity = "standard", f
           styles.topologyLayer,
           {
             opacity: topologyOpacity,
-            transform: [{ translateX: topologyShiftX }, { translateY: topologyShiftY }, { scale: topologyScale }],
+            transform: [{ translateX: topologyShiftX }, { translateY: topologyShiftY }, { rotate: topologyRotate }, { scale: topologyScale }],
           },
         ]}
       >
