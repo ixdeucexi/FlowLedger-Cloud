@@ -30,7 +30,6 @@ import {
   ALGORITHM_CATALOG,
   type AlgorithmId,
 } from "@/lib/algorithmCatalog";
-import { buildDataIntegrityIssues } from "@/lib/dataIntegrity";
 import { loadDecisionHubSettings, readDecisionHubSettings, saveDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { resetFloMemory } from "@/lib/flo";
 import { startLearningTour } from "@/lib/learningTour";
@@ -55,7 +54,6 @@ const FONT_OPTIONS: { label: string; value: AppFontStyle; icon: string; desc: st
 ];
 
 const BACKUP_COMPLETE_KEY = "flowledger_backup_exported";
-const HEALTH_CHECK_DONE_KEY = "flowledger_health_checked_items";
 type AlgorithmCatalogItem = typeof ALGORITHM_CATALOG[number];
 type SettingsSectionId =
   | "overview"
@@ -65,7 +63,6 @@ type SettingsSectionId =
   | "accounts"
   | "money"
   | "backup"
-  | "health"
   | "security"
   | "legal";
 
@@ -81,7 +78,6 @@ const SETTINGS_SECTIONS: Array<{
   { id: "algorithms", label: "Algorithm Suite", description: "Turn financial engines on or off and learn what each one does.", icon: "cpu" },
   { id: "appearance", label: "Appearance", description: "Light, dark, or automatic theme settings.", icon: "moon" },
   { id: "backup", label: "Backup, import, and install", description: "CSV backup, statement import, app install, and Flo memory.", icon: "download" },
-  { id: "health", label: "Health check", description: "Find setup issues before they break the forecast.", icon: "check-circle" },
   { id: "security", label: "Security and profile", description: "View the signed-in account and sign out.", icon: "lock" },
   { id: "legal", label: "Legal", description: "Terms, privacy, and data-use notes.", icon: "file-text" },
 ];
@@ -161,7 +157,6 @@ export default function MoreScreen() {
   useBackDismiss(Boolean(selectedAlgorithm), () => setSelectedAlgorithm(null));
   const [legalDoc, setLegalDoc] = useState<"terms" | "privacy" | null>(null);
   useBackDismiss(Boolean(legalDoc), () => setLegalDoc(null));
-  const [checkedHealthItems, setCheckedHealthItems] = useState<Record<string, boolean>>({});
   const [showAlgorithmSuite, setShowAlgorithmSuite] = useState(false);
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("overview");
   useBackDismiss(activeSettingsSection !== "overview", () => setActiveSettingsSection("overview"));
@@ -201,24 +196,6 @@ export default function MoreScreen() {
       cancelled = true;
     };
   }, [user?.id]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void AsyncStorage.getItem(HEALTH_CHECK_DONE_KEY).then(raw => {
-      if (cancelled || !raw) return;
-      try {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === "object") {
-          setCheckedHealthItems(parsed);
-        }
-      } catch {
-        // Ignore old or malformed local data.
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const saveSafetySettings = () => {
     const floor = Math.max(0, parseFloat(safetyFloorText) || 0);
@@ -329,19 +306,7 @@ export default function MoreScreen() {
     });
   };
 
-  const healthIssueKey = (title: string, detail: string) => `${title}:${detail}`;
-  const toggleHealthItem = (key: string) => {
-    const next = { ...checkedHealthItems, [key]: !checkedHealthItems[key] };
-    setCheckedHealthItems(next);
-    void AsyncStorage.setItem(HEALTH_CHECK_DONE_KEY, JSON.stringify(next)).catch(() => undefined);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
-
   const totalMonthlyIncome = getMonthlyIncome();
-  const dataIntegrityIssues = useMemo(
-    () => buildDataIntegrityIssues({ accounts, bills, incomes, transactions }),
-    [accounts, bills, incomes, transactions],
-  );
   const setupPersonalization = useMemo(
     () => buildSetupPersonalization(onboardingPreferences),
     [onboardingPreferences],
@@ -1410,49 +1375,6 @@ export default function MoreScreen() {
       </View>
 
       {/* ── Summary ── */}
-      </>}
-
-      {activeSettingsSection === "health" && <>
-      <SLabel c={c} text="Health Check" />
-      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        <View style={[styles.confidenceBox, { backgroundColor: dataIntegrityIssues.length ? c.warning + "12" : c.success + "14" }]}>
-          <Feather name={dataIntegrityIssues.length ? "alert-triangle" : "check-circle"} size={16} color={dataIntegrityIssues.length ? c.warning : c.success} />
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.accountName, { color: c.foreground }]}>{dataIntegrityIssues.length ? `${dataIntegrityIssues.length} item${dataIntegrityIssues.length === 1 ? "" : "s"} to review` : "No data issues found"}</Text>
-            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Checks accounts, bills, income, duplicate-looking bills, and unlinked transactions.</Text>
-          </View>
-        </View>
-        {dataIntegrityIssues.slice(0, 4).map((issue, index) => {
-          const key = healthIssueKey(issue.title, issue.detail);
-          const checked = Boolean(checkedHealthItems[key]);
-          return (
-            <Pressable
-              key={`${issue.title}-${index}`}
-              onPress={() => toggleHealthItem(key)}
-              style={({ pressed }) => [
-                styles.dataHealthRow,
-                {
-                  borderTopWidth: index ? 1 : 0,
-                  borderTopColor: c.border,
-                  opacity: pressed ? 0.75 : checked ? 0.55 : 1,
-                },
-              ]}
-            >
-              <Feather
-                name={checked ? "check-circle" : issue.severity === "error" ? "x-circle" : issue.severity === "warning" ? "alert-circle" : "info"}
-                size={16}
-                color={checked ? c.success : issue.severity === "error" ? c.destructive : issue.severity === "warning" ? c.warning : c.primary}
-              />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.dataLabel, { color: c.foreground, textDecorationLine: checked ? "line-through" : "none" }]}>{issue.title}</Text>
-                <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{checked ? "Marked reviewed. Tap again if this still needs attention." : issue.detail}</Text>
-              </View>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {/* ── Account section ── */}
       </>}
 
       {activeSettingsSection === "legal" && <>
