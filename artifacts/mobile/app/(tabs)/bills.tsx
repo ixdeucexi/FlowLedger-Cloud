@@ -3,7 +3,7 @@ import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert, FlatList, Platform, Pressable, StyleSheet, Text, View,
+  Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -250,10 +250,16 @@ export default function BillsScreen() {
   const subtitle = activeTab === "bills"
     ? `${totalCount} bill${totalCount !== 1 ? "s" : ""} · $${totalAmount.toFixed(0)}/mo recurring`
     : `${debts.length} debt${debts.length !== 1 ? "s" : ""} · $${totalDebt.toLocaleString(undefined, { maximumFractionDigits: 0 })} total`;
+  const listBottomPadding = insets.bottom + (Platform.OS === "web" ? 128 : 118);
 
   return (
     <View style={[styles.screen, { backgroundColor: c.background }]}>
       <PremiumBackdrop variant={activeTab === "debt" ? "purple" : "blue"} />
+      <ScrollView
+        showsVerticalScrollIndicator
+        contentContainerStyle={{ paddingBottom: listBottomPadding }}
+        scrollIndicatorInsets={{ bottom: listBottomPadding }}
+      >
       {/* ── Header ── */}
       <View style={[styles.header, { paddingTop: insets.top + 12 + webTopPad }]}>
         <View>
@@ -357,18 +363,15 @@ export default function BillsScreen() {
             ))}
           </View>
 
-          <FlatList
-            data={filteredBills}
-            keyExtractor={item => item.id}
-            contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 100 }]}
-            ListEmptyComponent={
+          <View style={styles.list}>
+            {filteredBills.length === 0 ? (
               <EmptyState icon="file-text" title="No Bills" message="Tap + to add your first bill." actionLabel="Add Bill" onAction={() => { setEditBill(null); setModalVisible(true); }} />
-            }
-            renderItem={({ item }) => {
+            ) : filteredBills.map(item => {
               const catColor = CAT_COLORS[item.category] ?? c.primary;
               const beforePayday = paycheckPlan.billsDue.some(bill => bill.id === item.id);
               return (
                 <Pressable
+                  key={item.id}
                   onPress={() => { setEditBill(item); setModalVisible(true); }}
                   style={({ pressed }) => [styles.card, { backgroundColor: c.card, borderRadius: colors.radius, opacity: pressed ? 0.88 : 1 }]}
                 >
@@ -405,19 +408,14 @@ export default function BillsScreen() {
                   </View>
                 </Pressable>
               );
-            }}
-          />
+            })}
+          </View>
         </>
       )}
 
       {/* ════════════════════ DEBT VIEW ════════════════════ */}
       {activeTab === "debt" && (
-        <FlatList
-          data={debts}
-          keyExtractor={item => item.id}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 118 }]}
-          ListHeaderComponent={(
+        <View style={styles.list}>
             <>
           {/* Safe Snowball Banner */}
           {debts.length > 0 && (
@@ -545,8 +543,7 @@ export default function BillsScreen() {
             </View>
           </View>
             </>
-          )}
-          ListEmptyComponent={
+          {debts.length === 0 ? (
             <EmptyState
               icon="credit-card"
               title="No Debts Tracked"
@@ -554,8 +551,7 @@ export default function BillsScreen() {
               actionLabel="Add Debt"
               onAction={() => { setEditBill(null); setModalVisible(true); }}
             />
-          }
-          renderItem={({ item }) => {
+          ) : debts.map(item => {
               const priorityColor = priorityColors[Math.min(item.priority - 1, priorityColors.length - 1)] ?? c.primary;
               const effectiveMinimum = item.amount + Number(item.snowball_minimum_boost ?? 0);
               const originalBalance = item.balance + item.amount * 12;
@@ -566,6 +562,7 @@ export default function BillsScreen() {
 
               return (
                 <Pressable
+                  key={item.id}
                   onPress={() => { setEditBill(item); setModalVisible(true); }}
                   style={({ pressed }) => [styles.card, { backgroundColor: c.card, borderRadius: colors.radius, opacity: pressed ? 0.88 : 1 }]}
                 >
@@ -633,9 +630,11 @@ export default function BillsScreen() {
                   </View>
                 </Pressable>
               );
-          }}
-        />
+          })}
+        </View>
       )}
+
+      </ScrollView>
 
       <AddBillModal
         visible={modalVisible}
