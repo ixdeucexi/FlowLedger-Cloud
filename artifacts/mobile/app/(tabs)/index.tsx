@@ -1130,7 +1130,7 @@ export default function DashboardScreen() {
             <AppText tone="label" style={styles.brandEyebrow}>FLOWLEDGER</AppText>
             <AppText tone="label" style={styles.brandAlgo}>ALGO</AppText>
             <AppText tone="title" style={styles.heading}>Command Center</AppText>
-            <AppText style={styles.subheading}>{MONTH_FULL[currentMonth]} {selectedYear} · live forecast</AppText>
+            <AppText style={styles.subheading}>{MONTH_FULL[currentMonth]} {selectedYear}</AppText>
           </View>
         </View>
         <CommandPlusButton onPress={() => setActionModalVisible(true)} accessibilityLabel="Add to FlowLedger" />
@@ -1266,14 +1266,6 @@ export default function DashboardScreen() {
             onPress={() => openFloWithPrompt(setupPersonalization.nextActionPrompt)}
             style={({ pressed }) => [styles.referencePlanSnapshot, { opacity: pressed ? 0.84 : 1 }]}
           >
-            <View style={styles.referencePlanAmountBlock}>
-              <AppText tone="label" style={styles.referencePlanEyebrow}>Plan Snapshot</AppText>
-              <AppText tone="label" style={styles.referencePlanLabel}>Available after plan</AppText>
-              <AppText tone="number" style={styles.referencePlanAmount}>
-                ${Math.max(0, algorithmSuite.safeCushion.amount).toLocaleString("en-US", { maximumFractionDigits: 0 })}
-              </AppText>
-            </View>
-            <View style={styles.referencePlanDivider} />
             <View style={styles.referencePlanFocusBlock}>
               <AppText tone="label" style={styles.referencePlanLabel}>Focus</AppText>
               <AppText tone="title" style={styles.referencePlanFocusTitle} numberOfLines={1}>{setupPersonalization.title}</AppText>
@@ -1296,7 +1288,6 @@ export default function DashboardScreen() {
           <FlowScoreGauge score={algorithmSuite.flowScore.score} />
           <AppText tone="title" style={styles.referenceScoreStatus}>{algorithmSuite.flowScore.label}</AppText>
           <View style={styles.referenceScoreUnderline} />
-          <AppText style={styles.referenceScoreReason} numberOfLines={2}>{algorithmSuite.flowScore.topReason}</AppText>
           <AppText style={styles.referenceScoreTapHint}>Tap for details</AppText>
         </Pressable>
       </View>
@@ -1306,7 +1297,6 @@ export default function DashboardScreen() {
           <View style={styles.referenceAlgoHeaderRow}>
             <View style={{ flex: 1 }}>
               <AppText tone="title" style={styles.referenceInsightTitle}>Algorithm Suite</AppText>
-              <AppText style={styles.referenceAlgoSubtitle}>Swipe through the engines guiding your money plan.</AppText>
             </View>
             <View style={styles.referenceAlgoCountPill}>
               <AppText tone="number" style={styles.referenceAlgoCountActive}>{String(activeAlgorithmCardNumber).padStart(2, "0")}</AppText>
