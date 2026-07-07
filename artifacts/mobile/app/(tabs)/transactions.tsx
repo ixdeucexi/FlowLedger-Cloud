@@ -7,6 +7,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddTransactionModal } from "@/components/AddTransactionModal";
+import { CommandPlusButton } from "@/components/CommandPlusButton";
 import { EmptyState } from "@/components/EmptyState";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import colors from "@/constants/colors";
@@ -468,12 +469,10 @@ export default function TransactionsScreen() {
             {filtered.length} of {allActivity.length} entries · {feedOrderLabel}
           </Text>
         </View>
-        <Pressable
+        <CommandPlusButton
           onPress={() => { setEditTx(null); setEditModalVisible(true); }}
-          style={({ pressed }) => [styles.addBtn, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
-        >
-          <Feather name="plus" size={22} color={c.primaryForeground} />
-        </Pressable>
+          accessibilityLabel="Add activity"
+        />
       </View>
 
       <View style={[styles.activityHero, { backgroundColor: c.card, borderColor: c.border }]}>

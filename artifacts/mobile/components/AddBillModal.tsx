@@ -21,11 +21,12 @@ interface AddBillModalProps {
   onClose: () => void;
   onSave: (bill: Omit<Bill, "id" | "created_at"> | Bill) => void | Promise<unknown>;
   onDelete?: (id: string) => void | Promise<unknown>;
+  onDeleteMistake?: (id: string) => void | Promise<unknown>;
   editBill?: Bill | null;
   forceDebt?: boolean;
 }
 
-export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, forceDebt }: AddBillModalProps) {
+export function AddBillModal({ visible, onClose, onSave, onDelete, onDeleteMistake, editBill, forceDebt }: AddBillModalProps) {
   const c = useColors();
   useBackDismiss(visible, onClose);
   const { categories } = useBudget();
@@ -154,6 +155,34 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
       [
       { text: "Cancel", style: "cancel" },
       { text: forwardOnly ? "Stop Future" : "Delete", style: "destructive", onPress: doDelete },
+      ],
+    );
+  };
+
+  const handleDeleteMistake = () => {
+    if (!editBill || !onDeleteMistake) return;
+    const doDeleteMistake = async () => {
+      if (saving) return;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setSaving(true);
+      try {
+        await onDeleteMistake(editBill.id);
+        onClose();
+      } catch (error) {
+        Alert.alert("Couldn’t delete mistake", error instanceof Error ? error.message : "Please try again.");
+      } finally {
+        setSaving(false);
+      }
+    };
+    if (Platform.OS === "web") { doDeleteMistake(); return; }
+    Alert.alert(
+      `Delete Mistake`,
+      (editBill.is_recurring || editBill.is_debt)
+        ? `Hide "${editBill.name}" from this month forward? Older months stay available for calculations.`
+        : `Delete "${editBill.name}"? This removes the bill and its monthly data.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete Mistake", style: "destructive", onPress: doDeleteMistake },
       ],
     );
   };
@@ -420,6 +449,21 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, editBill, for
               </Pressable>
             )}
 
+            {editBill && onDeleteMistake && (editBill.is_recurring || editBill.is_debt) && (
+              <Pressable onPress={handleDeleteMistake}
+                disabled={saving}
+                style={({ pressed }) => [styles.deleteMistakeBtn, { borderColor: c.warning + "80", backgroundColor: c.warning + "10", opacity: saving ? 0.55 : pressed ? 0.72 : 1 }]}
+              >
+                <Feather name="x-circle" size={16} color={c.warning} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.deleteBtnText, { color: c.warning }]}>Delete Mistake</Text>
+                  <Text style={[styles.deleteHelpText, { color: c.mutedForeground }]}>
+                    Removes it from this month forward while older months stay available.
+                  </Text>
+                </View>
+              </Pressable>
+            )}
+
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
@@ -467,5 +511,7 @@ const styles = StyleSheet.create({
   saveBtn: { height: 52, alignItems: "center", justifyContent: "center", marginTop: 24 },
   saveBtnText: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
   deleteBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 48, borderWidth: 1.5, borderRadius: 12, marginTop: 12, marginBottom: 32 },
+  deleteMistakeBtn: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 58, borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginTop: -20, marginBottom: 32 },
   deleteBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  deleteHelpText: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2, lineHeight: 15 },
 });

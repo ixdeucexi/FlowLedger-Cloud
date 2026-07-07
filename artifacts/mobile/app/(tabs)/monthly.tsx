@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AddTransactionModal } from "@/components/AddTransactionModal";
 import { BillSurplusModal } from "@/components/BillSurplusModal";
 import { CalendarView } from "@/components/CalendarView";
+import { CommandPlusButton } from "@/components/CommandPlusButton";
 import { EmptyState } from "@/components/EmptyState";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
@@ -848,12 +849,10 @@ export default function MonthlyScreen() {
               {todayDayNumber}
             </Text>
           </Pressable>
-          <Pressable
+          <CommandPlusButton
             onPress={() => openAddTransaction(selectedDate)}
-            style={({ pressed }) => [styles.iconBtn, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
-          >
-            <Feather name="plus" size={18} color={c.primaryForeground} />
-          </Pressable>
+            accessibilityLabel="Add to calendar"
+          />
         </View>
       </View>
 
@@ -1460,12 +1459,12 @@ export default function MonthlyScreen() {
                       <Feather name="message-circle" size={16} color={c.primary} />
                       <Text style={[styles.dayOverlayAskText, { color: c.primary }]}>Ask Flo</Text>
                     </Pressable>
-                    <Pressable
+                    <CommandPlusButton
                       onPress={() => openAddTransaction(selectedDate)}
-                      style={({ pressed }) => [styles.dayOverlayFab, { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 }]}
-                    >
-                      <Feather name="plus" size={24} color={c.primaryForeground} />
-                    </Pressable>
+                      size={62}
+                      iconSize={26}
+                      accessibilityLabel="Add on selected day"
+                    />
                   </View>
                 </Pressable>
               </Pressable>

@@ -10,6 +10,7 @@ import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from "re
 
 import { AddBillModal } from "@/components/AddBillModal";
 import { AppText } from "@/components/AppText";
+import { CommandPlusButton } from "@/components/CommandPlusButton";
 import { DatePickerField } from "@/components/DatePickerField";
 import { GoalModal } from "@/components/GoalModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
@@ -1132,12 +1133,7 @@ export default function DashboardScreen() {
             <AppText style={styles.subheading}>{MONTH_FULL[currentMonth]} {selectedYear} · live forecast</AppText>
           </View>
         </View>
-        <Pressable
-          onPress={() => setActionModalVisible(true)}
-          style={({ pressed }) => [styles.headerActionButton, { opacity: pressed ? 0.82 : 1 }]}
-        >
-          <Feather name="plus" size={20} color="#f8fafc" />
-        </Pressable>
+        <CommandPlusButton onPress={() => setActionModalVisible(true)} accessibilityLabel="Add to FlowLedger" />
       </View>
 
       {!settings.onboarding_completed && (() => {
@@ -1267,7 +1263,7 @@ export default function DashboardScreen() {
           </>
 
           <Pressable
-            onPress={openPersonalizedNextAction}
+            onPress={() => openFloWithPrompt(setupPersonalization.nextActionPrompt)}
             style={({ pressed }) => [styles.referencePlanSnapshot, { opacity: pressed ? 0.84 : 1 }]}
           >
             <View style={styles.referencePlanAmountBlock}>
@@ -1286,7 +1282,10 @@ export default function DashboardScreen() {
                 <AppText style={styles.referencePlanNextText} numberOfLines={1}>{setupPersonalization.nextActionLabel}</AppText>
               </View>
             </View>
-            <Feather name="chevron-right" size={16} color="rgba(216,180,254,0.86)" />
+            <View style={styles.referencePlanFloPill}>
+              <Feather name="message-circle" size={13} color="#f8fafc" />
+              <AppText style={styles.referencePlanFloText}>Flo</AppText>
+            </View>
           </Pressable>
         </View>
 
@@ -2201,6 +2200,8 @@ const styles = StyleSheet.create({
   referencePlanNextRow: { marginTop: 5, borderRadius: 999, alignSelf: "flex-start", maxWidth: "100%", paddingHorizontal: 8, paddingVertical: 4, backgroundColor: "rgba(139,92,246,0.22)", borderWidth: 1, borderColor: "rgba(192,132,252,0.24)" },
   referencePlanNextLabel: { color: "#c4b5fd", fontSize: 8, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.7 },
   referencePlanNextText: { color: "#f5f3ff", fontSize: 10, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
+  referencePlanFloPill: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 999, backgroundColor: "rgba(124,58,237,0.34)", borderWidth: 1, borderColor: "rgba(216,180,254,0.34)" },
+  referencePlanFloText: { color: "#f8fafc", fontSize: 10, fontFamily: "Inter_800ExtraBold" },
   referenceScorePanel: { alignItems: "center", justifyContent: "center", paddingTop: 4 },
   referenceGaugeWrap: { width: 102, height: 102, alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
   referenceGaugeSvg: { backgroundColor: "transparent" },

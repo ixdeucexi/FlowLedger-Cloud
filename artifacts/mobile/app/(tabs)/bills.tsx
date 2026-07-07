@@ -8,6 +8,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddBillModal } from "@/components/AddBillModal";
+import { CommandPlusButton } from "@/components/CommandPlusButton";
 import { EmptyState } from "@/components/EmptyState";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
@@ -20,6 +21,7 @@ import { sortDebtsLeastToGreatest } from "@/lib/debtOrder";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { DECISION_HUB_SETTINGS_EVENT, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { isAlgorithmEnabled } from "@/lib/algorithmCatalog";
+import { isBillActiveForMonth } from "@/lib/schedule";
 
 const CAT_COLORS: Record<string, string> = {
   Housing: "#0f9b8e", Utilities: "#f0b429", Insurance: "#6366f1",
@@ -37,7 +39,7 @@ export default function BillsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const {
-    bills, addBill, updateBill, deleteBill,
+    bills, addBill, updateBill, deleteBill, deleteBillMistake,
     dashboardFilter, setDashboardFilter,
     settings, updateSettings,
     previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, getExtraPayment,
@@ -74,7 +76,12 @@ export default function BillsScreen() {
   const webTopPad = Platform.OS === "web" ? 4 : 0;
 
   // ── Bills data ──────────────────────────────────────────────────
-  const nonDebtBills = bills.filter(b => !b.is_debt);
+  const now          = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear  = now.getFullYear();
+  const currentDay   = now.getDate();
+  const visibleBills = bills.filter(b => isBillActiveForMonth(b, currentMonth, currentYear));
+  const nonDebtBills = visibleBills.filter(b => !b.is_debt);
   const filteredBills = nonDebtBills
     .filter(b => {
       if (filter === "recurring") return b.is_recurring;
@@ -87,11 +94,6 @@ export default function BillsScreen() {
   const totalCount  = nonDebtBills.length;
 
   // ── Debt data ───────────────────────────────────────────────────
-  const now          = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear  = now.getFullYear();
-  const currentDay   = now.getDate();
-
   const baseSnowballPreview = useMemo(
     () => previewDebtSnowball(currentMonth, currentYear),
     [previewDebtSnowball, currentMonth, currentYear, bills],
@@ -100,7 +102,7 @@ export default function BillsScreen() {
   const existingSnowball = getExtraPayment(currentMonth, currentYear);
 
   const debts = (() => {
-    const debtBills = bills.filter(b => b.is_debt);
+    const debtBills = visibleBills.filter(b => b.is_debt);
     if (sortMode === "balance") return sortDebtsLeastToGreatest(debtBills);
     return debtBills.slice().sort((a, b) => {
       if (sortMode === "priority") return a.priority - b.priority;
@@ -258,12 +260,10 @@ export default function BillsScreen() {
           <Text style={[styles.title, { color: c.foreground }]}>Bills</Text>
           <Text style={[styles.subtitle, { color: c.mutedForeground }]}>{subtitle}</Text>
         </View>
-        <Pressable
+        <CommandPlusButton
           onPress={() => { setEditBill(null); setModalVisible(true); }}
-          style={({ pressed }) => [styles.addBtn, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
-        >
-          <Feather name="plus" size={22} color={c.primaryForeground} />
-        </Pressable>
+          accessibilityLabel={activeTab === "debt" ? "Add debt" : "Add bill"}
+        />
       </View>
 
       {/* ── Bills / Debt segment toggle ── */}
@@ -642,6 +642,7 @@ export default function BillsScreen() {
         onClose={() => { setModalVisible(false); setEditBill(null); }}
         onSave={handleSave}
         onDelete={deleteBill}
+        onDeleteMistake={deleteBillMistake}
         editBill={editBill}
         forceDebt={activeTab === "debt"}
       />

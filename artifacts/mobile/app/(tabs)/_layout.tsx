@@ -26,7 +26,6 @@ const MIN_BUDGET_LOADING_MS = 220;
 const TABS = [
   { name: "index",        title: "Dashboard",    icon: "bar-chart-2"     },
   { name: "bills",        title: "Bills",        icon: "file-text"       },
-  { name: "flo",          title: "Flo",          icon: "message-circle"  },
   { name: "transactions", title: "Activity",     icon: "repeat"          },
   { name: "monthly",      title: "Monthly",      icon: "calendar"        },
   { name: "more",         title: "More",         icon: "more-horizontal" },
@@ -477,14 +476,11 @@ function TabContent() {
               name={tab.name}
               options={{
                 title: tab.title,
-                tabBarActiveTintColor: tab.name === "flo" ? colors.primary : undefined,
-                tabBarInactiveTintColor: tab.name === "flo" ? colors.primary : undefined,
-                tabBarIcon: ({ color }) => tab.name === "flo"
-                  ? <FloLogo size={24} ring={false} />
-                  : <Feather name={tab.icon} size={22} color={color} />,
+                tabBarIcon: ({ color }) => <Feather name={tab.icon} size={22} color={color} />,
               }}
             />
           ))}
+          <Tabs.Screen name="flo" options={{ href: null }} />
           <Tabs.Screen name="category-budget" options={{ href: null }} />
         </Tabs>
         {demoMode ? <DemoModeBanner /> : null}

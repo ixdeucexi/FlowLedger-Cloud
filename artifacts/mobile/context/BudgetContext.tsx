@@ -267,6 +267,7 @@ interface BudgetContextType {
   addBill: (bill: Omit<Bill, "id" | "created_at">) => Promise<string>;
   updateBill: (bill: Bill) => Promise<void>;
   deleteBill: (id: string) => Promise<void>;
+  deleteBillMistake: (id: string) => Promise<void>;
   getBillById: (id: string) => Bill | undefined;
 
   getOverride: (billId: string, month: number, year: number) => MonthlyOverride | undefined;
@@ -423,6 +424,12 @@ function withLoadTimeout<T>(promise: PromiseLike<T>, ms: number, label: string):
 function endOfCurrentMonthYMD() {
   const now = new Date();
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  return `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
+}
+
+function endOfPreviousMonthYMD() {
+  const now = new Date();
+  const end = new Date(now.getFullYear(), now.getMonth(), 0);
   return `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
 }
 
@@ -1273,6 +1280,46 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       ]);
       const failed = results.find(result => result.error);
       if (failed?.error) throw new Error(`Delete bill: ${failed.error.message}`);
+      setBills(prev => reorderDebtPriorities(prev.filter(b => b.id !== id)));
+      setOverrides(prev => prev.filter(o => o.bill_id !== id));
+    }
+    if (deletedBill?.is_debt) {
+      const rollover = await supabase.rpc("recalculate_debt_minimum_boosts", { p_household_id: householdScopeRef.current?.householdId ?? null });
+      if (rollover.error) throw new Error(`Recalculate debt minimum: ${rollover.error.message}`);
+      const refreshed = await applyHouseholdSelect(supabase.from("bills").select("*"), user.id);
+      if (refreshed.error) throw new Error(`Refresh debts: ${refreshed.error.message}`);
+      setBills(reorderDebtPriorities((refreshed.data ?? []).map(normalizeBillRow)));
+    }
+  }, [user, bills, demoMode, applyHouseholdSelect]);
+
+  const deleteBillMistake = useCallback(async (id: string) => {
+    if (!user) return;
+    const deletedBill = bills.find(bill => bill.id === id);
+    const shouldHideForwardOnly = !!deletedBill && (deletedBill.is_recurring || deletedBill.is_debt);
+    const previousEndDate = endOfPreviousMonthYMD();
+    if (demoMode) {
+      if (shouldHideForwardOnly) {
+        setBills(prev => reorderDebtPriorities(prev.map(b => b.id === id ? { ...b, end_date: previousEndDate } : b)));
+      } else {
+        setBills(prev => reorderDebtPriorities(prev.filter(b => b.id !== id)));
+        setOverrides(prev => prev.filter(o => o.bill_id !== id));
+      }
+      return;
+    }
+    if (shouldHideForwardOnly && deletedBill) {
+      const hiddenBill = { ...deletedBill, end_date: previousEndDate };
+      await ensureSaved(
+        supabase.from("bills").update({ end_date: previousEndDate, last_reviewed_at: new Date().toISOString() }).eq("id", id),
+        "Delete mistaken bill"
+      );
+      setBills(prev => reorderDebtPriorities(prev.map(b => b.id === id ? hiddenBill : b)));
+    } else {
+      const results = await Promise.all([
+        supabase.from("bills").delete().eq("id", id),
+        supabase.from("monthly_overrides").delete().eq("bill_id", id),
+      ]);
+      const failed = results.find(result => result.error);
+      if (failed?.error) throw new Error(`Delete mistaken bill: ${failed.error.message}`);
       setBills(prev => reorderDebtPriorities(prev.filter(b => b.id !== id)));
       setOverrides(prev => prev.filter(o => o.bill_id !== id));
     }
@@ -2844,7 +2891,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       forecastConfidence, loading, loadError, retryBudgetLoad, demoMode,
       saveStatus, saveError, retryLastSave, clearSaveError,
       dashboardFilter, setDashboardFilter,
-      addBill, updateBill, deleteBill, getBillById,
+      addBill, updateBill, deleteBill, deleteBillMistake, getBillById,
       getOverride, getAmount, getPaidAmount, setPaidAmount, setCustomAmount, getCustomDueDay, setCustomDueDay,
       moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence, getBillDateMovesForMonth,
       getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal,
