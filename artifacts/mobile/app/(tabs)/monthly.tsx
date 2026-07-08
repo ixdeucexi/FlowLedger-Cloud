@@ -31,6 +31,7 @@ const MONTH_FULL = ["January","February","March","April","May","June","July","Au
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
 
 type TabView = "bills" | "calendar";
+type DueDayPickerState = { bill: Bill; fromDate: string };
 
 function formatShortDate(date: string) {
   const parsed = new Date(`${date}T12:00:00`);
@@ -42,6 +43,15 @@ function formatLongDate(date: string) {
   const parsed = new Date(`${date}T12:00:00`);
   if (Number.isNaN(parsed.getTime())) return date;
   return parsed.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+}
+
+function isoDateForMonthDay(year: number, month: number, day: number) {
+  return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function dayFromIsoDate(date: string) {
+  const day = Number(date.slice(8, 10));
+  return Number.isFinite(day) ? day : 1;
 }
 
 function money(amount: number, sign: "auto" | "none" = "none") {
@@ -71,7 +81,7 @@ export default function MonthlyScreen() {
   const {
     bills, overrides, billDateMoves, transactions, goals, decisions, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
     getCustomDueDay, setCustomDueDay,
-    removeBillOccurrenceMove, getBillDateMoveForOccurrence,
+    moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, settings,
     selectedYear, setSelectedYear, dashboardFilter, setDashboardFilter,
     getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill, updateIncome,
@@ -93,7 +103,8 @@ export default function MonthlyScreen() {
   const [extraPayment, setExtraPayment] = useState("");
   const [snowballResults, setSnowballResults] = useState<{ name: string; payment: number; paidOff: boolean }[]>([]);
   const [showSnowballResults, setShowSnowballResults] = useState(false);
-  const [dueDayPickerBill, setDueDayPickerBill] = useState<Bill | null>(null);
+  const [dueDayPicker, setDueDayPicker] = useState<DueDayPickerState | null>(null);
+  const dueDayPickerBill = dueDayPicker?.bill ?? null;
   const [savingDueDay, setSavingDueDay] = useState(false);
   const [incomeDatePicker, setIncomeDatePicker] = useState<{ income: IncomeItem; day: number; amount: number } | null>(null);
   const [savingIncomeDate, setSavingIncomeDate] = useState(false);
@@ -119,7 +130,7 @@ export default function MonthlyScreen() {
     setEditTx(null);
     setTransactionDefaultDate(undefined);
   });
-  useBackDismiss(Boolean(dueDayPickerBill), () => setDueDayPickerBill(null));
+  useBackDismiss(Boolean(dueDayPicker), () => setDueDayPicker(null));
   useBackDismiss(Boolean(incomeDatePicker), () => setIncomeDatePicker(null));
   useBackDismiss(Boolean(monthSummaryDetail), () => setMonthSummaryDetail(null));
   useBackDismiss(Boolean(editPlan), () => setEditPlan(null));
@@ -170,7 +181,7 @@ export default function MonthlyScreen() {
         return true;
       }
       if (dueDayPickerBill) {
-        setDueDayPickerBill(null);
+        setDueDayPicker(null);
         return true;
       }
       if (incomeDatePicker) {
@@ -585,19 +596,30 @@ export default function MonthlyScreen() {
     setEditingAmounts(p => { const n = { ...p }; delete n[key]; return n; });
   }, [editingAmounts, setCustomAmount, month, selectedYear]);
 
-  const saveDueDayChange = useCallback(async (bill: Bill, day: number | undefined) => {
+  const saveDueDayChange = useCallback(async (picker: DueDayPickerState, day: number | undefined) => {
     if (savingDueDay) return;
     setSavingDueDay(true);
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      await setCustomDueDay(bill.id, month, selectedYear, day);
-      setDueDayPickerBill(null);
+      const cleanFrom = picker.fromDate.slice(0, 10);
+      const existingMove = getBillDateMoveForOccurrence(picker.bill.id, cleanFrom);
+      if (day === undefined) {
+        if (existingMove) await removeBillOccurrenceMove(existingMove.id);
+      } else {
+        const targetDate = isoDateForMonthDay(selectedYear, month, day);
+        if (targetDate === cleanFrom) {
+          if (existingMove) await removeBillOccurrenceMove(existingMove.id);
+        } else {
+          await moveBillOccurrence(picker.bill.id, cleanFrom, targetDate);
+        }
+      }
+      setDueDayPicker(null);
     } catch (error) {
       Alert.alert("Couldn’t save date", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSavingDueDay(false);
     }
-  }, [savingDueDay, setCustomDueDay, month, selectedYear]);
+  }, [getBillDateMoveForOccurrence, month, moveBillOccurrence, removeBillOccurrenceMove, savingDueDay, selectedYear]);
 
   const saveIncomeDateChange = useCallback(async (income: IncomeItem, day: number) => {
     if (savingIncomeDate) return;
@@ -1130,7 +1152,10 @@ export default function MonthlyScreen() {
                         {customDay !== undefined ? "Due date this month:" : "Due date (this month only):"}
                       </Text>
                       <Pressable
-                        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setDueDayPickerBill(bill); }}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setDueDayPicker({ bill, fromDate: isoDateForMonthDay(selectedYear, month, effectiveDueDay) });
+                        }}
                         style={({ pressed }) => [
                           styles.dueDayInput,
                           {
@@ -1148,7 +1173,11 @@ export default function MonthlyScreen() {
                       </Pressable>
                       {customDay !== undefined && (
                         <Pressable
-                          onPress={() => saveDueDayChange(bill, undefined)}
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            setCustomDueDay(bill.id, month, selectedYear, undefined)
+                              .catch(error => Alert.alert("Couldn’t save date", error instanceof Error ? error.message : "Please try again."));
+                          }}
                           style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, marginLeft: 6 })}
                           hitSlop={8}
                         >
@@ -1375,8 +1404,9 @@ export default function MonthlyScreen() {
                                   <Pressable
                                     onPress={() => {
                                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                      const fromDate = movedInByBillId.get(bill.id)?.from_date ?? selectedDate;
                                       setSelectedDate(null);
-                                      setDueDayPickerBill(bill);
+                                      if (fromDate) setDueDayPicker({ bill, fromDate });
                                     }}
                                     style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.primary + "16", borderColor: c.primary + "35", opacity: pressed ? 0.74 : 1 }]}
                                   >
@@ -1476,29 +1506,32 @@ export default function MonthlyScreen() {
 
       {/* ── Due-day reschedule picker ── */}
       <Modal
-        visible={dueDayPickerBill !== null}
+        visible={dueDayPicker !== null}
         animationType="slide"
         transparent
-        onRequestClose={() => setDueDayPickerBill(null)}
+        onRequestClose={() => setDueDayPicker(null)}
       >
-        <Pressable style={styles.pickerOverlay} onPress={() => setDueDayPickerBill(null)}>
+        <Pressable style={styles.pickerOverlay} onPress={() => setDueDayPicker(null)}>
           <Pressable style={[styles.pickerSheet, { backgroundColor: c.background }]} onPress={e => e.stopPropagation()}>
-            {dueDayPickerBill && (() => {
+            {dueDayPicker && (() => {
+              const { bill, fromDate } = dueDayPicker;
               const daysInMonth = new Date(selectedYear, month + 1, 0).getDate();
-              const customDay = getCustomDueDay(dueDayPickerBill.id, month, selectedYear);
-              const effectiveDay = customDay ?? dueDayPickerBill.due_day;
+              const movedDate = getBillDateMoveForOccurrence(bill.id, fromDate)?.to_date;
+              const effectiveDate = movedDate ?? fromDate;
+              const effectiveDay = dayFromIsoDate(effectiveDate);
+              const originalDay = dayFromIsoDate(fromDate);
               return (
                 <>
                   <View style={styles.pickerHandle} />
                   <View style={styles.pickerHeader}>
                     <View>
-                      <Text style={[styles.pickerTitle, { color: c.foreground }]}>{dueDayPickerBill.name}</Text>
+                      <Text style={[styles.pickerTitle, { color: c.foreground }]}>{bill.name}</Text>
                       <Text style={[styles.pickerSub, { color: c.mutedForeground }]}>
-                        {MONTH_FULL[month]} {selectedYear} · Currently {MONTH_FULL[month]} {effectiveDay}, {selectedYear}
-                        {customDay !== undefined ? " (custom)" : " (default)"}
+                        Currently {formatShortDate(effectiveDate)}
+                        {movedDate ? ` · moved from ${formatShortDate(fromDate)}` : " · original date"}
                       </Text>
                     </View>
-                    <Pressable onPress={() => setDueDayPickerBill(null)} hitSlop={8}>
+                    <Pressable onPress={() => setDueDayPicker(null)} hitSlop={8}>
                       <Feather name="x" size={20} color={c.mutedForeground} />
                     </Pressable>
                   </View>
@@ -1522,12 +1555,12 @@ export default function MonthlyScreen() {
                     ].map((day, idx) => {
                       if (day === null) return <View key={`e${idx}`} style={styles.pickerDayBtn} />;
                       const isCurrent = day === effectiveDay;
-                      const isOriginal = day === dueDayPickerBill.due_day && customDay === undefined;
+                      const isOriginal = day === originalDay && !movedDate;
                       return (
                         <Pressable
                           key={day}
                           disabled={savingDueDay}
-                          onPress={() => saveDueDayChange(dueDayPickerBill, day === dueDayPickerBill.due_day ? undefined : day)}
+                          onPress={() => saveDueDayChange(dueDayPicker, day)}
                           style={({ pressed }) => [
                             styles.pickerDayBtn,
                             {
@@ -1548,10 +1581,10 @@ export default function MonthlyScreen() {
                     })}
                   </View>
 
-                  {customDay !== undefined && (
+                  {movedDate && (
                     <Pressable
                       disabled={savingDueDay}
-                      onPress={() => saveDueDayChange(dueDayPickerBill, undefined)}
+                      onPress={() => saveDueDayChange(dueDayPicker, undefined)}
                       style={({ pressed }) => [
                         styles.pickerResetBtn,
                         { backgroundColor: c.muted, opacity: pressed ? 0.7 : 1, borderRadius: colors.radius },
@@ -1559,7 +1592,7 @@ export default function MonthlyScreen() {
                     >
                       <Feather name="rotate-ccw" size={14} color={c.mutedForeground} />
                       <Text style={[styles.pickerResetText, { color: c.mutedForeground }]}>
-                        Reset to default {MONTH_FULL[month]} {dueDayPickerBill.due_day}, {selectedYear}
+                        Reset to {formatShortDate(fromDate)}
                       </Text>
                     </Pressable>
                   )}

@@ -18,6 +18,13 @@ export interface ScheduledBillDateMove {
   bill_id: string;
   from_date: string;
   to_date: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+function moveFreshness(move: ScheduledBillDateMove): number {
+  const parsed = Date.parse(move.updated_at ?? move.created_at ?? "");
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 export function isValidDateInMonth(date: string, month: number, year: number): boolean {
@@ -65,11 +72,21 @@ export function applyBillDateMovesToOccurrenceDays(
 ): number[] {
   const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
   const dateFromDay = (day: number) => `${monthPrefix}-${String(day).padStart(2, "0")}`;
-  const kept = occurrences.filter(day => !moves.some(move =>
+  const activeMovesByOriginalDate = new Map<string, ScheduledBillDateMove>();
+  moves
+    .filter(move => move.bill_id === billId)
+    .forEach(move => {
+      const existing = activeMovesByOriginalDate.get(move.from_date);
+      if (!existing || moveFreshness(move) >= moveFreshness(existing)) {
+        activeMovesByOriginalDate.set(move.from_date, move);
+      }
+    });
+  const activeMoves = Array.from(activeMovesByOriginalDate.values());
+  const kept = occurrences.filter(day => !activeMoves.some(move =>
     move.bill_id === billId && move.from_date === dateFromDay(day)
   ));
-  const movedIn = moves
-    .filter(move => move.bill_id === billId && move.to_date.startsWith(monthPrefix))
+  const movedIn = activeMoves
+    .filter(move => move.to_date.startsWith(monthPrefix))
     .map(move => Number(move.to_date.slice(8, 10)))
     .filter(day => Number.isFinite(day));
   return Array.from(new Set([...kept, ...movedIn])).sort((a, b) => a - b);

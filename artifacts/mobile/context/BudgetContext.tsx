@@ -530,16 +530,21 @@ function billDateMoveKey(move: Pick<BillDateMove, "bill_id" | "from_date">) {
   return `${move.bill_id}::${move.from_date}`;
 }
 
+function billDateMoveFreshness(move: Pick<BillDateMove, "created_at" | "updated_at">) {
+  const parsed = Date.parse(move.updated_at ?? move.created_at ?? "");
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function mergeBillDateMoves(primary: BillDateMove[], fallback: BillDateMove[]) {
-  const seen = new Set<string>();
-  const merged: BillDateMove[] = [];
-  [...primary, ...fallback].forEach(move => {
+  const byKey = new Map<string, BillDateMove>();
+  [...fallback, ...primary].forEach(move => {
     const key = billDateMoveKey(move);
-    if (seen.has(key)) return;
-    seen.add(key);
-    merged.push(move);
+    const existing = byKey.get(key);
+    if (!existing || billDateMoveFreshness(move) >= billDateMoveFreshness(existing)) {
+      byKey.set(key, move);
+    }
   });
-  return merged.sort((a, b) => a.from_date.localeCompare(b.from_date) || a.to_date.localeCompare(b.to_date));
+  return Array.from(byKey.values()).sort((a, b) => a.from_date.localeCompare(b.from_date) || a.to_date.localeCompare(b.to_date));
 }
 
 function billDateMoveDbPayload(move: Pick<BillDateMove, "bill_id" | "from_date" | "to_date">, userId: string, scope?: HouseholdMembership | null) {
@@ -551,6 +556,35 @@ function billDateMoveDbPayload(move: Pick<BillDateMove, "bill_id" | "from_date" 
     updated_at: new Date().toISOString(),
     ...(scope ? { household_id: scope.householdId, budget_id: scope.budgetId } : {}),
   };
+}
+
+function billDateMoveConflictTarget(scope?: HouseholdMembership | null) {
+  return scope?.householdId ? "household_id,bill_id,from_date" : "user_id,bill_id,from_date";
+}
+
+function isUuidLike(id: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+}
+
+async function upsertBillDateMoveRow(move: Pick<BillDateMove, "bill_id" | "from_date" | "to_date">, userId: string, scope?: HouseholdMembership | null) {
+  const payload = billDateMoveDbPayload(move, userId, scope);
+  const preferredConflict = billDateMoveConflictTarget(scope);
+  const saved = await supabase
+    .from("bill_date_moves")
+    .upsert(payload, { onConflict: preferredConflict })
+    .select("*")
+    .single();
+  if (!saved.error || preferredConflict === "user_id,bill_id,from_date") return saved;
+
+  const message = saved.error.message.toLowerCase();
+  const canFallback = message.includes("unique") || message.includes("constraint") || message.includes("schema cache") || message.includes("conflict");
+  if (!canFallback) return saved;
+
+  return supabase
+    .from("bill_date_moves")
+    .upsert(payload, { onConflict: "user_id,bill_id,from_date" })
+    .select("*")
+    .single();
 }
 
 async function loadBillDateMoves(uid: string, scope?: HouseholdMembership | null): Promise<BillDateMove[]> {
@@ -573,11 +607,7 @@ async function loadBillDateMoves(uid: string, scope?: HouseholdMembership | null
 
   if (localOnly.length > 0) {
     const synced = await Promise.all(localOnly.map(async move => {
-      const saved = await supabase
-        .from("bill_date_moves")
-        .upsert(billDateMoveDbPayload(move, uid, scope), { onConflict: "user_id,bill_id,from_date" })
-        .select("*")
-        .single();
+      const saved = await upsertBillDateMoveRow(move, uid, scope);
       return saved.error ? move : normalizeBillDateMoveRow(saved.data);
     }));
     remoteMoves = mergeBillDateMoves(remoteMoves, synced);
@@ -1503,11 +1533,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     markSaveStarted();
     try {
-      const saved = await supabase
-        .from("bill_date_moves")
-          .upsert(billDateMoveDbPayload(nextMove, user.id, householdScopeRef.current), { onConflict: "user_id,bill_id,from_date" })
-        .select("*")
-        .single();
+      const saved = await upsertBillDateMoveRow(nextMove, user.id, householdScopeRef.current);
       if (saved.error) throw new Error(`Move bill date: ${saved.error.message}`);
       const savedMove = normalizeBillDateMoveRow(saved.data);
       const finalMoves = billDateMovesRef.current.map(move =>
@@ -1543,11 +1569,21 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     markSaveStarted();
     try {
-      const removed = await supabase
-        .from("bill_date_moves")
-        .delete()
-        .eq("bill_id", existing.bill_id)
-        .eq("from_date", existing.from_date);
+      let removeQuery = supabase.from("bill_date_moves").delete();
+      if (isUuidLike(existing.id)) {
+        removeQuery = removeQuery.eq("id", existing.id);
+      } else if (householdScopeRef.current?.householdId) {
+        removeQuery = removeQuery
+          .eq("household_id", householdScopeRef.current.householdId)
+          .eq("bill_id", existing.bill_id)
+          .eq("from_date", existing.from_date);
+      } else {
+        removeQuery = removeQuery
+          .eq("user_id", user.id)
+          .eq("bill_id", existing.bill_id)
+          .eq("from_date", existing.from_date);
+      }
+      const removed = await removeQuery;
       if (removed.error) throw new Error(`Restore bill date: ${removed.error.message}`);
       markSaveCompleted();
     } catch (error) {
