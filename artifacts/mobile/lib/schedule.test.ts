@@ -27,6 +27,12 @@ describe("bill scheduling", () => {
     assert.deepEqual(getBillOccurrenceDays(bill, 5, 2026), [1, 8, 15, 22, 29]);
   });
 
+  it("projects biweekly bills from the remembered first pay date", () => {
+    const bill = { frequency: "biweekly" as const, due_day: 1, next_payment_date: "2026-06-05" };
+    assert.deepEqual(getBillOccurrenceDays(bill, 5, 2026), [5, 19]);
+    assert.deepEqual(getBillOccurrenceDays(bill, 6, 2026), [3, 17, 31]);
+  });
+
   it("moves a bill occurrence to the new day without leaving it on the old day", () => {
     const moved = applyBillDateMovesToOccurrenceDays("utilities", 6, 2026, [4], [
       { bill_id: "utilities", from_date: "2026-07-04", to_date: "2026-07-03" },

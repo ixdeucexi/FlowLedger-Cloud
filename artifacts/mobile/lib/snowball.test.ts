@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { allocateSnowballExtra, effectiveDebtMinimum, orderDebts, projectSnowballMonth, scheduledDebtPaymentAmount, simulateSnowballPayoff, type SnowballDebtInput } from "./snowball";
+import { allocateSnowballExtra, effectiveDebtMinimum, monthlyInterestCharge, orderDebts, projectSnowballMonth, scheduledDebtPaymentAmount, simulateSnowballPayoff, type SnowballDebtInput } from "./snowball";
 
 const debts: SnowballDebtInput[] = [
   { id: "large", name: "Large", balance: 1_000, minimum: 100, apr: 12, dueDay: 15, included: true },
@@ -10,6 +10,12 @@ const debts: SnowballDebtInput[] = [
 ];
 
 describe("debt ordering and allocation", () => {
+  it("calculates monthly interest from APR without treating APR as a monthly rate", () => {
+    assert.equal(monthlyInterestCharge(1_200, 24), 24);
+    assert.equal(monthlyInterestCharge(1_000, 0), 0);
+    assert.equal(monthlyInterestCharge(1_000, -5), 0);
+  });
+
   it("adds a closed debt minimum to the new number one debt", () => {
     assert.equal(effectiveDebtMinimum(75, 25), 100);
   });

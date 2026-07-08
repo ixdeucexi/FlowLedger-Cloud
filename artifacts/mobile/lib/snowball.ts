@@ -74,6 +74,10 @@ export interface SnowballProjectionResult {
 
 const cents = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
 
+export function monthlyInterestCharge(balance: number, annualPercentageRate: number): number {
+  return cents(Math.max(0, Number(balance) || 0) * (Math.max(0, Number(annualPercentageRate) || 0) / 100) / 12);
+}
+
 export function effectiveDebtMinimum(baseMinimum: number, rolledMinimum: number): number {
   return cents(Math.max(0, baseMinimum) + Math.max(0, rolledMinimum));
 }
@@ -213,7 +217,7 @@ export function projectSnowballMonth(options: {
   for (const debt of options.debts) {
     const before = balances.get(debt.id) ?? 0;
     if (before <= 0.009) continue;
-    const charge = cents(before * Math.max(0, debt.apr) / 1200);
+    const charge = monthlyInterestCharge(before, debt.apr);
     balances.set(debt.id, cents(before + charge));
     interest = cents(interest + charge);
   }

@@ -31,6 +31,11 @@ test("watch status starts when category is mostly used", () => {
   assert.equal(rows[0]?.status, "watch");
 });
 
+test("keeps user categories even when they have no budget or spending yet", () => {
+  const rows = buildCategoryPlan(["Food", "Other", "Savings"], [], []);
+  assert.deepEqual(rows.map(row => row.category).sort(), ["Food", "Other", "Savings"]);
+});
+
 test("explicit category budgets override bill-derived budgets", () => {
   const rows = buildCategoryPlan(
     ["Food"],

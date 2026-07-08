@@ -14,6 +14,7 @@ create table if not exists bills (
   interest_rate   numeric not null default 0,
   due_day         integer not null default 1,
   day_of_week     integer,
+  next_payment_date text,
   start_date      text,
   end_date        text,
   is_recurring    boolean not null default true,

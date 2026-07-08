@@ -1,7 +1,8 @@
 export interface ScheduledBill {
-  frequency: "monthly" | "weekly";
+  frequency: "monthly" | "biweekly" | "weekly";
   due_day: number;
   day_of_week?: number;
+  next_payment_date?: string;
   start_date?: string;
   end_date?: string;
 }
@@ -54,10 +55,14 @@ export function getBillOccurrenceDays(bill: ScheduledBill, month: number, year: 
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   if (bill.frequency === "weekly") {
     const days: number[] = [];
+    const dayOfWeek = bill.day_of_week ?? dateDayOfWeek(bill.next_payment_date) ?? 0;
     for (let day = 1; day <= daysInMonth; day++) {
-      if (new Date(year, month, day).getDay() === (bill.day_of_week ?? 0)) days.push(day);
+      if (new Date(year, month, day).getDay() === dayOfWeek) days.push(day);
     }
     return days;
+  }
+  if (bill.frequency === "biweekly") {
+    return occurrenceDaysFromAnchor(bill.next_payment_date ?? bill.start_date, bill.due_day, month, year, 14);
   }
   const day = Math.min(bill.due_day, daysInMonth);
   return day > 0 ? [day] : [];
@@ -113,6 +118,33 @@ export function getIncomeOccurrenceDays(income: ScheduledIncome, month: number, 
   const target = new Date(year, month, 1);
   while (cursor > target) cursor = new Date(cursor.getTime() - intervalDays * 86_400_000);
   while (cursor < target) cursor = new Date(cursor.getTime() + intervalDays * 86_400_000);
+  const days: number[] = [];
+  while (cursor.getMonth() === month && cursor.getFullYear() === year) {
+    days.push(cursor.getDate());
+    cursor = new Date(cursor.getTime() + intervalDays * 86_400_000);
+  }
+  return days;
+}
+
+function dateDayOfWeek(date?: string): number | null {
+  if (!date) return null;
+  const [year, month, day] = date.split("-").map(Number);
+  if (![year, month, day].every(Number.isFinite)) return null;
+  return new Date(year, month - 1, day).getDay();
+}
+
+function occurrenceDaysFromAnchor(anchorDate: string | undefined, fallbackDay: number, month: number, year: number, intervalDays: number): number[] {
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const fallback = Math.min(Math.max(1, fallbackDay || 1), daysInMonth);
+  const anchor = anchorDate ?? `${year}-${String(month + 1).padStart(2, "0")}-${String(fallback).padStart(2, "0")}`;
+  const [anchorYear, anchorMonth, anchorDay] = anchor.split("-").map(Number);
+  if (![anchorYear, anchorMonth, anchorDay].every(Number.isFinite)) return [fallback];
+
+  let cursor = new Date(anchorYear, anchorMonth - 1, anchorDay);
+  const target = new Date(year, month, 1);
+  while (cursor > target) cursor = new Date(cursor.getTime() - intervalDays * 86_400_000);
+  while (cursor < target) cursor = new Date(cursor.getTime() + intervalDays * 86_400_000);
+
   const days: number[] = [];
   while (cursor.getMonth() === month && cursor.getFullYear() === year) {
     days.push(cursor.getDate());

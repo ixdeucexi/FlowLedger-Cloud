@@ -60,14 +60,6 @@ export async function saveCategoryBudgets(userId: string | undefined | null, mon
   writeCategoryBudgetCache(month, year, clean);
   if (!userId) return;
 
-  const { error: deleteError } = await supabase
-    .from("category_budgets")
-    .delete()
-    .eq("user_id", userId)
-    .eq("month", month)
-    .eq("year", year);
-  if (deleteError) throw new Error(`Clear category budgets: ${deleteError.message}`);
-
   const rows = Object.entries(clean).map(([category, amount]) => ({
     user_id: userId,
     category,
@@ -77,7 +69,9 @@ export async function saveCategoryBudgets(userId: string | undefined | null, mon
     updated_at: new Date().toISOString(),
   }));
   if (!rows.length) return;
-  const { error } = await supabase.from("category_budgets").insert(rows);
+  const { error } = await supabase
+    .from("category_budgets")
+    .upsert(rows, { onConflict: "user_id,category,month,year" });
   if (error) throw new Error(`Save category budgets: ${error.message}`);
 }
 

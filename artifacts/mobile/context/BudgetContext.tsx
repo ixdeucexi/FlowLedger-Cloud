@@ -51,10 +51,11 @@ export interface Bill {
   interest_rate: number;
   due_day: number;
   day_of_week?: number;
+  next_payment_date?: string;
   start_date?: string;
   end_date?: string;
   is_recurring: boolean;
-  frequency: "monthly" | "weekly";
+  frequency: "monthly" | "biweekly" | "weekly";
   created_at: string;
   smart_priority?: "must" | "flexible" | "optional" | null;
   include_in_snowball?: boolean;
@@ -367,6 +368,32 @@ const DEFAULT_CATEGORIES = [
   "Shopping", "Rent", "Other",
 ];
 
+function normalizeCategoryInput(name: string): string {
+  return String(name ?? "").trim().replace(/\s+/g, " ");
+}
+
+function categoryMatches(left: string, right: string): boolean {
+  return normalizeCategoryInput(left).toLowerCase() === normalizeCategoryInput(right).toLowerCase();
+}
+
+function dedupeCategories(values: string[]): string[] {
+  const next: string[] = [];
+  const seen = new Set<string>();
+  values.forEach(value => {
+    const clean = normalizeCategoryInput(value);
+    if (!clean) return;
+    const key = clean.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    next.push(clean);
+  });
+  return next;
+}
+
+function fallbackCategoryList(values: string[]): string[] {
+  return dedupeCategories([...DEFAULT_CATEGORIES, ...values]);
+}
+
 const diagnosticPlatform = (): "web" | "ios" | "android" | "unknown" =>
   Platform.OS === "web" || Platform.OS === "ios" || Platform.OS === "android" ? Platform.OS : "unknown";
 
@@ -630,8 +657,9 @@ const hasPendingSnowballBalanceApply = (payment: Pick<ExtraPayment, "sources">) 
 function normalizeBillRow(bill: any): Bill {
   return {
     ...bill,
-    frequency: (bill.frequency ?? "monthly") as "monthly" | "weekly",
+    frequency: (bill.frequency ?? "monthly") as "monthly" | "biweekly" | "weekly",
     day_of_week: bill.day_of_week ?? 0,
+    next_payment_date: bill.next_payment_date ?? undefined,
     amount: Number(bill.amount),
     balance: Number(bill.balance),
     interest_rate: Number(bill.interest_rate),
@@ -1086,7 +1114,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           }
         }
         const cats = (cData ?? []).map((c: any) => c.name as string);
-        setCategories(cats.length > 0 ? cats : DEFAULT_CATEGORIES);
+        setCategories(cats.length > 0 ? fallbackCategoryList(cats) : DEFAULT_CATEGORIES);
         setLoadError(null);
       } catch (error) {
         console.warn("Budget load failed or timed out", error);
@@ -2599,61 +2627,67 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const addCategory = useCallback(async (name: string) => {
     if (!user) return;
-    const trimmed = name.trim();
+    const trimmed = normalizeCategoryInput(name);
     if (!trimmed) return;
-    if (categories.includes(trimmed)) return;
+    if (categories.some(category => categoryMatches(category, trimmed))) return;
     if (demoMode) {
-      setCategories(prev => [...prev, trimmed]);
+      setCategories(prev => fallbackCategoryList([...prev, trimmed]));
       return;
     }
     await ensureSaved(supabase.from("categories").insert(scopedPayload({ user_id: user.id, name: trimmed })), "Add category");
-    setCategories(prev => [...prev, trimmed]);
+    setCategories(prev => fallbackCategoryList([...prev, trimmed]));
   }, [user, categories, demoMode, scopedPayload]);
 
   const updateCategory = useCallback(async (oldName: string, newName: string) => {
     if (!user) return;
-    const trimmed = newName.trim();
-    if (!trimmed || trimmed === oldName) return;
-    const affectedBills = bills.filter(b => b.category === oldName);
-    const affectedTransactions = transactions.filter(t => t.category === oldName);
+    const trimmed = normalizeCategoryInput(newName);
+    if (!trimmed || categoryMatches(trimmed, oldName)) return;
+    const canonicalExisting = categories.find(category => !categoryMatches(category, oldName) && categoryMatches(category, trimmed));
+    const targetName = canonicalExisting ?? trimmed;
+    const affectedBills = bills.filter(b => categoryMatches(b.category, oldName));
+    const affectedTransactions = transactions.filter(t => categoryMatches(t.category, oldName));
     if (demoMode) {
-      setCategories(prev => prev.map(c => c === oldName ? trimmed : c));
-      setBills(prev => prev.map(b => b.category === oldName ? { ...b, category: trimmed } : b));
-      setTransactions(prev => prev.map(t => t.category === oldName ? { ...t, category: trimmed } : t));
+      setCategories(prev => fallbackCategoryList(prev.map(c => categoryMatches(c, oldName) ? targetName : c)));
+      setBills(prev => prev.map(b => categoryMatches(b.category, oldName) ? { ...b, category: targetName } : b));
+      setTransactions(prev => prev.map(t => categoryMatches(t.category, oldName) ? { ...t, category: targetName } : t));
       return;
     }
     const results = await Promise.all([
-      supabase.from("categories").update({ name: trimmed }).eq("name", oldName),
-      ...affectedBills.map(b => supabase.from("bills").update({ category: trimmed }).eq("id", b.id)),
-      ...affectedTransactions.map(t => supabase.from("transactions").update({ category: trimmed }).eq("id", t.id)),
+      canonicalExisting
+        ? supabase.from("categories").delete().eq("name", oldName)
+        : supabase.from("categories").update({ name: targetName }).eq("name", oldName),
+      ...affectedBills.map(b => supabase.from("bills").update({ category: targetName }).eq("id", b.id)),
+      ...affectedTransactions.map(t => supabase.from("transactions").update({ category: targetName }).eq("id", t.id)),
     ]);
     const failed = results.find(result => result.error);
     if (failed?.error) throw new Error(`Rename category: ${failed.error.message}`);
-    setCategories(prev => prev.map(c => c === oldName ? trimmed : c));
-    setBills(prev => prev.map(b => b.category === oldName ? { ...b, category: trimmed } : b));
-    setTransactions(prev => prev.map(t => t.category === oldName ? { ...t, category: trimmed } : t));
-  }, [user, bills, transactions, demoMode]);
+    setCategories(prev => fallbackCategoryList(prev.map(c => categoryMatches(c, oldName) ? targetName : c)));
+    setBills(prev => prev.map(b => categoryMatches(b.category, oldName) ? { ...b, category: targetName } : b));
+    setTransactions(prev => prev.map(t => categoryMatches(t.category, oldName) ? { ...t, category: targetName } : t));
+  }, [user, bills, transactions, categories, demoMode]);
 
   const deleteCategory = useCallback(async (name: string) => {
     if (!user) return;
-    const affectedBills = bills.filter(b => b.category === name);
-    const affectedTransactions = transactions.filter(t => t.category === name);
+    const cleanName = normalizeCategoryInput(name);
+    if (!cleanName || categoryMatches(cleanName, "Other")) return;
+    const affectedBills = bills.filter(b => categoryMatches(b.category, cleanName));
+    const affectedTransactions = transactions.filter(t => categoryMatches(t.category, cleanName));
     if (demoMode) {
-      setCategories(prev => prev.filter(c => c !== name));
-      setBills(prev => prev.map(b => b.category === name ? { ...b, category: "Other" } : b));
-      setTransactions(prev => prev.map(t => t.category === name ? { ...t, category: "Other" } : t));
+      setCategories(prev => fallbackCategoryList(prev.filter(c => !categoryMatches(c, cleanName))));
+      setBills(prev => prev.map(b => categoryMatches(b.category, cleanName) ? { ...b, category: "Other" } : b));
+      setTransactions(prev => prev.map(t => categoryMatches(t.category, cleanName) ? { ...t, category: "Other" } : t));
       return;
     }
     const results = await Promise.all([
-      supabase.from("categories").delete().eq("name", name),
+      supabase.from("categories").delete().eq("name", cleanName),
       ...affectedBills.map(b => supabase.from("bills").update({ category: "Other" }).eq("id", b.id)),
       ...affectedTransactions.map(t => supabase.from("transactions").update({ category: "Other" }).eq("id", t.id)),
     ]);
     const failed = results.find(result => result.error);
     if (failed?.error) throw new Error(`Delete category: ${failed.error.message}`);
-    setCategories(prev => prev.filter(c => c !== name));
-    setBills(prev => prev.map(b => b.category === name ? { ...b, category: "Other" } : b));
-    setTransactions(prev => prev.map(t => t.category === name ? { ...t, category: "Other" } : t));
+    setCategories(prev => fallbackCategoryList(prev.filter(c => !categoryMatches(c, cleanName))));
+    setBills(prev => prev.map(b => categoryMatches(b.category, cleanName) ? { ...b, category: "Other" } : b));
+    setTransactions(prev => prev.map(t => categoryMatches(t.category, cleanName) ? { ...t, category: "Other" } : t));
   }, [user, bills, transactions, demoMode]);
 
   // ─── Settings ─────────────────────────────────────────────────────────────────
@@ -2903,8 +2937,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     const newBills = imported.map(b => ({
       ...b,
-      frequency:   (b.frequency ?? "monthly") as "monthly" | "weekly",
+      frequency:   (["monthly", "biweekly", "weekly"].includes(String(b.frequency)) ? b.frequency : "monthly") as "monthly" | "biweekly" | "weekly",
       day_of_week: b.day_of_week ?? 0,
+      next_payment_date: b.next_payment_date ?? undefined,
       id:          genId(),
       created_at:  new Date().toISOString(),
     }));

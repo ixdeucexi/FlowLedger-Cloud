@@ -42,6 +42,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onDeleteMista
   const [dayOfWeek,     setDayOfWeek]     = useState(0);      // 0=Sun … 6=Sat
   const [isRecurring,   setIsRecurring]   = useState(true);
   const [frequency,     setFrequency]     = useState<Bill["frequency"]>("monthly");
+  const [nextPaymentDate, setNextPaymentDate] = useState("");
   const [billStartDate, setBillStartDate] = useState("");     // YYYY-MM-DD
   const [billEndDate,   setBillEndDate]   = useState("");     // YYYY-MM-DD
   const [showDayPicker, setShowDayPicker] = useState(false);
@@ -71,6 +72,17 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onDeleteMista
     });
   };
 
+  const handlePaymentDateChange = (value: string) => {
+    setNextPaymentDate(value);
+    const [year, month, day] = value.split("-").map(Number);
+    if (![year, month, day].every(Number.isFinite)) return;
+    const parsed = new Date(year, month - 1, day);
+    setDueDay(String(day));
+    setDayOfWeek(parsed.getDay());
+    setPickerYear(year);
+    setPickerMonth(month - 1);
+  };
+
   useEffect(() => {
     if (editBill) {
       setName(editBill.name);
@@ -84,13 +96,14 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onDeleteMista
       setDayOfWeek(editBill.day_of_week ?? 0);
       setIsRecurring(editBill.is_recurring);
       setFrequency(editBill.frequency ?? "monthly");
+      setNextPaymentDate(editBill.next_payment_date ?? "");
       setBillStartDate(editBill.start_date ?? "");
       setBillEndDate(editBill.end_date ?? "");
     } else {
       setName(""); setAmount(""); setCategory("Other");
       setIsDebt(forceDebt ?? false); setBalance(""); setInterestRate(""); setIncludeInSnowball(true);
       setDueDay("1"); setDayOfWeek(0); setIsRecurring(true);
-      setFrequency("monthly"); setBillStartDate(""); setBillEndDate("");
+      setFrequency("monthly"); setNextPaymentDate(""); setBillStartDate(""); setBillEndDate("");
     }
   }, [editBill, visible, forceDebt]);
 
@@ -111,6 +124,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onDeleteMista
       interest_rate: isDebt ? (parseFloat(interestRate) || 0) : 0,
       due_day: parseInt(dueDay) || 1,
       day_of_week: dayOfWeek,
+      next_payment_date: nextPaymentDate.trim() || undefined,
       start_date: billStartDate.trim() || undefined,
       end_date: billEndDate.trim() || undefined,
       is_recurring: isDebt ? true : isRecurring,
@@ -221,20 +235,28 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onDeleteMista
             {/* Frequency */}
             <Text style={lbl}>Frequency</Text>
             <View style={[styles.segRow, { backgroundColor: c.muted, borderRadius: 10 }]}>
-              {(["monthly", "weekly"] as Bill["frequency"][]).map(f => (
+              {(["monthly", "biweekly", "weekly"] as Bill["frequency"][]).map(f => (
                 <Pressable key={f} onPress={() => setFrequency(f)}
                   style={[styles.segBtn, { backgroundColor: frequency === f ? c.primary : "transparent", borderRadius: 8 }]}
                 >
                   <Feather name={f === "monthly" ? "calendar" : "repeat"} size={12}
                     color={frequency === f ? c.primaryForeground : c.mutedForeground} />
                   <Text style={[styles.segLabel, { color: frequency === f ? c.primaryForeground : c.mutedForeground }]}>
-                    {f === "monthly" ? "Monthly" : "Weekly"}
+                    {f === "monthly" ? "Monthly" : f === "biweekly" ? "Biweekly" : "Weekly"}
                   </Text>
                 </Pressable>
               ))}
             </View>
 
             {/* Monthly → calendar day picker; Weekly → day-of-week grid */}
+            <DatePickerField
+              label={frequency === "monthly" ? "Payment Date (optional)" : "First Pay Date"}
+              value={nextPaymentDate}
+              onChange={handlePaymentDateChange}
+              placeholder={frequency === "monthly" ? "Use due day only" : "Pick the first pay date"}
+              optional={frequency === "monthly"}
+            />
+
             {frequency === "monthly" ? (
               <>
                 <Text style={lbl}>Due Day of Month</Text>
@@ -308,7 +330,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onDeleteMista
                   </View>
                 )}
               </>
-            ) : (
+            ) : frequency === "weekly" ? (
               <>
                 <Text style={lbl}>Repeats Every</Text>
                 <View style={styles.dowRow}>
@@ -328,11 +350,18 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onDeleteMista
                 <View style={[styles.infoBox, { backgroundColor: c.primary + "12" }]}>
                   <Feather name="info" size={12} color={c.primary} />
                   <Text style={[styles.infoText, { color: c.mutedForeground }]}>
-                    Bill repeats every {WEEKDAYS[dayOfWeek]} of the month — typically 4–5 times.
+                    Bill repeats every {WEEKDAYS[dayOfWeek]} - typically 4-5 times per month.
                   </Text>
                 </View>
 
               </>
+            ) : (
+              <View style={[styles.infoBox, { backgroundColor: c.primary + "12" }]}>
+                <Feather name="info" size={12} color={c.primary} />
+                <Text style={[styles.infoText, { color: c.mutedForeground }]}>
+                  Biweekly bills repeat every 14 days from the first pay date you choose above.
+                </Text>
+              </View>
             )}
 
             {/* Optional date range */}

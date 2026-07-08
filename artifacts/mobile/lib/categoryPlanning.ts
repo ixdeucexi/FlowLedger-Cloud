@@ -53,7 +53,8 @@ export function buildCategoryPlan(
   transactions: CategoryPlanTransaction[],
   budgets: CategoryBudgetLimit[] = [],
 ): CategoryPlanRow[] {
-  const names = new Set(categories.length ? categories : ["Other"]);
+  const explicitCategories = new Set((categories.length ? categories : ["Other"]).map(category => category || "Other"));
+  const names = new Set(explicitCategories);
   bills.forEach(bill => names.add(bill.category || "Other"));
   transactions.forEach(transaction => names.add(transaction.category || "Other"));
   budgets.forEach(budget => names.add(budget.category || "Other"));
@@ -81,7 +82,7 @@ export function buildCategoryPlan(
   });
 
   return rows
-    .filter(row => row.budgeted > 0.005 || row.spent > 0.005)
+    .filter(row => explicitCategories.has(row.category) || row.budgeted > 0.005 || row.spent > 0.005)
     .sort((left, right) => {
       const pressure = statusWeight(right.status) - statusWeight(left.status);
       if (pressure) return pressure;

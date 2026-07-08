@@ -21,7 +21,6 @@ import { sortDebtsLeastToGreatest } from "@/lib/debtOrder";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { DECISION_HUB_SETTINGS_EVENT, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { isAlgorithmEnabled } from "@/lib/algorithmCatalog";
-import { isBillActiveForMonth } from "@/lib/schedule";
 
 const CAT_COLORS: Record<string, string> = {
   Housing: "#0f9b8e", Utilities: "#f0b429", Insurance: "#6366f1",
@@ -80,7 +79,15 @@ export default function BillsScreen() {
   const currentMonth = now.getMonth();
   const currentYear  = now.getFullYear();
   const currentDay   = now.getDate();
-  const visibleBills = bills.filter(b => isBillActiveForMonth(b, currentMonth, currentYear));
+  const billOccurrenceDays = useCallback(
+    (bill: Bill) => getBillOccurrencesInMonth(bill, currentMonth, currentYear),
+    [currentMonth, currentYear, getBillOccurrencesInMonth],
+  );
+  const firstOccurrenceDay = useCallback(
+    (bill: Bill) => billOccurrenceDays(bill)[0] ?? bill.due_day,
+    [billOccurrenceDays],
+  );
+  const visibleBills = bills.filter(b => billOccurrenceDays(b).length > 0);
   const nonDebtBills = visibleBills.filter(b => !b.is_debt);
   const filteredBills = nonDebtBills
     .filter(b => {
@@ -88,10 +95,24 @@ export default function BillsScreen() {
       if (filter === "one-time")  return !b.is_recurring;
       return true;
     })
-    .sort((a, b) => a.due_day - b.due_day || a.name.localeCompare(b.name));
+    .sort((a, b) => firstOccurrenceDay(a) - firstOccurrenceDay(b) || a.name.localeCompare(b.name));
 
-  const totalAmount = nonDebtBills.filter(b => b.is_recurring).reduce((s, b) => s + b.amount, 0);
+  const totalAmount = nonDebtBills
+    .filter(b => b.is_recurring)
+    .reduce((s, b) => s + getBillMonthlyTotal(b, currentMonth, currentYear), 0);
   const totalCount  = nonDebtBills.length;
+  const formatBillDueText = useCallback((bill: Bill) => {
+    const days = billOccurrenceDays(bill);
+    if (!days.length) return "No date this month";
+    if (days.length === 1) return `Due ${MONTH_FULL[currentMonth]} ${days[0]}, ${currentYear}`;
+    return `${days.length} payments in ${MONTH_FULL[currentMonth]}`;
+  }, [billOccurrenceDays, currentMonth, currentYear]);
+  const frequencyText = useCallback((bill: Bill) => {
+    if (!bill.is_recurring) return "one-time";
+    if (bill.frequency === "weekly") return "/week";
+    if (bill.frequency === "biweekly") return "biweekly";
+    return "/month";
+  }, []);
 
   // ── Debt data ───────────────────────────────────────────────────
   const baseSnowballPreview = useMemo(
@@ -185,8 +206,9 @@ export default function BillsScreen() {
     if (!isAlgorithmEnabled(decisionHubSettings, "billPriority")) return null;
     const unpaid = nonDebtBills
       .map(bill => {
-        const remaining = Math.max(0, bill.amount - getPaidAmount(bill.id, currentMonth, currentYear));
-        const daysUntilDue = bill.due_day - currentDay;
+        const monthlyTotal = getBillMonthlyTotal(bill, currentMonth, currentYear);
+        const remaining = Math.max(0, monthlyTotal - getPaidAmount(bill.id, currentMonth, currentYear));
+        const daysUntilDue = firstOccurrenceDay(bill) - currentDay;
         const urgency = daysUntilDue <= 0 ? 40 : daysUntilDue <= 3 ? 30 : daysUntilDue <= 7 ? 18 : 6;
         const score = urgency + Math.min(25, remaining / 40);
         return { bill, remaining, daysUntilDue, score };
@@ -206,7 +228,7 @@ export default function BillsScreen() {
       dueText,
       count: unpaid.length,
     };
-  }, [currentDay, currentMonth, currentYear, decisionHubSettings, getPaidAmount, nonDebtBills]);
+  }, [currentDay, currentMonth, currentYear, decisionHubSettings, firstOccurrenceDay, getBillMonthlyTotal, getPaidAmount, nonDebtBills]);
 
   // ── Handlers ────────────────────────────────────────────────────
   const handleSave = useCallback((data: Omit<Bill, "id" | "created_at"> | Bill) => {
@@ -384,7 +406,7 @@ export default function BillsScreen() {
                           <View style={[styles.tag, { backgroundColor: catColor + "18" }]}>
                             <Text style={[styles.tagText, { color: catColor }]}>{item.category}</Text>
                           </View>
-                          <Text style={[styles.metaText, { color: c.mutedForeground }]}>Due {MONTH_FULL[currentMonth]} {item.due_day}, {currentYear}</Text>
+                          <Text style={[styles.metaText, { color: c.mutedForeground }]}>{formatBillDueText(item)}</Text>
                           {beforePayday ? (
                             <View style={[styles.tag, { backgroundColor: c.warning + "18" }]}>
                               <Text style={[styles.tagText, { color: c.warning }]}>Before payday</Text>
@@ -399,7 +421,7 @@ export default function BillsScreen() {
                       </View>
                       <View style={styles.cardRight}>
                         <Text style={[styles.amount, { color: c.foreground }]}>${item.amount.toFixed(2)}</Text>
-                        <Text style={[styles.amountSub, { color: c.mutedForeground }]}>{item.is_recurring ? "/month" : "one-time"}</Text>
+                        <Text style={[styles.amountSub, { color: c.mutedForeground }]}>{frequencyText(item)}</Text>
                       </View>
                     </View>
                   </View>
@@ -484,6 +506,14 @@ export default function BillsScreen() {
                 </View>
               </View>
               <Text style={[styles.debtAlgoCopy, { color: c.mutedForeground }]}>{debtAlgoCopy}</Text>
+              {settings.paymentMethod === "snowball" ? (
+                <View style={[styles.snowballExplain, { backgroundColor: c.primary + "12", borderColor: c.primary + "25" }]}>
+                  <Feather name="info" size={13} color={c.primary} />
+                  <Text style={[styles.snowballExplainText, { color: c.foreground }]}>
+                    Snowball pays every minimum, sends extra money to the smallest balance first, then rolls that paid-off debt's payment into the next smallest debt.
+                  </Text>
+                </View>
+              ) : null}
               {activeDebtTarget && (
                 <Text style={[styles.debtAlgoMeta, { color: c.mutedForeground }]}>
                   ${activeDebtTarget.balance.toFixed(0)} balance · ${activeDebtMinimum.toFixed(0)}/mo min{activeDebtMonths > 0 ? ` · ~${activeDebtMonths} mo at minimum` : ""}
@@ -580,7 +610,7 @@ export default function BillsScreen() {
                               <Text style={[styles.aprText, { color: c.destructive }]}>{item.interest_rate}% APR</Text>
                             </View>
                           )}
-                          <Text style={[styles.metaText, { color: c.mutedForeground }]}>Due {MONTH_FULL[currentMonth]} {item.due_day}, {currentYear}</Text>
+                          <Text style={[styles.metaText, { color: c.mutedForeground }]}>{formatBillDueText(item)}</Text>
                           {monthsToPayoff > 0 && (
                             <Text style={[styles.metaText, { color: c.mutedForeground }]}>~{monthsToPayoff} mo left</Text>
                           )}
@@ -728,6 +758,8 @@ const styles = StyleSheet.create({
   debtAlgoBadgeText: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.5 },
   debtAlgoCopy:   { fontSize: 13, fontFamily: "Inter_600SemiBold", lineHeight: 18 },
   debtAlgoMeta:   { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: -4 },
+  snowballExplain: { borderWidth: 1, borderRadius: 12, padding: 10, flexDirection: "row", gap: 8, alignItems: "flex-start" },
+  snowballExplainText: { flex: 1, fontSize: 12, fontFamily: "Inter_600SemiBold", lineHeight: 17 },
   rolloverCard:   { marginTop: 2, borderWidth: 1, borderRadius: 14, padding: 10, flexDirection: "row", alignItems: "flex-start", gap: 8 },
   rolloverText:   { flex: 1, fontSize: 11, fontFamily: "Inter_600SemiBold", lineHeight: 16 },
   debtAlgoCompareRow: { flexDirection: "row", gap: 8 },
