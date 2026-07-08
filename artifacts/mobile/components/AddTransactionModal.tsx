@@ -22,6 +22,7 @@ import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { buildSafetyStop, type SafetyStopWarning } from "@/lib/safetyStop";
+import { confirmAction } from "@/lib/confirmAction";
 
 interface Props {
   visible: boolean;
@@ -231,18 +232,13 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
         setSaving(false);
       }
     };
-    if (Platform.OS === "web") {
-      await runDelete();
-      return;
-    }
-    Alert.alert(
-      isEditingTransfer ? "Delete Transfer" : "Delete Transaction",
-      isEditingTransfer ? "Remove both sides of this transfer?" : "Remove this transaction?",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: () => { void runDelete(); } },
-      ],
-    );
+    confirmAction({
+      title: isEditingTransfer ? "Delete Transfer" : "Delete Transaction",
+      message: isEditingTransfer ? "Remove both sides of this transfer?" : "Remove this transaction?",
+      confirmText: "Delete",
+      destructive: true,
+      onConfirm: runDelete,
+    });
   };
 
   const inputStyle = [styles.input, { backgroundColor: c.card, color: c.foreground, borderColor: c.border }];

@@ -11,6 +11,7 @@ import type { Goal } from "@/context/BudgetContext";
 import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
+import { confirmAction } from "@/lib/confirmAction";
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
 
@@ -86,11 +87,13 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Prop
       onDelete(editGoal.id);
       onClose();
     };
-    if (Platform.OS === "web") { doDelete(); return; }
-    Alert.alert("Delete Goal", `Remove "${editGoal.name}"?`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: doDelete },
-    ]);
+    confirmAction({
+      title: "Delete Goal",
+      message: `Remove "${editGoal.name}"?`,
+      confirmText: "Delete",
+      destructive: true,
+      onConfirm: doDelete,
+    });
   };
 
   const input = [styles.input, { backgroundColor: c.muted, color: c.foreground }];

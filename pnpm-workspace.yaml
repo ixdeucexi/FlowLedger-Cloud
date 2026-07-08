@@ -74,6 +74,9 @@ onlyBuiltDependencies:
   - unrs-resolver
 
 overrides:
+  # @react-native/codegen 0.81.5 references a missing generated file during
+  # production Metro builds; 0.81.6 is the compatible patch release.
+  "@react-native/codegen": "0.81.6"
   # replit uses linux-x64 only, we can exclude all other platforms
   "esbuild>@esbuild/darwin-arm64": "-"
   "esbuild>@esbuild/darwin-x64": "-"

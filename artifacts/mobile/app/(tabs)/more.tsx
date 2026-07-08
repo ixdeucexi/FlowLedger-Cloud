@@ -33,6 +33,7 @@ import {
 import { loadDecisionHubSettings, readDecisionHubSettings, saveDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { resetFloMemory } from "@/lib/flo";
 import { startLearningTour } from "@/lib/learningTour";
+import { confirmAction } from "@/lib/confirmAction";
 import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
@@ -483,11 +484,13 @@ export default function MoreScreen() {
 
   const handleDeleteIncome = (item: IncomeItem) => {
     const doDelete = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); deleteIncome(item.id); };
-    if (Platform.OS === "web") { doDelete(); return; }
-    Alert.alert("Delete Income", `Remove "${item.name}"?`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: doDelete },
-    ]);
+    confirmAction({
+      title: "Delete Income",
+      message: `Remove "${item.name}"?`,
+      confirmText: "Delete",
+      destructive: true,
+      onConfirm: doDelete,
+    });
   };
 
   const handleAddCategory = () => {
@@ -512,14 +515,16 @@ export default function MoreScreen() {
       deleteCategory(name);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     };
-    if (Platform.OS === "web") { doDelete(); return; }
     const msg = inUse > 0
       ? `"${name}" is used by ${inUse} item(s). They will be reassigned to "Other".`
       : `Delete category "${name}"?`;
-    Alert.alert("Delete Category", msg, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: doDelete },
-    ]);
+    confirmAction({
+      title: "Delete Category",
+      message: msg,
+      confirmText: "Delete",
+      destructive: true,
+      onConfirm: doDelete,
+    });
   };
 
   const handleSetupStep = (key: string) => {

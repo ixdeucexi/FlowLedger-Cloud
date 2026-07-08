@@ -13,6 +13,7 @@ import { useBudget } from "@/context/BudgetContext";
 import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
+import { confirmAction } from "@/lib/confirmAction";
 
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
@@ -21,12 +22,13 @@ interface AddBillModalProps {
   onClose: () => void;
   onSave: (bill: Omit<Bill, "id" | "created_at"> | Bill) => void | Promise<unknown>;
   onDelete?: (id: string) => void | Promise<unknown>;
+  onStopFuture?: (id: string) => void | Promise<unknown>;
   onDeleteMistake?: (id: string) => void | Promise<unknown>;
   editBill?: Bill | null;
   forceDebt?: boolean;
 }
 
-export function AddBillModal({ visible, onClose, onSave, onDelete, onDeleteMistake, editBill, forceDebt }: AddBillModalProps) {
+export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture, onDeleteMistake, editBill, forceDebt }: AddBillModalProps) {
   const c = useColors();
   useBackDismiss(visible, onClose);
   const { categories } = useBudget();
@@ -159,46 +161,39 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onDeleteMista
         setSaving(false);
       }
     };
-    if (Platform.OS === "web") { doDelete(); return; }
-    const forwardOnly = editBill.is_recurring || editBill.is_debt;
-    Alert.alert(
-      forwardOnly ? `Stop Future ${noun}` : `Delete ${noun}`,
-      forwardOnly
-        ? `Stop "${editBill.name}" after this month? Past months and saved monthly details will stay unchanged.`
-        : `Delete "${editBill.name}"? This removes the bill and its monthly data.`,
-      [
-      { text: "Cancel", style: "cancel" },
-      { text: forwardOnly ? "Stop Future" : "Delete", style: "destructive", onPress: doDelete },
-      ],
-    );
+    confirmAction({
+      title: `Delete ${noun}`,
+      message: `Delete "${editBill.name}" completely? This removes it from Bills and Calendar. Existing manual transactions stay in Activity.`,
+      confirmText: "Delete",
+      destructive: true,
+      onConfirm: doDelete,
+    });
   };
 
-  const handleDeleteMistake = () => {
-    if (!editBill || !onDeleteMistake) return;
-    const doDeleteMistake = async () => {
+  const handleStopFuture = () => {
+    if (!editBill) return;
+    const stopFuture = onStopFuture ?? onDeleteMistake;
+    if (!stopFuture) return;
+    const doStopFuture = async () => {
       if (saving) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setSaving(true);
       try {
-        await onDeleteMistake(editBill.id);
+        await stopFuture(editBill.id);
         onClose();
       } catch (error) {
-        Alert.alert("Couldn’t delete mistake", error instanceof Error ? error.message : "Please try again.");
+        Alert.alert("Couldn’t stop future bill", error instanceof Error ? error.message : "Please try again.");
       } finally {
         setSaving(false);
       }
     };
-    if (Platform.OS === "web") { doDeleteMistake(); return; }
-    Alert.alert(
-      `Delete Mistake`,
-      (editBill.is_recurring || editBill.is_debt)
-        ? `Hide "${editBill.name}" from this month forward? Older months stay available for calculations.`
-        : `Delete "${editBill.name}"? This removes the bill and its monthly data.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Delete Mistake", style: "destructive", onPress: doDeleteMistake },
-      ],
-    );
+    confirmAction({
+      title: `Stop Future ${noun}`,
+      message: `Stop "${editBill.name}" after this month? Past months and saved monthly details will stay unchanged.`,
+      confirmText: "Stop Future",
+      destructive: true,
+      onConfirm: doStopFuture,
+    });
   };
 
   const nonDebtCategories = categories.filter(c => c !== "Debt");
@@ -473,21 +468,21 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onDeleteMista
               >
                 <Feather name="trash-2" size={16} color={c.destructive} />
                 <Text style={[styles.deleteBtnText, { color: c.destructive }]}>
-                  {(editBill.is_recurring || editBill.is_debt) ? `Stop Future ${noun}` : `Delete ${noun}`}
+                  {`Delete ${noun}`}
                 </Text>
               </Pressable>
             )}
 
-            {editBill && onDeleteMistake && (editBill.is_recurring || editBill.is_debt) && (
-              <Pressable onPress={handleDeleteMistake}
+            {editBill && (onStopFuture || onDeleteMistake) && (editBill.is_recurring || editBill.is_debt) && (
+              <Pressable onPress={handleStopFuture}
                 disabled={saving}
                 style={({ pressed }) => [styles.deleteMistakeBtn, { borderColor: c.warning + "80", backgroundColor: c.warning + "10", opacity: saving ? 0.55 : pressed ? 0.72 : 1 }]}
               >
                 <Feather name="x-circle" size={16} color={c.warning} />
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.deleteBtnText, { color: c.warning }]}>Delete Mistake</Text>
+                  <Text style={[styles.deleteBtnText, { color: c.warning }]}>{`Stop Future ${noun}`}</Text>
                   <Text style={[styles.deleteHelpText, { color: c.mutedForeground }]}>
-                    Removes it from this month forward while older months stay available.
+                    Keeps past months, but removes future scheduled copies.
                   </Text>
                 </View>
               </Pressable>

@@ -267,6 +267,7 @@ interface BudgetContextType {
 
   addBill: (bill: Omit<Bill, "id" | "created_at">) => Promise<string>;
   updateBill: (bill: Bill) => Promise<void>;
+  stopFutureBill: (id: string) => Promise<void>;
   deleteBill: (id: string) => Promise<void>;
   deleteBillMistake: (id: string) => Promise<void>;
   getBillById: (id: string) => Bill | undefined;
@@ -451,12 +452,6 @@ function withLoadTimeout<T>(promise: PromiseLike<T>, ms: number, label: string):
 function endOfCurrentMonthYMD() {
   const now = new Date();
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  return `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
-}
-
-function endOfPreviousMonthYMD() {
-  const now = new Date();
-  const end = new Date(now.getFullYear(), now.getMonth(), 0);
   return `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
 }
 
@@ -1310,7 +1305,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, bills, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, scopedPayload, applyHouseholdSelect]);
 
-  const deleteBill = useCallback(async (id: string) => {
+  const stopFutureBill = useCallback(async (id: string) => {
     if (!user) return;
     const deletedBill = bills.find(bill => bill.id === id);
     const shouldEndForwardOnly = !!deletedBill && (deletedBill.is_recurring || deletedBill.is_debt);
@@ -1350,45 +1345,74 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, bills, demoMode, applyHouseholdSelect]);
 
-  const deleteBillMistake = useCallback(async (id: string) => {
+  const deleteBill = useCallback(async (id: string) => {
     if (!user) return;
     const deletedBill = bills.find(bill => bill.id === id);
-    const shouldHideForwardOnly = !!deletedBill && (deletedBill.is_recurring || deletedBill.is_debt);
-    const previousEndDate = endOfPreviousMonthYMD();
-    if (demoMode) {
-      if (shouldHideForwardOnly) {
-        setBills(prev => reorderDebtPriorities(prev.map(b => b.id === id ? { ...b, end_date: previousEndDate } : b)));
-      } else {
-        setBills(prev => reorderDebtPriorities(prev.filter(b => b.id !== id)));
-        setOverrides(prev => prev.filter(o => o.bill_id !== id));
-      }
-      return;
-    }
-    if (shouldHideForwardOnly && deletedBill) {
-      const hiddenBill = { ...deletedBill, end_date: previousEndDate };
-      await ensureSaved(
-        supabase.from("bills").update({ end_date: previousEndDate, last_reviewed_at: new Date().toISOString() }).eq("id", id),
-        "Delete mistaken bill"
-      );
-      setBills(prev => reorderDebtPriorities(prev.map(b => b.id === id ? hiddenBill : b)));
-    } else {
-      const results = await Promise.all([
-        supabase.from("bills").delete().eq("id", id),
-        supabase.from("monthly_overrides").delete().eq("bill_id", id),
-      ]);
-      const failed = results.find(result => result.error);
-      if (failed?.error) throw new Error(`Delete mistaken bill: ${failed.error.message}`);
+    const householdId = householdScopeRef.current?.householdId ?? null;
+    const clearBillLinks = (transaction: Transaction): Transaction => {
+      if (transaction.linked_bill_id !== id && transaction.debt_applied_bill_id !== id) return transaction;
+      return {
+        ...transaction,
+        linked_bill_id: transaction.linked_bill_id === id ? undefined : transaction.linked_bill_id,
+        debt_applied_bill_id: transaction.debt_applied_bill_id === id ? undefined : transaction.debt_applied_bill_id,
+        debt_applied_amount: transaction.debt_applied_bill_id === id ? 0 : transaction.debt_applied_amount,
+      };
+    };
+    const removeLocalBillData = () => {
       setBills(prev => reorderDebtPriorities(prev.filter(b => b.id !== id)));
       setOverrides(prev => prev.filter(o => o.bill_id !== id));
+      const nextMoves = billDateMovesRef.current.filter(move => move.bill_id !== id);
+      billDateMovesRef.current = nextMoves;
+      setBillDateMoves(nextMoves);
+      writeStoredBillDateMoves(user.id, nextMoves, householdScopeRef.current?.householdId);
+      setTransactions(prev => prev.map(clearBillLinks));
+    };
+
+    if (demoMode) {
+      removeLocalBillData();
+      return;
     }
+
+    const rpcDelete = await supabase.rpc("delete_bill_completely", { p_bill_id: id, p_household_id: householdId });
+    const rpcMissing = !!rpcDelete.error && (
+      rpcDelete.error.code === "PGRST202" ||
+      /delete_bill_completely|schema cache|function/i.test(rpcDelete.error.message ?? "")
+    );
+
+    if (rpcDelete.error && !rpcMissing) throw new Error(`Delete bill: ${rpcDelete.error.message}`);
+    if (!rpcDelete.error && rpcDelete.data !== true) {
+      throw new Error("Delete bill: no matching bill was found, or this household role cannot delete it.");
+    }
+
+    if (rpcMissing) {
+      const cleanupResults = await Promise.all([
+        supabase.from("monthly_overrides").delete().eq("bill_id", id),
+        supabase.from("bill_date_moves").delete().eq("bill_id", id),
+        supabase.from("transactions").update({ linked_bill_id: null }).eq("linked_bill_id", id),
+        supabase.from("transactions").update({ debt_applied_bill_id: null, debt_applied_amount: 0 }).eq("debt_applied_bill_id", id),
+      ]);
+      const cleanupFailed = cleanupResults.find(result => result.error);
+      if (cleanupFailed?.error) throw new Error(`Delete bill cleanup: ${cleanupFailed.error.message}`);
+
+      const deleted = await supabase.from("bills").delete().eq("id", id).select("id").maybeSingle();
+      if (deleted.error) throw new Error(`Delete bill: ${deleted.error.message}`);
+      if (!deleted.data) throw new Error("Delete bill: no matching bill was found, or this household role cannot delete it.");
+    }
+
+    removeLocalBillData();
+
     if (deletedBill?.is_debt) {
-      const rollover = await supabase.rpc("recalculate_debt_minimum_boosts", { p_household_id: householdScopeRef.current?.householdId ?? null });
+      const rollover = await supabase.rpc("recalculate_debt_minimum_boosts", { p_household_id: householdId });
       if (rollover.error) throw new Error(`Recalculate debt minimum: ${rollover.error.message}`);
       const refreshed = await applyHouseholdSelect(supabase.from("bills").select("*"), user.id);
       if (refreshed.error) throw new Error(`Refresh debts: ${refreshed.error.message}`);
       setBills(reorderDebtPriorities((refreshed.data ?? []).map(normalizeBillRow)));
     }
   }, [user, bills, demoMode, applyHouseholdSelect]);
+
+  const deleteBillMistake = useCallback(async (id: string) => {
+    await stopFutureBill(id);
+  }, [stopFutureBill]);
 
   const getBillById = useCallback((id: string) => bills.find(b => b.id === id), [bills]);
 
@@ -2962,7 +2986,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       forecastConfidence, loading, loadError, retryBudgetLoad, demoMode,
       saveStatus, saveError, retryLastSave, clearSaveError,
       dashboardFilter, setDashboardFilter,
-      addBill, updateBill, deleteBill, deleteBillMistake, getBillById,
+      addBill, updateBill, stopFutureBill, deleteBill, deleteBillMistake, getBillById,
       getOverride, getAmount, getPaidAmount, setPaidAmount, setCustomAmount, getCustomDueDay, setCustomDueDay,
       moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence, getBillDateMovesForMonth,
       getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal,

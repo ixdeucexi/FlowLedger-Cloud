@@ -38,7 +38,7 @@ export default function BillsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const {
-    bills, addBill, updateBill, deleteBill, deleteBillMistake,
+    bills, addBill, updateBill, stopFutureBill, deleteBill, deleteBillMistake,
     dashboardFilter, setDashboardFilter,
     settings, updateSettings,
     previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, getExtraPayment,
@@ -703,6 +703,7 @@ export default function BillsScreen() {
         onClose={() => { setModalVisible(false); setEditBill(null); }}
         onSave={handleSave}
         onDelete={deleteBill}
+        onStopFuture={stopFutureBill}
         onDeleteMistake={deleteBillMistake}
         editBill={editBill}
         forceDebt={activeTab === "debt"}

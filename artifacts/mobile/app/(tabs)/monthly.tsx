@@ -26,6 +26,7 @@ import { buildDayForecastFloPrompt, groupForecastEvents } from "@/lib/forecastDi
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { isValidDateInMonth } from "@/lib/schedule";
+import { confirmAction } from "@/lib/confirmAction";
 
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
@@ -678,11 +679,13 @@ export default function MonthlyScreen() {
     const tx = transactions.find(transaction => transaction.id === id);
     const isTransfer = Boolean(tx?.transfer_group_id);
     const doDelete = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); deleteTransaction(id); };
-    if (Platform.OS === "web") { doDelete(); return; }
-    Alert.alert(isTransfer ? "Delete Transfer" : "Delete Transaction", isTransfer ? "Remove both sides of this transfer?" : "Remove this transaction?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: doDelete },
-    ]);
+    confirmAction({
+      title: isTransfer ? "Delete Transfer" : "Delete Transaction",
+      message: isTransfer ? "Remove both sides of this transfer?" : "Remove this transaction?",
+      confirmText: "Delete",
+      destructive: true,
+      onConfirm: doDelete,
+    });
   };
 
   const openAddTransaction = useCallback((date?: string | null) => {
@@ -701,11 +704,13 @@ export default function MonthlyScreen() {
 
   const handleDeletePlan = (decision: DecisionRecord) => {
     const doDelete = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); void deleteDecision(decision.id); };
-    if (Platform.OS === "web") { doDelete(); return; }
-    Alert.alert("Remove Plan", `Remove "${decision.name}" from your calendar and forecast?`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Remove", style: "destructive", onPress: doDelete },
-    ]);
+    confirmAction({
+      title: "Remove Plan",
+      message: `Remove "${decision.name}" from your calendar and forecast?`,
+      confirmText: "Remove",
+      destructive: true,
+      onConfirm: doDelete,
+    });
   };
 
   const openEditPlan = (plan: DecisionRecord) => {
