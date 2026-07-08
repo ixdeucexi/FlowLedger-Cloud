@@ -83,11 +83,38 @@ export default function BillsScreen() {
     (bill: Bill) => getBillOccurrencesInMonth(bill, currentMonth, currentYear),
     [currentMonth, currentYear, getBillOccurrencesInMonth],
   );
+  const nextBillOccurrence = useCallback((bill: Bill) => {
+    const searchWindowMonths = 72;
+    for (let offset = 0; offset < searchWindowMonths; offset += 1) {
+      const absoluteMonth = currentMonth + offset;
+      const month = absoluteMonth % 12;
+      const year = currentYear + Math.floor(absoluteMonth / 12);
+      const days = getBillOccurrencesInMonth(bill, month, year);
+      if (days.length > 0) {
+        return {
+          month,
+          year,
+          days,
+          startsThisMonth: offset === 0,
+          sortTime: new Date(year, month, days[0], 12).getTime(),
+        };
+      }
+    }
+
+    return {
+      month: currentMonth,
+      year: currentYear,
+      days: [] as number[],
+      startsThisMonth: false,
+      sortTime: Number.MAX_SAFE_INTEGER,
+    };
+  }, [currentMonth, currentYear, getBillOccurrencesInMonth]);
   const firstOccurrenceDay = useCallback(
     (bill: Bill) => billOccurrenceDays(bill)[0] ?? bill.due_day,
     [billOccurrenceDays],
   );
-  const visibleBills = bills.filter(b => billOccurrenceDays(b).length > 0);
+  const currentMonthBills = bills.filter(b => billOccurrenceDays(b).length > 0);
+  const visibleBills = bills;
   const nonDebtBills = visibleBills.filter(b => !b.is_debt);
   const filteredBills = nonDebtBills
     .filter(b => {
@@ -95,7 +122,7 @@ export default function BillsScreen() {
       if (filter === "one-time")  return !b.is_recurring;
       return true;
     })
-    .sort((a, b) => firstOccurrenceDay(a) - firstOccurrenceDay(b) || a.name.localeCompare(b.name));
+    .sort((a, b) => nextBillOccurrence(a).sortTime - nextBillOccurrence(b).sortTime || a.name.localeCompare(b.name));
 
   const totalAmount = nonDebtBills
     .filter(b => b.is_recurring)
@@ -103,10 +130,14 @@ export default function BillsScreen() {
   const totalCount  = nonDebtBills.length;
   const formatBillDueText = useCallback((bill: Bill) => {
     const days = billOccurrenceDays(bill);
-    if (!days.length) return "No date this month";
     if (days.length === 1) return `Due ${MONTH_FULL[currentMonth]} ${days[0]}, ${currentYear}`;
-    return `${days.length} payments in ${MONTH_FULL[currentMonth]}`;
-  }, [billOccurrenceDays, currentMonth, currentYear]);
+    if (days.length > 1) return `${days.length} payments in ${MONTH_FULL[currentMonth]}`;
+
+    const next = nextBillOccurrence(bill);
+    if (next.days.length === 1) return `Next due ${MONTH_FULL[next.month]} ${next.days[0]}, ${next.year}`;
+    if (next.days.length > 1) return `${next.days.length} payments in ${MONTH_FULL[next.month]} ${next.year}`;
+    return "No scheduled date";
+  }, [billOccurrenceDays, currentMonth, currentYear, nextBillOccurrence]);
   const frequencyText = useCallback((bill: Bill) => {
     if (!bill.is_recurring) return "one-time";
     if (bill.frequency === "weekly") return "/week";
@@ -204,7 +235,8 @@ export default function BillsScreen() {
   }, [decisionHubSettings, dismissedBillPromptKey, paycheckPlan]);
   const billPrioritySummary = useMemo(() => {
     if (!isAlgorithmEnabled(decisionHubSettings, "billPriority")) return null;
-    const unpaid = nonDebtBills
+    const currentNonDebtBills = currentMonthBills.filter(bill => !bill.is_debt);
+    const unpaid = currentNonDebtBills
       .map(bill => {
         const monthlyTotal = getBillMonthlyTotal(bill, currentMonth, currentYear);
         const remaining = Math.max(0, monthlyTotal - getPaidAmount(bill.id, currentMonth, currentYear));
@@ -228,7 +260,7 @@ export default function BillsScreen() {
       dueText,
       count: unpaid.length,
     };
-  }, [currentDay, currentMonth, currentYear, decisionHubSettings, firstOccurrenceDay, getBillMonthlyTotal, getPaidAmount, nonDebtBills]);
+  }, [currentDay, currentMonth, currentYear, currentMonthBills, decisionHubSettings, firstOccurrenceDay, getBillMonthlyTotal, getPaidAmount]);
 
   // ── Handlers ────────────────────────────────────────────────────
   const handleSave = useCallback((data: Omit<Bill, "id" | "created_at"> | Bill) => {
