@@ -107,8 +107,10 @@ export default function TransactionsScreen() {
   const [sortOrder, setSortOrder]               = useState<SortOrder>("desc");
   const [search, setSearch]                     = useState("");
   const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const [weeklySummaryVisible, setWeeklySummaryVisible] = useState(false);
   useBackDismiss(!!detailItem, () => setDetailItem(null));
   useBackDismiss(filterModalVisible, () => setFilterModalVisible(false));
+  useBackDismiss(weeklySummaryVisible, () => setWeeklySummaryVisible(false));
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
   const listBottomPadding = insets.bottom + (Platform.OS === "web" ? 128 : 118);
@@ -375,6 +377,71 @@ export default function TransactionsScreen() {
   };
 
   // ── Detail sheet for auto-generated entries ───────────────────────────────
+  const renderWeeklySummarySheet = () => (
+    <Modal
+      visible={weeklySummaryVisible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setWeeklySummaryVisible(false)}
+    >
+      <Pressable style={styles.summaryOverlay} onPress={() => setWeeklySummaryVisible(false)}>
+        <Pressable
+          style={[styles.summarySheet, { backgroundColor: c.card, borderColor: c.border }]}
+          onPress={() => {}}
+        >
+          <View style={styles.summarySheetHeader}>
+            <View>
+              <Text style={[styles.activityHeroLabel, { color: c.mutedForeground }]}>Weekly breakdown</Text>
+              <Text style={[styles.summarySheetTitle, { color: c.foreground }]}>{monthlySummary.title}</Text>
+            </View>
+            <Pressable accessibilityLabel="Close weekly summary" onPress={() => setWeeklySummaryVisible(false)} hitSlop={10}>
+              <Feather name="x" size={22} color={c.mutedForeground} />
+            </Pressable>
+          </View>
+
+          <View style={[styles.summaryTotalRow, { borderColor: c.border }]}>
+            <View>
+              <Text style={[styles.summaryTinyLabel, { color: c.mutedForeground }]}>Month net</Text>
+              <Text style={[styles.summaryLargeNet, { color: monthlySummary.net >= 0 ? c.success : c.destructive }]}>
+                {monthlySummary.net >= 0 ? "+" : "-"}${Math.abs(monthlySummary.net).toFixed(0)}
+              </Text>
+            </View>
+            <View style={styles.summaryTotalRight}>
+              <Text style={[styles.summaryMiniValue, { color: c.success }]}>+${monthlySummary.income.toFixed(0)} in</Text>
+              <Text style={[styles.summaryMiniValue, { color: c.destructive }]}>-${monthlySummary.out.toFixed(0)} out</Text>
+            </View>
+          </View>
+
+          <View style={styles.summaryWeekList}>
+            {monthlySummary.weeks.map((week, index) => (
+              <View key={week.label} style={[styles.summaryWeekCard, { backgroundColor: c.background, borderColor: c.border }]}>
+                <View style={[styles.summaryWeekNumber, { backgroundColor: c.primary + "18" }]}>
+                  <Text style={[styles.summaryWeekNumberText, { color: c.primary }]}>W{index + 1}</Text>
+                </View>
+                <View style={styles.summaryWeekMiddle}>
+                  <Text style={[styles.summaryWeekLabel, { color: c.foreground }]}>{week.label}</Text>
+                  <Text style={[styles.summaryWeekSub, { color: c.mutedForeground }]}>
+                    {week.total >= 0 ? "Money moved in this stretch" : "Net spending this stretch"}
+                  </Text>
+                </View>
+                <Text style={[styles.summaryWeekValue, { color: week.total >= 0 ? c.success : c.destructive }]}>
+                  {week.total >= 0 ? "+" : "-"}${Math.abs(week.total).toFixed(0)}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          <Pressable
+            onPress={() => setWeeklySummaryVisible(false)}
+            style={({ pressed }) => [styles.sheetClose, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
+          >
+            <Text style={[styles.sheetCloseText, { color: c.primaryForeground }]}>Done</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+
   const renderDetailSheet = () => {
     if (!detailItem) return null;
     const meta      = SOURCE_META[detailItem.source];
@@ -507,7 +574,13 @@ export default function TransactionsScreen() {
         </View>
       </View>
 
-      <View style={[styles.monthlySummaryCard, { backgroundColor: c.card, borderColor: c.border }]}>
+      <Pressable
+        onPress={() => setWeeklySummaryVisible(true)}
+        style={({ pressed }) => [
+          styles.monthlySummaryCard,
+          { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.88 : 1 },
+        ]}
+      >
         <View style={styles.monthlySummaryHeader}>
           <View>
             <Text style={[styles.activityHeroLabel, { color: c.mutedForeground }]}>Monthly summary</Text>
@@ -543,17 +616,16 @@ export default function TransactionsScreen() {
             <Text style={[styles.monthlySummaryLabel, { color: c.mutedForeground }]}>Bills & spending</Text>
           </View>
         </View>
-        <View style={[styles.weekRows, { borderTopColor: c.border }]}>
-          {monthlySummary.weeks.map(week => (
-            <View key={week.label} style={styles.weekRow}>
-              <Text style={[styles.weekLabel, { color: c.mutedForeground }]}>{week.label}</Text>
-              <Text style={[styles.weekValue, { color: week.total >= 0 ? c.success : c.destructive }]}>
-                {week.total >= 0 ? "+" : "-"}${Math.abs(week.total).toFixed(0)}
-              </Text>
-            </View>
-          ))}
+        <View style={[styles.weekSummaryTrigger, { borderTopColor: c.border }]}>
+          <View>
+            <Text style={[styles.weekSummaryTitle, { color: c.foreground }]}>Weekly breakdown</Text>
+            <Text style={[styles.weekSummarySub, { color: c.mutedForeground }]}>
+              Tap to see where the month changes week by week.
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={18} color={c.mutedForeground} />
         </View>
-      </View>
+      </Pressable>
 
       <View style={[styles.searchWrap, { marginBottom: 10 }]}>
         <View style={[styles.searchBox, { backgroundColor: c.card, borderColor: c.border }]}>
@@ -845,6 +917,7 @@ export default function TransactionsScreen() {
       />
 
       {/* ── Detail sheet (auto-generated entries) ── */}
+      {renderWeeklySummarySheet()}
       {renderDetailSheet()}
     </View>
   );
@@ -880,6 +953,27 @@ const styles = StyleSheet.create({
   weekRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   weekLabel: { fontSize: 12, fontFamily: "Inter_700Bold" },
   weekValue: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  weekSummaryTrigger: { borderTopWidth: 1, paddingTop: 10, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  weekSummaryTitle: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  weekSummarySub: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2, lineHeight: 15 },
+
+  summaryOverlay: { flex: 1, justifyContent: "center", paddingHorizontal: 18, backgroundColor: "rgba(2,6,23,0.72)" },
+  summarySheet: { borderWidth: 1, borderRadius: 26, padding: 18, shadowColor: "#7c3aed", shadowOpacity: 0.22, shadowRadius: 24, shadowOffset: { width: 0, height: 12 }, elevation: 8 },
+  summarySheetHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 14 },
+  summarySheetTitle: { fontSize: 24, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.7, marginTop: 3 },
+  summaryTotalRow: { borderWidth: 1, borderRadius: 18, padding: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14 },
+  summaryTinyLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8 },
+  summaryLargeNet: { fontSize: 30, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.8, marginTop: 2 },
+  summaryTotalRight: { alignItems: "flex-end", gap: 3 },
+  summaryMiniValue: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  summaryWeekList: { gap: 8 },
+  summaryWeekCard: { borderWidth: 1, borderRadius: 16, padding: 11, flexDirection: "row", alignItems: "center", gap: 10 },
+  summaryWeekNumber: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  summaryWeekNumberText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
+  summaryWeekMiddle: { flex: 1 },
+  summaryWeekLabel: { fontSize: 12, fontFamily: "Inter_800ExtraBold", lineHeight: 16 },
+  summaryWeekSub: { fontSize: 10, fontFamily: "Inter_500Medium", marginTop: 2 },
+  summaryWeekValue: { fontSize: 15, fontFamily: "Inter_800ExtraBold" },
 
   searchWrap:  { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16 },
   searchBox:   { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 16, paddingHorizontal: 13, paddingVertical: 10 },
