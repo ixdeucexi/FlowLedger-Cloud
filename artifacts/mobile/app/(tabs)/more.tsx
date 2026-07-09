@@ -4,7 +4,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
 import * as Sharing from "expo-sharing";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert, Modal, Platform, Pressable, ScrollView, StyleSheet,
@@ -54,6 +54,17 @@ import {
   feedbackStatusLabel,
   sanitizeFeedbackMessage,
 } from "@/lib/feedback";
+import {
+  buildChildMoneySummary,
+  buildGoalFundingPlans,
+  buildReportsSummary,
+  buildReviewQueue,
+  buildSmartReminders,
+  detectSubscriptions,
+  evaluateForecastReadiness,
+  evaluatePlaidConnectionStatus,
+  type TransactionRule,
+} from "@/lib/competitiveGrowth";
 
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
 
@@ -80,6 +91,12 @@ type SettingsSectionId =
   | "algorithms"
   | "accounts"
   | "money"
+  | "review"
+  | "subscriptions"
+  | "reports"
+  | "goals"
+  | "plaid"
+  | "children"
   | "help"
   | "backup"
   | "security"
@@ -94,8 +111,14 @@ const SETTINGS_SECTIONS: Array<{
   { id: "setup", label: "Setup walkthrough", description: "Restart Flo setup, learning mode, and onboarding help.", icon: "message-circle" },
   { id: "accounts", label: "Accounts", description: "Manage balances, reconcile accounts, and account health.", icon: "credit-card" },
   { id: "money", label: "Money plan", description: "Income, categories, forecast safety, and payoff method.", icon: "sliders" },
+  { id: "review", label: "Review queue", description: "Unclear transactions, categorization rules, duplicates, and imports.", icon: "check-square" },
+  { id: "subscriptions", label: "Subscriptions", description: "Find recurring charges, price increases, and cleanup options.", icon: "repeat" },
+  { id: "reports", label: "Reports & insights", description: "Spending, debt, goals, cash flow, and what changed.", icon: "bar-chart-2" },
+  { id: "goals", label: "Goal funding", description: "Turn goals into safe monthly funding plans.", icon: "target" },
+  { id: "plaid", label: "Bank sync", description: "Plaid connection status and safe sync setup.", icon: "link" },
   { id: "algorithms", label: "Algorithm Suite", description: "Turn financial engines on or off and learn what each one does.", icon: "cpu" },
   { id: "appearance", label: "Appearance", description: "Light, dark, or automatic theme settings.", icon: "moon" },
+  { id: "children", label: "Child money", description: "Starter child profiles, allowance, limits, and savings goals.", icon: "smile" },
   { id: "help", label: "Help & Feedback", description: "Send tester feedback and review the feedback inbox.", icon: "message-square" },
   { id: "backup", label: "Backup, import, and install", description: "CSV backup, statement import, app install, and Flo memory.", icon: "download" },
   { id: "security", label: "Security and profile", description: "View the signed-in account and sign out.", icon: "lock" },
@@ -142,6 +165,7 @@ export default function MoreScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const routeParams = useLocalSearchParams<{ section?: string }>();
   const {
     themeMode,
     setThemeMode,
@@ -195,12 +219,27 @@ export default function MoreScreen() {
   const [feedbackInbox, setFeedbackInbox] = useState<AppFeedbackRow[]>([]);
   const [feedbackInboxLoading, setFeedbackInboxLoading] = useState(false);
   const [feedbackStatusFilter, setFeedbackStatusFilter] = useState<FeedbackStatus | "all">("all");
+  const [transactionRules, setTransactionRules] = useState<TransactionRule[]>([]);
+  const [plaidServerStatus, setPlaidServerStatus] = useState<{
+    configured: boolean;
+    storageReady: boolean;
+    message: string;
+  } | null>(null);
   const [backupExported, setBackupExported] = useState(() => {
     try { return Platform.OS === "web" && globalThis.localStorage?.getItem(BACKUP_COMPLETE_KEY) === "true"; }
     catch { return false; }
   });
   const [signingOut, setSigningOut] = useState(false);
   const inviteRoles = useMemo(() => householdInviteRolesFor(activeHousehold?.role), [activeHousehold?.role]);
+  const transactionRuleStorageKey = user?.id ? `flowledger_transaction_rules_${user.id}` : "flowledger_transaction_rules_guest";
+
+  useEffect(() => {
+    const requestedSection = Array.isArray(routeParams.section) ? routeParams.section[0] : routeParams.section;
+    if (!requestedSection) return;
+    if (SETTINGS_SECTIONS.some(section => section.id === requestedSection)) {
+      setActiveSettingsSection(requestedSection as SettingsSectionId);
+    }
+  }, [routeParams.section]);
 
   useEffect(() => {
     setSafetyFloorText(settings.safety_floor.toString());
@@ -227,6 +266,51 @@ export default function MoreScreen() {
       cancelled = true;
     };
   }, [user?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void AsyncStorage.getItem(transactionRuleStorageKey)
+      .then(value => {
+        if (cancelled) return;
+        if (!value) {
+          setTransactionRules([]);
+          return;
+        }
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) setTransactionRules(parsed);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [transactionRuleStorageKey]);
+
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    let cancelled = false;
+    fetch("/api/plaid/status")
+      .then(response => response.ok ? response.json() : null)
+      .then(payload => {
+        if (cancelled || !payload) return;
+        setPlaidServerStatus({
+          configured: Boolean(payload.configured),
+          storageReady: Boolean(payload.storageReady),
+          message: typeof payload.message === "string" ? payload.message : "Bank sync status loaded.",
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPlaidServerStatus({
+            configured: false,
+            storageReady: false,
+            message: "Bank sync endpoints are not reachable yet.",
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -544,6 +628,133 @@ export default function MoreScreen() {
     });
     return deltas;
   }, [transactions, currentMonthPrefix]);
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const activeAccounts = useMemo(() => accounts.filter(account => account.is_active), [accounts]);
+  const growthTransactions = useMemo(() => transactions.map(transaction => ({
+    id: transaction.id,
+    date: transaction.date,
+    amount: transaction.amount,
+    description: transaction.note?.trim() || transaction.category || "Transaction",
+    category: transaction.category,
+    accountId: transaction.account_id,
+    importHash: transaction.import_hash,
+    source: transaction.import_hash ? "import" as const
+      : transaction.debt_applied_bill_id ? "debt" as const
+      : transaction.linked_bill_id ? "bill" as const
+      : "manual" as const,
+    linkedBillId: transaction.linked_bill_id ?? transaction.debt_applied_bill_id ?? null,
+  })), [transactions]);
+  const growthBills = useMemo(() => bills.map(bill => ({
+    id: bill.id,
+    name: bill.name,
+    amount: bill.amount,
+    category: bill.category,
+    dueDay: bill.due_day,
+    isDebt: bill.is_debt,
+    isRecurring: bill.is_recurring,
+    stopped: Boolean(bill.end_date && bill.end_date < todayIso),
+  })), [bills, todayIso]);
+  const growthDebts = useMemo(() => bills.filter(bill => bill.is_debt).map(bill => ({
+    id: bill.id,
+    name: bill.name,
+    balance: Math.max(0, bill.balance),
+    minimumPayment: Math.max(0, bill.amount),
+    apr: bill.interest_rate,
+    dueDay: bill.due_day,
+    includeInSnowball: bill.include_in_snowball !== false,
+  })), [bills]);
+  const growthGoals = useMemo(() => goals.map(goal => ({
+    id: goal.id,
+    name: goal.name,
+    targetAmount: goal.target_amount,
+    currentAmount: goal.current_amount,
+    targetDate: goal.target_date,
+    type: goal.goal_type === "planned_expense" ? "other" as const : goal.goal_type,
+  })), [goals]);
+  const reviewQueue = useMemo(() => buildReviewQueue(growthTransactions, transactionRules), [growthTransactions, transactionRules]);
+  const reviewTransactions = useMemo(() => {
+    const byId = new Map(growthTransactions.map(transaction => [transaction.id, transaction]));
+    return reviewQueue.map(item => ({ item, transaction: byId.get(item.transactionId) })).filter(entry => entry.transaction);
+  }, [growthTransactions, reviewQueue]);
+  const subscriptions = useMemo(() => detectSubscriptions(growthTransactions), [growthTransactions]);
+  const monthlyRecurringBills = useMemo(
+    () => bills.filter(bill => bill.is_recurring !== false && !bill.is_debt && !(bill.end_date && bill.end_date < todayIso)).reduce((sum, bill) => sum + Math.max(0, bill.amount), 0),
+    [bills, todayIso],
+  );
+  const safeMonthlyGoalFunding = useMemo(
+    () => Math.max(0, Math.round((totalMonthlyIncome - monthlyRecurringBills) * 0.1)),
+    [monthlyRecurringBills, totalMonthlyIncome],
+  );
+  const goalFundingPlans = useMemo(
+    () => buildGoalFundingPlans(growthGoals, safeMonthlyGoalFunding),
+    [growthGoals, safeMonthlyGoalFunding],
+  );
+  const reportsSummary = useMemo(
+    () => buildReportsSummary(growthTransactions, growthBills, growthDebts, growthGoals),
+    [growthBills, growthDebts, growthGoals, growthTransactions],
+  );
+  const forecastReadiness = useMemo(() => {
+    const wantsDebt = onboardingPreferences.goals.includes("pay_off_debt") || bills.some(bill => bill.is_debt);
+    const wantsSavings = onboardingPreferences.goals.includes("grow_savings") || goals.length > 0;
+    const recentlyReconciled = activeAccounts.some(account => {
+      const reviewed = account.last_reconciled_at ?? account.balance_as_of;
+      const age = Math.floor((Date.now() - new Date(reviewed).getTime()) / 86_400_000);
+      return Number.isFinite(age) && age <= 31;
+    });
+    return evaluateForecastReadiness({
+      accounts: activeAccounts.length,
+      hasCurrentBalance: activeAccounts.some(account => Number.isFinite(account.current_balance)),
+      incomes: incomes.length,
+      recurringBills: bills.filter(bill => bill.is_recurring && !bill.is_debt).length,
+      debts: growthDebts.length,
+      goals: goals.length,
+      debtPayoffSelected: wantsDebt,
+      savingsSelected: wantsSavings,
+      safetyFloorReviewed: settings.safety_floor >= 0,
+      firstForecastViewed: true,
+      reconciledRecently: recentlyReconciled,
+    });
+  }, [activeAccounts, bills, goals.length, growthDebts.length, incomes.length, onboardingPreferences.goals, settings.safety_floor]);
+  const smartReminders = useMemo(() => buildSmartReminders({
+    today: todayIso,
+    bills: growthBills,
+    reviewCount: reviewQueue.length,
+    subscriptionIncreases: subscriptions.filter(subscription => subscription.priceIncrease).length,
+    lowestBalance: null,
+    safetyFloor: settings.safety_floor,
+    goals: goalFundingPlans,
+    needsReconcile: forecastReadiness.missing.includes("Reconcile an account"),
+  }), [forecastReadiness.missing, goalFundingPlans, growthBills, reviewQueue.length, settings.safety_floor, subscriptions, todayIso]);
+  const plaidStatus = useMemo(() => evaluatePlaidConnectionStatus({
+    clientName: "FlowLedger Algo",
+    hasServerTokenEndpoint: Boolean(plaidServerStatus?.configured),
+    hasExchangeEndpoint: Boolean(plaidServerStatus?.configured),
+    hasWebhookEndpoint: Boolean(plaidServerStatus?.storageReady),
+  }), [plaidServerStatus?.configured, plaidServerStatus?.storageReady]);
+  const childMoneySummary = useMemo(() => buildChildMoneySummary([]), []);
+
+  const saveTransactionRules = async (next: TransactionRule[]) => {
+    setTransactionRules(next);
+    await AsyncStorage.setItem(transactionRuleStorageKey, JSON.stringify(next)).catch(() => undefined);
+  };
+
+  const handleCreateRuleFromReview = (transactionId: string) => {
+    const transaction = growthTransactions.find(item => item.id === transactionId);
+    if (!transaction) return;
+    const merchant = (transaction.description || "Transaction").trim();
+    const nextRule: TransactionRule = {
+      id: `rule-${Date.now()}`,
+      name: `Remember ${merchant.slice(0, 28)}`,
+      matchType: "contains",
+      matchValue: merchant,
+      direction: transaction.amount >= 0 ? "income" : "expense",
+      category: transaction.category && transaction.category !== "Other" ? transaction.category : "Other",
+      priority: 10,
+      isActive: true,
+    };
+    void saveTransactionRules([nextRule, ...transactionRules]);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
 
   const handleExport = async () => {
     try {
@@ -1563,6 +1774,239 @@ export default function MoreScreen() {
       {/* ── Data ── */}
       </>}
 
+      {activeSettingsSection === "review" && <>
+      <SLabel c={c} text="Forecast Readiness" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <View style={styles.growthHeaderRow}>
+          <View style={[styles.growthScoreBubble, { backgroundColor: forecastReadiness.score >= 80 ? c.success + "18" : c.warning + "18" }]}>
+            <Text style={[styles.growthScoreText, { color: forecastReadiness.score >= 80 ? c.success : c.warning }]}>{forecastReadiness.score}%</Text>
+          </View>
+          <View style={styles.growthHeaderCopy}>
+            <Text style={[styles.switchLabel, { color: c.foreground }]}>{forecastReadiness.nextStep}</Text>
+            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>{forecastReadiness.whyItMatters}</Text>
+          </View>
+        </View>
+        <View style={[styles.setupProgressTrack, { backgroundColor: c.muted, marginTop: 14 }]}>
+          <View style={[styles.setupProgressFill, { backgroundColor: c.primary, width: `${forecastReadiness.score}%` as any }]} />
+        </View>
+        <Text style={[styles.dataDesc, { color: c.mutedForeground, marginTop: 10 }]}>
+          Missing: {forecastReadiness.missing.length ? forecastReadiness.missing.join(", ") : "Nothing major — your forecast is ready."}
+        </Text>
+      </View>
+
+      <SLabel c={c} text="Transaction Review Queue" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <View style={styles.growthMetricGrid}>
+          <View style={[styles.growthMetric, { backgroundColor: c.muted }]}>
+            <Text style={[styles.growthMetricValue, { color: c.primary }]}>{reviewQueue.length}</Text>
+            <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>Needs review</Text>
+          </View>
+          <View style={[styles.growthMetric, { backgroundColor: c.muted }]}>
+            <Text style={[styles.growthMetricValue, { color: c.success }]}>{transactionRules.length}</Text>
+            <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>Rules saved</Text>
+          </View>
+        </View>
+        {reviewTransactions.slice(0, 8).map(({ item, transaction }, index) => (
+          <View key={item.transactionId} style={[styles.growthListRow, { borderTopWidth: index ? 1 : 0, borderTopColor: c.border }]}>
+            <View style={[styles.dataIcon, { backgroundColor: item.priority === "high" ? c.destructive + "18" : c.primary + "18" }]}>
+              <Feather name={item.priority === "high" ? "alert-triangle" : "check-square"} size={17} color={item.priority === "high" ? c.destructive : c.primary} />
+            </View>
+            <View style={styles.dataBody}>
+              <Text style={[styles.dataLabel, { color: c.foreground }]} numberOfLines={1}>{transaction?.description ?? "Transaction"}</Text>
+              <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{item.summary}</Text>
+              <Text style={[styles.growthTinyText, { color: c.mutedForeground }]}>{item.reasons.map(reason => reason.replace(/_/g, " ")).join(" • ")}</Text>
+            </View>
+            <Pressable
+              onPress={() => handleCreateRuleFromReview(item.transactionId)}
+              style={({ pressed }) => [styles.growthSmallButton, { backgroundColor: c.primary + "18", opacity: pressed ? 0.72 : 1 }]}
+            >
+              <Text style={[styles.growthSmallButtonText, { color: c.primary }]}>Rule</Text>
+            </Pressable>
+          </View>
+        ))}
+        {!reviewTransactions.length && (
+          <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Nothing needs review right now. New imports, duplicates, unusual amounts, and unclear categories will show here.</Text>
+        )}
+      </View>
+      </>}
+
+      {activeSettingsSection === "subscriptions" && <>
+      <SLabel c={c} text="Subscription Cleanup" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <View style={styles.growthMetricGrid}>
+          <View style={[styles.growthMetric, { backgroundColor: c.muted }]}>
+            <Text style={[styles.growthMetricValue, { color: c.primary }]}>${subscriptions.reduce((sum, item) => sum + item.monthlyEquivalent, 0).toFixed(0)}</Text>
+            <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>Monthly</Text>
+          </View>
+          <View style={[styles.growthMetric, { backgroundColor: c.muted }]}>
+            <Text style={[styles.growthMetricValue, { color: c.warning }]}>{subscriptions.filter(item => item.priceIncrease).length}</Text>
+            <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>Price changes</Text>
+          </View>
+        </View>
+        {subscriptions.slice(0, 10).map((subscription, index) => (
+          <View key={subscription.merchant} style={[styles.growthListRow, { borderTopWidth: index ? 1 : 0, borderTopColor: c.border }]}>
+            <View style={[styles.dataIcon, { backgroundColor: c.warning + "18" }]}>
+              <Feather name="repeat" size={17} color={c.warning} />
+            </View>
+            <View style={styles.dataBody}>
+              <Text style={[styles.dataLabel, { color: c.foreground, textTransform: "capitalize" }]} numberOfLines={1}>{subscription.merchant}</Text>
+              <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>
+                ${subscription.monthlyEquivalent.toFixed(2)}/mo • {subscription.cadence} • {subscription.confidence} confidence
+              </Text>
+              <Text style={[styles.growthTinyText, { color: subscription.priceIncrease ? c.warning : c.mutedForeground }]}>
+                {subscription.priceIncrease ? "Possible price increase. " : ""}{subscription.duplicateRisk ? "Similar service found. " : ""}Review before creating or stopping bills.
+              </Text>
+            </View>
+          </View>
+        ))}
+        {!subscriptions.length && (
+          <Text style={[styles.emptyText, { color: c.mutedForeground }]}>I have not found recurring subscription patterns yet. Repeated monthly or weekly charges will appear here for cleanup.</Text>
+        )}
+      </View>
+      </>}
+
+      {activeSettingsSection === "reports" && <>
+      <SLabel c={c} text="Reports & Insights" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <View style={styles.growthMetricGrid}>
+          <View style={[styles.growthMetric, { backgroundColor: c.muted }]}>
+            <Text style={[styles.growthMetricValue, { color: c.success }]}>${reportsSummary.income.toFixed(0)}</Text>
+            <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>Income</Text>
+          </View>
+          <View style={[styles.growthMetric, { backgroundColor: c.muted }]}>
+            <Text style={[styles.growthMetricValue, { color: c.destructive }]}>${reportsSummary.spending.toFixed(0)}</Text>
+            <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>Spending</Text>
+          </View>
+          <View style={[styles.growthMetric, { backgroundColor: c.muted }]}>
+            <Text style={[styles.growthMetricValue, { color: reportsSummary.net >= 0 ? c.success : c.destructive }]}>${reportsSummary.net.toFixed(0)}</Text>
+            <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>Net</Text>
+          </View>
+        </View>
+        <View style={[styles.priorityNote, { backgroundColor: c.primary + "12", borderRadius: 10, marginTop: 12 }]}>
+          <Feather name="bar-chart-2" size={13} color={c.primary} />
+          <Text style={[styles.priorityNoteText, { color: c.mutedForeground }]}>{reportsSummary.insight}</Text>
+        </View>
+        {reportsSummary.categoryTotals.slice(0, 5).map((category, index) => (
+          <View key={category.category} style={[styles.growthListRow, { borderTopWidth: index ? 1 : 0, borderTopColor: c.border }]}>
+            <View style={styles.dataBody}>
+              <Text style={[styles.dataLabel, { color: c.foreground }]}>{category.category}</Text>
+              <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>Flexible spending category</Text>
+            </View>
+            <Text style={[styles.incomeMonthly, { color: c.destructive }]}>${category.amount.toFixed(0)}</Text>
+          </View>
+        ))}
+        <View style={[styles.growthListRow, { borderTopWidth: 1, borderTopColor: c.border }]}>
+          <View style={styles.dataBody}>
+            <Text style={[styles.dataLabel, { color: c.foreground }]}>Debt remaining</Text>
+            <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>Balances included in payoff reporting</Text>
+          </View>
+          <Text style={[styles.incomeMonthly, { color: c.destructive }]}>${reportsSummary.debtTotal.toFixed(0)}</Text>
+        </View>
+      </View>
+
+      <SLabel c={c} text="Smart Reminders" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        {smartReminders.slice(0, 8).map((reminder, index) => (
+          <View key={reminder.id} style={[styles.growthListRow, { borderTopWidth: index ? 1 : 0, borderTopColor: c.border }]}>
+            <View style={[styles.dataIcon, { backgroundColor: reminder.severity === "risk" ? c.destructive + "18" : reminder.severity === "watch" ? c.warning + "18" : c.primary + "18" }]}>
+              <Feather name={reminder.severity === "risk" ? "alert-triangle" : "bell"} size={17} color={reminder.severity === "risk" ? c.destructive : reminder.severity === "watch" ? c.warning : c.primary} />
+            </View>
+            <View style={styles.dataBody}>
+              <Text style={[styles.dataLabel, { color: c.foreground }]}>{reminder.title}</Text>
+              <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{reminder.message}</Text>
+            </View>
+          </View>
+        ))}
+        {!smartReminders.length && (
+          <Text style={[styles.emptyText, { color: c.mutedForeground }]}>No reminders right now. I’ll surface bills, reviews, subscriptions, goals, and reconciliation items here.</Text>
+        )}
+      </View>
+      </>}
+
+      {activeSettingsSection === "goals" && <>
+      <SLabel c={c} text="Goal Funding Plans" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        {goalFundingPlans.map((plan, index) => {
+          const goal = goals.find(item => item.id === plan.goalId);
+          return (
+            <View key={plan.goalId} style={[styles.growthListRow, { borderTopWidth: index ? 1 : 0, borderTopColor: c.border }]}>
+              <View style={[styles.dataIcon, { backgroundColor: plan.status === "on_track" ? c.success + "18" : c.warning + "18" }]}>
+                <Feather name="target" size={17} color={plan.status === "on_track" ? c.success : c.warning} />
+              </View>
+              <View style={styles.dataBody}>
+                <Text style={[styles.dataLabel, { color: c.foreground }]}>{goal?.name ?? "Goal"}</Text>
+                <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{plan.message}</Text>
+                <Text style={[styles.growthTinyText, { color: c.mutedForeground }]}>
+                  Needed ${plan.monthlyNeeded.toFixed(0)}/mo • Safe ${plan.safeMonthlyContribution.toFixed(0)}/mo
+                </Text>
+              </View>
+            </View>
+          );
+        })}
+        {!goalFundingPlans.length && (
+          <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Add a goal from the plus button and I’ll turn it into a funding plan that respects your safety floor.</Text>
+        )}
+      </View>
+      </>}
+
+      {activeSettingsSection === "plaid" && <>
+      <SLabel c={c} text="Bank Sync" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <View style={styles.growthHeaderRow}>
+          <View style={[styles.growthScoreBubble, { backgroundColor: plaidStatus.canStartLink ? c.success + "18" : c.warning + "18" }]}>
+            <Feather name="link" size={20} color={plaidStatus.canStartLink ? c.success : c.warning} />
+          </View>
+          <View style={styles.growthHeaderCopy}>
+            <Text style={[styles.switchLabel, { color: c.foreground }]}>
+              {plaidStatus.canStartLink ? "Plaid is ready" : "Plaid setup is staged"}
+            </Text>
+            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>{plaidServerStatus?.message ?? plaidStatus.message}</Text>
+          </View>
+        </View>
+        <View style={[styles.priorityNote, { backgroundColor: c.primary + "12", borderRadius: 10, marginTop: 12 }]}>
+          <Feather name="shield" size={13} color={c.primary} />
+          <Text style={[styles.priorityNoteText, { color: c.mutedForeground }]}>
+            FlowLedger will keep Plaid access tokens server-side. The app will only receive safe account and transaction data after you approve a link.
+          </Text>
+        </View>
+        <Pressable disabled style={[styles.balanceSaveFullBtn, { backgroundColor: plaidStatus.canStartLink ? c.primary : c.muted, marginTop: 14 }]}>
+          <Feather name={plaidStatus.canStartLink ? "link" : "lock"} size={15} color={plaidStatus.canStartLink ? "#fff" : c.mutedForeground} />
+          <Text style={[styles.balanceSaveBtnText, { color: plaidStatus.canStartLink ? "#fff" : c.mutedForeground }]}>
+            {plaidStatus.canStartLink ? "Bank sync endpoints are ready" : "Connect bank account after Plaid env setup"}
+          </Text>
+        </Pressable>
+      </View>
+      </>}
+
+      {activeSettingsSection === "children" && <>
+      <SLabel c={c} text="Child Money Management" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <View style={styles.growthHeaderRow}>
+          <View style={[styles.growthScoreBubble, { backgroundColor: c.primary + "18" }]}>
+            <Feather name="smile" size={20} color={c.primary} />
+          </View>
+          <View style={styles.growthHeaderCopy}>
+            <Text style={[styles.switchLabel, { color: c.foreground }]}>Family money skills</Text>
+            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>
+              Child profiles will support allowance, savings goals, simple limits, and parent-safe learning prompts.
+            </Text>
+          </View>
+        </View>
+        {childMoneySummary.map(child => (
+          <View key={child.id} style={[styles.growthListRow, { borderTopWidth: 1, borderTopColor: c.border }]}>
+            <View style={styles.dataBody}>
+              <Text style={[styles.dataLabel, { color: c.foreground }]}>{child.name}</Text>
+              <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{child.message}</Text>
+            </View>
+            <Text style={[styles.incomeMonthly, { color: c.primary }]}>{child.progress}%</Text>
+          </View>
+        ))}
+        {!childMoneySummary.length && (
+          <Text style={[styles.emptyText, { color: c.mutedForeground }]}>No child profiles yet. The database foundation is ready so this can become a safe household expansion without exposing adult controls.</Text>
+        )}
+      </View>
+      </>}
+
       {activeSettingsSection === "backup" && <>
       <SLabel c={c} text="Backup & Data" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
@@ -2077,6 +2521,19 @@ const styles = StyleSheet.create({
   methodDesc: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 19, marginTop: 10 },
   priorityNote: { flexDirection: "row", alignItems: "center", gap: 8, padding: 10, marginTop: 10 },
   priorityNoteText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
+
+  growthHeaderRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  growthScoreBubble: { width: 56, height: 56, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  growthScoreText: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
+  growthHeaderCopy: { flex: 1, gap: 4 },
+  growthMetricGrid: { flexDirection: "row", gap: 10, marginBottom: 12 },
+  growthMetric: { flex: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 11 },
+  growthMetricValue: { fontSize: 18, fontFamily: "Inter_800ExtraBold" },
+  growthMetricLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7, marginTop: 2, textTransform: "uppercase" },
+  growthListRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12 },
+  growthTinyText: { fontSize: 11, fontFamily: "Inter_500Medium", lineHeight: 15, marginTop: 3 },
+  growthSmallButton: { borderRadius: 999, paddingHorizontal: 11, paddingVertical: 7 },
+  growthSmallButtonText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
 
   switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   switchInfo: { flex: 1, marginRight: 12 },

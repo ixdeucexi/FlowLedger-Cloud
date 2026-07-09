@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
   Modal, Platform, Pressable, ScrollView, SectionList,
@@ -15,6 +16,7 @@ import type { Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
+import { buildReviewQueue, detectSubscriptions } from "@/lib/competitiveGrowth";
 import { debtPaymentStatusLabel } from "@/lib/forecastDisplay";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -91,6 +93,7 @@ function groupByMonth(items: ActivityItem[]): { title: string; data: ActivityIte
 export default function TransactionsScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const {
     transactions, addTransaction, updateTransaction, deleteTransaction, deleteTransfer,
     bills, overrides, extraPayments,
@@ -289,6 +292,24 @@ export default function TransactionsScreen() {
   }, [allActivity, typeFilter, sourceFilter, dateFilter, categoryFilter, search, sortOrder, hasActiveFilters]);
 
   const sections = useMemo(() => groupByMonth(filtered), [filtered]);
+
+  const growthTransactions = useMemo(() => allActivity.map(item => ({
+    id: item.id,
+    date: item.date,
+    amount: item.amount,
+    description: item.label,
+    category: item.category,
+    source: item.source === "transaction"
+      ? "manual" as const
+      : item.source === "bill_payment"
+      ? "bill" as const
+      : item.source === "extra_payment"
+      ? "debt" as const
+      : "income" as const,
+  })), [allActivity]);
+
+  const reviewQueue = useMemo(() => buildReviewQueue(growthTransactions, []), [growthTransactions]);
+  const subscriptionCandidates = useMemo(() => detectSubscriptions(growthTransactions), [growthTransactions]);
 
   // ── Summary stats ─────────────────────────────────────────────────────────
   const { totalIn, totalOut, net } = useMemo(() => {
@@ -626,6 +647,41 @@ export default function TransactionsScreen() {
           <Feather name="chevron-right" size={18} color={c.mutedForeground} />
         </View>
       </Pressable>
+
+      {(reviewQueue.length > 0 || subscriptionCandidates.length > 0) && (
+        <View style={[styles.growthReviewCard, { backgroundColor: c.card, borderColor: c.border }]}>
+          <View style={styles.growthReviewTop}>
+            <View>
+              <Text style={[styles.activityHeroLabel, { color: c.mutedForeground }]}>Review center</Text>
+              <Text style={[styles.growthReviewTitle, { color: c.foreground }]}>Clean up your money data</Text>
+            </View>
+            <View style={[styles.growthReviewBadge, { backgroundColor: c.primary + "18" }]}>
+              <Text style={[styles.growthReviewBadgeText, { color: c.primary }]}>
+                {reviewQueue.length + subscriptionCandidates.length}
+              </Text>
+            </View>
+          </View>
+          <Text style={[styles.growthReviewText, { color: c.mutedForeground }]}>
+            Review unclear transactions, possible subscriptions, duplicates, and rule opportunities.
+          </Text>
+          <View style={styles.growthReviewActions}>
+            <Pressable
+              onPress={() => router.push({ pathname: "/(tabs)/more", params: { section: "review" } } as any)}
+              style={({ pressed }) => [styles.growthReviewAction, { backgroundColor: c.primary + "18", opacity: pressed ? 0.8 : 1 }]}
+            >
+              <Feather name="check-square" size={14} color={c.primary} />
+              <Text style={[styles.growthReviewActionText, { color: c.primary }]}>Review {reviewQueue.length}</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => router.push({ pathname: "/(tabs)/more", params: { section: "subscriptions" } } as any)}
+              style={({ pressed }) => [styles.growthReviewAction, { backgroundColor: c.warning + "18", opacity: pressed ? 0.8 : 1 }]}
+            >
+              <Feather name="repeat" size={14} color={c.warning} />
+              <Text style={[styles.growthReviewActionText, { color: c.warning }]}>Subscriptions {subscriptionCandidates.length}</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       <View style={[styles.searchWrap, { marginBottom: 10 }]}>
         <View style={[styles.searchBox, { backgroundColor: c.card, borderColor: c.border }]}>
@@ -974,6 +1030,16 @@ const styles = StyleSheet.create({
   summaryWeekLabel: { fontSize: 12, fontFamily: "Inter_800ExtraBold", lineHeight: 16 },
   summaryWeekSub: { fontSize: 10, fontFamily: "Inter_500Medium", marginTop: 2 },
   summaryWeekValue: { fontSize: 15, fontFamily: "Inter_800ExtraBold" },
+
+  growthReviewCard: { marginHorizontal: 16, marginBottom: 10, borderWidth: 1, borderRadius: 20, padding: 12 },
+  growthReviewTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 },
+  growthReviewTitle: { fontSize: 18, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.2 },
+  growthReviewBadge: { minWidth: 34, height: 30, borderRadius: 15, paddingHorizontal: 10, alignItems: "center", justifyContent: "center" },
+  growthReviewBadgeText: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  growthReviewText: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 17, marginTop: 6 },
+  growthReviewActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
+  growthReviewAction: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 8 },
+  growthReviewActionText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
 
   searchWrap:  { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16 },
   searchBox:   { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 16, paddingHorizontal: 13, paddingVertical: 10 },
