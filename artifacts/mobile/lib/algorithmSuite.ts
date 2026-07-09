@@ -13,6 +13,7 @@ export interface AlgorithmBill {
   id: string;
   name: string;
   amount: number;
+  snowball_minimum_boost?: number;
   category: string;
   due_day: number;
   is_debt: boolean;
@@ -216,7 +217,7 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
   const debtTotal = input.bills.filter(bill => bill.is_debt).reduce((sum, bill) => sum + Math.max(0, bill.balance ?? bill.amount), 0);
   const monthlyDebtMinimums = input.bills
     .filter(bill => bill.is_debt && (bill.balance ?? bill.amount) > 0)
-    .reduce((sum, bill) => sum + Math.max(0, bill.amount), 0);
+    .reduce((sum, bill) => sum + Math.max(0, bill.amount + Number(bill.snowball_minimum_boost ?? 0)), 0);
   const debtPressure = input.cashFlow.monthlyIncome > 0
     ? Math.min(25, (monthlyDebtMinimums / input.cashFlow.monthlyIncome) * 75)
     : monthlyDebtMinimums > 0 ? 18 : 0;
@@ -234,8 +235,8 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
   const topDebtSnowball = activeDebts.slice().sort((a, b) => (a.balance ?? 0) - (b.balance ?? 0) || a.name.localeCompare(b.name))[0] ?? null;
   const topDebtAvalanche = activeDebts.slice().sort((a, b) => (b.interest_rate ?? 0) - (a.interest_rate ?? 0) || (a.balance ?? 0) - (b.balance ?? 0) || a.name.localeCompare(b.name))[0] ?? null;
   const topDebtCashFlow = activeDebts.slice().sort((a, b) => {
-    const aMinimum = Math.max(0.01, a.amount);
-    const bMinimum = Math.max(0.01, b.amount);
+    const aMinimum = Math.max(0.01, a.amount + Number(a.snowball_minimum_boost ?? 0));
+    const bMinimum = Math.max(0.01, b.amount + Number(b.snowball_minimum_boost ?? 0));
     const aMonths = (a.balance ?? 0) / aMinimum;
     const bMonths = (b.balance ?? 0) / bMinimum;
     return aMonths - bMonths || bMinimum - aMinimum || (a.balance ?? 0) - (b.balance ?? 0) || a.name.localeCompare(b.name);
@@ -606,7 +607,7 @@ function buildDebtPayoffDetails(targets: {
     .slice()
     .filter(debt => (debt.balance ?? 0) > 0.009)
     .sort((a, b) => (a.balance ?? 0) - (b.balance ?? 0) || a.name.localeCompare(b.name));
-  const totalMonthlyMinimum = roundCurrency(orderedDebts.reduce((sum, debt) => sum + Math.max(0, debt.amount), 0));
+  const totalMonthlyMinimum = roundCurrency(orderedDebts.reduce((sum, debt) => sum + Math.max(0, debt.amount + Number(debt.snowball_minimum_boost ?? 0)), 0));
 
   if (!targets.snowball) {
     return {
@@ -635,8 +636,8 @@ function buildDebtPayoffDetails(targets: {
     };
   }
 
-  const cashFlowReliefAmount = roundCurrency(targets.cashFlow?.amount ?? 0);
-  const snowballMinimum = roundCurrency(Math.max(0, targets.snowball.amount));
+  const cashFlowReliefAmount = roundCurrency((targets.cashFlow?.amount ?? 0) + Number(targets.cashFlow?.snowball_minimum_boost ?? 0));
+  const snowballMinimum = roundCurrency(Math.max(0, targets.snowball.amount + Number(targets.snowball.snowball_minimum_boost ?? 0)));
   const nextDebtNameAfterTarget = orderedDebts.find(debt => debt.id !== targets.snowball?.id)?.name ?? null;
   const safeExtraAmount = roundCurrency(Math.max(0, targets.safeCushionAmount));
   const status: AlgorithmSuiteResult["debtPayoff"]["status"] = targets.safeCushionAmount > 0 ? "ready" : "hold";

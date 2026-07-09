@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+﻿import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -17,6 +17,7 @@ import type { Bill } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { confirmAction } from "@/lib/confirmAction";
+import { buildAlgorithmSuite } from "@/lib/algorithmSuite";
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { sortDebtsLeastToGreatest } from "@/lib/debtOrder";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
@@ -46,11 +47,12 @@ export default function BillsScreen() {
   const router = useRouter();
   const {
     bills, addBill, updateBill, stopFutureBill, deleteBill, deleteBillMistake,
+    incomes, goals, forecastConfidence,
     dashboardFilter, setDashboardFilter,
     settings, updateSettings,
     previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, getExtraPayment,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getPaidAmount,
-    getDailyBalances, getIncomeOccurrencesInMonth,
+    getDailyBalances, getIncomeOccurrencesInMonth, getTransactionsForMonth, getCashFlow,
   } = useBudget();
 
   const [activeTab, setActiveTab]       = useState<Tab>("bills");
@@ -193,8 +195,81 @@ export default function BillsScreen() {
     () => previewDebtSnowball(currentMonth, currentYear),
     [previewDebtSnowball, currentMonth, currentYear, bills],
   );
-  const safeSnowballAmount = baseSnowballPreview.safeMaximum;
   const existingSnowball = getExtraPayment(currentMonth, currentYear);
+
+  const debtAlgorithmSuite = useMemo(() => {
+    const monthBills = getMonthlyBills(currentMonth, currentYear);
+    return buildAlgorithmSuite({
+      month: currentMonth,
+      year: currentYear,
+      todayDay: currentDay,
+      safetyFloor: settings.safety_floor,
+      cashFlow: getCashFlow(currentMonth, currentYear),
+      dailyBalances: getDailyBalances(currentMonth, currentYear).map(day => ({
+        day: day.day,
+        income: day.income,
+        bills: day.bills,
+        expense: day.expense,
+        net: day.net,
+        balance: day.balance,
+      })),
+      bills: monthBills.map(bill => ({
+        id: bill.id,
+        name: bill.name,
+        amount: getBillMonthlyTotal(bill, currentMonth, currentYear),
+        paidAmount: getPaidAmount(bill.id, currentMonth, currentYear),
+        category: bill.category || "Other",
+        due_day: firstOccurrenceDay(bill),
+        is_debt: bill.is_debt,
+        is_recurring: bill.is_recurring,
+        balance: bill.balance,
+        interest_rate: bill.interest_rate,
+        snowball_minimum_boost: bill.snowball_minimum_boost,
+      })),
+      transactions: getTransactionsForMonth(currentMonth, currentYear).map(transaction => ({
+        id: transaction.id,
+        date: transaction.date,
+        amount: transaction.amount,
+        category: transaction.category || "Other",
+        note: transaction.note,
+      })),
+      incomes: incomes.map(income => ({
+        id: income.id,
+        name: income.name,
+        amount: income.amount,
+        frequency: income.frequency,
+      })),
+      goals: goals.map(goal => ({
+        id: goal.id,
+        name: goal.name,
+        target_amount: goal.target_amount,
+        current_amount: goal.current_amount,
+        target_date: goal.target_date,
+        goal_type: goal.goal_type,
+      })),
+      categoryPlan: [],
+      forecastConfidence,
+      settings: decisionHubSettings,
+    });
+  }, [
+    currentDay,
+    currentMonth,
+    currentYear,
+    decisionHubSettings,
+    firstOccurrenceDay,
+    forecastConfidence,
+    getBillMonthlyTotal,
+    getCashFlow,
+    getDailyBalances,
+    getMonthlyBills,
+    getPaidAmount,
+    getTransactionsForMonth,
+    goals,
+    incomes,
+    settings.safety_floor,
+  ]);
+  const debtPayoffEngine = debtAlgorithmSuite.debtPayoff;
+  const safeSnowballAmount = debtPayoffEngine.safeExtraAmount;
 
   const debts = (() => {
     const debtBills = visibleBills.filter(b => b.is_debt);
@@ -228,14 +303,11 @@ export default function BillsScreen() {
   const nextTargetRolledMinimum = nextSnowballTarget && activeDebtTarget
     ? nextSnowballTarget.amount + Number(nextSnowballTarget.snowball_minimum_boost ?? 0) + activeDebtMinimum
     : 0;
+  const debtPayoffDetail = debtAlgorithmSuite.algorithmDetails.debtPayoff;
   const debtRoomExplanation = safeSnowballAmount > 0
-    ? `FlowLedger says you can add this much to debt and still keep your ${settings.forecast_horizon_months}-month forecast above your $${settings.safety_floor.toFixed(0)} cushion.`
-    : `Keep extra cash available for now. Your ${settings.forecast_horizon_months}-month forecast needs to stay above your $${settings.safety_floor.toFixed(0)} cushion first.`;
-  const debtAlgoCopy = activeDebtTarget
-    ? safeSnowballAmount > 0
-      ? `Next best move: put today's extra payoff money toward ${activeDebtTarget.name}.`
-      : `Hold extra payments until your Safe Cushion opens up, then target ${activeDebtTarget.name}.`
-    : "Add debts to unlock payoff guidance.";
+    ? debtPayoffDetail.nextAction
+    : `Keep extra cash available for now. ${debtPayoffDetail.nextAction}`;
+  const debtAlgoCopy = debtPayoffDetail.whatIFound;
 
   const priorityColors = ["#22c55e", "#f0b429", "#ef4444", "#8b5cf6", "#ec4899"];
   const todayIso = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -552,7 +624,7 @@ export default function BillsScreen() {
                 <View style={styles.extraLeft}>
                   <Feather name="shield" size={20} color={safeSnowballAmount > 0 ? c.success : c.mutedForeground} />
                   <View>
-                    <Text style={[styles.extraLabel, { color: c.mutedForeground }]}>Extra You Can Send Now</Text>
+                    <Text style={[styles.extraLabel, { color: c.mutedForeground }]}>Debt Payoff Guardrail</Text>
                     <Text style={[styles.extraValue, { color: safeSnowballAmount > 0 ? c.success : c.mutedForeground }]}>
                       ${safeSnowballAmount.toFixed(2)}
                     </Text>
@@ -567,7 +639,7 @@ export default function BillsScreen() {
                 >
                   <Feather name="zap" size={13} color={safeSnowballAmount > 0 ? c.primaryForeground : c.mutedForeground} />
                   <Text style={[styles.applyBtnText, { color: safeSnowballAmount > 0 ? c.primaryForeground : c.mutedForeground }]}>
-                    Apply to {settings.paymentMethod === "snowball" ? "Snowball" : "Avalanche"}
+                    Apply to Snowball
                   </Text>
                 </Pressable>
               </View>
@@ -602,12 +674,12 @@ export default function BillsScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.debtAlgoEyebrow, { color: c.primary }]}>Debt Payoff Algo</Text>
                   <Text style={[styles.debtAlgoTitle, { color: c.foreground }]}>
-                    {activeDebtTarget ? `${activeDebtTarget.name} is the move` : "No active target"}
+                    {debtPayoffEngine.nextDebtName ? `${debtPayoffEngine.nextDebtName} is the move` : "No active target"}
                   </Text>
                 </View>
-                <View style={[styles.debtAlgoBadge, { backgroundColor: safeSnowballAmount > 0 ? c.success + "18" : c.warning + "18" }]}>
-                  <Text style={[styles.debtAlgoBadgeText, { color: safeSnowballAmount > 0 ? c.success : c.warning }]}>
-                    {safeSnowballAmount > 0 ? "Ready" : "Hold"}
+                <View style={[styles.debtAlgoBadge, { backgroundColor: debtPayoffEngine.status === "hold" ? c.warning + "18" : c.success + "18" }]}>
+                  <Text style={[styles.debtAlgoBadgeText, { color: debtPayoffEngine.status === "hold" ? c.warning : c.success }]}>
+                    {debtPayoffEngine.status === "ready" ? "Ready" : debtPayoffEngine.status === "done" ? "Done" : "Hold"}
                   </Text>
                 </View>
               </View>
@@ -616,34 +688,34 @@ export default function BillsScreen() {
                 <View style={[styles.snowballExplain, { backgroundColor: c.primary + "12", borderColor: c.primary + "25" }]}>
                   <Feather name="info" size={13} color={c.primary} />
                   <Text style={[styles.snowballExplainText, { color: c.foreground }]}>
-                    Snowball pays every minimum, sends extra money to the smallest balance first, then rolls that paid-off debt's payment into the next smallest debt.
+                    {debtPayoffDetail.whyItMatters}
                   </Text>
                 </View>
               ) : null}
-              {activeDebtTarget && (
+              {debtPayoffEngine.nextDebtName && (
                 <Text style={[styles.debtAlgoMeta, { color: c.mutedForeground }]}>
-                  ${activeDebtTarget.balance.toFixed(0)} balance · ${activeDebtMinimum.toFixed(0)}/mo min{activeDebtMonths > 0 ? ` · ~${activeDebtMonths} mo at minimum` : ""}
+                  {debtPayoffEngine.sourceNumbers.map(item => `${item.label}: ${item.value}`).join(" · ")}
                 </Text>
               )}
-              {activeDebtTarget && nextSnowballTarget ? (
+              {debtPayoffEngine.nextDebtName && debtPayoffEngine.nextDebtNameAfterTarget ? (
                 <View style={[styles.rolloverCard, { backgroundColor: c.success + "10", borderColor: c.success + "24" }]}>
                   <Feather name="repeat" size={13} color={c.success} />
                   <Text style={[styles.rolloverText, { color: c.foreground }]}>
-                    After {activeDebtTarget.name} is paid off, its ${activeDebtMinimum.toFixed(0)}/mo rolls into {nextSnowballTarget.name}. New target payment: ${nextTargetRolledMinimum.toFixed(0)}/mo.
+                    After {debtPayoffEngine.nextDebtName} is paid off, its ${debtPayoffEngine.rolloverAmount.toFixed(0)}/mo rolls into {debtPayoffEngine.nextDebtNameAfterTarget}.
                   </Text>
                 </View>
               ) : null}
               <View style={styles.debtAlgoCompareRow}>
-                {[
-                  { label: "Snowball", value: snowballTarget?.name ?? "None", color: c.success },
-                  { label: "Avalanche", value: avalancheTarget?.name ?? "None", color: c.primary },
-                  { label: "Cash-flow", value: cashFlowTarget ? `${cashFlowTarget.name} frees $${(cashFlowTarget.amount + Number(cashFlowTarget.snowball_minimum_boost ?? 0)).toFixed(0)}/mo` : "None", color: c.warning },
-                ].map(item => (
-                  <View key={item.label} style={[styles.debtAlgoChip, { backgroundColor: item.color + "12", borderColor: item.color + "28" }]}>
-                    <Text style={[styles.debtAlgoChipLabel, { color: item.color }]}>{item.label}</Text>
-                    <Text style={[styles.debtAlgoChipValue, { color: c.foreground }]} numberOfLines={2}>{item.value}</Text>
+                {debtPayoffEngine.comparison.map(item => {
+                  const label = item.method === "snowball" ? "Snowball" : item.method === "avalanche" ? "Avalanche" : "Cash-flow";
+                  const chipColor = item.method === "snowball" ? c.success : item.method === "avalanche" ? c.primary : c.warning;
+                  return (
+                  <View key={item.method} style={[styles.debtAlgoChip, { backgroundColor: chipColor + "12", borderColor: chipColor + "28" }]}>
+                    <Text style={[styles.debtAlgoChipLabel, { color: chipColor }]}>{label}</Text>
+                    <Text style={[styles.debtAlgoChipValue, { color: c.foreground }]} numberOfLines={2}>{item.targetName ?? "None"}</Text>
                   </View>
-                ))}
+                  );
+                })}
               </View>
             </View>
           )}

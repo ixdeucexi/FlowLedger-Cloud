@@ -834,6 +834,7 @@ export default function DashboardScreen() {
       is_recurring: bill.is_recurring,
       balance: bill.balance,
       interest_rate: bill.interest_rate,
+      snowball_minimum_boost: bill.snowball_minimum_boost,
     })),
     transactions: getTransactionsForMonth(currentMonth, selectedYear).map(transaction => ({
       id: transaction.id,
