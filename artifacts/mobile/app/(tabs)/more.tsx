@@ -328,7 +328,7 @@ export default function MoreScreen() {
       setFeedbackMessage("");
       setFeedbackRating(null);
       setFeedbackType("bug");
-      setFeedbackNotice("Sent — thank you. I’ll review it in the Feedback Inbox.");
+      setFeedbackNotice("Thank you for your feedback. It’s appreciated and will be reviewed.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       if (feedbackAdmin) void loadFeedbackInbox();
     } catch (error) {
@@ -354,6 +354,65 @@ export default function MoreScreen() {
       const messageText = error instanceof Error ? error.message : "Could not update feedback.";
       setFeedbackNotice(messageText);
     }
+  };
+
+  const buildCodexFeedbackPrompt = (item: AppFeedbackRow) => {
+    const typeLabel = FEEDBACK_TYPES.find(type => type.id === item.feedback_type)?.label ?? "Feedback";
+    return [
+      "FlowLedger tester feedback to review:",
+      "",
+      `Type: ${typeLabel}`,
+      `Status: ${feedbackStatusLabel(item.status)}`,
+      `From: ${item.user_email ?? "Unknown user"}`,
+      `Screen: ${item.screen ?? "Unknown screen"}`,
+      item.rating ? `Rating: ${item.rating}/5` : null,
+      "",
+      "Feedback:",
+      item.message,
+      "",
+      "Please help me turn this into a clear update plan for FlowLedger. Include likely cause, recommended fix, test steps, and rollout/rollback notes.",
+    ].filter(Boolean).join("\n");
+  };
+
+  const handleCopyFeedbackForCodex = async (item: AppFeedbackRow) => {
+    const prompt = buildCodexFeedbackPrompt(item);
+    try {
+      if (Platform.OS === "web" && globalThis.navigator?.clipboard) {
+        await globalThis.navigator.clipboard.writeText(prompt);
+        setFeedbackNotice("Codex plan prompt copied. Paste it here and we’ll turn it into an update plan.");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        return;
+      }
+      setFeedbackNotice("Copy is not available on this device. Open this feedback and paste it into Codex manually.");
+    } catch {
+      setFeedbackNotice("Could not copy the Codex prompt. Try again.");
+    }
+  };
+
+  const handleDeleteFeedback = (item: AppFeedbackRow) => {
+    confirmAction({
+      title: "Delete feedback?",
+      message: "This removes the tester feedback from the admin inbox. This cannot be undone.",
+      confirmText: "Delete",
+      destructive: true,
+      onConfirm: async () => {
+        setFeedbackNotice(null);
+        try {
+          const { error } = await supabase
+            .from("app_feedback")
+            .delete()
+            .eq("id", item.id);
+          if (error) throw error;
+          setFeedbackInbox(items => items.filter(feedback => feedback.id !== item.id));
+          setFeedbackNotice("Feedback deleted.");
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (error) {
+          const messageText = error instanceof Error ? error.message : "Could not delete feedback.";
+          setFeedbackNotice(messageText);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        }
+      },
+    });
   };
 
   const handleCreateHouseholdInvite = async () => {
@@ -1609,7 +1668,7 @@ export default function MoreScreen() {
           </View>
           <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>It’s okay to contact me about this feedback.</Text>
         </Pressable>
-        {feedbackNotice ? <Text style={[styles.feedbackNotice, { color: feedbackNotice.startsWith("Sent") ? c.success : c.destructive }]}>{feedbackNotice}</Text> : null}
+        {feedbackNotice ? <Text style={[styles.feedbackNotice, { color: /thank|copied|deleted/i.test(feedbackNotice) ? c.success : c.destructive }]}>{feedbackNotice}</Text> : null}
         <Pressable
           onPress={handleSubmitFeedback}
           disabled={feedbackSubmitting || !canSubmitFeedback(feedbackMessage)}
@@ -1665,6 +1724,7 @@ export default function MoreScreen() {
                 );
               })}
             </ScrollView>
+            {feedbackNotice ? <Text style={[styles.feedbackNotice, { color: /thank|copied|deleted/i.test(feedbackNotice) ? c.success : c.destructive }]}>{feedbackNotice}</Text> : null}
             {feedbackInboxLoading ? (
               <Text style={[styles.switchDesc, { color: c.mutedForeground, marginTop: 10 }]}>Loading feedback...</Text>
             ) : feedbackInbox.length ? (
@@ -1684,6 +1744,28 @@ export default function MoreScreen() {
                   <Text style={[styles.feedbackInboxMessage, { color: c.foreground }]}>{item.message}</Text>
                   <View style={styles.feedbackInboxFooter}>
                     {item.rating ? <Text style={[styles.feedbackInboxMeta, { color: c.mutedForeground }]}>Rating: {item.rating}/5</Text> : <View />}
+                    <View style={styles.feedbackAdminActions}>
+                      <Pressable
+                        onPress={() => void handleCopyFeedbackForCodex(item)}
+                        style={({ pressed }) => [
+                          styles.feedbackAdminActionButton,
+                          { backgroundColor: c.primary + "18", borderColor: c.primary + "55", opacity: pressed ? 0.75 : 1 },
+                        ]}
+                      >
+                        <Feather name="copy" size={13} color={c.primary} />
+                        <Text style={[styles.feedbackAdminActionText, { color: c.primary }]}>Copy Codex Plan</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => handleDeleteFeedback(item)}
+                        style={({ pressed }) => [
+                          styles.feedbackAdminActionButton,
+                          { backgroundColor: c.destructive + "14", borderColor: c.destructive + "45", opacity: pressed ? 0.75 : 1 },
+                        ]}
+                      >
+                        <Feather name="trash-2" size={13} color={c.destructive} />
+                        <Text style={[styles.feedbackAdminActionText, { color: c.destructive }]}>Delete</Text>
+                      </Pressable>
+                    </View>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.feedbackStatusActions}>
                       {FEEDBACK_STATUSES.map(status => (
                         <Pressable
@@ -2060,6 +2142,9 @@ const styles = StyleSheet.create({
   feedbackStatusText: { fontSize: 10, fontFamily: "Inter_800ExtraBold" },
   feedbackInboxMessage: { fontSize: 13, fontFamily: "Inter_600SemiBold", lineHeight: 19, marginTop: 10 },
   feedbackInboxFooter: { marginTop: 12, gap: 8 },
+  feedbackAdminActions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  feedbackAdminActionButton: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 8 },
+  feedbackAdminActionText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   feedbackStatusActions: { gap: 8, paddingRight: 4 },
   feedbackStatusAction: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
 
