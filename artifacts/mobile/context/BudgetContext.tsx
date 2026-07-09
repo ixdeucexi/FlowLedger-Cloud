@@ -1284,7 +1284,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const failed = results.find(result => result?.error);
       if (failed?.error) throw new Error(`Update monthly bill: ${failed.error.message}`);
     }
-      await ensureSaved(supabase.from("bills").update({ ...reviewedBill }).eq("id", bill.id), "Update bill");
+      await ensureSaved(supabase.from("bills").update({
+        ...reviewedBill,
+        day_of_week: reviewedBill.day_of_week ?? null,
+        next_payment_date: reviewedBill.next_payment_date ?? null,
+        start_date: reviewedBill.start_date ?? null,
+        end_date: reviewedBill.end_date ?? null,
+        smart_priority: reviewedBill.smart_priority ?? null,
+        snowball_minimum_boost: reviewedBill.snowball_minimum_boost ?? 0,
+      }).eq("id", bill.id), "Update bill");
       if (bill.is_debt && (existing.balance !== bill.balance || existing.amount !== bill.amount || existing.include_in_snowball !== bill.include_in_snowball)) {
         const rollover = await supabase.rpc("recalculate_debt_minimum_boosts", { p_household_id: householdScopeRef.current?.householdId ?? null });
         if (rollover.error) throw new Error(`Roll debt minimum: ${rollover.error.message}`);

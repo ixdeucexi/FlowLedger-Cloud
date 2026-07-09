@@ -16,6 +16,7 @@ import colors from "@/constants/colors";
 import type { Bill } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
+import { confirmAction } from "@/lib/confirmAction";
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { sortDebtsLeastToGreatest } from "@/lib/debtOrder";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
@@ -170,6 +171,22 @@ export default function BillsScreen() {
     if (![endYear, endMonth, endDay].every(Number.isFinite)) return "Stopped";
     return `Stopped after ${MONTH_FULL[endMonth - 1]} ${endDay}, ${endYear}`;
   }, []);
+  const handleRestartStoppedBill = useCallback((bill: Bill) => {
+    const noun = bill.is_debt ? "debt" : "bill";
+    confirmAction({
+      title: `Restart ${noun}`,
+      message: `Add "${bill.name}" back to active ${noun}s and future calendar dates?`,
+      confirmText: "Restart",
+      onConfirm: async () => {
+        try {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          await updateBill({ ...bill, end_date: undefined });
+        } catch (error) {
+          Alert.alert("Couldn’t restart bill", error instanceof Error ? error.message : "Please try again.");
+        }
+      },
+    });
+  }, [updateBill]);
 
   // ── Debt data ───────────────────────────────────────────────────
   const baseSnowballPreview = useMemo(
@@ -497,9 +514,26 @@ export default function BillsScreen() {
                       </View>
                     </View>
                   </View>
-                  <View style={styles.editHint}>
-                    <Feather name="edit-2" size={13} color={c.mutedForeground} />
-                  </View>
+                  {stopped ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Restart ${item.name}`}
+                      onPress={(event) => {
+                        event.stopPropagation?.();
+                        handleRestartStoppedBill(item);
+                      }}
+                      style={({ pressed }) => [
+                        styles.restartHint,
+                        { backgroundColor: c.primary + "18", opacity: pressed ? 0.78 : 1 },
+                      ]}
+                    >
+                      <Feather name="refresh-cw" size={17} color={c.primary} />
+                    </Pressable>
+                  ) : (
+                    <View style={styles.editHint}>
+                      <Feather name="edit-2" size={13} color={c.mutedForeground} />
+                    </View>
+                  )}
                 </Pressable>
               );
             })}
@@ -799,6 +833,7 @@ const styles = StyleSheet.create({
   metaText: { fontSize: 11, fontFamily: "Inter_400Regular" },
   smartBillNote: { fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 16, marginTop: 2 },
   editHint: { padding: 14, justifyContent: "center" },
+  restartHint: { width: 46, marginVertical: 12, marginRight: 10, borderRadius: 14, alignItems: "center", justifyContent: "center" },
 
   // Bills-specific
   catBar:    { width: 4 },
