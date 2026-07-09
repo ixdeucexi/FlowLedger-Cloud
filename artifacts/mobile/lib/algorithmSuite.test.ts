@@ -84,6 +84,65 @@ test("builds Flow Score, Safe Cushion, and practical algorithm outputs", () => {
   assert.ok(suite.insights.some(insight => insight.algorithm === "Flow Score"));
 });
 
+test("every active algorithm exposes a decision-engine detail", () => {
+  const suite = buildAlgorithmSuite(baseInput());
+
+  for (const algorithm of ALGORITHM_CATALOG) {
+    const detail = suite.algorithmDetails[algorithm.id];
+    assert.equal(detail.id, algorithm.id);
+    assert.match(detail.status, /^(safe|watch|risk)$/);
+    assert.ok(detail.headline.length > 0);
+    assert.ok(detail.whatIFound.length > 0);
+    assert.ok(detail.whyItMatters.length > 0);
+    assert.ok(detail.nextAction.length > 0);
+    assert.ok(detail.floPrompt.length > 0);
+    assert.ok(detail.sourceNumbers.length > 0);
+  }
+});
+
+test("Safe Cushion protects spending, routing, and debt recommendations", () => {
+  const suite = buildAlgorithmSuite(baseInput({
+    cashFlow: {
+      monthlyIncome: 3000,
+      totalBillsDue: 1400,
+      totalPaid: 900,
+      netTransactions: -250,
+      remaining: 1000,
+      goalAllocations: 0,
+    },
+    dailyBalances: [
+      { day: 1, income: 0, bills: 0, expense: 0, net: 0, balance: 190 },
+      { day: 8, income: 0, bills: 0, expense: 0, net: 0, balance: 175 },
+    ],
+  }));
+
+  assert.equal(suite.safeCushion.amount, 0);
+  assert.equal(suite.safeCushion.status, "risk");
+  assert.equal(suite.purchaseDecision.safeNowLimit, 0);
+  assert.equal(suite.spendingLimit.daily, 0);
+  assert.equal(suite.extraMoneyRouter.amount, 0);
+  assert.equal(suite.debtPayoff.status, "hold");
+  assert.match(suite.algorithmDetails.safeCushion.whyItMatters, /guardrail/i);
+  assert.match(suite.algorithmDetails.debtPayoff.nextAction, /Hold extra debt payments/i);
+});
+
+test("Debt Payoff exposes snowball rollover and next target metadata", () => {
+  const suite = buildAlgorithmSuite(baseInput({
+    bills: [
+      { id: "camera", name: "Camera", amount: 38, category: "Debt", due_day: 11, is_debt: true, is_recurring: true, balance: 144, interest_rate: 0, paidAmount: 0 },
+      { id: "concert", name: "Concert", amount: 35, category: "Debt", due_day: 29, is_debt: true, is_recurring: true, balance: 389, interest_rate: 0, paidAmount: 0 },
+      { id: "card", name: "Card", amount: 80, category: "Debt", due_day: 15, is_debt: true, is_recurring: true, balance: 1200, interest_rate: 25, paidAmount: 0 },
+    ],
+  }));
+
+  assert.equal(suite.debtPayoff.nextDebtName, "Camera");
+  assert.equal(suite.debtPayoff.nextDebtNameAfterTarget, "Concert");
+  assert.equal(suite.debtPayoff.rolloverAmount, 38);
+  assert.equal(suite.debtPayoff.totalMonthlyMinimum, 153);
+  assert.ok(suite.debtPayoff.safeExtraAmount > 0);
+  assert.match(suite.debtPayoff.whyItMatters, /rolls into Concert/i);
+});
+
 test("cash-flow gap wording handles a one-day tight stretch", () => {
   const suite = buildAlgorithmSuite(baseInput({
     dailyBalances: [

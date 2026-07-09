@@ -143,6 +143,7 @@ export default function DashboardScreen() {
   const [moveError, setMoveError] = useState("");
   const [flowScoreVisible, setFlowScoreVisible] = useState(false);
   const [safeCushionVisible, setSafeCushionVisible] = useState(false);
+  const [selectedAlgorithmDetailId, setSelectedAlgorithmDetailId] = useState<AlgorithmId | null>(null);
   const [activeAlgoCard, setActiveAlgoCard] = useState(0);
   const [startupAlertVisible, setStartupAlertVisible] = useState(false);
   const [onboardingPreferences, setOnboardingPreferences] = useState(() => readOnboardingPreferences());
@@ -159,6 +160,7 @@ export default function DashboardScreen() {
   useBackDismiss(moveMoneyVisible, () => setMoveMoneyVisible(false));
   useBackDismiss(flowScoreVisible, () => setFlowScoreVisible(false));
   useBackDismiss(safeCushionVisible, () => setSafeCushionVisible(false));
+  useBackDismiss(Boolean(selectedAlgorithmDetailId), () => setSelectedAlgorithmDetailId(null));
   useBackDismiss(startupAlertVisible, () => setStartupAlertVisible(false));
 
   useFocusEffect(useCallback(() => {
@@ -1052,6 +1054,8 @@ export default function DashboardScreen() {
       });
   }, [algorithmSuite, currentMonth, decisionHubSettings, setupPersonalization.recommendedAlgorithms]);
   const activeAlgorithmCardNumber = algorithmCards.length ? Math.min(activeAlgoCard + 1, algorithmCards.length) : 0;
+  const selectedAlgorithmDetail = selectedAlgorithmDetailId ? algorithmSuite.algorithmDetails[selectedAlgorithmDetailId] : null;
+  const selectedAlgorithmCard = selectedAlgorithmDetailId ? algorithmCards.find(card => card.settingId === selectedAlgorithmDetailId) : null;
   useEffect(() => {
     if (algorithmCards.length === 0 && activeAlgoCard !== 0) {
       setActiveAlgoCard(0);
@@ -1322,7 +1326,7 @@ export default function DashboardScreen() {
             {algorithmCards.map(card => (
               <Pressable
                 key={card.id}
-                onPress={() => openFloWithPrompt(card.prompt)}
+                onPress={() => setSelectedAlgorithmDetailId(card.settingId)}
                 style={({ pressed }) => [
                   styles.referenceAlgorithmCard,
                   {
@@ -1391,6 +1395,74 @@ export default function DashboardScreen() {
 
 
       {/* ── "What can I do?" modal ── */}
+      <Modal
+        visible={Boolean(selectedAlgorithmDetail)}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSelectedAlgorithmDetailId(null)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setSelectedAlgorithmDetailId(null)}>
+          <Pressable style={[styles.actionSheet, { backgroundColor: c.card }]} onPress={() => {}}>
+            <View style={[styles.sheetHandle, { backgroundColor: c.muted }]} />
+            {selectedAlgorithmDetail ? (
+              <>
+                <View style={styles.flowScoreSheetHeader}>
+                  <View style={[
+                    styles.algoIconCircle,
+                    {
+                      backgroundColor: algoToneColor(selectedAlgorithmDetail.status) + "18",
+                      borderColor: algoToneColor(selectedAlgorithmDetail.status) + "35",
+                    },
+                  ]}>
+                    <Feather name={(selectedAlgorithmCard?.icon ?? "activity") as any} size={22} color={algoToneColor(selectedAlgorithmDetail.status)} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.sheetTitle, { color: c.foreground }]}>{selectedAlgorithmDetail.headline}</Text>
+                    <Text style={[styles.sheetSub, { color: c.mutedForeground }]}>{selectedAlgorithmCard?.title ?? "Algorithm detail"}</Text>
+                  </View>
+                </View>
+
+                <View style={[styles.flowScoreNextMove, { backgroundColor: c.primary + "12", borderColor: c.primary + "2f" }]}>
+                  <Text style={[styles.flowScoreColumnTitle, { color: c.primary }]}>What I found</Text>
+                  <Text style={[styles.flowScoreFactor, { color: c.foreground }]}>{selectedAlgorithmDetail.whatIFound}</Text>
+                </View>
+
+                <View style={[styles.flowScoreNextMove, { backgroundColor: c.muted, borderColor: c.border }]}>
+                  <Text style={[styles.flowScoreColumnTitle, { color: c.warning }]}>Why this matters</Text>
+                  <Text style={[styles.flowScoreFactor, { color: c.foreground }]}>{selectedAlgorithmDetail.whyItMatters}</Text>
+                </View>
+
+                <View style={[styles.flowScoreNextMove, { backgroundColor: algoToneColor(selectedAlgorithmDetail.status) + "12", borderColor: algoToneColor(selectedAlgorithmDetail.status) + "35" }]}>
+                  <Text style={[styles.flowScoreColumnTitle, { color: algoToneColor(selectedAlgorithmDetail.status) }]}>What I’d do next</Text>
+                  <Text style={[styles.flowScoreFactor, { color: c.foreground }]}>{selectedAlgorithmDetail.nextAction}</Text>
+                </View>
+
+                <View style={styles.flowScoreBreakdown}>
+                  {selectedAlgorithmDetail.sourceNumbers.map(item => (
+                    <View key={item.label} style={[styles.flowScoreBreakdownRow, { borderTopColor: c.border }]}>
+                      <Text style={[styles.flowScoreBreakdownLabel, { color: c.mutedForeground }]}>{item.label}</Text>
+                      <Text style={[styles.flowScoreBreakdownValue, { color: algoToneColor(item.tone === "watch" ? "watch" : item.tone === "risk" ? "risk" : item.tone === "safe" ? "safe" : "info") }]}>{item.value}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                <Pressable
+                  onPress={() => {
+                    const prompt = selectedAlgorithmDetail.floPrompt;
+                    setSelectedAlgorithmDetailId(null);
+                    openFloWithPrompt(prompt);
+                  }}
+                  style={({ pressed }) => [styles.flowScoreFloButton, { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 }]}
+                >
+                  <Feather name="message-circle" size={16} color={c.primaryForeground} />
+                  <Text style={[styles.flowScoreFloText, { color: c.primaryForeground }]}>Ask Flo about this</Text>
+                </Pressable>
+              </>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <Modal
         visible={flowScoreVisible}
         transparent
@@ -2263,6 +2335,7 @@ const styles = StyleSheet.create({
   algoSuiteCard: { borderRadius: 30, padding: 15, marginBottom: 12, backgroundColor: "rgba(2,6,23,0.72)", borderWidth: 1, borderColor: "rgba(168,85,247,0.24)", shadowColor: "#38bdf8", shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.22, shadowRadius: 26, elevation: 9 },
   algoSuiteHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
   algoScoreRing: { width: 68, height: 68, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.24)", borderWidth: 1, borderColor: "rgba(34,211,238,0.42)" },
+  algoIconCircle: { width: 58, height: 58, borderRadius: 20, alignItems: "center", justifyContent: "center", borderWidth: 1 },
   algoScoreValue: { color: "#f8fafc", fontSize: 24, fontFamily: "Inter_800ExtraBold", lineHeight: 27 },
   algoScoreLabel: { color: "#93c5fd", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 1 },
   algoEyebrow: { color: "#38bdf8", fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.1, marginBottom: 2 },

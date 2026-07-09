@@ -1,4 +1,4 @@
-import { ALGORITHM_CATALOG, isAlgorithmEnabled, type AlgorithmSettingsShape } from "./algorithmCatalog";
+import { ALGORITHM_CATALOG, isAlgorithmEnabled, type AlgorithmId, type AlgorithmSettingsShape } from "./algorithmCatalog";
 
 export interface AlgorithmDailyBalance {
   day: number;
@@ -85,8 +85,28 @@ export interface AlgorithmInsight {
   algorithm: string;
 }
 
+export type AlgorithmStatus = "safe" | "watch" | "risk";
+
+export interface AlgorithmSourceNumber {
+  label: string;
+  value: string;
+  tone?: "safe" | "watch" | "risk" | "info";
+}
+
+export interface AlgorithmDecisionDetail {
+  id: AlgorithmId;
+  status: AlgorithmStatus;
+  headline: string;
+  whatIFound: string;
+  whyItMatters: string;
+  nextAction: string;
+  floPrompt: string;
+  sourceNumbers: AlgorithmSourceNumber[];
+}
+
 export interface AlgorithmSuiteResult {
   activeCount: number;
+  algorithmDetails: Record<AlgorithmId, AlgorithmDecisionDetail>;
   flowScore: {
     score: number;
     grade: string;
@@ -144,9 +164,15 @@ export interface AlgorithmSuiteResult {
     avalancheName: string | null;
     cashFlowReliefName: string | null;
     cashFlowReliefAmount: number;
+    safeExtraAmount: number;
+    rolloverAmount: number;
+    nextDebtNameAfterTarget: string | null;
+    totalMonthlyMinimum: number;
     nextMove: string;
     status: "ready" | "hold" | "done";
     detail: string;
+    whyItMatters: string;
+    sourceNumbers: AlgorithmSourceNumber[];
     comparison: { method: "snowball" | "avalanche" | "cashFlow"; targetName: string | null; reason: string }[];
   };
   forecastConfidence: { score: number; label: string; reason: string };
@@ -284,9 +310,45 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     subscriptionCreep,
     billShock,
   });
+  const debtPayoff = buildDebtPayoffDetails({
+    debts: activeDebts,
+    snowball: topDebtSnowball,
+    avalanche: topDebtAvalanche,
+    cashFlow: topDebtCashFlow,
+    safeCushionAmount,
+  });
+  const extraMoneyRouter = buildExtraMoneyRouterDetails({
+    amount: extraMoneyAmount,
+    recommendation: extraMoneyRecommendation,
+    debtTargetName: topDebtSnowball?.name ?? null,
+    savingsTargetName: input.goals.find(goal => goal.goal_type === "savings" && goal.current_amount < goal.target_amount)?.name ?? null,
+    priorityBillName: billPriority.nextBill?.name ?? null,
+  });
+  const algorithmDetails = buildAlgorithmDecisionDetails(input, {
+    flowScore,
+    flowLabel,
+    flowScoreDetails,
+    safeCushionAmount,
+    safeCushionDetails,
+    purchaseDecision,
+    billPriority,
+    paydaySplit,
+    cashFlowGap,
+    debtPayoff,
+    spendingLimits,
+    extraMoneyRouter,
+    monthlyFreeCash,
+    decisionRoom,
+    monthlyDebtMinimums,
+    debtTotal,
+    lowestBalance,
+    lowestDay,
+    riskDayCounts,
+  });
 
   return {
     activeCount: ALGORITHM_CATALOG.filter(algorithm => isAlgorithmEnabled(input.settings, algorithm.id)).length,
+    algorithmDetails,
     flowScore: {
       score: isAlgorithmEnabled(input.settings, "flowScore") ? flowScore : 0,
       grade: flowGrade,
@@ -310,12 +372,7 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     purchaseDecision,
     billPriority,
     paydaySplit,
-    debtPayoff: buildDebtPayoffDetails({
-      snowball: topDebtSnowball,
-      avalanche: topDebtAvalanche,
-      cashFlow: topDebtCashFlow,
-      safeCushionAmount,
-    }),
+    debtPayoff,
     forecastConfidence: { score: confidenceScore, label: input.forecastConfidence.label, reason: input.forecastConfidence.reasons[0] ?? "Forecast inputs look current." },
     lowBalanceWarning,
     subscriptionCreep,
@@ -324,13 +381,7 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     billShock,
     cashFlowGap,
     incomeStability,
-    extraMoneyRouter: buildExtraMoneyRouterDetails({
-      amount: extraMoneyAmount,
-      recommendation: extraMoneyRecommendation,
-      debtTargetName: topDebtSnowball?.name ?? null,
-      savingsTargetName: input.goals.find(goal => goal.goal_type === "savings" && goal.current_amount < goal.target_amount)?.name ?? null,
-      priorityBillName: billPriority.nextBill?.name ?? null,
-    }),
+    extraMoneyRouter,
     riskDay: riskDayCounts,
     smartReminder: { reminders },
     monthlyHealth: { score: flowScore, grade: flowGrade, summary: `${flowLabel} plan based on cushion, bills, forecast confidence, and risk days.` },
@@ -545,11 +596,18 @@ function buildExtraMoneyRouterDetails(args: {
 }
 
 function buildDebtPayoffDetails(targets: {
+  debts: AlgorithmBill[];
   snowball: AlgorithmBill | null;
   avalanche: AlgorithmBill | null;
   cashFlow: AlgorithmBill | null;
   safeCushionAmount: number;
 }): AlgorithmSuiteResult["debtPayoff"] {
+  const orderedDebts = targets.debts
+    .slice()
+    .filter(debt => (debt.balance ?? 0) > 0.009)
+    .sort((a, b) => (a.balance ?? 0) - (b.balance ?? 0) || a.name.localeCompare(b.name));
+  const totalMonthlyMinimum = roundCurrency(orderedDebts.reduce((sum, debt) => sum + Math.max(0, debt.amount), 0));
+
   if (!targets.snowball) {
     return {
       nextDebtName: null,
@@ -557,9 +615,18 @@ function buildDebtPayoffDetails(targets: {
       avalancheName: null,
       cashFlowReliefName: null,
       cashFlowReliefAmount: 0,
+      safeExtraAmount: 0,
+      rolloverAmount: 0,
+      nextDebtNameAfterTarget: null,
+      totalMonthlyMinimum,
       status: "done",
       nextMove: "No active debt payoff target found.",
       detail: "No active debt payoff target found.",
+      whyItMatters: "Once active debts are gone, this algorithm steps out of the way so money can move toward savings and goals.",
+      sourceNumbers: [
+        { label: "Active debts", value: "0", tone: "safe" },
+        { label: "Minimums", value: `$${totalMonthlyMinimum.toFixed(0)}/mo`, tone: "safe" },
+      ],
       comparison: [
         { method: "snowball", targetName: null, reason: "No active debt balance found." },
         { method: "avalanche", targetName: null, reason: "No active debt balance found." },
@@ -569,11 +636,17 @@ function buildDebtPayoffDetails(targets: {
   }
 
   const cashFlowReliefAmount = roundCurrency(targets.cashFlow?.amount ?? 0);
+  const snowballMinimum = roundCurrency(Math.max(0, targets.snowball.amount));
+  const nextDebtNameAfterTarget = orderedDebts.find(debt => debt.id !== targets.snowball?.id)?.name ?? null;
+  const safeExtraAmount = roundCurrency(Math.max(0, targets.safeCushionAmount));
   const status: AlgorithmSuiteResult["debtPayoff"]["status"] = targets.safeCushionAmount > 0 ? "ready" : "hold";
   const nextMove = status === "ready"
     ? `Send safe extra money to ${targets.snowball.name} first.`
     : `Hold extra debt payments until the Safe Cushion is above the floor, then target ${targets.snowball.name}.`;
   const detail = `Snowball targets ${targets.snowball.name}; avalanche targets ${targets.avalanche?.name ?? targets.snowball.name}; cash-flow relief targets ${targets.cashFlow?.name ?? targets.snowball.name}.`;
+  const whyItMatters = nextDebtNameAfterTarget
+    ? `When ${targets.snowball.name} is paid off, its $${snowballMinimum.toFixed(0)}/mo minimum rolls into ${nextDebtNameAfterTarget} instead of disappearing.`
+    : `When ${targets.snowball.name} is paid off, its $${snowballMinimum.toFixed(0)}/mo minimum becomes cash-flow room for the next goal.`;
 
   return {
     nextDebtName: targets.snowball.name,
@@ -581,9 +654,21 @@ function buildDebtPayoffDetails(targets: {
     avalancheName: targets.avalanche?.name ?? targets.snowball.name,
     cashFlowReliefName: targets.cashFlow?.name ?? targets.snowball.name,
     cashFlowReliefAmount,
+    safeExtraAmount,
+    rolloverAmount: snowballMinimum,
+    nextDebtNameAfterTarget,
+    totalMonthlyMinimum,
     status,
     nextMove,
     detail,
+    whyItMatters,
+    sourceNumbers: [
+      { label: "Current target", value: targets.snowball.name, tone: "info" },
+      { label: "Target balance", value: `$${(targets.snowball.balance ?? 0).toFixed(0)}`, tone: "watch" },
+      { label: "Safe extra", value: `$${safeExtraAmount.toFixed(0)}`, tone: safeExtraAmount > 0 ? "safe" : "watch" },
+      { label: "Rolling minimum", value: `$${snowballMinimum.toFixed(0)}/mo`, tone: "safe" },
+      { label: "Total minimums", value: `$${totalMonthlyMinimum.toFixed(0)}/mo`, tone: "info" },
+    ],
     comparison: [
       {
         method: "snowball",
@@ -601,6 +686,176 @@ function buildDebtPayoffDetails(targets: {
         reason: `Closing it frees about $${cashFlowReliefAmount.toFixed(0)}/month the fastest.`,
       },
     ],
+  };
+}
+
+function buildAlgorithmDecisionDetails(
+  input: AlgorithmSuiteInput,
+  facts: {
+    flowScore: number;
+    flowLabel: string;
+    flowScoreDetails: Pick<AlgorithmSuiteResult["flowScore"], "topReason" | "topAction" | "breakdownItems">;
+    safeCushionAmount: number;
+    safeCushionDetails: Omit<AlgorithmSuiteResult["safeCushion"], "amount">;
+    purchaseDecision: AlgorithmSuiteResult["purchaseDecision"];
+    billPriority: AlgorithmSuiteResult["billPriority"];
+    paydaySplit: AlgorithmSuiteResult["paydaySplit"];
+    cashFlowGap: AlgorithmSuiteResult["cashFlowGap"];
+    debtPayoff: AlgorithmSuiteResult["debtPayoff"];
+    spendingLimits: AlgorithmSuiteResult["spendingLimit"];
+    extraMoneyRouter: AlgorithmSuiteResult["extraMoneyRouter"];
+    monthlyFreeCash: number;
+    decisionRoom: number;
+    monthlyDebtMinimums: number;
+    debtTotal: number;
+    lowestBalance: number;
+    lowestDay: number | null;
+    riskDayCounts: AlgorithmSuiteResult["riskDay"];
+  },
+): Record<AlgorithmId, AlgorithmDecisionDetail> {
+  const lowestDate = facts.lowestDay ? formatMonthDay(input, facts.lowestDay) : "this month";
+  const flowStatus = statusFromScore(facts.flowScore);
+  const bill = facts.billPriority.nextBill;
+  const billStatus: AlgorithmStatus = bill?.urgency === "now" ? "risk" : bill?.urgency === "soon" ? "watch" : "safe";
+  const purchaseStatus: AlgorithmStatus = facts.purchaseDecision.action === "safe" ? "safe" : facts.purchaseDecision.action === "avoid" ? "risk" : "watch";
+  const paydayStatus: AlgorithmStatus = input.cashFlow.monthlyIncome <= 0 ? "risk" : facts.paydaySplit.spending <= 8 ? "watch" : "safe";
+  const gapStatus: AlgorithmStatus = facts.lowestBalance < input.safetyFloor ? "risk" : facts.safeCushionAmount < 250 ? "watch" : "safe";
+  const debtStatus: AlgorithmStatus = facts.debtPayoff.status === "done" ? "safe" : facts.debtPayoff.status === "hold" ? "watch" : "safe";
+  const routerStatus: AlgorithmStatus = facts.extraMoneyRouter.amount > 0 ? "safe" : facts.safeCushionAmount <= 0 ? "risk" : "watch";
+
+  return {
+    flowScore: {
+      id: "flowScore",
+      status: flowStatus,
+      headline: `${facts.flowScore} - ${facts.flowLabel}`,
+      whatIFound: facts.flowScoreDetails.topReason,
+      whyItMatters: "This is the quick pressure check. I combine cushion, bills, debt pressure, forecast confidence, and risk days so you know what needs attention first.",
+      nextAction: facts.flowScoreDetails.topAction,
+      floPrompt: `Why is my Flow Score ${facts.flowScore}?`,
+      sourceNumbers: [
+        { label: "Flow Score", value: `${facts.flowScore}`, tone: flowStatus },
+        { label: "Safe Cushion", value: money(facts.safeCushionAmount), tone: facts.safeCushionDetails.status },
+        { label: "Risk days", value: `${facts.riskDayCounts.risk}`, tone: facts.riskDayCounts.risk ? "risk" : "safe" },
+        { label: "Forecast confidence", value: input.forecastConfidence.label, tone: input.forecastConfidence.level === "high" ? "safe" : input.forecastConfidence.level === "medium" ? "watch" : "risk" },
+      ],
+    },
+    safeCushion: {
+      id: "safeCushion",
+      status: facts.safeCushionDetails.status,
+      headline: `Safe Cushion: ${money(facts.safeCushionAmount)}`,
+      whatIFound: facts.safeCushionDetails.topReason,
+      whyItMatters: "This is the guardrail for every decision. If this number is thin, I should not recommend extra spending, debt payments, or savings moves that would break your floor.",
+      nextAction: facts.safeCushionDetails.topAction,
+      floPrompt: `Why is my Safe Cushion ${money(facts.safeCushionAmount)}?`,
+      sourceNumbers: [
+        { label: "Lowest forecast", value: `${money(facts.lowestBalance)} on ${lowestDate}`, tone: facts.lowestBalance < input.safetyFloor ? "risk" : "info" },
+        { label: "Safety floor", value: money(input.safetyFloor), tone: "info" },
+        { label: "Protected room", value: money(facts.safeCushionAmount), tone: facts.safeCushionDetails.status },
+        { label: "Reserved plan", value: money(facts.safeCushionDetails.reservedAmount), tone: "info" },
+      ],
+    },
+    purchaseDecision: {
+      id: "purchaseDecision",
+      status: purchaseStatus,
+      headline: `Purchase Decision: ${capitalize(facts.purchaseDecision.action)}`,
+      whatIFound: facts.purchaseDecision.detail,
+      whyItMatters: "This keeps a want from quietly stealing money that is already needed for bills, planned purchases, debt payoff, or the safety floor.",
+      nextAction: facts.purchaseDecision.nextMove,
+      floPrompt: "Can I afford this purchase?",
+      sourceNumbers: [
+        { label: "Safe now", value: money(facts.purchaseDecision.safeNowLimit), tone: purchaseStatus },
+        { label: "Monthly free cash", value: money(facts.monthlyFreeCash), tone: facts.monthlyFreeCash > 0 ? "safe" : "risk" },
+        { label: "Safe Cushion", value: money(facts.safeCushionAmount), tone: facts.safeCushionDetails.status },
+        { label: "Safer date", value: facts.purchaseDecision.bestDay ? formatMonthDay(input, facts.purchaseDecision.bestDay) : "Not found", tone: facts.purchaseDecision.bestDay ? "info" : "watch" },
+      ],
+    },
+    billPriority: {
+      id: "billPriority",
+      status: billStatus,
+      headline: bill ? `Bill Priority: ${bill.name}` : "Bill Priority: On track",
+      whatIFound: facts.billPriority.summary,
+      whyItMatters: "Bills are not bad; they are obligations. I rank them so the next required payment does not surprise the forecast or hit before the cash is ready.",
+      nextAction: facts.billPriority.nextMove,
+      floPrompt: bill ? `Why is ${bill.name} my priority bill?` : "What bills need attention?",
+      sourceNumbers: [
+        { label: "Priority bill", value: bill?.name ?? "None", tone: billStatus },
+        { label: "Unpaid amount", value: bill ? money(bill.amount) : money(0), tone: billStatus },
+        { label: "Due date", value: bill ? formatMonthDay(input, bill.dueDay) : "None", tone: "info" },
+        { label: "Ranked bills", value: `${facts.billPriority.bills.length}`, tone: facts.billPriority.bills.length ? "watch" : "safe" },
+      ],
+    },
+    paydaySplit: {
+      id: "paydaySplit",
+      status: paydayStatus,
+      headline: "Payday Split",
+      whatIFound: facts.paydaySplit.summary,
+      whyItMatters: "This turns a paycheck into a job list: required bills first, debt and goals second, then only the spending that the cushion can handle.",
+      nextAction: facts.paydaySplit.nextMove,
+      floPrompt: "How should I split my next paycheck?",
+      sourceNumbers: [
+        { label: "Bills", value: money(facts.paydaySplit.dollars.bills), tone: "info" },
+        { label: "Debt", value: money(facts.paydaySplit.dollars.debt), tone: facts.paydaySplit.dollars.debt > 0 ? "watch" : "info" },
+        { label: "Savings", value: money(facts.paydaySplit.dollars.savings), tone: "safe" },
+        { label: "Spending", value: money(facts.paydaySplit.dollars.spending), tone: paydayStatus },
+      ],
+    },
+    cashFlowGap: {
+      id: "cashFlowGap",
+      status: gapStatus,
+      headline: facts.cashFlowGap.startDay === facts.cashFlowGap.endDay && facts.cashFlowGap.startDay
+        ? `Cash Flow Gap: ${formatMonthDay(input, facts.cashFlowGap.startDay)}`
+        : "Cash Flow Gap",
+      whatIFound: facts.cashFlowGap.detail,
+      whyItMatters: "Paycheck-to-paycheck stress usually comes from a tight stretch, not the whole month. I find the squeeze so you can move timing instead of guessing.",
+      nextAction: gapStatus === "safe" ? "Keep this schedule and review again after new bills or plans are added." : "Review the bills, plans, or debt moves around the tight stretch.",
+      floPrompt: "Why is my cash flow tight?",
+      sourceNumbers: [
+        { label: "Low point", value: money(facts.cashFlowGap.lowestBalance), tone: gapStatus },
+        { label: "Safety floor", value: money(input.safetyFloor), tone: "info" },
+        { label: "Start", value: facts.cashFlowGap.startDay ? formatMonthDay(input, facts.cashFlowGap.startDay) : "None", tone: "info" },
+        { label: "End", value: facts.cashFlowGap.endDay ? formatMonthDay(input, facts.cashFlowGap.endDay) : "None", tone: "info" },
+      ],
+    },
+    debtPayoff: {
+      id: "debtPayoff",
+      status: debtStatus,
+      headline: facts.debtPayoff.nextDebtName ? `Debt Payoff: ${facts.debtPayoff.nextDebtName}` : "Debt Payoff: Complete",
+      whatIFound: facts.debtPayoff.detail,
+      whyItMatters: facts.debtPayoff.whyItMatters,
+      nextAction: facts.debtPayoff.nextMove,
+      floPrompt: "Explain my debt payoff plan.",
+      sourceNumbers: facts.debtPayoff.sourceNumbers,
+    },
+    spendingLimit: {
+      id: "spendingLimit",
+      status: facts.spendingLimits.status,
+      headline: `Spending Limit: ${money(facts.spendingLimits.daily)}/day`,
+      whatIFound: facts.spendingLimits.detail,
+      whyItMatters: "This gives flexible spending a ceiling so groceries, gas, and small purchases do not accidentally eat the cushion before the tight day passes.",
+      nextAction: facts.spendingLimits.status === "risk" ? "Pause extra spending until the forecast has room again." : "Use this as the flexible spending pace until the next paycheck or tight day.",
+      floPrompt: "What can I spend until payday?",
+      sourceNumbers: [
+        { label: "Daily limit", value: money(facts.spendingLimits.daily), tone: facts.spendingLimits.status },
+        { label: "Weekly limit", value: money(facts.spendingLimits.weekly), tone: facts.spendingLimits.status },
+        { label: "Remaining days", value: `${facts.spendingLimits.remainingDays}`, tone: "info" },
+        { label: "Decision room", value: money(facts.decisionRoom), tone: facts.decisionRoom > 0 ? "safe" : "risk" },
+      ],
+    },
+    extraMoneyRouter: {
+      id: "extraMoneyRouter",
+      status: routerStatus,
+      headline: `Extra Money Router: ${facts.extraMoneyRouter.targetLabel}`,
+      whatIFound: facts.extraMoneyRouter.detail,
+      whyItMatters: "Leftover money should have a job. I protect the floor first, then choose debt, savings, bills, or available cash based on what moves you away from paycheck-to-paycheck fastest.",
+      nextAction: facts.extraMoneyRouter.nextMove,
+      floPrompt: "Where should extra money go?",
+      sourceNumbers: [
+        { label: "Safe route amount", value: money(facts.extraMoneyRouter.amount), tone: routerStatus },
+        { label: "Recommendation", value: capitalize(facts.extraMoneyRouter.recommendation), tone: "info" },
+        { label: "Target", value: facts.extraMoneyRouter.targetLabel, tone: "info" },
+        { label: "Debt remaining", value: money(facts.debtTotal), tone: facts.debtTotal > 0 ? "watch" : "safe" },
+      ],
+    },
   };
 }
 
@@ -1017,6 +1272,18 @@ function clamp(value: number, min: number, max: number) {
 
 function roundCurrency(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+function money(value: number) {
+  const rounded = roundCurrency(value);
+  const sign = rounded < 0 ? "-" : "";
+  return `${sign}$${Math.abs(rounded).toFixed(Math.abs(rounded) >= 100 || Number.isInteger(rounded) ? 0 : 2)}`;
+}
+
+function statusFromScore(score: number): AlgorithmStatus {
+  if (score >= 70) return "safe";
+  if (score >= 45) return "watch";
+  return "risk";
 }
 
 const MONTH_FULL = [
