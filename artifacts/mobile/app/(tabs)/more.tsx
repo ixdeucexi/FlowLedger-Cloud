@@ -43,6 +43,17 @@ import {
 import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
+import { supabase } from "@/lib/supabase";
+import {
+  type AppFeedbackRow,
+  type FeedbackStatus,
+  type FeedbackType,
+  FEEDBACK_STATUSES,
+  FEEDBACK_TYPES,
+  canSubmitFeedback,
+  feedbackStatusLabel,
+  sanitizeFeedbackMessage,
+} from "@/lib/feedback";
 
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
 
@@ -69,6 +80,7 @@ type SettingsSectionId =
   | "algorithms"
   | "accounts"
   | "money"
+  | "help"
   | "backup"
   | "security"
   | "legal";
@@ -84,6 +96,7 @@ const SETTINGS_SECTIONS: Array<{
   { id: "money", label: "Money plan", description: "Income, categories, forecast safety, and payoff method.", icon: "sliders" },
   { id: "algorithms", label: "Algorithm Suite", description: "Turn financial engines on or off and learn what each one does.", icon: "cpu" },
   { id: "appearance", label: "Appearance", description: "Light, dark, or automatic theme settings.", icon: "moon" },
+  { id: "help", label: "Help & Feedback", description: "Send tester feedback and review the feedback inbox.", icon: "message-square" },
   { id: "backup", label: "Backup, import, and install", description: "CSV backup, statement import, app install, and Flo memory.", icon: "download" },
   { id: "security", label: "Security and profile", description: "View the signed-in account and sign out.", icon: "lock" },
   { id: "legal", label: "Legal", description: "Terms, privacy, and data-use notes.", icon: "file-text" },
@@ -172,6 +185,16 @@ export default function MoreScreen() {
   const [householdJoinCode, setHouseholdJoinCode] = useState("");
   const [householdBusy, setHouseholdBusy] = useState(false);
   const [householdMessage, setHouseholdMessage] = useState<string | null>(null);
+  const [feedbackType, setFeedbackType] = useState<FeedbackType>("bug");
+  const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [feedbackRating, setFeedbackRating] = useState<number | null>(null);
+  const [feedbackCanContact, setFeedbackCanContact] = useState(true);
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
+  const [feedbackAdmin, setFeedbackAdmin] = useState(false);
+  const [feedbackInbox, setFeedbackInbox] = useState<AppFeedbackRow[]>([]);
+  const [feedbackInboxLoading, setFeedbackInboxLoading] = useState(false);
+  const [feedbackStatusFilter, setFeedbackStatusFilter] = useState<FeedbackStatus | "all">("all");
   const [backupExported, setBackupExported] = useState(() => {
     try { return Platform.OS === "web" && globalThis.localStorage?.getItem(BACKUP_COMPLETE_KEY) === "true"; }
     catch { return false; }
@@ -206,10 +229,65 @@ export default function MoreScreen() {
   }, [user?.id]);
 
   useEffect(() => {
+    let cancelled = false;
+    if (!user?.id) {
+      setFeedbackAdmin(false);
+      setFeedbackInbox([]);
+      return () => {
+        cancelled = true;
+      };
+    }
+    void (async () => {
+      try {
+        const { data } = await supabase
+          .from("feedback_admins")
+          .select("user_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (!cancelled) setFeedbackAdmin(Boolean(data));
+      } catch {
+        if (!cancelled) setFeedbackAdmin(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
     if (inviteRoles.length > 0 && !inviteRoles.includes(householdInviteRole)) {
       setHouseholdInviteRole(inviteRoles[0]);
     }
   }, [householdInviteRole, inviteRoles]);
+
+  const loadFeedbackInbox = async () => {
+    if (!feedbackAdmin) return;
+    setFeedbackInboxLoading(true);
+    try {
+      let query = supabase
+        .from("app_feedback")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(75);
+      if (feedbackStatusFilter !== "all") {
+        query = query.eq("status", feedbackStatusFilter);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      setFeedbackInbox((data ?? []) as AppFeedbackRow[]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not load feedback.";
+      setFeedbackNotice(message);
+    } finally {
+      setFeedbackInboxLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSettingsSection === "help" && feedbackAdmin) {
+      void loadFeedbackInbox();
+    }
+  }, [activeSettingsSection, feedbackAdmin, feedbackStatusFilter]);
 
   const saveSafetySettings = () => {
     const floor = Math.max(0, parseFloat(safetyFloorText) || 0);
@@ -218,6 +296,64 @@ export default function MoreScreen() {
     setForecastHorizonText(horizon.toString());
     updateSettings({ safety_floor: floor, forecast_horizon_months: horizon });
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handleSubmitFeedback = async () => {
+    if (!user?.id) {
+      setFeedbackNotice("Sign in before sending feedback.");
+      return;
+    }
+    const message = sanitizeFeedbackMessage(feedbackMessage);
+    if (!canSubmitFeedback(message)) {
+      setFeedbackNotice("Add a little more detail before sending.");
+      return;
+    }
+    setFeedbackSubmitting(true);
+    setFeedbackNotice(null);
+    try {
+      const userMeta = (user as any)?.user_metadata ?? {};
+      const { error } = await supabase.from("app_feedback").insert({
+        user_id: user.id,
+        user_email: user.email ?? null,
+        user_name: userMeta.full_name ?? userMeta.name ?? null,
+        feedback_type: feedbackType,
+        screen: "Settings / Help & Feedback",
+        message,
+        rating: feedbackRating,
+        can_contact: feedbackCanContact,
+        app_version: process.env.EXPO_PUBLIC_APP_VERSION ?? null,
+        platform: Platform.OS,
+      });
+      if (error) throw error;
+      setFeedbackMessage("");
+      setFeedbackRating(null);
+      setFeedbackType("bug");
+      setFeedbackNotice("Sent — thank you. I’ll review it in the Feedback Inbox.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (feedbackAdmin) void loadFeedbackInbox();
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : "Could not send feedback.";
+      setFeedbackNotice(messageText);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  };
+
+  const handleFeedbackStatusChange = async (feedbackId: string, status: FeedbackStatus) => {
+    setFeedbackNotice(null);
+    try {
+      const { error } = await supabase
+        .from("app_feedback")
+        .update({ status, updated_at: new Date().toISOString() })
+        .eq("id", feedbackId);
+      if (error) throw error;
+      setFeedbackInbox(items => items.map(item => item.id === feedbackId ? { ...item, status } : item));
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : "Could not update feedback.";
+      setFeedbackNotice(messageText);
+    }
   };
 
   const handleCreateHouseholdInvite = async () => {
@@ -1398,6 +1534,177 @@ export default function MoreScreen() {
       {/* ── Summary ── */}
       </>}
 
+      {activeSettingsSection === "help" && <>
+      <SLabel c={c} text="Tester Feedback" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <View style={styles.feedbackHero}>
+          <View style={[styles.dataIcon, { backgroundColor: c.primary + "18" }]}>
+            <Feather name="message-square" size={17} color={c.primary} />
+          </View>
+          <View style={styles.switchInfo}>
+            <Text style={[styles.switchLabel, { color: c.foreground }]}>Send FlowLedger feedback</Text>
+            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Tell me what felt broken, confusing, slow, or useful. This goes to the FlowLedger app inbox, not your household.</Text>
+          </View>
+        </View>
+        <View style={styles.feedbackChipGrid}>
+          {FEEDBACK_TYPES.map(type => {
+            const active = feedbackType === type.id;
+            return (
+              <Pressable
+                key={type.id}
+                onPress={() => {
+                  setFeedbackType(type.id);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+                style={({ pressed }) => [
+                  styles.feedbackChip,
+                  {
+                    backgroundColor: active ? c.primary : c.muted,
+                    borderColor: active ? c.primary : c.border,
+                    opacity: pressed ? 0.75 : 1,
+                  },
+                ]}
+              >
+                <Feather name={type.icon as any} size={13} color={active ? c.primaryForeground : c.mutedForeground} />
+                <Text style={[styles.feedbackChipText, { color: active ? c.primaryForeground : c.mutedForeground }]}>{type.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <TextInput
+          value={feedbackMessage}
+          onChangeText={setFeedbackMessage}
+          multiline
+          textAlignVertical="top"
+          placeholder="Example: I tapped Save Account during setup and nothing happened..."
+          placeholderTextColor={c.mutedForeground}
+          style={[styles.feedbackInput, { backgroundColor: c.muted, borderColor: c.border, color: c.foreground }]}
+        />
+        <View style={styles.feedbackRatingRow}>
+          <Text style={[styles.feedbackSmallLabel, { color: c.mutedForeground }]}>How was it?</Text>
+          {[1, 2, 3, 4, 5].map(value => {
+            const active = feedbackRating === value;
+            return (
+              <Pressable
+                key={value}
+                onPress={() => setFeedbackRating(active ? null : value)}
+                style={({ pressed }) => [
+                  styles.feedbackRatingButton,
+                  { backgroundColor: active ? c.primary + "25" : c.muted, borderColor: active ? c.primary : c.border, opacity: pressed ? 0.75 : 1 },
+                ]}
+              >
+                <Text style={[styles.feedbackRatingText, { color: active ? c.primary : c.mutedForeground }]}>{value}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Pressable
+          onPress={() => setFeedbackCanContact(value => !value)}
+          style={({ pressed }) => [styles.feedbackContactRow, { opacity: pressed ? 0.75 : 1 }]}
+        >
+          <View style={[styles.feedbackCheck, { backgroundColor: feedbackCanContact ? c.success : c.muted, borderColor: feedbackCanContact ? c.success : c.border }]}>
+            {feedbackCanContact ? <Feather name="check" size={12} color="#fff" /> : null}
+          </View>
+          <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>It’s okay to contact me about this feedback.</Text>
+        </Pressable>
+        {feedbackNotice ? <Text style={[styles.feedbackNotice, { color: feedbackNotice.startsWith("Sent") ? c.success : c.destructive }]}>{feedbackNotice}</Text> : null}
+        <Pressable
+          onPress={handleSubmitFeedback}
+          disabled={feedbackSubmitting || !canSubmitFeedback(feedbackMessage)}
+          style={({ pressed }) => [
+            styles.balanceSaveFullBtn,
+            {
+              backgroundColor: canSubmitFeedback(feedbackMessage) ? c.primary : c.muted,
+              opacity: pressed || feedbackSubmitting ? 0.75 : 1,
+            },
+          ]}
+        >
+          <Feather name="send" size={15} color={canSubmitFeedback(feedbackMessage) ? c.primaryForeground : c.mutedForeground} />
+          <Text style={[styles.balanceSaveBtnText, { color: canSubmitFeedback(feedbackMessage) ? c.primaryForeground : c.mutedForeground }]}>
+            {feedbackSubmitting ? "Sending..." : "Send Feedback"}
+          </Text>
+        </Pressable>
+      </View>
+
+      {feedbackAdmin ? (
+        <>
+          <SLabel c={c} text="Feedback Inbox" />
+          <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+            <View style={styles.feedbackInboxHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.switchLabel, { color: c.foreground }]}>App admin inbox</Text>
+                <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Tester notes across FlowLedger. This is separate from household permissions.</Text>
+              </View>
+              <Pressable
+                onPress={() => void loadFeedbackInbox()}
+                style={({ pressed }) => [styles.feedbackRefreshButton, { backgroundColor: c.muted, opacity: pressed ? 0.75 : 1 }]}
+              >
+                <Feather name="refresh-cw" size={15} color={c.primary} />
+              </Pressable>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.feedbackFilterRow}>
+              {(["all", ...FEEDBACK_STATUSES.map(status => status.id)] as const).map(status => {
+                const active = feedbackStatusFilter === status;
+                return (
+                  <Pressable
+                    key={status}
+                    onPress={() => setFeedbackStatusFilter(status)}
+                    style={({ pressed }) => [
+                      styles.feedbackStatusFilter,
+                      { backgroundColor: active ? c.primary : c.muted, borderColor: active ? c.primary : c.border, opacity: pressed ? 0.75 : 1 },
+                    ]}
+                  >
+                    <Text style={[styles.feedbackChipText, { color: active ? c.primaryForeground : c.mutedForeground }]}>
+                      {status === "all" ? "All" : feedbackStatusLabel(status)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            {feedbackInboxLoading ? (
+              <Text style={[styles.switchDesc, { color: c.mutedForeground, marginTop: 10 }]}>Loading feedback...</Text>
+            ) : feedbackInbox.length ? (
+              feedbackInbox.map(item => (
+                <View key={item.id} style={[styles.feedbackInboxItem, { borderColor: c.border, backgroundColor: c.muted }]}>
+                  <View style={styles.feedbackInboxTop}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.feedbackInboxTitle, { color: c.foreground }]}>{FEEDBACK_TYPES.find(type => type.id === item.feedback_type)?.label ?? "Feedback"}</Text>
+                      <Text style={[styles.feedbackInboxMeta, { color: c.mutedForeground }]} numberOfLines={1}>
+                        {item.user_email ?? "Unknown user"} · {formatMemberDate(item.created_at)} · {item.platform ?? "app"}
+                      </Text>
+                    </View>
+                    <View style={[styles.feedbackStatusPill, { backgroundColor: c.primary + "18" }]}>
+                      <Text style={[styles.feedbackStatusText, { color: c.primary }]}>{feedbackStatusLabel(item.status)}</Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.feedbackInboxMessage, { color: c.foreground }]}>{item.message}</Text>
+                  <View style={styles.feedbackInboxFooter}>
+                    {item.rating ? <Text style={[styles.feedbackInboxMeta, { color: c.mutedForeground }]}>Rating: {item.rating}/5</Text> : <View />}
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.feedbackStatusActions}>
+                      {FEEDBACK_STATUSES.map(status => (
+                        <Pressable
+                          key={`${item.id}-${status.id}`}
+                          onPress={() => void handleFeedbackStatusChange(item.id, status.id)}
+                          style={({ pressed }) => [
+                            styles.feedbackStatusAction,
+                            { backgroundColor: item.status === status.id ? c.primary : c.card, borderColor: c.border, opacity: pressed ? 0.75 : 1 },
+                          ]}
+                        >
+                          <Text style={[styles.feedbackStatusText, { color: item.status === status.id ? c.primaryForeground : c.mutedForeground }]}>{status.label}</Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  </View>
+                </View>
+              ))
+            ) : (
+              <Text style={[styles.switchDesc, { color: c.mutedForeground, marginTop: 10 }]}>No feedback in this filter yet.</Text>
+            )}
+          </View>
+        </>
+      ) : null}
+      </>}
+
       {activeSettingsSection === "legal" && <>
       <SLabel c={c} text="Legal" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
@@ -1725,6 +2032,32 @@ const styles = StyleSheet.create({
   dataLabel: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   dataDesc: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   dataHealthRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, paddingVertical: 11 },
+  feedbackHero: { flexDirection: "row", alignItems: "flex-start", marginBottom: 12 },
+  feedbackChipGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
+  feedbackChip: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 8 },
+  feedbackChipText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
+  feedbackInput: { minHeight: 112, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 12, fontSize: 14, fontFamily: "Inter_500Medium", lineHeight: 20 },
+  feedbackRatingRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 },
+  feedbackSmallLabel: { fontSize: 11, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.6, marginRight: 2 },
+  feedbackRatingButton: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  feedbackRatingText: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  feedbackContactRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 },
+  feedbackCheck: { width: 20, height: 20, borderRadius: 10, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  feedbackNotice: { fontSize: 12, fontFamily: "Inter_800ExtraBold", lineHeight: 17, marginTop: 10 },
+  feedbackInboxHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  feedbackRefreshButton: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  feedbackFilterRow: { gap: 8, paddingTop: 12, paddingBottom: 4 },
+  feedbackStatusFilter: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
+  feedbackInboxItem: { borderWidth: 1, borderRadius: 16, padding: 12, marginTop: 12 },
+  feedbackInboxTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  feedbackInboxTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
+  feedbackInboxMeta: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginTop: 3 },
+  feedbackStatusPill: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
+  feedbackStatusText: { fontSize: 10, fontFamily: "Inter_800ExtraBold" },
+  feedbackInboxMessage: { fontSize: 13, fontFamily: "Inter_600SemiBold", lineHeight: 19, marginTop: 10 },
+  feedbackInboxFooter: { marginTop: 12, gap: 8 },
+  feedbackStatusActions: { gap: 8, paddingRight: 4 },
+  feedbackStatusAction: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
 
   summaryCard: { flexDirection: "row", justifyContent: "space-around", padding: 16, marginBottom: 8 },
   summaryItem: { alignItems: "center" },

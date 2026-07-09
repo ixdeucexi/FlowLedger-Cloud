@@ -53,5 +53,7 @@
     ,"lib/learningTour.test.ts"
     ,"lib/householdPermissions.ts"
     ,"lib/householdPermissions.test.ts"
+    ,"lib/feedback.ts"
+    ,"lib/feedback.test.ts"
   ]
 }
