@@ -1535,6 +1535,8 @@ export default function MoreScreen() {
       </>}
 
       {activeSettingsSection === "help" && <>
+      {!feedbackAdmin ? (
+      <>
       <SLabel c={c} text="Tester Feedback" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View style={styles.feedbackHero}>
@@ -1625,6 +1627,8 @@ export default function MoreScreen() {
           </Text>
         </Pressable>
       </View>
+      </>
+      ) : null}
 
       {feedbackAdmin ? (
         <>
