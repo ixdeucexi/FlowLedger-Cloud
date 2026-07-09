@@ -70,6 +70,7 @@ test("builds Flow Score, Safe Cushion, and practical algorithm outputs", () => {
   assert.match(suite.billPriority.summary, /Phone|bill/i);
   assert.match(suite.purchaseDecision.nextMove, /Flo|purchase|date/i);
   assert.equal(suite.paydaySplit.dollars.bills, 1400);
+  assert.ok(suite.paydaySplit.dollars.debt >= 120);
   assert.match(suite.paydaySplit.summary, /bills/i);
   assert.equal(suite.debtPayoff.nextDebtName, "Credit Card");
   assert.equal(suite.debtPayoff.status, "ready");
@@ -154,7 +155,9 @@ test("cash-flow gap wording handles a one-day tight stretch", () => {
 
   assert.equal(suite.cashFlowGap.startDay, 8);
   assert.equal(suite.cashFlowGap.endDay, 8);
-  assert.equal(suite.cashFlowGap.detail, "Tightest stretch is July 8, 2026.");
+  assert.equal(suite.cashFlowGap.detail, "Tightest stretch is July 8, 2026. Main pressure: Phone $100.");
+  assert.deepEqual(suite.cashFlowGap.causes.map(cause => cause.label), ["Phone"]);
+  assert.equal(suite.algorithmDetails.cashFlowGap.sourceNumbers.find(item => item.label === "Main pressure")?.value, "Phone");
 });
 
 test("Flow Score treats future bills as planned, not negative", () => {
@@ -206,6 +209,57 @@ test("spending and purchase algorithms require monthly room, not cushion alone",
   assert.equal(suite.spendingLimit.daily, 0);
   assert.equal(suite.spendingLimit.status, "risk");
   assert.equal(suite.extraMoneyRouter.amount, 0);
+});
+
+test("cash-flow gap explains the biggest bills and spending creating the squeeze", () => {
+  const suite = buildAlgorithmSuite(baseInput({
+    todayDay: 1,
+    dailyBalances: [
+      { day: 1, income: 3000, bills: 0, expense: 0, net: 3000, balance: 3000 },
+      { day: 7, income: 0, bills: 900, expense: 75, net: -975, balance: 310 },
+      { day: 8, income: 0, bills: 200, expense: 60, net: -260, balance: 255 },
+      { day: 9, income: 0, bills: 0, expense: 0, net: 0, balance: 700 },
+    ],
+    bills: [
+      { id: "rent", name: "Rent", amount: 900, category: "Housing", due_day: 7, is_debt: false, is_recurring: true, paidAmount: 0 },
+      { id: "phone", name: "Phone", amount: 200, category: "Utilities", due_day: 8, is_debt: false, is_recurring: true, paidAmount: 0 },
+    ],
+    transactions: [
+      { id: "gas", date: "2026-07-07", amount: -75, category: "Transportation", note: "Gas" },
+      { id: "food", date: "2026-07-08", amount: -60, category: "Food", note: "Food" },
+    ],
+  }));
+
+  assert.equal(suite.cashFlowGap.startDay, 7);
+  assert.equal(suite.cashFlowGap.endDay, 8);
+  assert.deepEqual(suite.cashFlowGap.causes.map(cause => cause.label), ["Rent", "Phone", "Gas"]);
+  assert.match(suite.cashFlowGap.detail, /Main pressure: Rent \$900, Phone \$200, Gas \$75/);
+});
+
+test("Extra Money Router protects current bills before routing leftover to debt", () => {
+  const suite = buildAlgorithmSuite(baseInput({
+    todayDay: 12,
+    cashFlow: {
+      monthlyIncome: 5000,
+      totalBillsDue: 600,
+      totalPaid: 0,
+      netTransactions: -250,
+      remaining: 3500,
+      goalAllocations: 0,
+    },
+    dailyBalances: [
+      { day: 12, income: 5000, bills: 0, expense: 0, net: 5000, balance: 5000 },
+      { day: 20, income: 0, bills: 0, expense: 0, net: 0, balance: 4200 },
+    ],
+    bills: [
+      { id: "utility", name: "Utility", amount: 220, category: "Utilities", due_day: 10, is_debt: false, is_recurring: true, paidAmount: 0 },
+      { id: "card", name: "Credit Card", amount: 120, category: "Debt", due_day: 20, is_debt: true, is_recurring: true, balance: 900, interest_rate: 24.99, paidAmount: 0 },
+    ],
+  }));
+
+  assert.equal(suite.extraMoneyRouter.recommendation, "bill");
+  assert.equal(suite.extraMoneyRouter.targetLabel, "Utility");
+  assert.match(suite.algorithmDetails.extraMoneyRouter.whyItMatters, /protect the floor first/i);
 });
 
 test("debt pressure uses monthly minimums instead of total balance", () => {

@@ -182,7 +182,13 @@ export interface AlgorithmSuiteResult {
   goalAcceleration: { amount: number; goalName: string | null; detail: string };
   spendingPattern: { topCategory: string | null; spikeCount: number; detail: string };
   billShock: { count: number; items: string[] };
-  cashFlowGap: { startDay: number | null; endDay: number | null; lowestBalance: number; detail: string };
+  cashFlowGap: {
+    startDay: number | null;
+    endDay: number | null;
+    lowestBalance: number;
+    detail: string;
+    causes: { label: string; amount: number; type: "bill" | "spending" | "debt" }[];
+  };
   incomeStability: { score: number; label: string; detail: string };
   extraMoneyRouter: {
     amount: number;
@@ -260,7 +266,15 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
         : input.goals.some(goal => goal.goal_type === "savings" && goal.current_amount < goal.target_amount)
           ? "savings" as const
           : "available" as const;
-  const paydaySplit = buildPaydaySplit(input.cashFlow.monthlyIncome, input.cashFlow.totalBillsDue, input.cashFlow.goalAllocations, debtTotal, safeCushionAmount);
+  const paydaySplit = buildPaydaySplit(
+    input.cashFlow.monthlyIncome,
+    input.cashFlow.totalBillsDue,
+    input.cashFlow.goalAllocations,
+    monthlyDebtMinimums,
+    debtTotal,
+    safeCushionAmount,
+    input.safetyFloor,
+  );
   const cashFlowGap = findCashFlowGap(balances, input.safetyFloor, input);
   const riskDayCounts = balances.reduce(
     (counts, day) => {
@@ -444,7 +458,15 @@ function buildLowBalanceWarning(lowestBalance: number, lowestDay: number | null,
   return { status: "safe", day: lowestDay, balance: lowestBalance, message: "No low-balance risk detected in this month." };
 }
 
-function buildPaydaySplit(monthlyIncome: number, bills: number, goals: number, debtTotal: number, safeCushion: number) {
+function buildPaydaySplit(
+  monthlyIncome: number,
+  bills: number,
+  goals: number,
+  monthlyDebtMinimums: number,
+  debtTotal: number,
+  safeCushion: number,
+  safetyFloor: number,
+) {
   const income = Math.max(0, monthlyIncome);
   if (income <= 0) {
     return {
@@ -458,14 +480,16 @@ function buildPaydaySplit(monthlyIncome: number, bills: number, goals: number, d
       nextMove: "Add your next paycheck date and amount.",
     };
   }
-  const billShare = Math.min(80, Math.round((bills / income) * 100));
+  const billShare = Math.min(85, Math.round((bills / income) * 100));
   const goalsShare = Math.min(20, Math.round((goals / income) * 100));
-  const debtShare = debtTotal > 0 ? Math.min(15, safeCushion > 200 ? 8 : 4) : 0;
-  const savingsShare = safeCushion > 250 ? 10 : safeCushion > 75 ? 5 : 0;
+  const minimumDebtShare = debtTotal > 0 ? Math.min(35, Math.round((monthlyDebtMinimums / income) * 100)) : 0;
+  const extraDebtShare = debtTotal > 0 ? Math.min(12, safeCushion > safetyFloor ? 8 : safeCushion > 75 ? 4 : 0) : 0;
+  const debtShare = Math.min(45, minimumDebtShare + extraDebtShare);
+  const savingsShare = safeCushion > safetyFloor + 250 ? 10 : safeCushion > 75 ? 5 : 0;
   const spendingShare = Math.max(0, 100 - billShare - goalsShare - debtShare - savingsShare);
   const billDollars = roundCurrency(Math.min(income, Math.max(0, bills)));
   const goalDollars = roundCurrency(Math.min(Math.max(0, income - billDollars), Math.max(0, goals)));
-  const debtDollars = roundCurrency(Math.min(Math.max(0, income - billDollars - goalDollars), income * debtShare / 100));
+  const debtDollars = roundCurrency(Math.min(Math.max(0, income - billDollars - goalDollars), Math.max(monthlyDebtMinimums, income * debtShare / 100)));
   const savingsDollars = roundCurrency(Math.min(Math.max(0, income - billDollars - goalDollars - debtDollars), income * savingsShare / 100));
   const dollars = {
     bills: billDollars,
@@ -474,7 +498,7 @@ function buildPaydaySplit(monthlyIncome: number, bills: number, goals: number, d
     debt: debtDollars,
     goals: goalDollars,
   };
-  const summary = `Suggested split: ${billShare}% bills, ${spendingShare}% spending, ${savingsShare}% savings, ${debtShare}% debt, ${goalsShare}% goals.`;
+  const summary = `Suggested split: ${billShare}% bills, ${debtShare}% debt, ${savingsShare}% savings, ${goalsShare}% goals, ${spendingShare}% flexible spending.`;
   const nextMove = billShare >= 60
     ? "Protect bills first, then let Flo find the safest spending limit."
     : safeCushion <= 75
@@ -815,6 +839,9 @@ function buildAlgorithmDecisionDetails(
         { label: "Safety floor", value: money(input.safetyFloor), tone: "info" },
         { label: "Start", value: facts.cashFlowGap.startDay ? formatMonthDay(input, facts.cashFlowGap.startDay) : "None", tone: "info" },
         { label: "End", value: facts.cashFlowGap.endDay ? formatMonthDay(input, facts.cashFlowGap.endDay) : "None", tone: "info" },
+        ...(facts.cashFlowGap.causes.length
+          ? [{ label: "Main pressure", value: facts.cashFlowGap.causes.map(cause => cause.label).join(", "), tone: "watch" as const }]
+          : []),
       ],
     },
     debtPayoff: {
@@ -927,7 +954,7 @@ function buildGoalAcceleration(goals: AlgorithmGoal[], safeCushion: number) {
   };
 }
 
-function findCashFlowGap(balances: AlgorithmDailyBalance[], safetyFloor: number, input: AlgorithmSuiteInput) {
+function findCashFlowGap(balances: AlgorithmDailyBalance[], safetyFloor: number, input: AlgorithmSuiteInput): AlgorithmSuiteResult["cashFlowGap"] {
   const sorted = balances.slice().sort((a, b) => a.day - b.day);
   const lowest = minBy(sorted, day => day.balance);
   let startDay: number | null = null;
@@ -952,16 +979,51 @@ function findCashFlowGap(balances: AlgorithmDailyBalance[], safetyFloor: number,
       ? formatMonthDay(input, startDay)
       : `${formatMonthDay(input, startDay)} through ${formatMonthDay(input, endDay)}`
     : null;
+  const causes = findCashFlowGapCauses(input, startDay, endDay);
+  const causeLabel = causes.length
+    ? ` Main pressure: ${causes.map(cause => `${cause.label} ${money(cause.amount)}`).join(", ")}.`
+    : "";
   return {
     startDay,
     endDay,
     lowestBalance: lowest?.balance ?? 0,
     detail: stretchLabel
       ? startDay === endDay
-        ? `Tightest stretch is ${stretchLabel}.`
-        : `Tightest stretch runs ${stretchLabel}.`
+        ? `Tightest stretch is ${stretchLabel}.${causeLabel}`
+        : `Tightest stretch runs ${stretchLabel}.${causeLabel}`
       : "No tight cash-flow stretch detected.",
+    causes,
   };
+}
+
+function findCashFlowGapCauses(input: AlgorithmSuiteInput, startDay: number | null, endDay: number | null) {
+  if (!startDay || !endDay) return [];
+  const inWindow = (day: number) => day >= startDay && day <= endDay;
+  const billCauses = input.bills
+    .filter(bill => inWindow(bill.due_day))
+    .map(bill => ({
+      label: bill.name,
+      amount: roundCurrency(Math.max(0, bill.amount - (bill.paidAmount ?? 0))),
+      type: bill.is_debt ? "debt" as const : "bill" as const,
+    }))
+    .filter(cause => cause.amount > 0);
+  const spendingCauses = input.transactions
+    .filter(tx => tx.amount < 0 && inWindow(dayFromDateString(tx.date, input) ?? -1))
+    .map(tx => ({
+      label: tx.note || tx.category || "Spending",
+      amount: roundCurrency(Math.abs(tx.amount)),
+      type: "spending" as const,
+    }));
+  return [...billCauses, ...spendingCauses]
+    .sort((a, b) => b.amount - a.amount || a.label.localeCompare(b.label))
+    .slice(0, 3);
+}
+
+function dayFromDateString(date: string, input: Pick<AlgorithmSuiteInput, "month" | "year">) {
+  const match = /(\d{4})-(\d{2})-(\d{2})/.exec(date);
+  if (!match) return null;
+  if (Number(match[1]) !== input.year || Number(match[2]) !== input.month + 1) return null;
+  return Number(match[3]);
 }
 
 function findPlanDelayDay(balances: AlgorithmDailyBalance[], safetyFloor: number) {
