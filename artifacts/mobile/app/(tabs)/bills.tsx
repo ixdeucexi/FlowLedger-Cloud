@@ -29,9 +29,15 @@ const CAT_COLORS: Record<string, string> = {
 };
 
 type Tab    = "bills" | "debt";
-type Filter = "all" | "recurring" | "one-time";
+type Filter = "all" | "recurring" | "one-time" | "stopped";
 type SortMode = "priority" | "balance" | "interest";
 const MONTH_FULL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const FILTER_LABELS: Record<Filter, string> = {
+  all: "All",
+  recurring: "Recurring",
+  "one-time": "One-Time",
+  stopped: "Stopped",
+};
 
 export default function BillsScreen() {
   const c = useColors();
@@ -113,21 +119,35 @@ export default function BillsScreen() {
     (bill: Bill) => billOccurrenceDays(bill)[0] ?? bill.due_day,
     [billOccurrenceDays],
   );
+  const stoppedCutoff = useMemo(() => new Date(currentYear, currentMonth + 1, 0), [currentMonth, currentYear]);
+  const isStoppedFutureBill = useCallback((bill: Bill) => {
+    if (!bill.end_date) return false;
+    const [endYear, endMonth, endDay] = bill.end_date.split("-").map(Number);
+    if (![endYear, endMonth].every(Number.isFinite)) return false;
+    const endDate = new Date(endYear, endMonth - 1, Number.isFinite(endDay) ? endDay : 1);
+    return endDate <= stoppedCutoff;
+  }, [stoppedCutoff]);
   const currentMonthBills = bills.filter(b => billOccurrenceDays(b).length > 0);
   const visibleBills = bills;
   const nonDebtBills = visibleBills.filter(b => !b.is_debt);
-  const filteredBills = nonDebtBills
+  const activeNonDebtBills = nonDebtBills.filter(b => !isStoppedFutureBill(b));
+  const stoppedNonDebtBills = nonDebtBills.filter(isStoppedFutureBill);
+  const filteredBills = (filter === "stopped" ? stoppedNonDebtBills : activeNonDebtBills)
     .filter(b => {
+      if (filter === "stopped") return true;
       if (filter === "recurring") return b.is_recurring;
       if (filter === "one-time")  return !b.is_recurring;
       return true;
     })
-    .sort((a, b) => nextBillOccurrence(a).sortTime - nextBillOccurrence(b).sortTime || a.name.localeCompare(b.name));
+    .sort((a, b) => {
+      if (filter === "stopped") return (b.end_date ?? "").localeCompare(a.end_date ?? "") || a.name.localeCompare(b.name);
+      return nextBillOccurrence(a).sortTime - nextBillOccurrence(b).sortTime || a.name.localeCompare(b.name);
+    });
 
-  const totalAmount = nonDebtBills
+  const totalAmount = activeNonDebtBills
     .filter(b => b.is_recurring)
     .reduce((s, b) => s + getBillMonthlyTotal(b, currentMonth, currentYear), 0);
-  const totalCount  = nonDebtBills.length;
+  const totalCount  = activeNonDebtBills.length;
   const formatBillDueText = useCallback((bill: Bill) => {
     const days = billOccurrenceDays(bill);
     if (days.length === 1) return `Due ${MONTH_FULL[currentMonth]} ${days[0]}, ${currentYear}`;
@@ -143,6 +163,12 @@ export default function BillsScreen() {
     if (bill.frequency === "weekly") return "/week";
     if (bill.frequency === "biweekly") return "biweekly";
     return "/month";
+  }, []);
+  const formatStoppedText = useCallback((bill: Bill) => {
+    if (!bill.end_date) return "Stopped";
+    const [endYear, endMonth, endDay] = bill.end_date.split("-").map(Number);
+    if (![endYear, endMonth, endDay].every(Number.isFinite)) return "Stopped";
+    return `Stopped after ${MONTH_FULL[endMonth - 1]} ${endDay}, ${endYear}`;
   }, []);
 
   // ── Debt data ───────────────────────────────────────────────────
@@ -404,14 +430,14 @@ export default function BillsScreen() {
           ) : null}
 
           <View style={styles.filterRow}>
-            {(["all", "recurring", "one-time"] as Filter[]).map(f => (
+            {(["all", "recurring", "one-time", "stopped"] as Filter[]).map(f => (
               <Pressable
                 key={f}
                 onPress={() => setFilter(f)}
                 style={[styles.filterChip, { backgroundColor: filter === f ? c.primary : c.card, borderRadius: colors.radius }]}
               >
                 <Text style={[styles.filterText, { color: filter === f ? c.primaryForeground : c.mutedForeground }]}>
-                  {f === "all" ? "All" : f === "recurring" ? "Recurring" : "One-Time"}
+                  {FILTER_LABELS[f]}
                 </Text>
               </Pressable>
             ))}
@@ -419,10 +445,17 @@ export default function BillsScreen() {
 
           <View style={styles.list}>
             {filteredBills.length === 0 ? (
-              <EmptyState icon="file-text" title="No Bills" message="Tap + to add your first bill." actionLabel="Add Bill" onAction={() => { setEditBill(null); setModalVisible(true); }} />
+              <EmptyState
+                icon="file-text"
+                title={filter === "stopped" ? "No Stopped Bills" : "No Bills"}
+                message={filter === "stopped" ? "Bills you stop for the future will live here." : "Tap + to add your first bill."}
+                actionLabel={filter === "stopped" ? undefined : "Add Bill"}
+                onAction={filter === "stopped" ? undefined : () => { setEditBill(null); setModalVisible(true); }}
+              />
             ) : filteredBills.map(item => {
               const catColor = CAT_COLORS[item.category] ?? c.primary;
               const beforePayday = paycheckPlan.billsDue.some(bill => bill.id === item.id);
+              const stopped = isStoppedFutureBill(item);
               return (
                 <Pressable
                   key={item.id}
@@ -438,8 +471,15 @@ export default function BillsScreen() {
                           <View style={[styles.tag, { backgroundColor: catColor + "18" }]}>
                             <Text style={[styles.tagText, { color: catColor }]}>{item.category}</Text>
                           </View>
-                          <Text style={[styles.metaText, { color: c.mutedForeground }]}>{formatBillDueText(item)}</Text>
-                          {beforePayday ? (
+                          <Text style={[styles.metaText, { color: c.mutedForeground }]}>
+                            {stopped ? formatStoppedText(item) : formatBillDueText(item)}
+                          </Text>
+                          {stopped ? (
+                            <View style={[styles.tag, { backgroundColor: c.muted }]}>
+                              <Text style={[styles.tagText, { color: c.mutedForeground }]}>Stopped</Text>
+                            </View>
+                          ) : null}
+                          {!stopped && beforePayday ? (
                             <View style={[styles.tag, { backgroundColor: c.warning + "18" }]}>
                               <Text style={[styles.tagText, { color: c.warning }]}>Before payday</Text>
                             </View>
