@@ -1,8 +1,13 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import {
+  type HouseholdInviteRole,
+  type HouseholdRole,
+  normalizeHouseholdRole,
+} from "@/lib/householdPermissions";
 import { supabase } from "@/lib/supabase";
 
-export type HouseholdRole = "owner" | "editor" | "viewer";
+export type { HouseholdInviteRole, HouseholdRole };
 
 export interface HouseholdMembership {
   householdId: string;
@@ -16,7 +21,7 @@ export interface HouseholdMembership {
 export interface HouseholdInvite {
   id: string;
   householdId: string;
-  role: Exclude<HouseholdRole, "owner">;
+  role: HouseholdInviteRole;
   expiresAt: string;
   acceptedAt?: string | null;
   revokedAt?: string | null;
@@ -51,14 +56,12 @@ function storageKey(userId?: string | null) {
   return `${ACTIVE_HOUSEHOLD_KEY}-${userId ?? "local"}`;
 }
 
-function normalizeRole(role: unknown): HouseholdRole {
-  return role === "viewer" || role === "editor" || role === "owner" ? role : "viewer";
-}
-
 function friendlyHouseholdError(message: string | undefined, fallback: string): string {
   const lower = (message ?? "").toLowerCase();
-  if (lower.includes("only the household owner")) return "Only the household owner can create invite codes.";
-  if (lower.includes("invalid invite role")) return "Choose Can edit or View only, then try again.";
+  if (lower.includes("only household owners or managers")) return "Only household owners or managers can do that.";
+  if (lower.includes("only the household owner")) return "Only the household owner can do that.";
+  if (lower.includes("view only") || lower.includes("viewer")) return "This household is view only for your account.";
+  if (lower.includes("invalid invite role")) return "Choose Manager, Can edit, or View only, then try again.";
   if (lower.includes("invite code is required")) return "Enter an invite code first.";
   if (lower.includes("invalid or expired")) return "That invite code is invalid or expired.";
   return fallback;
@@ -153,7 +156,7 @@ export async function loadHouseholdMemberships(userId?: string | null): Promise<
         budgetId: budgetByHousehold.get(householdId) ?? null,
         name: ownerName,
         isPersonal,
-        role: normalizeRole(membership.role),
+        role: normalizeHouseholdRole(membership.role),
         createdAt: membership.created_at ? String(membership.created_at) : undefined,
       };
     })
@@ -176,7 +179,10 @@ export async function loadHouseholdInvites(householdId: string): Promise<Househo
   return (data ?? []).map((row: any) => ({
     id: String(row.id),
     householdId: String(row.household_id),
-    role: row.role === "viewer" ? "viewer" : "editor",
+    role: (() => {
+      const normalized = normalizeHouseholdRole(row.role);
+      return normalized === "owner" ? "editor" : normalized;
+    })(),
     expiresAt: String(row.expires_at),
     acceptedAt: row.accepted_at ?? null,
     revokedAt: row.revoked_at ?? null,
@@ -184,12 +190,12 @@ export async function loadHouseholdInvites(householdId: string): Promise<Househo
   }));
 }
 
-export async function createHouseholdInviteCode(householdId: string, role: Exclude<HouseholdRole, "owner"> = "editor"): Promise<string> {
+export async function createHouseholdInviteCode(householdId: string, role: HouseholdInviteRole = "editor"): Promise<string> {
   const { data, error } = await supabase.rpc("create_household_invite", {
     p_household_id: householdId,
     p_role: role,
   });
-  if (error) throw new Error(friendlyHouseholdError(error.message, "Couldn’t create invite code. Try again."));
+  if (error) throw new Error(friendlyHouseholdError(error.message, "Couldn't create invite code. Try again."));
   return String(data ?? "");
 }
 
@@ -197,7 +203,7 @@ export async function acceptHouseholdInviteCode(code: string): Promise<string> {
   const { data, error } = await supabase.rpc("accept_household_invite", {
     p_code: code,
   });
-  if (error) throw new Error(friendlyHouseholdError(error.message, "Couldn’t join that household. Try again."));
+  if (error) throw new Error(friendlyHouseholdError(error.message, "Couldn't join that household. Try again."));
   return String(data ?? "");
 }
 
@@ -208,7 +214,7 @@ export async function loadHouseholdMembers(householdId?: string | null): Promise
   if (!rpcResult.error && Array.isArray(rpcResult.data)) {
     return rpcResult.data.map((row: any): HouseholdMember => ({
       userId: String(row.user_id),
-      role: normalizeRole(row.role),
+      role: normalizeHouseholdRole(row.role),
       joinedAt: row.joined_at ? String(row.joined_at) : undefined,
       email: row.email ?? null,
       displayName: row.display_name ?? row.email ?? null,
@@ -225,7 +231,7 @@ export async function loadHouseholdMembers(householdId?: string | null): Promise
   if (fallback.error) return [];
   return (fallback.data ?? []).map((row: any): HouseholdMember => ({
     userId: String(row.user_id),
-    role: normalizeRole(row.role),
+    role: normalizeHouseholdRole(row.role),
     joinedAt: row.created_at ? String(row.created_at) : undefined,
     displayName: row.user_id ? `Member ${String(row.user_id).slice(0, 6)}` : "Household member",
   }));
@@ -259,14 +265,14 @@ export async function loadHouseholdActivity(householdId?: string | null, limit =
 export async function updateHouseholdMemberRole(
   householdId: string,
   memberUserId: string,
-  role: Exclude<HouseholdRole, "owner">,
+  role: HouseholdInviteRole,
 ): Promise<void> {
   const { error } = await supabase.rpc("update_household_member_role", {
     p_household_id: householdId,
     p_member_user_id: memberUserId,
     p_role: role,
   });
-  if (error) throw new Error(friendlyHouseholdError(error.message, "Couldn’t update that member. Try again."));
+  if (error) throw new Error(friendlyHouseholdError(error.message, "Couldn't update that member. Try again."));
 }
 
 export async function removeHouseholdMember(householdId: string, memberUserId: string): Promise<void> {
@@ -274,5 +280,5 @@ export async function removeHouseholdMember(householdId: string, memberUserId: s
     p_household_id: householdId,
     p_member_user_id: memberUserId,
   });
-  if (error) throw new Error(friendlyHouseholdError(error.message, "Couldn’t remove that member. Try again."));
+  if (error) throw new Error(friendlyHouseholdError(error.message, "Couldn't remove that member. Try again."));
 }

@@ -128,7 +128,7 @@ create unique index if not exists households_one_personal_per_user on households
 create table if not exists household_members (
   household_id uuid not null references households(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
-  role text not null default 'owner' check (role in ('owner', 'editor', 'viewer')),
+  role text not null default 'owner' check (role in ('owner', 'manager', 'editor', 'viewer')),
   created_at timestamptz not null default now(),
   primary key (household_id, user_id)
 );

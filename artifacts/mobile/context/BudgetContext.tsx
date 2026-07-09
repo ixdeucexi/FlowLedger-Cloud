@@ -33,10 +33,12 @@ import {
   updateHouseholdMemberRole as updateHouseholdMemberRoleRecord,
   writeStoredActiveHouseholdId,
   type HouseholdActivity,
+  type HouseholdInviteRole,
   type HouseholdMember,
   type HouseholdMembership,
   type HouseholdRole,
 } from "@/lib/households";
+import { canEditHouseholdPlan, canManageHouseholdMembers } from "@/lib/householdPermissions";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -260,9 +262,9 @@ interface BudgetContextType {
   refreshHouseholds: () => Promise<void>;
   refreshHouseholdActivity: () => Promise<void>;
   switchHousehold: (householdId: string) => Promise<void>;
-  createHouseholdInvite: (role?: Exclude<HouseholdRole, "owner">) => Promise<string>;
+  createHouseholdInvite: (role?: HouseholdInviteRole) => Promise<string>;
   acceptHouseholdInvite: (code: string) => Promise<void>;
-  updateHouseholdMemberRole: (memberUserId: string, role: Exclude<HouseholdRole, "owner">) => Promise<void>;
+  updateHouseholdMemberRole: (memberUserId: string, role: HouseholdInviteRole) => Promise<void>;
   removeHouseholdMember: (memberUserId: string) => Promise<void>;
 
   addBill: (bill: Omit<Bill, "id" | "created_at">) => Promise<string>;
@@ -785,8 +787,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     [households, activeHouseholdId],
   );
   const householdRole = activeHousehold?.role ?? null;
-  const canEditHousehold = !activeHousehold || activeHousehold.role !== "viewer";
+  const canEditHousehold = canEditHouseholdPlan(activeHousehold?.role);
   useEffect(() => { householdScopeRef.current = activeHousehold; }, [activeHousehold]);
+
+  const assertCanEditHousehold = useCallback((action = "change this household plan") => {
+    if (!canEditHousehold) {
+      throw new Error(`View-only household access cannot ${action}.`);
+    }
+  }, [canEditHousehold]);
 
   const scopedPayload = useCallback(<T extends Record<string, unknown>>(payload: T): T & { household_id?: string; budget_id?: string | null } => {
     const scope = householdScopeRef.current;
@@ -931,9 +939,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setLoadRetryNonce(value => value + 1);
   }, [user, demoMode, households, refreshHouseholdDetails]);
 
-  const createHouseholdInvite = useCallback(async (role: Exclude<HouseholdRole, "owner"> = "editor") => {
+  const createHouseholdInvite = useCallback(async (role: HouseholdInviteRole = "editor") => {
     if (!activeHousehold) throw new Error("Choose a household first.");
-    if (activeHousehold.role !== "owner") throw new Error("Only the household owner can invite people.");
+    if (!canManageHouseholdMembers(activeHousehold.role)) throw new Error("Only household owners or managers can invite people.");
     return createHouseholdInviteCode(activeHousehold.householdId, role);
   }, [activeHousehold]);
 
@@ -946,16 +954,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setLoadRetryNonce(value => value + 1);
   }, [user, resolveHouseholds]);
 
-  const updateHouseholdMemberRole = useCallback(async (memberUserId: string, role: Exclude<HouseholdRole, "owner">) => {
+  const updateHouseholdMemberRole = useCallback(async (memberUserId: string, role: HouseholdInviteRole) => {
     if (!activeHousehold) throw new Error("Choose a household first.");
-    if (activeHousehold.role !== "owner") throw new Error("Only the household owner can update member access.");
+    if (!canManageHouseholdMembers(activeHousehold.role)) throw new Error("Only household owners or managers can update member access.");
     await updateHouseholdMemberRoleRecord(activeHousehold.householdId, memberUserId, role);
     await refreshHouseholdDetails(activeHousehold);
   }, [activeHousehold, refreshHouseholdDetails]);
 
   const removeHouseholdMember = useCallback(async (memberUserId: string) => {
     if (!activeHousehold) throw new Error("Choose a household first.");
-    if (activeHousehold.role !== "owner") throw new Error("Only the household owner can remove members.");
+    if (!canManageHouseholdMembers(activeHousehold.role)) throw new Error("Only household owners or managers can remove members.");
     await removeHouseholdMemberRecord(activeHousehold.householdId, memberUserId);
     await refreshHouseholdDetails(activeHousehold);
   }, [activeHousehold, refreshHouseholdDetails]);
@@ -1182,6 +1190,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const addBill = useCallback(async (bill: Omit<Bill, "id" | "created_at">) => {
     if (!user) throw new Error("Sign in to add a bill");
+    assertCanEditHousehold("add a bill");
     const nb: Bill = { ...bill, id: genId(), created_at: new Date().toISOString() };
     if (demoMode) {
       setBills(prev => reorderDebtPriorities([...prev, nb]));
@@ -1190,10 +1199,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     await ensureSaved(supabase.from("bills").insert(scopedPayload({ ...nb, user_id: user.id })), "Add bill");
     setBills(prev => reorderDebtPriorities([...prev, nb]));
     return nb.id;
-  }, [user, demoMode, scopedPayload]);
+  }, [user, demoMode, scopedPayload, assertCanEditHousehold]);
 
   const updateBill = useCallback(async (bill: Bill) => {
     if (!user) return;
+    assertCanEditHousehold("update a bill");
     const existing = bills.find(b => b.id === bill.id);
     if (!existing) return;
     const previousOverrides = overridesRef.current;
@@ -1311,10 +1321,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       markSaveFailed(error, () => updateBill(bill));
       throw error;
     }
-  }, [user, bills, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, scopedPayload, applyHouseholdSelect]);
+  }, [user, bills, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, scopedPayload, applyHouseholdSelect, assertCanEditHousehold]);
 
   const stopFutureBill = useCallback(async (id: string) => {
     if (!user) return;
+    assertCanEditHousehold("stop a future bill");
     const deletedBill = bills.find(bill => bill.id === id);
     const shouldEndForwardOnly = !!deletedBill && (deletedBill.is_recurring || deletedBill.is_debt);
     const forwardEndDate = endOfCurrentMonthYMD();
@@ -1351,10 +1362,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       if (refreshed.error) throw new Error(`Refresh debts: ${refreshed.error.message}`);
       setBills(reorderDebtPriorities((refreshed.data ?? []).map(normalizeBillRow)));
     }
-  }, [user, bills, demoMode, applyHouseholdSelect]);
+  }, [user, bills, demoMode, applyHouseholdSelect, assertCanEditHousehold]);
 
   const deleteBill = useCallback(async (id: string) => {
     if (!user) return;
+    assertCanEditHousehold("delete a bill");
     const deletedBill = bills.find(bill => bill.id === id);
     const householdId = householdScopeRef.current?.householdId ?? null;
     const clearBillLinks = (transaction: Transaction): Transaction => {
@@ -1416,7 +1428,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       if (refreshed.error) throw new Error(`Refresh debts: ${refreshed.error.message}`);
       setBills(reorderDebtPriorities((refreshed.data ?? []).map(normalizeBillRow)));
     }
-  }, [user, bills, demoMode, applyHouseholdSelect]);
+  }, [user, bills, demoMode, applyHouseholdSelect, assertCanEditHousehold]);
 
   const deleteBillMistake = useCallback(async (id: string) => {
     await stopFutureBill(id);
@@ -1450,6 +1462,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const upsertOverride = useCallback(
     async (billId: string, month: number, year: number, patch: Partial<Omit<MonthlyOverride, "id" | "bill_id" | "month" | "year">>) => {
       if (!user) return;
+      assertCanEditHousehold("update a monthly bill");
       const existing = overridesRef.current.find(o => o.bill_id === billId && o.month === month && o.year === year);
       const updated: MonthlyOverride = existing
         ? { ...existing, ...patch }
@@ -1494,7 +1507,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         throw error;
       }
     },
-    [user, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, scopedPayload]
+    [user, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, scopedPayload, assertCanEditHousehold]
   );
 
   const setPaidAmount = useCallback(
@@ -1574,6 +1587,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const moveBillOccurrence = useCallback(async (billId: string, fromDate: string, toDate: string) => {
     if (!user) return;
+    assertCanEditHousehold("move a bill date");
     const cleanFrom = fromDate.slice(0, 10);
     const cleanTo = toDate.slice(0, 10);
     const previous = billDateMovesRef.current;
@@ -1613,10 +1627,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       markSaveFailed(error, () => moveBillOccurrence(billId, fromDate, toDate));
       throw error;
     }
-  }, [user, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed]);
+  }, [user, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, assertCanEditHousehold]);
 
   const removeBillOccurrenceMove = useCallback(async (id: string) => {
     if (!user) return;
+    assertCanEditHousehold("restore a bill date");
     const previous = billDateMovesRef.current;
     const existing = previous.find(move => move.id === id);
     const next = billDateMovesRef.current.filter(move => move.id !== id);
@@ -1653,7 +1668,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       markSaveFailed(error, () => removeBillOccurrenceMove(id));
       throw error;
     }
-  }, [user, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed]);
+  }, [user, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, assertCanEditHousehold]);
 
   const applyBillDateMovesToOccurrences = useCallback((bill: Bill, month: number, year: number, occurrences: number[]): number[] =>
     applyBillDateMovesToOccurrenceDays(bill.id, month, year, occurrences, billDateMoves),
@@ -1713,6 +1728,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const saveExtraPayment = useCallback(async (month: number, year: number, amount: number, allocations: SnowballAllocation[], paymentDate?: string, sources: SnowballFundingSource[] = [{ type: "manual", amount }]) => {
     if (!user) return;
+    assertCanEditHousehold("save an extra debt payment");
     const existing = extraPayments.find(ep => ep.month === month && ep.year === year);
     const payload = { amount, allocations, payment_date: paymentDate, sources };
     if (demoMode) {
@@ -1734,7 +1750,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       await ensureSaved(supabase.from("extra_payments").insert(scopedPayload({ ...next, user_id: user.id })), "Add extra payment");
       setExtraPayments(prev => [...prev, next]);
     }
-  }, [user, extraPayments, demoMode, scopedPayload]);
+  }, [user, extraPayments, demoMode, scopedPayload, assertCanEditHousehold]);
 
   const getExtraPayment = useCallback(
     (month: number, year: number) => extraPayments.find(ep => ep.month === month && ep.year === year),
@@ -1792,19 +1808,21 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const deleteExtraPayment = useCallback(async (id: string) => {
     if (!user) return;
+    assertCanEditHousehold("delete an extra debt payment");
     if (demoMode) {
       setExtraPayments(prev => prev.filter(ep => ep.id !== id));
       return;
     }
     await ensureSaved(supabase.from("extra_payments").delete().eq("id", id), "Delete extra payment");
     setExtraPayments(prev => prev.filter(ep => ep.id !== id));
-  }, [user, demoMode]);
+  }, [user, demoMode, assertCanEditHousehold]);
 
   const applyDebtSnowballPayment = useCallback(async (
     preview: SnowballProjectionResult,
     sources: SnowballFundingSource[] = [{ type: "manual", amount: preview.selectedExtra }],
   ) => {
     if (!user) return;
+    assertCanEditHousehold("apply a debt snowball payment");
     const [year, monthNumber] = preview.paymentDate.split("-").map(Number);
     const month = monthNumber - 1;
     const existing = extraPayments.find(ep => ep.month === month && ep.year === year);
@@ -1886,11 +1904,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setExtraPayments(prev => existing
       ? prev.map(ep => ep.id === existing.id ? nextPayment : ep)
       : [...prev, nextPayment]);
-  }, [user, extraPayments, saveExtraPayment, demoMode, applyHouseholdSelect]);
+  }, [user, extraPayments, saveExtraPayment, demoMode, applyHouseholdSelect, assertCanEditHousehold]);
 
   const removeDebtSnowballPayment = useCallback(async (month: number, year: number) => {
     const existing = extraPayments.find(ep => ep.month === month && ep.year === year);
     if (!existing || !user) return;
+    assertCanEditHousehold("remove a debt snowball payment");
     if (demoMode) {
       const pending = hasPendingSnowballBalanceApply(existing) && (existing.payment_date ?? "") > localDateString();
       setExtraPayments(prev => prev.filter(ep => ep.id !== existing.id));
@@ -1935,7 +1954,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setBills(reorderDebtPriorities((billsResult.data ?? []).map(normalizeBillRow)));
     setOverrides(prev => [...prev.filter(o => o.month !== month || o.year !== year), ...refreshedOverrides]);
     setExtraPayments(prev => prev.filter(ep => ep.id !== existing.id));
-  }, [user, extraPayments, deleteExtraPayment, demoMode, applyHouseholdSelect]);
+  }, [user, extraPayments, deleteExtraPayment, demoMode, applyHouseholdSelect, assertCanEditHousehold]);
 
   const syncingDueSnowballPayments = useRef(new Set<string>());
   useEffect(() => {
@@ -2031,13 +2050,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   }, [user, extraPayments, bills, overrides, saveExtraPayment, markSaveFailed, demoMode, applyHouseholdSelect]);
 
   const finalizeBillPayment = useCallback(async (billId: string, month: number, year: number, actualAmount: number, paidDate: string) => {
+    assertCanEditHousehold("finalize a bill payment");
     const bill = bills.find(b => b.id === billId);
     if (!bill) throw new Error("Bill not found");
     const budgeted = getBillMonthlyTotal(bill, month, year);
     const actual = Math.max(0, Number(actualAmount) || 0);
     await upsertOverride(billId, month, year, { actual_amount: actual, paid_amount: actual, paid_date: paidDate });
     return { budgeted, actual, surplus: Math.max(0, budgeted - actual) };
-  }, [bills, getBillMonthlyTotal, upsertOverride]);
+  }, [bills, getBillMonthlyTotal, upsertOverride, assertCanEditHousehold]);
 
   // ─── Transactions ─────────────────────────────────────────────────────────────
 
@@ -2078,6 +2098,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const addTransaction = useCallback(async (tx: Omit<Transaction, "id">) => {
     if (!user) throw new Error("Sign in to add a transaction");
+    assertCanEditHousehold("add a transaction");
     const defaultAccountId = accounts.find(account => account.is_active)?.id;
     const nt: Transaction = { ...tx, account_id: tx.account_id ?? defaultAccountId, id: genId() };
     if (demoMode) {
@@ -2088,10 +2109,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setTransactions(prev => [...prev, nt]);
     if (nt.linked_bill_id || nt.debt_applied_bill_id) await syncDebtTransactionsAndRefresh();
     return nt.id;
-  }, [user, accounts, syncDebtTransactionsAndRefresh, demoMode, scopedPayload]);
+  }, [user, accounts, syncDebtTransactionsAndRefresh, demoMode, scopedPayload, assertCanEditHousehold]);
 
   const updateTransaction = useCallback(async (tx: Transaction) => {
     if (!user) return;
+    assertCanEditHousehold("update a transaction");
     const existing = transactions.find(item => item.id === tx.id);
     setTransactions(prev => prev.map(t => t.id === tx.id ? tx : t));
     if (demoMode) return;
@@ -2105,10 +2127,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       markSaveFailed(error, () => updateTransaction(tx));
       throw error;
     }
-  }, [user, transactions, syncDebtTransactionsAndRefresh, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed]);
+  }, [user, transactions, syncDebtTransactionsAndRefresh, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, assertCanEditHousehold]);
 
   const deleteTransfer = useCallback(async (transferGroupId: string) => {
     if (!user) return;
+    assertCanEditHousehold("delete a transfer");
     const idsToDelete = transactions
       .filter(transaction => transaction.transfer_group_id === transferGroupId)
       .map(transaction => transaction.id);
@@ -2123,10 +2146,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     );
     setTransactions(prev => prev.filter(t => !idsToDelete.includes(t.id)));
     if (idsToDelete.some(txId => transactions.find(transaction => transaction.id === txId)?.debt_applied_bill_id)) await syncDebtTransactionsAndRefresh();
-  }, [user, transactions, syncDebtTransactionsAndRefresh, demoMode]);
+  }, [user, transactions, syncDebtTransactionsAndRefresh, demoMode, assertCanEditHousehold]);
 
   const deleteTransaction = useCallback(async (id: string) => {
     if (!user) return;
+    assertCanEditHousehold("delete a transaction");
     const existing = transactions.find(transaction => transaction.id === id);
     const groupId = existing?.transfer_group_id;
     if (groupId) {
@@ -2143,7 +2167,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     await ensureSaved(supabase.from("transactions").delete().eq("id", id), "Delete transaction");
     setTransactions(prev => prev.filter(t => !idsToDelete.includes(t.id)));
     if (idsToDelete.some(txId => transactions.find(transaction => transaction.id === txId)?.debt_applied_bill_id)) await syncDebtTransactionsAndRefresh();
-  }, [user, transactions, syncDebtTransactionsAndRefresh, demoMode, deleteTransfer]);
+  }, [user, transactions, syncDebtTransactionsAndRefresh, demoMode, deleteTransfer, assertCanEditHousehold]);
 
   const getTransactionsForMonth = useCallback(
     (month: number, year: number) =>
@@ -2158,6 +2182,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const addIncome = useCallback(async (item: Omit<IncomeItem, "id">) => {
     if (!user) throw new Error("Sign in to add income");
+    assertCanEditHousehold("add income");
     const ni: IncomeItem = { ...item, id: genId() };
     if (demoMode) {
       setIncomes(prev => [...prev, ni]);
@@ -2166,10 +2191,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     await ensureSaved(supabase.from("incomes").insert(scopedPayload({ ...ni, amount_history: ni.amount_history ?? [], user_id: user.id })), "Add income");
     setIncomes(prev => [...prev, ni]);
     return ni.id;
-  }, [user, demoMode]);
+  }, [user, demoMode, scopedPayload, assertCanEditHousehold]);
 
   const updateIncome = useCallback(async (item: IncomeItem) => {
     if (!user) return;
+    assertCanEditHousehold("update income");
     const existing = incomes.find(income => income.id === item.id);
     const reviewedItem = { ...item, last_reviewed_at: new Date().toISOString() };
     setIncomes(prev => prev.map(i => i.id === item.id ? reviewedItem : i));
@@ -2183,17 +2209,18 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       markSaveFailed(error, () => updateIncome(item));
       throw error;
     }
-  }, [user, incomes, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed]);
+  }, [user, incomes, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, assertCanEditHousehold]);
 
   const deleteIncome = useCallback(async (id: string) => {
     if (!user) return;
+    assertCanEditHousehold("delete income");
     if (demoMode) {
       setIncomes(prev => prev.filter(i => i.id !== id));
       return;
     }
     await ensureSaved(supabase.from("incomes").delete().eq("id", id), "Delete income");
     setIncomes(prev => prev.filter(i => i.id !== id));
-  }, [user, demoMode]);
+  }, [user, demoMode, assertCanEditHousehold]);
 
   const getMonthlyIncome = useCallback(
     (month?: number, year?: number) =>
@@ -2226,6 +2253,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const addGoal = useCallback(async (goal: Omit<Goal, "id" | "created_at">) => {
     if (!user) return;
+    assertCanEditHousehold("add a goal");
     const ng: Goal = { ...goal, id: genId(), created_at: new Date().toISOString() };
     if (demoMode) {
       setGoals(prev => [...prev, ng]);
@@ -2233,10 +2261,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     await ensureSaved(supabase.from("goals").insert(scopedPayload({ ...ng, user_id: user.id })), "Add goal");
     setGoals(prev => [...prev, ng]);
-  }, [user, demoMode]);
+  }, [user, demoMode, scopedPayload, assertCanEditHousehold]);
 
   const updateGoal = useCallback(async (goal: Goal) => {
     if (!user) return;
+    assertCanEditHousehold("update a goal");
     const existing = goals.find(item => item.id === goal.id);
     setGoals(prev => prev.map(g => g.id === goal.id ? goal : g));
     if (demoMode) return;
@@ -2249,17 +2278,18 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       markSaveFailed(error, () => updateGoal(goal));
       throw error;
     }
-  }, [user, goals, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed]);
+  }, [user, goals, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, assertCanEditHousehold]);
 
   const deleteGoal = useCallback(async (id: string) => {
     if (!user) return;
+    assertCanEditHousehold("delete a goal");
     if (demoMode) {
       setGoals(prev => prev.filter(g => g.id !== id));
       return;
     }
     await ensureSaved(supabase.from("goals").delete().eq("id", id), "Delete goal");
     setGoals(prev => prev.filter(g => g.id !== id));
-  }, [user, demoMode]);
+  }, [user, demoMode, assertCanEditHousehold]);
 
   const checkGoalAffordability = useCallback(
     (goal: Goal, month: number, year: number): GoalAffordability => {
@@ -2659,6 +2689,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const addCategory = useCallback(async (name: string) => {
     if (!user) return;
+    assertCanEditHousehold("add a category");
     const trimmed = normalizeCategoryInput(name);
     if (!trimmed) return;
     if (categories.some(category => categoryMatches(category, trimmed))) return;
@@ -2668,10 +2699,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     await ensureSaved(supabase.from("categories").insert(scopedPayload({ user_id: user.id, name: trimmed })), "Add category");
     setCategories(prev => fallbackCategoryList([...prev, trimmed]));
-  }, [user, categories, demoMode, scopedPayload]);
+  }, [user, categories, demoMode, scopedPayload, assertCanEditHousehold]);
 
   const updateCategory = useCallback(async (oldName: string, newName: string) => {
     if (!user) return;
+    assertCanEditHousehold("update a category");
     const trimmed = normalizeCategoryInput(newName);
     if (!trimmed || categoryMatches(trimmed, oldName)) return;
     const canonicalExisting = categories.find(category => !categoryMatches(category, oldName) && categoryMatches(category, trimmed));
@@ -2696,10 +2728,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setCategories(prev => fallbackCategoryList(prev.map(c => categoryMatches(c, oldName) ? targetName : c)));
     setBills(prev => prev.map(b => categoryMatches(b.category, oldName) ? { ...b, category: targetName } : b));
     setTransactions(prev => prev.map(t => categoryMatches(t.category, oldName) ? { ...t, category: targetName } : t));
-  }, [user, bills, transactions, categories, demoMode]);
+  }, [user, bills, transactions, categories, demoMode, assertCanEditHousehold]);
 
   const deleteCategory = useCallback(async (name: string) => {
     if (!user) return;
+    assertCanEditHousehold("delete a category");
     const cleanName = normalizeCategoryInput(name);
     if (!cleanName || categoryMatches(cleanName, "Other")) return;
     const affectedBills = bills.filter(b => categoryMatches(b.category, cleanName));
@@ -2720,7 +2753,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setCategories(prev => fallbackCategoryList(prev.filter(c => !categoryMatches(c, cleanName))));
     setBills(prev => prev.map(b => categoryMatches(b.category, cleanName) ? { ...b, category: "Other" } : b));
     setTransactions(prev => prev.map(t => categoryMatches(t.category, cleanName) ? { ...t, category: "Other" } : t));
-  }, [user, bills, transactions, demoMode]);
+  }, [user, bills, transactions, demoMode, assertCanEditHousehold]);
 
   // ─── Settings ─────────────────────────────────────────────────────────────────
 
@@ -2759,6 +2792,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const updateSettings = useCallback(async (s: Partial<Settings>) => {
     if (!user) return;
+    assertCanEditHousehold("update household settings");
     const next = { ...settings, ...s };
     setSettings(next);
     if (demoMode) return;
@@ -2776,7 +2810,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       markSaveFailed(error, () => updateSettings(s));
       throw error;
     }
-  }, [user, settings, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, saveSettingsRecord]);
+  }, [user, settings, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, saveSettingsRecord, assertCanEditHousehold]);
 
   const persistAccountAnchor = useCallback(async (nextAccounts: Account[], asOfDate: string) => {
     if (!user) return;
@@ -2789,6 +2823,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const addAccount = useCallback(async (input: Omit<Account, "id" | "created_at" | "last_reconciled_at">) => {
     if (!user) return;
+    assertCanEditHousehold("add an account");
     const now = new Date().toISOString();
     const account: Account = { ...input, id: genId(), created_at: now, last_reconciled_at: now };
     if (demoMode) {
@@ -2812,10 +2847,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       markSaveFailed(error, () => addAccount(input));
       throw error;
     }
-  }, [user, accounts, persistAccountAnchor, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, scopedPayload]);
+  }, [user, accounts, persistAccountAnchor, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, scopedPayload, assertCanEditHousehold]);
 
   const updateAccount = useCallback(async (account: Account) => {
     if (!user) return;
+    assertCanEditHousehold("update an account");
     const previous = accounts.find(item => item.id === account.id);
     const next = accounts.map(item => item.id === account.id ? account : item);
     setAccounts(next);
@@ -2846,10 +2882,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       markSaveFailed(error, () => updateAccount(account));
       throw error;
     }
-  }, [user, accounts, persistAccountAnchor, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed]);
+  }, [user, accounts, persistAccountAnchor, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, assertCanEditHousehold]);
 
   const reconcileAccount = useCallback(async (accountId: string, balance: number, asOfDate: string) => {
     if (!user) return;
+    assertCanEditHousehold("reconcile an account");
     const reconciledAt = new Date().toISOString();
     const next = accounts.map(account => account.id === accountId ? {
       ...account, current_balance: balance, balance_as_of: asOfDate, last_reconciled_at: reconciledAt,
@@ -2889,7 +2926,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       markSaveFailed(error, () => reconcileAccount(accountId, balance, asOfDate));
       throw error;
     }
-  }, [user, accounts, persistAccountAnchor, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, scopedPayload]);
+  }, [user, accounts, persistAccountAnchor, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, scopedPayload, assertCanEditHousehold]);
 
   const archiveAccount = useCallback(async (accountId: string) => {
     const account = accounts.find(item => item.id === accountId);
@@ -2899,6 +2936,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const importStatementTransactions = useCallback(async (accountId: string, rows: ImportedTransactionRow[]) => {
     if (!user || !rows.length) return { imported: 0, duplicates: 0 };
+    assertCanEditHousehold("import transactions");
     if (demoMode) {
       const existing = new Set(transactions.map(transaction => transaction.import_hash).filter(Boolean));
       const seen = new Set<string>();
@@ -2926,10 +2964,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     void recordDiagnostic(user.id, { eventType: "performance", operation: "statement_import", platform: diagnosticPlatform() }).catch(() => undefined);
     return { imported: fresh.length, duplicates: rows.length - fresh.length };
-  }, [user, demoMode, transactions, scopedPayload, applyHouseholdSelect]);
+  }, [user, demoMode, transactions, scopedPayload, applyHouseholdSelect, assertCanEditHousehold]);
 
   const saveDecision = useCallback(async (scenario: DecisionScenario, result: DecisionResult, status: DecisionRecord["status"] = "saved") => {
     if (!user) throw new Error("Sign in to save a decision");
+    assertCanEditHousehold("save a decision");
     const decision: DecisionRecord = { id: genId(), name: scenario.name, decision_type: scenario.type, scenario, result, status, calendar_date: status === "calendar" || status === "planned" ? scenario.date : undefined, next_due_date: status === "planned" ? scenario.date : undefined, created_at: new Date().toISOString() };
     if (demoMode) {
       setDecisions(previous => [decision, ...previous]);
@@ -2937,23 +2976,25 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     await ensureSaved(supabase.from("decisions").insert(scopedPayload({ id: decision.id, user_id: user.id, created_at: decision.created_at, ...decisionDbPayload(decision) })), "Save decision");
     setDecisions(previous => [decision, ...previous]); return decision;
-  }, [user, demoMode, scopedPayload]);
+  }, [user, demoMode, scopedPayload, assertCanEditHousehold]);
 
   const updateDecision = useCallback(async (decision: DecisionRecord) => {
     if (!user) return;
+    assertCanEditHousehold("update a decision");
     if (demoMode) {
       setDecisions(previous => previous.map(item => item.id === decision.id ? decision : item));
       return;
     }
     await ensureSaved(supabase.from("decisions").update({ ...decisionDbPayload(decision), updated_at: new Date().toISOString() }).eq("id", decision.id), "Update decision");
     setDecisions(previous => previous.map(item => item.id === decision.id ? decision : item));
-  }, [user, demoMode]);
+  }, [user, demoMode, assertCanEditHousehold]);
 
   const deleteDecision = useCallback(async (id: string) => {
     if (!user) return;
+    assertCanEditHousehold("delete a decision");
     if (demoMode) { setDecisions(previous => previous.filter(item => item.id !== id)); return; }
     await ensureSaved(supabase.from("decisions").delete().eq("id", id), "Delete decision"); setDecisions(previous => previous.filter(item => item.id !== id));
-  }, [user, demoMode]);
+  }, [user, demoMode, assertCanEditHousehold]);
 
   const forecastConfidence = useMemo(() => {
     const base = evaluateForecastConfidence(accounts.map(toAccountSnapshot), incomes.length > 0, bills.some(bill => bill.is_recurring || bill.is_debt));
@@ -2967,6 +3008,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const importBills = useCallback(async (imported: Omit<Bill, "id" | "created_at">[]) => {
     if (!user) return;
+    assertCanEditHousehold("import bills");
     const newBills = imported.map(b => ({
       ...b,
       frequency:   (["monthly", "biweekly", "weekly"].includes(String(b.frequency)) ? b.frequency : "monthly") as "monthly" | "biweekly" | "weekly",
@@ -2981,7 +3023,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     await ensureSaved(supabase.from("bills").insert(newBills.map(b => scopedPayload({ ...b, user_id: user.id }))), "Import bills");
     setBills(prev => reorderDebtPriorities([...prev, ...newBills]));
-  }, [user, demoMode, scopedPayload]);
+  }, [user, demoMode, scopedPayload, assertCanEditHousehold]);
 
   // ─── Provider value ───────────────────────────────────────────────────────────
 

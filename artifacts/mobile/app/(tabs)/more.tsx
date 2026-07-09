@@ -34,6 +34,12 @@ import { loadDecisionHubSettings, readDecisionHubSettings, saveDecisionHubSettin
 import { resetFloMemory } from "@/lib/flo";
 import { startLearningTour } from "@/lib/learningTour";
 import { confirmAction } from "@/lib/confirmAction";
+import {
+  type HouseholdInviteRole,
+  householdAssignableRolesFor,
+  householdInviteRolesFor,
+  householdRoleLabel,
+} from "@/lib/householdPermissions";
 import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
@@ -110,11 +116,11 @@ function activitySentence(action: string, entityType: string, entityLabel?: stri
   switch (action) {
     case "created": return `created ${item}`;
     case "updated": return `updated ${item}`;
-    case "deleted": return `deleted ${item}`;
+    case "deleted": return `removed ${item}`;
     case "joined": return "joined the household";
-    case "invited": return "created an invite";
+    case "invited": return `created a ${item} invite`;
     case "changed_role": return `changed access for ${item}`;
-    case "removed": return `removed ${item}`;
+    case "removed": return `removed ${item} from the household`;
     default: return `${action.replace(/_/g, " ")} ${item}`.trim();
   }
 }
@@ -161,7 +167,7 @@ export default function MoreScreen() {
   const [showAlgorithmSuite, setShowAlgorithmSuite] = useState(false);
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("overview");
   useBackDismiss(activeSettingsSection !== "overview", () => setActiveSettingsSection("overview"));
-  const [householdInviteRole, setHouseholdInviteRole] = useState<"editor" | "viewer">("editor");
+  const [householdInviteRole, setHouseholdInviteRole] = useState<HouseholdInviteRole>("editor");
   const [householdInviteCode, setHouseholdInviteCode] = useState("");
   const [householdJoinCode, setHouseholdJoinCode] = useState("");
   const [householdBusy, setHouseholdBusy] = useState(false);
@@ -171,6 +177,7 @@ export default function MoreScreen() {
     catch { return false; }
   });
   const [signingOut, setSigningOut] = useState(false);
+  const inviteRoles = useMemo(() => householdInviteRolesFor(activeHousehold?.role), [activeHousehold?.role]);
 
   useEffect(() => {
     setSafetyFloorText(settings.safety_floor.toString());
@@ -198,6 +205,12 @@ export default function MoreScreen() {
     };
   }, [user?.id]);
 
+  useEffect(() => {
+    if (inviteRoles.length > 0 && !inviteRoles.includes(householdInviteRole)) {
+      setHouseholdInviteRole(inviteRoles[0]);
+    }
+  }, [householdInviteRole, inviteRoles]);
+
   const saveSafetySettings = () => {
     const floor = Math.max(0, parseFloat(safetyFloorText) || 0);
     const horizon = Math.min(24, Math.max(1, Math.round(parseFloat(forecastHorizonText) || 6)));
@@ -213,7 +226,7 @@ export default function MoreScreen() {
     try {
       const code = await createHouseholdInvite(householdInviteRole);
       setHouseholdInviteCode(code);
-      setHouseholdMessage(`${householdInviteRole === "editor" ? "Editor" : "Viewer"} invite created. Share this code with the person you want to add.`);
+      setHouseholdMessage(`${householdRoleLabel(householdInviteRole)} invite created. Share this code with the person you want to add.`);
       if (Platform.OS === "web" && globalThis.navigator?.clipboard) {
         await globalThis.navigator.clipboard.writeText(code).catch(() => undefined);
       }
@@ -249,12 +262,12 @@ export default function MoreScreen() {
     }
   };
 
-  const handleUpdateHouseholdRole = async (memberUserId: string, role: "editor" | "viewer") => {
+  const handleUpdateHouseholdRole = async (memberUserId: string, role: HouseholdInviteRole) => {
     setHouseholdBusy(true);
     setHouseholdMessage(null);
     try {
       await updateHouseholdMemberRole(memberUserId, role);
-      setHouseholdMessage(role === "editor" ? "Member can now edit this household." : "Member is now view only.");
+      setHouseholdMessage(`${householdRoleLabel(role)} access saved.`);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not update member access.";
@@ -908,7 +921,7 @@ export default function MoreScreen() {
               {activeHousehold?.name ?? "Personal household"}
             </Text>
             <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>
-              {householdRole ? `${householdRole.charAt(0).toUpperCase()}${householdRole.slice(1)} access` : "Your private FlowLedger plan"}
+              {householdRole ? `${householdRoleLabel(householdRole)} access` : "Your private FlowLedger plan"}
               {canEditHousehold ? " • editing allowed" : " • view only"}
             </Text>
           </View>
@@ -967,7 +980,7 @@ export default function MoreScreen() {
             <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Members will show here after the household syncs.</Text>
           ) : householdMembers.map(member => {
             const label = member.displayName || member.email || `Member ${member.userId.slice(0, 6)}`;
-            const ownerCanManage = activeHousehold?.role === "owner" && member.role !== "owner" && !member.isCurrentUser;
+            const assignableRoles = householdAssignableRolesFor(activeHousehold?.role, member.role, member.isCurrentUser);
             return (
               <View key={member.userId} style={[styles.memberRow, { borderTopColor: c.border }]}>
                 <View style={[styles.memberAvatar, { backgroundColor: member.role === "owner" ? c.primary + "24" : c.card }]}>
@@ -978,19 +991,22 @@ export default function MoreScreen() {
                     {label}{member.isCurrentUser ? " (you)" : ""}
                   </Text>
                   <Text style={[styles.memberMeta, { color: c.mutedForeground }]}>
-                    {member.role === "owner" ? "Owner" : member.role === "editor" ? "Can edit" : "View only"}
+                    {householdRoleLabel(member.role)}
                     {member.joinedAt ? ` • joined ${formatMemberDate(member.joinedAt)}` : ""}
                   </Text>
                 </View>
-                {ownerCanManage && (
+                {assignableRoles.length > 0 && (
                   <View style={styles.memberActions}>
-                    <Pressable
-                      onPress={() => handleUpdateHouseholdRole(member.userId, member.role === "editor" ? "viewer" : "editor")}
-                      disabled={householdBusy}
-                      style={[styles.memberActionPill, { backgroundColor: c.primary + "16" }]}
-                    >
-                      <Text style={[styles.memberActionText, { color: c.primary }]}>{member.role === "editor" ? "View only" : "Can edit"}</Text>
-                    </Pressable>
+                    {assignableRoles.map(role => (
+                      <Pressable
+                        key={role}
+                        onPress={() => handleUpdateHouseholdRole(member.userId, role)}
+                        disabled={householdBusy}
+                        style={[styles.memberActionPill, { backgroundColor: c.primary + "16" }]}
+                      >
+                        <Text style={[styles.memberActionText, { color: c.primary }]}>{householdRoleLabel(role)}</Text>
+                      </Pressable>
+                    ))}
                     <Pressable onPress={() => handleRemoveHouseholdMember(member.userId, label)} disabled={householdBusy} hitSlop={8}>
                       <Feather name="x" size={17} color={c.destructive} />
                     </Pressable>
@@ -1006,10 +1022,10 @@ export default function MoreScreen() {
           <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>
             Invite someone to the active household. They’ll only see this household’s plan, not code, keys, or admin tools.
           </Text>
-          {activeHousehold?.role === "owner" ? (
+          {inviteRoles.length > 0 ? (
             <>
               <View style={styles.roleRow}>
-                {(["editor", "viewer"] as const).map(role => {
+                {inviteRoles.map(role => {
                   const selected = householdInviteRole === role;
                   return (
                     <Pressable
@@ -1021,7 +1037,7 @@ export default function MoreScreen() {
                       ]}
                     >
                       <Text style={[styles.roleButtonText, { color: selected ? c.primaryForeground : c.foreground }]}>
-                        {role === "editor" ? "Can edit" : "View only"}
+                        {householdRoleLabel(role)}
                       </Text>
                     </Pressable>
                   );
@@ -1046,7 +1062,7 @@ export default function MoreScreen() {
               )}
             </>
           ) : (
-            <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Only the household owner can create invite codes.</Text>
+            <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Only household owners and managers can create invite codes.</Text>
           )}
         </View>
 
@@ -1080,20 +1096,20 @@ export default function MoreScreen() {
           <View style={styles.householdPanelHeader}>
             <View>
               <Text style={[styles.householdPanelTitle, { color: c.foreground }]}>Recent activity</Text>
-              <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>A simple record of household changes.</Text>
+              <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>See who changed what and when.</Text>
             </View>
             <Pressable onPress={refreshHouseholdActivity} disabled={householdBusy} hitSlop={10} style={({ pressed }) => ({ opacity: pressed || householdBusy ? 0.6 : 1 })}>
               <Feather name="refresh-cw" size={16} color={c.primary} />
             </Pressable>
           </View>
           {householdActivity.length === 0 ? (
-            <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Edits will appear here after the activity table is available.</Text>
-          ) : householdActivity.slice(0, 8).map(activity => {
+            <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Household edits will appear here after the activity table is available.</Text>
+          ) : householdActivity.slice(0, 12).map(activity => {
             const actor = activity.actorName || activity.actorEmail || "A household member";
             return (
               <View key={activity.id} style={[styles.activityRow, { borderTopColor: c.border }]}>
                 <View style={[styles.activityIcon, { backgroundColor: c.primary + "14" }]}>
-                  <Feather name={activity.action === "deleted" ? "trash-2" : "clock"} size={14} color={activity.action === "deleted" ? c.destructive : c.primary} />
+                  <Feather name={activity.action === "deleted" || activity.action === "removed" ? "trash-2" : "clock"} size={14} color={activity.action === "deleted" || activity.action === "removed" ? c.destructive : c.primary} />
                 </View>
                 <View style={styles.activityInfo}>
                   <Text style={[styles.activityText, { color: c.foreground }]} numberOfLines={2}>
