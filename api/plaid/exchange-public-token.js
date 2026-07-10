@@ -1,35 +1,35 @@
+"use strict";
+
 const {
   encryptAccessToken,
-  encryptionConfigured,
-  getSupabaseUser,
-  plaidConfigured,
-  plaidPost,
+  getPlaidClient,
   readJsonBody,
+  requireSupabaseUser,
+  safePlaidError,
   sendJson,
-  supabaseConfigured,
-  supabaseRest,
 } = require("../_utils/plaid");
+const {
+  getItemByPlaidItemId,
+  savePlaidItem,
+  syncPlaidAccountMetadata,
+} = require("../_utils/plaid-data");
 
-function accountTypeFromPlaid(account) {
-  if (account.type === "depository" && account.subtype === "savings") return "savings";
-  if (account.type === "depository") return "checking";
-  return null;
-}
-
-function safeAccountPreview(account) {
-  const suggestedAccountType = accountTypeFromPlaid(account);
-  return {
-    plaid_account_id: account.account_id,
-    name: account.name,
-    official_name: account.official_name || null,
-    mask: account.mask || null,
-    type: account.type,
-    subtype: account.subtype || null,
-    current_balance: account.balances?.current ?? null,
-    available_balance: account.balances?.available ?? null,
-    supported: Boolean(suggestedAccountType),
-    suggested_account_type: suggestedAccountType,
-  };
+async function getInstitutionName(client, accessToken, fallback) {
+  try {
+    const item = await client.itemGet({ access_token: accessToken });
+    const institutionId = item?.data?.item?.institution_id || null;
+    if (!institutionId) return { institutionId: null, institutionName: fallback || null };
+    const institution = await client.institutionsGetById({
+      institution_id: institutionId,
+      country_codes: ["US"],
+    });
+    return {
+      institutionId,
+      institutionName: institution?.data?.institution?.name || fallback || null,
+    };
+  } catch {
+    return { institutionId: null, institutionName: fallback || null };
+  }
 }
 
 module.exports = async function handler(req, res) {
@@ -37,57 +37,57 @@ module.exports = async function handler(req, res) {
     return sendJson(res, 405, { error: "Method not allowed" });
   }
 
-  if (!plaidConfigured()) {
-    return sendJson(res, 503, { error: "Plaid is not configured yet." });
-  }
-
-  const body = readJsonBody(req);
-  if (!body.public_token) {
-    return sendJson(res, 400, { error: "Missing public_token." });
-  }
-
   try {
-    const exchange = await plaidPost("/item/public_token/exchange", {
-      public_token: body.public_token,
-    });
-
-    const accessTokenCiphertext = encryptAccessToken(exchange.access_token);
-    const canStore = Boolean(accessTokenCiphertext && supabaseConfigured() && encryptionConfigured());
-    const user = canStore ? await getSupabaseUser(req) : null;
-    const accountsPayload = await plaidPost("/accounts/get", {
-      access_token: exchange.access_token,
-    });
-
-    let storedItem = null;
-
-    if (canStore && user?.id) {
-      const inserted = await supabaseRest("plaid_items?on_conflict=user_id,item_id", "POST", {
-        user_id: user.id,
-        household_id: body.household_id || null,
-        item_id: exchange.item_id,
-        access_token_ciphertext: accessTokenCiphertext,
-        institution_id: body.institution_id || null,
-        institution_name: body.institution_name || null,
-        status: "active",
-        last_synced_at: null,
-      }, { prefer: "resolution=merge-duplicates,return=representation" });
-      storedItem = Array.isArray(inserted) ? inserted[0] : inserted;
+    const user = await requireSupabaseUser(req);
+    const body = readJsonBody(req);
+    if (!body.public_token || typeof body.public_token !== "string") {
+      return sendJson(res, 400, { error: "Missing public_token." });
     }
 
+    const client = getPlaidClient();
+    const exchange = await client.itemPublicTokenExchange({ public_token: body.public_token });
+    const accessToken = exchange?.data?.access_token;
+    const plaidItemId = exchange?.data?.item_id;
+    if (!accessToken || !plaidItemId) {
+      return sendJson(res, 502, { error: "Plaid did not return a bank connection." });
+    }
+
+    const existing = await getItemByPlaidItemId(user.id, plaidItemId);
+    if (existing?.id) {
+      return sendJson(res, 409, {
+        error: "This bank connection already exists in FlowLedger.",
+        plaid_item_record_id: existing.id,
+        institution_name: existing.institution_name || null,
+        status: existing.status || "active",
+      });
+    }
+
+    const encryptedAccessToken = encryptAccessToken(accessToken);
+    const metadata = await getInstitutionName(client, accessToken, body.institution_name || null);
+    const item = await savePlaidItem({
+      userId: user.id,
+      householdId: body.household_id || null,
+      plaidItemId,
+      encryptedAccessToken,
+      institutionId: body.institution_id || metadata.institutionId,
+      institutionName: body.institution_name || metadata.institutionName,
+      status: "active",
+    });
+
+    const accounts = await syncPlaidAccountMetadata(client, accessToken, item, user.id);
+
     return sendJson(res, 200, {
-      item_id: exchange.item_id,
-      plaid_item_record_id: storedItem?.id || null,
-      request_id: exchange.request_id,
-      stored: Boolean(storedItem?.id),
-      accounts: (accountsPayload.accounts || []).map(safeAccountPreview),
-      message: canStore
-        ? "Bank connected. Choose which accounts FlowLedger should add."
-        : "Plaid item exchanged, but storage is waiting on Supabase/encryption configuration.",
+      plaid_item_record_id: item?.id || null,
+      institution_name: item?.institution_name || metadata.institutionName || "Connected bank",
+      status: "active",
+      accounts: accounts.previews,
+      message: "Bank connected. Choose which accounts FlowLedger should add.",
     });
   } catch (error) {
-    return sendJson(res, error.status || 500, {
-      error: error.message || "Unable to exchange Plaid public token.",
-      request_id: error.payload?.request_id,
-    });
+    return sendJson(
+      res,
+      error.status || error.response?.status || 500,
+      safePlaidError(error, "Unable to save this Plaid connection."),
+    );
   }
 };

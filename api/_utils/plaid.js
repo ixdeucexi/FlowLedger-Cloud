@@ -1,8 +1,15 @@
+"use strict";
+
+if (typeof window !== "undefined") {
+  throw new Error("Plaid server utilities cannot be imported in the browser.");
+}
+
+const crypto = require("crypto");
 const { Configuration, PlaidApi, PlaidEnvironments } = require("plaid");
 
 const PLAID_HOSTS = {
   sandbox: PlaidEnvironments.sandbox,
-  development: "https://development.plaid.com",
+  development: PlaidEnvironments.development || "https://development.plaid.com",
   production: PlaidEnvironments.production,
 };
 
@@ -15,6 +22,15 @@ class PlaidConfigurationError extends Error {
     this.status = 503;
     this.code = "PLAID_CONFIGURATION_MISSING";
     this.missing = missing;
+  }
+}
+
+class AuthRequiredError extends Error {
+  constructor(message = "Sign in again before connecting your bank.") {
+    super(message);
+    this.name = "AuthRequiredError";
+    this.status = 401;
+    this.code = "AUTH_REQUIRED";
   }
 }
 
@@ -87,8 +103,46 @@ function supabaseConfigured() {
   );
 }
 
+function requireSupabaseConfigured() {
+  if (!supabaseConfigured()) {
+    throw new PlaidConfigurationError(
+      "Supabase service configuration is missing for secure Plaid storage.",
+      ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"],
+    );
+  }
+}
+
 function encryptionConfigured() {
   return Boolean(process.env.PLAID_TOKEN_ENCRYPTION_KEY);
+}
+
+function decodeEncryptionKey() {
+  const value = process.env.PLAID_TOKEN_ENCRYPTION_KEY || "";
+  if (!value) {
+    throw new PlaidConfigurationError(
+      "Plaid token encryption key is missing.",
+      ["PLAID_TOKEN_ENCRYPTION_KEY"],
+    );
+  }
+
+  const trimmed = value.trim();
+  const candidates = [];
+  if (/^[a-f0-9]{64}$/i.test(trimmed)) candidates.push(Buffer.from(trimmed, "hex"));
+  try {
+    candidates.push(Buffer.from(trimmed, "base64"));
+  } catch {
+    // ignore invalid base64 candidate
+  }
+  candidates.push(Buffer.from(trimmed, "utf8"));
+
+  const key = candidates.find(candidate => candidate.length === 32);
+  if (!key) {
+    throw new PlaidConfigurationError(
+      "PLAID_TOKEN_ENCRYPTION_KEY must decode to exactly 32 bytes.",
+      ["PLAID_TOKEN_ENCRYPTION_KEY"],
+    );
+  }
+  return key;
 }
 
 function readJsonBody(req) {
@@ -117,7 +171,7 @@ async function plaidPost(path, body) {
     );
   }
 
-  const response = await fetch(`${plaidHost()}${path}`, {
+  const response = await fetch(`${host}${path}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -163,21 +217,31 @@ async function getSupabaseUser(req) {
   return response.json().catch(() => null);
 }
 
+async function requireSupabaseUser(req) {
+  const user = await getSupabaseUser(req);
+  if (!user?.id) throw new AuthRequiredError();
+  return user;
+}
+
 async function supabaseRest(path, method, body, options = {}) {
+  requireSupabaseConfigured();
   const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const headers = {
+    apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+    "content-type": "application/json",
+    prefer: options.prefer || "return=representation",
+  };
+  if (options.headers) Object.assign(headers, options.headers);
+
   const response = await fetch(`${supabaseUrl}/rest/v1/${path}`, {
     method,
-    headers: {
-      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-      authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-      "content-type": "application/json",
-      prefer: options.prefer || "return=representation",
-    },
-    body: body ? JSON.stringify(body) : undefined,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    const error = new Error("Supabase write failed");
+    const error = new Error("Supabase request failed");
     error.status = response.status;
     error.payload = payload;
     throw error;
@@ -186,44 +250,139 @@ async function supabaseRest(path, method, body, options = {}) {
 }
 
 function encryptAccessToken(accessToken) {
-  if (!encryptionConfigured()) return null;
-  const crypto = require("crypto");
-  const key = crypto.createHash("sha256").update(process.env.PLAID_TOKEN_ENCRYPTION_KEY).digest();
+  const key = decodeEncryptionKey();
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
   const ciphertext = Buffer.concat([cipher.update(accessToken, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
-  return Buffer.concat([iv, tag, ciphertext]).toString("base64");
+  return [
+    "v1",
+    iv.toString("base64"),
+    tag.toString("base64"),
+    ciphertext.toString("base64"),
+  ].join(":");
 }
 
-function decryptAccessToken(ciphertext) {
-  if (!encryptionConfigured() || !ciphertext) return null;
-  const crypto = require("crypto");
+function decryptLegacyAccessToken(ciphertext) {
   const raw = Buffer.from(ciphertext, "base64");
   if (raw.length < 29) return null;
   const iv = raw.subarray(0, 12);
   const tag = raw.subarray(12, 28);
   const encrypted = raw.subarray(28);
-  const key = crypto.createHash("sha256").update(process.env.PLAID_TOKEN_ENCRYPTION_KEY).digest();
+  const key = crypto.createHash("sha256").update(process.env.PLAID_TOKEN_ENCRYPTION_KEY || "").digest();
   const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
 }
 
+function decryptAccessToken(ciphertext) {
+  if (!ciphertext) return null;
+  if (String(ciphertext).startsWith("v1:")) {
+    const [, ivText, tagText, ciphertextText] = String(ciphertext).split(":");
+    if (!ivText || !tagText || !ciphertextText) return null;
+    const key = decodeEncryptionKey();
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(ivText, "base64"));
+    decipher.setAuthTag(Buffer.from(tagText, "base64"));
+    return Buffer.concat([
+      decipher.update(Buffer.from(ciphertextText, "base64")),
+      decipher.final(),
+    ]).toString("utf8");
+  }
+
+  if (!encryptionConfigured()) return null;
+  return decryptLegacyAccessToken(ciphertext);
+}
+
+function accountTypeFromPlaid(account) {
+  if (account?.type === "depository" && account?.subtype === "savings") return "savings";
+  if (account?.type === "depository") return "checking";
+  if (account?.type === "credit") return "credit";
+  if (account?.type === "loan") return "loan";
+  return "other";
+}
+
+function isCashAccount(account) {
+  const type = accountTypeFromPlaid(account);
+  return type === "checking" || type === "savings";
+}
+
+function safeAccountPreview(account) {
+  const suggestedAccountType = accountTypeFromPlaid(account);
+  const balances = account?.balances || {};
+  return {
+    plaid_account_id: account.account_id,
+    persistent_account_id: account.persistent_account_id || null,
+    name: account.name,
+    official_name: account.official_name || null,
+    mask: account.mask || null,
+    type: account.type,
+    subtype: account.subtype || null,
+    current_balance: balances.current ?? null,
+    available_balance: balances.available ?? null,
+    credit_limit: balances.limit ?? null,
+    currency_code: balances.iso_currency_code || balances.unofficial_currency_code || null,
+    supported: isCashAccount(account),
+    suggested_account_type: suggestedAccountType === "savings" ? "savings" : "checking",
+  };
+}
+
+function mapPlaidCategory(transaction) {
+  if (Number(transaction.amount) < 0) return "Income";
+  const primary = transaction.personal_finance_category?.primary || "";
+  const detailed = transaction.personal_finance_category?.detailed || "";
+  const legacy = Array.isArray(transaction.category) ? transaction.category.join(" ") : "";
+  const source = `${primary} ${detailed} ${legacy}`.toLowerCase();
+  if (/food|restaurant|coffee|grocery/.test(source)) return "Food";
+  if (/transport|gas|parking|taxi|rideshare|automotive/.test(source)) return "Transportation";
+  if (/rent|utility|utilities|telephone|internet|electric|water/.test(source)) return "Utilities";
+  if (/medical|health|pharmacy|doctor/.test(source)) return "Health";
+  if (/education|school|tuition/.test(source)) return "Education";
+  if (/loan|credit|debt/.test(source)) return "Debt";
+  if (/merchandise|shopping|retail/.test(source)) return "Shopping";
+  if (/entertainment|streaming|subscription|recreation/.test(source)) return "Entertainment";
+  return "Other";
+}
+
+function normalizePlaidAmount(amount) {
+  // Plaid uses positive values for money leaving the account and negative
+  // values for money entering the account. FlowLedger uses the opposite sign.
+  return -Number(amount || 0);
+}
+
+function safePlaidError(error, fallback = "Plaid request failed.") {
+  const payload = plaidErrorPayload(error, fallback);
+  return {
+    error: payload.error || fallback,
+    error_code: payload.error_code,
+    request_id: payload.request_id,
+    missing: payload.missing,
+  };
+}
+
 module.exports = {
+  AuthRequiredError,
+  accountTypeFromPlaid,
+  decodeEncryptionKey,
   decryptAccessToken,
   encryptionConfigured,
+  encryptAccessToken,
   getPlaidClient,
   getSupabaseUser,
+  isCashAccount,
+  mapPlaidCategory,
   missingPlaidEnvVars,
+  normalizePlaidAmount,
   PlaidConfigurationError,
   plaidConfigured,
   plaidEnv,
   plaidErrorPayload,
   plaidPost,
   readJsonBody,
+  requireSupabaseConfigured,
+  requireSupabaseUser,
+  safeAccountPreview,
+  safePlaidError,
   sendJson,
   supabaseConfigured,
   supabaseRest,
-  encryptAccessToken,
 };

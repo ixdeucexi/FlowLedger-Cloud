@@ -1,3 +1,5 @@
+"use client";
+
 import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as DocumentPicker from "expo-document-picker";
@@ -16,6 +18,7 @@ import { AccountModal } from "@/components/AccountModal";
 import { AppText } from "@/components/AppText";
 import { FloLogo } from "@/components/FloLogo";
 import { IncomeModal } from "@/components/IncomeModal";
+import { PlaidLinkLauncher } from "@/components/PlaidLinkLauncher.web";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { PWA_INSTALL_EVENT } from "@/components/PwaInstallPrompt";
 import colors from "@/constants/colors";
@@ -142,16 +145,6 @@ type ChildProfileRow = {
   current_savings: number | null;
   spending_limit: number | null;
   is_active: boolean | null;
-};
-
-type PlaidWindow = typeof globalThis & {
-  Plaid?: {
-    create: (options: {
-      token: string;
-      onSuccess: (publicToken: string, metadata: any) => void;
-      onExit?: (error: any, metadata: any) => void;
-    }) => { open: () => void; exit?: () => void };
-  };
 };
 
 type PlaidAccountPreview = {
@@ -323,29 +316,6 @@ function mapChildForSupabase(profile: ChildProfile, userId: string, householdId:
   };
 }
 
-function loadPlaidScript(): Promise<PlaidWindow["Plaid"]> {
-  if (Platform.OS !== "web") return Promise.resolve(undefined);
-  const plaidWindow = globalThis as PlaidWindow;
-  if (plaidWindow.Plaid?.create) return Promise.resolve(plaidWindow.Plaid);
-
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>("script[data-flowledger-plaid='true']");
-    if (existing) {
-      existing.addEventListener("load", () => resolve((globalThis as PlaidWindow).Plaid), { once: true });
-      existing.addEventListener("error", () => reject(new Error("Plaid Link could not load.")), { once: true });
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = "https://cdn.plaid.com/link/v2/stable/link-initialize.js";
-    script.async = true;
-    script.dataset.flowledgerPlaid = "true";
-    script.onload = () => resolve((globalThis as PlaidWindow).Plaid);
-    script.onerror = () => reject(new Error("Plaid Link could not load."));
-    document.head.appendChild(script);
-  });
-}
-
 const SETTINGS_SECTIONS: Array<{
   id: Exclude<SettingsSectionId, "overview">;
   label: string;
@@ -473,6 +443,9 @@ export default function MoreScreen() {
   const [growthNotice, setGrowthNotice] = useState<string | null>(null);
   const [plaidNotice, setPlaidNotice] = useState<string | null>(null);
   const [plaidLinking, setPlaidLinking] = useState(false);
+  const [plaidLinkReady, setPlaidLinkReady] = useState(false);
+  const [plaidLinkShouldOpen, setPlaidLinkShouldOpen] = useState(false);
+  const [plaidLinkToken, setPlaidLinkToken] = useState<string | null>(null);
   const [plaidImporting, setPlaidImporting] = useState(false);
   const [plaidSetup, setPlaidSetup] = useState<PlaidSetupState | null>(null);
   const [childProfiles, setChildProfiles] = useState<ChildProfile[]>([]);
@@ -1435,78 +1408,90 @@ export default function MoreScreen() {
       return;
     }
     if (!plaidStatus.canStartLink || plaidLinking || plaidImporting) return;
-    setPlaidNotice(null);
+    setPlaidNotice("Preparing secure bank link...");
     setPlaidSetup(null);
     setPlaidLinking(true);
+    setPlaidLinkReady(false);
+    setPlaidLinkShouldOpen(false);
+    setPlaidLinkToken(null);
     try {
       const headers = await plaidAuthHeaders();
       const response = await fetch("/api/plaid/create-link-token", {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          client_user_id: user?.id,
-          products: ["transactions"],
-          country_codes: ["US"],
-        }),
+        body: JSON.stringify({}),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload.link_token) {
-        throw new Error(payload.message || "Plaid link token could not be created.");
+        throw new Error(payload.error || payload.message || "Plaid link token could not be created.");
       }
-      const plaid = await loadPlaidScript();
-      if (!plaid?.create) throw new Error("Plaid Link is unavailable.");
-      const handler = plaid.create({
-        token: payload.link_token,
-        onSuccess: (publicToken, metadata) => {
-          void (async () => {
-            try {
-              const exchange = await fetch("/api/plaid/exchange-public-token", {
-                method: "POST",
-                headers,
-                body: JSON.stringify({
-                  public_token: publicToken,
-                  household_id: activeHousehold?.householdId,
-                  institution_name: metadata?.institution?.name ?? null,
-                  institution_id: metadata?.institution?.institution_id ?? null,
-                }),
-              });
-              const exchangePayload = await exchange.json().catch(() => ({}));
-              if (!exchange.ok) throw new Error(exchangePayload.error || exchangePayload.message || "Plaid token exchange failed.");
-              const accountList: PlaidAccountPreview[] = Array.isArray(exchangePayload.accounts) ? exchangePayload.accounts : [];
-              if (!exchangePayload.plaid_item_record_id) {
-                throw new Error("Bank connected, but secure account storage is not ready yet.");
-              }
-              setPlaidSetup({
-                plaidItemRecordId: exchangePayload.plaid_item_record_id,
-                institutionName: metadata?.institution?.name ?? null,
-                accounts: accountList,
-                selectedAccountIds: accountList.filter(account => account.supported).map(account => account.plaid_account_id),
-              });
-              const supportedCount = accountList.filter(account => account.supported).length;
-              setPlaidNotice(supportedCount
-                ? exchangePayload.message || "Bank connected. Choose the accounts to add."
-                : "Bank connected, but I did not find a checking or savings account to add.");
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            } catch (error) {
-              setPlaidNotice(error instanceof Error ? error.message : "Bank connection could not be saved.");
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-            } finally {
-              setPlaidLinking(false);
-            }
-          })();
-        },
-        onExit: (error) => {
-          if (error) setPlaidNotice(error.display_message || error.error_message || "Plaid was closed before finishing.");
-          setPlaidLinking(false);
-        },
-      });
-      handler.open();
+      setPlaidLinkToken(payload.link_token);
+      setPlaidLinkShouldOpen(true);
     } catch (error) {
       setPlaidNotice(error instanceof Error ? error.message : "Plaid could not start.");
       setPlaidLinking(false);
+      setPlaidLinkReady(false);
+      setPlaidLinkShouldOpen(false);
+      setPlaidLinkToken(null);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   };
+
+  const handlePlaidSuccess = useCallback(async (publicToken: string, metadata: any) => {
+    try {
+      const headers = await plaidAuthHeaders();
+      setPlaidNotice("Bank connected. Saving secure connection...");
+      const exchange = await fetch("/api/plaid/exchange-public-token", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          public_token: publicToken,
+          household_id: activeHousehold?.householdId ?? null,
+          institution_name: metadata?.institution?.name ?? null,
+          institution_id: metadata?.institution?.institution_id ?? null,
+        }),
+      });
+      const exchangePayload = await exchange.json().catch(() => ({}));
+      if (!exchange.ok) {
+        throw new Error(exchangePayload.error || exchangePayload.message || "Plaid token exchange failed.");
+      }
+      const accountList: PlaidAccountPreview[] = Array.isArray(exchangePayload.accounts) ? exchangePayload.accounts : [];
+      if (!exchangePayload.plaid_item_record_id) {
+        throw new Error("Bank connected, but secure account storage is not ready yet.");
+      }
+      setPlaidSetup({
+        plaidItemRecordId: exchangePayload.plaid_item_record_id,
+        institutionName: exchangePayload.institution_name || metadata?.institution?.name || "Connected bank",
+        accounts: accountList,
+        selectedAccountIds: accountList.filter(account => account.supported).map(account => account.plaid_account_id),
+      });
+      const supportedCount = accountList.filter(account => account.supported).length;
+      setPlaidNotice(supportedCount
+        ? exchangePayload.message || "Bank connected. Choose the accounts to add."
+        : "Bank connected, but I did not find a checking or savings account to add.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      setPlaidNotice(error instanceof Error ? error.message : "Bank connection could not be saved.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setPlaidLinking(false);
+      setPlaidLinkReady(false);
+      setPlaidLinkShouldOpen(false);
+      setPlaidLinkToken(null);
+    }
+  }, [activeHousehold?.householdId, plaidAuthHeaders]);
+
+  const handlePlaidExit = useCallback((error: any) => {
+    if (error) {
+      setPlaidNotice(error.display_message || error.error_message || error.error_code || "Plaid was closed before finishing.");
+    } else {
+      setPlaidNotice("Plaid Link was closed. No bank was connected.");
+    }
+    setPlaidLinking(false);
+    setPlaidLinkReady(false);
+    setPlaidLinkShouldOpen(false);
+    setPlaidLinkToken(null);
+  }, []);
 
   const handleExport = async () => {
     try {
@@ -1734,6 +1719,14 @@ export default function MoreScreen() {
   return (
     <View style={[styles.screen, { backgroundColor: c.background }]}>
       <PremiumBackdrop variant="blue" />
+      <PlaidLinkLauncher
+        linkToken={plaidLinkToken}
+        shouldOpen={plaidLinkShouldOpen}
+        onReadyChange={setPlaidLinkReady}
+        onOpened={() => setPlaidNotice("Plaid Link is opening...")}
+        onSuccess={handlePlaidSuccess}
+        onExit={handlePlaidExit}
+      />
       <ScrollView
         style={styles.scroller}
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 + webTopPad, paddingBottom: insets.bottom + 100 }]}
@@ -2863,7 +2856,9 @@ export default function MoreScreen() {
         >
           <Feather name={plaidStatus.canStartLink ? "link" : "lock"} size={15} color={plaidStatus.canStartLink ? "#fff" : c.mutedForeground} />
           <Text style={[styles.balanceSaveBtnText, { color: plaidStatus.canStartLink ? "#fff" : c.mutedForeground }]}>
-            {plaidLinking ? "Opening Plaid..." : plaidStatus.canStartLink ? (plaidSetup ? "Connect another bank" : "Connect Bank Account") : "Connect bank account after Plaid env setup"}
+            {plaidLinking
+              ? (plaidLinkReady ? "Opening Plaid..." : "Preparing Plaid...")
+              : plaidStatus.canStartLink ? (plaidSetup ? "Connect another bank" : "Connect Bank Account") : "Connect bank account after Plaid env setup"}
           </Text>
         </Pressable>
       </View>
