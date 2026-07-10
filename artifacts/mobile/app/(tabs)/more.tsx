@@ -7,7 +7,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
 import * as Sharing from "expo-sharing";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert, Modal, Platform, Pressable, ScrollView, StyleSheet,
   Text, TextInput, View,
@@ -18,7 +18,7 @@ import { AccountModal } from "@/components/AccountModal";
 import { AppText } from "@/components/AppText";
 import { FloLogo } from "@/components/FloLogo";
 import { IncomeModal } from "@/components/IncomeModal";
-import { PlaidLinkLauncher } from "@/components/PlaidLinkLauncher.web";
+import { PlaidLinkLauncher, type PlaidLinkLauncherHandle } from "@/components/PlaidLinkLauncher.web";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { PWA_INSTALL_EVENT } from "@/components/PwaInstallPrompt";
 import colors from "@/constants/colors";
@@ -443,11 +443,13 @@ export default function MoreScreen() {
   const [growthNotice, setGrowthNotice] = useState<string | null>(null);
   const [plaidNotice, setPlaidNotice] = useState<string | null>(null);
   const [plaidLinking, setPlaidLinking] = useState(false);
+  const [plaidPreparing, setPlaidPreparing] = useState(false);
   const [plaidLinkReady, setPlaidLinkReady] = useState(false);
   const [plaidLinkShouldOpen, setPlaidLinkShouldOpen] = useState(false);
   const [plaidLinkToken, setPlaidLinkToken] = useState<string | null>(null);
   const [plaidImporting, setPlaidImporting] = useState(false);
   const [plaidSetup, setPlaidSetup] = useState<PlaidSetupState | null>(null);
+  const plaidLauncherRef = useRef<PlaidLinkLauncherHandle | null>(null);
   const [childProfiles, setChildProfiles] = useState<ChildProfile[]>([]);
   const [childName, setChildName] = useState("");
   const [childAllowanceText, setChildAllowanceText] = useState("");
@@ -1440,18 +1442,16 @@ export default function MoreScreen() {
     }
   };
 
-  const handleStartPlaidLink = async () => {
-    if (Platform.OS !== "web") {
-      Alert.alert("Bank sync", "Open FlowLedger in the web app to connect Plaid for now.");
-      return;
-    }
-    if (!plaidStatus.canStartLink || plaidLinking || plaidImporting) return;
-    setPlaidNotice("Preparing secure bank link...");
-    setPlaidSetup(null);
-    setPlaidLinking(true);
+  const preparePlaidLinkToken = useCallback(async (options?: { silent?: boolean }) => {
+    if (Platform.OS !== "web") return null;
+    if (!plaidStatus.canStartLink) return null;
+    if (plaidLinkToken) return plaidLinkToken;
+    if (plaidPreparing) return null;
+
+    setPlaidPreparing(true);
+    if (!options?.silent) setPlaidNotice("Preparing secure bank link...");
     setPlaidLinkReady(false);
     setPlaidLinkShouldOpen(false);
-    setPlaidLinkToken(null);
     try {
       const response = await plaidPost("/api/plaid/create-link-token", {});
       const payload = await response.json().catch(() => ({}));
@@ -1459,6 +1459,45 @@ export default function MoreScreen() {
         throw new Error(payload.error || payload.message || "Plaid link token could not be created.");
       }
       setPlaidLinkToken(payload.link_token);
+      if (!options?.silent) setPlaidNotice("Plaid is ready. Opening secure bank link...");
+      return String(payload.link_token);
+    } catch (error) {
+      setPlaidNotice(error instanceof Error ? error.message : "Plaid could not start.");
+      setPlaidLinkReady(false);
+      setPlaidLinkShouldOpen(false);
+      setPlaidLinkToken(null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return null;
+    } finally {
+      setPlaidPreparing(false);
+    }
+  }, [plaidLinkToken, plaidPost, plaidPreparing, plaidStatus.canStartLink]);
+
+  useEffect(() => {
+    if (activeSettingsSection !== "plaid") return;
+    if (Platform.OS !== "web") return;
+    if (!plaidStatus.canStartLink || plaidLinkToken || plaidPreparing || plaidLinking || plaidImporting) return;
+    void preparePlaidLinkToken({ silent: true });
+  }, [activeSettingsSection, plaidImporting, plaidLinkToken, plaidLinking, plaidPreparing, plaidStatus.canStartLink, preparePlaidLinkToken]);
+
+  const handleStartPlaidLink = async () => {
+    if (Platform.OS !== "web") {
+      Alert.alert("Bank sync", "Open FlowLedger in the web app to connect Plaid for now.");
+      return;
+    }
+    if (!plaidStatus.canStartLink || plaidLinking || plaidImporting || plaidPreparing) return;
+    setPlaidSetup(null);
+    setPlaidLinking(true);
+    setPlaidLinkShouldOpen(false);
+
+    if (plaidLauncherRef.current?.isReady()) {
+      const opened = plaidLauncherRef.current.open();
+      if (opened) return;
+    }
+
+    try {
+      const token = await preparePlaidLinkToken({ silent: false });
+      if (!token) throw new Error("Plaid link token could not be created.");
       setPlaidLinkShouldOpen(true);
     } catch (error) {
       setPlaidNotice(error instanceof Error ? error.message : "Plaid could not start.");
@@ -1748,6 +1787,7 @@ export default function MoreScreen() {
     <View style={[styles.screen, { backgroundColor: c.background }]}>
       <PremiumBackdrop variant="blue" />
       <PlaidLinkLauncher
+        ref={plaidLauncherRef}
         linkToken={plaidLinkToken}
         shouldOpen={plaidLinkShouldOpen}
         onReadyChange={setPlaidLinkReady}
@@ -2879,12 +2919,14 @@ export default function MoreScreen() {
         ) : null}
         <Pressable
           onPress={() => void handleStartPlaidLink()}
-          disabled={!plaidStatus.canStartLink || plaidLinking || plaidImporting}
-          style={({ pressed }) => [styles.balanceSaveFullBtn, { backgroundColor: plaidStatus.canStartLink ? c.primary : c.muted, marginTop: 14, opacity: pressed || plaidLinking ? 0.72 : 1 }]}
+          disabled={!plaidStatus.canStartLink || plaidLinking || plaidPreparing || plaidImporting}
+          style={({ pressed }) => [styles.balanceSaveFullBtn, { backgroundColor: plaidStatus.canStartLink ? c.primary : c.muted, marginTop: 14, opacity: pressed || plaidLinking || plaidPreparing ? 0.72 : 1 }]}
         >
           <Feather name={plaidStatus.canStartLink ? "link" : "lock"} size={15} color={plaidStatus.canStartLink ? "#fff" : c.mutedForeground} />
           <Text style={[styles.balanceSaveBtnText, { color: plaidStatus.canStartLink ? "#fff" : c.mutedForeground }]}>
-            {plaidLinking
+            {plaidPreparing
+              ? "Preparing Plaid..."
+              : plaidLinking
               ? (plaidLinkReady ? "Opening Plaid..." : "Preparing Plaid...")
               : plaidStatus.canStartLink ? (plaidSetup ? "Connect another bank" : "Connect Bank Account") : "Connect bank account after Plaid env setup"}
           </Text>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from "react";
 import { usePlaidLink } from "react-plaid-link";
 
 type PlaidLinkLauncherProps = {
@@ -13,7 +13,12 @@ type PlaidLinkLauncherProps = {
   onEvent?: (eventName: string, metadata: any) => void;
 };
 
-export function PlaidLinkLauncher({
+export type PlaidLinkLauncherHandle = {
+  open: () => boolean;
+  isReady: () => boolean;
+};
+
+export const PlaidLinkLauncher = forwardRef<PlaidLinkLauncherHandle, PlaidLinkLauncherProps>(function PlaidLinkLauncher({
   linkToken,
   shouldOpen,
   onReadyChange,
@@ -21,7 +26,7 @@ export function PlaidLinkLauncher({
   onSuccess,
   onExit,
   onEvent,
-}: PlaidLinkLauncherProps) {
+}: PlaidLinkLauncherProps, ref) {
   const openedTokenRef = useRef<string | null>(null);
   const { open, ready, error } = usePlaidLink({
     token: linkToken,
@@ -39,17 +44,28 @@ export function PlaidLinkLauncher({
     onExit(error, null);
   }, [error, onExit]);
 
-  useEffect(() => {
-    if (!linkToken || !shouldOpen || !ready) return;
-    if (openedTokenRef.current === linkToken) return;
+  const openLink = useCallback(() => {
+    if (!linkToken || !ready) return false;
+    if (openedTokenRef.current === linkToken) return true;
     openedTokenRef.current = linkToken;
     onOpened?.();
     open();
-  }, [linkToken, onOpened, open, ready, shouldOpen]);
+    return true;
+  }, [linkToken, onOpened, open, ready]);
+
+  useImperativeHandle(ref, () => ({
+    open: openLink,
+    isReady: () => Boolean(linkToken && ready),
+  }), [linkToken, openLink, ready]);
+
+  useEffect(() => {
+    if (!shouldOpen) return;
+    openLink();
+  }, [shouldOpen, openLink]);
 
   useEffect(() => {
     if (!linkToken) openedTokenRef.current = null;
   }, [linkToken]);
 
   return null;
-}
+});
