@@ -388,7 +388,7 @@ export default function MoreScreen() {
     lightningFlashesEnabled,
     setLightningFlashesEnabled,
   } = useThemeMode();
-  const { signOut, user } = useAuth();
+  const { signOut, user, session } = useAuth();
   const {
     bills, transactions, overrides, incomes, goals, importBills, settings, updateSettings, accounts, forecastConfidence,
     addBill, updateBill,
@@ -1346,13 +1346,56 @@ export default function MoreScreen() {
   };
 
   const plaidAuthHeaders = useCallback(async () => {
-    const { data } = await supabase.auth.getSession();
-    const accessToken = data.session?.access_token;
+    const readStoredAccessToken = async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        return data.session?.access_token ?? null;
+      } catch {
+        return null;
+      }
+    };
+
+    let accessToken = await readStoredAccessToken();
+    accessToken = accessToken ?? session?.access_token ?? null;
+
+    if (!accessToken || accessToken === "dev-demo") {
+      try {
+        const { data } = await supabase.auth.refreshSession();
+        accessToken = data.session?.access_token ?? accessToken;
+      } catch {}
+    }
+
+    if (!accessToken || accessToken === "dev-demo") {
+      await new Promise(resolve => setTimeout(resolve, 350));
+      accessToken = await readStoredAccessToken();
+    }
+
+    if (!accessToken || accessToken === "dev-demo") {
+      throw new Error("I need a fresh sign-in before connecting your bank. Please sign in again, then tap Connect Bank Account.");
+    }
+
     return {
       "Content-Type": "application/json",
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      Authorization: `Bearer ${accessToken}`,
     };
-  }, []);
+  }, [session?.access_token]);
+
+  const plaidPost = useCallback(async (path: string, body: Record<string, unknown>) => {
+    const makeRequest = async () => fetch(path, {
+      method: "POST",
+      headers: await plaidAuthHeaders(),
+      body: JSON.stringify(body),
+    });
+
+    let response = await makeRequest();
+    if (response.status === 401) {
+      try {
+        await supabase.auth.refreshSession();
+      } catch {}
+      response = await makeRequest();
+    }
+    return response;
+  }, [plaidAuthHeaders]);
 
   const handleTogglePlaidAccount = (accountId: string) => {
     setPlaidSetup(prev => {
@@ -1376,15 +1419,10 @@ export default function MoreScreen() {
     setPlaidImporting(true);
     setPlaidNotice(null);
     try {
-      const headers = await plaidAuthHeaders();
-      const response = await fetch("/api/plaid/import-accounts", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          plaid_item_record_id: plaidSetup.plaidItemRecordId,
-          selected_account_ids: plaidSetup.selectedAccountIds,
-          household_id: activeHousehold?.householdId,
-        }),
+      const response = await plaidPost("/api/plaid/import-accounts", {
+        plaid_item_record_id: plaidSetup.plaidItemRecordId,
+        selected_account_ids: plaidSetup.selectedAccountIds,
+        household_id: activeHousehold?.householdId,
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || payload.message || "Bank accounts could not be imported.");
@@ -1415,12 +1453,7 @@ export default function MoreScreen() {
     setPlaidLinkShouldOpen(false);
     setPlaidLinkToken(null);
     try {
-      const headers = await plaidAuthHeaders();
-      const response = await fetch("/api/plaid/create-link-token", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({}),
-      });
+      const response = await plaidPost("/api/plaid/create-link-token", {});
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload.link_token) {
         throw new Error(payload.error || payload.message || "Plaid link token could not be created.");
@@ -1439,17 +1472,12 @@ export default function MoreScreen() {
 
   const handlePlaidSuccess = useCallback(async (publicToken: string, metadata: any) => {
     try {
-      const headers = await plaidAuthHeaders();
       setPlaidNotice("Bank connected. Saving secure connection...");
-      const exchange = await fetch("/api/plaid/exchange-public-token", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          public_token: publicToken,
-          household_id: activeHousehold?.householdId ?? null,
-          institution_name: metadata?.institution?.name ?? null,
-          institution_id: metadata?.institution?.institution_id ?? null,
-        }),
+      const exchange = await plaidPost("/api/plaid/exchange-public-token", {
+        public_token: publicToken,
+        household_id: activeHousehold?.householdId ?? null,
+        institution_name: metadata?.institution?.name ?? null,
+        institution_id: metadata?.institution?.institution_id ?? null,
       });
       const exchangePayload = await exchange.json().catch(() => ({}));
       if (!exchange.ok) {
@@ -1479,7 +1507,7 @@ export default function MoreScreen() {
       setPlaidLinkShouldOpen(false);
       setPlaidLinkToken(null);
     }
-  }, [activeHousehold?.householdId, plaidAuthHeaders]);
+  }, [activeHousehold?.householdId, plaidPost]);
 
   const handlePlaidExit = useCallback((error: any) => {
     if (error) {
