@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo } from "react";
 import { usePlaidLink } from "react-plaid-link";
 
 type PlaidLinkLauncherProps = {
@@ -27,9 +27,14 @@ export const PlaidLinkLauncher = forwardRef<PlaidLinkLauncherHandle, PlaidLinkLa
   onExit,
   onEvent,
 }: PlaidLinkLauncherProps, ref) {
-  const openedTokenRef = useRef<string | null>(null);
+  const receivedRedirectUri = useMemo(() => {
+    if (typeof window === "undefined") return undefined;
+    return window.location.href.includes("oauth_state_id=") ? window.location.href : undefined;
+  }, []);
+
   const { open, ready, error } = usePlaidLink({
     token: linkToken,
+    receivedRedirectUri,
     onSuccess,
     onExit,
     onEvent,
@@ -46,8 +51,6 @@ export const PlaidLinkLauncher = forwardRef<PlaidLinkLauncherHandle, PlaidLinkLa
 
   const openLink = useCallback(() => {
     if (!linkToken || !ready) return false;
-    if (openedTokenRef.current === linkToken) return true;
-    openedTokenRef.current = linkToken;
     onOpened?.();
     open();
     return true;
@@ -62,10 +65,6 @@ export const PlaidLinkLauncher = forwardRef<PlaidLinkLauncherHandle, PlaidLinkLa
     if (!shouldOpen) return;
     openLink();
   }, [shouldOpen, openLink]);
-
-  useEffect(() => {
-    if (!linkToken) openedTokenRef.current = null;
-  }, [linkToken]);
 
   return null;
 });

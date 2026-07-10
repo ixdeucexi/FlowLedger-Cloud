@@ -1442,16 +1442,17 @@ export default function MoreScreen() {
     }
   };
 
-  const preparePlaidLinkToken = useCallback(async (options?: { silent?: boolean }) => {
+  const preparePlaidLinkToken = useCallback(async (options?: { forceFresh?: boolean; silent?: boolean }) => {
     if (Platform.OS !== "web") return null;
     if (!plaidStatus.canStartLink) return null;
-    if (plaidLinkToken) return plaidLinkToken;
+    if (plaidLinkToken && !options?.forceFresh) return plaidLinkToken;
     if (plaidPreparing) return null;
 
     setPlaidPreparing(true);
     if (!options?.silent) setPlaidNotice("Preparing secure bank link...");
     setPlaidLinkReady(false);
     setPlaidLinkShouldOpen(false);
+    if (options?.forceFresh) setPlaidLinkToken(null);
     try {
       const response = await plaidPost("/api/plaid/create-link-token", {});
       const payload = await response.json().catch(() => ({}));
@@ -1473,13 +1474,6 @@ export default function MoreScreen() {
     }
   }, [plaidLinkToken, plaidPost, plaidPreparing, plaidStatus.canStartLink]);
 
-  useEffect(() => {
-    if (activeSettingsSection !== "plaid") return;
-    if (Platform.OS !== "web") return;
-    if (!plaidStatus.canStartLink || plaidLinkToken || plaidPreparing || plaidLinking || plaidImporting) return;
-    void preparePlaidLinkToken({ silent: true });
-  }, [activeSettingsSection, plaidImporting, plaidLinkToken, plaidLinking, plaidPreparing, plaidStatus.canStartLink, preparePlaidLinkToken]);
-
   const handleStartPlaidLink = async () => {
     if (Platform.OS !== "web") {
       Alert.alert("Bank sync", "Open FlowLedger in the web app to connect Plaid for now.");
@@ -1490,13 +1484,8 @@ export default function MoreScreen() {
     setPlaidLinking(true);
     setPlaidLinkShouldOpen(false);
 
-    if (plaidLauncherRef.current?.isReady()) {
-      const opened = plaidLauncherRef.current.open();
-      if (opened) return;
-    }
-
     try {
-      const token = await preparePlaidLinkToken({ silent: false });
+      const token = await preparePlaidLinkToken({ forceFresh: true, silent: false });
       if (!token) throw new Error("Plaid link token could not be created.");
       setPlaidLinkShouldOpen(true);
     } catch (error) {
@@ -1508,6 +1497,18 @@ export default function MoreScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   };
+
+  useEffect(() => {
+    if (!plaidLinking || !plaidLinkShouldOpen) return;
+    const timeout = setTimeout(() => {
+      setPlaidNotice("Plaid is taking longer than expected. Tap Connect Bank Account again.");
+      setPlaidLinking(false);
+      setPlaidLinkReady(false);
+      setPlaidLinkShouldOpen(false);
+      setPlaidLinkToken(null);
+    }, 12000);
+    return () => clearTimeout(timeout);
+  }, [plaidLinking, plaidLinkShouldOpen]);
 
   const handlePlaidSuccess = useCallback(async (publicToken: string, metadata: any) => {
     try {
@@ -1791,7 +1792,10 @@ export default function MoreScreen() {
         linkToken={plaidLinkToken}
         shouldOpen={plaidLinkShouldOpen}
         onReadyChange={setPlaidLinkReady}
-        onOpened={() => setPlaidNotice("Plaid Link is opening...")}
+        onOpened={() => {
+          setPlaidLinkShouldOpen(false);
+          setPlaidNotice("Plaid Link is opening...");
+        }}
         onSuccess={handlePlaidSuccess}
         onExit={handlePlaidExit}
       />
