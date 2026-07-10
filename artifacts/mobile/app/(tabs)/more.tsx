@@ -55,6 +55,7 @@ import {
   sanitizeFeedbackMessage,
 } from "@/lib/feedback";
 import {
+  applyTransactionRules,
   buildChildMoneySummary,
   buildGoalFundingPlans,
   buildReportsSummary,
@@ -63,6 +64,8 @@ import {
   detectSubscriptions,
   evaluateForecastReadiness,
   evaluatePlaidConnectionStatus,
+  type ChildProfile,
+  type SubscriptionCandidate,
   type TransactionRule,
 } from "@/lib/competitiveGrowth";
 
@@ -101,6 +104,62 @@ type SettingsSectionId =
   | "backup"
   | "security"
   | "legal";
+
+type ReviewDecision = "approved" | "ignored" | "deleted";
+type SubscriptionDecision = "keep" | "not_subscription" | "cancelled" | "bill_created";
+
+type PlaidWindow = typeof globalThis & {
+  Plaid?: {
+    create: (options: {
+      token: string;
+      onSuccess: (publicToken: string, metadata: any) => void;
+      onExit?: (error: any, metadata: any) => void;
+    }) => { open: () => void; exit?: () => void };
+  };
+};
+
+function normalizeStorageMap<T extends string>(value: unknown): Record<string, T> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.entries(value as Record<string, unknown>).reduce<Record<string, T>>((acc, [key, val]) => {
+    if (typeof val === "string") acc[key] = val as T;
+    return acc;
+  }, {});
+}
+
+function subscriptionKey(subscription: SubscriptionCandidate) {
+  return subscription.merchant.toLowerCase().trim();
+}
+
+function newestTransactionDate(ids: string[], transactions: Array<{ id: string; date: string }>) {
+  return transactions
+    .filter(transaction => ids.includes(transaction.id))
+    .map(transaction => transaction.date)
+    .sort()
+    .at(-1);
+}
+
+function loadPlaidScript(): Promise<PlaidWindow["Plaid"]> {
+  if (Platform.OS !== "web") return Promise.resolve(undefined);
+  const plaidWindow = globalThis as PlaidWindow;
+  if (plaidWindow.Plaid?.create) return Promise.resolve(plaidWindow.Plaid);
+
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>("script[data-flowledger-plaid='true']");
+    if (existing) {
+      existing.addEventListener("load", () => resolve((globalThis as PlaidWindow).Plaid), { once: true });
+      existing.addEventListener("error", () => reject(new Error("Plaid Link could not load.")), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://cdn.plaid.com/link/v2/stable/link-initialize.js";
+    script.async = true;
+    script.dataset.flowledgerPlaid = "true";
+    script.onload = () => resolve((globalThis as PlaidWindow).Plaid);
+    script.onerror = () => reject(new Error("Plaid Link could not load."));
+    document.head.appendChild(script);
+  });
+}
 
 const SETTINGS_SECTIONS: Array<{
   id: Exclude<SettingsSectionId, "overview">;
@@ -177,6 +236,9 @@ export default function MoreScreen() {
   const { signOut, user } = useAuth();
   const {
     bills, transactions, overrides, incomes, goals, importBills, settings, updateSettings, accounts, forecastConfidence,
+    addBill, updateBill,
+    addTransaction, updateTransaction, deleteTransaction,
+    addGoal, updateGoal,
     addIncome, updateIncome, deleteIncome, getMonthlyIncome,
     categories, addCategory, updateCategory, deleteCategory,
     addAccount, updateAccount, reconcileAccount, archiveAccount, importStatementTransactions,
@@ -220,6 +282,15 @@ export default function MoreScreen() {
   const [feedbackInboxLoading, setFeedbackInboxLoading] = useState(false);
   const [feedbackStatusFilter, setFeedbackStatusFilter] = useState<FeedbackStatus | "all">("all");
   const [transactionRules, setTransactionRules] = useState<TransactionRule[]>([]);
+  const [reviewDecisions, setReviewDecisions] = useState<Record<string, ReviewDecision>>({});
+  const [subscriptionDecisions, setSubscriptionDecisions] = useState<Record<string, SubscriptionDecision>>({});
+  const [growthNotice, setGrowthNotice] = useState<string | null>(null);
+  const [plaidNotice, setPlaidNotice] = useState<string | null>(null);
+  const [plaidLinking, setPlaidLinking] = useState(false);
+  const [childProfiles, setChildProfiles] = useState<ChildProfile[]>([]);
+  const [childName, setChildName] = useState("");
+  const [childAllowanceText, setChildAllowanceText] = useState("");
+  const [childGoalText, setChildGoalText] = useState("");
   const [plaidServerStatus, setPlaidServerStatus] = useState<{
     configured: boolean;
     storageReady: boolean;
@@ -232,6 +303,11 @@ export default function MoreScreen() {
   const [signingOut, setSigningOut] = useState(false);
   const inviteRoles = useMemo(() => householdInviteRolesFor(activeHousehold?.role), [activeHousehold?.role]);
   const transactionRuleStorageKey = user?.id ? `flowledger_transaction_rules_${user.id}` : "flowledger_transaction_rules_guest";
+  const reviewDecisionStorageKey = user?.id ? `flowledger_review_decisions_${user.id}` : "flowledger_review_decisions_guest";
+  const subscriptionDecisionStorageKey = user?.id ? `flowledger_subscription_decisions_${user.id}` : "flowledger_subscription_decisions_guest";
+  const childProfileStorageKey = activeHousehold?.householdId
+    ? `flowledger_child_profiles_${activeHousehold.householdId}`
+    : user?.id ? `flowledger_child_profiles_${user.id}` : "flowledger_child_profiles_guest";
 
   useEffect(() => {
     const requestedSection = Array.isArray(routeParams.section) ? routeParams.section[0] : routeParams.section;
@@ -284,6 +360,52 @@ export default function MoreScreen() {
       cancelled = true;
     };
   }, [transactionRuleStorageKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void AsyncStorage.getItem(reviewDecisionStorageKey)
+      .then(value => {
+        if (cancelled) return;
+        setReviewDecisions(value ? normalizeStorageMap<ReviewDecision>(JSON.parse(value)) : {});
+      })
+      .catch(() => {
+        if (!cancelled) setReviewDecisions({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reviewDecisionStorageKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void AsyncStorage.getItem(subscriptionDecisionStorageKey)
+      .then(value => {
+        if (cancelled) return;
+        setSubscriptionDecisions(value ? normalizeStorageMap<SubscriptionDecision>(JSON.parse(value)) : {});
+      })
+      .catch(() => {
+        if (!cancelled) setSubscriptionDecisions({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [subscriptionDecisionStorageKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void AsyncStorage.getItem(childProfileStorageKey)
+      .then(value => {
+        if (cancelled) return;
+        const parsed = value ? JSON.parse(value) : [];
+        setChildProfiles(Array.isArray(parsed) ? parsed : []);
+      })
+      .catch(() => {
+        if (!cancelled) setChildProfiles([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [childProfileStorageKey]);
 
   useEffect(() => {
     if (Platform.OS !== "web") return;
@@ -674,9 +796,15 @@ export default function MoreScreen() {
   const reviewQueue = useMemo(() => buildReviewQueue(growthTransactions, transactionRules), [growthTransactions, transactionRules]);
   const reviewTransactions = useMemo(() => {
     const byId = new Map(growthTransactions.map(transaction => [transaction.id, transaction]));
-    return reviewQueue.map(item => ({ item, transaction: byId.get(item.transactionId) })).filter(entry => entry.transaction);
-  }, [growthTransactions, reviewQueue]);
-  const subscriptions = useMemo(() => detectSubscriptions(growthTransactions), [growthTransactions]);
+    return reviewQueue
+      .filter(item => !reviewDecisions[item.transactionId])
+      .map(item => ({ item, transaction: byId.get(item.transactionId) }))
+      .filter(entry => entry.transaction);
+  }, [growthTransactions, reviewDecisions, reviewQueue]);
+  const subscriptions = useMemo(
+    () => detectSubscriptions(growthTransactions).filter(item => subscriptionDecisions[subscriptionKey(item)] !== "not_subscription"),
+    [growthTransactions, subscriptionDecisions],
+  );
   const monthlyRecurringBills = useMemo(
     () => bills.filter(bill => bill.is_recurring !== false && !bill.is_debt && !(bill.end_date && bill.end_date < todayIso)).reduce((sum, bill) => sum + Math.max(0, bill.amount), 0),
     [bills, todayIso],
@@ -718,24 +846,47 @@ export default function MoreScreen() {
   const smartReminders = useMemo(() => buildSmartReminders({
     today: todayIso,
     bills: growthBills,
-    reviewCount: reviewQueue.length,
+    reviewCount: reviewTransactions.length,
     subscriptionIncreases: subscriptions.filter(subscription => subscription.priceIncrease).length,
     lowestBalance: null,
     safetyFloor: settings.safety_floor,
     goals: goalFundingPlans,
     needsReconcile: forecastReadiness.missing.includes("Reconcile an account"),
-  }), [forecastReadiness.missing, goalFundingPlans, growthBills, reviewQueue.length, settings.safety_floor, subscriptions, todayIso]);
+  }), [forecastReadiness.missing, goalFundingPlans, growthBills, reviewTransactions.length, settings.safety_floor, subscriptions, todayIso]);
   const plaidStatus = useMemo(() => evaluatePlaidConnectionStatus({
     clientName: "FlowLedger Algo",
     hasServerTokenEndpoint: Boolean(plaidServerStatus?.configured),
     hasExchangeEndpoint: Boolean(plaidServerStatus?.configured),
     hasWebhookEndpoint: Boolean(plaidServerStatus?.storageReady),
   }), [plaidServerStatus?.configured, plaidServerStatus?.storageReady]);
-  const childMoneySummary = useMemo(() => buildChildMoneySummary([]), []);
+  const childMoneySummary = useMemo(() => buildChildMoneySummary(childProfiles), [childProfiles]);
 
   const saveTransactionRules = async (next: TransactionRule[]) => {
     setTransactionRules(next);
     await AsyncStorage.setItem(transactionRuleStorageKey, JSON.stringify(next)).catch(() => undefined);
+  };
+
+  const saveReviewDecisions = async (next: Record<string, ReviewDecision>) => {
+    setReviewDecisions(next);
+    await AsyncStorage.setItem(reviewDecisionStorageKey, JSON.stringify(next)).catch(() => undefined);
+  };
+
+  const markReviewDecision = async (transactionId: string, decision: ReviewDecision) => {
+    await saveReviewDecisions({ ...reviewDecisions, [transactionId]: decision });
+  };
+
+  const saveSubscriptionDecisions = async (next: Record<string, SubscriptionDecision>) => {
+    setSubscriptionDecisions(next);
+    await AsyncStorage.setItem(subscriptionDecisionStorageKey, JSON.stringify(next)).catch(() => undefined);
+  };
+
+  const markSubscriptionDecision = async (subscription: SubscriptionCandidate, decision: SubscriptionDecision) => {
+    await saveSubscriptionDecisions({ ...subscriptionDecisions, [subscriptionKey(subscription)]: decision });
+  };
+
+  const saveChildProfiles = async (next: ChildProfile[]) => {
+    setChildProfiles(next);
+    await AsyncStorage.setItem(childProfileStorageKey, JSON.stringify(next)).catch(() => undefined);
   };
 
   const handleCreateRuleFromReview = (transactionId: string) => {
@@ -752,8 +903,258 @@ export default function MoreScreen() {
       priority: 10,
       isActive: true,
     };
-    void saveTransactionRules([nextRule, ...transactionRules]);
+    void saveTransactionRules([nextRule, ...transactionRules]).then(() => markReviewDecision(transactionId, "approved"));
+    setGrowthNotice("Rule saved. I’ll use it on future matching transactions.");
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  const handleApproveReview = (transactionId: string) => {
+    void markReviewDecision(transactionId, "approved");
+    setGrowthNotice("Transaction approved.");
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handleIgnoreReview = (transactionId: string) => {
+    void markReviewDecision(transactionId, "ignored");
+    setGrowthNotice("Review item ignored.");
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handleDeleteReviewTransaction = (transactionId: string, label: string) => {
+    confirmAction({
+      title: "Delete transaction?",
+      message: `This removes "${label}" from Activity and your forecast.`,
+      confirmText: "Delete",
+      destructive: true,
+      onConfirm: async () => {
+        try {
+          await deleteTransaction(transactionId);
+          await markReviewDecision(transactionId, "deleted");
+          setGrowthNotice("Transaction deleted.");
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (error) {
+          Alert.alert("Couldn’t delete transaction", error instanceof Error ? error.message : "Try again.");
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        }
+      },
+    });
+  };
+
+  const handleCategorizeReview = async (transactionId: string, category: string) => {
+    const original = transactions.find(item => item.id === transactionId);
+    if (!original) return;
+    try {
+      await updateTransaction({ ...original, category });
+      await markReviewDecision(transactionId, "approved");
+      setGrowthNotice(`Categorized as ${category}.`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      Alert.alert("Couldn’t update transaction", error instanceof Error ? error.message : "Try again.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+  };
+
+  const handleApplySavedRules = async () => {
+    if (!transactionRules.length) return;
+    let changed = 0;
+    for (const growthTransaction of growthTransactions) {
+      const applied = applyTransactionRules(growthTransaction, transactionRules);
+      const original = transactions.find(item => item.id === growthTransaction.id);
+      if (!original || !applied.ruleId || !applied.category || applied.category === original.category) continue;
+      await updateTransaction({ ...original, category: applied.category });
+      changed += 1;
+    }
+    setGrowthNotice(changed ? `Applied saved rules to ${changed} transaction${changed === 1 ? "" : "s"}.` : "No uncategorized matches found.");
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  const handleCreateBillFromSubscription = async (subscription: SubscriptionCandidate) => {
+    const amount = Math.max(0, subscription.cadence === "annual" ? subscription.yearlyEquivalent / 12 : subscription.averageAmount || subscription.lastAmount);
+    const latestDate = newestTransactionDate(subscription.transactionIds, growthTransactions) ?? todayIso;
+    const dueDay = Math.min(28, Math.max(1, Number(latestDate.slice(8, 10)) || 1));
+    confirmAction({
+      title: "Create subscription bill?",
+      message: `I’ll add ${subscription.merchant} as a recurring bill for about $${amount.toFixed(2)} due around the ${dueDay}.`,
+      confirmText: "Create bill",
+      onConfirm: async () => {
+        try {
+          await addBill({
+            name: subscription.merchant.replace(/\b\w/g, letter => letter.toUpperCase()),
+            amount,
+            category: "Subscriptions",
+            priority: bills.length + 1,
+            is_debt: false,
+            balance: 0,
+            interest_rate: 0,
+            due_day: dueDay,
+            start_date: latestDate,
+            is_recurring: true,
+            frequency: subscription.cadence === "weekly" ? "weekly" : "monthly",
+          });
+          await markSubscriptionDecision(subscription, "bill_created");
+          setGrowthNotice("Subscription bill created.");
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (error) {
+          Alert.alert("Couldn’t create bill", error instanceof Error ? error.message : "Try again.");
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        }
+      },
+    });
+  };
+
+  const handleMarkSubscription = (subscription: SubscriptionCandidate, decision: SubscriptionDecision) => {
+    void markSubscriptionDecision(subscription, decision);
+    setGrowthNotice(
+      decision === "keep" ? "Subscription kept on the review list." :
+      decision === "cancelled" ? "Marked as cancelled. Stop future bills if this is already scheduled." :
+      "Marked as not a subscription.",
+    );
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handleAddSafeGoalContribution = (goalId: string) => {
+    const plan = goalFundingPlans.find(item => item.goalId === goalId);
+    const goal = goals.find(item => item.id === goalId);
+    if (!plan || !goal) return;
+    const contribution = Math.max(0, Math.min(plan.safeMonthlyContribution, goal.target_amount - goal.current_amount));
+    if (contribution <= 0) {
+      Alert.alert("Goal funding", "I don’t see a safe contribution for this goal yet.");
+      return;
+    }
+    confirmAction({
+      title: "Add safe goal contribution?",
+      message: `I’ll add $${contribution.toFixed(2)} toward ${goal.name} today and keep it inside the current safe funding plan.`,
+      confirmText: "Add contribution",
+      onConfirm: async () => {
+        try {
+          await addTransaction({
+            date: todayIso,
+            amount: -contribution,
+            category: "Savings",
+            note: `Goal funding: ${goal.name}`,
+            account_id: activeAccounts[0]?.id,
+          });
+          await updateGoal({
+            ...goal,
+            current_amount: Math.min(goal.target_amount, goal.current_amount + contribution),
+          });
+          setGrowthNotice("Goal contribution added.");
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (error) {
+          Alert.alert("Couldn’t fund goal", error instanceof Error ? error.message : "Try again.");
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        }
+      },
+    });
+  };
+
+  const handleAddChildProfile = async () => {
+    const name = childName.trim();
+    if (!name) {
+      Alert.alert("Child profile", "Add a child name first.");
+      return;
+    }
+    const allowanceAmount = Math.max(0, parseFloat(childAllowanceText) || 0);
+    const savingsGoal = Math.max(0, parseFloat(childGoalText) || 0);
+    const next: ChildProfile = {
+      id: `child-${Date.now()}`,
+      name,
+      allowanceAmount: allowanceAmount || null,
+      allowanceFrequency: allowanceAmount ? "weekly" : null,
+      savingsGoal: savingsGoal || null,
+      currentSavings: 0,
+      spendingLimit: null,
+    };
+    await saveChildProfiles([next, ...childProfiles]);
+    setChildName("");
+    setChildAllowanceText("");
+    setChildGoalText("");
+    setGrowthNotice("Child profile added for starter tracking.");
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  const handleRemoveChildProfile = (profile: ChildProfile) => {
+    confirmAction({
+      title: "Remove child profile?",
+      message: `This removes ${profile.name} from local child money tracking.`,
+      confirmText: "Remove",
+      destructive: true,
+      onConfirm: async () => {
+        await saveChildProfiles(childProfiles.filter(item => item.id !== profile.id));
+        setGrowthNotice("Child profile removed.");
+      },
+    });
+  };
+
+  const handleStartPlaidLink = async () => {
+    if (Platform.OS !== "web") {
+      Alert.alert("Bank sync", "Open FlowLedger in the web app to connect Plaid for now.");
+      return;
+    }
+    if (!plaidStatus.canStartLink || plaidLinking) return;
+    setPlaidNotice(null);
+    setPlaidLinking(true);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const accessToken = data.session?.access_token;
+      const response = await fetch("/api/plaid/create-link-token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({
+          client_user_id: user?.id,
+          products: ["transactions"],
+          country_codes: ["US"],
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.link_token) {
+        throw new Error(payload.message || "Plaid link token could not be created.");
+      }
+      const plaid = await loadPlaidScript();
+      if (!plaid?.create) throw new Error("Plaid Link is unavailable.");
+      const handler = plaid.create({
+        token: payload.link_token,
+        onSuccess: (publicToken, metadata) => {
+          void (async () => {
+            try {
+              const exchange = await fetch("/api/plaid/exchange-public-token", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+                },
+                body: JSON.stringify({
+                  public_token: publicToken,
+                  household_id: activeHousehold?.householdId,
+                  institution_name: metadata?.institution?.name ?? null,
+                }),
+              });
+              const exchangePayload = await exchange.json().catch(() => ({}));
+              if (!exchange.ok) throw new Error(exchangePayload.message || "Plaid token exchange failed.");
+              setPlaidNotice(exchangePayload.message || "Bank connected. Transaction sync can now be enabled.");
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch (error) {
+              setPlaidNotice(error instanceof Error ? error.message : "Bank connection could not be saved.");
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            } finally {
+              setPlaidLinking(false);
+            }
+          })();
+        },
+        onExit: (error) => {
+          if (error) setPlaidNotice(error.display_message || error.error_message || "Plaid was closed before finishing.");
+          setPlaidLinking(false);
+        },
+      });
+      handler.open();
+    } catch (error) {
+      setPlaidNotice(error instanceof Error ? error.message : "Plaid could not start.");
+      setPlaidLinking(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
   };
 
   const handleExport = async () => {
@@ -1796,9 +2197,10 @@ export default function MoreScreen() {
 
       <SLabel c={c} text="Transaction Review Queue" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        {growthNotice ? <Text style={[styles.feedbackNotice, { color: c.success }]}>{growthNotice}</Text> : null}
         <View style={styles.growthMetricGrid}>
           <View style={[styles.growthMetric, { backgroundColor: c.muted }]}>
-            <Text style={[styles.growthMetricValue, { color: c.primary }]}>{reviewQueue.length}</Text>
+            <Text style={[styles.growthMetricValue, { color: c.primary }]}>{reviewTransactions.length}</Text>
             <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>Needs review</Text>
           </View>
           <View style={[styles.growthMetric, { backgroundColor: c.muted }]}>
@@ -1806,6 +2208,15 @@ export default function MoreScreen() {
             <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>Rules saved</Text>
           </View>
         </View>
+        {transactionRules.length ? (
+          <Pressable
+            onPress={() => void handleApplySavedRules()}
+            style={({ pressed }) => [styles.balanceSaveFullBtn, { backgroundColor: c.primary, opacity: pressed ? 0.78 : 1, marginTop: 12 }]}
+          >
+            <Feather name="zap" size={15} color={c.primaryForeground} />
+            <Text style={[styles.balanceSaveBtnText, { color: c.primaryForeground }]}>Apply Saved Rules</Text>
+          </Pressable>
+        ) : null}
         {reviewTransactions.slice(0, 8).map(({ item, transaction }, index) => (
           <View key={item.transactionId} style={[styles.growthListRow, { borderTopWidth: index ? 1 : 0, borderTopColor: c.border }]}>
             <View style={[styles.dataIcon, { backgroundColor: item.priority === "high" ? c.destructive + "18" : c.primary + "18" }]}>
@@ -1815,13 +2226,44 @@ export default function MoreScreen() {
               <Text style={[styles.dataLabel, { color: c.foreground }]} numberOfLines={1}>{transaction?.description ?? "Transaction"}</Text>
               <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{item.summary}</Text>
               <Text style={[styles.growthTinyText, { color: c.mutedForeground }]}>{item.reasons.map(reason => reason.replace(/_/g, " ")).join(" • ")}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.growthActionRow}>
+                {categories.slice(0, 5).map(category => (
+                  <Pressable
+                    key={`${item.transactionId}-${category}`}
+                    onPress={() => void handleCategorizeReview(item.transactionId, category)}
+                    style={({ pressed }) => [styles.growthPillButton, { backgroundColor: c.muted, borderColor: c.border, opacity: pressed ? 0.72 : 1 }]}
+                  >
+                    <Text style={[styles.growthPillButtonText, { color: c.mutedForeground }]}>{category}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
             </View>
-            <Pressable
-              onPress={() => handleCreateRuleFromReview(item.transactionId)}
-              style={({ pressed }) => [styles.growthSmallButton, { backgroundColor: c.primary + "18", opacity: pressed ? 0.72 : 1 }]}
-            >
-              <Text style={[styles.growthSmallButtonText, { color: c.primary }]}>Rule</Text>
-            </Pressable>
+            <View style={styles.reviewActionStack}>
+              <Pressable
+                onPress={() => handleApproveReview(item.transactionId)}
+                style={({ pressed }) => [styles.growthSmallButton, { backgroundColor: c.success + "18", opacity: pressed ? 0.72 : 1 }]}
+              >
+                <Text style={[styles.growthSmallButtonText, { color: c.success }]}>Approve</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => handleCreateRuleFromReview(item.transactionId)}
+                style={({ pressed }) => [styles.growthSmallButton, { backgroundColor: c.primary + "18", opacity: pressed ? 0.72 : 1 }]}
+              >
+                <Text style={[styles.growthSmallButtonText, { color: c.primary }]}>Rule</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => handleIgnoreReview(item.transactionId)}
+                style={({ pressed }) => [styles.growthSmallButton, { backgroundColor: c.muted, opacity: pressed ? 0.72 : 1 }]}
+              >
+                <Text style={[styles.growthSmallButtonText, { color: c.mutedForeground }]}>Ignore</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => handleDeleteReviewTransaction(item.transactionId, transaction?.description ?? "Transaction")}
+                style={({ pressed }) => [styles.growthSmallButton, { backgroundColor: c.destructive + "14", opacity: pressed ? 0.72 : 1 }]}
+              >
+                <Text style={[styles.growthSmallButtonText, { color: c.destructive }]}>Delete</Text>
+              </Pressable>
+            </View>
           </View>
         ))}
         {!reviewTransactions.length && (
@@ -1856,6 +2298,32 @@ export default function MoreScreen() {
               <Text style={[styles.growthTinyText, { color: subscription.priceIncrease ? c.warning : c.mutedForeground }]}>
                 {subscription.priceIncrease ? "Possible price increase. " : ""}{subscription.duplicateRisk ? "Similar service found. " : ""}Review before creating or stopping bills.
               </Text>
+              <View style={styles.subscriptionActionRow}>
+                <Pressable
+                  onPress={() => handleMarkSubscription(subscription, "keep")}
+                  style={({ pressed }) => [styles.growthPillButton, { backgroundColor: c.success + "14", borderColor: c.success + "44", opacity: pressed ? 0.72 : 1 }]}
+                >
+                  <Text style={[styles.growthPillButtonText, { color: c.success }]}>Keep</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => void handleCreateBillFromSubscription(subscription)}
+                  style={({ pressed }) => [styles.growthPillButton, { backgroundColor: c.primary + "18", borderColor: c.primary + "44", opacity: pressed ? 0.72 : 1 }]}
+                >
+                  <Text style={[styles.growthPillButtonText, { color: c.primary }]}>Create bill</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => handleMarkSubscription(subscription, "not_subscription")}
+                  style={({ pressed }) => [styles.growthPillButton, { backgroundColor: c.muted, borderColor: c.border, opacity: pressed ? 0.72 : 1 }]}
+                >
+                  <Text style={[styles.growthPillButtonText, { color: c.mutedForeground }]}>Not subscription</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => handleMarkSubscription(subscription, "cancelled")}
+                  style={({ pressed }) => [styles.growthPillButton, { backgroundColor: c.destructive + "14", borderColor: c.destructive + "44", opacity: pressed ? 0.72 : 1 }]}
+                >
+                  <Text style={[styles.growthPillButtonText, { color: c.destructive }]}>Cancel</Text>
+                </Pressable>
+              </View>
             </View>
           </View>
         ))}
@@ -1939,6 +2407,15 @@ export default function MoreScreen() {
                 <Text style={[styles.growthTinyText, { color: c.mutedForeground }]}>
                   Needed ${plan.monthlyNeeded.toFixed(0)}/mo • Safe ${plan.safeMonthlyContribution.toFixed(0)}/mo
                 </Text>
+                {plan.safeMonthlyContribution > 0 ? (
+                  <Pressable
+                    onPress={() => handleAddSafeGoalContribution(plan.goalId)}
+                    style={({ pressed }) => [styles.growthInlineButton, { backgroundColor: c.primary + "18", borderColor: c.primary + "44", opacity: pressed ? 0.72 : 1 }]}
+                  >
+                    <Feather name="plus-circle" size={13} color={c.primary} />
+                    <Text style={[styles.growthSmallButtonText, { color: c.primary }]}>Add safe contribution</Text>
+                  </Pressable>
+                ) : null}
               </View>
             </View>
           );
@@ -1969,10 +2446,15 @@ export default function MoreScreen() {
             FlowLedger will keep Plaid access tokens server-side. The app will only receive safe account and transaction data after you approve a link.
           </Text>
         </View>
-        <Pressable disabled style={[styles.balanceSaveFullBtn, { backgroundColor: plaidStatus.canStartLink ? c.primary : c.muted, marginTop: 14 }]}>
+        {plaidNotice ? <Text style={[styles.feedbackNotice, { color: /ready|connected|saved/i.test(plaidNotice) ? c.success : c.destructive }]}>{plaidNotice}</Text> : null}
+        <Pressable
+          onPress={() => void handleStartPlaidLink()}
+          disabled={!plaidStatus.canStartLink || plaidLinking}
+          style={({ pressed }) => [styles.balanceSaveFullBtn, { backgroundColor: plaidStatus.canStartLink ? c.primary : c.muted, marginTop: 14, opacity: pressed || plaidLinking ? 0.72 : 1 }]}
+        >
           <Feather name={plaidStatus.canStartLink ? "link" : "lock"} size={15} color={plaidStatus.canStartLink ? "#fff" : c.mutedForeground} />
           <Text style={[styles.balanceSaveBtnText, { color: plaidStatus.canStartLink ? "#fff" : c.mutedForeground }]}>
-            {plaidStatus.canStartLink ? "Bank sync endpoints are ready" : "Connect bank account after Plaid env setup"}
+            {plaidLinking ? "Opening Plaid..." : plaidStatus.canStartLink ? "Connect Bank Account" : "Connect bank account after Plaid env setup"}
           </Text>
         </Pressable>
       </View>
@@ -1981,6 +2463,7 @@ export default function MoreScreen() {
       {activeSettingsSection === "children" && <>
       <SLabel c={c} text="Child Money Management" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        {growthNotice ? <Text style={[styles.feedbackNotice, { color: c.success }]}>{growthNotice}</Text> : null}
         <View style={styles.growthHeaderRow}>
           <View style={[styles.growthScoreBubble, { backgroundColor: c.primary + "18" }]}>
             <Feather name="smile" size={20} color={c.primary} />
@@ -1992,6 +2475,40 @@ export default function MoreScreen() {
             </Text>
           </View>
         </View>
+        <View style={[styles.childForm, { borderColor: c.border, backgroundColor: c.muted }]}>
+          <TextInput
+            value={childName}
+            onChangeText={setChildName}
+            placeholder="Child name"
+            placeholderTextColor={c.mutedForeground}
+            style={[styles.childInput, { color: c.foreground, borderColor: c.border, backgroundColor: c.card }]}
+          />
+          <View style={styles.childFormRow}>
+            <TextInput
+              value={childAllowanceText}
+              onChangeText={setChildAllowanceText}
+              placeholder="Weekly allowance"
+              placeholderTextColor={c.mutedForeground}
+              keyboardType="decimal-pad"
+              style={[styles.childHalfInput, { color: c.foreground, borderColor: c.border, backgroundColor: c.card }]}
+            />
+            <TextInput
+              value={childGoalText}
+              onChangeText={setChildGoalText}
+              placeholder="Savings goal"
+              placeholderTextColor={c.mutedForeground}
+              keyboardType="decimal-pad"
+              style={[styles.childHalfInput, { color: c.foreground, borderColor: c.border, backgroundColor: c.card }]}
+            />
+          </View>
+          <Pressable
+            onPress={() => void handleAddChildProfile()}
+            style={({ pressed }) => [styles.balanceSaveFullBtn, { backgroundColor: c.primary, opacity: pressed ? 0.75 : 1 }]}
+          >
+            <Feather name="plus" size={15} color={c.primaryForeground} />
+            <Text style={[styles.balanceSaveBtnText, { color: c.primaryForeground }]}>Add Child Profile</Text>
+          </Pressable>
+        </View>
         {childMoneySummary.map(child => (
           <View key={child.id} style={[styles.growthListRow, { borderTopWidth: 1, borderTopColor: c.border }]}>
             <View style={styles.dataBody}>
@@ -1999,10 +2516,19 @@ export default function MoreScreen() {
               <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{child.message}</Text>
             </View>
             <Text style={[styles.incomeMonthly, { color: c.primary }]}>{child.progress}%</Text>
+            <Pressable
+              onPress={() => {
+                const profile = childProfiles.find(item => item.id === child.id);
+                if (profile) handleRemoveChildProfile(profile);
+              }}
+              hitSlop={10}
+            >
+              <Feather name="trash-2" size={15} color={c.destructive} />
+            </Pressable>
           </View>
         ))}
         {!childMoneySummary.length && (
-          <Text style={[styles.emptyText, { color: c.mutedForeground }]}>No child profiles yet. The database foundation is ready so this can become a safe household expansion without exposing adult controls.</Text>
+          <Text style={[styles.emptyText, { color: c.mutedForeground }]}>No child profiles yet. Add one to start testing allowance, savings goals, and kid-safe money coaching without exposing adult controls.</Text>
         )}
       </View>
       </>}
@@ -2534,6 +3060,16 @@ const styles = StyleSheet.create({
   growthTinyText: { fontSize: 11, fontFamily: "Inter_500Medium", lineHeight: 15, marginTop: 3 },
   growthSmallButton: { borderRadius: 999, paddingHorizontal: 11, paddingVertical: 7 },
   growthSmallButtonText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
+  growthActionRow: { paddingTop: 8, paddingRight: 8, gap: 8 },
+  growthPillButton: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
+  growthPillButtonText: { fontSize: 12, fontFamily: "Inter_700Bold" },
+  reviewActionStack: { alignItems: "flex-end", gap: 6, marginLeft: 8 },
+  subscriptionActionRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
+  growthInlineButton: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7, marginTop: 8 },
+  childForm: { borderWidth: 1, borderRadius: 16, padding: 12, marginTop: 14, gap: 10 },
+  childFormRow: { flexDirection: "row", gap: 10 },
+  childInput: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 11, fontSize: 14, fontFamily: "Inter_500Medium" },
+  childHalfInput: { flex: 1, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 11, fontSize: 13, fontFamily: "Inter_500Medium" },
 
   switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   switchInfo: { flex: 1, marginRight: 12 },
