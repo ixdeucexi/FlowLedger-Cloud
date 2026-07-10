@@ -12,6 +12,7 @@ const {
   getItemByPlaidItemId,
   savePlaidItem,
   syncPlaidAccountMetadata,
+  syncPlaidTransactions,
 } = require("../_utils/plaid-data");
 
 async function getInstitutionName(client, accessToken, fallback) {
@@ -75,13 +76,49 @@ module.exports = async function handler(req, res) {
     });
 
     const accounts = await syncPlaidAccountMetadata(client, accessToken, item, user.id);
+    let transactionSync = {
+      status: "not_started",
+      created: 0,
+      updated: 0,
+      removed: 0,
+      pages: 0,
+      message: "Transaction sync has not started yet.",
+    };
+
+    try {
+      const accountLinks = accounts.synced.map(entry => entry.row).filter(Boolean);
+      const synced = await syncPlaidTransactions(client, item, accessToken, accountLinks);
+      transactionSync = {
+        status: "complete",
+        created: synced.created,
+        updated: synced.updated,
+        removed: synced.removed,
+        pages: synced.pages,
+        empty: synced.empty,
+        message: synced.empty
+          ? "Bank connected. Plaid may still be preparing recent activity."
+          : "Bank connected and recent activity started syncing.",
+      };
+    } catch (syncError) {
+      const safeSyncError = safePlaidError(syncError, "Plaid is still preparing transaction history.");
+      transactionSync = {
+        status: "pending",
+        created: 0,
+        updated: 0,
+        removed: 0,
+        pages: 0,
+        error_code: safeSyncError.error_code || null,
+        message: "Bank connected. Plaid is still preparing transaction history, so sync again shortly.",
+      };
+    }
 
     return sendJson(res, 200, {
       plaid_item_record_id: item?.id || null,
       institution_name: item?.institution_name || metadata.institutionName || "Connected bank",
       status: "active",
       accounts: accounts.previews,
-      message: "Bank connected. Choose which accounts FlowLedger should add.",
+      transaction_sync: transactionSync,
+      message: transactionSync.message || "Bank connected. Choose which accounts FlowLedger should add.",
     });
   } catch (error) {
     return sendJson(

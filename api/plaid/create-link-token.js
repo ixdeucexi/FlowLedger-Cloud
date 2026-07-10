@@ -20,10 +20,13 @@ module.exports = async function handler(req, res) {
     const client = getPlaidClient();
     const request = {
       user: { client_user_id: String(user.id) },
-      client_name: "FlowLedger Algo",
+      client_name: "FlowLedger",
       products: ["transactions"],
       country_codes: ["US"],
       language: "en",
+      transactions: {
+        days_requested: 90,
+      },
     };
 
     const redirectUri = process.env.PLAID_OAUTH_REDIRECT_URI || process.env.PLAID_REDIRECT_URI;
@@ -35,6 +38,7 @@ module.exports = async function handler(req, res) {
       if (!item?.id) return sendJson(res, 404, { error: "Bank connection was not found." });
       request.access_token = decryptItemAccessToken(item);
       delete request.products;
+      delete request.transactions;
     }
 
     const response = await client.linkTokenCreate(request);

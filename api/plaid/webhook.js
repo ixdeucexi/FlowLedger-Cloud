@@ -24,7 +24,7 @@ module.exports = async function handler(req, res) {
     const item = await getItemByPlaidItemIdForWebhook(plaidItemId);
     if (!item?.id) return sendJson(res, 200, { ok: true, unknown_item: true });
 
-    if (webhookType === "TRANSACTIONS") {
+    if (webhookType === "TRANSACTIONS" && webhookCode === "SYNC_UPDATES_AVAILABLE") {
       const accessToken = decryptItemAccessToken(item);
       await syncPlaidTransactions(getPlaidClient(), item, accessToken);
     }
@@ -33,6 +33,7 @@ module.exports = async function handler(req, res) {
       ok: true,
       webhook_type: webhookType || null,
       webhook_code: webhookCode || null,
+      synced: webhookType === "TRANSACTIONS" && webhookCode === "SYNC_UPDATES_AVAILABLE",
     });
   } catch (error) {
     try {

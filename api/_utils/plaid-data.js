@@ -6,6 +6,7 @@ const {
   decryptAccessToken,
   mapPlaidCategory,
   normalizePlaidAmount,
+  safePlaidError,
   safeAccountPreview,
   supabaseRest,
 } = require("./plaid");
@@ -29,6 +30,20 @@ function first(rows) {
 function unsupportedColumn(error, columnName) {
   const text = JSON.stringify(error?.payload || {});
   return error?.status === 400 && (!columnName || text.includes(columnName));
+}
+
+function plaidErrorCode(error) {
+  return (
+    error?.response?.data?.error_code ||
+    error?.payload?.error_code ||
+    error?.error_code ||
+    error?.code ||
+    null
+  );
+}
+
+function isTransactionsMutationDuringPagination(error) {
+  return plaidErrorCode(error) === "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION";
 }
 
 async function getItemById(userId, itemRecordId) {
@@ -338,6 +353,10 @@ async function getExistingTransactionByHash(userId, importHash) {
 }
 
 async function upsertPlaidTransaction(userId, householdId, plaidAccountLink, plaidTransaction) {
+  if (plaidTransaction.pending_transaction_id) {
+    await removePlaidTransaction(userId, plaidTransaction.pending_transaction_id);
+  }
+
   const importHash = `plaid:${plaidTransaction.transaction_id}`;
   const existing = await getExistingTransactionByHash(userId, importHash);
   const amount = normalizePlaidAmount(plaidTransaction.amount);
@@ -476,65 +495,124 @@ async function removePlaidTransaction(userId, plaidTransactionId) {
 }
 
 async function syncPlaidTransactions(client, item, accessToken, accountLinks = null) {
-  let cursor = getTransactionsCursor(item);
-  let hasMore = true;
-  let pages = 0;
-  let created = 0;
-  let updated = 0;
-  let removed = 0;
+  const originalCursor = getTransactionsCursor(item);
   const userId = item.user_id;
   const householdId = item.household_id || null;
   const links = accountLinks || await getPlaidAccountLinksForItem(userId, item.id);
   const linksByPlaidAccountId = new Map(links.map(link => [link.plaid_account_id, link]));
-
-  while (hasMore && pages < 20) {
-    pages += 1;
-    const response = await client.transactionsSync({
-      access_token: accessToken,
-      cursor: cursor || undefined,
-      count: 500,
-      options: {
-        include_personal_finance_category: true,
-      },
-    });
-    const page = response.data;
-    cursor = page.next_cursor || cursor;
-    hasMore = Boolean(page.has_more);
-
-    for (const tx of [...(page.added || []), ...(page.modified || [])]) {
-      const link = linksByPlaidAccountId.get(tx.account_id);
-      if (!link) continue;
-      const result = await upsertPlaidTransaction(userId, householdId, link, tx);
-      if (result === "created") created += 1;
-      else updated += 1;
-    }
-
-    for (const tx of page.removed || []) {
-      if (!tx.transaction_id) continue;
-      await removePlaidTransaction(userId, tx.transaction_id);
-      removed += 1;
-    }
-  }
+  let restartCount = 0;
 
   await patchPlaidItem(
     item,
-    {
-      transactions_cursor: cursor,
-      cursor,
-      last_successful_sync_at: new Date().toISOString(),
-      last_attempted_sync_at: new Date().toISOString(),
-      last_synced_at: new Date().toISOString(),
-      status: "active",
-      error_code: null,
-    },
-    {
-      cursor,
-      last_synced_at: new Date().toISOString(),
-      status: "active",
-    },
+    { last_attempted_sync_at: new Date().toISOString() },
+    {},
   );
 
-  return { created, updated, removed, cursor, pages };
+  while (restartCount < 3) {
+    let cursor = originalCursor;
+    let hasMore = true;
+    let pages = 0;
+    let created = 0;
+    let updated = 0;
+    let removed = 0;
+    const transactionPages = [];
+
+    try {
+      while (hasMore) {
+        pages += 1;
+        const response = await client.transactionsSync({
+          access_token: accessToken,
+          cursor: cursor || undefined,
+          count: 500,
+          options: {
+            include_personal_finance_category: true,
+          },
+        });
+        const page = response.data || {};
+        cursor = page.next_cursor || cursor;
+        hasMore = Boolean(page.has_more);
+        transactionPages.push(page);
+      }
+
+      for (const page of transactionPages) {
+        for (const tx of [...(page.added || []), ...(page.modified || [])]) {
+          const link = linksByPlaidAccountId.get(tx.account_id);
+          if (!link) continue;
+          const result = await upsertPlaidTransaction(userId, householdId, link, tx);
+          if (result === "created") created += 1;
+          else updated += 1;
+        }
+
+        for (const tx of page.removed || []) {
+          if (!tx.transaction_id) continue;
+          await removePlaidTransaction(userId, tx.transaction_id);
+          removed += 1;
+        }
+      }
+
+      await patchPlaidItem(
+        item,
+        {
+          transactions_cursor: cursor,
+          cursor,
+          last_successful_sync_at: new Date().toISOString(),
+          last_attempted_sync_at: new Date().toISOString(),
+          last_synced_at: new Date().toISOString(),
+          status: "active",
+          error_code: null,
+          error_message: null,
+        },
+        {
+          cursor,
+          last_synced_at: new Date().toISOString(),
+          status: "active",
+        },
+      );
+
+      return {
+        created,
+        updated,
+        removed,
+        cursor,
+        pages,
+        restarted: restartCount > 0,
+        empty: created + updated + removed === 0,
+      };
+    } catch (error) {
+      if (isTransactionsMutationDuringPagination(error)) {
+        restartCount += 1;
+        continue;
+      }
+
+      const safe = safePlaidError(error, "Unable to sync Plaid transactions.");
+      await patchPlaidItem(
+        item,
+        {
+          last_attempted_sync_at: new Date().toISOString(),
+          error_code: safe.error_code || "TRANSACTIONS_SYNC_FAILED",
+          error_message: safe.error || null,
+          status: safe.error_code === "ITEM_LOGIN_REQUIRED" ? "needs_repair" : item.status || "active",
+        },
+        {
+          status: safe.error_code === "ITEM_LOGIN_REQUIRED" ? "needs_repair" : item.status || "active",
+        },
+      );
+      throw error;
+    }
+  }
+
+  const error = new Error("Plaid transactions changed during sync. Try again.");
+  error.code = "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION";
+  await patchPlaidItem(
+    item,
+    {
+      last_attempted_sync_at: new Date().toISOString(),
+      error_code: error.code,
+      error_message: "Plaid transactions changed during sync. Try again.",
+    },
+    {},
+  );
+  throw error;
 }
 
 function decryptItemAccessToken(item) {
