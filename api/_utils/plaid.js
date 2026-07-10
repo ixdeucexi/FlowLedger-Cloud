@@ -1,20 +1,83 @@
+const { Configuration, PlaidApi, PlaidEnvironments } = require("plaid");
+
 const PLAID_HOSTS = {
-  sandbox: "https://sandbox.plaid.com",
+  sandbox: PlaidEnvironments.sandbox,
   development: "https://development.plaid.com",
-  production: "https://production.plaid.com",
+  production: PlaidEnvironments.production,
 };
 
+let plaidClientInstance = null;
+
+class PlaidConfigurationError extends Error {
+  constructor(message, missing = []) {
+    super(message);
+    this.name = "PlaidConfigurationError";
+    this.status = 503;
+    this.code = "PLAID_CONFIGURATION_MISSING";
+    this.missing = missing;
+  }
+}
+
 function plaidEnv() {
-  const env = (process.env.PLAID_ENV || "sandbox").toLowerCase();
-  return PLAID_HOSTS[env] ? env : "sandbox";
+  const env = (process.env.PLAID_ENV || "").toLowerCase();
+  return PLAID_HOSTS[env] ? env : "";
 }
 
 function plaidHost() {
-  return PLAID_HOSTS[plaidEnv()];
+  return PLAID_HOSTS[plaidEnv()] || null;
+}
+
+function missingPlaidEnvVars() {
+  const missing = [];
+  if (!process.env.PLAID_CLIENT_ID) missing.push("PLAID_CLIENT_ID");
+  if (!process.env.PLAID_SECRET) missing.push("PLAID_SECRET");
+  if (!process.env.PLAID_ENV) missing.push("PLAID_ENV");
+  if (process.env.PLAID_ENV && !PLAID_HOSTS[String(process.env.PLAID_ENV).toLowerCase()]) {
+    missing.push("PLAID_ENV must be sandbox, development, or production");
+  }
+  return missing;
 }
 
 function plaidConfigured() {
-  return Boolean(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET);
+  return missingPlaidEnvVars().length === 0;
+}
+
+function getPlaidClient() {
+  const missing = missingPlaidEnvVars();
+  if (missing.length) {
+    throw new PlaidConfigurationError(
+      `Plaid is missing required server configuration: ${missing.join(", ")}.`,
+      missing,
+    );
+  }
+
+  const env = plaidEnv();
+  if (!plaidClientInstance || plaidClientInstance.__flowledgerPlaidEnv !== env) {
+    const configuration = new Configuration({
+      basePath: PLAID_HOSTS[env],
+      baseOptions: {
+        headers: {
+          "PLAID-CLIENT-ID": process.env.PLAID_CLIENT_ID,
+          "PLAID-SECRET": process.env.PLAID_SECRET,
+        },
+      },
+    });
+
+    plaidClientInstance = new PlaidApi(configuration);
+    plaidClientInstance.__flowledgerPlaidEnv = env;
+  }
+
+  return plaidClientInstance;
+}
+
+function plaidErrorPayload(error, fallbackMessage) {
+  const plaidData = error?.response?.data || error?.payload || {};
+  return {
+    error: plaidData.error_message || error.message || fallbackMessage,
+    error_code: plaidData.error_code || error.code,
+    request_id: plaidData.request_id,
+    missing: error.missing,
+  };
 }
 
 function supabaseConfigured() {
@@ -45,6 +108,15 @@ function sendJson(res, status, payload) {
 }
 
 async function plaidPost(path, body) {
+  const host = plaidHost();
+  if (!host) {
+    const missing = missingPlaidEnvVars();
+    throw new PlaidConfigurationError(
+      `Plaid is missing required server configuration: ${missing.join(", ")}.`,
+      missing,
+    );
+  }
+
   const response = await fetch(`${plaidHost()}${path}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -141,9 +213,13 @@ function decryptAccessToken(ciphertext) {
 module.exports = {
   decryptAccessToken,
   encryptionConfigured,
+  getPlaidClient,
   getSupabaseUser,
+  missingPlaidEnvVars,
+  PlaidConfigurationError,
   plaidConfigured,
   plaidEnv,
+  plaidErrorPayload,
   plaidPost,
   readJsonBody,
   sendJson,
