@@ -108,6 +108,42 @@ type SettingsSectionId =
 type ReviewDecision = "approved" | "ignored" | "deleted";
 type SubscriptionDecision = "keep" | "not_subscription" | "cancelled" | "bill_created";
 
+type TransactionRuleRow = {
+  id: string;
+  name: string;
+  match_type: TransactionRule["matchType"];
+  match_value: string | null;
+  amount_min: number | null;
+  amount_max: number | null;
+  direction: TransactionRule["direction"] | null;
+  category: string | null;
+  linked_bill_id: string | null;
+  mark_as_transfer: boolean | null;
+  priority: number | null;
+  is_active: boolean | null;
+};
+
+type ReviewDecisionRow = {
+  transaction_id: string | null;
+  status: "needs_review" | "approved" | "ignored" | "deleted";
+};
+
+type SubscriptionDecisionRow = {
+  merchant: string;
+  status: "review" | "keep" | "cancel_manually" | "convert_to_bill" | "not_subscription";
+};
+
+type ChildProfileRow = {
+  id: string;
+  name: string;
+  allowance_amount: number | null;
+  allowance_frequency: ChildProfile["allowanceFrequency"] | null;
+  savings_goal: number | null;
+  current_savings: number | null;
+  spending_limit: number | null;
+  is_active: boolean | null;
+};
+
 type PlaidWindow = typeof globalThis & {
   Plaid?: {
     create: (options: {
@@ -156,6 +192,135 @@ function newestTransactionDate(ids: string[], transactions: Array<{ id: string; 
     .map(transaction => transaction.date)
     .sort()
     .at(-1);
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isUuid(value: string | null | undefined): value is string {
+  return typeof value === "string" && UUID_RE.test(value);
+}
+
+function stableUuidFromString(seed: string) {
+  let hash = 2166136261;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  const chunks = Array.from({ length: 4 }, (_, index) => {
+    hash ^= index + seed.length;
+    hash = Math.imul(hash, 16777619);
+    return (hash >>> 0).toString(16).padStart(8, "0");
+  }).join("");
+  return `${chunks.slice(0, 8)}-${chunks.slice(8, 12)}-4${chunks.slice(13, 16)}-a${chunks.slice(17, 20)}-${chunks.slice(20, 32)}`;
+}
+
+function makeClientUuid(label: string) {
+  return stableUuidFromString(`${label}-${Date.now()}-${Math.random()}`);
+}
+
+function numberOrNull(value: unknown): number | null {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function normalizeRuleIds(rules: TransactionRule[]) {
+  return rules.map(rule => ({
+    ...rule,
+    id: isUuid(rule.id) ? rule.id : stableUuidFromString(`transaction-rule:${rule.id}:${rule.name}`),
+  }));
+}
+
+function normalizeChildProfileIds(profiles: ChildProfile[]) {
+  return profiles.map(profile => ({
+    ...profile,
+    id: isUuid(profile.id) ? profile.id : stableUuidFromString(`child-profile:${profile.id}:${profile.name}`),
+  }));
+}
+
+function mapRuleRow(row: TransactionRuleRow): TransactionRule {
+  return {
+    id: row.id,
+    name: row.name,
+    matchType: row.match_type,
+    matchValue: row.match_value,
+    amountMin: numberOrNull(row.amount_min),
+    amountMax: numberOrNull(row.amount_max),
+    direction: row.direction ?? "any",
+    category: row.category,
+    linkedBillId: row.linked_bill_id,
+    markAsTransfer: Boolean(row.mark_as_transfer),
+    priority: row.priority,
+    isActive: row.is_active !== false,
+  };
+}
+
+function mapRuleForSupabase(rule: TransactionRule, userId: string, householdId: string) {
+  const id = isUuid(rule.id) ? rule.id : stableUuidFromString(`transaction-rule:${rule.id}:${rule.name}`);
+  return {
+    id,
+    user_id: userId,
+    household_id: householdId,
+    name: rule.name,
+    match_type: rule.matchType,
+    match_value: rule.matchValue ?? null,
+    amount_min: rule.amountMin ?? null,
+    amount_max: rule.amountMax ?? null,
+    direction: rule.direction ?? "any",
+    category: rule.category ?? null,
+    linked_bill_id: isUuid(rule.linkedBillId) ? rule.linkedBillId : null,
+    mark_as_transfer: Boolean(rule.markAsTransfer),
+    priority: rule.priority ?? 100,
+    is_active: rule.isActive !== false,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function reviewStatusToDecision(status: ReviewDecisionRow["status"]): ReviewDecision | null {
+  if (status === "approved" || status === "ignored" || status === "deleted") return status;
+  return null;
+}
+
+function subscriptionStatusToDecision(status: SubscriptionDecisionRow["status"]): SubscriptionDecision | null {
+  if (status === "keep") return "keep";
+  if (status === "cancel_manually") return "cancelled";
+  if (status === "convert_to_bill") return "bill_created";
+  if (status === "not_subscription") return "not_subscription";
+  return null;
+}
+
+function subscriptionDecisionToStatus(decision: SubscriptionDecision): SubscriptionDecisionRow["status"] {
+  if (decision === "cancelled") return "cancel_manually";
+  if (decision === "bill_created") return "convert_to_bill";
+  return decision;
+}
+
+function mapChildRow(row: ChildProfileRow): ChildProfile {
+  return {
+    id: row.id,
+    name: row.name,
+    allowanceAmount: numberOrNull(row.allowance_amount),
+    allowanceFrequency: row.allowance_frequency,
+    savingsGoal: numberOrNull(row.savings_goal),
+    currentSavings: numberOrNull(row.current_savings) ?? 0,
+    spendingLimit: numberOrNull(row.spending_limit),
+  };
+}
+
+function mapChildForSupabase(profile: ChildProfile, userId: string, householdId: string) {
+  const id = isUuid(profile.id) ? profile.id : stableUuidFromString(`child-profile:${profile.id}:${profile.name}`);
+  return {
+    id,
+    household_id: householdId,
+    owner_user_id: userId,
+    name: profile.name,
+    allowance_amount: profile.allowanceAmount ?? null,
+    allowance_frequency: profile.allowanceFrequency ?? null,
+    savings_goal: profile.savingsGoal ?? null,
+    current_savings: profile.currentSavings ?? 0,
+    spending_limit: profile.spendingLimit ?? null,
+    is_active: true,
+    updated_at: new Date().toISOString(),
+  };
 }
 
 function loadPlaidScript(): Promise<PlaidWindow["Plaid"]> {
@@ -368,67 +533,114 @@ export default function MoreScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    void AsyncStorage.getItem(transactionRuleStorageKey)
-      .then(value => {
+    void (async () => {
+      const value = await AsyncStorage.getItem(transactionRuleStorageKey).catch(() => null);
+      if (!cancelled) {
         if (cancelled) return;
         if (!value) {
           setTransactionRules([]);
-          return;
+        } else {
+          const parsed = JSON.parse(value);
+          if (Array.isArray(parsed)) setTransactionRules(normalizeRuleIds(parsed));
         }
-        const parsed = JSON.parse(value);
-        if (Array.isArray(parsed)) setTransactionRules(parsed);
-      })
-      .catch(() => undefined);
+      }
+      if (!user?.id || !activeHousehold?.householdId) return;
+      const { data, error } = await supabase
+        .from("transaction_rules")
+        .select("id,name,match_type,match_value,amount_min,amount_max,direction,category,linked_bill_id,mark_as_transfer,priority,is_active")
+        .eq("household_id", activeHousehold.householdId)
+        .eq("is_active", true)
+        .order("priority", { ascending: true });
+      if (cancelled || error || !data) return;
+      const mapped = (data as TransactionRuleRow[]).map(mapRuleRow);
+      setTransactionRules(mapped);
+      await AsyncStorage.setItem(transactionRuleStorageKey, JSON.stringify(mapped)).catch(() => undefined);
+    })().catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [transactionRuleStorageKey]);
+  }, [activeHousehold?.householdId, transactionRuleStorageKey, user?.id]);
 
   useEffect(() => {
     let cancelled = false;
-    void AsyncStorage.getItem(reviewDecisionStorageKey)
-      .then(value => {
-        if (cancelled) return;
-        setReviewDecisions(value ? normalizeStorageMap<ReviewDecision>(JSON.parse(value)) : {});
-      })
-      .catch(() => {
-        if (!cancelled) setReviewDecisions({});
-      });
+    void (async () => {
+      const value = await AsyncStorage.getItem(reviewDecisionStorageKey).catch(() => null);
+      if (!cancelled) setReviewDecisions(value ? normalizeStorageMap<ReviewDecision>(JSON.parse(value)) : {});
+      if (!user?.id || !activeHousehold?.householdId) return;
+      const { data, error } = await supabase
+        .from("transaction_reviews")
+        .select("transaction_id,status")
+        .eq("household_id", activeHousehold.householdId)
+        .in("status", ["approved", "ignored", "deleted"]);
+      if (cancelled || error || !data) return;
+      const mapped = (data as ReviewDecisionRow[]).reduce<Record<string, ReviewDecision>>((acc, row) => {
+        const decision = reviewStatusToDecision(row.status);
+        if (row.transaction_id && decision) acc[row.transaction_id] = decision;
+        return acc;
+      }, {});
+      setReviewDecisions(mapped);
+      await AsyncStorage.setItem(reviewDecisionStorageKey, JSON.stringify(mapped)).catch(() => undefined);
+    })().catch(() => {
+      if (!cancelled) setReviewDecisions({});
+    });
     return () => {
       cancelled = true;
     };
-  }, [reviewDecisionStorageKey]);
+  }, [activeHousehold?.householdId, reviewDecisionStorageKey, user?.id]);
 
   useEffect(() => {
     let cancelled = false;
-    void AsyncStorage.getItem(subscriptionDecisionStorageKey)
-      .then(value => {
-        if (cancelled) return;
-        setSubscriptionDecisions(value ? normalizeStorageMap<SubscriptionDecision>(JSON.parse(value)) : {});
-      })
-      .catch(() => {
-        if (!cancelled) setSubscriptionDecisions({});
-      });
+    void (async () => {
+      const value = await AsyncStorage.getItem(subscriptionDecisionStorageKey).catch(() => null);
+      if (!cancelled) setSubscriptionDecisions(value ? normalizeStorageMap<SubscriptionDecision>(JSON.parse(value)) : {});
+      if (!user?.id || !activeHousehold?.householdId) return;
+      const { data, error } = await supabase
+        .from("subscription_candidates")
+        .select("merchant,status")
+        .eq("household_id", activeHousehold.householdId)
+        .neq("status", "review");
+      if (cancelled || error || !data) return;
+      const mapped = (data as SubscriptionDecisionRow[]).reduce<Record<string, SubscriptionDecision>>((acc, row) => {
+        const decision = subscriptionStatusToDecision(row.status);
+        if (decision) acc[row.merchant.toLowerCase().trim()] = decision;
+        return acc;
+      }, {});
+      setSubscriptionDecisions(mapped);
+      await AsyncStorage.setItem(subscriptionDecisionStorageKey, JSON.stringify(mapped)).catch(() => undefined);
+    })().catch(() => {
+      if (!cancelled) setSubscriptionDecisions({});
+    });
     return () => {
       cancelled = true;
     };
-  }, [subscriptionDecisionStorageKey]);
+  }, [activeHousehold?.householdId, subscriptionDecisionStorageKey, user?.id]);
 
   useEffect(() => {
     let cancelled = false;
-    void AsyncStorage.getItem(childProfileStorageKey)
-      .then(value => {
-        if (cancelled) return;
+    void (async () => {
+      const value = await AsyncStorage.getItem(childProfileStorageKey).catch(() => null);
+      if (!cancelled) {
         const parsed = value ? JSON.parse(value) : [];
-        setChildProfiles(Array.isArray(parsed) ? parsed : []);
-      })
-      .catch(() => {
-        if (!cancelled) setChildProfiles([]);
-      });
+        setChildProfiles(Array.isArray(parsed) ? normalizeChildProfileIds(parsed) : []);
+      }
+      if (!user?.id || !activeHousehold?.householdId) return;
+      const { data, error } = await supabase
+        .from("child_profiles")
+        .select("id,name,allowance_amount,allowance_frequency,savings_goal,current_savings,spending_limit,is_active")
+        .eq("household_id", activeHousehold.householdId)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false });
+      if (cancelled || error || !data) return;
+      const mapped = (data as ChildProfileRow[]).map(mapChildRow);
+      setChildProfiles(mapped);
+      await AsyncStorage.setItem(childProfileStorageKey, JSON.stringify(mapped)).catch(() => undefined);
+    })().catch(() => {
+      if (!cancelled) setChildProfiles([]);
+    });
     return () => {
       cancelled = true;
     };
-  }, [childProfileStorageKey]);
+  }, [activeHousehold?.householdId, childProfileStorageKey, user?.id]);
 
   useEffect(() => {
     if (Platform.OS !== "web") return;
@@ -885,8 +1097,14 @@ export default function MoreScreen() {
   const childMoneySummary = useMemo(() => buildChildMoneySummary(childProfiles), [childProfiles]);
 
   const saveTransactionRules = async (next: TransactionRule[]) => {
-    setTransactionRules(next);
-    await AsyncStorage.setItem(transactionRuleStorageKey, JSON.stringify(next)).catch(() => undefined);
+    const normalized = normalizeRuleIds(next);
+    setTransactionRules(normalized);
+    await AsyncStorage.setItem(transactionRuleStorageKey, JSON.stringify(normalized)).catch(() => undefined);
+    if (!user?.id || !activeHousehold?.householdId || !canEditHousehold) return;
+    const rows = normalized.map(rule => mapRuleForSupabase(rule, user.id, activeHousehold.householdId));
+    if (!rows.length) return;
+    const { error } = await supabase.from("transaction_rules").upsert(rows);
+    if (error) return;
   };
 
   const saveReviewDecisions = async (next: Record<string, ReviewDecision>) => {
@@ -896,6 +1114,20 @@ export default function MoreScreen() {
 
   const markReviewDecision = async (transactionId: string, decision: ReviewDecision) => {
     await saveReviewDecisions({ ...reviewDecisions, [transactionId]: decision });
+    if (!user?.id || !activeHousehold?.householdId || !canEditHousehold) return;
+    const transaction = growthTransactions.find(item => item.id === transactionId);
+    const reviewItem = reviewQueue.find(item => item.transactionId === transactionId);
+    const { error } = await supabase.from("transaction_reviews").upsert({
+      id: isUuid(transactionId) ? transactionId : stableUuidFromString(`transaction-review:${activeHousehold.householdId}:${transactionId}`),
+      user_id: user.id,
+      household_id: activeHousehold.householdId,
+      transaction_id: isUuid(transactionId) ? transactionId : null,
+      reasons: reviewItem?.reasons ?? [],
+      status: decision,
+      priority: reviewItem?.priority ?? (Math.abs(transaction?.amount ?? 0) > 250 ? "medium" : "low"),
+      updated_at: new Date().toISOString(),
+    });
+    if (error) return;
   };
 
   const saveSubscriptionDecisions = async (next: Record<string, SubscriptionDecision>) => {
@@ -905,11 +1137,34 @@ export default function MoreScreen() {
 
   const markSubscriptionDecision = async (subscription: SubscriptionCandidate, decision: SubscriptionDecision) => {
     await saveSubscriptionDecisions({ ...subscriptionDecisions, [subscriptionKey(subscription)]: decision });
+    if (!user?.id || !activeHousehold?.householdId || !canEditHousehold) return;
+    const { error } = await supabase.from("subscription_candidates").upsert({
+      id: stableUuidFromString(`subscription:${activeHousehold.householdId}:${subscriptionKey(subscription)}`),
+      user_id: user.id,
+      household_id: activeHousehold.householdId,
+      merchant: subscription.merchant,
+      cadence: subscription.cadence,
+      average_amount: subscription.averageAmount,
+      monthly_equivalent: subscription.monthlyEquivalent,
+      yearly_equivalent: subscription.yearlyEquivalent,
+      confidence: subscription.confidence,
+      status: subscriptionDecisionToStatus(decision),
+      source_transaction_ids: subscription.transactionIds.filter(isUuid),
+      last_reviewed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    if (error) return;
   };
 
   const saveChildProfiles = async (next: ChildProfile[]) => {
-    setChildProfiles(next);
-    await AsyncStorage.setItem(childProfileStorageKey, JSON.stringify(next)).catch(() => undefined);
+    const normalized = normalizeChildProfileIds(next);
+    setChildProfiles(normalized);
+    await AsyncStorage.setItem(childProfileStorageKey, JSON.stringify(normalized)).catch(() => undefined);
+    if (!user?.id || !activeHousehold?.householdId || !canEditHousehold) return;
+    const rows = normalized.map(profile => mapChildForSupabase(profile, user.id, activeHousehold.householdId));
+    if (!rows.length) return;
+    const { error } = await supabase.from("child_profiles").upsert(rows);
+    if (error) return;
   };
 
   const handleCreateRuleFromReview = (transactionId: string) => {
@@ -917,7 +1172,7 @@ export default function MoreScreen() {
     if (!transaction) return;
     const merchant = (transaction.description || "Transaction").trim();
     const nextRule: TransactionRule = {
-      id: `rule-${Date.now()}`,
+      id: makeClientUuid("transaction-rule"),
       name: `Remember ${merchant.slice(0, 28)}`,
       matchType: "contains",
       matchValue: merchant,
@@ -1080,7 +1335,7 @@ export default function MoreScreen() {
     const allowanceAmount = Math.max(0, parseFloat(childAllowanceText) || 0);
     const savingsGoal = Math.max(0, parseFloat(childGoalText) || 0);
     const next: ChildProfile = {
-      id: `child-${Date.now()}`,
+      id: makeClientUuid("child-profile"),
       name,
       allowanceAmount: allowanceAmount || null,
       allowanceFrequency: allowanceAmount ? "weekly" : null,
@@ -1104,6 +1359,14 @@ export default function MoreScreen() {
       destructive: true,
       onConfirm: async () => {
         await saveChildProfiles(childProfiles.filter(item => item.id !== profile.id));
+        if (user?.id && activeHousehold?.householdId && canEditHousehold && isUuid(profile.id)) {
+          const { error } = await supabase
+            .from("child_profiles")
+            .update({ is_active: false, updated_at: new Date().toISOString() })
+            .eq("id", profile.id)
+            .eq("household_id", activeHousehold.householdId);
+          if (error) return;
+        }
         setGrowthNotice("Child profile removed.");
       },
     });
