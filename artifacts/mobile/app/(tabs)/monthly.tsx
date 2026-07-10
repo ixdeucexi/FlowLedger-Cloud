@@ -106,6 +106,7 @@ export default function MonthlyScreen() {
   const [editingAmounts, setEditingAmounts] = useState<Record<string, string>>({});
   const [editingPaid, setEditingPaid] = useState<Record<string, string>>({});
   const editingPaidRef = useRef<Record<string, string>>({});
+  const paidSaveInFlightRef = useRef<Set<string>>(new Set());
   const [billFilter, setBillFilter] = useState<"all" | "paid" | "unpaid">("all");
   const [extraPayment, setExtraPayment] = useState("");
   const [snowballResults, setSnowballResults] = useState<{ name: string; payment: number; paidOff: boolean }[]>([]);
@@ -464,8 +465,10 @@ export default function MonthlyScreen() {
   }, [finalizeBillPayment, month, selectedYear, setCustomAmount]);
 
   const handlePaidBlur = useCallback(async (billId: string, key: string, submittedValue?: string) => {
-    if (savingPaidKey === key) return;
-    const val = submittedValue ?? editingPaidRef.current[key] ?? editingPaid[key];
+    if (savingPaidKey === key || paidSaveInFlightRef.current.has(key)) return;
+    const candidates = [submittedValue, editingPaidRef.current[key], editingPaid[key]]
+      .filter((candidate): candidate is string => candidate !== undefined);
+    const val = candidates.find(candidate => candidate.trim().length > 0) ?? candidates[0];
     if (val === undefined) return;
     const trimmed = val.trim();
     const clearPaidEdit = () => {
@@ -473,6 +476,7 @@ export default function MonthlyScreen() {
       delete editingPaidRef.current[key];
       setEditingPaid(p => { const n = { ...p }; delete n[key]; return n; });
     };
+    paidSaveInFlightRef.current.add(key);
     clearPaidEdit();
     setSavingPaidKey(key);
     try {
@@ -562,6 +566,7 @@ export default function MonthlyScreen() {
       }
       if (bill) askToTreatPaidAsFullPayment({ bill, budgeted, actual: parsed, paidDate });
     } finally {
+      paidSaveInFlightRef.current.delete(key);
       setSavingPaidKey(current => current === key ? null : current);
     }
   }, [editingPaid, savingPaidKey, setPaidAmount, bills, overrides, transactions, deleteTransaction, getBillMonthlyTotal, getCustomDueDay, getPaidAmount, getExtraPayment, previewDebtSnowball, finalizeBillPayment, applyDebtSnowballPayment, removeDebtSnowballPayment, removeDebtSurplusTransaction, showDebtPaymentNotice, askToTreatPaidAsFullPayment, month, selectedYear]);
@@ -1517,7 +1522,6 @@ export default function MonthlyScreen() {
                                         editingPaidRef.current = { ...editingPaidRef.current, [paidKey]: showPaid || "" };
                                         setEditingPaid(current => ({ ...current, [paidKey]: showPaid || "" }));
                                       }}
-                                      onBlur={() => handlePaidBlur(bill.id, paidKey)}
                                       onEndEditing={event => handlePaidBlur(bill.id, paidKey, event.nativeEvent.text)}
                                       onSubmitEditing={event => handlePaidBlur(bill.id, paidKey, event.nativeEvent.text)}
                                       keyboardType="decimal-pad"
