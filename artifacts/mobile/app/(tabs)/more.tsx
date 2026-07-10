@@ -1563,20 +1563,25 @@ export default function MoreScreen() {
     }
     if (!plaidStatus.canStartLink || plaidLinking || plaidImporting || plaidPreparing) return;
     setPlaidSetup(null);
-    setPlaidLinking(true);
     setPlaidLinkShouldOpen(false);
 
     try {
       if (plaidLinkToken && plaidLauncherRef.current?.isReady()) {
+        setPlaidLinking(true);
         setPlaidNotice("Opening Plaid...");
         const opened = plaidLauncherRef.current.open();
         if (opened) return;
+        setPlaidLinking(false);
       }
 
-      const token = plaidLinkToken || await preparePlaidLinkToken({ forceFresh: true, silent: false });
+      if (plaidLinkToken && !plaidLauncherRef.current?.isReady()) {
+        setPlaidNotice("Plaid is almost ready. Tap Connect Bank Account again in a moment.");
+        return;
+      }
+
+      const token = await preparePlaidLinkToken({ forceFresh: true, silent: false });
       if (!token) throw new Error("Plaid link token could not be created.");
-      setPlaidNotice(plaidLinkReady ? "Opening Plaid..." : "Plaid is almost ready. Opening secure bank link...");
-      setPlaidLinkShouldOpen(true);
+      setPlaidNotice("Plaid is ready. Tap Connect Bank Account to open the secure bank login.");
     } catch (error) {
       setPlaidNotice(error instanceof Error ? error.message : "Plaid could not start.");
       setPlaidLinking(false);
@@ -1651,6 +1656,22 @@ export default function MoreScreen() {
     setPlaidLinkToken(null);
     clearPlaidOAuthLinkSession();
   }, []);
+
+  const plaidConnectLabel = plaidPreparing
+    ? "Preparing Plaid..."
+    : plaidLinking
+      ? "Opening Plaid..."
+      : plaidLinkToken
+        ? plaidLinkReady
+          ? plaidSetup
+            ? "Open another secure bank login"
+            : "Open secure bank login"
+          : "Loading secure bank login..."
+        : plaidStatus.canStartLink
+          ? plaidSetup
+            ? "Connect another bank"
+            : "Connect Bank Account"
+          : "Connect bank account after Plaid env setup";
 
   const handleExport = async () => {
     try {
@@ -3019,11 +3040,7 @@ export default function MoreScreen() {
         >
           <Feather name={plaidStatus.canStartLink ? "link" : "lock"} size={15} color={plaidStatus.canStartLink ? "#fff" : c.mutedForeground} />
           <Text style={[styles.balanceSaveBtnText, { color: plaidStatus.canStartLink ? "#fff" : c.mutedForeground }]}>
-            {plaidPreparing
-              ? "Preparing Plaid..."
-              : plaidLinking
-              ? (plaidLinkReady ? "Opening Plaid..." : "Preparing Plaid...")
-              : plaidStatus.canStartLink ? (plaidSetup ? "Connect another bank" : "Connect Bank Account") : "Connect bank account after Plaid env setup"}
+            {plaidConnectLabel}
           </Text>
         </Pressable>
       </View>
