@@ -421,7 +421,19 @@ export default function MoreScreen() {
   useBackDismiss(Boolean(legalDoc), () => setLegalDoc(null));
   const [showAlgorithmSuite, setShowAlgorithmSuite] = useState(false);
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("overview");
-  useBackDismiss(activeSettingsSection !== "overview", () => setActiveSettingsSection("overview"));
+  const openSettingsSection = useCallback((sectionId: SettingsSectionId) => {
+    setActiveSettingsSection(sectionId);
+    if (Platform.OS !== "web") return;
+    const setParams = (router as unknown as { setParams?: (params: Record<string, string | undefined>) => void }).setParams;
+    if (typeof setParams === "function") {
+      setParams({ section: sectionId === "overview" ? undefined : sectionId });
+    } else {
+      router.replace(sectionId === "overview"
+        ? "/(tabs)/more" as any
+        : { pathname: "/(tabs)/more", params: { section: sectionId } } as any);
+    }
+  }, [router]);
+  useBackDismiss(activeSettingsSection !== "overview", () => openSettingsSection("overview"));
   const [householdInviteRole, setHouseholdInviteRole] = useState<HouseholdInviteRole>("editor");
   const [householdInviteCode, setHouseholdInviteCode] = useState("");
   const [householdJoinCode, setHouseholdJoinCode] = useState("");
@@ -1812,7 +1824,7 @@ export default function MoreScreen() {
                 key={section.id}
                 onPress={() => {
                   if (section.id === "algorithms") setShowAlgorithmSuite(true);
-                  setActiveSettingsSection(section.id);
+                  openSettingsSection(section.id);
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 }}
                 style={({ pressed }) => [
@@ -1835,7 +1847,7 @@ export default function MoreScreen() {
       ) : (
         <>
           <Pressable
-            onPress={() => setActiveSettingsSection("overview")}
+            onPress={() => openSettingsSection("overview")}
             style={({ pressed }) => [styles.settingsBackRow, { opacity: pressed ? 0.7 : 1 }]}
           >
             <Feather name="chevron-left" size={22} color={c.primary} />
