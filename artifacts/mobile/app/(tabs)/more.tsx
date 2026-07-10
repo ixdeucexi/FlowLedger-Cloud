@@ -45,6 +45,7 @@ import {
 } from "@/lib/householdPermissions";
 import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
+import { clearPlaidOAuthLinkSession, storePlaidOAuthLinkSession } from "@/lib/plaidOAuthSession";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 import { supabase } from "@/lib/supabase";
 import {
@@ -89,6 +90,7 @@ const FONT_OPTIONS: { label: string; value: AppFontStyle; icon: string; desc: st
 ];
 
 const BACKUP_COMPLETE_KEY = "flowledger_backup_exported";
+const PLAID_RETURN_NOTICE_KEY = "flowledger_plaid_return_notice";
 type AlgorithmCatalogItem = typeof ALGORITHM_CATALOG[number];
 type SettingsSectionId =
   | "overview"
@@ -522,6 +524,16 @@ export default function MoreScreen() {
       setActiveSettingsSection(storedSection);
     }
   }, [routeParams.section]);
+
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined") return;
+    try {
+      const notice = window.sessionStorage.getItem(PLAID_RETURN_NOTICE_KEY);
+      if (!notice) return;
+      window.sessionStorage.removeItem(PLAID_RETURN_NOTICE_KEY);
+      setPlaidNotice(notice);
+    } catch {}
+  }, []);
 
   useEffect(() => {
     setSafetyFloorText(settings.safety_floor.toString());
@@ -1502,14 +1514,17 @@ export default function MoreScreen() {
       if (!response.ok || !payload.link_token) {
         throw new Error(payload.error || payload.message || "Plaid link token could not be created.");
       }
-      setPlaidLinkToken(payload.link_token);
+      const linkToken = String(payload.link_token);
+      setPlaidLinkToken(linkToken);
+      storePlaidOAuthLinkSession(linkToken, typeof payload.expiration === "string" ? payload.expiration : null);
       if (!options?.silent) setPlaidNotice("Plaid is ready. Opening secure bank link...");
-      return String(payload.link_token);
+      return linkToken;
     } catch (error) {
       setPlaidNotice(error instanceof Error ? error.message : "Plaid could not start.");
       setPlaidLinkReady(false);
       setPlaidLinkShouldOpen(false);
       setPlaidLinkToken(null);
+      clearPlaidOAuthLinkSession();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return null;
     } finally {
@@ -1589,6 +1604,7 @@ export default function MoreScreen() {
       setPlaidLinkReady(false);
       setPlaidLinkShouldOpen(false);
       setPlaidLinkToken(null);
+      clearPlaidOAuthLinkSession();
     }
   }, [activeHousehold?.householdId, plaidPost]);
 
@@ -1602,6 +1618,7 @@ export default function MoreScreen() {
     setPlaidLinkReady(false);
     setPlaidLinkShouldOpen(false);
     setPlaidLinkToken(null);
+    clearPlaidOAuthLinkSession();
   }, []);
 
   const handleExport = async () => {

@@ -23,6 +23,10 @@
     {
       "source": "/:page(login|setup|bills|monthly|flo|transactions|more)",
       "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+    },
+    {
+      "source": "/plaid/oauth",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
     }
   ],
   "rewrites": [
@@ -32,6 +36,7 @@
     { "source": "/monthly", "destination": "/index.html" },
     { "source": "/flo", "destination": "/index.html" },
     { "source": "/transactions", "destination": "/index.html" },
-    { "source": "/more", "destination": "/index.html" }
+    { "source": "/more", "destination": "/index.html" },
+    { "source": "/plaid/oauth", "destination": "/index.html" }
   ]
 }
