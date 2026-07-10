@@ -117,7 +117,7 @@ export default function MonthlyScreen() {
   const [savingIncomeDate, setSavingIncomeDate] = useState(false);
   const [snowballModalVisible, setSnowballModalVisible] = useState(false);
   const [snowballPreview, setSnowballPreview] = useState<SnowballProjectionResult | null>(null);
-  const [surplusPrompt, setSurplusPrompt] = useState<{ bill: Bill; budgeted: number; actual: number; paidDate: string } | null>(null);
+  const [surplusPrompt, setSurplusPrompt] = useState<{ bill: Bill; budgeted: number; actual: number; paidDate: string; matchAmountToActual?: boolean } | null>(null);
   const [surplusPaymentDate, setSurplusPaymentDate] = useState("");
   const [debtPaymentNotice, setDebtPaymentNotice] = useState<DebtPaymentAppliedDetail | null>(null);
   const [editPlan, setEditPlan] = useState<DecisionRecord | null>(null);
@@ -437,6 +437,32 @@ export default function MonthlyScreen() {
     return { preview, total, targetDebt: preview.months[0]?.targetName ?? preview.allocations[0]?.billName, dateValid: validDate, safe: validDate && preview.selectedExtra + 0.005 >= total };
   }, [surplusPrompt, surplusPaymentDate, getExtraPayment, previewDebtSnowball, month, selectedYear]);
 
+  const askToTreatPaidAsFullPayment = useCallback((prompt: { bill: Bill; budgeted: number; actual: number; paidDate: string }) => {
+    const { bill, budgeted, actual, paidDate } = prompt;
+    if (bill.frequency === "weekly" || Math.abs(budgeted - actual) < 0.005) return;
+    const currentMonthLabel = `${MONTH_FULL[month]} ${selectedYear}`;
+    const showPrompt = () => Alert.alert(
+      "Was this the full payment?",
+      `${bill.name} was paid at $${actual.toFixed(2)}, which is different from the planned $${budgeted.toFixed(2)}. Should I update ${currentMonthLabel}'s amount to $${actual.toFixed(2)} and mark it paid?`,
+      [
+        { text: `Keep $${budgeted.toFixed(2)}`, style: "cancel" },
+        {
+          text: "Yes, update it",
+          onPress: async () => {
+            try {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              await finalizeBillPayment(bill.id, month, selectedYear, actual, paidDate);
+              await setCustomAmount(bill.id, month, selectedYear, Math.abs(actual - bill.amount) < 0.005 ? undefined : actual);
+            } catch (error) {
+              Alert.alert("Could not update amount", error instanceof Error ? error.message : "Please try again.");
+            }
+          },
+        },
+      ],
+    );
+    setTimeout(showPrompt, Platform.OS === "web" ? 0 : 250);
+  }, [finalizeBillPayment, month, selectedYear, setCustomAmount]);
+
   const handlePaidBlur = useCallback(async (billId: string, key: string, submittedValue?: string) => {
     if (savingPaidKey === key) return;
     const val = submittedValue ?? editingPaidRef.current[key] ?? editingPaid[key];
@@ -484,13 +510,44 @@ export default function MonthlyScreen() {
         else await finalizeBillPayment(bill.id, month, selectedYear, parsed, paidDate);
         if (total > 0.005) await applyDebtSnowballPayment(preview, sources);
         else await removeDebtSnowballPayment(month, selectedYear);
+        askToTreatPaidAsFullPayment({ bill, budgeted, actual: parsed, paidDate });
         return;
       }
       if (bill && parsed >= 0 && parsed < budgeted) {
         Keyboard.dismiss();
-        setSurplusPrompt({ bill, budgeted, actual: parsed, paidDate });
-        setSurplusPaymentDate(paidDate);
-        setSelectedDate(null);
+        const showFullPaymentPrompt = () => Alert.alert(
+          "Was this the full payment?",
+          `${bill.name} was paid at $${parsed.toFixed(2)}, which is different from the planned $${budgeted.toFixed(2)}. Was $${parsed.toFixed(2)} the full payment for this month?`,
+          [
+            {
+              text: "No, keep partial",
+              style: "cancel",
+              onPress: async () => {
+                try {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  const directPaidBefore = getPaidAmount(bill.id, month, selectedYear);
+                  if (bill.is_debt) await removeDebtSurplusTransaction(bill.id);
+                  await setPaidAmount(bill.id, month, selectedYear, parsed);
+                  if (bill.is_debt) {
+                    const delta = parsed - directPaidBefore;
+                    if (delta > 0.005) showDebtPaymentNotice(bill, delta, paidDate, { scheduled: false, balanceBefore: bill.balance });
+                  }
+                } catch (error) {
+                  Alert.alert("Could not save payment", error instanceof Error ? error.message : "Please try again.");
+                }
+              },
+            },
+            {
+              text: "Yes, full payment",
+              onPress: () => {
+                setSurplusPrompt({ bill, budgeted, actual: parsed, paidDate, matchAmountToActual: true });
+                setSurplusPaymentDate(paidDate);
+                setSelectedDate(null);
+              },
+            },
+          ],
+        );
+        setTimeout(showFullPaymentPrompt, Platform.OS === "web" ? 0 : 250);
         return;
       }
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -503,10 +560,11 @@ export default function MonthlyScreen() {
           if (delta > 0.005) showDebtPaymentNotice(bill, delta, paidDate, { scheduled: false, balanceBefore: bill.balance });
         }
       }
+      if (bill) askToTreatPaidAsFullPayment({ bill, budgeted, actual: parsed, paidDate });
     } finally {
       setSavingPaidKey(current => current === key ? null : current);
     }
-  }, [editingPaid, savingPaidKey, setPaidAmount, bills, overrides, transactions, deleteTransaction, getBillMonthlyTotal, getCustomDueDay, getPaidAmount, getExtraPayment, previewDebtSnowball, finalizeBillPayment, applyDebtSnowballPayment, removeDebtSnowballPayment, showDebtPaymentNotice, month, selectedYear]);
+  }, [editingPaid, savingPaidKey, setPaidAmount, bills, overrides, transactions, deleteTransaction, getBillMonthlyTotal, getCustomDueDay, getPaidAmount, getExtraPayment, previewDebtSnowball, finalizeBillPayment, applyDebtSnowballPayment, removeDebtSnowballPayment, removeDebtSurplusTransaction, showDebtPaymentNotice, askToTreatPaidAsFullPayment, month, selectedYear]);
 
   const finalizeBillAtActualForMonth = useCallback(async (prompt: { bill: Bill; actual: number; paidDate: string }) => {
     if (prompt.bill.is_debt) {
@@ -515,15 +573,7 @@ export default function MonthlyScreen() {
       return;
     }
     await finalizeBillPayment(prompt.bill.id, month, selectedYear, prompt.actual, prompt.paidDate);
-    if (!prompt.bill.is_debt && prompt.bill.frequency === "monthly") {
-      await setCustomAmount(
-        prompt.bill.id,
-        month,
-        selectedYear,
-        Math.abs(prompt.actual - prompt.bill.amount) < 0.005 ? undefined : prompt.actual,
-      );
-    }
-  }, [finalizeBillPayment, month, selectedYear, setCustomAmount, setPaidAmount]);
+  }, [finalizeBillPayment, month, selectedYear, setPaidAmount]);
 
   const upsertDebtSurplusTransaction = useCallback(async (
     sourceDebt: Bill,
@@ -549,6 +599,16 @@ export default function MonthlyScreen() {
     else await addTransaction(nextTx);
   }, [addTransaction, debtSurplusTransactionKey, transactions, updateTransaction]);
 
+  const matchSurplusAmountToActual = useCallback(async (prompt: { bill: Bill; actual: number; matchAmountToActual?: boolean } | null) => {
+    if (!prompt?.matchAmountToActual || prompt.bill.frequency === "weekly") return;
+    await setCustomAmount(
+      prompt.bill.id,
+      month,
+      selectedYear,
+      Math.abs(prompt.actual - prompt.bill.amount) < 0.005 ? undefined : prompt.actual,
+    );
+  }, [month, selectedYear, setCustomAmount]);
+
   const keepBillSurplus = async () => {
     if (!surplusPrompt) return;
     if (surplusPrompt.bill.is_debt) {
@@ -562,6 +622,7 @@ export default function MonthlyScreen() {
           balanceBefore: surplusPrompt.bill.balance,
         });
       }
+      await matchSurplusAmountToActual(surplusPrompt);
       setSurplusPrompt(null);
       return;
     }
@@ -574,6 +635,7 @@ export default function MonthlyScreen() {
       if (total > 0.005) await applyDebtSnowballPayment(preview, sources);
       else await removeDebtSnowballPayment(month, selectedYear);
     }
+    await matchSurplusAmountToActual(surplusPrompt);
     setSurplusPrompt(null);
   };
 
@@ -631,6 +693,7 @@ export default function MonthlyScreen() {
           extraMessage: `I also added $${surplus.toFixed(2)} to ${target.billName} for ${formatShortDate(surplusPaymentDate)}.`,
         });
       }
+      await matchSurplusAmountToActual(surplusPrompt);
       setSurplusPrompt(null);
       return;
     }
@@ -649,6 +712,7 @@ export default function MonthlyScreen() {
         "The actual bill amount was saved, but the surplus could not be added to debt. The difference is still available in your account, so you can safely try again.",
       );
     }
+    await matchSurplusAmountToActual(surplusPrompt);
     setSurplusPrompt(null);
   };
 
