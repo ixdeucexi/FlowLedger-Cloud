@@ -5,7 +5,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
 import * as Sharing from "expo-sharing";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert, Modal, Platform, Pressable, ScrollView, StyleSheet,
   Text, TextInput, View,
@@ -116,6 +116,26 @@ type PlaidWindow = typeof globalThis & {
       onExit?: (error: any, metadata: any) => void;
     }) => { open: () => void; exit?: () => void };
   };
+};
+
+type PlaidAccountPreview = {
+  plaid_account_id: string;
+  name: string;
+  official_name?: string | null;
+  mask?: string | null;
+  type: string;
+  subtype?: string | null;
+  current_balance?: number | null;
+  available_balance?: number | null;
+  supported: boolean;
+  suggested_account_type?: "checking" | "savings" | "cash" | null;
+};
+
+type PlaidSetupState = {
+  plaidItemRecordId: string | null;
+  institutionName?: string | null;
+  accounts: PlaidAccountPreview[];
+  selectedAccountIds: string[];
 };
 
 function normalizeStorageMap<T extends string>(value: unknown): Record<string, T> {
@@ -245,6 +265,7 @@ export default function MoreScreen() {
     households, householdMembers, householdActivity, activeHousehold, householdRole, canEditHousehold,
     refreshHouseholds, refreshHouseholdActivity, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
     updateHouseholdMemberRole, removeHouseholdMember,
+    retryBudgetLoad,
   } = useBudget();
 
   const [incomeModalVisible, setIncomeModalVisible] = useState(false);
@@ -287,6 +308,8 @@ export default function MoreScreen() {
   const [growthNotice, setGrowthNotice] = useState<string | null>(null);
   const [plaidNotice, setPlaidNotice] = useState<string | null>(null);
   const [plaidLinking, setPlaidLinking] = useState(false);
+  const [plaidImporting, setPlaidImporting] = useState(false);
+  const [plaidSetup, setPlaidSetup] = useState<PlaidSetupState | null>(null);
   const [childProfiles, setChildProfiles] = useState<ChildProfile[]>([]);
   const [childName, setChildName] = useState("");
   const [childAllowanceText, setChildAllowanceText] = useState("");
@@ -1086,23 +1109,77 @@ export default function MoreScreen() {
     });
   };
 
+  const plaidAuthHeaders = useCallback(async () => {
+    const { data } = await supabase.auth.getSession();
+    const accessToken = data.session?.access_token;
+    return {
+      "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    };
+  }, []);
+
+  const handleTogglePlaidAccount = (accountId: string) => {
+    setPlaidSetup(prev => {
+      if (!prev) return prev;
+      const account = prev.accounts.find(item => item.plaid_account_id === accountId);
+      if (!account?.supported) return prev;
+      const selected = prev.selectedAccountIds.includes(accountId)
+        ? prev.selectedAccountIds.filter(id => id !== accountId)
+        : [...prev.selectedAccountIds, accountId];
+      return { ...prev, selectedAccountIds: selected };
+    });
+  };
+
+  const handleImportPlaidAccounts = async () => {
+    if (!plaidSetup?.plaidItemRecordId || plaidImporting) return;
+    if (!plaidSetup.selectedAccountIds.length) {
+      setPlaidNotice("Choose at least one checking or savings account to add.");
+      return;
+    }
+
+    setPlaidImporting(true);
+    setPlaidNotice(null);
+    try {
+      const headers = await plaidAuthHeaders();
+      const response = await fetch("/api/plaid/import-accounts", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          plaid_item_record_id: plaidSetup.plaidItemRecordId,
+          selected_account_ids: plaidSetup.selectedAccountIds,
+          household_id: activeHousehold?.householdId,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || payload.message || "Bank accounts could not be imported.");
+      setPlaidNotice(payload.message || "Bank accounts and activity were imported.");
+      if (!payload.transactions_pending) {
+        setPlaidSetup(null);
+      }
+      retryBudgetLoad();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      setPlaidNotice(error instanceof Error ? error.message : "Bank accounts could not be imported.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setPlaidImporting(false);
+    }
+  };
+
   const handleStartPlaidLink = async () => {
     if (Platform.OS !== "web") {
       Alert.alert("Bank sync", "Open FlowLedger in the web app to connect Plaid for now.");
       return;
     }
-    if (!plaidStatus.canStartLink || plaidLinking) return;
+    if (!plaidStatus.canStartLink || plaidLinking || plaidImporting) return;
     setPlaidNotice(null);
+    setPlaidSetup(null);
     setPlaidLinking(true);
     try {
-      const { data } = await supabase.auth.getSession();
-      const accessToken = data.session?.access_token;
+      const headers = await plaidAuthHeaders();
       const response = await fetch("/api/plaid/create-link-token", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        },
+        headers,
         body: JSON.stringify({
           client_user_id: user?.id,
           products: ["transactions"],
@@ -1122,19 +1199,30 @@ export default function MoreScreen() {
             try {
               const exchange = await fetch("/api/plaid/exchange-public-token", {
                 method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-                },
+                headers,
                 body: JSON.stringify({
                   public_token: publicToken,
                   household_id: activeHousehold?.householdId,
                   institution_name: metadata?.institution?.name ?? null,
+                  institution_id: metadata?.institution?.institution_id ?? null,
                 }),
               });
               const exchangePayload = await exchange.json().catch(() => ({}));
-              if (!exchange.ok) throw new Error(exchangePayload.message || "Plaid token exchange failed.");
-              setPlaidNotice(exchangePayload.message || "Bank connected. Transaction sync can now be enabled.");
+              if (!exchange.ok) throw new Error(exchangePayload.error || exchangePayload.message || "Plaid token exchange failed.");
+              const accountList: PlaidAccountPreview[] = Array.isArray(exchangePayload.accounts) ? exchangePayload.accounts : [];
+              if (!exchangePayload.plaid_item_record_id) {
+                throw new Error("Bank connected, but secure account storage is not ready yet.");
+              }
+              setPlaidSetup({
+                plaidItemRecordId: exchangePayload.plaid_item_record_id,
+                institutionName: metadata?.institution?.name ?? null,
+                accounts: accountList,
+                selectedAccountIds: accountList.filter(account => account.supported).map(account => account.plaid_account_id),
+              });
+              const supportedCount = accountList.filter(account => account.supported).length;
+              setPlaidNotice(supportedCount
+                ? exchangePayload.message || "Bank connected. Choose the accounts to add."
+                : "Bank connected, but I did not find a checking or savings account to add.");
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             } catch (error) {
               setPlaidNotice(error instanceof Error ? error.message : "Bank connection could not be saved.");
@@ -2446,15 +2534,73 @@ export default function MoreScreen() {
             FlowLedger will keep Plaid access tokens server-side. The app will only receive safe account and transaction data after you approve a link.
           </Text>
         </View>
-        {plaidNotice ? <Text style={[styles.feedbackNotice, { color: /ready|connected|saved/i.test(plaidNotice) ? c.success : c.destructive }]}>{plaidNotice}</Text> : null}
+        {plaidNotice ? <Text style={[styles.feedbackNotice, { color: /ready|connected|saved|added|imported|choose/i.test(plaidNotice) ? c.success : c.destructive }]}>{plaidNotice}</Text> : null}
+        {plaidSetup ? (
+          <View style={[styles.plaidPicker, { borderColor: c.border, backgroundColor: c.muted }]}>
+            <View style={styles.plaidPickerHeader}>
+              <View>
+                <Text style={[styles.switchLabel, { color: c.foreground }]}>Choose accounts to add</Text>
+                <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>
+                  {plaidSetup.institutionName || "Your bank"} · checking and savings work best here.
+                </Text>
+              </View>
+              <Text style={[styles.plaidSelectedCount, { color: c.primary }]}>
+                {plaidSetup.selectedAccountIds.length} selected
+              </Text>
+            </View>
+            {plaidSetup.accounts.map(account => {
+              const selected = plaidSetup.selectedAccountIds.includes(account.plaid_account_id);
+              return (
+                <Pressable
+                  key={account.plaid_account_id}
+                  disabled={!account.supported}
+                  onPress={() => handleTogglePlaidAccount(account.plaid_account_id)}
+                  style={({ pressed }) => [
+                    styles.plaidAccountChoice,
+                    {
+                      borderColor: selected ? c.primary + "88" : c.border,
+                      backgroundColor: selected ? c.primary + "14" : c.card,
+                      opacity: !account.supported ? 0.48 : pressed ? 0.76 : 1,
+                    },
+                  ]}
+                >
+                  <View style={[styles.incomeIcon, { backgroundColor: selected ? c.primary + "24" : c.muted }]}>
+                    <Feather name={account.subtype === "savings" ? "heart" : "credit-card"} size={17} color={selected ? c.primary : c.mutedForeground} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.accountName, { color: c.foreground }]}>
+                      {account.name}{account.mask ? ` • ${account.mask}` : ""}
+                    </Text>
+                    <Text style={[styles.incomeFreq, { color: c.mutedForeground }]}>
+                      {account.supported
+                        ? `${account.suggested_account_type ?? "account"} · balance ${Number(account.current_balance ?? account.available_balance ?? 0).toLocaleString(undefined, { style: "currency", currency: "USD" })}`
+                        : "Credit/loan accounts stay in the Debt tab for now"}
+                    </Text>
+                  </View>
+                  <Feather name={selected ? "check-circle" : "circle"} size={20} color={selected ? c.success : c.mutedForeground} />
+                </Pressable>
+              );
+            })}
+            <Pressable
+              onPress={() => void handleImportPlaidAccounts()}
+              disabled={plaidImporting || !plaidSetup.selectedAccountIds.length}
+              style={({ pressed }) => [styles.balanceSaveFullBtn, { backgroundColor: c.primary, opacity: pressed || plaidImporting || !plaidSetup.selectedAccountIds.length ? 0.66 : 1 }]}
+            >
+              <Feather name="download-cloud" size={15} color="#fff" />
+              <Text style={[styles.balanceSaveBtnText, { color: "#fff" }]}>
+                {plaidImporting ? "Importing..." : "Add selected accounts"}
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
         <Pressable
           onPress={() => void handleStartPlaidLink()}
-          disabled={!plaidStatus.canStartLink || plaidLinking}
+          disabled={!plaidStatus.canStartLink || plaidLinking || plaidImporting}
           style={({ pressed }) => [styles.balanceSaveFullBtn, { backgroundColor: plaidStatus.canStartLink ? c.primary : c.muted, marginTop: 14, opacity: pressed || plaidLinking ? 0.72 : 1 }]}
         >
           <Feather name={plaidStatus.canStartLink ? "link" : "lock"} size={15} color={plaidStatus.canStartLink ? "#fff" : c.mutedForeground} />
           <Text style={[styles.balanceSaveBtnText, { color: plaidStatus.canStartLink ? "#fff" : c.mutedForeground }]}>
-            {plaidLinking ? "Opening Plaid..." : plaidStatus.canStartLink ? "Connect Bank Account" : "Connect bank account after Plaid env setup"}
+            {plaidLinking ? "Opening Plaid..." : plaidStatus.canStartLink ? (plaidSetup ? "Connect another bank" : "Connect Bank Account") : "Connect bank account after Plaid env setup"}
           </Text>
         </Pressable>
       </View>
@@ -3102,6 +3248,10 @@ const styles = StyleSheet.create({
   balanceSaveFullBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 44, borderRadius: 10, marginTop: 12 },
   balanceSaveBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   balanceNote: { flexDirection: "row", alignItems: "flex-start", gap: 6, padding: 9, borderRadius: 8, marginTop: 10 },
+  plaidPicker: { borderWidth: 1, borderRadius: 16, padding: 12, marginTop: 12, gap: 10 },
+  plaidPickerHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10 },
+  plaidSelectedCount: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
+  plaidAccountChoice: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 14, padding: 10 },
   safetyFields: { flexDirection: "row", gap: 10 },
   safetyField: { flex: 1 },
 

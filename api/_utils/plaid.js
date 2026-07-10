@@ -91,7 +91,7 @@ async function getSupabaseUser(req) {
   return response.json().catch(() => null);
 }
 
-async function supabaseRest(path, method, body) {
+async function supabaseRest(path, method, body, options = {}) {
   const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
   const response = await fetch(`${supabaseUrl}/rest/v1/${path}`, {
     method,
@@ -99,7 +99,7 @@ async function supabaseRest(path, method, body) {
       apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
       authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
       "content-type": "application/json",
-      prefer: "return=representation",
+      prefer: options.prefer || "return=representation",
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -124,7 +124,22 @@ function encryptAccessToken(accessToken) {
   return Buffer.concat([iv, tag, ciphertext]).toString("base64");
 }
 
+function decryptAccessToken(ciphertext) {
+  if (!encryptionConfigured() || !ciphertext) return null;
+  const crypto = require("crypto");
+  const raw = Buffer.from(ciphertext, "base64");
+  if (raw.length < 29) return null;
+  const iv = raw.subarray(0, 12);
+  const tag = raw.subarray(12, 28);
+  const encrypted = raw.subarray(28);
+  const key = crypto.createHash("sha256").update(process.env.PLAID_TOKEN_ENCRYPTION_KEY).digest();
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
+}
+
 module.exports = {
+  decryptAccessToken,
   encryptionConfigured,
   getSupabaseUser,
   plaidConfigured,
