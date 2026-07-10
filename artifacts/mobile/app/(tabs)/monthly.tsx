@@ -13,6 +13,7 @@ import { AddTransactionModal } from "@/components/AddTransactionModal";
 import { BillSurplusModal } from "@/components/BillSurplusModal";
 import { CalendarView } from "@/components/CalendarView";
 import { CommandPlusButton } from "@/components/CommandPlusButton";
+import { DebtPaymentAppliedModal, type DebtPaymentAppliedDetail } from "@/components/DebtPaymentAppliedModal";
 import { EmptyState } from "@/components/EmptyState";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
@@ -64,6 +65,11 @@ function debtSurplusTransactionImportHash(sourceDebtId: string, month: number, y
   return `flowledger:debt-surplus:${sourceDebtId}:${year}-${String(month + 1).padStart(2, "0")}`;
 }
 
+function todayIsoDate() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
 function PayStatus({ paid, partial }: { paid: boolean; partial: boolean }) {
   const c = useColors();
   if (paid) return <View style={[ps.badge, { backgroundColor: c.success + "25" }]}><Text style={[ps.text, { color: c.success }]}>PAID</Text></View>;
@@ -113,6 +119,7 @@ export default function MonthlyScreen() {
   const [snowballPreview, setSnowballPreview] = useState<SnowballProjectionResult | null>(null);
   const [surplusPrompt, setSurplusPrompt] = useState<{ bill: Bill; budgeted: number; actual: number; paidDate: string } | null>(null);
   const [surplusPaymentDate, setSurplusPaymentDate] = useState("");
+  const [debtPaymentNotice, setDebtPaymentNotice] = useState<DebtPaymentAppliedDetail | null>(null);
   const [editPlan, setEditPlan] = useState<DecisionRecord | null>(null);
   const [editPlanName, setEditPlanName] = useState("");
   const [editPlanAmount, setEditPlanAmount] = useState("");
@@ -134,6 +141,7 @@ export default function MonthlyScreen() {
   useBackDismiss(Boolean(dueDayPicker), () => setDueDayPicker(null));
   useBackDismiss(Boolean(incomeDatePicker), () => setIncomeDatePicker(null));
   useBackDismiss(Boolean(monthSummaryDetail), () => setMonthSummaryDetail(null));
+  useBackDismiss(Boolean(debtPaymentNotice), () => setDebtPaymentNotice(null));
   useBackDismiss(Boolean(editPlan), () => setEditPlan(null));
   useBackDismiss(showSnowballResults, () => setShowSnowballResults(false));
 
@@ -167,8 +175,34 @@ export default function MonthlyScreen() {
     if (existingTx) await deleteTransaction(existingTx.id);
   }, [debtSurplusTransactionKey, deleteTransaction, transactions]);
 
+  const showDebtPaymentNotice = useCallback((debt: Bill, amount: number, paymentDate: string, options?: { scheduled?: boolean; balanceBefore?: number; extraMessage?: string }) => {
+    if (!debt.is_debt || amount <= 0.005) return;
+    const scheduled = options?.scheduled ?? paymentDate > todayIsoDate();
+    const balanceBefore = Math.max(0, Number(options?.balanceBefore ?? debt.balance) || 0);
+    const balanceAfter = scheduled ? undefined : Math.max(0, balanceBefore - amount);
+    const rolledToDebtName = balanceAfter !== undefined && balanceAfter <= 0.005
+      ? bills
+        .filter(item => item.is_debt && item.id !== debt.id && Number(item.balance) > 0.005)
+        .sort((left, right) => Number(left.balance) - Number(right.balance) || left.name.localeCompare(right.name))[0]?.name
+      : undefined;
+    setDebtPaymentNotice({
+      debtName: debt.name,
+      amount,
+      paymentDate,
+      scheduled,
+      balanceBefore,
+      balanceAfter,
+      rolledToDebtName,
+      extraMessage: options?.extraMessage,
+    });
+  }, [bills]);
+
   useEffect(() => {
     const closeTopOverlay = () => {
+      if (debtPaymentNotice) {
+        setDebtPaymentNotice(null);
+        return true;
+      }
       if (surplusPrompt) {
         setSurplusPrompt(null);
         return true;
@@ -225,7 +259,7 @@ export default function MonthlyScreen() {
     const onPopState = () => setSelectedDate(null);
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [dueDayPickerBill, editPlan, incomeDatePicker, monthSummaryDetail, selectedDate, showSnowballResults, snowballModalVisible, snowballPreview, surplusPrompt, txModalVisible]);
+  }, [debtPaymentNotice, dueDayPickerBill, editPlan, incomeDatePicker, monthSummaryDetail, selectedDate, showSnowballResults, snowballModalVisible, snowballPreview, surplusPrompt, txModalVisible]);
 
   const monthBills = useMemo(() => getMonthlyBills(month, selectedYear), [getMonthlyBills, month, selectedYear]);
 
@@ -436,12 +470,17 @@ export default function MonthlyScreen() {
       const newSurplus = Math.max(0, budgeted - parsed);
 
       if (bill && previousSource && newSurplus <= previousSource.amount + 0.005) {
+        const directPaidBefore = bill ? getPaidAmount(bill.id, month, selectedYear) : 0;
         const sources = (existing?.sources ?? [])
           .filter(source => !(source.type === "bill_surplus" && source.billId === billId));
         if (newSurplus > 0.005) sources.push({ ...previousSource, amount: newSurplus });
         const total = sources.reduce((sum, source) => sum + source.amount, 0);
         const preview = previewDebtSnowball(month, selectedYear, total);
-        if (bill.is_debt) await setPaidAmount(bill.id, month, selectedYear, parsed);
+        if (bill.is_debt) {
+          await setPaidAmount(bill.id, month, selectedYear, parsed);
+          const delta = parsed - directPaidBefore;
+          if (delta > 0.005) showDebtPaymentNotice(bill, delta, paidDate, { scheduled: false, balanceBefore: bill.balance });
+        }
         else await finalizeBillPayment(bill.id, month, selectedYear, parsed, paidDate);
         if (total > 0.005) await applyDebtSnowballPayment(preview, sources);
         else await removeDebtSnowballPayment(month, selectedYear);
@@ -456,11 +495,18 @@ export default function MonthlyScreen() {
       }
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       if (bill && !bill.is_debt) await finalizeBillPayment(billId, month, selectedYear, parsed, paidDate);
-      else await setPaidAmount(billId, month, selectedYear, parsed);
+      else {
+        const directPaidBefore = bill ? getPaidAmount(bill.id, month, selectedYear) : 0;
+        await setPaidAmount(billId, month, selectedYear, parsed);
+        if (bill?.is_debt) {
+          const delta = parsed - directPaidBefore;
+          if (delta > 0.005) showDebtPaymentNotice(bill, delta, paidDate, { scheduled: false, balanceBefore: bill.balance });
+        }
+      }
     } finally {
       setSavingPaidKey(current => current === key ? null : current);
     }
-  }, [editingPaid, savingPaidKey, setPaidAmount, bills, overrides, transactions, deleteTransaction, getBillMonthlyTotal, getCustomDueDay, getExtraPayment, previewDebtSnowball, finalizeBillPayment, applyDebtSnowballPayment, removeDebtSnowballPayment, month, selectedYear]);
+  }, [editingPaid, savingPaidKey, setPaidAmount, bills, overrides, transactions, deleteTransaction, getBillMonthlyTotal, getCustomDueDay, getPaidAmount, getExtraPayment, previewDebtSnowball, finalizeBillPayment, applyDebtSnowballPayment, removeDebtSnowballPayment, showDebtPaymentNotice, month, selectedYear]);
 
   const finalizeBillAtActualForMonth = useCallback(async (prompt: { bill: Bill; actual: number; paidDate: string }) => {
     if (prompt.bill.is_debt) {
@@ -506,8 +552,16 @@ export default function MonthlyScreen() {
   const keepBillSurplus = async () => {
     if (!surplusPrompt) return;
     if (surplusPrompt.bill.is_debt) {
+      const directPaidBefore = getPaidAmount(surplusPrompt.bill.id, month, selectedYear);
       await finalizeBillAtActualForMonth(surplusPrompt);
       await removeDebtSurplusTransaction(surplusPrompt.bill.id);
+      const delta = surplusPrompt.actual - directPaidBefore;
+      if (delta > 0.005) {
+        showDebtPaymentNotice(surplusPrompt.bill, delta, surplusPrompt.paidDate, {
+          scheduled: false,
+          balanceBefore: surplusPrompt.bill.balance,
+        });
+      }
       setSurplusPrompt(null);
       return;
     }
@@ -554,6 +608,7 @@ export default function MonthlyScreen() {
     if (surplusPrompt.bill.is_debt) {
       const target = surplusSnowballOffer.preview.allocations[0];
       if (!surplusSnowballOffer.safe || !target) return;
+      const directPaidBefore = getPaidAmount(surplusPrompt.bill.id, month, selectedYear);
       await finalizeBillAtActualForMonth(surplusPrompt);
       try {
         await upsertDebtSurplusTransaction(
@@ -567,6 +622,14 @@ export default function MonthlyScreen() {
           "Debt Finalized",
           "The debt payment was saved, but the leftover could not be added as a snowball transaction. The difference is still available, so you can try again.",
         );
+      }
+      const delta = surplusPrompt.actual - directPaidBefore;
+      if (delta > 0.005) {
+        showDebtPaymentNotice(surplusPrompt.bill, delta, surplusPrompt.paidDate, {
+          scheduled: false,
+          balanceBefore: surplusPrompt.bill.balance,
+          extraMessage: `I also added $${surplus.toFixed(2)} to ${target.billName} for ${formatShortDate(surplusPaymentDate)}.`,
+        });
       }
       setSurplusPrompt(null);
       return;
@@ -644,9 +707,30 @@ export default function MonthlyScreen() {
 
   const handleQuickPaid = useCallback(async (billId: string, amount: number, isPaid: boolean) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const bill = bills.find(item => item.id === billId);
+    const day = bill ? Math.min(new Date(selectedYear, month + 1, 0).getDate(), getCustomDueDay(bill.id, month, selectedYear) ?? bill.due_day) : 1;
+    const paidDate = isoDateForMonthDay(selectedYear, month, day);
+    const paidBefore = bill?.is_debt ? getPaidAmount(billId, month, selectedYear) : 0;
     if (isPaid) await removeDebtSurplusTransaction(billId);
     await setPaidAmount(billId, month, selectedYear, isPaid ? 0 : amount);
-  }, [setPaidAmount, removeDebtSurplusTransaction, month, selectedYear]);
+    if (!isPaid && bill?.is_debt) {
+      const appliedAmount = Math.max(0, amount - paidBefore);
+      if (appliedAmount > 0.005) showDebtPaymentNotice(bill, appliedAmount, paidDate, { scheduled: false, balanceBefore: bill.balance });
+    }
+  }, [setPaidAmount, removeDebtSurplusTransaction, bills, getCustomDueDay, getPaidAmount, showDebtPaymentNotice, month, selectedYear]);
+
+  const showTransactionDebtNotice = useCallback((tx: Omit<Transaction, "id"> | Transaction) => {
+    const linkedDebtId = tx.linked_bill_id ?? tx.debt_applied_bill_id;
+    if (!linkedDebtId) return;
+    const debt = bills.find(item => item.id === linkedDebtId);
+    if (!debt?.is_debt) return;
+    const amount = Math.abs(Number(tx.debt_applied_amount ?? tx.amount) || 0);
+    if (amount <= 0.005 || Number(tx.amount) > 0) return;
+    showDebtPaymentNotice(debt, amount, tx.date, {
+      scheduled: tx.date > todayIsoDate(),
+      balanceBefore: debt.balance,
+    });
+  }, [bills, showDebtPaymentNotice]);
 
   const handleApplyExtra = () => {
     const amt = parseFloat(extraPayment);
@@ -1685,14 +1769,21 @@ export default function MonthlyScreen() {
         onSave={async (data) => {
           if (editTx && "id" in data) {
             await updateTransaction(data as Transaction);
+            showTransactionDebtNotice(data);
           } else {
             const newTx = data as Omit<Transaction, "id">;
             await addTransaction(newTx);
             checkForRecurring(newTx);
+            showTransactionDebtNotice(newTx);
           }
         }}
         editTx={editTx}
         defaultDate={editTx ? undefined : transactionDefaultDate}
+      />
+      <DebtPaymentAppliedModal
+        visible={!!debtPaymentNotice}
+        detail={debtPaymentNotice}
+        onClose={() => setDebtPaymentNotice(null)}
       />
       <Modal
         visible={monthSummaryDetail !== null}

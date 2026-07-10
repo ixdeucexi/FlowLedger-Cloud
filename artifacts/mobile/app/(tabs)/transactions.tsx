@@ -9,10 +9,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddTransactionModal } from "@/components/AddTransactionModal";
 import { CommandPlusButton } from "@/components/CommandPlusButton";
+import { DebtPaymentAppliedModal, type DebtPaymentAppliedDetail } from "@/components/DebtPaymentAppliedModal";
 import { EmptyState } from "@/components/EmptyState";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import colors from "@/constants/colors";
-import type { Transaction } from "@/context/BudgetContext";
+import type { Bill, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
@@ -77,6 +78,18 @@ function formatDateLong(dateStr: string) {
   return `${MONTH_NAMES_LONG[m - 1]} ${d}, ${y}`;
 }
 
+function todayIsoDate() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+function nextDebtNameAfterPayment(debts: Bill[], debt: Bill, balanceAfter?: number) {
+  if (balanceAfter === undefined || balanceAfter > 0.005) return undefined;
+  return debts
+    .filter(item => item.is_debt && item.id !== debt.id && Number(item.balance) > 0.005)
+    .sort((left, right) => Number(left.balance) - Number(right.balance) || left.name.localeCompare(right.name))[0]?.name;
+}
+
 function groupByMonth(items: ActivityItem[]): { title: string; data: ActivityItem[] }[] {
   const map = new Map<string, ActivityItem[]>();
   for (const item of items) {
@@ -102,6 +115,7 @@ export default function TransactionsScreen() {
 
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editTx, setEditTx]                     = useState<Transaction | null>(null);
+  const [debtPaymentNotice, setDebtPaymentNotice] = useState<DebtPaymentAppliedDetail | null>(null);
   const [detailItem, setDetailItem]             = useState<ActivityItem | null>(null);
   const [typeFilter, setTypeFilter]             = useState<TypeFilter>("all");
   const [sourceFilter, setSourceFilter]         = useState<SourceFilter>("all");
@@ -371,9 +385,31 @@ export default function TransactionsScreen() {
     { key: "debt", label: "Debt pay", active: sourceFilter === "extra_payment", onPress: () => { setTypeFilter("all"); setSourceFilter("extra_payment"); } },
   ];
 
-  const handleSave = (data: Omit<Transaction, "id"> | Transaction) => {
-    if ("id" in data) return updateTransaction(data as Transaction);
-    return addTransaction(data);
+  const showTransactionDebtNotice = (tx: Omit<Transaction, "id"> | Transaction) => {
+    const linkedDebtId = tx.linked_bill_id ?? tx.debt_applied_bill_id;
+    if (!linkedDebtId) return;
+    const debt = bills.find(item => item.id === linkedDebtId);
+    if (!debt?.is_debt) return;
+    const amount = Math.abs(Number(tx.debt_applied_amount ?? tx.amount) || 0);
+    if (amount <= 0.005 || Number(tx.amount) > 0) return;
+    const scheduled = tx.date > todayIsoDate();
+    const balanceBefore = Math.max(0, Number(debt.balance) || 0);
+    const balanceAfter = scheduled ? undefined : Math.max(0, balanceBefore - amount);
+    setDebtPaymentNotice({
+      debtName: debt.name,
+      amount,
+      paymentDate: tx.date,
+      scheduled,
+      balanceBefore,
+      balanceAfter,
+      rolledToDebtName: nextDebtNameAfterPayment(bills, debt, balanceAfter),
+    });
+  };
+
+  const handleSave = async (data: Omit<Transaction, "id"> | Transaction) => {
+    if ("id" in data) await updateTransaction(data as Transaction);
+    else await addTransaction(data);
+    showTransactionDebtNotice(data);
   };
 
   const handleDelete = async (id: string) => {
@@ -970,6 +1006,11 @@ export default function TransactionsScreen() {
         onDelete={handleDelete}
         onDeleteTransfer={handleDeleteTransfer}
         editTx={editTx}
+      />
+      <DebtPaymentAppliedModal
+        visible={!!debtPaymentNotice}
+        detail={debtPaymentNotice}
+        onClose={() => setDebtPaymentNotice(null)}
       />
 
       {/* ── Detail sheet (auto-generated entries) ── */}
