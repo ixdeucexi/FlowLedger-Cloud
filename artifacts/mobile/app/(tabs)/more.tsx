@@ -490,6 +490,7 @@ export default function MoreScreen() {
   const [plaidImporting, setPlaidImporting] = useState(false);
   const [plaidSetup, setPlaidSetup] = useState<PlaidSetupState | null>(null);
   const plaidLauncherRef = useRef<PlaidLinkLauncherHandle | null>(null);
+  const plaidAutoPreparedRef = useRef(false);
   const [childProfiles, setChildProfiles] = useState<ChildProfile[]>([]);
   const [childName, setChildName] = useState("");
   const [childAllowanceText, setChildAllowanceText] = useState("");
@@ -1532,6 +1533,36 @@ export default function MoreScreen() {
     }
   }, [plaidLinkToken, plaidPost, plaidPreparing, plaidStatus.canStartLink]);
 
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    if (activeSettingsSection !== "plaid") {
+      plaidAutoPreparedRef.current = false;
+      return;
+    }
+    if (
+      plaidAutoPreparedRef.current ||
+      !plaidStatus.canStartLink ||
+      plaidLinkToken ||
+      plaidPreparing ||
+      plaidLinking ||
+      plaidImporting ||
+      plaidSetup
+    ) {
+      return;
+    }
+    plaidAutoPreparedRef.current = true;
+    void preparePlaidLinkToken({ silent: true });
+  }, [
+    activeSettingsSection,
+    plaidImporting,
+    plaidLinkToken,
+    plaidLinking,
+    plaidPreparing,
+    plaidSetup,
+    plaidStatus.canStartLink,
+    preparePlaidLinkToken,
+  ]);
+
   const handleStartPlaidLink = async () => {
     if (Platform.OS !== "web") {
       Alert.alert("Bank sync", "Open FlowLedger in the web app to connect Plaid for now.");
@@ -1543,8 +1574,15 @@ export default function MoreScreen() {
     setPlaidLinkShouldOpen(false);
 
     try {
-      const token = await preparePlaidLinkToken({ forceFresh: true, silent: false });
+      if (plaidLinkToken && plaidLauncherRef.current?.isReady()) {
+        setPlaidNotice("Opening Plaid...");
+        const opened = plaidLauncherRef.current.open();
+        if (opened) return;
+      }
+
+      const token = plaidLinkToken || await preparePlaidLinkToken({ forceFresh: true, silent: false });
       if (!token) throw new Error("Plaid link token could not be created.");
+      setPlaidNotice(plaidLinkReady ? "Opening Plaid..." : "Plaid is almost ready. Opening secure bank link...");
       setPlaidLinkShouldOpen(true);
     } catch (error) {
       setPlaidNotice(error instanceof Error ? error.message : "Plaid could not start.");
