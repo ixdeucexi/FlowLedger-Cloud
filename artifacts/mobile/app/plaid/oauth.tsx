@@ -41,7 +41,7 @@ export default function PlaidOAuthCallbackPage() {
         if (notice) window.sessionStorage.setItem(PLAID_RETURN_NOTICE_KEY, notice);
       } catch {}
     }
-    router.replace("/more" as any);
+    router.replace({ pathname: "/(tabs)/more", params: { section: "plaid" } } as any);
   }, [router]);
 
   useEffect(() => {

@@ -365,13 +365,6 @@ function writeStoredSettingsSection(sectionId: SettingsSectionId) {
     } else {
       window.sessionStorage?.setItem(ACTIVE_SETTINGS_SECTION_KEY, sectionId);
     }
-    const url = new URL(window.location.href);
-    if (sectionId === "overview") {
-      url.searchParams.delete("section");
-    } else {
-      url.searchParams.set("section", sectionId);
-    }
-    window.history.replaceState(window.history.state, "", url.toString());
   } catch {}
 }
 
