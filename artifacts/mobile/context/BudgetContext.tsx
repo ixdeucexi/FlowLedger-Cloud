@@ -734,6 +734,10 @@ function normalizeTransactionRow(transaction: any): Transaction {
   };
 }
 
+function roundMoney(value: number): number {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
 function incomeToMonthly(amount: number, frequency: IncomeItem["frequency"]): number {
   if (frequency === "biweekly") return amount * 26 / 12;
   if (frequency === "weekly")   return amount * 52 / 12;
@@ -2061,6 +2065,128 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Transactions ─────────────────────────────────────────────────────────────
 
+  const refreshDebtRows = useCallback(async () => {
+    if (!user) return;
+    const [billRows, transactionRows] = await Promise.all([
+      applyHouseholdSelect(supabase.from("bills").select("*"), user.id),
+      applyHouseholdSelect(supabase.from("transactions").select("*"), user.id),
+    ]);
+    if (billRows.error) throw new Error(`Refresh debts: ${billRows.error.message}`);
+    if (transactionRows.error) throw new Error(`Refresh transactions: ${transactionRows.error.message}`);
+    setBills(reorderDebtPriorities((billRows.data ?? []).map(normalizeBillRow)));
+    setTransactions((transactionRows.data ?? []).map(normalizeTransactionRow));
+  }, [user, applyHouseholdSelect]);
+
+  const syncDebtTransactionsClientSide = useCallback(async () => {
+    if (!user || demoMode) return;
+    const [billRows, transactionRows] = await Promise.all([
+      applyHouseholdSelect(supabase.from("bills").select("*"), user.id),
+      applyHouseholdSelect(supabase.from("transactions").select("*"), user.id),
+    ]);
+    if (billRows.error) throw new Error(`Sync debt payments: ${billRows.error.message}`);
+    if (transactionRows.error) throw new Error(`Sync debt payments: ${transactionRows.error.message}`);
+
+    const debtMap = new Map<string, Bill>();
+    for (const bill of (billRows.data ?? []).map(normalizeBillRow)) {
+      if (bill.is_debt) debtMap.set(bill.id, { ...bill });
+    }
+
+    const today = localDateString();
+    const transactionsToCheck: Transaction[] = (transactionRows.data ?? [])
+      .map(normalizeTransactionRow)
+      .filter((transaction: Transaction) => transaction.linked_bill_id || transaction.debt_applied_bill_id || Number(transaction.debt_applied_amount ?? 0) > 0)
+      .sort((left: Transaction, right: Transaction) => left.date.localeCompare(right.date) || left.id.localeCompare(right.id));
+
+    const changedBills = new Map<string, Bill>();
+    const changedTransactions: Array<{ id: string; debt_applied_amount: number; debt_applied_bill_id: string | null }> = [];
+
+    for (const transaction of transactionsToCheck) {
+      const previousDebtId = transaction.debt_applied_bill_id;
+      const previousApplied = Math.max(0, Number(transaction.debt_applied_amount ?? 0) || 0);
+      if (previousDebtId && previousApplied > 0.005) {
+        const previousDebt = debtMap.get(previousDebtId);
+        if (previousDebt) {
+          previousDebt.balance = roundMoney(previousDebt.balance + previousApplied);
+          changedBills.set(previousDebt.id, previousDebt);
+        }
+      }
+
+      let nextDebtId: string | null = null;
+      let nextApplied = 0;
+      const targetDebt = transaction.linked_bill_id ? debtMap.get(transaction.linked_bill_id) : undefined;
+      if (targetDebt && Number(transaction.amount) < -0.005 && transaction.date <= today) {
+        const desiredPayment = roundMoney(Math.abs(Number(transaction.amount) || 0));
+        nextApplied = roundMoney(Math.min(desiredPayment, Math.max(0, targetDebt.balance)));
+        if (nextApplied > 0.005) {
+          targetDebt.balance = roundMoney(Math.max(0, targetDebt.balance - nextApplied));
+          nextDebtId = targetDebt.id;
+          changedBills.set(targetDebt.id, targetDebt);
+        }
+      }
+
+      if (
+        (previousDebtId ?? null) !== nextDebtId ||
+        Math.abs(previousApplied - nextApplied) > 0.005
+      ) {
+        changedTransactions.push({
+          id: transaction.id,
+          debt_applied_amount: nextApplied,
+          debt_applied_bill_id: nextDebtId,
+        });
+      }
+    }
+
+    await Promise.all([
+      ...Array.from(changedBills.values()).map(debt =>
+        ensureSaved(
+          supabase.from("bills").update({ balance: debt.balance }).eq("id", debt.id),
+          `Apply debt payment to ${debt.name}`,
+        )
+      ),
+      ...changedTransactions.map(transaction =>
+        ensureSaved(
+          supabase.from("transactions").update({
+            debt_applied_amount: transaction.debt_applied_amount,
+            debt_applied_bill_id: transaction.debt_applied_bill_id,
+          }).eq("id", transaction.id),
+          "Mark debt payment applied",
+        )
+      ),
+    ]);
+
+    const rollover = await supabase.rpc("recalculate_debt_minimum_boosts", { p_household_id: householdScopeRef.current?.householdId ?? null });
+    if (rollover.error) console.warn("Debt minimum rollover skipped", rollover.error.message);
+    await refreshDebtRows();
+  }, [user, demoMode, applyHouseholdSelect, refreshDebtRows]);
+
+  const restoreDebtApplicationsForTransactions = useCallback(async (items: Transaction[]) => {
+    const appliedItems = items.filter(item => item.debt_applied_bill_id && Number(item.debt_applied_amount ?? 0) > 0.005);
+    if (!user || demoMode || appliedItems.length === 0) return;
+
+    const restores = new Map<string, number>();
+    for (const item of appliedItems) {
+      const debtId = item.debt_applied_bill_id;
+      if (!debtId) continue;
+      restores.set(debtId, roundMoney((restores.get(debtId) ?? 0) + Math.max(0, Number(item.debt_applied_amount ?? 0) || 0)));
+    }
+
+    await Promise.all(Array.from(restores.entries()).map(([debtId, amount]) => {
+      const debt = bills.find(item => item.id === debtId);
+      if (!debt) return Promise.resolve();
+      const nextBalance = roundMoney(Math.max(0, Number(debt.balance) || 0) + amount);
+      return ensureSaved(
+        supabase.from("bills").update({ balance: nextBalance }).eq("id", debtId),
+        `Restore debt payment for ${debt.name}`,
+      );
+    }));
+
+    setBills(previous => reorderDebtPriorities(previous.map(bill => {
+      const amount = restores.get(bill.id);
+      if (!amount) return bill;
+      return { ...bill, balance: roundMoney(Math.max(0, Number(bill.balance) || 0) + amount) };
+    })));
+  }, [user, demoMode, bills]);
+
   const syncDebtTransactionsAndRefresh = useCallback(async () => {
     if (!user || demoMode) return;
     if (!canEditHousehold) return;
@@ -2070,17 +2196,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     });
     if (synced.error) {
       console.warn("Scheduled debt sync skipped", synced.error.message);
-      return;
+    } else {
+      const rollover = await supabase.rpc("recalculate_debt_minimum_boosts", { p_household_id: householdScopeRef.current?.householdId ?? null });
+      if (rollover.error) console.warn("Debt minimum rollover skipped", rollover.error.message);
     }
-    const [billRows, transactionRows] = await Promise.all([
-      applyHouseholdSelect(supabase.from("bills").select("*"), user.id),
-      applyHouseholdSelect(supabase.from("transactions").select("*"), user.id),
-    ]);
-    if (billRows.error) throw new Error(`Refresh debts: ${billRows.error.message}`);
-    if (transactionRows.error) throw new Error(`Refresh transactions: ${transactionRows.error.message}`);
-    setBills(reorderDebtPriorities((billRows.data ?? []).map(normalizeBillRow)));
-    setTransactions((transactionRows.data ?? []).map(normalizeTransactionRow));
-  }, [user, demoMode, canEditHousehold, applyHouseholdSelect]);
+    await syncDebtTransactionsClientSide();
+  }, [user, demoMode, canEditHousehold, syncDebtTransactionsClientSide]);
 
   useEffect(() => {
     if (!user || demoMode) return;
@@ -2140,13 +2261,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setTransactions(prev => prev.filter(t => !idsToDelete.includes(t.id)));
       return;
     }
+    await restoreDebtApplicationsForTransactions(transactions.filter(transaction => idsToDelete.includes(transaction.id)));
     await ensureSaved(
       supabase.from("transactions").delete().eq("transfer_group_id", transferGroupId),
       "Delete transfer",
     );
     setTransactions(prev => prev.filter(t => !idsToDelete.includes(t.id)));
     if (idsToDelete.some(txId => transactions.find(transaction => transaction.id === txId)?.debt_applied_bill_id)) await syncDebtTransactionsAndRefresh();
-  }, [user, transactions, syncDebtTransactionsAndRefresh, demoMode, assertCanEditHousehold]);
+  }, [user, transactions, restoreDebtApplicationsForTransactions, syncDebtTransactionsAndRefresh, demoMode, assertCanEditHousehold]);
 
   const deleteTransaction = useCallback(async (id: string) => {
     if (!user) return;
@@ -2164,10 +2286,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setTransactions(prev => prev.filter(t => !idsToDelete.includes(t.id)));
       return;
     }
+    await restoreDebtApplicationsForTransactions(transactions.filter(transaction => idsToDelete.includes(transaction.id)));
     await ensureSaved(supabase.from("transactions").delete().eq("id", id), "Delete transaction");
     setTransactions(prev => prev.filter(t => !idsToDelete.includes(t.id)));
     if (idsToDelete.some(txId => transactions.find(transaction => transaction.id === txId)?.debt_applied_bill_id)) await syncDebtTransactionsAndRefresh();
-  }, [user, transactions, syncDebtTransactionsAndRefresh, demoMode, deleteTransfer, assertCanEditHousehold]);
+  }, [user, transactions, restoreDebtApplicationsForTransactions, syncDebtTransactionsAndRefresh, demoMode, deleteTransfer, assertCanEditHousehold]);
 
   const getTransactionsForMonth = useCallback(
     (month: number, year: number) =>
