@@ -339,6 +339,40 @@ const SETTINGS_SECTIONS: Array<{
   { id: "legal", label: "Legal", description: "Terms, privacy, and data-use notes.", icon: "file-text" },
 ];
 
+const ACTIVE_SETTINGS_SECTION_KEY = "flowledger_active_settings_section";
+
+function isSettingsSectionId(value: unknown): value is SettingsSectionId {
+  return value === "overview" || SETTINGS_SECTIONS.some(section => section.id === value);
+}
+
+function readStoredSettingsSection(): SettingsSectionId {
+  if (Platform.OS !== "web" || typeof window === "undefined") return "overview";
+  try {
+    const stored = window.sessionStorage?.getItem(ACTIVE_SETTINGS_SECTION_KEY);
+    return isSettingsSectionId(stored) ? stored : "overview";
+  } catch {
+    return "overview";
+  }
+}
+
+function writeStoredSettingsSection(sectionId: SettingsSectionId) {
+  if (Platform.OS !== "web" || typeof window === "undefined") return;
+  try {
+    if (sectionId === "overview") {
+      window.sessionStorage?.removeItem(ACTIVE_SETTINGS_SECTION_KEY);
+    } else {
+      window.sessionStorage?.setItem(ACTIVE_SETTINGS_SECTION_KEY, sectionId);
+    }
+    const url = new URL(window.location.href);
+    if (sectionId === "overview") {
+      url.searchParams.delete("section");
+    } else {
+      url.searchParams.set("section", sectionId);
+    }
+    window.history.replaceState(window.history.state, "", url.toString());
+  } catch {}
+}
+
 function csvCell(value: unknown): string {
   const text = String(value ?? "");
   return `"${text.replace(/"/g, '""')}"`;
@@ -420,19 +454,11 @@ export default function MoreScreen() {
   const [legalDoc, setLegalDoc] = useState<"terms" | "privacy" | null>(null);
   useBackDismiss(Boolean(legalDoc), () => setLegalDoc(null));
   const [showAlgorithmSuite, setShowAlgorithmSuite] = useState(false);
-  const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("overview");
+  const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>(() => readStoredSettingsSection());
   const openSettingsSection = useCallback((sectionId: SettingsSectionId) => {
     setActiveSettingsSection(sectionId);
-    if (Platform.OS !== "web") return;
-    const setParams = (router as unknown as { setParams?: (params: Record<string, string | undefined>) => void }).setParams;
-    if (typeof setParams === "function") {
-      setParams({ section: sectionId === "overview" ? undefined : sectionId });
-    } else {
-      router.replace(sectionId === "overview"
-        ? "/(tabs)/more" as any
-        : { pathname: "/(tabs)/more", params: { section: sectionId } } as any);
-    }
-  }, [router]);
+    writeStoredSettingsSection(sectionId);
+  }, []);
   useBackDismiss(activeSettingsSection !== "overview", () => openSettingsSection("overview"));
   const [householdInviteRole, setHouseholdInviteRole] = useState<HouseholdInviteRole>("editor");
   const [householdInviteCode, setHouseholdInviteCode] = useState("");
@@ -486,9 +512,14 @@ export default function MoreScreen() {
 
   useEffect(() => {
     const requestedSection = Array.isArray(routeParams.section) ? routeParams.section[0] : routeParams.section;
-    if (!requestedSection) return;
-    if (SETTINGS_SECTIONS.some(section => section.id === requestedSection)) {
+    if (isSettingsSectionId(requestedSection)) {
       setActiveSettingsSection(requestedSection as SettingsSectionId);
+      writeStoredSettingsSection(requestedSection as SettingsSectionId);
+      return;
+    }
+    const storedSection = readStoredSettingsSection();
+    if (storedSection !== "overview") {
+      setActiveSettingsSection(storedSection);
     }
   }, [routeParams.section]);
 
