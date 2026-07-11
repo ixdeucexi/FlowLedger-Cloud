@@ -107,6 +107,7 @@ export default function MonthlyScreen() {
   const [editingPaid, setEditingPaid] = useState<Record<string, string>>({});
   const editingPaidRef = useRef<Record<string, string>>({});
   const paidSaveInFlightRef = useRef<Set<string>>(new Set());
+  const paidSaveSnapshotRef = useRef<Record<string, { value: string; at: number }>>({});
   const [billFilter, setBillFilter] = useState<"all" | "paid" | "unpaid">("all");
   const [extraPayment, setExtraPayment] = useState("");
   const [snowballResults, setSnowballResults] = useState<{ name: string; payment: number; paidOff: boolean }[]>([]);
@@ -466,6 +467,19 @@ export default function MonthlyScreen() {
 
   const handlePaidBlur = useCallback(async (billId: string, key: string, submittedValue?: string) => {
     if (savingPaidKey === key || paidSaveInFlightRef.current.has(key)) return;
+    const hasActiveEdit = Object.prototype.hasOwnProperty.call(editingPaidRef.current, key)
+      || Object.prototype.hasOwnProperty.call(editingPaid, key);
+    const submittedTrimmed = submittedValue?.trim();
+    const recentSave = paidSaveSnapshotRef.current[key];
+    if (
+      !hasActiveEdit
+      && (submittedValue === undefined || submittedTrimmed === "")
+      && recentSave
+      && Date.now() - recentSave.at < 2000
+    ) {
+      return;
+    }
+    if (!hasActiveEdit && (submittedValue === undefined || submittedTrimmed === "")) return;
     const candidates = [submittedValue, editingPaidRef.current[key], editingPaid[key]]
       .filter((candidate): candidate is string => candidate !== undefined);
     const val = candidates.find(candidate => candidate.trim().length > 0) ?? candidates[0];
@@ -488,6 +502,7 @@ export default function MonthlyScreen() {
           if (existingTx) await deleteTransaction(existingTx.id);
         }
         await setPaidAmount(billId, month, selectedYear, 0);
+        paidSaveSnapshotRef.current = { ...paidSaveSnapshotRef.current, [key]: { value: "", at: Date.now() } };
         return;
       }
       const parsed = parseFloat(trimmed);
@@ -514,6 +529,7 @@ export default function MonthlyScreen() {
         else await finalizeBillPayment(bill.id, month, selectedYear, parsed, paidDate);
         if (total > 0.005) await applyDebtSnowballPayment(preview, sources);
         else await removeDebtSnowballPayment(month, selectedYear);
+        paidSaveSnapshotRef.current = { ...paidSaveSnapshotRef.current, [key]: { value: trimmed, at: Date.now() } };
         askToTreatPaidAsFullPayment({ bill, budgeted, actual: parsed, paidDate });
         return;
       }
@@ -536,6 +552,7 @@ export default function MonthlyScreen() {
                     const delta = parsed - directPaidBefore;
                     if (delta > 0.005) showDebtPaymentNotice(bill, delta, paidDate, { scheduled: false, balanceBefore: bill.balance });
                   }
+                  paidSaveSnapshotRef.current = { ...paidSaveSnapshotRef.current, [key]: { value: trimmed, at: Date.now() } };
                 } catch (error) {
                   Alert.alert("Could not save payment", error instanceof Error ? error.message : "Please try again.");
                 }
@@ -564,6 +581,7 @@ export default function MonthlyScreen() {
           if (delta > 0.005) showDebtPaymentNotice(bill, delta, paidDate, { scheduled: false, balanceBefore: bill.balance });
         }
       }
+      paidSaveSnapshotRef.current = { ...paidSaveSnapshotRef.current, [key]: { value: trimmed, at: Date.now() } };
       if (bill) askToTreatPaidAsFullPayment({ bill, budgeted, actual: parsed, paidDate });
     } finally {
       paidSaveInFlightRef.current.delete(key);
@@ -1285,9 +1303,16 @@ export default function MonthlyScreen() {
                       <TextInput
                         style={[styles.fieldInput, { backgroundColor: isPaid ? c.success + "20" : c.muted, color: isPaid ? c.success : c.foreground }]}
                         value={showPaid}
-                        onChangeText={v => setEditingPaid(p => ({ ...p, [paidKey]: v }))}
-                        onFocus={() => setEditingPaid(p => ({ ...p, [paidKey]: paid > 0 ? paid.toFixed(2) : "" }))}
-                        onBlur={() => handlePaidBlur(bill.id, paidKey)}
+                        onChangeText={v => {
+                          editingPaidRef.current = { ...editingPaidRef.current, [paidKey]: v };
+                          setEditingPaid(p => ({ ...p, [paidKey]: v }));
+                        }}
+                        onFocus={() => {
+                          const focusValue = paid > 0 ? paid.toFixed(2) : "";
+                          editingPaidRef.current = { ...editingPaidRef.current, [paidKey]: focusValue };
+                          setEditingPaid(p => ({ ...p, [paidKey]: focusValue }));
+                        }}
+                        onBlur={() => handlePaidBlur(bill.id, paidKey, editingPaidRef.current[paidKey] ?? showPaid)}
                         keyboardType="decimal-pad"
                         placeholder="0.00"
                         placeholderTextColor={c.mutedForeground}
@@ -1522,6 +1547,7 @@ export default function MonthlyScreen() {
                                         editingPaidRef.current = { ...editingPaidRef.current, [paidKey]: showPaid || "" };
                                         setEditingPaid(current => ({ ...current, [paidKey]: showPaid || "" }));
                                       }}
+                                      onBlur={() => handlePaidBlur(bill.id, paidKey, editingPaidRef.current[paidKey] ?? showPaid)}
                                       onEndEditing={event => handlePaidBlur(bill.id, paidKey, event.nativeEvent.text)}
                                       onSubmitEditing={event => handlePaidBlur(bill.id, paidKey, event.nativeEvent.text)}
                                       keyboardType="decimal-pad"
