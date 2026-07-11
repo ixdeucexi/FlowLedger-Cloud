@@ -600,7 +600,7 @@ export default function FloScreen() {
       "Can I afford $500?",
       "Which bills are due next?",
       "Why is my balance getting low?",
-    ])).slice(0, 8);
+    ])).slice(0, 2);
   }, [categoryPlan, decisionHistory, decisionRiskAlerts, decisionHubSettings, hasSetupAnswers, setupPersonalization]);
 
   const buildCalendarDayReply = (prompt: string) => {
@@ -998,7 +998,7 @@ export default function FloScreen() {
         <FloLogo size={48} />
         <View style={styles.headerText}>
           <Text style={[styles.title, { color: colors.foreground }]}>Ask Flo</Text>
-          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Ask questions, preview moves, and get help with your plan.</Text>
+          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Ask, preview, and apply money moves.</Text>
         </View>
         <Feather name="message-circle" size={24} color={colors.primaryForeground} />
       </LinearGradient>

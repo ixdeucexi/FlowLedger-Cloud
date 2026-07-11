@@ -1293,7 +1293,6 @@ export default function DashboardScreen() {
           <FlowScoreGauge score={algorithmSuite.flowScore.score} />
           <AppText tone="title" style={styles.referenceScoreStatus}>{algorithmSuite.flowScore.label}</AppText>
           <View style={styles.referenceScoreUnderline} />
-          <AppText style={styles.referenceScoreTapHint}>Tap for details</AppText>
         </Pressable>
       </View>
 
@@ -1343,8 +1342,8 @@ export default function DashboardScreen() {
                 <View style={{ flex: 1 }}>
                   <AppText tone="label" style={styles.referenceAlgorithmTitle}>{card.title}</AppText>
                   <AppText tone="title" style={[styles.referenceAlgorithmValue, { color: card.color }]}>{card.value}</AppText>
-                  <AppText style={styles.referenceAlgorithmDetail}>{card.detail}</AppText>
-                  <AppText style={styles.referenceAlgorithmAction}>{card.action}</AppText>
+                  <AppText style={styles.referenceAlgorithmDetail} numberOfLines={2}>{card.detail}</AppText>
+                  <AppText style={styles.referenceAlgorithmAction} numberOfLines={1}>{card.action}</AppText>
                 </View>
                 <Feather name="message-circle" size={16} color="rgba(226,232,240,0.72)" />
               </Pressable>

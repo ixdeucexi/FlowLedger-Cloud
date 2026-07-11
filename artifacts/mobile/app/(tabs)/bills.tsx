@@ -307,7 +307,6 @@ export default function BillsScreen() {
   const debtRoomExplanation = safeSnowballAmount > 0
     ? debtPayoffDetail.nextAction
     : `Keep extra cash available for now. ${debtPayoffDetail.nextAction}`;
-  const debtAlgoCopy = debtPayoffDetail.whatIFound;
 
   const priorityColors = ["#22c55e", "#f0b429", "#ef4444", "#8b5cf6", "#ec4899"];
   const todayIso = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -617,38 +616,6 @@ export default function BillsScreen() {
       {activeTab === "debt" && (
         <View style={styles.list}>
             <>
-          {/* Safe Snowball Banner */}
-          {debts.length > 0 && (
-            <View style={[styles.extraBanner, { backgroundColor: safeSnowballAmount > 0 ? c.success + "15" : c.muted, marginHorizontal: 0, borderRadius: colors.radius }]}>
-              <View style={styles.extraTopRow}>
-                <View style={styles.extraLeft}>
-                  <Feather name="shield" size={20} color={safeSnowballAmount > 0 ? c.success : c.mutedForeground} />
-                  <View>
-                    <Text style={[styles.extraLabel, { color: c.mutedForeground }]}>Debt Payoff Guardrail</Text>
-                    <Text style={[styles.extraValue, { color: safeSnowballAmount > 0 ? c.success : c.mutedForeground }]}>
-                      ${safeSnowballAmount.toFixed(2)}
-                    </Text>
-                  </View>
-                </View>
-                <Pressable
-                  onPress={handleApplySnowball}
-                  style={({ pressed }) => [
-                    styles.applyBtn,
-                    { backgroundColor: safeSnowballAmount > 0 ? c.primary : c.muted, opacity: pressed ? 0.8 : 1 }
-                  ]}
-                >
-                  <Feather name="zap" size={13} color={safeSnowballAmount > 0 ? c.primaryForeground : c.mutedForeground} />
-                  <Text style={[styles.applyBtnText, { color: safeSnowballAmount > 0 ? c.primaryForeground : c.mutedForeground }]}>
-                    Apply to Snowball
-                  </Text>
-                </Pressable>
-              </View>
-              <Text style={[styles.cappedNote, { color: c.mutedForeground }]}>
-                {debtRoomExplanation}
-              </Text>
-            </View>
-          )}
-
           {debts.length > 0 && (
             <View style={[styles.statsRow, { marginHorizontal: 0, gap: 10 }]}>
               {[
@@ -672,31 +639,36 @@ export default function BillsScreen() {
                   <Feather name="trending-down" size={17} color={c.primary} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.debtAlgoEyebrow, { color: c.primary }]}>Debt Payoff Algo</Text>
+                  <Text style={[styles.debtAlgoEyebrow, { color: c.primary }]}>Snowball Plan</Text>
                   <Text style={[styles.debtAlgoTitle, { color: c.foreground }]}>
-                    {debtPayoffEngine.nextDebtName ? `${debtPayoffEngine.nextDebtName} is the move` : "No active target"}
+                    {debtPayoffEngine.nextDebtName ? `Focus on ${debtPayoffEngine.nextDebtName}` : "No active target"}
                   </Text>
                 </View>
-                <View style={[styles.debtAlgoBadge, { backgroundColor: debtPayoffEngine.status === "hold" ? c.warning + "18" : c.success + "18" }]}>
-                  <Text style={[styles.debtAlgoBadgeText, { color: debtPayoffEngine.status === "hold" ? c.warning : c.success }]}>
-                    {debtPayoffEngine.status === "ready" ? "Ready" : debtPayoffEngine.status === "done" ? "Done" : "Hold"}
+                <Pressable
+                  onPress={handleApplySnowball}
+                  disabled={safeSnowballAmount <= 0}
+                  style={({ pressed }) => [
+                    styles.debtPlanApplyButton,
+                    { backgroundColor: safeSnowballAmount > 0 ? c.primary : c.muted, opacity: pressed ? 0.8 : safeSnowballAmount > 0 ? 1 : 0.65 },
+                  ]}
+                >
+                  <Feather name="zap" size={13} color={safeSnowballAmount > 0 ? c.primaryForeground : c.mutedForeground} />
+                  <Text style={[styles.debtPlanApplyText, { color: safeSnowballAmount > 0 ? c.primaryForeground : c.mutedForeground }]}>
+                    Apply
                   </Text>
+                </Pressable>
+              </View>
+              <View style={styles.debtPlanValueRow}>
+                <View style={[styles.debtPlanMetric, { backgroundColor: c.success + "10", borderColor: c.success + "24" }]}>
+                  <Text style={[styles.debtPlanLabel, { color: c.mutedForeground }]}>Safe extra</Text>
+                  <Text style={[styles.debtPlanValue, { color: safeSnowballAmount > 0 ? c.success : c.mutedForeground }]}>${safeSnowballAmount.toFixed(2)}</Text>
+                </View>
+                <View style={[styles.debtPlanMetric, { backgroundColor: c.primary + "10", borderColor: c.primary + "24" }]}>
+                  <Text style={[styles.debtPlanLabel, { color: c.mutedForeground }]}>Method</Text>
+                  <Text style={[styles.debtPlanValue, { color: c.primary }]}>Snowball</Text>
                 </View>
               </View>
-              <Text style={[styles.debtAlgoCopy, { color: c.mutedForeground }]}>{debtAlgoCopy}</Text>
-              {settings.paymentMethod === "snowball" ? (
-                <View style={[styles.snowballExplain, { backgroundColor: c.primary + "12", borderColor: c.primary + "25" }]}>
-                  <Feather name="info" size={13} color={c.primary} />
-                  <Text style={[styles.snowballExplainText, { color: c.foreground }]}>
-                    {debtPayoffDetail.whyItMatters}
-                  </Text>
-                </View>
-              ) : null}
-              {debtPayoffEngine.nextDebtName && (
-                <Text style={[styles.debtAlgoMeta, { color: c.mutedForeground }]}>
-                  {debtPayoffEngine.sourceNumbers.map(item => `${item.label}: ${item.value}`).join(" · ")}
-                </Text>
-              )}
+              <Text style={[styles.debtAlgoCopy, { color: c.mutedForeground }]} numberOfLines={2}>{debtRoomExplanation}</Text>
               {debtPayoffEngine.nextDebtName && debtPayoffEngine.nextDebtNameAfterTarget ? (
                 <View style={[styles.rolloverCard, { backgroundColor: c.success + "10", borderColor: c.success + "24" }]}>
                   <Feather name="repeat" size={13} color={c.success} />
@@ -705,18 +677,6 @@ export default function BillsScreen() {
                   </Text>
                 </View>
               ) : null}
-              <View style={styles.debtAlgoCompareRow}>
-                {debtPayoffEngine.comparison.map(item => {
-                  const label = item.method === "snowball" ? "Snowball" : item.method === "avalanche" ? "Avalanche" : "Cash-flow";
-                  const chipColor = item.method === "snowball" ? c.success : item.method === "avalanche" ? c.primary : c.warning;
-                  return (
-                  <View key={item.method} style={[styles.debtAlgoChip, { backgroundColor: chipColor + "12", borderColor: chipColor + "28" }]}>
-                    <Text style={[styles.debtAlgoChipLabel, { color: chipColor }]}>{label}</Text>
-                    <Text style={[styles.debtAlgoChipValue, { color: c.foreground }]} numberOfLines={2}>{item.targetName ?? "None"}</Text>
-                  </View>
-                  );
-                })}
-              </View>
             </View>
           )}
 
@@ -921,21 +881,17 @@ const styles = StyleSheet.create({
   statCard:       { flex: 1, alignItems: "center", paddingVertical: 12, gap: 4 },
   statValue:      { fontSize: 16, fontFamily: "Inter_700Bold" },
   statLabel:      { fontSize: 10, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.4 },
-  extraBanner:    { flexDirection: "column", padding: 16, marginBottom: 12, marginTop: 4, borderWidth: 1, borderColor: "rgba(34,197,94,0.16)" },
-  extraTopRow:    { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  extraLeft:      { flexDirection: "row", alignItems: "center", gap: 10 },
-  extraLabel:     { fontSize: 11, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.5 },
-  extraValue:     { fontSize: 20, fontFamily: "Inter_700Bold", marginTop: 2 },
-  applyBtn:       { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
-  applyBtnText:   { fontSize: 13, fontFamily: "Inter_700Bold" },
-  cappedNote:     { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 10, lineHeight: 15 },
   debtAlgoCard:   { borderWidth: 1, padding: 14, marginTop: 10, marginBottom: 2, gap: 10 },
   debtAlgoHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
   dataIcon:       { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   debtAlgoEyebrow:{ fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8 },
   debtAlgoTitle:  { fontSize: 17, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
-  debtAlgoBadge:  { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999 },
-  debtAlgoBadgeText: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.5 },
+  debtPlanApplyButton: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999 },
+  debtPlanApplyText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
+  debtPlanValueRow: { flexDirection: "row", gap: 8 },
+  debtPlanMetric: { flex: 1, borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 9 },
+  debtPlanLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 3 },
+  debtPlanValue: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
   debtAlgoCopy:   { fontSize: 13, fontFamily: "Inter_600SemiBold", lineHeight: 18 },
   debtAlgoMeta:   { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: -4 },
   snowballExplain: { borderWidth: 1, borderRadius: 12, padding: 10, flexDirection: "row", gap: 8, alignItems: "flex-start" },

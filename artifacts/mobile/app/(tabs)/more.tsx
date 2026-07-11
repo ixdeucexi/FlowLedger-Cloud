@@ -329,21 +329,21 @@ const SETTINGS_SECTIONS: Array<{
   description: string;
   icon: string;
 }> = [
-  { id: "setup", label: "Setup walkthrough", description: "Restart Flo setup, learning mode, and onboarding help.", icon: "message-circle" },
-  { id: "accounts", label: "Accounts", description: "Manage balances, reconcile accounts, and account health.", icon: "credit-card" },
-  { id: "money", label: "Money plan", description: "Income, categories, forecast safety, and payoff method.", icon: "sliders" },
-  { id: "review", label: "Review queue", description: "Unclear transactions, categorization rules, duplicates, and imports.", icon: "check-square" },
-  { id: "subscriptions", label: "Subscriptions", description: "Find recurring charges, price increases, and cleanup options.", icon: "repeat" },
-  { id: "reports", label: "Reports & insights", description: "Spending, debt, goals, cash flow, and what changed.", icon: "bar-chart-2" },
-  { id: "goals", label: "Goal funding", description: "Turn goals into safe monthly funding plans.", icon: "target" },
-  { id: "plaid", label: "Bank sync", description: "Plaid connection status and safe sync setup.", icon: "link" },
-  { id: "algorithms", label: "Algorithm Suite", description: "Turn financial engines on or off and learn what each one does.", icon: "cpu" },
-  { id: "appearance", label: "Appearance", description: "Light, dark, or automatic theme settings.", icon: "moon" },
-  { id: "children", label: "Child money", description: "Starter child profiles, allowance, limits, and savings goals.", icon: "smile" },
-  { id: "help", label: "Help & Feedback", description: "Send tester feedback and review the feedback inbox.", icon: "message-square" },
-  { id: "backup", label: "Backup, import, and install", description: "CSV backup, statement import, app install, and Flo memory.", icon: "download" },
-  { id: "security", label: "Security and profile", description: "View the signed-in account and sign out.", icon: "lock" },
-  { id: "legal", label: "Legal", description: "Terms, privacy, and data-use notes.", icon: "file-text" },
+  { id: "setup", label: "Setup walkthrough", description: "Restart setup and learning mode.", icon: "message-circle" },
+  { id: "accounts", label: "Accounts", description: "Balances, reconcile, and household sharing.", icon: "credit-card" },
+  { id: "money", label: "Money plan", description: "Income, categories, safety, and payoff.", icon: "sliders" },
+  { id: "review", label: "Review queue", description: "Rules, duplicates, imports, and unclear items.", icon: "check-square" },
+  { id: "subscriptions", label: "Subscriptions", description: "Recurring charges and cleanup.", icon: "repeat" },
+  { id: "reports", label: "Reports & insights", description: "Spending, debt, goals, and changes.", icon: "bar-chart-2" },
+  { id: "goals", label: "Goal funding", description: "Safe monthly goal plans.", icon: "target" },
+  { id: "plaid", label: "Bank sync", description: "Secure bank connection status.", icon: "link" },
+  { id: "algorithms", label: "Algorithm Suite", description: "Turn money engines on or off.", icon: "cpu" },
+  { id: "appearance", label: "Appearance", description: "Theme, text, and motion.", icon: "moon" },
+  { id: "children", label: "Child money", description: "Profiles, allowance, and goals.", icon: "smile" },
+  { id: "help", label: "Help & Feedback", description: "Send feedback and view the inbox.", icon: "message-square" },
+  { id: "backup", label: "Backup, import, and install", description: "CSV, imports, install, and Flo memory.", icon: "download" },
+  { id: "security", label: "Security and profile", description: "Signed-in account and sign out.", icon: "lock" },
+  { id: "legal", label: "Legal", description: "Terms, privacy, and data use.", icon: "file-text" },
 ];
 
 const VISIBLE_SETTINGS_SECTIONS = SETTINGS_SECTIONS.filter(section => PLAID_SETTINGS_ENABLED || section.id !== "plaid");
@@ -1939,7 +1939,7 @@ export default function MoreScreen() {
                 </View>
                 <View style={styles.settingsSectionCopy}>
                   <Text style={[styles.settingsSectionTitle, { color: c.foreground }]}>{section.label}</Text>
-                  <Text style={[styles.settingsSectionDesc, { color: c.mutedForeground }]}>{section.description}</Text>
+                  <Text style={[styles.settingsSectionDesc, { color: c.mutedForeground }]} numberOfLines={1}>{section.description}</Text>
                 </View>
                 <Feather name="chevron-right" size={18} color={c.mutedForeground} />
               </Pressable>

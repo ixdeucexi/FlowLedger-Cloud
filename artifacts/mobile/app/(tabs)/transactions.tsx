@@ -590,7 +590,7 @@ export default function TransactionsScreen() {
         <View>
           <Text style={[styles.title, { color: c.foreground }]}>Activity</Text>
           <Text style={[styles.subtitle, { color: c.mutedForeground }]}>
-            {filtered.length} of {allActivity.length} entries · {feedOrderLabel}
+            {feedOrderLabel}
           </Text>
         </View>
         <CommandPlusButton
@@ -676,8 +676,8 @@ export default function TransactionsScreen() {
         <View style={[styles.weekSummaryTrigger, { borderTopColor: c.border }]}>
           <View>
             <Text style={[styles.weekSummaryTitle, { color: c.foreground }]}>Weekly breakdown</Text>
-            <Text style={[styles.weekSummarySub, { color: c.mutedForeground }]}>
-              Tap to see where the month changes week by week.
+            <Text style={[styles.weekSummarySub, { color: c.mutedForeground }]} numberOfLines={1}>
+              See weekly net by date range.
             </Text>
           </View>
           <Feather name="chevron-right" size={18} color={c.mutedForeground} />
