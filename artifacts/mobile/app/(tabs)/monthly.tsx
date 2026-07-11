@@ -34,6 +34,14 @@ const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biw
 
 type TabView = "bills" | "calendar";
 type DueDayPickerState = { bill: Bill; fromDate: string };
+type FullPaymentPromptState = {
+  bill: Bill;
+  budgeted: number;
+  actual: number;
+  paidDate: string;
+  paidKey: string;
+  editValue: string;
+};
 
 function formatShortDate(date: string) {
   const parsed = new Date(`${date}T12:00:00`);
@@ -81,6 +89,142 @@ const ps = StyleSheet.create({
   text: { fontSize: 10, fontFamily: "Inter_700Bold", letterSpacing: 0.5 },
 });
 
+function FullPaymentPromptModal({
+  visible,
+  prompt,
+  onClose,
+  onKeepPartial,
+  onFullPayment,
+}: {
+  visible: boolean;
+  prompt: FullPaymentPromptState | null;
+  onClose: () => void;
+  onKeepPartial: () => void;
+  onFullPayment: () => void;
+}) {
+  const c = useColors();
+  const difference = prompt ? Math.max(0, prompt.budgeted - prompt.actual) : 0;
+  const fmt = (amount: number) => `$${amount.toFixed(2)}`;
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
+      <Pressable style={fp.backdrop} onPress={onClose}>
+        <Pressable
+          onPress={(event) => event.stopPropagation()}
+          style={[fp.card, { backgroundColor: c.card, borderColor: c.primary + "55" }]}
+        >
+          <View style={[fp.avatar, { backgroundColor: c.primary + "22", borderColor: c.primary + "66" }]}>
+            <Text style={[fp.avatarText, { color: c.primary }]}>F</Text>
+          </View>
+          <Text style={[fp.eyebrow, { color: c.primary }]}>FLO ASKS</Text>
+          <Text style={[fp.title, { color: c.foreground }]}>Was this the full payment?</Text>
+          <Text style={[fp.body, { color: c.mutedForeground }]}>
+            I see {prompt?.bill.name ?? "this bill"} was planned for {fmt(prompt?.budgeted ?? 0)}, but you entered {fmt(prompt?.actual ?? 0)}.
+            Was {fmt(prompt?.actual ?? 0)} the full amount for this month?
+          </Text>
+
+          <View style={[fp.amountBox, { backgroundColor: c.background + "88", borderColor: c.border }]}>
+            <View>
+              <Text style={[fp.amountLabel, { color: c.mutedForeground }]}>Planned</Text>
+              <Text style={[fp.amountValue, { color: c.foreground }]}>{fmt(prompt?.budgeted ?? 0)}</Text>
+            </View>
+            <View>
+              <Text style={[fp.amountLabel, { color: c.mutedForeground }]}>Paid</Text>
+              <Text style={[fp.amountValue, { color: c.success }]}>{fmt(prompt?.actual ?? 0)}</Text>
+            </View>
+            <View>
+              <Text style={[fp.amountLabel, { color: c.mutedForeground }]}>Leftover</Text>
+              <Text style={[fp.amountValue, { color: c.success }]}>{fmt(difference)}</Text>
+            </View>
+          </View>
+
+          <Pressable
+            onPress={onFullPayment}
+            style={({ pressed }) => [fp.primaryButton, { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 }]}
+          >
+            <Feather name="check-circle" size={18} color={c.primaryForeground} />
+            <Text style={[fp.primaryButtonText, { color: c.primaryForeground }]}>Yes, show leftover options</Text>
+          </Pressable>
+          <Pressable
+            onPress={onKeepPartial}
+            style={({ pressed }) => [fp.secondaryButton, { borderColor: c.border, opacity: pressed ? 0.75 : 1 }]}
+          >
+            <Text style={[fp.secondaryButtonText, { color: c.foreground }]}>No, keep it partial</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const fp = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(2,6,23,0.76)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 22,
+  },
+  card: {
+    width: "100%",
+    maxWidth: 430,
+    borderRadius: 28,
+    borderWidth: 1,
+    padding: 22,
+    alignItems: "center",
+    shadowColor: "#8b5cf6",
+    shadowOpacity: 0.28,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 18 },
+    elevation: 14,
+  },
+  avatar: {
+    width: 58,
+    height: 58,
+    borderRadius: 22,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  avatarText: { fontSize: 27, fontFamily: "Inter_800ExtraBold" },
+  eyebrow: { fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 2.2, marginBottom: 7 },
+  title: { fontSize: 25, fontFamily: "Inter_800ExtraBold", textAlign: "center", letterSpacing: -0.5 },
+  body: { fontSize: 15, fontFamily: "Inter_500Medium", lineHeight: 22, textAlign: "center", marginTop: 9 },
+  amountBox: {
+    width: "100%",
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 14,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 18,
+    marginBottom: 18,
+  },
+  amountLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.1, textTransform: "uppercase", marginBottom: 5 },
+  amountValue: { fontSize: 18, fontFamily: "Inter_800ExtraBold" },
+  primaryButton: {
+    width: "100%",
+    minHeight: 54,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 9,
+  },
+  primaryButtonText: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
+  secondaryButton: {
+    width: "100%",
+    minHeight: 52,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 10,
+  },
+  secondaryButtonText: { fontSize: 15, fontFamily: "Inter_800ExtraBold" },
+});
+
 export default function MonthlyScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
@@ -120,6 +264,7 @@ export default function MonthlyScreen() {
   const [savingIncomeDate, setSavingIncomeDate] = useState(false);
   const [snowballModalVisible, setSnowballModalVisible] = useState(false);
   const [snowballPreview, setSnowballPreview] = useState<SnowballProjectionResult | null>(null);
+  const [fullPaymentPrompt, setFullPaymentPrompt] = useState<FullPaymentPromptState | null>(null);
   const [surplusPrompt, setSurplusPrompt] = useState<{ bill: Bill; budgeted: number; actual: number; paidDate: string; matchAmountToActual?: boolean } | null>(null);
   const [surplusPaymentDate, setSurplusPaymentDate] = useState("");
   const [debtPaymentNotice, setDebtPaymentNotice] = useState<DebtPaymentAppliedDetail | null>(null);
@@ -206,6 +351,11 @@ export default function MonthlyScreen() {
         setDebtPaymentNotice(null);
         return true;
       }
+      if (fullPaymentPrompt) {
+        paidPromptPendingRef.current.delete(fullPaymentPrompt.paidKey);
+        setFullPaymentPrompt(null);
+        return true;
+      }
       if (surplusPrompt) {
         setSurplusPrompt(null);
         return true;
@@ -262,7 +412,7 @@ export default function MonthlyScreen() {
     const onPopState = () => setSelectedDate(null);
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [debtPaymentNotice, dueDayPickerBill, editPlan, incomeDatePicker, monthSummaryDetail, selectedDate, showSnowballResults, snowballModalVisible, snowballPreview, surplusPrompt, txModalVisible]);
+  }, [debtPaymentNotice, dueDayPickerBill, editPlan, fullPaymentPrompt, incomeDatePicker, monthSummaryDetail, selectedDate, showSnowballResults, snowballModalVisible, snowballPreview, surplusPrompt, txModalVisible]);
 
   const monthBills = useMemo(() => getMonthlyBills(month, selectedYear), [getMonthlyBills, month, selectedYear]);
 
@@ -474,6 +624,60 @@ export default function MonthlyScreen() {
     return Number.parseFloat(normalized);
   }, []);
 
+  const clearPaidEditForKey = useCallback((key: string) => {
+    editingPaidRef.current = { ...editingPaidRef.current };
+    delete editingPaidRef.current[key];
+    setEditingPaid(current => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  }, []);
+
+  const closeFullPaymentPrompt = useCallback(() => {
+    if (fullPaymentPrompt) paidPromptPendingRef.current.delete(fullPaymentPrompt.paidKey);
+    setFullPaymentPrompt(null);
+  }, [fullPaymentPrompt]);
+
+  const keepPromptAsPartialPayment = useCallback(async () => {
+    if (!fullPaymentPrompt) return;
+    const { bill, actual, paidDate, paidKey, editValue } = fullPaymentPrompt;
+    paidSaveInFlightRef.current.add(paidKey);
+    setSavingPaidKey(paidKey);
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const directPaidBefore = getPaidAmount(bill.id, month, selectedYear);
+      if (bill.is_debt) await removeDebtSurplusTransaction(bill.id);
+      await setPaidAmount(bill.id, month, selectedYear, actual);
+      if (bill.is_debt) {
+        const delta = actual - directPaidBefore;
+        if (delta > 0.005) showDebtPaymentNotice(bill, delta, paidDate, { scheduled: false, balanceBefore: bill.balance });
+      }
+      paidSaveSnapshotRef.current = { ...paidSaveSnapshotRef.current, [paidKey]: { value: editValue, at: Date.now() } };
+      clearPaidEditForKey(paidKey);
+      paidPromptPendingRef.current.delete(paidKey);
+      setFullPaymentPrompt(null);
+    } catch (error) {
+      Alert.alert("Could not save payment", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      paidSaveInFlightRef.current.delete(paidKey);
+      setSavingPaidKey(current => current === paidKey ? null : current);
+    }
+  }, [clearPaidEditForKey, fullPaymentPrompt, getPaidAmount, month, removeDebtSurplusTransaction, selectedYear, setPaidAmount, showDebtPaymentNotice]);
+
+  const confirmPromptAsFullPayment = useCallback(() => {
+    if (!fullPaymentPrompt) return;
+    const { bill, budgeted, actual, paidDate, paidKey, editValue } = fullPaymentPrompt;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSurplusPrompt({ bill, budgeted, actual, paidDate, matchAmountToActual: true });
+    setSurplusPaymentDate(paidDate);
+    setSelectedDate(null);
+    paidSaveSnapshotRef.current = { ...paidSaveSnapshotRef.current, [paidKey]: { value: editValue, at: Date.now() } };
+    clearPaidEditForKey(paidKey);
+    paidPromptPendingRef.current.delete(paidKey);
+    setFullPaymentPrompt(null);
+  }, [clearPaidEditForKey, fullPaymentPrompt]);
+
   const handlePaidBlur = useCallback(async (billId: string, key: string, submittedValue?: string) => {
     if (savingPaidKey === key || paidSaveInFlightRef.current.has(key) || paidPromptPendingRef.current.has(key)) return;
     const hasActiveEdit = Object.prototype.hasOwnProperty.call(editingPaidRef.current, key)
@@ -494,11 +698,7 @@ export default function MonthlyScreen() {
     const val = candidates.find(candidate => candidate.trim().length > 0) ?? candidates[0];
     if (val === undefined) return;
     const trimmed = val.trim();
-    const clearPaidEdit = () => {
-      editingPaidRef.current = { ...editingPaidRef.current };
-      delete editingPaidRef.current[key];
-      setEditingPaid(p => { const n = { ...p }; delete n[key]; return n; });
-    };
+    const clearPaidEdit = () => clearPaidEditForKey(key);
     paidSaveInFlightRef.current.add(key);
     setSavingPaidKey(key);
     try {
@@ -546,51 +746,7 @@ export default function MonthlyScreen() {
       if (bill && parsed >= 0 && parsed < budgeted) {
         Keyboard.dismiss();
         paidPromptPendingRef.current.add(key);
-        const showFullPaymentPrompt = () => Alert.alert(
-          "Was this the full payment?",
-          `${bill.name} was paid at $${parsed.toFixed(2)}, which is different from the planned $${budgeted.toFixed(2)}. Was $${parsed.toFixed(2)} the full payment for this month?`,
-          [
-            {
-              text: "No, keep partial",
-              style: "cancel",
-              onPress: async () => {
-                try {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  const directPaidBefore = getPaidAmount(bill.id, month, selectedYear);
-                  if (bill.is_debt) await removeDebtSurplusTransaction(bill.id);
-                  await setPaidAmount(bill.id, month, selectedYear, parsed);
-                  if (bill.is_debt) {
-                    const delta = parsed - directPaidBefore;
-                    if (delta > 0.005) showDebtPaymentNotice(bill, delta, paidDate, { scheduled: false, balanceBefore: bill.balance });
-                  }
-                  paidSaveSnapshotRef.current = { ...paidSaveSnapshotRef.current, [key]: { value: trimmed, at: Date.now() } };
-                  clearPaidEdit();
-                } catch (error) {
-                  Alert.alert("Could not save payment", error instanceof Error ? error.message : "Please try again.");
-                } finally {
-                  paidPromptPendingRef.current.delete(key);
-                }
-              },
-            },
-            {
-              text: "Yes, full payment",
-              onPress: () => {
-                setSurplusPrompt({ bill, budgeted, actual: parsed, paidDate, matchAmountToActual: true });
-                setSurplusPaymentDate(paidDate);
-                setSelectedDate(null);
-                paidSaveSnapshotRef.current = { ...paidSaveSnapshotRef.current, [key]: { value: trimmed, at: Date.now() } };
-                clearPaidEdit();
-                paidPromptPendingRef.current.delete(key);
-              },
-            },
-          ],
-          {
-            onDismiss: () => {
-              paidPromptPendingRef.current.delete(key);
-            },
-          },
-        );
-        setTimeout(showFullPaymentPrompt, Platform.OS === "web" ? 0 : 250);
+        setFullPaymentPrompt({ bill, budgeted, actual: parsed, paidDate, paidKey: key, editValue: trimmed });
         return;
       }
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -610,7 +766,7 @@ export default function MonthlyScreen() {
       paidSaveInFlightRef.current.delete(key);
       setSavingPaidKey(current => current === key ? null : current);
     }
-  }, [editingPaid, savingPaidKey, setPaidAmount, bills, overrides, transactions, deleteTransaction, getBillMonthlyTotal, getCustomDueDay, getPaidAmount, getExtraPayment, previewDebtSnowball, finalizeBillPayment, applyDebtSnowballPayment, removeDebtSnowballPayment, removeDebtSurplusTransaction, showDebtPaymentNotice, askToTreatPaidAsFullPayment, parsePaidInput, month, selectedYear]);
+  }, [clearPaidEditForKey, editingPaid, savingPaidKey, setPaidAmount, bills, overrides, transactions, deleteTransaction, getBillMonthlyTotal, getCustomDueDay, getPaidAmount, getExtraPayment, previewDebtSnowball, finalizeBillPayment, applyDebtSnowballPayment, removeDebtSnowballPayment, showDebtPaymentNotice, askToTreatPaidAsFullPayment, parsePaidInput, month, selectedYear]);
 
   const finalizeBillAtActualForMonth = useCallback(async (prompt: { bill: Bill; actual: number; paidDate: string }) => {
     if (prompt.bill.is_debt) {
@@ -2032,6 +2188,13 @@ export default function MonthlyScreen() {
         onClose={() => setSnowballModalVisible(false)}
         onConfirm={confirmSnowballPayment}
         onRemove={() => removeDebtSnowballPayment(month, selectedYear).then(() => setSnowballModalVisible(false))}
+      />
+      <FullPaymentPromptModal
+        visible={!!fullPaymentPrompt}
+        prompt={fullPaymentPrompt}
+        onClose={closeFullPaymentPrompt}
+        onKeepPartial={keepPromptAsPartialPayment}
+        onFullPayment={confirmPromptAsFullPayment}
       />
       <BillSurplusModal
         visible={!!surplusPrompt}
