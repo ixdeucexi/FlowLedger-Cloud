@@ -1003,9 +1003,9 @@ export default function DashboardScreen() {
         id: "paydaySplit",
         settingId: "paydaySplit" as AlgorithmId,
         title: "Payday Split",
-        value: algorithmSuite.paydaySplit.summary,
-        detail: algorithmSuite.paydaySplit.nextMove,
-        action: `${algorithmSuite.paydaySplit.bills.toFixed(0)}% bills / ${algorithmSuite.paydaySplit.debt.toFixed(0)}% debt`,
+        value: "Next paycheck",
+        detail: algorithmSuite.paydaySplit.summary,
+        action: `${algorithmSuite.paydaySplit.bills.toFixed(0)}% bills · ${algorithmSuite.paydaySplit.debt.toFixed(0)}% debt · ${algorithmSuite.paydaySplit.savings.toFixed(0)}% savings`,
         icon: "git-branch" as const,
         color: "#818cf8",
         prompt: "How should my next paycheck be split so I can stop living paycheck to paycheck?",
@@ -1342,8 +1342,8 @@ export default function DashboardScreen() {
                 <View style={{ flex: 1 }}>
                   <AppText tone="label" style={styles.referenceAlgorithmTitle}>{card.title}</AppText>
                   <AppText tone="title" style={[styles.referenceAlgorithmValue, { color: card.color }]}>{card.value}</AppText>
-                  <AppText style={styles.referenceAlgorithmDetail} numberOfLines={2}>{card.detail}</AppText>
-                  <AppText style={styles.referenceAlgorithmAction} numberOfLines={1}>{card.action}</AppText>
+                  <AppText style={styles.referenceAlgorithmDetail}>{card.detail}</AppText>
+                  <AppText style={styles.referenceAlgorithmAction}>{card.action}</AppText>
                 </View>
                 <Feather name="message-circle" size={16} color="rgba(226,232,240,0.72)" />
               </Pressable>
