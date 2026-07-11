@@ -18,7 +18,6 @@ import { AccountModal } from "@/components/AccountModal";
 import { AppText } from "@/components/AppText";
 import { FloLogo } from "@/components/FloLogo";
 import { IncomeModal } from "@/components/IncomeModal";
-import { PlaidLinkLauncher, type PlaidLinkLauncherHandle } from "@/components/PlaidLinkLauncher.web";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { PWA_INSTALL_EVENT } from "@/components/PwaInstallPrompt";
 import colors from "@/constants/colors";
@@ -91,6 +90,7 @@ const FONT_OPTIONS: { label: string; value: AppFontStyle; icon: string; desc: st
 
 const BACKUP_COMPLETE_KEY = "flowledger_backup_exported";
 const PLAID_RETURN_NOTICE_KEY = "flowledger_plaid_return_notice";
+const PLAID_SETTINGS_ENABLED = false;
 type AlgorithmCatalogItem = typeof ALGORITHM_CATALOG[number];
 type SettingsSectionId =
   | "overview"
@@ -167,6 +167,11 @@ type PlaidSetupState = {
   institutionName?: string | null;
   accounts: PlaidAccountPreview[];
   selectedAccountIds: string[];
+};
+
+type PlaidLinkLauncherHandle = {
+  open: () => boolean;
+  isReady: () => boolean;
 };
 
 function normalizeStorageMap<T extends string>(value: unknown): Record<string, T> {
@@ -341,10 +346,11 @@ const SETTINGS_SECTIONS: Array<{
   { id: "legal", label: "Legal", description: "Terms, privacy, and data-use notes.", icon: "file-text" },
 ];
 
+const VISIBLE_SETTINGS_SECTIONS = SETTINGS_SECTIONS.filter(section => PLAID_SETTINGS_ENABLED || section.id !== "plaid");
 const ACTIVE_SETTINGS_SECTION_KEY = "flowledger_active_settings_section";
 
 function isSettingsSectionId(value: unknown): value is SettingsSectionId {
-  return value === "overview" || SETTINGS_SECTIONS.some(section => section.id === value);
+  return value === "overview" || VISIBLE_SETTINGS_SECTIONS.some(section => section.id === value);
 }
 
 function readStoredSettingsSection(): SettingsSectionId {
@@ -451,8 +457,9 @@ export default function MoreScreen() {
   const [showAlgorithmSuite, setShowAlgorithmSuite] = useState(false);
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>(() => readStoredSettingsSection());
   const openSettingsSection = useCallback((sectionId: SettingsSectionId) => {
-    setActiveSettingsSection(sectionId);
-    writeStoredSettingsSection(sectionId);
+    const safeSectionId = PLAID_SETTINGS_ENABLED || sectionId !== "plaid" ? sectionId : "overview";
+    setActiveSettingsSection(safeSectionId);
+    writeStoredSettingsSection(safeSectionId);
   }, []);
   useBackDismiss(activeSettingsSection !== "overview", () => openSettingsSection("overview"));
   const [householdInviteRole, setHouseholdInviteRole] = useState<HouseholdInviteRole>("editor");
@@ -520,6 +527,7 @@ export default function MoreScreen() {
   }, [routeParams.section]);
 
   useEffect(() => {
+    if (!PLAID_SETTINGS_ENABLED) return;
     if (Platform.OS !== "web" || typeof window === "undefined") return;
     try {
       const notice = window.sessionStorage.getItem(PLAID_RETURN_NOTICE_KEY);
@@ -1492,6 +1500,7 @@ export default function MoreScreen() {
   };
 
   const preparePlaidLinkToken = useCallback(async (options?: { forceFresh?: boolean; silent?: boolean }) => {
+    if (!PLAID_SETTINGS_ENABLED) return null;
     if (Platform.OS !== "web") return null;
     if (!plaidStatus.canStartLink) return null;
     if (plaidLinkToken && !options?.forceFresh) return plaidLinkToken;
@@ -1527,6 +1536,7 @@ export default function MoreScreen() {
   }, [plaidLinkToken, plaidPost, plaidPreparing, plaidStatus.canStartLink]);
 
   useEffect(() => {
+    if (!PLAID_SETTINGS_ENABLED) return;
     if (Platform.OS !== "web") return;
     if (activeSettingsSection !== "plaid") {
       plaidAutoPreparedRef.current = false;
@@ -1557,6 +1567,10 @@ export default function MoreScreen() {
   ]);
 
   const handleStartPlaidLink = async () => {
+    if (!PLAID_SETTINGS_ENABLED) {
+      setPlaidNotice("Bank sync is temporarily disabled while I repair Plaid Link.");
+      return;
+    }
     if (Platform.OS !== "web") {
       Alert.alert("Bank sync", "Open FlowLedger in the web app to connect Plaid for now.");
       return;
@@ -1894,23 +1908,11 @@ export default function MoreScreen() {
   };
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
-  const activeSettingsMeta = SETTINGS_SECTIONS.find(section => section.id === activeSettingsSection);
+  const activeSettingsMeta = VISIBLE_SETTINGS_SECTIONS.find(section => section.id === activeSettingsSection);
 
   return (
     <View style={[styles.screen, { backgroundColor: c.background }]}>
       <PremiumBackdrop variant="blue" />
-      <PlaidLinkLauncher
-        ref={plaidLauncherRef}
-        linkToken={plaidLinkToken}
-        shouldOpen={plaidLinkShouldOpen}
-        onReadyChange={setPlaidLinkReady}
-        onOpened={() => {
-          setPlaidLinkShouldOpen(false);
-          setPlaidNotice("Plaid Link is opening...");
-        }}
-        onSuccess={handlePlaidSuccess}
-        onExit={handlePlaidExit}
-      />
       <ScrollView
         style={styles.scroller}
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 + webTopPad, paddingBottom: insets.bottom + 100 }]}
@@ -1919,7 +1921,7 @@ export default function MoreScreen() {
         <>
           <Text style={[styles.pageTitle, { color: c.foreground }]}>Settings</Text>
           <View style={styles.settingsSectionList}>
-            {SETTINGS_SECTIONS.map(section => (
+            {VISIBLE_SETTINGS_SECTIONS.map(section => (
               <Pressable
                 key={section.id}
                 onPress={() => {
