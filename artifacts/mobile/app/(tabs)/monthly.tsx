@@ -15,6 +15,7 @@ import { CalendarView } from "@/components/CalendarView";
 import { CommandPlusButton } from "@/components/CommandPlusButton";
 import { DebtPaymentAppliedModal, type DebtPaymentAppliedDetail } from "@/components/DebtPaymentAppliedModal";
 import { EmptyState } from "@/components/EmptyState";
+import { FloLogo } from "@/components/FloLogo";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
 import colors from "@/constants/colors";
@@ -107,35 +108,27 @@ function FullPaymentPromptModal({
   const fmt = (amount: number) => `$${amount.toFixed(2)}`;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" presentationStyle="overFullScreen" statusBarTranslucent onRequestClose={onClose}>
       <Pressable style={fp.backdrop} onPress={onClose}>
         <Pressable
           onPress={(event) => event.stopPropagation()}
-          style={[fp.card, { backgroundColor: c.card, borderColor: c.primary + "55" }]}
+          style={[fp.card, { backgroundColor: c.card, borderColor: c.border }]}
         >
-          <View style={[fp.avatar, { backgroundColor: c.primary + "22", borderColor: c.primary + "66" }]}>
-            <Text style={[fp.avatarText, { color: c.primary }]}>F</Text>
+          <View style={fp.floWrap}>
+            <FloLogo size={74} />
           </View>
-          <Text style={[fp.eyebrow, { color: c.primary }]}>FLO ASKS</Text>
-          <Text style={[fp.title, { color: c.foreground }]}>Was this the full payment?</Text>
-          <Text style={[fp.body, { color: c.mutedForeground }]}>
-            I see {prompt?.bill.name ?? "this bill"} was planned for {fmt(prompt?.budgeted ?? 0)}, but you entered {fmt(prompt?.actual ?? 0)}.
-            Was {fmt(prompt?.actual ?? 0)} the full amount for this month?
+          <Text style={[fp.eyebrow, { color: c.primary }]}>Flo can help</Text>
+          <Text style={[fp.message, { color: c.foreground }]}>
+            Was {fmt(prompt?.actual ?? 0)} the full payment for {prompt?.bill.name ?? "this bill"}?
+          </Text>
+          <Text style={[fp.sub, { color: c.mutedForeground }]}>
+            I see it was planned for {fmt(prompt?.budgeted ?? 0)}. If this was the full amount, I can help route the {fmt(difference)} left over.
           </Text>
 
           <View style={[fp.amountBox, { backgroundColor: c.background + "88", borderColor: c.border }]}>
-            <View>
-              <Text style={[fp.amountLabel, { color: c.mutedForeground }]}>Planned</Text>
-              <Text style={[fp.amountValue, { color: c.foreground }]}>{fmt(prompt?.budgeted ?? 0)}</Text>
-            </View>
-            <View>
-              <Text style={[fp.amountLabel, { color: c.mutedForeground }]}>Paid</Text>
-              <Text style={[fp.amountValue, { color: c.success }]}>{fmt(prompt?.actual ?? 0)}</Text>
-            </View>
-            <View>
-              <Text style={[fp.amountLabel, { color: c.mutedForeground }]}>Leftover</Text>
-              <Text style={[fp.amountValue, { color: c.success }]}>{fmt(difference)}</Text>
-            </View>
+            <View style={fp.amountRow}><Text style={[fp.amountLabel, { color: c.mutedForeground }]}>Budgeted</Text><Text style={[fp.amountValue, { color: c.foreground }]}>{fmt(prompt?.budgeted ?? 0)}</Text></View>
+            <View style={fp.amountRow}><Text style={[fp.amountLabel, { color: c.mutedForeground }]}>Actual</Text><Text style={[fp.amountValue, { color: c.foreground }]}>{fmt(prompt?.actual ?? 0)}</Text></View>
+            <View style={fp.amountRow}><Text style={[fp.amountLabel, { color: c.success }]}>Available</Text><Text style={[fp.amountValue, { color: c.success }]}>{fmt(difference)}</Text></View>
           </View>
 
           <Pressable
@@ -143,7 +136,7 @@ function FullPaymentPromptModal({
             style={({ pressed }) => [fp.primaryButton, { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 }]}
           >
             <Feather name="check-circle" size={18} color={c.primaryForeground} />
-            <Text style={[fp.primaryButtonText, { color: c.primaryForeground }]}>Yes, show leftover options</Text>
+            <Text style={[fp.primaryButtonText, { color: c.primaryForeground }]}>Yes</Text>
           </Pressable>
           <Pressable
             onPress={onKeepPartial}
@@ -160,69 +153,60 @@ function FullPaymentPromptModal({
 const fp = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(2,6,23,0.76)",
-    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.68)",
     justifyContent: "center",
-    padding: 22,
+    padding: 20,
   },
   card: {
     width: "100%",
     maxWidth: 430,
     borderRadius: 28,
     borderWidth: 1,
-    padding: 22,
-    alignItems: "center",
-    shadowColor: "#8b5cf6",
+    padding: 20,
+    paddingTop: 24,
+    paddingBottom: 22,
+    shadowColor: "#2563eb",
     shadowOpacity: 0.28,
-    shadowRadius: 28,
-    shadowOffset: { width: 0, height: 18 },
-    elevation: 14,
+    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 12,
   },
-  avatar: {
-    width: 58,
-    height: 58,
-    borderRadius: 22,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
-  },
-  avatarText: { fontSize: 27, fontFamily: "Inter_800ExtraBold" },
-  eyebrow: { fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 2.2, marginBottom: 7 },
-  title: { fontSize: 25, fontFamily: "Inter_800ExtraBold", textAlign: "center", letterSpacing: -0.5 },
-  body: { fontSize: 15, fontFamily: "Inter_500Medium", lineHeight: 22, textAlign: "center", marginTop: 9 },
+  floWrap: { alignItems: "center" },
+  eyebrow: { fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.1, textTransform: "uppercase", textAlign: "center", marginTop: 12 },
+  message: { fontSize: 21, fontFamily: "Inter_800ExtraBold", lineHeight: 28, textAlign: "center", marginTop: 10 },
+  sub: { fontSize: 14, lineHeight: 20, textAlign: "center", marginTop: 7 },
   amountBox: {
     width: "100%",
     borderWidth: 1,
-    borderRadius: 18,
+    borderRadius: 16,
     padding: 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
+    gap: 9,
     marginTop: 18,
     marginBottom: 18,
   },
-  amountLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.1, textTransform: "uppercase", marginBottom: 5 },
-  amountValue: { fontSize: 18, fontFamily: "Inter_800ExtraBold" },
+  amountRow: { flexDirection: "row", justifyContent: "space-between" },
+  amountLabel: { fontSize: 13 },
+  amountValue: { fontSize: 13, fontFamily: "Inter_700Bold" },
   primaryButton: {
     width: "100%",
-    minHeight: 54,
-    borderRadius: 17,
+    minHeight: 50,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
-    gap: 9,
+    gap: 7,
   },
-  primaryButtonText: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
+  primaryButtonText: { fontSize: 14, fontFamily: "Inter_700Bold" },
   secondaryButton: {
     width: "100%",
-    minHeight: 52,
-    borderRadius: 17,
+    minHeight: 48,
+    borderRadius: 12,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 10,
   },
-  secondaryButtonText: { fontSize: 15, fontFamily: "Inter_800ExtraBold" },
+  secondaryButtonText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
 });
 
 export default function MonthlyScreen() {
