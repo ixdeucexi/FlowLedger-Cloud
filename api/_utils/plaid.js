@@ -26,12 +26,16 @@ class PlaidConfigurationError extends Error {
 }
 
 class AuthRequiredError extends Error {
-  constructor(message = "Sign in again before connecting your bank.") {
+  constructor(message = "Sign in again before connecting your bank.", code = "AUTH_REQUIRED") {
     super(message);
     this.name = "AuthRequiredError";
     this.status = 401;
-    this.code = "AUTH_REQUIRED";
+    this.code = code;
   }
+}
+
+function logPlaidAuthStage(stage) {
+  console.log("[plaid-auth]", { stage });
 }
 
 function plaidEnv() {
@@ -195,15 +199,35 @@ async function plaidPost(path, body) {
 
 function getBearerToken(req) {
   const auth = req.headers.authorization || req.headers.Authorization;
-  if (!auth || typeof auth !== "string") return null;
+  if (!auth || typeof auth !== "string") {
+    logPlaidAuthStage("AUTH_HEADER_MISSING");
+    throw new AuthRequiredError(
+      "Please sign in again before connecting your bank.",
+      "AUTH_HEADER_MISSING",
+    );
+  }
   const match = auth.match(/^Bearer\s+(.+)$/i);
-  return match ? match[1] : null;
+  if (!match) {
+    logPlaidAuthStage("AUTH_BEARER_REQUIRED");
+    throw new AuthRequiredError(
+      "Please sign in again before connecting your bank.",
+      "AUTH_BEARER_REQUIRED",
+    );
+  }
+  const token = match[1]?.trim();
+  if (!token) {
+    logPlaidAuthStage("AUTH_TOKEN_MISSING");
+    throw new AuthRequiredError(
+      "Please sign in again before connecting your bank.",
+      "AUTH_TOKEN_MISSING",
+    );
+  }
+  return token;
 }
 
 async function getSupabaseUser(req) {
-  if (!supabaseConfigured()) return null;
+  requireSupabaseConfigured();
   const token = getBearerToken(req);
-  if (!token) return null;
 
   const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
   const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
@@ -213,8 +237,16 @@ async function getSupabaseUser(req) {
     },
   });
 
-  if (!response.ok) return null;
-  return response.json().catch(() => null);
+  if (!response.ok) {
+    logPlaidAuthStage("AUTH_TOKEN_INVALID");
+    throw new AuthRequiredError(
+      "Your bank connection session expired. Please sign in again.",
+      "AUTH_TOKEN_INVALID",
+    );
+  }
+  const user = await response.json().catch(() => null);
+  if (user?.id) logPlaidAuthStage("AUTH_USER_VERIFIED");
+  return user;
 }
 
 async function requireSupabaseUser(req) {

@@ -419,7 +419,7 @@ export default function MoreScreen() {
     lightningFlashesEnabled,
     setLightningFlashesEnabled,
   } = useThemeMode();
-  const { signOut, user, session } = useAuth();
+  const { signOut, user, session, loading: authLoading } = useAuth();
   const {
     bills, transactions, overrides, incomes, goals, importBills, settings, updateSettings, accounts, forecastConfidence,
     addBill, updateBill,
@@ -486,7 +486,6 @@ export default function MoreScreen() {
   const [plaidImporting, setPlaidImporting] = useState(false);
   const [plaidSetup, setPlaidSetup] = useState<PlaidSetupState | null>(null);
   const plaidLauncherRef = useRef<PlaidLinkLauncherHandle | null>(null);
-  const plaidAutoPreparedRef = useRef(false);
   const [childProfiles, setChildProfiles] = useState<ChildProfile[]>([]);
   const [childName, setChildName] = useState("");
   const [childAllowanceText, setChildAllowanceText] = useState("");
@@ -1401,6 +1400,10 @@ export default function MoreScreen() {
   };
 
   const plaidAuthHeaders = useCallback(async () => {
+    if (authLoading) {
+      throw new Error("I’m still restoring your sign-in. Please wait a moment, then tap Connect Bank Account again.");
+    }
+
     const readStoredAccessToken = async () => {
       try {
         const { data } = await supabase.auth.getSession();
@@ -1433,23 +1436,14 @@ export default function MoreScreen() {
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
     };
-  }, [session?.access_token]);
+  }, [authLoading, session?.access_token]);
 
   const plaidPost = useCallback(async (path: string, body: Record<string, unknown>) => {
-    const makeRequest = async () => fetch(path, {
+    return fetch(path, {
       method: "POST",
       headers: await plaidAuthHeaders(),
       body: JSON.stringify(body),
     });
-
-    let response = await makeRequest();
-    if (response.status === 401) {
-      try {
-        await supabase.auth.refreshSession();
-      } catch {}
-      response = await makeRequest();
-    }
-    return response;
   }, [plaidAuthHeaders]);
 
   const handleTogglePlaidAccount = (accountId: string) => {
@@ -1531,37 +1525,6 @@ export default function MoreScreen() {
     }
   }, [plaidLinkToken, plaidPost, plaidPreparing, plaidStatus.canStartLink]);
 
-  useEffect(() => {
-    if (!PLAID_SETTINGS_ENABLED) return;
-    if (Platform.OS !== "web") return;
-    if (activeSettingsSection !== "plaid") {
-      plaidAutoPreparedRef.current = false;
-      return;
-    }
-    if (
-      plaidAutoPreparedRef.current ||
-      !plaidStatus.canStartLink ||
-      plaidLinkToken ||
-      plaidPreparing ||
-      plaidLinking ||
-      plaidImporting ||
-      plaidSetup
-    ) {
-      return;
-    }
-    plaidAutoPreparedRef.current = true;
-    void preparePlaidLinkToken({ silent: true });
-  }, [
-    activeSettingsSection,
-    plaidImporting,
-    plaidLinkToken,
-    plaidLinking,
-    plaidPreparing,
-    plaidSetup,
-    plaidStatus.canStartLink,
-    preparePlaidLinkToken,
-  ]);
-
   const handleStartPlaidLink = async () => {
     if (!PLAID_SETTINGS_ENABLED) {
       setPlaidNotice("Bank sync is temporarily disabled while I repair Plaid Link.");
@@ -1569,6 +1532,10 @@ export default function MoreScreen() {
     }
     if (Platform.OS !== "web") {
       Alert.alert("Bank sync", "Open FlowLedger in the web app to connect Plaid for now.");
+      return;
+    }
+    if (authLoading) {
+      setPlaidNotice("I’m still restoring your sign-in. Please wait a moment, then tap Connect Bank Account again.");
       return;
     }
     if (!plaidStatus.canStartLink || plaidLinking || plaidImporting || plaidPreparing) return;

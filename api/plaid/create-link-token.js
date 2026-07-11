@@ -91,6 +91,7 @@ module.exports = async function handler(req, res) {
     if (!data.link_token) {
       return sendJson(res, 502, { error: "Plaid did not return a link token." });
     }
+    console.log("[plaid-auth]", { stage: "LINK_TOKEN_CREATED" });
 
     return sendJson(res, 200, {
       link_token: data.link_token,
