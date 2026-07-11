@@ -34,8 +34,15 @@ function AuthObserver() {
   useEffect(() => {
     if (loading) return;
     const firstSegment = segments[0] as string | undefined;
+    const secondSegment = segments[1] as string | undefined;
     const inAuth = firstSegment === "login";
     const atRoot = !firstSegment || firstSegment === "index";
+    const inPlaidOAuthCallback = firstSegment === "plaid" && secondSegment === "oauth";
+
+    if (inPlaidOAuthCallback) {
+      return;
+    }
+
     if (!session && !inAuth) {
       router.replace("/login");
     } else if (session && (inAuth || atRoot)) {
@@ -159,6 +166,7 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
             <Stack.Screen name="index" />
             <Stack.Screen name="login" />
             <Stack.Screen name="setup" />
+            <Stack.Screen name="plaid/oauth" />
             <Stack.Screen name="(tabs)" />
           </Stack>
           <PwaInstallPrompt />

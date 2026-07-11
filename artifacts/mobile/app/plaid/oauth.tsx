@@ -25,6 +25,7 @@ export default function PlaidOAuthCallbackPage() {
   const { session, loading } = useAuth();
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [shouldOpen, setShouldOpen] = useState(false);
+  const [plaidReady, setPlaidReady] = useState(false);
   const [status, setStatus] = useState("Preparing secure bank connection...");
   const [error, setError] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
@@ -56,9 +57,20 @@ export default function PlaidOAuthCallbackPage() {
       return;
     }
     setLinkToken(stored.linkToken);
-    setStatus("Finishing secure bank sign-in...");
-    setShouldOpen(true);
+    setStatus("Reopening Plaid to finish secure bank sign-in...");
   }, [hasOAuthState, loading, session]);
+
+  useEffect(() => {
+    if (loading || session) return;
+    setShouldOpen(false);
+    setError("Please sign in again before reconnecting your bank.");
+    setStatus("Bank sync needs a fresh sign-in.");
+  }, [loading, session]);
+
+  useEffect(() => {
+    if (!linkToken || !plaidReady || completed || error) return;
+    setShouldOpen(true);
+  }, [completed, error, linkToken, plaidReady]);
 
   const authHeaders = useCallback(async () => {
     let accessToken = session?.access_token ?? null;
@@ -135,6 +147,7 @@ export default function PlaidOAuthCallbackPage() {
       <PlaidLinkLauncher
         linkToken={linkToken}
         shouldOpen={shouldOpen}
+        onReadyChange={setPlaidReady}
         onOpened={() => {
           setShouldOpen(false);
           setStatus("Plaid is reopening...");

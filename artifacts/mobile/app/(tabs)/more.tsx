@@ -19,6 +19,7 @@ import { AppText } from "@/components/AppText";
 import { FloLogo } from "@/components/FloLogo";
 import { IncomeModal } from "@/components/IncomeModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
+import { PlaidLinkLauncher, type PlaidLinkLauncherHandle } from "@/components/PlaidLinkLauncher.web";
 import { PWA_INSTALL_EVENT } from "@/components/PwaInstallPrompt";
 import colors from "@/constants/colors";
 import type { Account, IncomeItem } from "@/context/BudgetContext";
@@ -90,7 +91,7 @@ const FONT_OPTIONS: { label: string; value: AppFontStyle; icon: string; desc: st
 
 const BACKUP_COMPLETE_KEY = "flowledger_backup_exported";
 const PLAID_RETURN_NOTICE_KEY = "flowledger_plaid_return_notice";
-const PLAID_SETTINGS_ENABLED = false;
+const PLAID_SETTINGS_ENABLED = true;
 type AlgorithmCatalogItem = typeof ALGORITHM_CATALOG[number];
 type SettingsSectionId =
   | "overview"
@@ -167,11 +168,6 @@ type PlaidSetupState = {
   institutionName?: string | null;
   accounts: PlaidAccountPreview[];
   selectedAccountIds: string[];
-};
-
-type PlaidLinkLauncherHandle = {
-  open: () => boolean;
-  isReady: () => boolean;
 };
 
 function normalizeStorageMap<T extends string>(value: unknown): Record<string, T> {
@@ -1580,22 +1576,18 @@ export default function MoreScreen() {
     setPlaidLinkShouldOpen(false);
 
     try {
-      if (plaidLinkToken && plaidLauncherRef.current?.isReady()) {
+      if (plaidLinkToken) {
         setPlaidLinking(true);
-        setPlaidNotice("Opening Plaid...");
-        const opened = plaidLauncherRef.current.open();
-        if (opened) return;
-        setPlaidLinking(false);
-      }
-
-      if (plaidLinkToken && !plaidLauncherRef.current?.isReady()) {
-        setPlaidNotice("Plaid is almost ready. Tap Connect Bank Account again in a moment.");
+        setPlaidNotice(plaidLauncherRef.current?.isReady() ? "Opening Plaid..." : "Plaid is loading. I’ll open it in a moment...");
+        setPlaidLinkShouldOpen(true);
         return;
       }
 
       const token = await preparePlaidLinkToken({ forceFresh: true, silent: false });
       if (!token) throw new Error("Plaid link token could not be created.");
-      setPlaidNotice("Plaid is ready. Tap Connect Bank Account to open the secure bank login.");
+      setPlaidLinking(true);
+      setPlaidLinkShouldOpen(true);
+      setPlaidNotice("Opening Plaid secure bank login...");
     } catch (error) {
       setPlaidNotice(error instanceof Error ? error.message : "Plaid could not start.");
       setPlaidLinking(false);
@@ -1614,7 +1606,7 @@ export default function MoreScreen() {
       setPlaidLinkReady(false);
       setPlaidLinkShouldOpen(false);
       setPlaidLinkToken(null);
-    }, 12000);
+    }, 25000);
     return () => clearTimeout(timeout);
   }, [plaidLinking, plaidLinkShouldOpen]);
 
@@ -1913,6 +1905,20 @@ export default function MoreScreen() {
   return (
     <View style={[styles.screen, { backgroundColor: c.background }]}>
       <PremiumBackdrop variant="blue" />
+      {Platform.OS === "web" ? (
+        <PlaidLinkLauncher
+          ref={plaidLauncherRef}
+          linkToken={plaidLinkToken}
+          shouldOpen={plaidLinkShouldOpen}
+          onReadyChange={setPlaidLinkReady}
+          onOpened={() => {
+            setPlaidLinkShouldOpen(false);
+            setPlaidNotice("Plaid is open. Finish secure bank login there.");
+          }}
+          onSuccess={handlePlaidSuccess}
+          onExit={handlePlaidExit}
+        />
+      ) : null}
       <ScrollView
         style={styles.scroller}
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 + webTopPad, paddingBottom: insets.bottom + 100 }]}
