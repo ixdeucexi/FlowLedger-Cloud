@@ -107,6 +107,7 @@ export default function MonthlyScreen() {
   const [editingPaid, setEditingPaid] = useState<Record<string, string>>({});
   const editingPaidRef = useRef<Record<string, string>>({});
   const paidSaveInFlightRef = useRef<Set<string>>(new Set());
+  const paidPromptPendingRef = useRef<Set<string>>(new Set());
   const paidSaveSnapshotRef = useRef<Record<string, { value: string; at: number }>>({});
   const [billFilter, setBillFilter] = useState<"all" | "paid" | "unpaid">("all");
   const [extraPayment, setExtraPayment] = useState("");
@@ -465,8 +466,16 @@ export default function MonthlyScreen() {
     setTimeout(showPrompt, Platform.OS === "web" ? 0 : 250);
   }, [finalizeBillPayment, month, selectedYear, setCustomAmount]);
 
+  const parsePaidInput = useCallback((value: string) => {
+    const normalized = value
+      .trim()
+      .replace(/[$,\s]/g, "")
+      .replace(/^\((.*)\)$/, "-$1");
+    return Number.parseFloat(normalized);
+  }, []);
+
   const handlePaidBlur = useCallback(async (billId: string, key: string, submittedValue?: string) => {
-    if (savingPaidKey === key || paidSaveInFlightRef.current.has(key)) return;
+    if (savingPaidKey === key || paidSaveInFlightRef.current.has(key) || paidPromptPendingRef.current.has(key)) return;
     const hasActiveEdit = Object.prototype.hasOwnProperty.call(editingPaidRef.current, key)
       || Object.prototype.hasOwnProperty.call(editingPaid, key);
     const submittedTrimmed = submittedValue?.trim();
@@ -491,11 +500,11 @@ export default function MonthlyScreen() {
       setEditingPaid(p => { const n = { ...p }; delete n[key]; return n; });
     };
     paidSaveInFlightRef.current.add(key);
-    clearPaidEdit();
     setSavingPaidKey(key);
     try {
       const bill = bills.find(item => item.id === billId);
       if (trimmed.length === 0) {
+        clearPaidEdit();
         if (bill?.is_debt) {
           const key = `flowledger:debt-surplus:${bill.id}:${selectedYear}-${String(month + 1).padStart(2, "0")}`;
           const existingTx = transactions.find(transaction => transaction.import_hash === key);
@@ -505,7 +514,7 @@ export default function MonthlyScreen() {
         paidSaveSnapshotRef.current = { ...paidSaveSnapshotRef.current, [key]: { value: "", at: Date.now() } };
         return;
       }
-      const parsed = parseFloat(trimmed);
+      const parsed = parsePaidInput(trimmed);
       if (!Number.isFinite(parsed)) return;
       const budgeted = bill ? getBillMonthlyTotal(bill, month, selectedYear) : 0;
       const day = bill ? Math.min(new Date(selectedYear, month + 1, 0).getDate(), getCustomDueDay(bill.id, month, selectedYear) ?? bill.due_day) : 1;
@@ -530,11 +539,13 @@ export default function MonthlyScreen() {
         if (total > 0.005) await applyDebtSnowballPayment(preview, sources);
         else await removeDebtSnowballPayment(month, selectedYear);
         paidSaveSnapshotRef.current = { ...paidSaveSnapshotRef.current, [key]: { value: trimmed, at: Date.now() } };
+        clearPaidEdit();
         askToTreatPaidAsFullPayment({ bill, budgeted, actual: parsed, paidDate });
         return;
       }
       if (bill && parsed >= 0 && parsed < budgeted) {
         Keyboard.dismiss();
+        paidPromptPendingRef.current.add(key);
         const showFullPaymentPrompt = () => Alert.alert(
           "Was this the full payment?",
           `${bill.name} was paid at $${parsed.toFixed(2)}, which is different from the planned $${budgeted.toFixed(2)}. Was $${parsed.toFixed(2)} the full payment for this month?`,
@@ -553,8 +564,11 @@ export default function MonthlyScreen() {
                     if (delta > 0.005) showDebtPaymentNotice(bill, delta, paidDate, { scheduled: false, balanceBefore: bill.balance });
                   }
                   paidSaveSnapshotRef.current = { ...paidSaveSnapshotRef.current, [key]: { value: trimmed, at: Date.now() } };
+                  clearPaidEdit();
                 } catch (error) {
                   Alert.alert("Could not save payment", error instanceof Error ? error.message : "Please try again.");
+                } finally {
+                  paidPromptPendingRef.current.delete(key);
                 }
               },
             },
@@ -564,9 +578,17 @@ export default function MonthlyScreen() {
                 setSurplusPrompt({ bill, budgeted, actual: parsed, paidDate, matchAmountToActual: true });
                 setSurplusPaymentDate(paidDate);
                 setSelectedDate(null);
+                paidSaveSnapshotRef.current = { ...paidSaveSnapshotRef.current, [key]: { value: trimmed, at: Date.now() } };
+                clearPaidEdit();
+                paidPromptPendingRef.current.delete(key);
               },
             },
           ],
+          {
+            onDismiss: () => {
+              paidPromptPendingRef.current.delete(key);
+            },
+          },
         );
         setTimeout(showFullPaymentPrompt, Platform.OS === "web" ? 0 : 250);
         return;
@@ -582,12 +604,13 @@ export default function MonthlyScreen() {
         }
       }
       paidSaveSnapshotRef.current = { ...paidSaveSnapshotRef.current, [key]: { value: trimmed, at: Date.now() } };
+      clearPaidEdit();
       if (bill) askToTreatPaidAsFullPayment({ bill, budgeted, actual: parsed, paidDate });
     } finally {
       paidSaveInFlightRef.current.delete(key);
       setSavingPaidKey(current => current === key ? null : current);
     }
-  }, [editingPaid, savingPaidKey, setPaidAmount, bills, overrides, transactions, deleteTransaction, getBillMonthlyTotal, getCustomDueDay, getPaidAmount, getExtraPayment, previewDebtSnowball, finalizeBillPayment, applyDebtSnowballPayment, removeDebtSnowballPayment, removeDebtSurplusTransaction, showDebtPaymentNotice, askToTreatPaidAsFullPayment, month, selectedYear]);
+  }, [editingPaid, savingPaidKey, setPaidAmount, bills, overrides, transactions, deleteTransaction, getBillMonthlyTotal, getCustomDueDay, getPaidAmount, getExtraPayment, previewDebtSnowball, finalizeBillPayment, applyDebtSnowballPayment, removeDebtSnowballPayment, removeDebtSurplusTransaction, showDebtPaymentNotice, askToTreatPaidAsFullPayment, parsePaidInput, month, selectedYear]);
 
   const finalizeBillAtActualForMonth = useCallback(async (prompt: { bill: Bill; actual: number; paidDate: string }) => {
     if (prompt.bill.is_debt) {
@@ -1512,8 +1535,6 @@ export default function MonthlyScreen() {
                                       onChangeText={text => setEditingAmounts(current => ({ ...current, [amtKey]: text }))}
                                       onFocus={() => setEditingAmounts(current => ({ ...current, [amtKey]: showAmt || amount.toFixed(2) }))}
                                       onBlur={() => handleAmtBlur({ id: bill.id, amount: bill.amount }, amtKey)}
-                                      onEndEditing={() => handleAmtBlur({ id: bill.id, amount: bill.amount }, amtKey)}
-                                      onSubmitEditing={() => handleAmtBlur({ id: bill.id, amount: bill.amount }, amtKey)}
                                       keyboardType="decimal-pad"
                                       returnKeyType="done"
                                       blurOnSubmit
@@ -1548,8 +1569,6 @@ export default function MonthlyScreen() {
                                         setEditingPaid(current => ({ ...current, [paidKey]: showPaid || "" }));
                                       }}
                                       onBlur={() => handlePaidBlur(bill.id, paidKey, editingPaidRef.current[paidKey] ?? showPaid)}
-                                      onEndEditing={event => handlePaidBlur(bill.id, paidKey, event.nativeEvent.text)}
-                                      onSubmitEditing={event => handlePaidBlur(bill.id, paidKey, event.nativeEvent.text)}
                                       keyboardType="decimal-pad"
                                       returnKeyType="done"
                                       blurOnSubmit
