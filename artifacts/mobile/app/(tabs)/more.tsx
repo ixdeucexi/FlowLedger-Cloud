@@ -328,8 +328,8 @@ const SETTINGS_SECTIONS: Array<{
   { id: "setup", label: "Setup walkthrough", description: "Restart setup and learning mode.", icon: "message-circle" },
   { id: "accounts", label: "Accounts", description: "Balances, reconcile, and household sharing.", icon: "credit-card" },
   { id: "money", label: "Money plan", description: "Income, categories, safety, and payoff.", icon: "sliders" },
-  { id: "review", label: "Review queue", description: "Rules, duplicates, imports, and unclear items.", icon: "check-square" },
-  { id: "subscriptions", label: "Subscriptions", description: "Recurring charges and cleanup.", icon: "repeat" },
+  { id: "review", label: "Review Center", description: "Your money inbox for unclear activity.", icon: "check-square" },
+  { id: "subscriptions", label: "Subscriptions", description: "Recurring charges, patterns, and cleanup.", icon: "repeat" },
   { id: "reports", label: "Reports & insights", description: "Spending, debt, goals, and changes.", icon: "bar-chart-2" },
   { id: "goals", label: "Goal funding", description: "Safe monthly goal plans.", icon: "target" },
   { id: "plaid", label: "Bank sync", description: "Secure bank connection status.", icon: "link" },
@@ -386,6 +386,39 @@ function formatActivityTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+}
+
+const SUBSCRIPTION_BILL_WORDS = [
+  "subscription",
+  "netflix",
+  "hulu",
+  "spotify",
+  "disney",
+  "apple",
+  "google",
+  "youtube",
+  "prime",
+  "peacock",
+  "paramount",
+  "max",
+  "hbo",
+  "chatgpt",
+  "gym",
+  "fitness",
+  "membership",
+  "streaming",
+];
+
+function isSubscriptionStyleBill(bill: { name: string; category?: string | null; is_recurring?: boolean; is_debt?: boolean; end_date?: string | null }) {
+  if (bill.is_recurring === false || bill.is_debt) return false;
+  const text = `${bill.name} ${bill.category ?? ""}`.toLowerCase();
+  return SUBSCRIPTION_BILL_WORDS.some(word => text.includes(word));
+}
+
+function recurringBillCadenceLabel(frequency?: string | null) {
+  if (frequency === "weekly") return "weekly";
+  if (frequency === "biweekly") return "biweekly";
+  return "monthly";
 }
 
 function humanizeEntityType(value: string) {
@@ -1066,6 +1099,13 @@ export default function MoreScreen() {
   const subscriptions = useMemo(
     () => detectSubscriptions(growthTransactions).filter(item => subscriptionDecisions[subscriptionKey(item)] !== "not_subscription"),
     [growthTransactions, subscriptionDecisions],
+  );
+  const subscriptionBillHints = useMemo(
+    () => bills
+      .filter(bill => !(bill.end_date && bill.end_date < todayIso))
+      .filter(isSubscriptionStyleBill)
+      .sort((a, b) => a.due_day - b.due_day || a.name.localeCompare(b.name)),
+    [bills, todayIso],
   );
   const monthlyRecurringBills = useMemo(
     () => bills.filter(bill => bill.is_recurring !== false && !bill.is_debt && !(bill.end_date && bill.end_date < todayIso)).reduce((sum, bill) => sum + Math.max(0, bill.amount), 0),
@@ -2700,6 +2740,12 @@ export default function MoreScreen() {
 
       <SLabel c={c} text="Transaction Review Queue" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <View style={[styles.priorityNote, { backgroundColor: c.primary + "12", borderRadius: 10, marginTop: 0, marginBottom: 12 }]}>
+          <Feather name="inbox" size={14} color={c.primary} />
+          <Text style={[styles.priorityNoteText, { color: c.mutedForeground }]}>
+            This is your money inbox. I’ll put transactions here when I should not guess — duplicates, imports, unusual amounts, unclear categories, possible bills, or household edits.
+          </Text>
+        </View>
         {growthNotice ? <Text style={[styles.feedbackNotice, { color: c.success }]}>{growthNotice}</Text> : null}
         <View style={styles.growthMetricGrid}>
           <View style={[styles.growthMetric, { backgroundColor: c.muted }]}>
@@ -2770,7 +2816,12 @@ export default function MoreScreen() {
           </View>
         ))}
         {!reviewTransactions.length && (
-          <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Nothing needs review right now. New imports, duplicates, unusual amounts, and unclear categories will show here.</Text>
+          <View style={[styles.priorityNote, { backgroundColor: c.success + "12", borderRadius: 10, marginTop: 12 }]}>
+            <Feather name="check-circle" size={14} color={c.success} />
+            <Text style={[styles.priorityNoteText, { color: c.mutedForeground }]}>
+              You’re caught up. When FlowLedger sees a transaction that needs your decision, it will show here with approve, categorize, rule, ignore, or delete options.
+            </Text>
+          </View>
         )}
       </View>
       </>}
@@ -2778,6 +2829,12 @@ export default function MoreScreen() {
       {activeSettingsSection === "subscriptions" && <>
       <SLabel c={c} text="Subscription Cleanup" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <View style={[styles.priorityNote, { backgroundColor: c.warning + "12", borderRadius: 10, marginTop: 0, marginBottom: 12 }]}>
+          <Feather name="repeat" size={14} color={c.warning} />
+          <Text style={[styles.priorityNoteText, { color: c.mutedForeground }]}>
+            I use this screen for recurring charges that need cleanup. Detected Activity patterns show first; subscription-style bills already in your Bills tab are shown below so you know they are being tracked.
+          </Text>
+        </View>
         <View style={styles.growthMetricGrid}>
           <View style={[styles.growthMetric, { backgroundColor: c.muted }]}>
             <Text style={[styles.growthMetricValue, { color: c.primary }]}>${subscriptions.reduce((sum, item) => sum + item.monthlyEquivalent, 0).toFixed(0)}</Text>
@@ -2830,8 +2887,41 @@ export default function MoreScreen() {
             </View>
           </View>
         ))}
-        {!subscriptions.length && (
-          <Text style={[styles.emptyText, { color: c.mutedForeground }]}>I have not found recurring subscription patterns yet. Repeated monthly or weekly charges will appear here for cleanup.</Text>
+        {subscriptionBillHints.length ? (
+          <View style={{ marginTop: subscriptions.length ? 14 : 4 }}>
+            <Text style={[styles.dataLabel, { color: c.foreground, marginBottom: 6 }]}>Already scheduled as bills</Text>
+            {subscriptionBillHints.slice(0, 8).map((bill, index) => (
+              <View key={bill.id} style={[styles.growthListRow, { borderTopWidth: index ? 1 : 0, borderTopColor: c.border }]}>
+                <View style={[styles.dataIcon, { backgroundColor: c.primary + "18" }]}>
+                  <Feather name="calendar" size={17} color={c.primary} />
+                </View>
+                <View style={styles.dataBody}>
+                  <Text style={[styles.dataLabel, { color: c.foreground }]} numberOfLines={1}>{bill.name}</Text>
+                  <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>
+                    ${Math.max(0, bill.amount).toFixed(2)} • {recurringBillCadenceLabel(bill.frequency)} • due day {bill.due_day}
+                  </Text>
+                  <Text style={[styles.growthTinyText, { color: c.mutedForeground }]}>
+                    This is already in Bills, so I won’t ask you to create it again.
+                  </Text>
+                </View>
+              </View>
+            ))}
+            <Pressable
+              onPress={() => router.push("/(tabs)/bills")}
+              style={({ pressed }) => [styles.balanceSaveFullBtn, { backgroundColor: c.primary, opacity: pressed ? 0.78 : 1, marginTop: 10 }]}
+            >
+              <Feather name="file-text" size={15} color={c.primaryForeground} />
+              <Text style={[styles.balanceSaveBtnText, { color: c.primaryForeground }]}>Open Bills</Text>
+            </Pressable>
+          </View>
+        ) : null}
+        {!subscriptions.length && !subscriptionBillHints.length && (
+          <View style={[styles.priorityNote, { backgroundColor: c.muted, borderRadius: 10, marginTop: 12 }]}>
+            <Feather name="search" size={14} color={c.mutedForeground} />
+            <Text style={[styles.priorityNoteText, { color: c.mutedForeground }]}>
+              I have not found subscription patterns yet. Repeated monthly or weekly Activity entries will appear here, and subscription-style recurring bills will show here once you add them.
+            </Text>
+          </View>
         )}
       </View>
       </>}

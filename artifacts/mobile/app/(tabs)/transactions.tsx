@@ -324,6 +324,7 @@ export default function TransactionsScreen() {
 
   const reviewQueue = useMemo(() => buildReviewQueue(growthTransactions, []), [growthTransactions]);
   const subscriptionCandidates = useMemo(() => detectSubscriptions(growthTransactions), [growthTransactions]);
+  const activityReviewCount = reviewQueue.length + subscriptionCandidates.length;
 
   // ── Summary stats ─────────────────────────────────────────────────────────
   const { totalIn, totalOut, net } = useMemo(() => {
@@ -593,10 +594,34 @@ export default function TransactionsScreen() {
             {feedOrderLabel}
           </Text>
         </View>
-        <CommandPlusButton
-          onPress={() => { setEditTx(null); setEditModalVisible(true); }}
-          accessibilityLabel="Add activity"
-        />
+        {activityReviewCount > 0 ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Open Review Center, ${activityReviewCount} item${activityReviewCount === 1 ? "" : "s"} need review`}
+            onPress={() => router.push({
+              pathname: "/(tabs)/more",
+              params: { section: reviewQueue.length > 0 ? "review" : "subscriptions" },
+            } as any)}
+            style={({ pressed }) => [
+              styles.reviewAlertButton,
+              {
+                borderColor: c.warning + "66",
+                backgroundColor: "rgba(245,158,11,0.20)",
+                opacity: pressed ? 0.82 : 1,
+              },
+            ]}
+          >
+            <Feather name="alert-triangle" size={23} color={c.warning} />
+            <View style={[styles.reviewAlertBadge, { backgroundColor: c.destructive }]}>
+              <Text style={styles.reviewAlertBadgeText}>{activityReviewCount}</Text>
+            </View>
+          </Pressable>
+        ) : (
+          <CommandPlusButton
+            onPress={() => { setEditTx(null); setEditModalVisible(true); }}
+            accessibilityLabel="Add activity"
+          />
+        )}
       </View>
 
       <View style={[styles.activityHero, { backgroundColor: c.card, borderColor: c.border }]}>
@@ -683,41 +708,6 @@ export default function TransactionsScreen() {
           <Feather name="chevron-right" size={18} color={c.mutedForeground} />
         </View>
       </Pressable>
-
-      {(reviewQueue.length > 0 || subscriptionCandidates.length > 0) && (
-        <View style={[styles.growthReviewCard, { backgroundColor: c.card, borderColor: c.border }]}>
-          <View style={styles.growthReviewTop}>
-            <View>
-              <Text style={[styles.activityHeroLabel, { color: c.mutedForeground }]}>Review center</Text>
-              <Text style={[styles.growthReviewTitle, { color: c.foreground }]}>Clean up your money data</Text>
-            </View>
-            <View style={[styles.growthReviewBadge, { backgroundColor: c.primary + "18" }]}>
-              <Text style={[styles.growthReviewBadgeText, { color: c.primary }]}>
-                {reviewQueue.length + subscriptionCandidates.length}
-              </Text>
-            </View>
-          </View>
-          <Text style={[styles.growthReviewText, { color: c.mutedForeground }]}>
-            Review unclear transactions, possible subscriptions, duplicates, and rule opportunities.
-          </Text>
-          <View style={styles.growthReviewActions}>
-            <Pressable
-              onPress={() => router.push({ pathname: "/(tabs)/more", params: { section: "review" } } as any)}
-              style={({ pressed }) => [styles.growthReviewAction, { backgroundColor: c.primary + "18", opacity: pressed ? 0.8 : 1 }]}
-            >
-              <Feather name="check-square" size={14} color={c.primary} />
-              <Text style={[styles.growthReviewActionText, { color: c.primary }]}>Review {reviewQueue.length}</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => router.push({ pathname: "/(tabs)/more", params: { section: "subscriptions" } } as any)}
-              style={({ pressed }) => [styles.growthReviewAction, { backgroundColor: c.warning + "18", opacity: pressed ? 0.8 : 1 }]}
-            >
-              <Feather name="repeat" size={14} color={c.warning} />
-              <Text style={[styles.growthReviewActionText, { color: c.warning }]}>Subscriptions {subscriptionCandidates.length}</Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
 
       <View style={[styles.searchWrap, { marginBottom: 10 }]}>
         <View style={[styles.searchBox, { backgroundColor: c.card, borderColor: c.border }]}>
@@ -1026,6 +1016,33 @@ const styles = StyleSheet.create({
   title:    { fontSize: 30, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.9 },
   subtitle: { fontSize: 12, fontFamily: "Inter_500Medium", marginTop: 2, letterSpacing: 0.1 },
   addBtn:   { width: 46, height: 46, borderRadius: 16, alignItems: "center", justifyContent: "center", shadowColor: "#2563eb", shadowOpacity: 0.28, shadowRadius: 14, shadowOffset: { width: 0, height: 7 }, elevation: 7 },
+  reviewAlertButton: {
+    width: 54,
+    height: 54,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    shadowColor: "#f59e0b",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.34,
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  reviewAlertBadge: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#020617",
+  },
+  reviewAlertBadgeText: { color: "#fff", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
 
   activityHero: { marginHorizontal: 16, marginBottom: 9, borderWidth: 1, borderRadius: 20, padding: 12, shadowColor: "#000", shadowOpacity: 0.16, shadowRadius: 16, shadowOffset: { width: 0, height: 9 }, elevation: 4 },
   activityHeroTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 10 },
@@ -1071,16 +1088,6 @@ const styles = StyleSheet.create({
   summaryWeekLabel: { fontSize: 12, fontFamily: "Inter_800ExtraBold", lineHeight: 16 },
   summaryWeekSub: { fontSize: 10, fontFamily: "Inter_500Medium", marginTop: 2 },
   summaryWeekValue: { fontSize: 15, fontFamily: "Inter_800ExtraBold" },
-
-  growthReviewCard: { marginHorizontal: 16, marginBottom: 10, borderWidth: 1, borderRadius: 20, padding: 12 },
-  growthReviewTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 },
-  growthReviewTitle: { fontSize: 18, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.2 },
-  growthReviewBadge: { minWidth: 34, height: 30, borderRadius: 15, paddingHorizontal: 10, alignItems: "center", justifyContent: "center" },
-  growthReviewBadgeText: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
-  growthReviewText: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 17, marginTop: 6 },
-  growthReviewActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
-  growthReviewAction: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 8 },
-  growthReviewActionText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
 
   searchWrap:  { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16 },
   searchBox:   { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 16, paddingHorizontal: 13, paddingVertical: 10 },
