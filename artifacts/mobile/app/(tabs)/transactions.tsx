@@ -473,12 +473,6 @@ export default function TransactionsScreen() {
   const activityReviewCount = reviewAlertLoaded ? unresolvedReviewQueue.length : 0;
 
   // ── Summary stats ─────────────────────────────────────────────────────────
-  const { totalIn, totalOut, net } = useMemo(() => {
-    const totalIn  = filtered.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
-    const totalOut = filtered.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
-    return { totalIn, totalOut, net: totalIn - totalOut };
-  }, [filtered]);
-
   const monthlySummary = useMemo(() => {
     const now = new Date();
     const year = now.getFullYear();
@@ -507,17 +501,6 @@ export default function TransactionsScreen() {
       });
     return { title: `${MONTH_NAMES_LONG[month - 1]} ${year}`, income, out, net: income - out, weeks };
   }, [allActivity]);
-
-  const currentPeriodLabel = useMemo(() => {
-    const now = new Date();
-    if (dateFilter === "this_month") return `${MONTH_NAMES_LONG[now.getMonth()]} ${now.getFullYear()}`;
-    if (dateFilter === "last_month") {
-      const last = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      return `${MONTH_NAMES_LONG[last.getMonth()]} ${last.getFullYear()}`;
-    }
-    if (dateFilter === "this_year") return `${now.getFullYear()}`;
-    return "All activity";
-  }, [dateFilter]);
 
   const feedOrderLabel = hasActiveFilters
     ? (sortOrder === "asc" ? "oldest first" : "newest first")
@@ -770,38 +753,6 @@ export default function TransactionsScreen() {
         )}
       </View>
 
-      <View style={[styles.activityHero, { backgroundColor: c.card, borderColor: c.border }]}>
-        <View style={styles.activityHeroTop}>
-          <View>
-            <Text style={[styles.activityHeroLabel, { color: c.mutedForeground }]}>{currentPeriodLabel}</Text>
-            <Text style={[styles.activityHeroTitle, { color: c.foreground }]}>Activity flow</Text>
-          </View>
-          <View style={[styles.activityHeroBadge, { backgroundColor: net >= 0 ? c.success + "18" : c.destructive + "18" }]}>
-            <Text style={[styles.activityHeroBadgeText, { color: net >= 0 ? c.success : c.destructive }]}>
-              {net >= 0 ? "Positive" : "Negative"}
-            </Text>
-          </View>
-        </View>
-        <View style={styles.heroStats}>
-          <View style={styles.heroStat}>
-            <Text style={[styles.heroStatValue, { color: net >= 0 ? c.success : c.destructive }]}>
-              {net >= 0 ? "+" : "-"}${Math.abs(net).toFixed(0)}
-            </Text>
-            <Text style={[styles.heroStatLabel, { color: c.mutedForeground }]}>Net</Text>
-          </View>
-          <View style={[styles.heroDivider, { backgroundColor: c.border }]} />
-          <View style={styles.heroStat}>
-            <Text style={[styles.heroStatValue, { color: c.success }]}>+${totalIn.toFixed(0)}</Text>
-            <Text style={[styles.heroStatLabel, { color: c.mutedForeground }]}>In</Text>
-          </View>
-          <View style={[styles.heroDivider, { backgroundColor: c.border }]} />
-          <View style={styles.heroStat}>
-            <Text style={[styles.heroStatValue, { color: c.destructive }]}>-${totalOut.toFixed(0)}</Text>
-            <Text style={[styles.heroStatLabel, { color: c.mutedForeground }]}>Out</Text>
-          </View>
-        </View>
-      </View>
-
       <Pressable
         onPress={() => setWeeklySummaryVisible(true)}
         style={({ pressed }) => [
@@ -811,14 +762,30 @@ export default function TransactionsScreen() {
       >
         <View style={styles.monthlySummaryHeader}>
           <View>
-            <Text style={[styles.activityHeroLabel, { color: c.mutedForeground }]}>Monthly summary</Text>
+            <Text style={[styles.activityHeroLabel, { color: c.mutedForeground }]}>Activity snapshot</Text>
             <Text style={[styles.monthlySummaryTitle, { color: c.foreground }]}>{monthlySummary.title}</Text>
           </View>
-          <Text style={[styles.monthlySummaryNet, { color: monthlySummary.net >= 0 ? c.success : c.destructive }]}>
-            {monthlySummary.net >= 0 ? "+" : "-"}${Math.abs(monthlySummary.net).toFixed(0)}
-          </Text>
+          <View style={[styles.activityHeroBadge, { backgroundColor: monthlySummary.net >= 0 ? c.success + "18" : c.destructive + "18" }]}>
+            <Text style={[styles.activityHeroBadgeText, { color: monthlySummary.net >= 0 ? c.success : c.destructive }]}>
+              {monthlySummary.net >= 0 ? "Positive" : "Negative"}
+            </Text>
+          </View>
         </View>
         <View style={styles.monthlySummaryStats}>
+          <View
+            style={[
+              styles.monthlySummaryStat,
+              {
+                backgroundColor: c.isDark ? "rgba(15,23,42,0.42)" : "rgba(248,250,252,0.96)",
+                borderColor: c.isDark ? "rgba(148,163,184,0.10)" : "rgba(15,23,42,0.08)",
+              },
+            ]}
+          >
+            <Text style={[styles.monthlySummaryValue, { color: monthlySummary.net >= 0 ? c.success : c.destructive }]}>
+              {monthlySummary.net >= 0 ? "+" : "-"}${Math.abs(monthlySummary.net).toFixed(0)}
+            </Text>
+            <Text style={[styles.monthlySummaryLabel, { color: c.mutedForeground }]}>Net</Text>
+          </View>
           <View
             style={[
               styles.monthlySummaryStat,
@@ -855,7 +822,7 @@ export default function TransactionsScreen() {
         </View>
       </Pressable>
 
-      <View style={[styles.searchWrap, { marginBottom: 10 }]}>
+      <View style={[styles.searchWrap, { marginBottom: 8 }]}>
         <View style={[styles.searchBox, { backgroundColor: c.card, borderColor: c.border }]}>
           <Feather name="search" size={15} color={c.mutedForeground} />
           <TextInput
@@ -892,30 +859,6 @@ export default function TransactionsScreen() {
           )}
         </Pressable>
       </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.quickChipRow}
-        style={styles.quickChipScroller}
-      >
-        {quickChips.map(chip => (
-          <Pressable
-            key={chip.key}
-            onPress={chip.onPress}
-            style={({ pressed }) => [
-              styles.quickChip,
-              {
-                backgroundColor: chip.active ? c.primary : c.card,
-                borderColor: chip.active ? c.primary : c.border,
-                opacity: pressed ? 0.82 : 1,
-              },
-            ]}
-          >
-            <Text style={[styles.quickChipText, { color: chip.active ? c.primaryForeground : c.foreground }]}>{chip.label}</Text>
-          </Pressable>
-        ))}
-      </ScrollView>
     </>
   );
 
@@ -1032,6 +975,26 @@ export default function TransactionsScreen() {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} style={styles.filterSheetScroll}>
+              <Text style={[styles.filterGroupLabel, { color: c.mutedForeground, marginTop: 2 }]}>QUICK FILTERS</Text>
+              <View style={styles.filterOptionGrid}>
+                {quickChips.map(chip => (
+                  <Pressable
+                    key={chip.key}
+                    onPress={chip.onPress}
+                    style={({ pressed }) => [
+                      styles.filterChip,
+                      {
+                        backgroundColor: chip.active ? c.primary : c.card,
+                        borderColor: chip.active ? c.primary : c.border,
+                        opacity: pressed ? 0.82 : 1,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.filterText, { color: chip.active ? c.primaryForeground : c.foreground }]}>{chip.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
               <Text style={[styles.filterGroupLabel, { color: c.mutedForeground }]}>AMOUNT</Text>
               <View style={styles.filterOptionGrid}>
                 {([
@@ -1190,21 +1153,12 @@ const styles = StyleSheet.create({
   },
   reviewAlertBadgeText: { color: "#fff", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
 
-  activityHero: { marginHorizontal: 16, marginBottom: 9, borderWidth: 1, borderRadius: 20, padding: 12, shadowColor: "#000", shadowOpacity: 0.16, shadowRadius: 16, shadowOffset: { width: 0, height: 9 }, elevation: 4 },
-  activityHeroTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 10 },
   activityHeroLabel: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 1, textTransform: "uppercase" },
-  activityHeroTitle: { fontSize: 18, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.3, marginTop: 2 },
   activityHeroBadge: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999 },
   activityHeroBadgeText: { fontSize: 10, fontFamily: "Inter_800ExtraBold" },
-  heroStats: { flexDirection: "row", alignItems: "center" },
-  heroStat: { flex: 1 },
-  heroStatValue: { fontSize: 18, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.4 },
-  heroStatLabel: { fontSize: 9, fontFamily: "Inter_700Bold", letterSpacing: 0.6, textTransform: "uppercase", marginTop: 2 },
-  heroDivider: { width: 1, height: 28, marginHorizontal: 10 },
   monthlySummaryCard: { marginHorizontal: 16, marginBottom: 10, borderWidth: 1, borderRadius: 20, padding: 12 },
   monthlySummaryHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 10 },
   monthlySummaryTitle: { fontSize: 17, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
-  monthlySummaryNet: { fontSize: 22, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.5 },
   monthlySummaryStats: { flexDirection: "row", gap: 10, marginBottom: 10 },
   monthlySummaryStat: { flex: 1, borderRadius: 14, backgroundColor: "rgba(15,23,42,0.42)", borderWidth: 1, paddingHorizontal: 10, paddingVertical: 9 },
   monthlySummaryValue: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
@@ -1241,11 +1195,6 @@ const styles = StyleSheet.create({
   filterIconButton: { width: 44, height: 44, borderRadius: 15, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   filterCount: { position: "absolute", top: -5, right: -5, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, alignItems: "center", justifyContent: "center" },
   filterCountText: { color: "#fff", fontSize: 10, fontFamily: "Inter_700Bold" },
-
-  quickChipScroller: { height: 38, marginBottom: 8, flexGrow: 0 },
-  quickChipRow: { paddingHorizontal: 16, gap: 7, alignItems: "center", paddingBottom: 2 },
-  quickChip: { minHeight: 28, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, alignItems: "center", justifyContent: "center" },
-  quickChipText: { fontSize: 11, lineHeight: 14, fontFamily: "Inter_800ExtraBold" },
 
   filterOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.55)" },
   filterSheet: { borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32, maxHeight: "88%" },
