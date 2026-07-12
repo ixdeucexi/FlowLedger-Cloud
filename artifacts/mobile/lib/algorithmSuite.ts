@@ -601,7 +601,9 @@ function buildExtraMoneyRouterDetails(args: {
         : args.recommendation === "savings"
           ? `Up to $${amount.toFixed(0)} can safely move toward ${targetLabel} after the plan is protected.`
           : `Up to $${amount.toFixed(0)} can safely stay available without crossing the floor.`
-    : "No safe extra money is available to route yet.";
+    : args.recommendation === "bill"
+      ? `No safe extra money is available to route yet. I’m holding cash for ${targetLabel} as a required bill, not choosing it as a payoff target.`
+      : "No safe extra money is available to route yet.";
   const nextMove = amount > 0
     ? args.recommendation === "debt"
       ? `Preview adding $${amount.toFixed(0)} to ${targetLabel}.`
@@ -610,7 +612,9 @@ function buildExtraMoneyRouterDetails(args: {
         : args.recommendation === "savings"
           ? `Preview moving $${amount.toFixed(0)} toward ${targetLabel}.`
           : "Keep it available until the tightest forecast day passes."
-    : "Keep extra cash available until FlowLedger shows safe room.";
+    : args.recommendation === "bill"
+      ? `Keep extra cash available for ${targetLabel} until FlowLedger shows safe room.`
+      : "Keep extra cash available until FlowLedger shows safe room.";
   const options = amount > 0 ? [
     { route: "debt" as const, label: args.debtTargetName ? `Debt: ${args.debtTargetName}` : "Debt payoff", amount, reason: "Fastest path away from paycheck-to-paycheck when debt is active." },
     { route: "savings" as const, label: args.savingsTargetName ? `Savings: ${args.savingsTargetName}` : "Savings cushion", amount, reason: "Builds protection before investing or larger plans." },
@@ -747,6 +751,21 @@ function buildAlgorithmDecisionDetails(
   const gapStatus: AlgorithmStatus = facts.lowestBalance < input.safetyFloor ? "risk" : facts.safeCushionAmount < 250 ? "watch" : "safe";
   const debtStatus: AlgorithmStatus = facts.debtPayoff.status === "done" ? "safe" : facts.debtPayoff.status === "hold" ? "watch" : "safe";
   const routerStatus: AlgorithmStatus = facts.extraMoneyRouter.amount > 0 ? "safe" : facts.safeCushionAmount <= 0 ? "risk" : "watch";
+  const routerIsHoldingForBill = facts.extraMoneyRouter.amount <= 0 && facts.extraMoneyRouter.recommendation === "bill";
+  const routerHeadline = facts.extraMoneyRouter.amount > 0
+    ? `Extra Money Router: ${facts.extraMoneyRouter.targetLabel}`
+    : routerIsHoldingForBill
+      ? "Extra Money Router: Hold cash"
+      : "Extra Money Router: No extra route yet";
+  const routerSourceNumbers: AlgorithmDecisionDetail["sourceNumbers"] = [
+    { label: "Safe route amount", value: money(facts.extraMoneyRouter.amount), tone: routerStatus },
+    { label: "Recommendation", value: facts.extraMoneyRouter.amount > 0 ? capitalize(facts.extraMoneyRouter.recommendation) : "Hold cash", tone: "info" },
+    ...(facts.extraMoneyRouter.amount > 0
+      ? [{ label: "Route target", value: facts.extraMoneyRouter.targetLabel, tone: "info" as const }]
+      : routerIsHoldingForBill
+        ? [{ label: "Protecting", value: facts.extraMoneyRouter.targetLabel, tone: "info" as const }]
+        : []),
+  ];
 
   return {
     flowScore: {
@@ -872,17 +891,12 @@ function buildAlgorithmDecisionDetails(
     extraMoneyRouter: {
       id: "extraMoneyRouter",
       status: routerStatus,
-      headline: `Extra Money Router: ${facts.extraMoneyRouter.targetLabel}`,
+      headline: routerHeadline,
       whatIFound: facts.extraMoneyRouter.detail,
       whyItMatters: "Leftover money should have a job. I protect the floor first, then choose debt, savings, bills, or available cash based on what moves you away from paycheck-to-paycheck fastest.",
       nextAction: facts.extraMoneyRouter.nextMove,
       floPrompt: "Where should extra money go?",
-      sourceNumbers: [
-        { label: "Safe route amount", value: money(facts.extraMoneyRouter.amount), tone: routerStatus },
-        { label: "Recommendation", value: capitalize(facts.extraMoneyRouter.recommendation), tone: "info" },
-        { label: "Target", value: facts.extraMoneyRouter.targetLabel, tone: "info" },
-        { label: "Debt remaining", value: money(facts.debtTotal), tone: facts.debtTotal > 0 ? "watch" : "safe" },
-      ],
+      sourceNumbers: routerSourceNumbers,
     },
   };
 }
