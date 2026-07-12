@@ -2419,17 +2419,24 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const monthNet = (m: number, y: number): number => {
         const inc = incomes.reduce((s, i) => s + getIncomeOccurrenceDays(i, m, y).length * getEffectiveIncomeAmount(i, m, y), 0);
         const bil = bills.filter(b => b.is_recurring || b.is_debt).reduce((s, b) => {
-          const occ = getBillOccurrenceDays(b, m, y);
+          const occ = getBillOccurrencesInMonth(b, m, y);
           if (occ.length === 0) return s;
-          const o = overrides.find(o => o.bill_id === b.id && o.month === m && o.year === y);
-          const baseAmount = billBaseAmountForMonth(b, o);
-          const amt = b.is_debt ? effectiveDebtMinimum(baseAmount, Number(b.snowball_minimum_boost ?? 0)) : baseAmount;
-          return s + amt * occ.length;
+          return s + getBillEffectiveMonthlyTotal(b, m, y);
         }, 0);
         const tx = transactions
           .filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === y && tm === m + 1; })
           .reduce((s, t) => s + t.amount, 0);
-        return inc + tx - bil;
+        const snowballExtra = extraPayments.find(ep => ep.month === m && ep.year === y)?.amount ?? 0;
+        const monthPrefix = `${y}-${String(m + 1).padStart(2, "0")}`;
+        const monthEnd = `${monthPrefix}-${String(new Date(y, m + 1, 0).getDate()).padStart(2, "0")}`;
+        const plannedDecisionNet = decisions
+          .filter(d => d.status === "planned" || d.status === "calendar")
+          .reduce((sum, d) => {
+            const occurrences = scenarioDates(d.scenario, monthEnd).filter(date => date.startsWith(monthPrefix)).length;
+            const signedAmount = d.scenario.type === "income_change" ? Math.abs(d.scenario.amount) : -Math.abs(d.scenario.amount);
+            return sum + occurrences * signedAmount;
+          }, 0);
+        return inc + tx - bil - snowballExtra + plannedDecisionNet;
       };
       let anchorM: number, anchorY: number, seed: number;
       if (settings.starting_balance_date) {
@@ -2463,7 +2470,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const canAfford = available >= needed;
       return { projectedBalance, canAfford, shortfall: canAfford ? 0 : needed - available };
     },
-    [bills, incomes, transactions, overrides, settings]
+    [bills, incomes, transactions, extraPayments, decisions, settings, getBillOccurrencesInMonth, getBillEffectiveMonthlyTotal]
   );
 
   // ─── Cash Flow ────────────────────────────────────────────────────────────────
