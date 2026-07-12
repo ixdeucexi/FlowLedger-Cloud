@@ -21,8 +21,6 @@ import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import {
   buildReviewQueue,
-  detectSubscriptions,
-  type SubscriptionCandidate,
   type TransactionRule,
 } from "@/lib/competitiveGrowth";
 import { debtPaymentStatusLabel } from "@/lib/forecastDisplay";
@@ -36,7 +34,6 @@ type SourceFilter   = "all" | ActivitySource;
 type DateFilter     = "all" | "this_month" | "last_month" | "this_year";
 type SortOrder      = "asc" | "desc";
 type ReviewDecision = "approved" | "ignored" | "deleted";
-type SubscriptionDecision = "keep" | "not_subscription" | "cancelled" | "bill_created";
 type TransactionRuleRow = {
   id: string;
   name: string;
@@ -52,7 +49,6 @@ type TransactionRuleRow = {
   is_active: boolean | null;
 };
 type ReviewDecisionRow = { transaction_id: string | null; status: "needs_review" | "approved" | "ignored" | "deleted" };
-type SubscriptionDecisionRow = { merchant: string | null; status: "review" | "keep" | "cancel_manually" | "convert_to_bill" | "not_subscription" };
 
 interface ActivityItem {
   id: string;
@@ -178,20 +174,8 @@ function mapRuleRow(row: TransactionRuleRow): TransactionRule {
   };
 }
 
-function subscriptionKey(subscription: SubscriptionCandidate) {
-  return subscription.merchant.toLowerCase().trim();
-}
-
 function reviewStatusToDecision(status: ReviewDecisionRow["status"]): ReviewDecision | null {
   if (status === "approved" || status === "ignored" || status === "deleted") return status;
-  return null;
-}
-
-function subscriptionStatusToDecision(status: SubscriptionDecisionRow["status"]): SubscriptionDecision | null {
-  if (status === "keep") return "keep";
-  if (status === "cancel_manually") return "cancelled";
-  if (status === "convert_to_bill") return "bill_created";
-  if (status === "not_subscription") return "not_subscription";
   return null;
 }
 
@@ -221,7 +205,6 @@ export default function TransactionsScreen() {
   const [reviewAlertLoaded, setReviewAlertLoaded] = useState(false);
   const [transactionRules, setTransactionRules] = useState<TransactionRule[]>([]);
   const [reviewDecisions, setReviewDecisions] = useState<Record<string, ReviewDecision>>({});
-  const [subscriptionDecisions, setSubscriptionDecisions] = useState<Record<string, SubscriptionDecision>>({});
   useBackDismiss(!!detailItem, () => setDetailItem(null));
   useBackDismiss(filterModalVisible, () => setFilterModalVisible(false));
   useBackDismiss(weeklySummaryVisible, () => setWeeklySummaryVisible(false));
@@ -230,23 +213,19 @@ export default function TransactionsScreen() {
   const listBottomPadding = insets.bottom + (Platform.OS === "web" ? 128 : 118);
   const transactionRuleStorageKey = user?.id ? `flowledger_transaction_rules_${user.id}` : "flowledger_transaction_rules_guest";
   const reviewDecisionStorageKey = user?.id ? `flowledger_review_decisions_${user.id}` : "flowledger_review_decisions_guest";
-  const subscriptionDecisionStorageKey = user?.id ? `flowledger_subscription_decisions_${user.id}` : "flowledger_subscription_decisions_guest";
 
   const loadReviewAlertState = useCallback(async () => {
     setReviewAlertLoaded(false);
-    const [storedRules, storedReviews, storedSubscriptions] = await Promise.all([
+    const [storedRules, storedReviews] = await Promise.all([
       AsyncStorage.getItem(transactionRuleStorageKey).catch(() => null),
       AsyncStorage.getItem(reviewDecisionStorageKey).catch(() => null),
-      AsyncStorage.getItem(subscriptionDecisionStorageKey).catch(() => null),
     ]);
     let nextTransactionRules = parseTransactionRules(storedRules);
     const nextReviewDecisions = parseDecisionMap<ReviewDecision>(storedReviews);
-    const nextSubscriptionDecisions = parseDecisionMap<SubscriptionDecision>(storedSubscriptions);
 
     if (user?.id && activeHousehold?.householdId) {
       let remoteRules: TransactionRuleRow[] | null = null;
       let remoteReviews: ReviewDecisionRow[] | null = null;
-      let remoteSubscriptions: SubscriptionDecisionRow[] | null = null;
 
       try {
         const { data } = await supabase
@@ -271,40 +250,22 @@ export default function TransactionsScreen() {
         remoteReviews = null;
       }
 
-      try {
-        const { data } = await supabase
-          .from("subscription_candidates")
-          .select("merchant,status")
-          .eq("household_id", activeHousehold.householdId)
-          .neq("status", "review");
-        remoteSubscriptions = data as SubscriptionDecisionRow[] | null;
-      } catch {
-        remoteSubscriptions = null;
-      }
-
       if (remoteRules) nextTransactionRules = remoteRules.map(mapRuleRow);
       remoteReviews?.forEach(row => {
         const decision = reviewStatusToDecision(row.status);
         if (row.transaction_id && decision) nextReviewDecisions[row.transaction_id] = decision;
       });
-      remoteSubscriptions?.forEach(row => {
-        const decision = subscriptionStatusToDecision(row.status);
-        const merchant = row.merchant?.toLowerCase().trim();
-        if (merchant && decision) nextSubscriptionDecisions[merchant] = decision;
-      });
 
       await Promise.all([
         AsyncStorage.setItem(transactionRuleStorageKey, JSON.stringify(nextTransactionRules)).catch(() => undefined),
         AsyncStorage.setItem(reviewDecisionStorageKey, JSON.stringify(nextReviewDecisions)).catch(() => undefined),
-        AsyncStorage.setItem(subscriptionDecisionStorageKey, JSON.stringify(nextSubscriptionDecisions)).catch(() => undefined),
       ]);
     }
 
     setTransactionRules(nextTransactionRules);
     setReviewDecisions(nextReviewDecisions);
-    setSubscriptionDecisions(nextSubscriptionDecisions);
     setReviewAlertLoaded(true);
-  }, [activeHousehold?.householdId, reviewDecisionStorageKey, subscriptionDecisionStorageKey, transactionRuleStorageKey, user?.id]);
+  }, [activeHousehold?.householdId, reviewDecisionStorageKey, transactionRuleStorageKey, user?.id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -505,16 +466,11 @@ export default function TransactionsScreen() {
   })), [allActivity]);
 
   const reviewQueue = useMemo(() => buildReviewQueue(growthTransactions, transactionRules), [growthTransactions, transactionRules]);
-  const subscriptionCandidates = useMemo(() => detectSubscriptions(growthTransactions), [growthTransactions]);
   const unresolvedReviewQueue = useMemo(
     () => reviewQueue.filter(item => !reviewDecisions[item.transactionId]),
     [reviewDecisions, reviewQueue],
   );
-  const unresolvedSubscriptionCandidates = useMemo(
-    () => subscriptionCandidates.filter(item => !subscriptionDecisions[subscriptionKey(item)]),
-    [subscriptionCandidates, subscriptionDecisions],
-  );
-  const activityReviewCount = reviewAlertLoaded ? unresolvedReviewQueue.length + unresolvedSubscriptionCandidates.length : 0;
+  const activityReviewCount = reviewAlertLoaded ? unresolvedReviewQueue.length : 0;
 
   // ── Summary stats ─────────────────────────────────────────────────────────
   const { totalIn, totalOut, net } = useMemo(() => {
@@ -790,7 +746,7 @@ export default function TransactionsScreen() {
             accessibilityLabel={`Open Review Center, ${activityReviewCount} item${activityReviewCount === 1 ? "" : "s"} need review`}
             onPress={() => router.push({
               pathname: "/(tabs)/more",
-              params: { section: unresolvedReviewQueue.length > 0 ? "review" : "subscriptions" },
+              params: { section: "review" },
             } as any)}
             style={({ pressed }) => [
               styles.reviewAlertButton,
