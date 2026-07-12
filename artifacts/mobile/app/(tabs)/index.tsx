@@ -50,6 +50,16 @@ function algoToneColor(tone: AlgorithmInsight["tone"]) {
   return "#38bdf8";
 }
 
+function formatDashboardCurrency(value: number): string {
+  const safeValue = Number.isFinite(value) ? value : 0;
+  return safeValue.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 function FlowScoreGauge({ score }: { score: number }) {
   const size = 112;
   const stroke = 8;
@@ -1260,12 +1270,9 @@ export default function DashboardScreen() {
           <AppText tone="title" style={styles.referenceGreeting}>{timeGreeting} 👋</AppText>
           <AppText style={styles.referenceGreetingSub}>Here’s your financial flow for {MONTH_FULL[currentMonth]}.</AppText>
           <AppText tone="label" style={styles.referenceHeroLabel}>Available to spend</AppText>
-          <>
-            <AppText tone="number" style={styles.referenceHeroAmount}>
-              {(balanceMetrics?.currentBalance ?? cashFlow.remaining) < 0 ? "−" : ""}$
-              {Math.abs(balanceMetrics?.currentBalance ?? cashFlow.remaining).toLocaleString("en-US", { maximumFractionDigits: 2 })}
-            </AppText>
-          </>
+          <AppText tone="number" style={styles.referenceHeroAmount}>
+            {formatDashboardCurrency(balanceMetrics?.currentBalance ?? cashFlow.remaining)}
+          </AppText>
 
           <Pressable
             onPress={() => openFloWithPrompt(setupPersonalization.nextActionPrompt)}

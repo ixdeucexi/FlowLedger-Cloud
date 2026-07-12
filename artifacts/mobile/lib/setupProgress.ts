@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 export type SetupStepKey =
   | "welcome"
   | "intro"
+  | "household"
   | "help"
   | "goals_intro"
   | "goals"

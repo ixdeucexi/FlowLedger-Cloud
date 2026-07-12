@@ -15,6 +15,13 @@ import { useAuth } from "@/context/AuthContext";
 import { BudgetProvider, useBudget, type Account, type Bill, type Goal, type IncomeItem } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import {
+  acceptHouseholdInviteCode,
+  createHouseholdInviteCode,
+  loadHouseholdMemberships,
+  type HouseholdInviteRole,
+  type HouseholdMembership,
+} from "@/lib/households";
+import {
   buildSetupCompletionMessage,
   buildPersonalizedSetupKeys,
   DEFAULT_ONBOARDING_PREFERENCES,
@@ -37,7 +44,7 @@ interface SetupStep {
   ask: string;
   body: string;
   button: string;
-  kind: "intro" | "multi" | "single" | "plan" | "action";
+  kind: "intro" | "household" | "multi" | "single" | "plan" | "action";
 }
 
 const HELP_OPTIONS: { id: SetupHelpOption; label: string; icon: React.ComponentProps<typeof Feather>["name"] }[] = [
@@ -61,7 +68,7 @@ const SAVINGS_OPTIONS: { id: SavingsGoalOption; label: string; icon: React.Compo
   { id: "emergency_fund", label: "An emergency fund", icon: "umbrella" },
   { id: "house", label: "A house", icon: "home" },
   { id: "car", label: "A car", icon: "truck" },
-  { id: "debt_payoff", label: "To pay off debt", icon: "dollar-sign" },
+  { id: "debt_payoff", label: "Pay off debt", icon: "dollar-sign" },
   { id: "something_else", label: "Something else", icon: "more-horizontal" },
 ];
 
@@ -70,7 +77,7 @@ function moneyKeyToStepKey(key: MoneySetupKey): SetupStepKey {
 }
 
 function isPreferenceStep(key: SetupStepKey) {
-  return ["welcome", "intro", "help", "goals", "savings_goal", "plan"].includes(key);
+  return ["welcome", "intro", "household", "help", "goals", "savings_goal", "plan"].includes(key);
 }
 
 function toggleArrayValue<T extends string>(values: T[], value: T): T[] {
@@ -114,10 +121,26 @@ function SetupWizard() {
   const [floConfirmation, setFloConfirmation] = useState("");
   const [restoredProgress, setRestoredProgress] = useState(false);
   const [coachVisible, setCoachVisible] = useState(false);
+  const [households, setHouseholds] = useState<HouseholdMembership[]>([]);
+  const [householdRole, setHouseholdRole] = useState<HouseholdInviteRole>("editor");
+  const [householdCode, setHouseholdCode] = useState("");
+  const [joinCode, setJoinCode] = useState("");
+  const [householdMessage, setHouseholdMessage] = useState("");
+  const [householdBusy, setHouseholdBusy] = useState(false);
   const stepOpacity = useRef(new Animated.Value(1)).current;
   const stepTranslate = useRef(new Animated.Value(0)).current;
 
   const activeAccount = accounts.find(account => account.is_active) ?? null;
+  const householdForInvite = useMemo(
+    () => households.find(item => item.role === "owner" || item.role === "manager") ?? households[0] ?? null,
+    [households],
+  );
+
+  const reloadHouseholds = async () => {
+    const next = await loadHouseholdMemberships(user?.id);
+    setHouseholds(next);
+    return next;
+  };
 
   const steps = useMemo<SetupStep[]>(() => {
     const accountDone = accounts.some(account => account.is_active);
@@ -205,6 +228,15 @@ function SetupWizard() {
         kind: "intro",
       },
       {
+        key: "household",
+        done: true,
+        title: "Will anyone share this plan?",
+        ask: "Invite or join a household before we talk finances.",
+        body: "If your money is shared with a spouse or partner, I can help connect the household first. This does not create, reset, or change any money records.",
+        button: "Continue",
+        kind: "household",
+      },
+      {
         key: "help",
         done: preferences.help.length > 0,
         title: "How can I help?",
@@ -269,6 +301,20 @@ function SetupWizard() {
   const savePreferences = (next = preferences) => saveOnboardingPreferences(user?.id, next).catch(() => undefined);
 
   useEffect(() => {
+    let active = true;
+    loadHouseholdMemberships(user?.id)
+      .then(next => {
+        if (active) setHouseholds(next);
+      })
+      .catch(() => {
+        if (active) setHouseholds([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
     if (restoredProgress) return;
     const storedKey = readStoredSetupStep();
     const storedIndex = storedKey ? steps.findIndex(step => step.key === storedKey) : -1;
@@ -329,11 +375,54 @@ function SetupWizard() {
     router.replace({ pathname: "/(tabs)/flo", params: { prompt: "Can I afford $100?" } } as any);
   };
 
+  const createInvite = async () => {
+    if (!householdForInvite) {
+      setHouseholdMessage("No household is ready yet. You can invite someone later from Settings.");
+      return;
+    }
+    setHouseholdBusy(true);
+    setHouseholdMessage("");
+    try {
+      const code = await createHouseholdInviteCode(householdForInvite.householdId, householdRole);
+      setHouseholdCode(code);
+      setHouseholdMessage("Invite code created. Share it with the person joining your household.");
+    } catch (error) {
+      setHouseholdMessage(error instanceof Error ? error.message : "Couldn't create an invite code. Try again.");
+    } finally {
+      setHouseholdBusy(false);
+    }
+  };
+
+  const joinHousehold = async () => {
+    const code = joinCode.trim();
+    if (!code) {
+      setHouseholdMessage("Enter an invite code first.");
+      return;
+    }
+    setHouseholdBusy(true);
+    setHouseholdMessage("");
+    try {
+      await acceptHouseholdInviteCode(code);
+      setJoinCode("");
+      setHouseholdCode("");
+      await reloadHouseholds();
+      setHouseholdMessage("Household joined. I'll use that shared plan once setup continues.");
+    } catch (error) {
+      setHouseholdMessage(error instanceof Error ? error.message : "Couldn't join that household. Try again.");
+    } finally {
+      setHouseholdBusy(false);
+    }
+  };
+
   const runAction = async () => {
     switch (current.key) {
       case "welcome":
       case "intro":
         setFloConfirmation("");
+        goNext();
+        return;
+      case "household":
+        setFloConfirmation(householdCode ? "Invite code is ready. You can continue setup while they join." : "No problem — household setup can wait until Settings.");
         goNext();
         return;
       case "help":
@@ -440,6 +529,78 @@ function SetupWizard() {
       ));
     }
     return null;
+  };
+
+  const renderHouseholdStep = () => {
+    if (current.key !== "household") return null;
+    const roleOptions: { role: HouseholdInviteRole; label: string }[] = [
+      { role: "editor", label: "Can edit" },
+      { role: "viewer", label: "View only" },
+    ];
+    return (
+      <View style={styles.householdPanel}>
+        <View style={styles.householdSection}>
+          <View style={styles.householdTitleRow}>
+            <Feather name="users" size={18} color="#c084fc" />
+            <Text style={styles.householdTitle}>Share this household</Text>
+          </View>
+          <Text style={styles.householdText}>
+            Create a code for your spouse, partner, or household member. They only join this money plan.
+          </Text>
+          <View style={styles.householdRoleRow}>
+            {roleOptions.map(option => (
+              <Pressable
+                key={option.role}
+                onPress={() => setHouseholdRole(option.role)}
+                style={[styles.householdRoleChip, householdRole === option.role && styles.householdRoleChipActive]}
+              >
+                <Text style={[styles.householdRoleText, householdRole === option.role && styles.householdRoleTextActive]}>
+                  {option.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Pressable
+            disabled={householdBusy}
+            onPress={() => void createInvite()}
+            style={[styles.householdButton, householdBusy && styles.disabledButton]}
+          >
+            <Feather name="send" size={16} color="#f8fafc" />
+            <Text style={styles.householdButtonText}>{householdCode ? "Create New Code" : "Create Invite Code"}</Text>
+          </Pressable>
+          {householdCode ? <Text style={styles.householdCode}>{householdCode}</Text> : null}
+        </View>
+
+        <View style={styles.householdDivider} />
+
+        <View style={styles.householdSection}>
+          <View style={styles.householdTitleRow}>
+            <Feather name="log-in" size={18} color="#38bdf8" />
+            <Text style={styles.householdTitle}>Join a household</Text>
+          </View>
+          <View style={styles.householdJoinRow}>
+            <TextInput
+              value={joinCode}
+              onChangeText={setJoinCode}
+              autoCapitalize="characters"
+              placeholder="Enter invite code"
+              placeholderTextColor="#64748b"
+              style={styles.householdJoinInput}
+            />
+            <Pressable
+              disabled={householdBusy}
+              onPress={() => void joinHousehold()}
+              style={[styles.householdJoinButton, householdBusy && styles.disabledButton]}
+            >
+              <Feather name="arrow-right" size={20} color="#f8fafc" />
+            </Pressable>
+          </View>
+        </View>
+
+        {householdMessage ? <Text style={styles.householdMessage}>{householdMessage}</Text> : null}
+        <Text style={styles.householdFootnote}>You can skip this and invite people later from Settings → Accounts.</Text>
+      </View>
+    );
   };
 
   const renderPlanCards = () => {
@@ -580,6 +741,7 @@ function SetupWizard() {
           <View style={styles.optionStack}>
             {renderTrustCards()}
             {renderActionPathCard()}
+            {renderHouseholdStep()}
             {renderOptions()}
             {renderPlanCards()}
             {renderFinishCards()}
@@ -789,6 +951,26 @@ const styles = StyleSheet.create({
   trustText: { color: "#94a3b8", fontSize: 12, lineHeight: 17, fontFamily: "Inter_500Medium", marginTop: 3 },
   safeNote: { flexDirection: "row", alignItems: "flex-start", gap: 8, borderRadius: 16, borderWidth: 1, borderColor: "rgba(56,189,248,0.16)", backgroundColor: "rgba(2,132,199,0.10)", padding: 12 },
   safeNoteText: { flex: 1, color: "#bae6fd", fontSize: 12, lineHeight: 17, fontFamily: "Inter_600SemiBold" },
+  householdPanel: { gap: 16, marginTop: 8 },
+  householdSection: { borderRadius: 24, borderWidth: 1, borderColor: "rgba(148, 163, 184, 0.18)", backgroundColor: "rgba(15, 23, 42, 0.72)", padding: 16, gap: 12 },
+  householdTitleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  householdTitle: { color: "#f8fafc", fontSize: 18, fontFamily: "Inter_800ExtraBold" },
+  householdText: { color: "#94a3b8", fontSize: 14, lineHeight: 20, fontFamily: "Inter_500Medium" },
+  householdRoleRow: { flexDirection: "row", gap: 10 },
+  householdRoleChip: { flex: 1, borderRadius: 16, borderWidth: 1, borderColor: "rgba(148, 163, 184, 0.2)", paddingVertical: 12, alignItems: "center", backgroundColor: "rgba(15, 23, 42, 0.6)" },
+  householdRoleChipActive: { backgroundColor: "rgba(147, 51, 234, 0.95)", borderColor: "rgba(216, 180, 254, 0.65)" },
+  householdRoleText: { color: "#94a3b8", fontSize: 14, fontFamily: "Inter_800ExtraBold" },
+  householdRoleTextActive: { color: "#fff" },
+  householdButton: { borderRadius: 18, minHeight: 54, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: "#7c3aed" },
+  householdButtonText: { color: "#f8fafc", fontSize: 16, fontFamily: "Inter_800ExtraBold" },
+  householdCode: { borderRadius: 16, borderWidth: 1, borderColor: "rgba(56, 189, 248, 0.35)", backgroundColor: "rgba(14, 165, 233, 0.12)", color: "#bae6fd", fontSize: 22, fontFamily: "Inter_800ExtraBold", textAlign: "center", letterSpacing: 3, paddingVertical: 12 },
+  householdDivider: { height: 1, backgroundColor: "rgba(148, 163, 184, 0.14)" },
+  householdJoinRow: { flexDirection: "row", gap: 10, alignItems: "center" },
+  householdJoinInput: { flex: 1, minHeight: 54, borderRadius: 18, borderWidth: 1, borderColor: "rgba(148, 163, 184, 0.22)", backgroundColor: "rgba(2, 6, 23, 0.55)", color: "#f8fafc", paddingHorizontal: 16, fontSize: 16, fontFamily: "Inter_700Bold" },
+  householdJoinButton: { width: 56, height: 54, borderRadius: 18, backgroundColor: "#7c3aed", alignItems: "center", justifyContent: "center" },
+  householdMessage: { color: "#86efac", fontSize: 13, fontFamily: "Inter_800ExtraBold", textAlign: "center" },
+  householdFootnote: { color: "#64748b", fontSize: 12, lineHeight: 18, fontFamily: "Inter_500Medium", textAlign: "center" },
+  disabledButton: { opacity: 0.6 },
   optionCard: { minHeight: 58, borderRadius: 18, borderWidth: 1, borderColor: "rgba(148,163,184,0.2)", backgroundColor: "rgba(15,23,42,0.82)", paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 14 },
   optionCardSelected: { borderColor: "rgba(139,92,246,0.8)", backgroundColor: "rgba(88,28,135,0.45)" },
   optionIcon: { width: 34, height: 34, borderRadius: 12, backgroundColor: "rgba(148,163,184,0.12)", alignItems: "center", justifyContent: "center" },

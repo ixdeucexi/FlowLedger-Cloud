@@ -203,7 +203,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!error && data.session) {
       setSession(data.session);
       setLoading(false);
+      return null;
     }
+    if (!error && !data.session) {
+      const fallback = await supabase.auth.signInWithPassword({ email, password });
+      if (!fallback.error && fallback.data.session) {
+        setSession(fallback.data.session);
+        setLoading(false);
+        return null;
+      }
+      setLoading(false);
+      const fallbackMessage = fallback.error?.message?.toLowerCase().includes("email")
+        ? "Account created. Please confirm your email, then sign in to start setup."
+        : fallback.error?.message;
+      return friendlyAuthError(fallbackMessage);
+    }
+    setLoading(false);
     return friendlyAuthError(error?.message);
   };
 
