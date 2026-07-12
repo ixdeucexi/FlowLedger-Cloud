@@ -123,7 +123,7 @@ test("Safe Cushion protects spending, routing, and debt recommendations", () => 
   assert.equal(suite.spendingLimit.daily, 0);
   assert.equal(suite.extraMoneyRouter.amount, 0);
   assert.equal(suite.debtPayoff.status, "hold");
-  assert.match(suite.algorithmDetails.safeCushion.whyItMatters, /guardrail/i);
+  assert.match(suite.algorithmDetails.safeCushion.whyItMatters, /money I’m protecting/i);
   assert.match(suite.algorithmDetails.debtPayoff.nextAction, /Hold extra debt payments/i);
 });
 

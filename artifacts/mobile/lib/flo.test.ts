@@ -130,7 +130,7 @@ const facts: FloFacts = {
     debt: 8,
     goals: 0,
     dollars: { bills: 2000, spending: 1280, savings: 400, debt: 320, goals: 0 },
-    summary: "Suggested split: 50% bills, 32% spending, 10% savings, 8% debt, 0% goals.",
+    summary: "I would use this paycheck like this: 50% bills, 32% spending, 10% savings, 8% debt, 0% goals.",
     nextMove: "After bills are covered, route safe extra money toward the debt target.",
   },
   cashFlowGap: {

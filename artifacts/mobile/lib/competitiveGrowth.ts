@@ -330,7 +330,7 @@ export function evaluateForecastReadiness(input: ForecastReadinessInput): Foreca
     { ok: input.recurringBills > 0, label: "Add recurring bills", why: "Bills are the biggest reason forecasts get tight." },
     { ok: !input.debtPayoffSelected || input.debts > 0, label: "Add debts", why: "Debt payoff needs balances and minimums." },
     { ok: !input.savingsSelected || input.goals > 0, label: "Add savings goals", why: "Goals show what money should be protected." },
-    { ok: Boolean(input.safetyFloorReviewed), label: "Review your safety floor", why: "The floor is the guardrail I protect." },
+    { ok: Boolean(input.safetyFloorReviewed), label: "Review your safety floor", why: "The floor is the safe line I protect." },
     { ok: Boolean(input.firstForecastViewed), label: "View your first forecast", why: "This confirms the plan creates the days you expect." },
     { ok: Boolean(input.reconciledRecently), label: "Reconcile an account", why: "Fresh balances make every answer more trustworthy." },
   ];

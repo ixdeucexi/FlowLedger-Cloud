@@ -1,15 +1,15 @@
 export const ALGORITHM_CATALOG = [
-  { id: "flowScore", name: "Flow Score", icon: "activity", desc: "A 0-100 view of plan health with the next best action." },
-  { id: "safeCushion", name: "Safe Cushion", icon: "shield", desc: "Money safely available after your forecast and floor." },
-  { id: "purchaseDecision", name: "Purchase Decision", icon: "shopping-bag", desc: "Shows whether a purchase is safe, tight, or should wait." },
-  { id: "billPriority", name: "Bill Priority", icon: "file-text", desc: "Ranks bills by timing, unpaid status, due date, and forecast pressure." },
+  { id: "flowScore", name: "Flow Score", icon: "activity", desc: "A simple score for how much breathing room your money plan has." },
+  { id: "safeCushion", name: "Safe Cushion", icon: "shield", desc: "Money I protect so you do not drop below your safety floor." },
+  { id: "purchaseDecision", name: "Purchase Decision", icon: "shopping-bag", desc: "Checks if a purchase is safe before you spend." },
+  { id: "billPriority", name: "Bill Priority", icon: "file-text", desc: "Shows which bill needs attention first." },
 
-  { id: "paydaySplit", name: "Payday Split", icon: "git-branch", desc: "Recommends how each paycheck should be divided." },
-  { id: "cashFlowGap", name: "Cash Flow Gap", icon: "clock", desc: "Finds the tightest stretch between paychecks so bills can be moved before the squeeze." },
-  { id: "debtPayoff", name: "Debt Payoff", icon: "trending-down", desc: "Compares snowball, avalanche, and cash-flow payoff options." },
-  { id: "spendingLimit", name: "Spending Limit", icon: "sliders", desc: "Recommends safe daily and weekly spending limits." },
+  { id: "paydaySplit", name: "Payday Split", icon: "git-branch", desc: "Shows what each paycheck should cover before spending." },
+  { id: "cashFlowGap", name: "Cash Flow Gap", icon: "clock", desc: "Finds the tightest days between paychecks." },
+  { id: "debtPayoff", name: "Debt Payoff", icon: "trending-down", desc: "Shows the next debt to attack and what rolls forward." },
+  { id: "spendingLimit", name: "Spending Limit", icon: "sliders", desc: "Gives a daily and weekly spending limit that protects your cushion." },
 
-  { id: "extraMoneyRouter", name: "Extra Money Router", icon: "corner-up-right", desc: "Helps route safe leftover money to debt, savings, upcoming bills, or available cash." },
+  { id: "extraMoneyRouter", name: "Extra Money Router", icon: "corner-up-right", desc: "Shows where leftover money should go next: debt, savings, bills, or stay available." },
 ] as const;
 
 export type AlgorithmId = typeof ALGORITHM_CATALOG[number]["id"];

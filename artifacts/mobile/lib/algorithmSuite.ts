@@ -476,8 +476,8 @@ function buildPaydaySplit(
       debt: 0,
       goals: 0,
       dollars: { bills: 0, spending: 0, savings: 0, debt: 0, goals: 0 },
-      summary: "Add income to unlock paycheck split guidance.",
-      nextMove: "Add your next paycheck date and amount.",
+      summary: "Add income so I can show where each paycheck should go.",
+      nextMove: "Add your next paycheck date and amount first.",
     };
   }
   const billShare = Math.min(85, Math.round((bills / income) * 100));
@@ -498,14 +498,14 @@ function buildPaydaySplit(
     debt: debtDollars,
     goals: goalDollars,
   };
-  const summary = `Suggested split: ${billShare}% bills, ${debtShare}% debt, ${savingsShare}% savings, ${goalsShare}% goals, ${spendingShare}% flexible spending.`;
+  const summary = `I would use this paycheck like this: ${billShare}% bills, ${debtShare}% debt, ${savingsShare}% savings, ${goalsShare}% goals, and ${spendingShare}% spending.`;
   const nextMove = billShare >= 60
-    ? "Protect bills first, then let Flo find the safest spending limit."
+    ? "Cover bills first. Spend only after those are protected."
     : safeCushion <= 75
-      ? "Build cushion before adding more spending or debt extras."
+      ? "Build breathing room before extra spending."
       : debtTotal > 0
-        ? "After bills are covered, route safe extra money toward the debt target."
-        : "After bills are covered, route safe extra money toward savings or goals.";
+        ? "After bills are safe, send extra money to the next debt."
+        : "After bills are safe, send extra money to savings or goals.";
   return { bills: billShare, spending: spendingShare, savings: savingsShare, debt: debtShare, goals: goalsShare, dollars, summary, nextMove };
 }
 
@@ -523,8 +523,8 @@ function buildPurchaseDecisionDetails(
       action: "avoid",
       confidence,
       bestDay: planDelayDay,
-      detail: "This month does not have free cash after the current plan, even if the balance still has cushion.",
-      nextMove: "Wait, lower another planned expense, or review which bill or plan is squeezing the month.",
+      detail: "Your plan already uses this month’s money. The balance may look okay, but that money already has a job.",
+      nextMove: "Wait, lower another planned expense, or ask Flo what is squeezing the month.",
     };
   }
   if (decisionRoom >= 250) {
@@ -533,8 +533,8 @@ function buildPurchaseDecisionDetails(
       action: "safe",
       confidence,
       bestDay: planDelayDay,
-      detail: `Purchases up to $${decisionRoom.toFixed(0)} are safe because that is the smaller number between monthly free cash ($${monthlyFreeCash.toFixed(0)}) and Safe Cushion ($${safeCushionAmount.toFixed(0)}).`,
-      nextMove: "Test the exact amount and date before committing.",
+      detail: `I would trust up to $${decisionRoom.toFixed(0)} right now. That is the smaller number between money left this month and your Safe Cushion.`,
+      nextMove: "Check the exact amount and date before you commit.",
     };
   }
   if (decisionRoom >= 75) {
@@ -543,8 +543,8 @@ function buildPurchaseDecisionDetails(
       action: "split",
       confidence,
       bestDay: planDelayDay,
-      detail: `Small purchases may work. The safe amount is capped at $${decisionRoom.toFixed(0)} because FlowLedger compares monthly free cash ($${monthlyFreeCash.toFixed(0)}) against Safe Cushion ($${safeCushionAmount.toFixed(0)}) and uses the lower number.`,
-      nextMove: planDelayDay ? `Try the purchase after ${formatMonthDay(input, planDelayDay)}, or split it into smaller pieces.` : "Split it smaller or wait for more cushion.",
+      detail: `A small purchase may work, but I would keep it at $${decisionRoom.toFixed(0)} or less so your cushion stays protected.`,
+      nextMove: planDelayDay ? `Try it after ${formatMonthDay(input, planDelayDay)}, or split it into smaller pieces.` : "Split it smaller or wait for more breathing room.",
     };
   }
   if (decisionRoom > 0) {
@@ -553,7 +553,7 @@ function buildPurchaseDecisionDetails(
       action: "wait",
       confidence,
       bestDay: planDelayDay,
-      detail: `This month is tight. Only about $${decisionRoom.toFixed(0)} is safe after comparing free cash and cushion.`,
+      detail: `This month is tight. I only see about $${decisionRoom.toFixed(0)} that is not already needed by the plan.`,
       nextMove: planDelayDay ? `Check again around ${formatMonthDay(input, planDelayDay)}.` : "Hold the purchase until the forecast improves.",
     };
   }
@@ -562,8 +562,8 @@ function buildPurchaseDecisionDetails(
     action: "avoid",
     confidence,
     bestDay: planDelayDay,
-    detail: safeCushionAmount <= 0 ? "New spending is unsafe until the forecast improves." : "The cushion exists, but the monthly plan does not have free spendable room.",
-    nextMove: "Protect the safety floor before adding this purchase.",
+    detail: safeCushionAmount <= 0 ? "I would not add new spending until the forecast improves." : "You have some cushion, but this month’s money is already spoken for.",
+    nextMove: "Protect the safety floor first.",
   };
 }
 
@@ -573,8 +573,8 @@ function buildSpendingLimitDetails(safeCushionAmount: number, remainingDays: num
   const status: AlgorithmSuiteResult["spendingLimit"]["status"] = safeCushionAmount <= 0 ? "risk" : daily < 10 ? "watch" : "safe";
   const paceLabel = status === "safe" ? "safe pace" : status === "watch" ? "tight pace" : "pause spending";
   const detail = status === "risk"
-    ? "No safe daily spending is available until the cushion improves."
-    : `About $${daily.toFixed(0)}/day or $${weekly.toFixed(0)}/week is safe from the current cushion.`;
+    ? "I would pause extra spending until the cushion improves."
+    : `To stay safe, keep extra spending near $${daily.toFixed(0)}/day or $${weekly.toFixed(0)}/week.`;
   return { daily, weekly, status, paceLabel, remainingDays, detail };
 }
 
@@ -595,26 +595,26 @@ function buildExtraMoneyRouterDetails(args: {
         : "available cash";
   const detail = amount > 0
     ? args.recommendation === "debt"
-      ? `Up to $${amount.toFixed(0)} can safely speed up ${targetLabel} without crossing the floor.`
+      ? `I can safely send up to $${amount.toFixed(0)} to ${targetLabel} without breaking your floor.`
       : args.recommendation === "bill"
-        ? `Up to $${amount.toFixed(0)} can safely protect ${targetLabel} before extra spending.`
+        ? `I can safely hold up to $${amount.toFixed(0)} for ${targetLabel} before extra spending.`
         : args.recommendation === "savings"
-          ? `Up to $${amount.toFixed(0)} can safely move toward ${targetLabel} after the plan is protected.`
-          : `Up to $${amount.toFixed(0)} can safely stay available without crossing the floor.`
+          ? `I can safely move up to $${amount.toFixed(0)} toward ${targetLabel} after the plan is protected.`
+          : `I would keep up to $${amount.toFixed(0)} available without crossing your floor.`
     : args.recommendation === "bill"
-      ? `No safe extra money is available to route yet. I’m holding cash for ${targetLabel} as a required bill, not choosing it as a payoff target.`
-      : "No safe extra money is available to route yet.";
+      ? `I do not see safe leftover money yet. I’m holding cash for ${targetLabel} because it is a required bill.`
+      : "I do not see safe leftover money yet.";
   const nextMove = amount > 0
     ? args.recommendation === "debt"
       ? `Preview adding $${amount.toFixed(0)} to ${targetLabel}.`
       : args.recommendation === "bill"
-        ? `Use it to protect ${targetLabel} before spending it.`
+        ? `Hold it for ${targetLabel} before spending it.`
         : args.recommendation === "savings"
           ? `Preview moving $${amount.toFixed(0)} toward ${targetLabel}.`
           : "Keep it available until the tightest forecast day passes."
     : args.recommendation === "bill"
-      ? `Keep extra cash available for ${targetLabel} until FlowLedger shows safe room.`
-      : "Keep extra cash available until FlowLedger shows safe room.";
+      ? `Keep extra cash available for ${targetLabel} until I see safe room.`
+      : "Keep extra cash available until I see safe room.";
   const options = amount > 0 ? [
     { route: "debt" as const, label: args.debtTargetName ? `Debt: ${args.debtTargetName}` : "Debt payoff", amount, reason: "Fastest path away from paycheck-to-paycheck when debt is active." },
     { route: "savings" as const, label: args.savingsTargetName ? `Savings: ${args.savingsTargetName}` : "Savings cushion", amount, reason: "Builds protection before investing or larger plans." },
@@ -649,9 +649,9 @@ function buildDebtPayoffDetails(targets: {
       nextDebtNameAfterTarget: null,
       totalMonthlyMinimum,
       status: "done",
-      nextMove: "No active debt payoff target found.",
-      detail: "No active debt payoff target found.",
-      whyItMatters: "Once active debts are gone, this algorithm steps out of the way so money can move toward savings and goals.",
+      nextMove: "No active debt is left to attack.",
+      detail: "No active debt is left to attack.",
+      whyItMatters: "Once active debts are gone, I stop pushing payoff moves and help send money toward savings and goals.",
       sourceNumbers: [
         { label: "Active debts", value: "0", tone: "safe" },
         { label: "Minimums", value: `$${totalMonthlyMinimum.toFixed(0)}/mo`, tone: "safe" },
@@ -670,9 +670,9 @@ function buildDebtPayoffDetails(targets: {
   const safeExtraAmount = roundCurrency(Math.max(0, targets.safeCushionAmount));
   const status: AlgorithmSuiteResult["debtPayoff"]["status"] = targets.safeCushionAmount > 0 ? "ready" : "hold";
   const nextMove = status === "ready"
-    ? `Send safe extra money to ${targets.snowball.name} first.`
-    : `Hold extra debt payments until the Safe Cushion is above the floor, then target ${targets.snowball.name}.`;
-  const detail = `Snowball targets ${targets.snowball.name}; avalanche targets ${targets.avalanche?.name ?? targets.snowball.name}; cash-flow relief targets ${targets.cashFlow?.name ?? targets.snowball.name}.`;
+    ? `Attack ${targets.snowball.name} first with any safe extra money.`
+    : `Hold extra debt payments until your cushion is safe, then attack ${targets.snowball.name}.`;
+  const detail = `I’d attack ${targets.snowball.name} first because it has the smallest balance. Avalanche would chase ${targets.avalanche?.name ?? targets.snowball.name} for interest, and cash-flow relief would close ${targets.cashFlow?.name ?? targets.snowball.name} to free monthly room.`;
   const whyItMatters = nextDebtNameAfterTarget
     ? `When ${targets.snowball.name} is paid off, its $${snowballMinimum.toFixed(0)}/mo minimum rolls into ${nextDebtNameAfterTarget} instead of disappearing.`
     : `When ${targets.snowball.name} is paid off, its $${snowballMinimum.toFixed(0)}/mo minimum becomes cash-flow room for the next goal.`;
@@ -702,7 +702,7 @@ function buildDebtPayoffDetails(targets: {
       {
         method: "snowball",
         targetName: targets.snowball.name,
-        reason: `Smallest balance at $${(targets.snowball.balance ?? 0).toFixed(0)} keeps momentum high.`,
+        reason: `Smallest balance ($${(targets.snowball.balance ?? 0).toFixed(0)}) gives the fastest win.`,
       },
       {
         method: "avalanche",
@@ -758,10 +758,10 @@ function buildAlgorithmDecisionDetails(
       ? "Extra Money Router: Hold cash"
       : "Extra Money Router: No extra route yet";
   const routerSourceNumbers: AlgorithmDecisionDetail["sourceNumbers"] = [
-    { label: "Safe route amount", value: money(facts.extraMoneyRouter.amount), tone: routerStatus },
-    { label: "Recommendation", value: facts.extraMoneyRouter.amount > 0 ? capitalize(facts.extraMoneyRouter.recommendation) : "Hold cash", tone: "info" },
+    { label: "Safe extra", value: money(facts.extraMoneyRouter.amount), tone: routerStatus },
+    { label: "Best use", value: facts.extraMoneyRouter.amount > 0 ? capitalize(facts.extraMoneyRouter.recommendation) : "Hold cash", tone: "info" },
     ...(facts.extraMoneyRouter.amount > 0
-      ? [{ label: "Route target", value: facts.extraMoneyRouter.targetLabel, tone: "info" as const }]
+      ? [{ label: "Target", value: facts.extraMoneyRouter.targetLabel, tone: "info" as const }]
       : routerIsHoldingForBill
         ? [{ label: "Protecting", value: facts.extraMoneyRouter.targetLabel, tone: "info" as const }]
         : []),
@@ -773,7 +773,7 @@ function buildAlgorithmDecisionDetails(
       status: flowStatus,
       headline: `${facts.flowScore} - ${facts.flowLabel}`,
       whatIFound: facts.flowScoreDetails.topReason,
-      whyItMatters: "This is the quick pressure check. I combine cushion, bills, debt pressure, forecast confidence, and risk days so you know what needs attention first.",
+      whyItMatters: "This is your money weather report. I check cushion, bills, debt, confidence, and risk days so you know what to fix first.",
       nextAction: facts.flowScoreDetails.topAction,
       floPrompt: `Why is my Flow Score ${facts.flowScore}?`,
       sourceNumbers: [
@@ -788,7 +788,7 @@ function buildAlgorithmDecisionDetails(
       status: facts.safeCushionDetails.status,
       headline: `Safe Cushion: ${money(facts.safeCushionAmount)}`,
       whatIFound: facts.safeCushionDetails.topReason,
-      whyItMatters: "This is the guardrail for every decision. If this number is thin, I should not recommend extra spending, debt payments, or savings moves that would break your floor.",
+      whyItMatters: "This is the money I’m protecting for you. If it is thin, I should not suggest spending, extra debt payments, or savings moves that break your floor.",
       nextAction: facts.safeCushionDetails.topAction,
       floPrompt: `Why is my Safe Cushion ${money(facts.safeCushionAmount)}?`,
       sourceNumbers: [
@@ -803,7 +803,7 @@ function buildAlgorithmDecisionDetails(
       status: purchaseStatus,
       headline: `Purchase Decision: ${capitalize(facts.purchaseDecision.action)}`,
       whatIFound: facts.purchaseDecision.detail,
-      whyItMatters: "This keeps a want from quietly stealing money that is already needed for bills, planned purchases, debt payoff, or the safety floor.",
+      whyItMatters: "This keeps a purchase from using money that already belongs to bills, debt, goals, or your safety floor.",
       nextAction: facts.purchaseDecision.nextMove,
       floPrompt: "Can I afford this purchase?",
       sourceNumbers: [
@@ -818,7 +818,7 @@ function buildAlgorithmDecisionDetails(
       status: billStatus,
       headline: bill ? `Bill Priority: ${bill.name}` : "Bill Priority: On track",
       whatIFound: facts.billPriority.summary,
-      whyItMatters: "Bills are not bad; they are obligations. I rank them so the next required payment does not surprise the forecast or hit before the cash is ready.",
+      whyItMatters: "Bills are normal. I just show which one needs attention first so it does not surprise the forecast or hit before cash is ready.",
       nextAction: facts.billPriority.nextMove,
       floPrompt: bill ? `Why is ${bill.name} my priority bill?` : "What bills need attention?",
       sourceNumbers: [
@@ -833,7 +833,7 @@ function buildAlgorithmDecisionDetails(
       status: paydayStatus,
       headline: "Payday Split",
       whatIFound: facts.paydaySplit.summary,
-      whyItMatters: "This turns a paycheck into a job list: required bills first, debt and goals second, then only the spending that the cushion can handle.",
+      whyItMatters: "This gives every paycheck a job: bills first, debt and goals next, then only the spending your cushion can handle.",
       nextAction: facts.paydaySplit.nextMove,
       floPrompt: "How should I split my next paycheck?",
       sourceNumbers: [
@@ -850,7 +850,7 @@ function buildAlgorithmDecisionDetails(
         ? `Cash Flow Gap: ${formatMonthDay(input, facts.cashFlowGap.startDay)}`
         : "Cash Flow Gap",
       whatIFound: facts.cashFlowGap.detail,
-      whyItMatters: "Paycheck-to-paycheck stress usually comes from a tight stretch, not the whole month. I find the squeeze so you can move timing instead of guessing.",
+      whyItMatters: "Paycheck-to-paycheck stress usually comes from a few tight days. I find those days so you can fix timing instead of guessing.",
       nextAction: gapStatus === "safe" ? "Keep this schedule and review again after new bills or plans are added." : "Review the bills, plans, or debt moves around the tight stretch.",
       floPrompt: "Why is my cash flow tight?",
       sourceNumbers: [
@@ -878,7 +878,7 @@ function buildAlgorithmDecisionDetails(
       status: facts.spendingLimits.status,
       headline: `Spending Limit: ${money(facts.spendingLimits.daily)}/day`,
       whatIFound: facts.spendingLimits.detail,
-      whyItMatters: "This gives flexible spending a ceiling so groceries, gas, and small purchases do not accidentally eat the cushion before the tight day passes.",
+      whyItMatters: "This gives everyday spending a safe line so groceries, gas, and small purchases do not eat the cushion before the tight day passes.",
       nextAction: facts.spendingLimits.status === "risk" ? "Pause extra spending until the forecast has room again." : "Use this as the flexible spending pace until the next paycheck or tight day.",
       floPrompt: "What can I spend until payday?",
       sourceNumbers: [
@@ -893,7 +893,7 @@ function buildAlgorithmDecisionDetails(
       status: routerStatus,
       headline: routerHeadline,
       whatIFound: facts.extraMoneyRouter.detail,
-      whyItMatters: "Leftover money should have a job. I protect the floor first, then choose debt, savings, bills, or available cash based on what moves you away from paycheck-to-paycheck fastest.",
+      whyItMatters: "Every extra dollar needs a job. I protect the floor first, then choose debt, savings, bills, or cash based on what helps you escape paycheck-to-paycheck fastest.",
       nextAction: facts.extraMoneyRouter.nextMove,
       floPrompt: "Where should extra money go?",
       sourceNumbers: routerSourceNumbers,
