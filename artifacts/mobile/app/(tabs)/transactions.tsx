@@ -19,7 +19,12 @@ import type { Bill, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
-import { buildReviewQueue, detectSubscriptions, type SubscriptionCandidate } from "@/lib/competitiveGrowth";
+import {
+  buildReviewQueue,
+  detectSubscriptions,
+  type SubscriptionCandidate,
+  type TransactionRule,
+} from "@/lib/competitiveGrowth";
 import { debtPaymentStatusLabel } from "@/lib/forecastDisplay";
 import { supabase } from "@/lib/supabase";
 
@@ -32,6 +37,20 @@ type DateFilter     = "all" | "this_month" | "last_month" | "this_year";
 type SortOrder      = "asc" | "desc";
 type ReviewDecision = "approved" | "ignored" | "deleted";
 type SubscriptionDecision = "keep" | "not_subscription" | "cancelled" | "bill_created";
+type TransactionRuleRow = {
+  id: string;
+  name: string;
+  match_type: TransactionRule["matchType"];
+  match_value: string | null;
+  amount_min: number | null;
+  amount_max: number | null;
+  direction: TransactionRule["direction"] | null;
+  category: string | null;
+  linked_bill_id: string | null;
+  mark_as_transfer: boolean | null;
+  priority: number | null;
+  is_active: boolean | null;
+};
 type ReviewDecisionRow = { transaction_id: string | null; status: "needs_review" | "approved" | "ignored" | "deleted" };
 type SubscriptionDecisionRow = { merchant: string | null; status: "review" | "keep" | "cancel_manually" | "convert_to_bill" | "not_subscription" };
 
@@ -127,6 +146,38 @@ function parseDecisionMap<T extends string>(value: string | null): Record<string
   }
 }
 
+function parseTransactionRules(value: string | null): TransactionRule[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter(rule => rule && typeof rule === "object") as TransactionRule[] : [];
+  } catch {
+    return [];
+  }
+}
+
+function numberOrNull(value: unknown): number | null {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function mapRuleRow(row: TransactionRuleRow): TransactionRule {
+  return {
+    id: row.id,
+    name: row.name,
+    matchType: row.match_type,
+    matchValue: row.match_value,
+    amountMin: numberOrNull(row.amount_min),
+    amountMax: numberOrNull(row.amount_max),
+    direction: row.direction ?? "any",
+    category: row.category,
+    linkedBillId: row.linked_bill_id,
+    markAsTransfer: Boolean(row.mark_as_transfer),
+    priority: row.priority,
+    isActive: row.is_active !== false,
+  };
+}
+
 function subscriptionKey(subscription: SubscriptionCandidate) {
   return subscription.merchant.toLowerCase().trim();
 }
@@ -167,6 +218,8 @@ export default function TransactionsScreen() {
   const [search, setSearch]                     = useState("");
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [weeklySummaryVisible, setWeeklySummaryVisible] = useState(false);
+  const [reviewAlertLoaded, setReviewAlertLoaded] = useState(false);
+  const [transactionRules, setTransactionRules] = useState<TransactionRule[]>([]);
   const [reviewDecisions, setReviewDecisions] = useState<Record<string, ReviewDecision>>({});
   const [subscriptionDecisions, setSubscriptionDecisions] = useState<Record<string, SubscriptionDecision>>({});
   useBackDismiss(!!detailItem, () => setDetailItem(null));
@@ -175,20 +228,37 @@ export default function TransactionsScreen() {
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
   const listBottomPadding = insets.bottom + (Platform.OS === "web" ? 128 : 118);
+  const transactionRuleStorageKey = user?.id ? `flowledger_transaction_rules_${user.id}` : "flowledger_transaction_rules_guest";
   const reviewDecisionStorageKey = user?.id ? `flowledger_review_decisions_${user.id}` : "flowledger_review_decisions_guest";
   const subscriptionDecisionStorageKey = user?.id ? `flowledger_subscription_decisions_${user.id}` : "flowledger_subscription_decisions_guest";
 
   const loadReviewAlertState = useCallback(async () => {
-    const [storedReviews, storedSubscriptions] = await Promise.all([
+    setReviewAlertLoaded(false);
+    const [storedRules, storedReviews, storedSubscriptions] = await Promise.all([
+      AsyncStorage.getItem(transactionRuleStorageKey).catch(() => null),
       AsyncStorage.getItem(reviewDecisionStorageKey).catch(() => null),
       AsyncStorage.getItem(subscriptionDecisionStorageKey).catch(() => null),
     ]);
+    let nextTransactionRules = parseTransactionRules(storedRules);
     const nextReviewDecisions = parseDecisionMap<ReviewDecision>(storedReviews);
     const nextSubscriptionDecisions = parseDecisionMap<SubscriptionDecision>(storedSubscriptions);
 
     if (user?.id && activeHousehold?.householdId) {
+      let remoteRules: TransactionRuleRow[] | null = null;
       let remoteReviews: ReviewDecisionRow[] | null = null;
       let remoteSubscriptions: SubscriptionDecisionRow[] | null = null;
+
+      try {
+        const { data } = await supabase
+          .from("transaction_rules")
+          .select("id,name,match_type,match_value,amount_min,amount_max,direction,category,linked_bill_id,mark_as_transfer,priority,is_active")
+          .eq("household_id", activeHousehold.householdId)
+          .eq("is_active", true)
+          .order("priority", { ascending: true });
+        remoteRules = data as TransactionRuleRow[] | null;
+      } catch {
+        remoteRules = null;
+      }
 
       try {
         const { data } = await supabase
@@ -212,6 +282,7 @@ export default function TransactionsScreen() {
         remoteSubscriptions = null;
       }
 
+      if (remoteRules) nextTransactionRules = remoteRules.map(mapRuleRow);
       remoteReviews?.forEach(row => {
         const decision = reviewStatusToDecision(row.status);
         if (row.transaction_id && decision) nextReviewDecisions[row.transaction_id] = decision;
@@ -223,18 +294,23 @@ export default function TransactionsScreen() {
       });
 
       await Promise.all([
+        AsyncStorage.setItem(transactionRuleStorageKey, JSON.stringify(nextTransactionRules)).catch(() => undefined),
         AsyncStorage.setItem(reviewDecisionStorageKey, JSON.stringify(nextReviewDecisions)).catch(() => undefined),
         AsyncStorage.setItem(subscriptionDecisionStorageKey, JSON.stringify(nextSubscriptionDecisions)).catch(() => undefined),
       ]);
     }
 
+    setTransactionRules(nextTransactionRules);
     setReviewDecisions(nextReviewDecisions);
     setSubscriptionDecisions(nextSubscriptionDecisions);
-  }, [activeHousehold?.householdId, reviewDecisionStorageKey, subscriptionDecisionStorageKey, user?.id]);
+    setReviewAlertLoaded(true);
+  }, [activeHousehold?.householdId, reviewDecisionStorageKey, subscriptionDecisionStorageKey, transactionRuleStorageKey, user?.id]);
 
   useFocusEffect(
     useCallback(() => {
-      void loadReviewAlertState();
+      void loadReviewAlertState().catch(() => {
+        setReviewAlertLoaded(true);
+      });
     }, [loadReviewAlertState]),
   );
 
@@ -428,7 +504,7 @@ export default function TransactionsScreen() {
       : "income" as const,
   })), [allActivity]);
 
-  const reviewQueue = useMemo(() => buildReviewQueue(growthTransactions, []), [growthTransactions]);
+  const reviewQueue = useMemo(() => buildReviewQueue(growthTransactions, transactionRules), [growthTransactions, transactionRules]);
   const subscriptionCandidates = useMemo(() => detectSubscriptions(growthTransactions), [growthTransactions]);
   const unresolvedReviewQueue = useMemo(
     () => reviewQueue.filter(item => !reviewDecisions[item.transactionId]),
@@ -438,7 +514,7 @@ export default function TransactionsScreen() {
     () => subscriptionCandidates.filter(item => !subscriptionDecisions[subscriptionKey(item)]),
     [subscriptionCandidates, subscriptionDecisions],
   );
-  const activityReviewCount = unresolvedReviewQueue.length + unresolvedSubscriptionCandidates.length;
+  const activityReviewCount = reviewAlertLoaded ? unresolvedReviewQueue.length + unresolvedSubscriptionCandidates.length : 0;
 
   // ── Summary stats ─────────────────────────────────────────────────────────
   const { totalIn, totalOut, net } = useMemo(() => {
