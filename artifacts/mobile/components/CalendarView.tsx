@@ -303,7 +303,7 @@ export function CalendarView({
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 10,
+    marginBottom: 22,
     backgroundColor: CALENDAR.surface,
     borderRadius: 26,
     overflow: "hidden",
@@ -324,7 +324,7 @@ const styles = StyleSheet.create({
   },
   dayName: { flex: 1, textAlign: "center", fontSize: 11, fontFamily: "Inter_800ExtraBold", color: CALENDAR.muted, letterSpacing: 1.1 },
   gridScroll: { maxHeight: 530 },
-  gridScrollContent: { paddingBottom: 4 },
+  gridScrollContent: { paddingBottom: 6 },
   grid: { flexDirection: "row", flexWrap: "wrap", backgroundColor: CALENDAR.surface },
   cellOuter: {
     width: "14.285714%",
@@ -371,8 +371,16 @@ const styles = StyleSheet.create({
   },
   eventChipText: { flex: 1, fontSize: 8, fontFamily: "Inter_800ExtraBold", lineHeight: 11 },
   moreText: { fontSize: 8, fontFamily: "Inter_600SemiBold", textAlign: "center", color: CALENDAR.faded },
-  legendRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, paddingTop: 12, paddingHorizontal: 2, paddingBottom: 2 },
-  legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
+  legendRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    columnGap: 12,
+    rowGap: 8,
+    paddingTop: 12,
+    paddingHorizontal: 6,
+    paddingBottom: 16,
+  },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 5, minHeight: 18 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { color: CALENDAR.muted, fontSize: 10, fontFamily: "Inter_700Bold" },
 });

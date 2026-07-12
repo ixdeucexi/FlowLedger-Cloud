@@ -1547,7 +1547,7 @@ export default function MonthlyScreen() {
             }}
           />
       ) : (
-        <View style={[styles.calFixed, { paddingBottom: insets.bottom + 64 }]}>
+        <View style={[styles.calFixed, { paddingBottom: insets.bottom + 92 }]}>
           <View style={styles.calInner}>
             <View {...calendarSwipeResponder.panHandlers}>
               <CalendarView
