@@ -450,20 +450,20 @@ export default function TransactionsScreen() {
 
   const sections = useMemo(() => groupByMonth(filtered), [filtered]);
 
-  const growthTransactions = useMemo(() => allActivity.map(item => ({
-    id: item.id,
-    date: item.date,
-    amount: item.amount,
-    description: item.label,
-    category: item.category,
-    source: item.source === "transaction"
-      ? "manual" as const
-      : item.source === "bill_payment"
-      ? "bill" as const
-      : item.source === "extra_payment"
-      ? "debt" as const
-      : "income" as const,
-  })), [allActivity]);
+  const growthTransactions = useMemo(() => transactions.map(transaction => ({
+    id: transaction.id,
+    date: transaction.date,
+    amount: transaction.amount,
+    description: transaction.note?.trim() || transaction.category || "Transaction",
+    category: transaction.category,
+    accountId: transaction.account_id,
+    importHash: transaction.import_hash,
+    source: transaction.import_hash ? "import" as const
+      : transaction.debt_applied_bill_id ? "debt" as const
+      : transaction.linked_bill_id ? "bill" as const
+      : "manual" as const,
+    linkedBillId: transaction.linked_bill_id ?? transaction.debt_applied_bill_id ?? null,
+  })), [transactions]);
 
   const reviewQueue = useMemo(() => buildReviewQueue(growthTransactions, transactionRules), [growthTransactions, transactionRules]);
   const unresolvedReviewQueue = useMemo(
