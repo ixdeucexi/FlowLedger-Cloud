@@ -3,6 +3,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { AppState, Platform } from "react-native";
 
 import { DEV_DEMO_USER_ID, disableDevDemoMode, enableDevDemoMode, isDevDemoMode } from "@/lib/demoMode";
+import { clearLastAppRoute } from "@/lib/navigationMemory";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 import { supabase } from "@/lib/supabase";
 
@@ -231,6 +232,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     setSession(null);
+    clearLastAppRoute();
     if (demoMode) {
       disableDevDemoMode();
       setDemoMode(false);

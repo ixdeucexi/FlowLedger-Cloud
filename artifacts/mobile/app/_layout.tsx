@@ -19,6 +19,7 @@ import { PwaInstallPrompt } from "@/components/PwaInstallPrompt";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
+import { readLastAppRoute, rememberCurrentAppRoute } from "@/lib/navigationMemory";
 import { supabase } from "@/lib/supabase";
 
 SplashScreen.preventAutoHideAsync();
@@ -54,7 +55,7 @@ function AuthObserver() {
         } catch {}
       }
       if (!requestedSetup) {
-        router.replace("/(tabs)");
+        router.replace((readLastAppRoute() ?? "/(tabs)") as any);
         return;
       }
       let cancelled = false;
@@ -73,7 +74,30 @@ function AuthObserver() {
         cancelled = true;
       };
     }
+
+    if (session && !inAuth && !atRoot && !inPlaidOAuthCallback) {
+      rememberCurrentAppRoute();
+    }
   }, [session, loading, segments, router]);
+
+  useEffect(() => {
+    if (loading || !session || Platform.OS !== "web" || typeof window === "undefined" || typeof document === "undefined") {
+      return;
+    }
+
+    const rememberRouteBeforePause = () => rememberCurrentAppRoute();
+    const rememberRouteWhenHidden = () => {
+      if (document.visibilityState === "hidden") rememberCurrentAppRoute();
+    };
+
+    window.addEventListener("pagehide", rememberRouteBeforePause);
+    document.addEventListener("visibilitychange", rememberRouteWhenHidden);
+
+    return () => {
+      window.removeEventListener("pagehide", rememberRouteBeforePause);
+      document.removeEventListener("visibilitychange", rememberRouteWhenHidden);
+    };
+  }, [session, loading]);
 
   return null;
 }
