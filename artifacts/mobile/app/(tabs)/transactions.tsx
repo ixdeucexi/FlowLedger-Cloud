@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Modal, Platform, Pressable, ScrollView, SectionList,
   StyleSheet, Text, TextInput, View,
@@ -13,12 +14,14 @@ import { DebtPaymentAppliedModal, type DebtPaymentAppliedDetail } from "@/compon
 import { EmptyState } from "@/components/EmptyState";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import colors from "@/constants/colors";
+import { useAuth } from "@/context/AuthContext";
 import type { Bill, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
-import { buildReviewQueue, detectSubscriptions } from "@/lib/competitiveGrowth";
+import { buildReviewQueue, detectSubscriptions, type SubscriptionCandidate } from "@/lib/competitiveGrowth";
 import { debtPaymentStatusLabel } from "@/lib/forecastDisplay";
+import { supabase } from "@/lib/supabase";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -27,6 +30,10 @@ type TypeFilter     = "all" | "expense" | "income";
 type SourceFilter   = "all" | ActivitySource;
 type DateFilter     = "all" | "this_month" | "last_month" | "this_year";
 type SortOrder      = "asc" | "desc";
+type ReviewDecision = "approved" | "ignored" | "deleted";
+type SubscriptionDecision = "keep" | "not_subscription" | "cancelled" | "bill_created";
+type ReviewDecisionRow = { transaction_id: string | null; status: "needs_review" | "approved" | "ignored" | "deleted" };
+type SubscriptionDecisionRow = { merchant: string | null; status: "review" | "keep" | "cancel_manually" | "convert_to_bill" | "not_subscription" };
 
 interface ActivityItem {
   id: string;
@@ -103,13 +110,48 @@ function groupByMonth(items: ActivityItem[]): { title: string; data: ActivityIte
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
+function normalizeStorageMap<T extends string>(value: unknown): Record<string, T> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.entries(value).reduce<Record<string, T>>((acc, [key, item]) => {
+    if (typeof key === "string" && typeof item === "string") acc[key] = item as T;
+    return acc;
+  }, {});
+}
+
+function parseDecisionMap<T extends string>(value: string | null): Record<string, T> {
+  if (!value) return {};
+  try {
+    return normalizeStorageMap<T>(JSON.parse(value));
+  } catch {
+    return {};
+  }
+}
+
+function subscriptionKey(subscription: SubscriptionCandidate) {
+  return subscription.merchant.toLowerCase().trim();
+}
+
+function reviewStatusToDecision(status: ReviewDecisionRow["status"]): ReviewDecision | null {
+  if (status === "approved" || status === "ignored" || status === "deleted") return status;
+  return null;
+}
+
+function subscriptionStatusToDecision(status: SubscriptionDecisionRow["status"]): SubscriptionDecision | null {
+  if (status === "keep") return "keep";
+  if (status === "cancel_manually") return "cancelled";
+  if (status === "convert_to_bill") return "bill_created";
+  if (status === "not_subscription") return "not_subscription";
+  return null;
+}
+
 export default function TransactionsScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { user } = useAuth();
   const {
     transactions, addTransaction, updateTransaction, deleteTransaction, deleteTransfer,
-    bills, overrides, extraPayments,
+    bills, overrides, extraPayments, activeHousehold,
     getIncomeOccurrencesInMonth,
   } = useBudget();
 
@@ -125,12 +167,76 @@ export default function TransactionsScreen() {
   const [search, setSearch]                     = useState("");
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [weeklySummaryVisible, setWeeklySummaryVisible] = useState(false);
+  const [reviewDecisions, setReviewDecisions] = useState<Record<string, ReviewDecision>>({});
+  const [subscriptionDecisions, setSubscriptionDecisions] = useState<Record<string, SubscriptionDecision>>({});
   useBackDismiss(!!detailItem, () => setDetailItem(null));
   useBackDismiss(filterModalVisible, () => setFilterModalVisible(false));
   useBackDismiss(weeklySummaryVisible, () => setWeeklySummaryVisible(false));
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
   const listBottomPadding = insets.bottom + (Platform.OS === "web" ? 128 : 118);
+  const reviewDecisionStorageKey = user?.id ? `flowledger_review_decisions_${user.id}` : "flowledger_review_decisions_guest";
+  const subscriptionDecisionStorageKey = user?.id ? `flowledger_subscription_decisions_${user.id}` : "flowledger_subscription_decisions_guest";
+
+  const loadReviewAlertState = useCallback(async () => {
+    const [storedReviews, storedSubscriptions] = await Promise.all([
+      AsyncStorage.getItem(reviewDecisionStorageKey).catch(() => null),
+      AsyncStorage.getItem(subscriptionDecisionStorageKey).catch(() => null),
+    ]);
+    const nextReviewDecisions = parseDecisionMap<ReviewDecision>(storedReviews);
+    const nextSubscriptionDecisions = parseDecisionMap<SubscriptionDecision>(storedSubscriptions);
+
+    if (user?.id && activeHousehold?.householdId) {
+      let remoteReviews: ReviewDecisionRow[] | null = null;
+      let remoteSubscriptions: SubscriptionDecisionRow[] | null = null;
+
+      try {
+        const { data } = await supabase
+          .from("transaction_reviews")
+          .select("transaction_id,status")
+          .eq("household_id", activeHousehold.householdId)
+          .in("status", ["approved", "ignored", "deleted"]);
+        remoteReviews = data as ReviewDecisionRow[] | null;
+      } catch {
+        remoteReviews = null;
+      }
+
+      try {
+        const { data } = await supabase
+          .from("subscription_candidates")
+          .select("merchant,status")
+          .eq("household_id", activeHousehold.householdId)
+          .neq("status", "review");
+        remoteSubscriptions = data as SubscriptionDecisionRow[] | null;
+      } catch {
+        remoteSubscriptions = null;
+      }
+
+      remoteReviews?.forEach(row => {
+        const decision = reviewStatusToDecision(row.status);
+        if (row.transaction_id && decision) nextReviewDecisions[row.transaction_id] = decision;
+      });
+      remoteSubscriptions?.forEach(row => {
+        const decision = subscriptionStatusToDecision(row.status);
+        const merchant = row.merchant?.toLowerCase().trim();
+        if (merchant && decision) nextSubscriptionDecisions[merchant] = decision;
+      });
+
+      await Promise.all([
+        AsyncStorage.setItem(reviewDecisionStorageKey, JSON.stringify(nextReviewDecisions)).catch(() => undefined),
+        AsyncStorage.setItem(subscriptionDecisionStorageKey, JSON.stringify(nextSubscriptionDecisions)).catch(() => undefined),
+      ]);
+    }
+
+    setReviewDecisions(nextReviewDecisions);
+    setSubscriptionDecisions(nextSubscriptionDecisions);
+  }, [activeHousehold?.householdId, reviewDecisionStorageKey, subscriptionDecisionStorageKey, user?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadReviewAlertState();
+    }, [loadReviewAlertState]),
+  );
 
   // ── Build unified activity feed ───────────────────────────────────────────
   const allActivity = useMemo((): ActivityItem[] => {
@@ -324,7 +430,15 @@ export default function TransactionsScreen() {
 
   const reviewQueue = useMemo(() => buildReviewQueue(growthTransactions, []), [growthTransactions]);
   const subscriptionCandidates = useMemo(() => detectSubscriptions(growthTransactions), [growthTransactions]);
-  const activityReviewCount = reviewQueue.length + subscriptionCandidates.length;
+  const unresolvedReviewQueue = useMemo(
+    () => reviewQueue.filter(item => !reviewDecisions[item.transactionId]),
+    [reviewDecisions, reviewQueue],
+  );
+  const unresolvedSubscriptionCandidates = useMemo(
+    () => subscriptionCandidates.filter(item => !subscriptionDecisions[subscriptionKey(item)]),
+    [subscriptionCandidates, subscriptionDecisions],
+  );
+  const activityReviewCount = unresolvedReviewQueue.length + unresolvedSubscriptionCandidates.length;
 
   // ── Summary stats ─────────────────────────────────────────────────────────
   const { totalIn, totalOut, net } = useMemo(() => {
@@ -600,7 +714,7 @@ export default function TransactionsScreen() {
             accessibilityLabel={`Open Review Center, ${activityReviewCount} item${activityReviewCount === 1 ? "" : "s"} need review`}
             onPress={() => router.push({
               pathname: "/(tabs)/more",
-              params: { section: reviewQueue.length > 0 ? "review" : "subscriptions" },
+              params: { section: unresolvedReviewQueue.length > 0 ? "review" : "subscriptions" },
             } as any)}
             style={({ pressed }) => [
               styles.reviewAlertButton,
