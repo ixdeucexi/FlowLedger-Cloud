@@ -388,6 +388,24 @@ function formatActivityTime(value: string) {
   return date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
 }
 
+function formatReviewDate(value?: string | null) {
+  if (!value) return "No date";
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+}
+
+function formatSignedMoney(value: number) {
+  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+  return `${sign}$${Math.abs(value).toFixed(2)}`;
+}
+
+function reviewMoneyLabel(value: number) {
+  if (value > 0) return "Money in";
+  if (value < 0) return "Money out";
+  return "No money impact";
+}
+
 const SUBSCRIPTION_BILL_WORDS = [
   "subscription",
   "netflix",
@@ -1096,6 +1114,18 @@ export default function MoreScreen() {
       .map(item => ({ item, transaction: byId.get(item.transactionId) }))
       .filter(entry => entry.transaction);
   }, [growthTransactions, reviewDecisions, reviewQueue]);
+  const reviewImpactSummary = useMemo(() => {
+    return reviewTransactions.reduce(
+      (summary, { transaction }) => {
+        const amount = transaction?.amount ?? 0;
+        if (amount > 0) summary.moneyIn += amount;
+        if (amount < 0) summary.moneyOut += Math.abs(amount);
+        summary.net += amount;
+        return summary;
+      },
+      { moneyIn: 0, moneyOut: 0, net: 0 },
+    );
+  }, [reviewTransactions]);
   const subscriptions = useMemo(
     () => detectSubscriptions(growthTransactions).filter(item => subscriptionDecisions[subscriptionKey(item)] !== "not_subscription"),
     [growthTransactions, subscriptionDecisions],
@@ -2750,13 +2780,22 @@ export default function MoreScreen() {
         <View style={styles.growthMetricGrid}>
           <View style={[styles.growthMetric, { backgroundColor: c.muted }]}>
             <Text style={[styles.growthMetricValue, { color: c.primary }]}>{reviewTransactions.length}</Text>
-            <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>Needs review</Text>
+            <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>Items to check</Text>
           </View>
           <View style={[styles.growthMetric, { backgroundColor: c.muted }]}>
-            <Text style={[styles.growthMetricValue, { color: c.success }]}>{transactionRules.length}</Text>
-            <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>Rules saved</Text>
+            <Text style={[styles.growthMetricValue, { color: c.destructive }]}>${reviewImpactSummary.moneyOut.toFixed(0)}</Text>
+            <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>Money out</Text>
+          </View>
+          <View style={[styles.growthMetric, { backgroundColor: c.muted }]}>
+            <Text style={[styles.growthMetricValue, { color: c.success }]}>${reviewImpactSummary.moneyIn.toFixed(0)}</Text>
+            <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>Money in</Text>
           </View>
         </View>
+        <Text style={[styles.reviewSummaryLine, { color: c.mutedForeground }]}>
+          Net impact: <Text style={{ color: reviewImpactSummary.net >= 0 ? c.success : c.destructive }}>{formatSignedMoney(reviewImpactSummary.net)}</Text>
+          {"  •  "}
+          {transactionRules.length} saved {transactionRules.length === 1 ? "rule" : "rules"}
+        </Text>
         {transactionRules.length ? (
           <Pressable
             onPress={() => void handleApplySavedRules()}
@@ -2772,7 +2811,15 @@ export default function MoreScreen() {
               <Feather name={item.priority === "high" ? "alert-triangle" : "check-square"} size={17} color={item.priority === "high" ? c.destructive : c.primary} />
             </View>
             <View style={styles.dataBody}>
-              <Text style={[styles.dataLabel, { color: c.foreground }]} numberOfLines={1}>{transaction?.description ?? "Transaction"}</Text>
+              <View style={styles.reviewItemTitleRow}>
+                <Text style={[styles.dataLabel, { color: c.foreground, flex: 1 }]} numberOfLines={1}>{transaction?.description ?? "Transaction"}</Text>
+                <Text style={[styles.reviewItemAmount, { color: (transaction?.amount ?? 0) >= 0 ? c.success : c.destructive }]}>
+                  {formatSignedMoney(transaction?.amount ?? 0)}
+                </Text>
+              </View>
+              <Text style={[styles.reviewItemMeta, { color: c.mutedForeground }]}>
+                {formatReviewDate(transaction?.date)} • {reviewMoneyLabel(transaction?.amount ?? 0)} • {transaction?.category || "Uncategorized"}
+              </Text>
               <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{item.summary}</Text>
               <Text style={[styles.growthTinyText, { color: c.mutedForeground }]}>{item.reasons.map(reason => reason.replace(/_/g, " ")).join(" • ")}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.growthActionRow}>
@@ -3707,6 +3754,7 @@ const styles = StyleSheet.create({
   growthMetric: { flex: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 11 },
   growthMetricValue: { fontSize: 18, fontFamily: "Inter_800ExtraBold" },
   growthMetricLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7, marginTop: 2, textTransform: "uppercase" },
+  reviewSummaryLine: { fontSize: 12, fontFamily: "Inter_700Bold", lineHeight: 17, marginTop: -2, marginBottom: 8 },
   growthListRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12 },
   growthTinyText: { fontSize: 11, fontFamily: "Inter_500Medium", lineHeight: 15, marginTop: 3 },
   growthSmallButton: { borderRadius: 999, paddingHorizontal: 11, paddingVertical: 7 },
@@ -3714,6 +3762,9 @@ const styles = StyleSheet.create({
   growthActionRow: { paddingTop: 8, paddingRight: 8, gap: 8 },
   growthPillButton: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
   growthPillButtonText: { fontSize: 12, fontFamily: "Inter_700Bold" },
+  reviewItemTitleRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  reviewItemAmount: { fontSize: 15, fontFamily: "Inter_800ExtraBold" },
+  reviewItemMeta: { fontSize: 11, fontFamily: "Inter_700Bold", lineHeight: 15, marginTop: 2 },
   reviewActionStack: { alignItems: "flex-end", gap: 6, marginLeft: 8 },
   subscriptionActionRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
   growthInlineButton: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7, marginTop: 8 },
