@@ -219,10 +219,10 @@ export default function MonthlyScreen() {
     moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, settings,
     selectedYear, setSelectedYear, dashboardFilter, setDashboardFilter,
-    getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill, updateIncome,
+    getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill, deleteBill, updateIncome, deleteIncome,
     getCashFlow, getMonthlyIncome, getDailyBalances, getIncomeOccurrencesInMonth,
     previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, finalizeBillPayment, getExtraPayment,
-    updateDecision, deleteDecision,
+    updateDecision, deleteDecision, deleteGoal,
   } = useBudget();
 
   const [month, setMonth] = useState(new Date().getMonth());
@@ -1047,6 +1047,58 @@ export default function MonthlyScreen() {
     });
   };
 
+  const handleDeleteBillFromDay = useCallback((bill: Bill) => {
+    const itemLabel = bill.is_debt ? "debt" : "bill";
+    confirmAction({
+      title: `Delete ${bill.is_debt ? "Debt" : "Bill"}`,
+      message: `Delete "${bill.name}" completely? This removes it from Bills and Monthly. Existing Activity entries stay for history.`,
+      confirmText: "Delete",
+      destructive: true,
+      onConfirm: async () => {
+        try {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          await deleteBill(bill.id);
+        } catch (error) {
+          Alert.alert(`Couldn't delete ${itemLabel}`, error instanceof Error ? error.message : "Try again in a moment.");
+        }
+      },
+    });
+  }, [deleteBill]);
+
+  const handleDeleteIncomeFromDay = useCallback((income: IncomeItem) => {
+    confirmAction({
+      title: "Delete Income",
+      message: `Delete "${income.name}" completely? This removes its future income dates from Monthly and your forecast.`,
+      confirmText: "Delete",
+      destructive: true,
+      onConfirm: async () => {
+        try {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          await deleteIncome(income.id);
+        } catch (error) {
+          Alert.alert("Couldn't delete income", error instanceof Error ? error.message : "Try again in a moment.");
+        }
+      },
+    });
+  }, [deleteIncome]);
+
+  const handleDeleteGoalFromDay = useCallback((goalId: string, goalName: string) => {
+    confirmAction({
+      title: "Delete Goal",
+      message: `Delete "${goalName}" completely? This removes it from Monthly and your forecast.`,
+      confirmText: "Delete",
+      destructive: true,
+      onConfirm: async () => {
+        try {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          await deleteGoal(goalId);
+        } catch (error) {
+          Alert.alert("Couldn't delete goal", error instanceof Error ? error.message : "Try again in a moment.");
+        }
+      },
+    });
+  }, [deleteGoal]);
+
   const openEditPlan = (plan: DecisionRecord) => {
     setEditPlan(plan);
     setEditPlanName(plan.name);
@@ -1631,6 +1683,13 @@ export default function MonthlyScreen() {
                               <Feather name="calendar" size={13} color={c.primary} />
                               <Text style={[styles.dayBillActionText, { color: c.primary }]}>Change date</Text>
                             </Pressable>
+                            <Pressable
+                              onPress={() => handleDeleteIncomeFromDay(item.income)}
+                              style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.destructive + "12", borderColor: c.destructive + "35", opacity: pressed ? 0.74 : 1 }]}
+                            >
+                              <Feather name="trash-2" size={13} color={c.destructive} />
+                              <Text style={[styles.dayBillActionText, { color: c.destructive }]}>Delete</Text>
+                            </Pressable>
                           </View>
                         ))}
                       </View>
@@ -1756,6 +1815,13 @@ export default function MonthlyScreen() {
                                     <Text style={[styles.dayBillActionText, { color: c.primary }]}>Change date</Text>
                                   </Pressable>
                                 ) : null}
+                                <Pressable
+                                  onPress={() => handleDeleteBillFromDay(bill)}
+                                  style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.destructive + "12", borderColor: c.destructive + "35", opacity: pressed ? 0.74 : 1 }]}
+                                >
+                                  <Feather name="trash-2" size={13} color={c.destructive} />
+                                  <Text style={[styles.dayBillActionText, { color: c.destructive }]}>Delete</Text>
+                                </Pressable>
                               </View>
                             </View>
                           );
@@ -1770,15 +1836,31 @@ export default function MonthlyScreen() {
                           <View key={`overlay-goal-${goal.id}`} style={styles.dayOverlayRow}>
                             <Text numberOfLines={1} style={[styles.dayOverlayRowName, { color: c.foreground }]}>★ {goal.name}</Text>
                             <Text style={[styles.dayOverlayAmount, { color: "#8b5cf6" }]}>-${goal.amount.toFixed(2)}</Text>
+                            <Pressable
+                              onPress={() => handleDeleteGoalFromDay(goal.id, goal.name)}
+                              hitSlop={8}
+                              style={({ pressed }) => [styles.dayOverlayDeleteButton, { backgroundColor: c.destructive + "12", opacity: pressed ? 0.74 : 1 }]}
+                            >
+                              <Feather name="trash-2" size={14} color={c.destructive} />
+                            </Pressable>
                           </View>
                         ))}
                         {plansForSelectedDay.map(plan => {
                           const amount = plan.scenario.type === "income_change" ? Math.abs(plan.scenario.amount) : -Math.abs(plan.scenario.amount);
                           return (
-                            <Pressable key={`overlay-plan-${plan.id}`} onPress={() => openEditPlan(plan)} style={styles.dayOverlayRow}>
-                              <Text numberOfLines={1} style={[styles.dayOverlayRowName, { color: c.foreground }]}>◆ {plan.name}</Text>
-                              <Text style={[styles.dayOverlayAmount, { color: amount >= 0 ? c.success : "#3b82f6" }]}>{amount >= 0 ? "+" : "-"}${Math.abs(amount).toFixed(2)}</Text>
-                            </Pressable>
+                            <View key={`overlay-plan-${plan.id}`} style={styles.dayOverlayRow}>
+                              <Pressable onPress={() => openEditPlan(plan)} style={styles.dayOverlayRowMain}>
+                                <Text numberOfLines={1} style={[styles.dayOverlayRowName, { color: c.foreground }]}>◆ {plan.name}</Text>
+                                <Text style={[styles.dayOverlayAmount, { color: amount >= 0 ? c.success : "#3b82f6" }]}>{amount >= 0 ? "+" : "-"}${Math.abs(amount).toFixed(2)}</Text>
+                              </Pressable>
+                              <Pressable
+                                onPress={() => handleDeletePlan(plan)}
+                                hitSlop={8}
+                                style={({ pressed }) => [styles.dayOverlayDeleteButton, { backgroundColor: c.destructive + "12", opacity: pressed ? 0.74 : 1 }]}
+                              >
+                                <Feather name="trash-2" size={14} color={c.destructive} />
+                              </Pressable>
+                            </View>
                           );
                         })}
                       </View>
@@ -1788,16 +1870,21 @@ export default function MonthlyScreen() {
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
                         <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Activity</Text>
                         {displayedTxs.map(tx => (
-                          <Pressable
-                            key={`overlay-tx-${tx.id}`}
-                            onPress={() => openEditTransaction(tx)}
-                            style={styles.dayOverlayRow}
-                          >
-                            <Text numberOfLines={1} style={[styles.dayOverlayRowName, { color: c.foreground }]}>{tx.note || tx.category}</Text>
-                            <Text style={[styles.dayOverlayAmount, { color: tx.amount > 0 ? c.success : c.destructive }]}>
-                              {tx.amount > 0 ? "+" : ""}{tx.amount.toFixed(2)}
-                            </Text>
-                          </Pressable>
+                          <View key={`overlay-tx-${tx.id}`} style={styles.dayOverlayRow}>
+                            <Pressable onPress={() => openEditTransaction(tx)} style={styles.dayOverlayRowMain}>
+                              <Text numberOfLines={1} style={[styles.dayOverlayRowName, { color: c.foreground }]}>{tx.note || tx.category}</Text>
+                              <Text style={[styles.dayOverlayAmount, { color: tx.amount > 0 ? c.success : c.destructive }]}>
+                                {tx.amount > 0 ? "+" : ""}{tx.amount.toFixed(2)}
+                              </Text>
+                            </Pressable>
+                            <Pressable
+                              onPress={() => handleDeleteTx(tx.id)}
+                              hitSlop={8}
+                              style={({ pressed }) => [styles.dayOverlayDeleteButton, { backgroundColor: c.destructive + "12", opacity: pressed ? 0.74 : 1 }]}
+                            >
+                              <Feather name="trash-2" size={14} color={c.destructive} />
+                            </Pressable>
+                          </View>
                         ))}
                       </View>
                     ) : null}
@@ -2336,6 +2423,8 @@ const styles = StyleSheet.create({
   dayOverlayGroup: { gap: 5 },
   dayOverlayGroupTitle: { fontSize: 11, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.6 },
   dayOverlayRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: 30 },
+  dayOverlayRowMain: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  dayOverlayDeleteButton: { width: 30, height: 30, borderRadius: 999, alignItems: "center", justifyContent: "center" },
   dayIncomeRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: 42, flexWrap: "wrap" },
   dayOverlayRowName: { flex: 1, fontSize: 13, fontFamily: "Inter_600SemiBold" },
   dayOverlayAmount: { fontSize: 13, fontFamily: "Inter_700Bold" },
