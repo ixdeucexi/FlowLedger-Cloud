@@ -46,6 +46,13 @@ import {
 import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
 import { clearPlaidOAuthLinkSession, storePlaidOAuthLinkSession } from "@/lib/plaidOAuthSession";
+import {
+  clearPlaidLaunchPending,
+  ensurePlaidBankSyncUrl,
+  logPlaidClientStage,
+  logRouteReplaceAttempt,
+  setPlaidLaunchPending,
+} from "@/lib/plaidLaunchGuard";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 import { supabase } from "@/lib/supabase";
 import {
@@ -544,6 +551,8 @@ export default function MoreScreen() {
   const [plaidSetup, setPlaidSetup] = useState<PlaidSetupState | null>(null);
   const plaidLauncherRef = useRef<PlaidLinkLauncherHandle | null>(null);
   const plaidCreateTokenInFlightRef = useRef(false);
+  const plaidBankSyncMountedRef = useRef(false);
+  const plaidPendingClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [childProfiles, setChildProfiles] = useState<ChildProfile[]>([]);
   const [childName, setChildName] = useState("");
   const [childAllowanceText, setChildAllowanceText] = useState("");
@@ -567,10 +576,17 @@ export default function MoreScreen() {
     : user?.id ? `flowledger_child_profiles_${user.id}` : "flowledger_child_profiles_guest";
 
   useEffect(() => {
-    const requestedSection = Array.isArray(routeParams.section) ? routeParams.section[0] : routeParams.section;
+    const requestedSectionParam = Array.isArray(routeParams.section) ? routeParams.section[0] : routeParams.section;
+    let requestedSection = requestedSectionParam;
+    if (!requestedSection && Platform.OS === "web" && typeof window !== "undefined") {
+      try {
+        requestedSection = new URLSearchParams(window.location.search).get("section") ?? undefined;
+      } catch {}
+    }
     if (isSettingsSectionId(requestedSection)) {
       setActiveSettingsSection(requestedSection as SettingsSectionId);
       writeStoredSettingsSection(requestedSection as SettingsSectionId);
+      if (requestedSection === "plaid") ensurePlaidBankSyncUrl();
       return;
     }
     const storedSection = readStoredSettingsSection();
@@ -578,6 +594,40 @@ export default function MoreScreen() {
       setActiveSettingsSection(storedSection);
     }
   }, [routeParams.section]);
+
+  useEffect(() => {
+    if (activeSettingsSection === "plaid") {
+      ensurePlaidBankSyncUrl();
+      if (!plaidBankSyncMountedRef.current) {
+        plaidBankSyncMountedRef.current = true;
+        logPlaidClientStage("BANK_SYNC_SCREEN_MOUNTED");
+      }
+      return;
+    }
+    if (plaidBankSyncMountedRef.current) {
+      plaidBankSyncMountedRef.current = false;
+      logPlaidClientStage("BANK_SYNC_SCREEN_UNMOUNTED", { section: activeSettingsSection });
+    }
+  }, [activeSettingsSection]);
+
+  useEffect(() => () => {
+    if (plaidBankSyncMountedRef.current) {
+      logPlaidClientStage("BANK_SYNC_SCREEN_UNMOUNTED", { section: "component_unmount" });
+    }
+    if (plaidPendingClearTimerRef.current) {
+      clearTimeout(plaidPendingClearTimerRef.current);
+    }
+  }, []);
+
+  const schedulePlaidPendingClear = useCallback((delayMs = 25000) => {
+    if (plaidPendingClearTimerRef.current) {
+      clearTimeout(plaidPendingClearTimerRef.current);
+    }
+    plaidPendingClearTimerRef.current = setTimeout(() => {
+      clearPlaidLaunchPending();
+      plaidPendingClearTimerRef.current = null;
+    }, delayMs);
+  }, []);
 
   useEffect(() => {
     if (!PLAID_SETTINGS_ENABLED) return;
@@ -1560,9 +1610,13 @@ export default function MoreScreen() {
     if (!PLAID_SETTINGS_ENABLED) return null;
     if (Platform.OS !== "web") return null;
     if (!plaidStatus.canStartLink) return null;
-    if (plaidLinkToken && !options?.forceFresh) return plaidLinkToken;
+    if (plaidLinkToken && !options?.forceFresh) {
+      ensurePlaidBankSyncUrl();
+      return plaidLinkToken;
+    }
     if (plaidPreparing || plaidCreateTokenInFlightRef.current) return null;
 
+    ensurePlaidBankSyncUrl();
     plaidCreateTokenInFlightRef.current = true;
     setPlaidPreparing(true);
     if (!options?.silent) setPlaidNotice("Preparing secure bank link...");
@@ -1577,6 +1631,8 @@ export default function MoreScreen() {
       }
       const linkToken = String(payload.link_token);
       setPlaidLinkToken(linkToken);
+      ensurePlaidBankSyncUrl();
+      logPlaidClientStage("LINK_TOKEN_RECEIVED_CLIENT");
       storePlaidOAuthLinkSession(linkToken, typeof payload.expiration === "string" ? payload.expiration : null);
       if (!options?.silent) setPlaidNotice("Plaid is ready. Opening secure bank link...");
       return linkToken;
@@ -1586,13 +1642,14 @@ export default function MoreScreen() {
       setPlaidLinkShouldOpen(false);
       setPlaidLinkToken(null);
       clearPlaidOAuthLinkSession();
+      schedulePlaidPendingClear();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return null;
     } finally {
       plaidCreateTokenInFlightRef.current = false;
       setPlaidPreparing(false);
     }
-  }, [plaidLinkToken, plaidPost, plaidPreparing, plaidStatus.canStartLink]);
+  }, [plaidLinkToken, plaidPost, plaidPreparing, plaidStatus.canStartLink, schedulePlaidPendingClear]);
 
   const handleStartPlaidLink = async () => {
     if (!PLAID_SETTINGS_ENABLED) {
@@ -1608,11 +1665,21 @@ export default function MoreScreen() {
       return;
     }
     if (!plaidStatus.canStartLink || plaidLinking || plaidImporting || plaidPreparing) return;
+    logPlaidClientStage("CONNECT_BANK_CLICKED");
+    setPlaidLaunchPending(true);
+    if (plaidPendingClearTimerRef.current) {
+      clearTimeout(plaidPendingClearTimerRef.current);
+      plaidPendingClearTimerRef.current = null;
+    }
+    ensurePlaidBankSyncUrl();
+    setActiveSettingsSection("plaid");
+    writeStoredSettingsSection("plaid");
     setPlaidSetup(null);
     setPlaidLinkShouldOpen(false);
 
     try {
       if (plaidLinkToken) {
+        ensurePlaidBankSyncUrl();
         setPlaidLinking(true);
         setPlaidNotice(plaidLauncherRef.current?.isReady() ? "Opening Plaid..." : "Plaid is loading. I’ll open it in a moment...");
         setPlaidLinkShouldOpen(true);
@@ -1630,6 +1697,7 @@ export default function MoreScreen() {
       setPlaidLinkReady(false);
       setPlaidLinkShouldOpen(false);
       setPlaidLinkToken(null);
+      schedulePlaidPendingClear();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   };
@@ -1642,11 +1710,13 @@ export default function MoreScreen() {
       setPlaidLinkReady(false);
       setPlaidLinkShouldOpen(false);
       setPlaidLinkToken(null);
-    }, 25000);
+      clearPlaidLaunchPending();
+      }, 25000);
     return () => clearTimeout(timeout);
   }, [plaidLinking, plaidLinkShouldOpen]);
 
   const handlePlaidSuccess = useCallback(async (publicToken: string, metadata: any) => {
+    logPlaidClientStage("PLAID_ON_SUCCESS");
     try {
       setPlaidNotice("Bank connected. Saving secure connection...");
       const exchange = await plaidPost("/api/plaid/exchange-public-token", {
@@ -1683,10 +1753,16 @@ export default function MoreScreen() {
       setPlaidLinkShouldOpen(false);
       setPlaidLinkToken(null);
       clearPlaidOAuthLinkSession();
+      if (plaidPendingClearTimerRef.current) {
+        clearTimeout(plaidPendingClearTimerRef.current);
+        plaidPendingClearTimerRef.current = null;
+      }
+      clearPlaidLaunchPending();
     }
   }, [activeHousehold?.householdId, plaidPost]);
 
   const handlePlaidExit = useCallback((error: any) => {
+    logPlaidClientStage("PLAID_ON_EXIT");
     if (error) {
       setPlaidNotice(error.display_message || error.error_message || error.error_code || "Plaid was closed before finishing.");
     } else {
@@ -1697,6 +1773,11 @@ export default function MoreScreen() {
     setPlaidLinkShouldOpen(false);
     setPlaidLinkToken(null);
     clearPlaidOAuthLinkSession();
+    if (plaidPendingClearTimerRef.current) {
+      clearTimeout(plaidPendingClearTimerRef.current);
+      plaidPendingClearTimerRef.current = null;
+    }
+    clearPlaidLaunchPending();
   }, []);
 
   const plaidConnectLabel = plaidPreparing
@@ -1851,9 +1932,11 @@ export default function MoreScreen() {
       await signOut();
     } finally {
       if (Platform.OS === "web" && typeof window !== "undefined") {
+        logRouteReplaceAttempt("/login", "settings_sign_out");
         window.location.assign("/login");
         return;
       }
+      logRouteReplaceAttempt("/login", "settings_sign_out");
       router.replace("/login");
       setSigningOut(false);
     }

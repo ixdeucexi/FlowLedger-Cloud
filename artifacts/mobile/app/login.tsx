@@ -12,6 +12,7 @@ import Svg, { Path } from "react-native-svg";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { logRouteReplaceAttempt } from "@/lib/plaidLaunchGuard";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 
 function GoogleMark() {
@@ -80,7 +81,9 @@ export default function LoginScreen() {
           else window.localStorage.removeItem("flowledger_show_setup_after_login");
         } catch {}
       }
-      router.replace(mode === "signup" ? "/setup" : "/(tabs)");
+      const destination = mode === "signup" ? "/setup" : "/(tabs)";
+      logRouteReplaceAttempt(destination, mode === "signup" ? "login_signup_complete" : "login_signin_complete");
+      router.replace(destination as any);
     }
   };
 

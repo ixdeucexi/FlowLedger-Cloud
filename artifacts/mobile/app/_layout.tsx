@@ -20,6 +20,7 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import { readLastAppRoute, rememberCurrentAppRoute } from "@/lib/navigationMemory";
+import { isPlaidLaunchPending, logRouteReplaceAttempt } from "@/lib/plaidLaunchGuard";
 import { supabase } from "@/lib/supabase";
 
 SplashScreen.preventAutoHideAsync();
@@ -44,8 +45,14 @@ function AuthObserver() {
       return;
     }
 
+    const replaceRoute = (destination: string, reason: string) => {
+      logRouteReplaceAttempt(destination, reason);
+      if (isPlaidLaunchPending()) return;
+      router.replace(destination as any);
+    };
+
     if (!session && !inAuth) {
-      router.replace("/login");
+      replaceRoute("/login", "auth_missing_session");
     } else if (session && (inAuth || atRoot)) {
       let requestedSetup = false;
       if (Platform.OS === "web" && typeof window !== "undefined") {
@@ -55,7 +62,7 @@ function AuthObserver() {
         } catch {}
       }
       if (!requestedSetup) {
-        router.replace((readLastAppRoute() ?? "/(tabs)") as any);
+        replaceRoute(readLastAppRoute() ?? "/(tabs)", "auth_restore_last_route");
         return;
       }
       let cancelled = false;
@@ -66,9 +73,9 @@ function AuthObserver() {
         .maybeSingle()
         .then(({ data }) => {
           if (cancelled) return;
-          router.replace(data?.onboarding_completed ? "/(tabs)" : "/setup");
+          replaceRoute(data?.onboarding_completed ? "/(tabs)" : "/setup", "auth_setup_status_loaded");
         }, () => {
-          if (!cancelled) router.replace("/(tabs)");
+          if (!cancelled) replaceRoute("/(tabs)", "auth_setup_status_error");
         });
       return () => {
         cancelled = true;

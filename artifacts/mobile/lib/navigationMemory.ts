@@ -28,7 +28,7 @@ function normalizeRoute(route: string | null | undefined) {
   if (BLOCKED_PREFIXES.some(prefix => pathOnly === prefix || pathOnly.startsWith(`${prefix}/`))) return null;
   if (!MAIN_APP_PREFIXES.some(prefix => pathOnly === prefix || pathOnly.startsWith(`${prefix}/`))) return null;
 
-  if (pathOnly === "/more" && query.startsWith("section=")) return `${pathOnly}?${query}`;
+  if (pathOnly === "/more" && new URLSearchParams(query).has("section")) return `${pathOnly}?${query}`;
   return pathOnly;
 }
 

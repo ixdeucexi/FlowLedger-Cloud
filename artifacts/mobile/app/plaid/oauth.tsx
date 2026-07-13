@@ -12,6 +12,7 @@ import { PlaidLinkLauncher } from "@/components/PlaidLinkLauncher.web";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { logRouteReplaceAttempt } from "@/lib/plaidLaunchGuard";
 import { clearPlaidOAuthLinkSession, readPlaidOAuthLinkSession } from "@/lib/plaidOAuthSession";
 import { supabase } from "@/lib/supabase";
 
@@ -42,6 +43,7 @@ export default function PlaidOAuthCallbackPage() {
         if (notice) window.sessionStorage.setItem(PLAID_RETURN_NOTICE_KEY, notice);
       } catch {}
     }
+    logRouteReplaceAttempt("/more?section=plaid", "plaid_oauth_return_to_bank_sync");
     router.replace("/more?section=plaid" as any);
   }, [router]);
 
