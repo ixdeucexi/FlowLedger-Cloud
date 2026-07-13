@@ -29,16 +29,17 @@ class PlaidConfigurationError extends Error {
 }
 
 class AuthRequiredError extends Error {
-  constructor(message = "Sign in again before connecting your bank.", code = "AUTH_REQUIRED") {
+  constructor(message = "Sign in again before connecting your bank.", code = "AUTH_REQUIRED", safeAuthError = null) {
     super(message);
     this.name = "AuthRequiredError";
     this.status = 401;
     this.code = code;
+    this.safeAuthError = safeAuthError;
   }
 }
 
-function logPlaidAuthStage(stage) {
-  console.log("[plaid-auth]", { stage });
+function logPlaidAuthStage(stage, details = {}) {
+  console.log("[plaid-auth]", { stage, ...details });
 }
 
 function plaidEnv() {
@@ -256,10 +257,17 @@ async function getSupabaseUser(req) {
   } = await supabase.auth.getUser(token);
 
   if (error || !user?.id) {
-    logPlaidAuthStage("AUTH_TOKEN_INVALID");
+    const safeAuthError = {
+      name: error?.name,
+      message: error?.message || "Supabase did not return a verified user.",
+      status: error?.status,
+      code: error?.code,
+    };
+    logPlaidAuthStage("AUTH_TOKEN_INVALID", safeAuthError);
     throw new AuthRequiredError(
-      "Your session is invalid or expired.",
+      safeAuthError.message || "Your session is invalid or expired.",
       "AUTH_TOKEN_INVALID",
+      safeAuthError,
     );
   }
   logPlaidAuthStage("AUTH_USER_VERIFIED");
@@ -403,6 +411,7 @@ function safePlaidError(error, fallback = "Plaid request failed.") {
     return {
       error: error.code || "AUTH_REQUIRED",
       message: error.message || "Your session is invalid or expired.",
+      status: error.status || 401,
     };
   }
   const payload = plaidErrorPayload(error, fallback);

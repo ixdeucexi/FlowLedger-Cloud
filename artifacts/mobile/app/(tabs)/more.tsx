@@ -75,6 +75,12 @@ import {
 
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
 
+function isSupabaseUserJwt(token: string | null | undefined) {
+  if (!token || token === "dev-demo") return false;
+  if (token.startsWith("sb_")) return false;
+  return token.startsWith("ey") && token.split(".").length === 3;
+}
+
 const THEME_OPTIONS: { label: string; value: ThemeMode; icon: string }[] = [
   { label: "Light", value: "light", icon: "sun" },
   { label: "Dark",  value: "dark",  icon: "moon" },
@@ -1470,72 +1476,27 @@ export default function MoreScreen() {
     });
   };
 
-  const plaidAuthHeaders = useCallback(async () => {
-    if (authLoading) {
-      throw new Error("I’m still restoring your sign-in. Please wait a moment, then tap Connect Bank Account again.");
-    }
-
-    const readStoredAccessToken = async () => {
-      try {
-        const { data } = await supabase.auth.getSession();
-        return data.session?.access_token ?? null;
-      } catch {
-        return null;
-      }
-    };
-
-    let accessToken = await readStoredAccessToken();
-    accessToken = accessToken ?? session?.access_token ?? null;
-
-    if (!accessToken || accessToken === "dev-demo") {
-      try {
-        const { data } = await supabase.auth.refreshSession();
-        accessToken = data.session?.access_token ?? accessToken;
-      } catch {}
-    }
-
-    if (!accessToken || accessToken === "dev-demo") {
-      await new Promise(resolve => setTimeout(resolve, 350));
-      accessToken = await readStoredAccessToken();
-    }
-
-    if (!accessToken || accessToken === "dev-demo") {
-      throw new Error("I need a fresh sign-in before connecting your bank. Please sign in again, then tap Connect Bank Account.");
-    }
-
-    return {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    };
-  }, [authLoading, session?.access_token]);
-
   const freshPlaidAuthHeaders = useCallback(async () => {
     if (authLoading) {
       throw new Error("I'm still restoring your sign-in. Please wait a moment, then tap Connect Bank Account again.");
     }
 
     const {
-      data: { session: currentSession },
+      data: { session: latestSession },
       error: sessionError,
     } = await supabase.auth.getSession();
 
-    if (sessionError || !currentSession?.access_token || currentSession.access_token === "dev-demo") {
+    if (sessionError || !latestSession?.access_token || latestSession.access_token === "dev-demo") {
       throw new Error("Your session has expired. Please sign in again.");
     }
 
-    let requestSession = currentSession;
-    const expiresAtMs =
-      typeof requestSession.expires_at === "number"
-        ? requestSession.expires_at * 1000
-        : null;
-    const expiresSoon = expiresAtMs !== null && expiresAtMs - Date.now() < 5 * 60 * 1000;
+    const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+    const requestSession = !refreshError && refreshData.session?.access_token
+      ? refreshData.session
+      : latestSession;
 
-    if (expiresSoon) {
-      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-      if (refreshError || !refreshData.session?.access_token || refreshData.session.access_token === "dev-demo") {
-        throw new Error("Your session has expired. Please sign in again.");
-      }
-      requestSession = refreshData.session;
+    if (!isSupabaseUserJwt(requestSession.access_token)) {
+      throw new Error("Your session has expired. Please sign in again.");
     }
 
     return {
@@ -1612,7 +1573,7 @@ export default function MoreScreen() {
       const response = await plaidPost("/api/plaid/create-link-token", {});
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload.link_token) {
-        throw new Error(payload.error || payload.message || "Plaid link token could not be created.");
+        throw new Error(payload.message || payload.error || "Plaid link token could not be created.");
       }
       const linkToken = String(payload.link_token);
       setPlaidLinkToken(linkToken);
