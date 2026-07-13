@@ -1260,9 +1260,9 @@ export default function MonthlyScreen() {
   const chooseMonthFromSearch = useCallback((nextMonth: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setMonth(nextMonth);
-    setSelectedDate(isoDateForMonthDay(selectedYear, nextMonth, 1));
+    setSelectedDate(null);
     closeMonthSearch();
-  }, [closeMonthSearch, selectedYear]);
+  }, [closeMonthSearch]);
 
   const changeSearchYear = useCallback((delta: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
