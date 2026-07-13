@@ -1335,10 +1335,7 @@ export default function MonthlyScreen() {
           accessibilityLabel={`Search months. Current month is ${MONTH_FULL[month]} ${selectedYear}`}
           style={({ pressed }) => [styles.monthCenterLabel, pressed && styles.monthCenterPressed]}
         >
-          <View style={styles.monthTitleRow}>
-            <Text style={[styles.monthShortTitle, { color: c.foreground }]}>{MONTH_FULL[month].slice(0, 3).toUpperCase()}</Text>
-            <Feather name="search" size={17} color={c.mutedForeground} />
-          </View>
+          <Text style={[styles.monthShortTitle, { color: c.foreground }]}>{MONTH_FULL[month].slice(0, 3).toUpperCase()}</Text>
           {selectedYear !== todayYear && (
             <Text style={[styles.monthSwipeHint, { color: c.mutedForeground }]}>{selectedYear}</Text>
           )}
