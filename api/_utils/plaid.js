@@ -17,6 +17,9 @@ const PLAID_HOSTS = {
 let plaidClientInstance = null;
 let supabaseAuthClientInstance = null;
 let supabaseAuthClientUrl = null;
+let supabaseApiKeyCheckCache = null;
+let supabaseApiKeyCheckCacheAt = 0;
+const SUPABASE_API_KEY_CHECK_CACHE_MS = 60 * 1000;
 
 class PlaidConfigurationError extends Error {
   constructor(message, missing = []) {
@@ -40,6 +43,48 @@ class AuthRequiredError extends Error {
 
 function logPlaidAuthStage(stage, details = {}) {
   console.log("[plaid-auth]", { stage, ...details });
+}
+
+function trimEnv(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function getConfiguredSupabaseUrl() {
+  return trimEnv(process.env.SUPABASE_URL) || trimEnv(process.env.EXPO_PUBLIC_SUPABASE_URL);
+}
+
+function getConfiguredSupabaseServiceRoleKey() {
+  return trimEnv(process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
+function getSupabaseProjectRef(supabaseUrl = getConfiguredSupabaseUrl()) {
+  try {
+    return new URL(supabaseUrl).hostname.split(".")[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+function getServiceRoleKeyType(serviceRoleKey = getConfiguredSupabaseServiceRoleKey()) {
+  if (serviceRoleKey.startsWith("eyJ")) return "legacy_jwt";
+  if (serviceRoleKey.startsWith("sb_secret_")) return "secret_key";
+  return "unknown";
+}
+
+function getSafeKeyFingerprint(value = getConfiguredSupabaseServiceRoleKey()) {
+  if (!value) return null;
+  return crypto.createHash("sha256").update(value).digest("hex").slice(0, 12);
+}
+
+function getSupabaseConfigDiagnostics() {
+  const supabaseUrl = getConfiguredSupabaseUrl();
+  const serviceRoleKey = getConfiguredSupabaseServiceRoleKey();
+  return {
+    supabase_project_ref: getSupabaseProjectRef(supabaseUrl),
+    service_role_key_length: serviceRoleKey.length,
+    service_role_key_type: getServiceRoleKeyType(serviceRoleKey),
+    service_role_key_fingerprint: getSafeKeyFingerprint(serviceRoleKey),
+  };
 }
 
 function plaidEnv() {
@@ -105,10 +150,7 @@ function plaidErrorPayload(error, fallbackMessage) {
 }
 
 function supabaseConfigured() {
-  return Boolean(
-    (process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL) &&
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
-  );
+  return Boolean(getConfiguredSupabaseUrl() && getConfiguredSupabaseServiceRoleKey());
 }
 
 function requireSupabaseConfigured() {
@@ -122,9 +164,10 @@ function requireSupabaseConfigured() {
 
 function getSupabaseAuthClient() {
   requireSupabaseConfigured();
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const supabaseUrl = getConfiguredSupabaseUrl();
+  const serviceRoleKey = getConfiguredSupabaseServiceRoleKey();
   if (!supabaseAuthClientInstance || supabaseAuthClientUrl !== supabaseUrl) {
-    supabaseAuthClientInstance = createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+    supabaseAuthClientInstance = createClient(supabaseUrl, serviceRoleKey, {
       auth: {
         autoRefreshToken: false,
         detectSessionInUrl: false,
@@ -134,6 +177,63 @@ function getSupabaseAuthClient() {
     supabaseAuthClientUrl = supabaseUrl;
   }
   return supabaseAuthClientInstance;
+}
+
+async function checkSupabaseAuthApiKey() {
+  requireSupabaseConfigured();
+
+  const now = Date.now();
+  if (
+    supabaseApiKeyCheckCache &&
+    now - supabaseApiKeyCheckCacheAt < SUPABASE_API_KEY_CHECK_CACHE_MS
+  ) {
+    return supabaseApiKeyCheckCache;
+  }
+
+  const supabaseUrl = getConfiguredSupabaseUrl();
+  const serviceRoleKey = getConfiguredSupabaseServiceRoleKey();
+  const diagnostics = getSupabaseConfigDiagnostics();
+  let result = {
+    accepted: false,
+    status: null,
+    message: "Supabase API key check did not run.",
+    ...diagnostics,
+  };
+
+  try {
+    const response = await fetch(`${supabaseUrl}/auth/v1/settings`, {
+      method: "GET",
+      headers: {
+        apikey: serviceRoleKey,
+        authorization: `Bearer ${serviceRoleKey}`,
+      },
+    });
+    const payload = await response.json().catch(() => null);
+    result = {
+      accepted: response.ok,
+      status: response.status,
+      message:
+        payload?.message ||
+        payload?.msg ||
+        payload?.error ||
+        (response.ok
+          ? "Supabase accepted configured API key."
+          : "Supabase rejected configured API key."),
+      ...diagnostics,
+    };
+  } catch (error) {
+    result = {
+      accepted: false,
+      status: null,
+      message: error?.message || "Supabase API key check failed before a response was returned.",
+      ...diagnostics,
+    };
+  }
+
+  logPlaidAuthStage("SUPABASE_API_KEY_CHECK", result);
+  supabaseApiKeyCheckCache = result;
+  supabaseApiKeyCheckCacheAt = now;
+  return result;
 }
 
 function encryptionConfigured() {
@@ -250,6 +350,8 @@ async function getSupabaseUser(req) {
   const token = getBearerToken(req);
   logPlaidAuthStage("AUTH_TOKEN_RECEIVED");
 
+  await checkSupabaseAuthApiKey();
+
   const supabase = getSupabaseAuthClient();
   const {
     data: { user },
@@ -282,10 +384,11 @@ async function requireSupabaseUser(req) {
 
 async function supabaseRest(path, method, body, options = {}) {
   requireSupabaseConfigured();
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const supabaseUrl = getConfiguredSupabaseUrl();
+  const serviceRoleKey = getConfiguredSupabaseServiceRoleKey();
   const headers = {
-    apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-    authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+    apikey: serviceRoleKey,
+    authorization: `Bearer ${serviceRoleKey}`,
     "content-type": "application/json",
     prefer: options.prefer || "return=representation",
   };
@@ -408,11 +511,13 @@ function normalizePlaidAmount(amount) {
 
 function safePlaidError(error, fallback = "Plaid request failed.") {
   if (error instanceof AuthRequiredError || error?.name === "AuthRequiredError") {
-    return {
+    const payload = {
       error: error.code || "AUTH_REQUIRED",
       message: error.message || "Your session is invalid or expired.",
       status: error.status || 401,
     };
+    if (error.safeAuthError) payload.auth_error = error.safeAuthError;
+    return payload;
   }
   const payload = plaidErrorPayload(error, fallback);
   return {
@@ -430,7 +535,11 @@ module.exports = {
   decryptAccessToken,
   encryptionConfigured,
   encryptAccessToken,
+  checkSupabaseAuthApiKey,
+  getConfiguredSupabaseServiceRoleKey,
+  getConfiguredSupabaseUrl,
   getPlaidClient,
+  getSupabaseConfigDiagnostics,
   getSupabaseAuthClient,
   getSupabaseUser,
   isCashAccount,
