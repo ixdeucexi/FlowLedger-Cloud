@@ -264,6 +264,8 @@ export default function MonthlyScreen() {
     details: string[];
     fallback: string;
   } | null>(null);
+  const [monthSearchVisible, setMonthSearchVisible] = useState(false);
+  const [monthSearchQuery, setMonthSearchQuery] = useState("");
 
   useBackDismiss(txModalVisible, () => {
     setTxModalVisible(false);
@@ -276,6 +278,7 @@ export default function MonthlyScreen() {
   useBackDismiss(Boolean(debtPaymentNotice), () => setDebtPaymentNotice(null));
   useBackDismiss(Boolean(editPlan), () => setEditPlan(null));
   useBackDismiss(showSnowballResults, () => setShowSnowballResults(false));
+  useBackDismiss(monthSearchVisible, () => setMonthSearchVisible(false));
 
   useEffect(() => {
     if (dashboardFilter === "paid" || dashboardFilter === "unpaid") setDashboardFilter(null);
@@ -1233,6 +1236,41 @@ export default function MonthlyScreen() {
     if (selectedYear !== todayYear) setSelectedYear(todayYear);
   }, [selectedYear, setSelectedYear, todayIso, todayMonth, todayYear]);
 
+  const monthSearchOptions = useMemo(() => {
+    const query = monthSearchQuery.trim().toLowerCase();
+    return MONTH_FULL
+      .map((name, index) => ({ name, index, short: name.slice(0, 3).toUpperCase() }))
+      .filter(option => {
+        if (!query) return true;
+        return option.name.toLowerCase().includes(query) || option.short.toLowerCase().includes(query);
+      });
+  }, [monthSearchQuery]);
+
+  const openMonthSearch = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setMonthSearchQuery("");
+    setMonthSearchVisible(true);
+  }, []);
+
+  const closeMonthSearch = useCallback(() => {
+    Keyboard.dismiss();
+    setMonthSearchVisible(false);
+  }, []);
+
+  const chooseMonthFromSearch = useCallback((nextMonth: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setMonth(nextMonth);
+    setSelectedDate(isoDateForMonthDay(selectedYear, nextMonth, 1));
+    closeMonthSearch();
+  }, [closeMonthSearch, selectedYear]);
+
+  const changeSearchYear = useCallback((delta: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const nextYear = selectedYear + delta;
+    setSelectedYear(nextYear);
+    setSelectedDate(isoDateForMonthDay(nextYear, month, 1));
+  }, [month, selectedYear, setSelectedYear]);
+
   const webTopPad = Platform.OS === "web" ? 4 : 0;
 
   return (
@@ -1291,12 +1329,20 @@ export default function MonthlyScreen() {
         >
           <Feather name="chevron-left" size={24} color={c.mutedForeground} />
         </Pressable>
-        <View style={styles.monthCenterLabel}>
-          <Text style={[styles.monthShortTitle, { color: c.foreground }]}>{MONTH_FULL[month].slice(0, 3).toUpperCase()}</Text>
+        <Pressable
+          onPress={openMonthSearch}
+          accessibilityRole="button"
+          accessibilityLabel={`Search months. Current month is ${MONTH_FULL[month]} ${selectedYear}`}
+          style={({ pressed }) => [styles.monthCenterLabel, pressed && styles.monthCenterPressed]}
+        >
+          <View style={styles.monthTitleRow}>
+            <Text style={[styles.monthShortTitle, { color: c.foreground }]}>{MONTH_FULL[month].slice(0, 3).toUpperCase()}</Text>
+            <Feather name="search" size={17} color={c.mutedForeground} />
+          </View>
           {selectedYear !== todayYear && (
             <Text style={[styles.monthSwipeHint, { color: c.mutedForeground }]}>{selectedYear}</Text>
           )}
-        </View>
+        </Pressable>
         <Pressable
           onPress={() => changeMonth(1)}
           hitSlop={10}
@@ -1933,6 +1979,101 @@ export default function MonthlyScreen() {
         </View>
       )}
 
+      <Modal
+        visible={monthSearchVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={closeMonthSearch}
+      >
+        <Pressable style={styles.monthSearchBackdrop} onPress={closeMonthSearch}>
+          <Pressable
+            onPress={event => event.stopPropagation()}
+            style={[
+              styles.monthSearchSheet,
+              {
+                backgroundColor: c.isDark ? "rgba(15,23,42,0.98)" : "rgba(255,255,255,0.98)",
+                borderColor: c.border,
+              },
+            ]}
+          >
+            <View style={styles.monthSearchHeader}>
+              <View>
+                <Text style={[styles.monthSearchEyebrow, { color: c.primary }]}>Calendar search</Text>
+                <Text style={[styles.monthSearchTitle, { color: c.foreground }]}>Jump to month</Text>
+              </View>
+              <Pressable
+                onPress={closeMonthSearch}
+                hitSlop={10}
+                style={({ pressed }) => [styles.monthSearchClose, { opacity: pressed ? 0.6 : 1 }]}
+              >
+                <Feather name="x" size={22} color={c.mutedForeground} />
+              </Pressable>
+            </View>
+
+            <View style={[styles.monthSearchInputWrap, { backgroundColor: c.card, borderColor: c.border }]}>
+              <Feather name="search" size={18} color={c.mutedForeground} />
+              <TextInput
+                value={monthSearchQuery}
+                onChangeText={setMonthSearchQuery}
+                placeholder="Search month..."
+                placeholderTextColor={c.mutedForeground}
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={[styles.monthSearchInput, { color: c.foreground }]}
+              />
+              {monthSearchQuery.length > 0 && (
+                <Pressable onPress={() => setMonthSearchQuery("")} hitSlop={8}>
+                  <Feather name="x-circle" size={18} color={c.mutedForeground} />
+                </Pressable>
+              )}
+            </View>
+
+            <View style={styles.monthSearchYearRow}>
+              <Pressable
+                onPress={() => changeSearchYear(-1)}
+                style={({ pressed }) => [styles.monthSearchYearButton, { backgroundColor: c.muted, opacity: pressed ? 0.7 : 1 }]}
+              >
+                <Feather name="chevron-left" size={18} color={c.foreground} />
+              </Pressable>
+              <Text style={[styles.monthSearchYearText, { color: c.foreground }]}>{selectedYear}</Text>
+              <Pressable
+                onPress={() => changeSearchYear(1)}
+                style={({ pressed }) => [styles.monthSearchYearButton, { backgroundColor: c.muted, opacity: pressed ? 0.7 : 1 }]}
+              >
+                <Feather name="chevron-right" size={18} color={c.foreground} />
+              </Pressable>
+            </View>
+
+            <View style={styles.monthSearchGrid}>
+              {monthSearchOptions.map(option => {
+                const selected = option.index === month;
+                return (
+                  <Pressable
+                    key={option.name}
+                    onPress={() => chooseMonthFromSearch(option.index)}
+                    style={({ pressed }) => [
+                      styles.monthSearchOption,
+                      {
+                        backgroundColor: selected ? c.primary : c.card,
+                        borderColor: selected ? c.primary : c.border,
+                        opacity: pressed ? 0.75 : 1,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.monthSearchOptionShort, { color: selected ? c.primaryForeground : c.foreground }]}>
+                      {option.short}
+                    </Text>
+                    <Text style={[styles.monthSearchOptionName, { color: selected ? c.primaryForeground : c.mutedForeground }]}>
+                      {option.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {/* ── Due-day reschedule picker ── */}
       <Modal
         visible={dueDayPicker !== null}
@@ -2303,9 +2444,26 @@ const styles = StyleSheet.create({
   iconBtn: { width: 54, height: 54, borderRadius: 20, alignItems: "center", justifyContent: "center", shadowColor: "#8b5cf6", shadowOpacity: 0.46, shadowRadius: 22, shadowOffset: { width: 0, height: 10 }, elevation: 10, borderWidth: 1, borderColor: "rgba(34,211,238,0.28)" },
   calendarMonthBar: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginHorizontal: 22, marginTop: 0, marginBottom: 12, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", backgroundColor: "rgba(2,6,23,0.32)", borderRadius: 24, paddingHorizontal: 8, paddingVertical: 10 },
   monthArrowBtn: { width: 46, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: "rgba(15,23,42,0.58)" },
-  monthCenterLabel: { flex: 1, alignItems: "center", justifyContent: "center" },
+  monthCenterLabel: { flex: 1, minHeight: 42, alignItems: "center", justifyContent: "center", borderRadius: 18 },
+  monthCenterPressed: { opacity: 0.72, transform: [{ scale: 0.985 }] },
+  monthTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   monthShortTitle: { fontSize: 28, fontFamily: "Inter_800ExtraBold", letterSpacing: 2.8 },
   monthSwipeHint: { fontSize: 10, fontFamily: "Inter_500Medium", marginTop: 1 },
+  monthSearchBackdrop: { flex: 1, backgroundColor: "rgba(2,6,23,0.72)", justifyContent: "center", paddingHorizontal: 22 },
+  monthSearchSheet: { borderWidth: 1, borderRadius: 28, padding: 18, shadowColor: "#8b5cf6", shadowOpacity: 0.32, shadowRadius: 26, shadowOffset: { width: 0, height: 12 }, elevation: 18 },
+  monthSearchHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 14, marginBottom: 14 },
+  monthSearchEyebrow: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.7, textTransform: "uppercase", marginBottom: 4 },
+  monthSearchTitle: { fontSize: 25, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.5 },
+  monthSearchClose: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 19 },
+  monthSearchInputWrap: { minHeight: 52, borderWidth: 1, borderRadius: 18, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
+  monthSearchInput: { flex: 1, fontSize: 16, fontFamily: "Inter_600SemiBold", paddingVertical: Platform.OS === "web" ? 10 : 8 },
+  monthSearchYearRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 14 },
+  monthSearchYearButton: { width: 42, height: 36, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  monthSearchYearText: { minWidth: 72, textAlign: "center", fontSize: 22, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.4 },
+  monthSearchGrid: { flexDirection: "row", flexWrap: "wrap", gap: 9 },
+  monthSearchOption: { width: "30.9%", minHeight: 72, borderRadius: 18, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 10, justifyContent: "center" },
+  monthSearchOptionShort: { fontSize: 18, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.4 },
+  monthSearchOptionName: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginTop: 4 },
   tabBar: { flexDirection: "row", padding: 4, gap: 4 },
   tabBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 9 },
   tabBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
