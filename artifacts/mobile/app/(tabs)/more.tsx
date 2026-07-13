@@ -537,6 +537,7 @@ export default function MoreScreen() {
   const [plaidImporting, setPlaidImporting] = useState(false);
   const [plaidSetup, setPlaidSetup] = useState<PlaidSetupState | null>(null);
   const plaidLauncherRef = useRef<PlaidLinkLauncherHandle | null>(null);
+  const plaidCreateTokenInFlightRef = useRef(false);
   const [childProfiles, setChildProfiles] = useState<ChildProfile[]>([]);
   const [childName, setChildName] = useState("");
   const [childAllowanceText, setChildAllowanceText] = useState("");
@@ -1508,13 +1509,48 @@ export default function MoreScreen() {
     };
   }, [authLoading, session?.access_token]);
 
+  const freshPlaidAuthHeaders = useCallback(async () => {
+    if (authLoading) {
+      throw new Error("I'm still restoring your sign-in. Please wait a moment, then tap Connect Bank Account again.");
+    }
+
+    const {
+      data: { session: currentSession },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError || !currentSession?.access_token || currentSession.access_token === "dev-demo") {
+      throw new Error("Your session has expired. Please sign in again.");
+    }
+
+    let requestSession = currentSession;
+    const expiresAtMs =
+      typeof requestSession.expires_at === "number"
+        ? requestSession.expires_at * 1000
+        : null;
+    const expiresSoon = expiresAtMs !== null && expiresAtMs - Date.now() < 5 * 60 * 1000;
+
+    if (expiresSoon) {
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError || !refreshData.session?.access_token || refreshData.session.access_token === "dev-demo") {
+        throw new Error("Your session has expired. Please sign in again.");
+      }
+      requestSession = refreshData.session;
+    }
+
+    return {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${requestSession.access_token}`,
+    };
+  }, [authLoading]);
+
   const plaidPost = useCallback(async (path: string, body: Record<string, unknown>) => {
     return fetch(path, {
       method: "POST",
-      headers: await plaidAuthHeaders(),
+      headers: await freshPlaidAuthHeaders(),
       body: JSON.stringify(body),
     });
-  }, [plaidAuthHeaders]);
+  }, [freshPlaidAuthHeaders]);
 
   const handleTogglePlaidAccount = (accountId: string) => {
     setPlaidSetup(prev => {
@@ -1564,8 +1600,9 @@ export default function MoreScreen() {
     if (Platform.OS !== "web") return null;
     if (!plaidStatus.canStartLink) return null;
     if (plaidLinkToken && !options?.forceFresh) return plaidLinkToken;
-    if (plaidPreparing) return null;
+    if (plaidPreparing || plaidCreateTokenInFlightRef.current) return null;
 
+    plaidCreateTokenInFlightRef.current = true;
     setPlaidPreparing(true);
     if (!options?.silent) setPlaidNotice("Preparing secure bank link...");
     setPlaidLinkReady(false);
@@ -1591,6 +1628,7 @@ export default function MoreScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return null;
     } finally {
+      plaidCreateTokenInFlightRef.current = false;
       setPlaidPreparing(false);
     }
   }, [plaidLinkToken, plaidPost, plaidPreparing, plaidStatus.canStartLink]);

@@ -6,6 +6,7 @@ if (typeof window !== "undefined") {
 
 const crypto = require("crypto");
 const { Configuration, PlaidApi, PlaidEnvironments } = require("plaid");
+const { createClient } = require("@supabase/supabase-js");
 
 const PLAID_HOSTS = {
   sandbox: PlaidEnvironments.sandbox,
@@ -14,6 +15,8 @@ const PLAID_HOSTS = {
 };
 
 let plaidClientInstance = null;
+let supabaseAuthClientInstance = null;
+let supabaseAuthClientUrl = null;
 
 class PlaidConfigurationError extends Error {
   constructor(message, missing = []) {
@@ -116,6 +119,22 @@ function requireSupabaseConfigured() {
   }
 }
 
+function getSupabaseAuthClient() {
+  requireSupabaseConfigured();
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
+  if (!supabaseAuthClientInstance || supabaseAuthClientUrl !== supabaseUrl) {
+    supabaseAuthClientInstance = createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+      auth: {
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+        persistSession: false,
+      },
+    });
+    supabaseAuthClientUrl = supabaseUrl;
+  }
+  return supabaseAuthClientInstance;
+}
+
 function encryptionConfigured() {
   return Boolean(process.env.PLAID_TOKEN_ENCRYPTION_KEY);
 }
@@ -202,24 +221,24 @@ function getBearerToken(req) {
   if (!auth || typeof auth !== "string") {
     logPlaidAuthStage("AUTH_HEADER_MISSING");
     throw new AuthRequiredError(
-      "Please sign in again before connecting your bank.",
+      "Your session has expired. Please sign in again.",
       "AUTH_HEADER_MISSING",
     );
   }
   const match = auth.match(/^Bearer\s+(.+)$/i);
   if (!match) {
-    logPlaidAuthStage("AUTH_BEARER_REQUIRED");
+    logPlaidAuthStage("AUTH_TOKEN_INVALID");
     throw new AuthRequiredError(
-      "Please sign in again before connecting your bank.",
-      "AUTH_BEARER_REQUIRED",
+      "Your session is invalid or expired.",
+      "AUTH_TOKEN_INVALID",
     );
   }
   const token = match[1]?.trim();
   if (!token) {
-    logPlaidAuthStage("AUTH_TOKEN_MISSING");
+    logPlaidAuthStage("AUTH_TOKEN_INVALID");
     throw new AuthRequiredError(
-      "Please sign in again before connecting your bank.",
-      "AUTH_TOKEN_MISSING",
+      "Your session is invalid or expired.",
+      "AUTH_TOKEN_INVALID",
     );
   }
   return token;
@@ -228,24 +247,22 @@ function getBearerToken(req) {
 async function getSupabaseUser(req) {
   requireSupabaseConfigured();
   const token = getBearerToken(req);
+  logPlaidAuthStage("AUTH_TOKEN_RECEIVED");
 
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
-  const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
-    headers: {
-      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-      authorization: `Bearer ${token}`,
-    },
-  });
+  const supabase = getSupabaseAuthClient();
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser(token);
 
-  if (!response.ok) {
+  if (error || !user?.id) {
     logPlaidAuthStage("AUTH_TOKEN_INVALID");
     throw new AuthRequiredError(
-      "Your bank connection session expired. Please sign in again.",
+      "Your session is invalid or expired.",
       "AUTH_TOKEN_INVALID",
     );
   }
-  const user = await response.json().catch(() => null);
-  if (user?.id) logPlaidAuthStage("AUTH_USER_VERIFIED");
+  logPlaidAuthStage("AUTH_USER_VERIFIED");
   return user;
 }
 
@@ -382,6 +399,12 @@ function normalizePlaidAmount(amount) {
 }
 
 function safePlaidError(error, fallback = "Plaid request failed.") {
+  if (error instanceof AuthRequiredError || error?.name === "AuthRequiredError") {
+    return {
+      error: error.code || "AUTH_REQUIRED",
+      message: error.message || "Your session is invalid or expired.",
+    };
+  }
   const payload = plaidErrorPayload(error, fallback);
   return {
     error: payload.error || fallback,
@@ -399,6 +422,7 @@ module.exports = {
   encryptionConfigured,
   encryptAccessToken,
   getPlaidClient,
+  getSupabaseAuthClient,
   getSupabaseUser,
   isCashAccount,
   mapPlaidCategory,

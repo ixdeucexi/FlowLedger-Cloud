@@ -19,6 +19,7 @@
     "typescript": "~5.9.2"
   },
   "dependencies": {
+    "@supabase/supabase-js": "2.108.0",
     "plaid": "^43.0.0"
   }
 }
