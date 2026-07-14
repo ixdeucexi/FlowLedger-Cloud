@@ -94,6 +94,7 @@ type SettingsSectionId =
   | "appearance"
   | "algorithms"
   | "accounts"
+  | "plaid"
   | "money"
   | "review"
   | "subscriptions"
@@ -301,6 +302,7 @@ const SETTINGS_SECTIONS: Array<{
 }> = [
   { id: "setup", label: "Setup walkthrough", description: "Restart setup and learning mode.", icon: "message-circle" },
   { id: "accounts", label: "Accounts", description: "Balances, reconcile, and household sharing.", icon: "credit-card" },
+  { id: "plaid", label: "Bank sync", description: "Connect a bank or import activity safely.", icon: "link" },
   { id: "money", label: "Money plan", description: "Income, categories, safety, and payoff.", icon: "sliders" },
   { id: "review", label: "Review Center", description: "Your money inbox for unclear activity.", icon: "check-square" },
   { id: "subscriptions", label: "Subscriptions", description: "Recurring charges, patterns, and cleanup.", icon: "repeat" },
@@ -1912,6 +1914,32 @@ export default function MoreScreen() {
           </Pressable>
         </View>
       )}
+
+      {activeSettingsSection === "plaid" && <>
+      <SLabel c={c} text="Bank sync" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <View style={[styles.settingsSectionIcon, { backgroundColor: c.success + "18", marginRight: 12 }]}>
+            <Feather name="link" size={20} color={c.success} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.switchLabel, { color: c.foreground }]}>Bank activity</Text>
+            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Bring in recent activity without changing your planned bills, goals, or forecast.</Text>
+          </View>
+        </View>
+        <View style={[styles.priorityNote, { backgroundColor: c.primary + "12", borderRadius: 10, marginTop: 14 }]}>
+          <Feather name="shield" size={14} color={c.primary} />
+          <Text style={[styles.priorityNoteText, { color: c.mutedForeground }]}>Automatic bank linking is being restored separately. You can safely import a statement now; existing manual data stays unchanged.</Text>
+        </View>
+        <Pressable
+          onPress={handleStatementImport}
+          style={({ pressed }) => [styles.balanceSaveFullBtn, { backgroundColor: c.primary, opacity: pressed ? 0.78 : 1 }]}
+        >
+          <Feather name="upload" size={15} color={c.primaryForeground} />
+          <Text style={[styles.balanceSaveBtnText, { color: c.primaryForeground }]}>Import a bank statement</Text>
+        </Pressable>
+      </View>
+      </>}
 
       {activeSettingsSection === "appearance" && <>
       <SLabel c={c} text="Theme" />
