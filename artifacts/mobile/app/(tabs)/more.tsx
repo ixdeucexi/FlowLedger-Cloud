@@ -7,7 +7,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
 import * as Sharing from "expo-sharing";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert, Modal, Platform, Pressable, ScrollView, StyleSheet,
   Text, TextInput, View,
@@ -19,7 +19,6 @@ import { AppText } from "@/components/AppText";
 import { FloLogo } from "@/components/FloLogo";
 import { IncomeModal } from "@/components/IncomeModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
-import { PlaidLinkLauncher, type PlaidLinkLauncherHandle } from "@/components/PlaidLinkLauncher.web";
 import { PWA_INSTALL_EVENT } from "@/components/PwaInstallPrompt";
 import colors from "@/constants/colors";
 import type { Account, IncomeItem } from "@/context/BudgetContext";
@@ -45,14 +44,6 @@ import {
 } from "@/lib/householdPermissions";
 import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
-import { clearPlaidOAuthLinkSession, storePlaidOAuthLinkSession } from "@/lib/plaidOAuthSession";
-import {
-  clearPlaidLaunchPending,
-  ensurePlaidBankSyncUrl,
-  logPlaidClientStage,
-  logRouteReplaceAttempt,
-  setPlaidLaunchPending,
-} from "@/lib/plaidLaunchGuard";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 import { supabase } from "@/lib/supabase";
 import {
@@ -74,19 +65,12 @@ import {
   buildSmartReminders,
   detectSubscriptions,
   evaluateForecastReadiness,
-  evaluatePlaidConnectionStatus,
   type ChildProfile,
   type SubscriptionCandidate,
   type TransactionRule,
 } from "@/lib/competitiveGrowth";
 
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
-
-function isSupabaseUserJwt(token: string | null | undefined) {
-  if (!token || token === "dev-demo") return false;
-  if (token.startsWith("sb_")) return false;
-  return token.startsWith("ey") && token.split(".").length === 3;
-}
 
 const THEME_OPTIONS: { label: string; value: ThemeMode; icon: string }[] = [
   { label: "Light", value: "light", icon: "sun" },
@@ -103,8 +87,6 @@ const FONT_OPTIONS: { label: string; value: AppFontStyle; icon: string; desc: st
 ];
 
 const BACKUP_COMPLETE_KEY = "flowledger_backup_exported";
-const PLAID_RETURN_NOTICE_KEY = "flowledger_plaid_return_notice";
-const PLAID_SETTINGS_ENABLED = true;
 type AlgorithmCatalogItem = typeof ALGORITHM_CATALOG[number];
 type SettingsSectionId =
   | "overview"
@@ -117,7 +99,6 @@ type SettingsSectionId =
   | "subscriptions"
   | "reports"
   | "goals"
-  | "plaid"
   | "children"
   | "help"
   | "backup"
@@ -161,26 +142,6 @@ type ChildProfileRow = {
   current_savings: number | null;
   spending_limit: number | null;
   is_active: boolean | null;
-};
-
-type PlaidAccountPreview = {
-  plaid_account_id: string;
-  name: string;
-  official_name?: string | null;
-  mask?: string | null;
-  type: string;
-  subtype?: string | null;
-  current_balance?: number | null;
-  available_balance?: number | null;
-  supported: boolean;
-  suggested_account_type?: "checking" | "savings" | "cash" | null;
-};
-
-type PlaidSetupState = {
-  plaidItemRecordId: string | null;
-  institutionName?: string | null;
-  accounts: PlaidAccountPreview[];
-  selectedAccountIds: string[];
 };
 
 function normalizeStorageMap<T extends string>(value: unknown): Record<string, T> {
@@ -345,7 +306,6 @@ const SETTINGS_SECTIONS: Array<{
   { id: "subscriptions", label: "Subscriptions", description: "Recurring charges, patterns, and cleanup.", icon: "repeat" },
   { id: "reports", label: "Reports & insights", description: "Spending, debt, goals, and changes.", icon: "bar-chart-2" },
   { id: "goals", label: "Goal funding", description: "Safe monthly goal plans.", icon: "target" },
-  { id: "plaid", label: "Bank sync", description: "Secure bank connection status.", icon: "link" },
   { id: "algorithms", label: "Algorithm Suite", description: "Turn money engines on or off.", icon: "cpu" },
   { id: "appearance", label: "Appearance", description: "Theme, text, and motion.", icon: "moon" },
   { id: "children", label: "Child money", description: "Profiles, allowance, and goals.", icon: "smile" },
@@ -355,7 +315,7 @@ const SETTINGS_SECTIONS: Array<{
   { id: "legal", label: "Legal", description: "Terms, privacy, and data use.", icon: "file-text" },
 ];
 
-const VISIBLE_SETTINGS_SECTIONS = SETTINGS_SECTIONS.filter(section => PLAID_SETTINGS_ENABLED || section.id !== "plaid");
+const VISIBLE_SETTINGS_SECTIONS = SETTINGS_SECTIONS;
 const ACTIVE_SETTINGS_SECTION_KEY = "flowledger_active_settings_section";
 
 function isSettingsSectionId(value: unknown): value is SettingsSectionId {
@@ -517,7 +477,7 @@ export default function MoreScreen() {
   const [showAlgorithmSuite, setShowAlgorithmSuite] = useState(false);
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>(() => readStoredSettingsSection());
   const openSettingsSection = useCallback((sectionId: SettingsSectionId) => {
-    const safeSectionId = PLAID_SETTINGS_ENABLED || sectionId !== "plaid" ? sectionId : "overview";
+    const safeSectionId = sectionId;
     setActiveSettingsSection(safeSectionId);
     writeStoredSettingsSection(safeSectionId);
   }, []);
@@ -541,27 +501,10 @@ export default function MoreScreen() {
   const [reviewDecisions, setReviewDecisions] = useState<Record<string, ReviewDecision>>({});
   const [subscriptionDecisions, setSubscriptionDecisions] = useState<Record<string, SubscriptionDecision>>({});
   const [growthNotice, setGrowthNotice] = useState<string | null>(null);
-  const [plaidNotice, setPlaidNotice] = useState<string | null>(null);
-  const [plaidLinking, setPlaidLinking] = useState(false);
-  const [plaidPreparing, setPlaidPreparing] = useState(false);
-  const [plaidLinkReady, setPlaidLinkReady] = useState(false);
-  const [plaidLinkShouldOpen, setPlaidLinkShouldOpen] = useState(false);
-  const [plaidLinkToken, setPlaidLinkToken] = useState<string | null>(null);
-  const [plaidImporting, setPlaidImporting] = useState(false);
-  const [plaidSetup, setPlaidSetup] = useState<PlaidSetupState | null>(null);
-  const plaidLauncherRef = useRef<PlaidLinkLauncherHandle | null>(null);
-  const plaidCreateTokenInFlightRef = useRef(false);
-  const plaidBankSyncMountedRef = useRef(false);
-  const plaidPendingClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [childProfiles, setChildProfiles] = useState<ChildProfile[]>([]);
   const [childName, setChildName] = useState("");
   const [childAllowanceText, setChildAllowanceText] = useState("");
   const [childGoalText, setChildGoalText] = useState("");
-  const [plaidServerStatus, setPlaidServerStatus] = useState<{
-    configured: boolean;
-    storageReady: boolean;
-    message: string;
-  } | null>(null);
   const [backupExported, setBackupExported] = useState(() => {
     try { return Platform.OS === "web" && globalThis.localStorage?.getItem(BACKUP_COMPLETE_KEY) === "true"; }
     catch { return false; }
@@ -574,6 +517,7 @@ export default function MoreScreen() {
   const childProfileStorageKey = activeHousehold?.householdId
     ? `flowledger_child_profiles_${activeHousehold.householdId}`
     : user?.id ? `flowledger_child_profiles_${user.id}` : "flowledger_child_profiles_guest";
+  const childMoneySummary = useMemo(() => buildChildMoneySummary(childProfiles), [childProfiles]);
 
   useEffect(() => {
     const requestedSectionParam = Array.isArray(routeParams.section) ? routeParams.section[0] : routeParams.section;
@@ -581,12 +525,14 @@ export default function MoreScreen() {
     if (!requestedSection && Platform.OS === "web" && typeof window !== "undefined") {
       try {
         requestedSection = new URLSearchParams(window.location.search).get("section") ?? undefined;
-      } catch {}
+      } catch {
+        requestedSection = undefined;
+      }
     }
     if (isSettingsSectionId(requestedSection)) {
-      setActiveSettingsSection(requestedSection as SettingsSectionId);
-      writeStoredSettingsSection(requestedSection as SettingsSectionId);
-      if (requestedSection === "plaid") ensurePlaidBankSyncUrl();
+      const safeSection = requestedSection as SettingsSectionId;
+      setActiveSettingsSection(safeSection);
+      writeStoredSettingsSection(safeSection);
       return;
     }
     const storedSection = readStoredSettingsSection();
@@ -594,51 +540,6 @@ export default function MoreScreen() {
       setActiveSettingsSection(storedSection);
     }
   }, [routeParams.section]);
-
-  useEffect(() => {
-    if (activeSettingsSection === "plaid") {
-      ensurePlaidBankSyncUrl();
-      if (!plaidBankSyncMountedRef.current) {
-        plaidBankSyncMountedRef.current = true;
-        logPlaidClientStage("BANK_SYNC_SCREEN_MOUNTED");
-      }
-      return;
-    }
-    if (plaidBankSyncMountedRef.current) {
-      plaidBankSyncMountedRef.current = false;
-      logPlaidClientStage("BANK_SYNC_SCREEN_UNMOUNTED", { section: activeSettingsSection });
-    }
-  }, [activeSettingsSection]);
-
-  useEffect(() => () => {
-    if (plaidBankSyncMountedRef.current) {
-      logPlaidClientStage("BANK_SYNC_SCREEN_UNMOUNTED", { section: "component_unmount" });
-    }
-    if (plaidPendingClearTimerRef.current) {
-      clearTimeout(plaidPendingClearTimerRef.current);
-    }
-  }, []);
-
-  const schedulePlaidPendingClear = useCallback((delayMs = 25000) => {
-    if (plaidPendingClearTimerRef.current) {
-      clearTimeout(plaidPendingClearTimerRef.current);
-    }
-    plaidPendingClearTimerRef.current = setTimeout(() => {
-      clearPlaidLaunchPending();
-      plaidPendingClearTimerRef.current = null;
-    }, delayMs);
-  }, []);
-
-  useEffect(() => {
-    if (!PLAID_SETTINGS_ENABLED) return;
-    if (Platform.OS !== "web" || typeof window === "undefined") return;
-    try {
-      const notice = window.sessionStorage.getItem(PLAID_RETURN_NOTICE_KEY);
-      if (!notice) return;
-      window.sessionStorage.removeItem(PLAID_RETURN_NOTICE_KEY);
-      setPlaidNotice(notice);
-    } catch {}
-  }, []);
 
   useEffect(() => {
     setSafetyFloorText(settings.safety_floor.toString());
@@ -776,33 +677,6 @@ export default function MoreScreen() {
       cancelled = true;
     };
   }, [activeHousehold?.householdId, childProfileStorageKey, user?.id]);
-
-  useEffect(() => {
-    if (Platform.OS !== "web") return;
-    let cancelled = false;
-    fetch("/api/plaid/status")
-      .then(response => response.ok ? response.json() : null)
-      .then(payload => {
-        if (cancelled || !payload) return;
-        setPlaidServerStatus({
-          configured: Boolean(payload.configured),
-          storageReady: Boolean(payload.storageReady),
-          message: typeof payload.message === "string" ? payload.message : "Bank sync status loaded.",
-        });
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setPlaidServerStatus({
-            configured: false,
-            storageReady: false,
-            message: "Bank sync endpoints are not reachable yet.",
-          });
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1242,14 +1116,6 @@ export default function MoreScreen() {
     goals: goalFundingPlans,
     needsReconcile: forecastReadiness.missing.includes("Reconcile an account"),
   }), [forecastReadiness.missing, goalFundingPlans, growthBills, reviewTransactions.length, settings.safety_floor, subscriptions, todayIso]);
-  const plaidStatus = useMemo(() => evaluatePlaidConnectionStatus({
-    clientName: "FlowLedger Algo",
-    hasServerTokenEndpoint: Boolean(plaidServerStatus?.configured),
-    hasExchangeEndpoint: Boolean(plaidServerStatus?.configured),
-    hasWebhookEndpoint: Boolean(plaidServerStatus?.storageReady),
-  }), [plaidServerStatus?.configured, plaidServerStatus?.storageReady]);
-  const childMoneySummary = useMemo(() => buildChildMoneySummary(childProfiles), [childProfiles]);
-
   const saveTransactionRules = async (next: TransactionRule[]) => {
     const normalized = normalizeRuleIds(next);
     setTransactionRules(normalized);
@@ -1526,405 +1392,6 @@ export default function MoreScreen() {
     });
   };
 
-  const freshPlaidAuthHeaders = useCallback(async () => {
-    if (authLoading) {
-      throw new Error("I'm still restoring your sign-in. Please wait a moment, then tap Connect Bank Account again.");
-    }
-
-    const {
-      data: { session: latestSession },
-      error: sessionError,
-    } = await supabase.auth.getSession();
-
-    if (sessionError || !latestSession?.access_token || latestSession.access_token === "dev-demo") {
-      throw new Error("Your session has expired. Please sign in again.");
-    }
-
-    const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-    const requestSession = !refreshError && refreshData.session?.access_token
-      ? refreshData.session
-      : latestSession;
-
-    if (!isSupabaseUserJwt(requestSession.access_token)) {
-      throw new Error("Your session has expired. Please sign in again.");
-    }
-
-    return {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${requestSession.access_token}`,
-    };
-  }, [authLoading]);
-
-  const plaidPost = useCallback(async (path: string, body: Record<string, unknown>) => {
-    return fetch(path, {
-      method: "POST",
-      headers: await freshPlaidAuthHeaders(),
-      body: JSON.stringify(body),
-    });
-  }, [freshPlaidAuthHeaders]);
-
-  const handleTogglePlaidAccount = (accountId: string) => {
-    setPlaidSetup(prev => {
-      if (!prev) return prev;
-      const account = prev.accounts.find(item => item.plaid_account_id === accountId);
-      if (!account?.supported) return prev;
-      const selected = prev.selectedAccountIds.includes(accountId)
-        ? prev.selectedAccountIds.filter(id => id !== accountId)
-        : [...prev.selectedAccountIds, accountId];
-      return { ...prev, selectedAccountIds: selected };
-    });
-  };
-
-  const handleImportPlaidAccounts = async () => {
-    if (!plaidSetup?.plaidItemRecordId || plaidImporting) return;
-    if (!plaidSetup.selectedAccountIds.length) {
-      setPlaidNotice("Choose at least one checking or savings account to add.");
-      return;
-    }
-
-    setPlaidImporting(true);
-    setPlaidNotice(null);
-    try {
-      const response = await plaidPost("/api/plaid/import-accounts", {
-        plaid_item_record_id: plaidSetup.plaidItemRecordId,
-        selected_account_ids: plaidSetup.selectedAccountIds,
-        household_id: activeHousehold?.householdId,
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || payload.message || "Bank accounts could not be imported.");
-      setPlaidNotice(payload.message || "Bank accounts and activity were imported.");
-      if (!payload.transactions_pending) {
-        setPlaidSetup(null);
-      }
-      retryBudgetLoad();
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (error) {
-      setPlaidNotice(error instanceof Error ? error.message : "Bank accounts could not be imported.");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setPlaidImporting(false);
-    }
-  };
-
-  const preparePlaidLinkToken = useCallback(async (options?: { forceFresh?: boolean; silent?: boolean }) => {
-    if (!PLAID_SETTINGS_ENABLED) return null;
-    if (Platform.OS !== "web") return null;
-    if (!plaidStatus.canStartLink) return null;
-    if (plaidLinkToken && !options?.forceFresh) {
-      ensurePlaidBankSyncUrl();
-      return plaidLinkToken;
-    }
-    if (plaidPreparing || plaidCreateTokenInFlightRef.current) return null;
-
-    ensurePlaidBankSyncUrl();
-    plaidCreateTokenInFlightRef.current = true;
-    setPlaidPreparing(true);
-    if (!options?.silent) setPlaidNotice("Preparing secure bank link...");
-    setPlaidLinkReady(false);
-    setPlaidLinkShouldOpen(false);
-    if (options?.forceFresh) setPlaidLinkToken(null);
-    try {
-      const response = await plaidPost("/api/plaid/create-link-token", {});
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || !payload.link_token) {
-        throw new Error(payload.message || payload.error || "Plaid link token could not be created.");
-      }
-      const linkToken = String(payload.link_token);
-      setPlaidLinkToken(linkToken);
-      ensurePlaidBankSyncUrl();
-      logPlaidClientStage("LINK_TOKEN_RECEIVED_CLIENT");
-      storePlaidOAuthLinkSession(linkToken, typeof payload.expiration === "string" ? payload.expiration : null);
-      if (!options?.silent) setPlaidNotice("Plaid is ready. Opening secure bank link...");
-      return linkToken;
-    } catch (error) {
-      setPlaidNotice(error instanceof Error ? error.message : "Plaid could not start.");
-      setPlaidLinkReady(false);
-      setPlaidLinkShouldOpen(false);
-      setPlaidLinkToken(null);
-      clearPlaidOAuthLinkSession();
-      schedulePlaidPendingClear();
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      return null;
-    } finally {
-      plaidCreateTokenInFlightRef.current = false;
-      setPlaidPreparing(false);
-    }
-  }, [plaidLinkToken, plaidPost, plaidPreparing, plaidStatus.canStartLink, schedulePlaidPendingClear]);
-
-  const handleStartPlaidLink = async () => {
-    if (!PLAID_SETTINGS_ENABLED) {
-      setPlaidNotice("Bank sync is temporarily disabled while I repair Plaid Link.");
-      return;
-    }
-    if (Platform.OS !== "web") {
-      Alert.alert("Bank sync", "Open FlowLedger in the web app to connect Plaid for now.");
-      return;
-    }
-    if (authLoading) {
-      setPlaidNotice("I’m still restoring your sign-in. Please wait a moment, then tap Connect Bank Account again.");
-      return;
-    }
-    if (!plaidStatus.canStartLink || plaidLinking || plaidImporting || plaidPreparing) return;
-    logPlaidClientStage("CONNECT_BANK_CLICKED");
-    setPlaidLaunchPending(true);
-    if (plaidPendingClearTimerRef.current) {
-      clearTimeout(plaidPendingClearTimerRef.current);
-      plaidPendingClearTimerRef.current = null;
-    }
-    ensurePlaidBankSyncUrl();
-    setActiveSettingsSection("plaid");
-    writeStoredSettingsSection("plaid");
-    setPlaidSetup(null);
-    setPlaidLinkShouldOpen(false);
-
-    try {
-      if (plaidLinkToken) {
-        ensurePlaidBankSyncUrl();
-        setPlaidLinking(true);
-        setPlaidNotice(plaidLauncherRef.current?.isReady() ? "Opening Plaid..." : "Plaid is loading. I’ll open it in a moment...");
-        setPlaidLinkShouldOpen(true);
-        return;
-      }
-
-      const token = await preparePlaidLinkToken({ forceFresh: true, silent: false });
-      if (!token) throw new Error("Plaid link token could not be created.");
-      setPlaidLinking(true);
-      setPlaidLinkShouldOpen(true);
-      setPlaidNotice("Opening Plaid secure bank login...");
-    } catch (error) {
-      setPlaidNotice(error instanceof Error ? error.message : "Plaid could not start.");
-      setPlaidLinking(false);
-      setPlaidLinkReady(false);
-      setPlaidLinkShouldOpen(false);
-      setPlaidLinkToken(null);
-      schedulePlaidPendingClear();
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    }
-  };
-
-  useEffect(() => {
-    if (!plaidLinking || !plaidLinkShouldOpen) return;
-    const timeout = setTimeout(() => {
-      setPlaidNotice("Plaid is taking longer than expected. Tap Connect Bank Account again.");
-      setPlaidLinking(false);
-      setPlaidLinkReady(false);
-      setPlaidLinkShouldOpen(false);
-      setPlaidLinkToken(null);
-      clearPlaidLaunchPending();
-      }, 25000);
-    return () => clearTimeout(timeout);
-  }, [plaidLinking, plaidLinkShouldOpen]);
-
-  const handlePlaidSuccess = useCallback(async (publicToken: string, metadata: any) => {
-    logPlaidClientStage("PLAID_ON_SUCCESS");
-    try {
-      setPlaidNotice("Bank connected. Saving secure connection...");
-      const exchange = await plaidPost("/api/plaid/exchange-public-token", {
-        public_token: publicToken,
-        household_id: activeHousehold?.householdId ?? null,
-        institution_name: metadata?.institution?.name ?? null,
-        institution_id: metadata?.institution?.institution_id ?? null,
-      });
-      const exchangePayload = await exchange.json().catch(() => ({}));
-      if (!exchange.ok) {
-        throw new Error(exchangePayload.error || exchangePayload.message || "Plaid token exchange failed.");
-      }
-      const accountList: PlaidAccountPreview[] = Array.isArray(exchangePayload.accounts) ? exchangePayload.accounts : [];
-      if (!exchangePayload.plaid_item_record_id) {
-        throw new Error("Bank connected, but secure account storage is not ready yet.");
-      }
-      setPlaidSetup({
-        plaidItemRecordId: exchangePayload.plaid_item_record_id,
-        institutionName: exchangePayload.institution_name || metadata?.institution?.name || "Connected bank",
-        accounts: accountList,
-        selectedAccountIds: accountList.filter(account => account.supported).map(account => account.plaid_account_id),
-      });
-      const supportedCount = accountList.filter(account => account.supported).length;
-      setPlaidNotice(supportedCount
-        ? exchangePayload.message || "Bank connected. Choose the accounts to add."
-        : "Bank connected, but I did not find a checking or savings account to add.");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (error) {
-      setPlaidNotice(error instanceof Error ? error.message : "Bank connection could not be saved.");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setPlaidLinking(false);
-      setPlaidLinkReady(false);
-      setPlaidLinkShouldOpen(false);
-      setPlaidLinkToken(null);
-      clearPlaidOAuthLinkSession();
-      if (plaidPendingClearTimerRef.current) {
-        clearTimeout(plaidPendingClearTimerRef.current);
-        plaidPendingClearTimerRef.current = null;
-      }
-      clearPlaidLaunchPending();
-    }
-  }, [activeHousehold?.householdId, plaidPost]);
-
-  const handlePlaidExit = useCallback((error: any) => {
-    logPlaidClientStage("PLAID_ON_EXIT");
-    if (error) {
-      setPlaidNotice(error.display_message || error.error_message || error.error_code || "Plaid was closed before finishing.");
-    } else {
-      setPlaidNotice("Plaid Link was closed. No bank was connected.");
-    }
-    setPlaidLinking(false);
-    setPlaidLinkReady(false);
-    setPlaidLinkShouldOpen(false);
-    setPlaidLinkToken(null);
-    clearPlaidOAuthLinkSession();
-    if (plaidPendingClearTimerRef.current) {
-      clearTimeout(plaidPendingClearTimerRef.current);
-      plaidPendingClearTimerRef.current = null;
-    }
-    clearPlaidLaunchPending();
-  }, []);
-
-  const plaidConnectLabel = plaidPreparing
-    ? "Preparing Plaid..."
-    : plaidLinking
-      ? "Opening Plaid..."
-      : plaidLinkToken
-        ? plaidLinkReady
-          ? plaidSetup
-            ? "Open another secure bank login"
-            : "Open secure bank login"
-          : "Loading secure bank login..."
-        : plaidStatus.canStartLink
-          ? plaidSetup
-            ? "Connect another bank"
-            : "Connect Bank Account"
-          : "Connect bank account after Plaid env setup";
-
-  const handleExport = async () => {
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      const accountHeader = "Id,Name,Type,CurrentBalance,BalanceAsOf,LastReconciledAt,IsActive";
-      const accountRows = accounts.map(account => [
-        account.id, account.name, account.account_type, account.current_balance,
-        account.balance_as_of, account.last_reconciled_at ?? "", account.is_active,
-      ].map(csvCell).join(",")).join("\n");
-      const incomeHeader = "Name,Amount,Frequency,StartDate,NextPaymentDate,LastReviewedAt";
-      const incomeRows = incomes.map(income => [
-        income.name, income.amount, income.frequency, income.start_date ?? "",
-        income.next_payment_date ?? "", income.last_reviewed_at ?? "",
-      ].map(csvCell).join(",")).join("\n");
-      const billHeader = "Name,Amount,Category,Priority,IsDebt,Balance,InterestRate,DueDay,IsRecurring,Frequency";
-      const billRows = bills.map(b =>
-        [b.name, b.amount, b.category, b.priority, b.is_debt, b.balance, b.interest_rate, b.due_day, b.is_recurring, b.frequency ?? "monthly"].map(csvCell).join(",")
-      ).join("\n");
-      const txHeader = "Date,Amount,Category,Note,AccountId,LinkedBillId,TransferGroupId,ImportHash";
-      const txRows = transactions.map(t => [
-        t.date, t.amount, t.category, t.note, t.account_id ?? "", t.linked_bill_id ?? "", t.transfer_group_id ?? "", t.import_hash ?? "",
-      ].map(csvCell).join(",")).join("\n");
-      const ovrHeader = "BillId,Month,Year,CustomAmount,PaidAmount";
-      const ovrRows = overrides.map(o => [o.bill_id, o.month, o.year, o.custom_amount ?? "", o.paid_amount].map(csvCell).join(",")).join("\n");
-      const goalHeader = "Name,TargetAmount,CurrentAmount,TargetDate,Type";
-      const goalRows = goals.map(goal => [goal.name, goal.target_amount, goal.current_amount, goal.target_date ?? "", goal.goal_type ?? ""].map(csvCell).join(",")).join("\n");
-      const csv = [
-        "=== ACCOUNTS ===", accountHeader, accountRows,
-        "", "=== INCOME ===", incomeHeader, incomeRows,
-        "", "=== BILLS ===", billHeader, billRows,
-        "", "=== TRANSACTIONS ===", txHeader, txRows,
-        "", "=== MONTHLY OVERRIDES ===", ovrHeader, ovrRows,
-        "", "=== GOALS ===", goalHeader, goalRows,
-      ].join("\n");
-
-      if (Platform.OS === "web") {
-        const blob = new Blob([csv], { type: "text/csv" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a"); a.href = url; a.download = "budget_export.csv"; a.click();
-        URL.revokeObjectURL(url);
-      } else {
-        const uri = (FileSystem.cacheDirectory ?? FileSystem.documentDirectory) + "budget_export.csv";
-        await FileSystem.writeAsStringAsync(uri, csv);
-        await Sharing.shareAsync(uri, { mimeType: "text/csv" });
-      }
-      setBackupExported(true);
-      try { if (Platform.OS === "web") globalThis.localStorage?.setItem(BACKUP_COMPLETE_KEY, "true"); } catch {}
-    } catch { Alert.alert("Error", "Export failed."); }
-  };
-
-  const handleImport = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({ type: ["text/csv", "text/comma-separated-values", "*/*"] });
-      if (result.canceled || !result.assets?.length) return;
-      const file = result.assets[0];
-      let content: string;
-      if (Platform.OS === "web") { const r = await fetch(file.uri); content = await r.text(); }
-      else { content = await FileSystem.readAsStringAsync(file.uri); }
-
-      const lines = content.split("\n").filter(l => l.trim() && !l.startsWith("="));
-      const headerIdx = lines.findIndex(l => l.toLowerCase().includes("name") && l.toLowerCase().includes("amount"));
-      if (headerIdx === -1) { Alert.alert("Invalid CSV", "Could not find Name,Amount header."); return; }
-
-      const imported: Parameters<typeof importBills>[0] = [];
-      for (let i = headerIdx + 1; i < lines.length; i++) {
-        const parts = lines[i].split(",").map(p => p.replace(/"/g, "").trim());
-        const amount = parseFloat(parts[1]);
-        if (!parts[0] || isNaN(amount)) continue;
-        imported.push({
-          name: parts[0], amount, category: parts[2] || "Other",
-          priority: parseInt(parts[3]) || i, is_debt: parts[4]?.toLowerCase() === "true",
-          balance: parseFloat(parts[5]) || 0, interest_rate: parseFloat(parts[6]) || 0,
-          due_day: parseInt(parts[7]) || 1, is_recurring: parts[8]?.toLowerCase() !== "false",
-          frequency: (parts[9] === "weekly" ? "weekly" : "monthly"),
-        });
-      }
-      if (!imported.length) { Alert.alert("No Data", "No valid bill rows found."); return; }
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      importBills(imported);
-      Alert.alert("Imported", `${imported.length} bills added.`);
-    } catch { Alert.alert("Error", "Import failed."); }
-  };
-
-  const openAccount = (mode: "add" | "edit" | "reconcile", account: Account | null = null) => {
-    setSelectedAccount(account); setAccountMode(mode); setAccountModalVisible(true);
-  };
-
-  const readPickedFile = async () => {
-    const result = await DocumentPicker.getDocumentAsync({ type: ["text/csv", "text/comma-separated-values", "*/*"] });
-    if (result.canceled || !result.assets?.length) return null;
-    const file = result.assets[0];
-    if (Platform.OS === "web") { const response = await fetch(file.uri); return response.text(); }
-    return FileSystem.readAsStringAsync(file.uri);
-  };
-
-  const importStatementFor = async (account: Account) => {
-    try {
-      const content = await readPickedFile();
-      if (!content) return;
-      const rows = parseStatementCsv(content, account.id);
-      if (!rows.length) { Alert.alert("No transactions found", "Use a CSV with Date, Description, and Amount columns (or separate Debit and Credit columns)."); return; }
-      const result = await importStatementTransactions(account.id, rows);
-      Alert.alert("Statement imported", `${result.imported} new transaction${result.imported === 1 ? "" : "s"} added.${result.duplicates ? ` ${result.duplicates} duplicate${result.duplicates === 1 ? " was" : "s were"} skipped.` : ""}`);
-    } catch { Alert.alert("Import failed", "The statement could not be imported. Your existing transactions were not changed."); }
-  };
-
-  const handleStatementImport = () => {
-    const active = accounts.filter(account => account.is_active);
-    if (!active.length) { Alert.alert("Add an account first", "Transactions need an account so FlowLedger can detect duplicate statement rows."); return; }
-    if (active.length === 1) { void importStatementFor(active[0]); return; }
-    Alert.alert("Choose account", "Which account is this statement for?", [
-      ...active.slice(0, 4).map(account => ({ text: account.name, onPress: () => void importStatementFor(account) })),
-      { text: "Cancel", style: "cancel" as const },
-    ]);
-  };
-  const handleResetFlo = () => {
-    if (!user) return;
-    Alert.alert("Reset Flo Memory", "Remove Flo's saved preference and context summary? Your financial data will not be changed.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Reset", style: "destructive", onPress: () => void resetFloMemory(user.id).then(() => Alert.alert("Flo Memory Reset", "Flo's rolling summary was removed.")) },
-    ]);
-  };
-  const handleShowInstallPrompt = () => {
-    if (Platform.OS === "web") {
-      globalThis.dispatchEvent?.(new Event(PWA_INSTALL_EVENT));
-      return;
-    }
-    Alert.alert("Install FlowLedger", "Open FlowLedger in your phone browser, then use Add to Home Screen.");
-  };
-
   const handleSignOut = async () => {
     if (signingOut) return;
     setSigningOut(true);
@@ -1932,11 +1399,9 @@ export default function MoreScreen() {
       await signOut();
     } finally {
       if (Platform.OS === "web" && typeof window !== "undefined") {
-        logRouteReplaceAttempt("/login", "settings_sign_out");
-        window.location.assign("/login");
+          window.location.assign("/login");
         return;
       }
-      logRouteReplaceAttempt("/login", "settings_sign_out");
       router.replace("/login");
       setSigningOut(false);
     }
@@ -1988,6 +1453,261 @@ export default function MoreScreen() {
     });
   };
 
+  const openAccount = (mode: "add" | "edit" | "reconcile", account: Account | null = null) => {
+    setSelectedAccount(account);
+    setAccountMode(mode);
+    setAccountModalVisible(true);
+  };
+
+  const handleExport = async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+      const accountHeader = "Id,Name,Type,CurrentBalance,BalanceAsOf,LastReconciledAt,IsActive";
+      const accountRows = accounts.map(account => [
+        account.id,
+        account.name,
+        account.account_type,
+        account.current_balance,
+        account.balance_as_of,
+        account.last_reconciled_at ?? "",
+        account.is_active,
+      ].map(csvCell).join(",")).join("\n");
+
+      const incomeHeader = "Name,Amount,Frequency,StartDate,NextPaymentDate,LastReviewedAt";
+      const incomeRows = incomes.map(income => [
+        income.name,
+        income.amount,
+        income.frequency,
+        income.start_date ?? "",
+        income.next_payment_date ?? "",
+        income.last_reviewed_at ?? "",
+      ].map(csvCell).join(",")).join("\n");
+
+      const billHeader = "Name,Amount,Category,Priority,IsDebt,Balance,InterestRate,DueDay,IsRecurring,Frequency";
+      const billRows = bills.map(b => [
+        b.name,
+        b.amount,
+        b.category,
+        b.priority,
+        b.is_debt,
+        b.balance,
+        b.interest_rate,
+        b.due_day,
+        b.is_recurring,
+        b.frequency ?? "monthly",
+      ].map(csvCell).join(",")).join("\n");
+
+      const txHeader = "Date,Amount,Category,Note,AccountId,LinkedBillId,TransferGroupId,ImportHash";
+      const txRows = transactions.map(t => [
+        t.date,
+        t.amount,
+        t.category,
+        t.note,
+        t.account_id ?? "",
+        t.linked_bill_id ?? "",
+        t.transfer_group_id ?? "",
+        t.import_hash ?? "",
+      ].map(csvCell).join(",")).join("\n");
+
+      const ovrHeader = "BillId,Month,Year,CustomAmount,PaidAmount";
+      const ovrRows = overrides.map(o => [
+        o.bill_id,
+        o.month,
+        o.year,
+        o.custom_amount ?? "",
+        o.paid_amount,
+      ].map(csvCell).join(",")).join("\n");
+
+      const goalHeader = "Name,TargetAmount,CurrentAmount,TargetDate,Type";
+      const goalRows = goals.map(goal => [
+        goal.name,
+        goal.target_amount,
+        goal.current_amount,
+        goal.target_date ?? "",
+        goal.goal_type ?? "",
+      ].map(csvCell).join(",")).join("\n");
+
+      const csv = [
+        "=== ACCOUNTS ===",
+        accountHeader,
+        accountRows,
+        "",
+        "=== INCOME ===",
+        incomeHeader,
+        incomeRows,
+        "",
+        "=== BILLS ===",
+        billHeader,
+        billRows,
+        "",
+        "=== TRANSACTIONS ===",
+        txHeader,
+        txRows,
+        "",
+        "=== MONTHLY OVERRIDES ===",
+        ovrHeader,
+        ovrRows,
+        "",
+        "=== GOALS ===",
+        goalHeader,
+        goalRows,
+      ].join("\n");
+      const filename = `flowledger-backup-${Date.now()}.csv`;
+
+      if (Platform.OS === "web") {
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const fileUri = `${FileSystem.cacheDirectory}${filename}`;
+        await FileSystem.writeAsStringAsync(fileUri, csv);
+        if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(fileUri);
+      }
+
+      setBackupExported(true);
+      try {
+        if (Platform.OS === "web") globalThis.localStorage?.setItem(BACKUP_COMPLETE_KEY, "true");
+      } catch {}
+    } catch {
+      Alert.alert("Error", "Export failed.");
+    }
+  };
+
+  const handleImport = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["text/csv", "text/comma-separated-values", "*/*"],
+      });
+      if (result.canceled || !result.assets?.length) return;
+
+      const file = result.assets[0];
+      let content: string;
+      if (Platform.OS === "web") {
+        const response = await fetch(file.uri);
+        content = await response.text();
+      } else {
+        content = await FileSystem.readAsStringAsync(file.uri);
+      }
+
+      const lines = content.split("\n").filter(line => line.trim() && !line.startsWith("="));
+      const headerIdx = lines.findIndex(line => line.toLowerCase().includes("name") && line.toLowerCase().includes("amount"));
+      if (headerIdx === -1) {
+        Alert.alert("Invalid CSV", "Could not find Name,Amount header.");
+        return;
+      }
+
+      const imported: Parameters<typeof importBills>[0] = [];
+      for (let i = headerIdx + 1; i < lines.length; i++) {
+        const parts = lines[i].split(",").map(part => part.replace(/"/g, "").trim());
+        const amount = parseFloat(parts[1]);
+        if (!parts[0] || Number.isNaN(amount)) continue;
+        imported.push({
+          name: parts[0],
+          amount,
+          category: parts[2] || "Other",
+          priority: parseInt(parts[3], 10) || i,
+          is_debt: parts[4]?.toLowerCase() === "true",
+          balance: parseFloat(parts[5]) || 0,
+          interest_rate: parseFloat(parts[6]) || 0,
+          due_day: parseInt(parts[7], 10) || 1,
+          is_recurring: parts[8]?.toLowerCase() !== "false",
+          frequency: parts[9] === "weekly" ? "weekly" : "monthly",
+        });
+      }
+
+      if (!imported.length) {
+        Alert.alert("No Data", "No valid bill rows found.");
+        return;
+      }
+
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      importBills(imported);
+      Alert.alert("Imported", `${imported.length} bills added.`);
+    } catch {
+      Alert.alert("Error", "Import failed.");
+    }
+  };
+
+  const readPickedFile = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ["text/csv", "text/comma-separated-values", "*/*"],
+    });
+    if (result.canceled || !result.assets?.length) return null;
+    const file = result.assets[0];
+    if (Platform.OS === "web") {
+      const response = await fetch(file.uri);
+      return response.text();
+    }
+    return FileSystem.readAsStringAsync(file.uri);
+  };
+
+  const importStatementFor = async (account: Account) => {
+    try {
+      const content = await readPickedFile();
+      if (!content) return;
+      const rows = parseStatementCsv(content, account.id);
+      if (!rows.length) {
+        Alert.alert("No transactions found", "Use a CSV with Date, Description, and Amount columns (or separate Debit and Credit columns).");
+        return;
+      }
+      const result = await importStatementTransactions(account.id, rows);
+      Alert.alert(
+        "Statement imported",
+        `${result.imported} new transaction${result.imported === 1 ? "" : "s"} added.${result.duplicates ? ` ${result.duplicates} duplicate${result.duplicates === 1 ? " was" : "s were"} skipped.` : ""}`,
+      );
+    } catch {
+      Alert.alert("Import failed", "The statement could not be imported. Your existing transactions were not changed.");
+    }
+  };
+
+  const handleStatementImport = () => {
+    const active = accounts.filter(account => account.is_active);
+    if (!active.length) {
+      Alert.alert("Add an account first", "Transactions need an account so FlowLedger can detect duplicate statement rows.");
+      return;
+    }
+    if (active.length === 1) {
+      void importStatementFor(active[0]);
+      return;
+    }
+    Alert.alert("Choose account", "Which account is this statement for?", [
+      ...active.slice(0, 4).map(account => ({
+        text: account.name,
+        onPress: () => void importStatementFor(account),
+      })),
+      { text: "Cancel", style: "cancel" as const },
+    ]);
+  };
+
+  const handleResetFlo = () => {
+    if (!user) return;
+    Alert.alert(
+      "Reset Flo Memory",
+      "Remove Flo's saved preference and context summary? Your financial data will not be changed.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset",
+          style: "destructive",
+          onPress: () => void resetFloMemory(user.id).then(() => Alert.alert("Flo Memory Reset", "Flo's rolling summary was removed.")),
+        },
+      ],
+    );
+  };
+
+  const handleShowInstallPrompt = () => {
+    if (Platform.OS === "web") {
+      globalThis.dispatchEvent?.(new Event(PWA_INSTALL_EVENT));
+      return;
+    }
+    Alert.alert("Install FlowLedger", "Open FlowLedger in your phone browser, then use Add to Home Screen.");
+  };
+
   const handleSetupStep = (key: string) => {
     switch (key) {
       case "account":
@@ -2024,20 +1744,6 @@ export default function MoreScreen() {
   return (
     <View style={[styles.screen, { backgroundColor: c.background }]}>
       <PremiumBackdrop variant="blue" />
-      {Platform.OS === "web" ? (
-        <PlaidLinkLauncher
-          ref={plaidLauncherRef}
-          linkToken={plaidLinkToken}
-          shouldOpen={plaidLinkShouldOpen}
-          onReadyChange={setPlaidLinkReady}
-          onOpened={() => {
-            setPlaidLinkShouldOpen(false);
-            setPlaidNotice("Plaid is open. Finish secure bank login there.");
-          }}
-          onSuccess={handlePlaidSuccess}
-          onExit={handlePlaidExit}
-        />
-      ) : null}
       <ScrollView
         style={styles.scroller}
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 + webTopPad, paddingBottom: insets.bottom + 100 }]}
@@ -3148,98 +2854,6 @@ export default function MoreScreen() {
       </View>
       </>}
 
-      {activeSettingsSection === "plaid" && <>
-      <SLabel c={c} text="Bank Sync" />
-      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        <View style={styles.growthHeaderRow}>
-          <View style={[styles.growthScoreBubble, { backgroundColor: plaidStatus.canStartLink ? c.success + "18" : c.warning + "18" }]}>
-            <Feather name="link" size={20} color={plaidStatus.canStartLink ? c.success : c.warning} />
-          </View>
-          <View style={styles.growthHeaderCopy}>
-            <Text style={[styles.switchLabel, { color: c.foreground }]}>
-              {plaidStatus.canStartLink ? "Plaid is ready" : "Plaid setup is staged"}
-            </Text>
-            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>{plaidServerStatus?.message ?? plaidStatus.message}</Text>
-          </View>
-        </View>
-        <View style={[styles.priorityNote, { backgroundColor: c.primary + "12", borderRadius: 10, marginTop: 12 }]}>
-          <Feather name="shield" size={13} color={c.primary} />
-          <Text style={[styles.priorityNoteText, { color: c.mutedForeground }]}>
-            FlowLedger will keep Plaid access tokens server-side. The app will only receive safe account and transaction data after you approve a link.
-          </Text>
-        </View>
-        {plaidNotice ? <Text style={[styles.feedbackNotice, { color: /ready|connected|saved|added|imported|choose/i.test(plaidNotice) ? c.success : c.destructive }]}>{plaidNotice}</Text> : null}
-        {plaidSetup ? (
-          <View style={[styles.plaidPicker, { borderColor: c.border, backgroundColor: c.muted }]}>
-            <View style={styles.plaidPickerHeader}>
-              <View>
-                <Text style={[styles.switchLabel, { color: c.foreground }]}>Choose accounts to add</Text>
-                <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>
-                  {plaidSetup.institutionName || "Your bank"} · checking and savings work best here.
-                </Text>
-              </View>
-              <Text style={[styles.plaidSelectedCount, { color: c.primary }]}>
-                {plaidSetup.selectedAccountIds.length} selected
-              </Text>
-            </View>
-            {plaidSetup.accounts.map(account => {
-              const selected = plaidSetup.selectedAccountIds.includes(account.plaid_account_id);
-              return (
-                <Pressable
-                  key={account.plaid_account_id}
-                  disabled={!account.supported}
-                  onPress={() => handleTogglePlaidAccount(account.plaid_account_id)}
-                  style={({ pressed }) => [
-                    styles.plaidAccountChoice,
-                    {
-                      borderColor: selected ? c.primary + "88" : c.border,
-                      backgroundColor: selected ? c.primary + "14" : c.card,
-                      opacity: !account.supported ? 0.48 : pressed ? 0.76 : 1,
-                    },
-                  ]}
-                >
-                  <View style={[styles.incomeIcon, { backgroundColor: selected ? c.primary + "24" : c.muted }]}>
-                    <Feather name={account.subtype === "savings" ? "heart" : "credit-card"} size={17} color={selected ? c.primary : c.mutedForeground} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.accountName, { color: c.foreground }]}>
-                      {account.name}{account.mask ? ` • ${account.mask}` : ""}
-                    </Text>
-                    <Text style={[styles.incomeFreq, { color: c.mutedForeground }]}>
-                      {account.supported
-                        ? `${account.suggested_account_type ?? "account"} · balance ${Number(account.current_balance ?? account.available_balance ?? 0).toLocaleString(undefined, { style: "currency", currency: "USD" })}`
-                        : "Credit/loan accounts stay in the Debt tab for now"}
-                    </Text>
-                  </View>
-                  <Feather name={selected ? "check-circle" : "circle"} size={20} color={selected ? c.success : c.mutedForeground} />
-                </Pressable>
-              );
-            })}
-            <Pressable
-              onPress={() => void handleImportPlaidAccounts()}
-              disabled={plaidImporting || !plaidSetup.selectedAccountIds.length}
-              style={({ pressed }) => [styles.balanceSaveFullBtn, { backgroundColor: c.primary, opacity: pressed || plaidImporting || !plaidSetup.selectedAccountIds.length ? 0.66 : 1 }]}
-            >
-              <Feather name="download-cloud" size={15} color="#fff" />
-              <Text style={[styles.balanceSaveBtnText, { color: "#fff" }]}>
-                {plaidImporting ? "Importing..." : "Add selected accounts"}
-              </Text>
-            </Pressable>
-          </View>
-        ) : null}
-        <Pressable
-          onPress={() => void handleStartPlaidLink()}
-          disabled={!plaidStatus.canStartLink || plaidLinking || plaidPreparing || plaidImporting}
-          style={({ pressed }) => [styles.balanceSaveFullBtn, { backgroundColor: plaidStatus.canStartLink ? c.primary : c.muted, marginTop: 14, opacity: pressed || plaidLinking || plaidPreparing ? 0.72 : 1 }]}
-        >
-          <Feather name={plaidStatus.canStartLink ? "link" : "lock"} size={15} color={plaidStatus.canStartLink ? "#fff" : c.mutedForeground} />
-          <Text style={[styles.balanceSaveBtnText, { color: plaidStatus.canStartLink ? "#fff" : c.mutedForeground }]}>
-            {plaidConnectLabel}
-          </Text>
-        </Pressable>
-      </View>
-      </>}
-
       {activeSettingsSection === "children" && <>
       <SLabel c={c} text="Child Money Management" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
@@ -3886,10 +3500,6 @@ const styles = StyleSheet.create({
   balanceSaveFullBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 44, borderRadius: 10, marginTop: 12 },
   balanceSaveBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   balanceNote: { flexDirection: "row", alignItems: "flex-start", gap: 6, padding: 9, borderRadius: 8, marginTop: 10 },
-  plaidPicker: { borderWidth: 1, borderRadius: 16, padding: 12, marginTop: 12, gap: 10 },
-  plaidPickerHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10 },
-  plaidSelectedCount: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
-  plaidAccountChoice: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 14, padding: 10 },
   safetyFields: { flexDirection: "row", gap: 10 },
   safetyField: { flex: 1 },
 

@@ -15,7 +15,6 @@ const MAIN_APP_PREFIXES = [
 const BLOCKED_PREFIXES = [
   "/login",
   "/setup",
-  "/plaid/oauth",
 ] as const;
 
 function normalizeRoute(route: string | null | undefined) {

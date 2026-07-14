@@ -20,7 +20,6 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import { readLastAppRoute, rememberCurrentAppRoute } from "@/lib/navigationMemory";
-import { isPlaidLaunchPending, logRouteReplaceAttempt } from "@/lib/plaidLaunchGuard";
 import { supabase } from "@/lib/supabase";
 
 SplashScreen.preventAutoHideAsync();
@@ -36,23 +35,15 @@ function AuthObserver() {
   useEffect(() => {
     if (loading) return;
     const firstSegment = segments[0] as string | undefined;
-    const secondSegment = segments[1] as string | undefined;
     const inAuth = firstSegment === "login";
     const atRoot = !firstSegment || firstSegment === "index";
-    const inPlaidOAuthCallback = firstSegment === "plaid" && secondSegment === "oauth";
 
-    if (inPlaidOAuthCallback) {
-      return;
-    }
-
-    const replaceRoute = (destination: string, reason: string) => {
-      logRouteReplaceAttempt(destination, reason);
-      if (isPlaidLaunchPending()) return;
+    const replaceRoute = (destination: string) => {
       router.replace(destination as any);
     };
 
     if (!session && !inAuth) {
-      replaceRoute("/login", "auth_missing_session");
+      replaceRoute("/login");
     } else if (session && (inAuth || atRoot)) {
       let requestedSetup = false;
       if (Platform.OS === "web" && typeof window !== "undefined") {
@@ -62,7 +53,7 @@ function AuthObserver() {
         } catch {}
       }
       if (!requestedSetup) {
-        replaceRoute(readLastAppRoute() ?? "/(tabs)", "auth_restore_last_route");
+        replaceRoute(readLastAppRoute() ?? "/(tabs)");
         return;
       }
       let cancelled = false;
@@ -73,16 +64,16 @@ function AuthObserver() {
         .maybeSingle()
         .then(({ data }) => {
           if (cancelled) return;
-          replaceRoute(data?.onboarding_completed ? "/(tabs)" : "/setup", "auth_setup_status_loaded");
+          replaceRoute(data?.onboarding_completed ? "/(tabs)" : "/setup");
         }, () => {
-          if (!cancelled) replaceRoute("/(tabs)", "auth_setup_status_error");
+          if (!cancelled) replaceRoute("/(tabs)");
         });
       return () => {
         cancelled = true;
       };
     }
 
-    if (session && !inAuth && !atRoot && !inPlaidOAuthCallback) {
+    if (session && !inAuth && !atRoot) {
       rememberCurrentAppRoute();
     }
   }, [session, loading, segments, router]);
@@ -197,7 +188,6 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
             <Stack.Screen name="index" />
             <Stack.Screen name="login" />
             <Stack.Screen name="setup" />
-            <Stack.Screen name="plaid/oauth" />
             <Stack.Screen name="(tabs)" />
           </Stack>
           <PwaInstallPrompt />

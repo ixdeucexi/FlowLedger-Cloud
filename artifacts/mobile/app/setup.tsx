@@ -21,7 +21,6 @@ import {
   type HouseholdInviteRole,
   type HouseholdMembership,
 } from "@/lib/households";
-import { logRouteReplaceAttempt } from "@/lib/plaidLaunchGuard";
 import {
   buildSetupCompletionMessage,
   buildPersonalizedSetupKeys,
@@ -373,7 +372,6 @@ function SetupWizard() {
   const finish = async () => {
     writeStoredSetupStep(null);
     await updateSettings({ onboarding_completed: true });
-    logRouteReplaceAttempt("/(tabs)/flo?prompt=Can%20I%20afford%20%24100%3F", "setup_complete");
     router.replace({ pathname: "/(tabs)/flo", params: { prompt: "Can I afford $100?" } } as any);
   };
 

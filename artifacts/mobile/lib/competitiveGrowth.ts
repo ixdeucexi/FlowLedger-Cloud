@@ -8,7 +8,7 @@ export interface GrowthTransaction {
   category?: string | null;
   accountId?: string | null;
   importHash?: string | null;
-  source?: "manual" | "import" | "plaid" | "bill" | "income" | "debt";
+  source?: "manual" | "import" | "bill" | "income" | "debt";
   householdMemberId?: string | null;
   linkedBillId?: string | null;
 }
@@ -167,12 +167,6 @@ export interface ChildProfile {
   spendingLimit?: number | null;
 }
 
-export interface PlaidConnectionStatus {
-  status: "not_configured" | "ready" | "needs_repair" | "syncing";
-  message: string;
-  canStartLink: boolean;
-}
-
 const KNOWN_SUBSCRIPTION_WORDS = [
   "netflix",
   "hulu",
@@ -251,7 +245,7 @@ export function buildReviewQueue(
       const reasons: ReviewReason[] = [];
       const category = transaction.category?.trim();
       if (!category || category.toLowerCase() === "other") reasons.push("missing_category");
-      if (transaction.source === "import" || transaction.source === "plaid") reasons.push("imported");
+      if (transaction.source === "import") reasons.push("imported");
       if (transaction.importHash && (byHash.get(transaction.importHash) ?? 0) > 1) reasons.push("possible_duplicate");
       if (isUnusualAmount(transaction, byMerchant.get(normalizeMerchant(transaction.description)) ?? [])) reasons.push("unusual_amount");
       if (transaction.householdMemberId) reasons.push("household_edit");
@@ -487,27 +481,6 @@ export function buildSmartReminders(input: {
   return reminders;
 }
 
-export function evaluatePlaidConnectionStatus(config: {
-  clientName?: string | null;
-  hasServerTokenEndpoint?: boolean;
-  hasExchangeEndpoint?: boolean;
-  hasWebhookEndpoint?: boolean;
-}): PlaidConnectionStatus {
-  if (!config.hasServerTokenEndpoint || !config.hasExchangeEndpoint) {
-    return {
-      status: "not_configured",
-      message: "Plaid needs server-side link-token and public-token exchange endpoints before bank sync can be turned on.",
-      canStartLink: false,
-    };
-  }
-  return {
-    status: config.hasWebhookEndpoint ? "ready" : "needs_repair",
-    message: config.hasWebhookEndpoint
-      ? `${config.clientName ?? "FlowLedger"} can start bank linking.`
-      : "Bank linking can start, but webhooks should be added before automatic background sync.",
-    canStartLink: true,
-  };
-}
 
 export function buildChildMoneySummary(children: ChildProfile[]) {
   return children.map(child => {

@@ -62,8 +62,6 @@
     "@supabase/supabase-js": "^2.108.0",
     "expo-document-picker": "~14.0.8",
     "expo-file-system": "~19.0.23",
-    "expo-sharing": "~14.0.8",
-    "react-plaid-link": "^4.1.1",
-    "react-native-plaid-link-sdk": "^12.8.2"
+    "expo-sharing": "~14.0.8"
   }
 }

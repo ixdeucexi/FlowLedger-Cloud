@@ -10,7 +10,6 @@ import {
   buildSmartReminders,
   detectSubscriptions,
   evaluateForecastReadiness,
-  evaluatePlaidConnectionStatus,
   type GrowthTransaction,
   type TransactionRule,
 } from "./competitiveGrowth";
@@ -21,7 +20,7 @@ const transactions: GrowthTransaction[] = [
   { id: "t3", date: "2026-09-01", amount: -17.99, description: "Netflix", category: "Entertainment", source: "manual" },
   { id: "t4", date: "2026-07-04", amount: -83.44, description: "Unknown store", category: "Other", source: "import", importHash: "abc" },
   { id: "t5", date: "2026-07-04", amount: -83.44, description: "Unknown store", category: "Other", source: "import", importHash: "abc" },
-  { id: "t6", date: "2026-07-10", amount: 2200, description: "Payroll", category: "Income", source: "plaid" },
+  { id: "t6", date: "2026-07-10", amount: 2200, description: "Payroll", category: "Income", source: "import" },
 ];
 
 test("applies the best matching transaction rule", () => {
@@ -99,7 +98,7 @@ test("summarizes reports without AI guessing", () => {
   assert.ok(report.subscriptionTotal > 0);
 });
 
-test("builds reminders and Plaid connection state", () => {
+test("builds reminders", () => {
   const reminders = buildSmartReminders({
     today: "2026-07-02",
     bills: [{ id: "b1", name: "Utilities", amount: 300, category: "Utilities", dueDay: 4 }],
@@ -113,9 +112,6 @@ test("builds reminders and Plaid connection state", () => {
   assert.ok(reminders.some(item => item.type === "low_balance"));
   assert.ok(reminders.some(item => item.type === "transaction_review"));
 
-  const plaid = evaluatePlaidConnectionStatus({ hasServerTokenEndpoint: false, hasExchangeEndpoint: false });
-  assert.equal(plaid.status, "not_configured");
-  assert.equal(plaid.canStartLink, false);
 });
 
 test("child summaries stay limited and parent-safe", () => {

@@ -19,7 +19,6 @@ import {
   readLearningTourState,
   writeLearningTourState,
 } from "@/lib/learningTour";
-import { isPlaidLaunchPending, logRouteReplaceAttempt } from "@/lib/plaidLaunchGuard";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 
 const MIN_BUDGET_LOADING_MS = 220;
@@ -172,8 +171,6 @@ function DemoModeBanner() {
   const startRealSetup = () => {
     clearStoredSetupStep();
     stopDemoMode();
-    logRouteReplaceAttempt("/setup", "demo_start_real_setup");
-    if (isPlaidLaunchPending()) return;
     router.replace("/setup" as any);
   };
 
@@ -182,8 +179,6 @@ function DemoModeBanner() {
     writeDemoTourStep(0);
     setTourStepIndex(0);
     setShowDetails(true);
-    logRouteReplaceAttempt("/(tabs)", "demo_reset");
-    if (isPlaidLaunchPending()) return;
     router.replace("/(tabs)" as any);
   };
 
