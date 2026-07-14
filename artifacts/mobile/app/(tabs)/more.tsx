@@ -20,6 +20,7 @@ import { FloLogo } from "@/components/FloLogo";
 import { IncomeModal } from "@/components/IncomeModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { PWA_INSTALL_EVENT } from "@/components/PwaInstallPrompt";
+import { PlaidLinkButton } from "@/components/PlaidLinkButton";
 import colors from "@/constants/colors";
 import type { Account, IncomeItem } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
@@ -1918,19 +1919,7 @@ export default function MoreScreen() {
       {activeSettingsSection === "plaid" && <>
       <SLabel c={c} text="Bank sync" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <View style={[styles.settingsSectionIcon, { backgroundColor: c.success + "18", marginRight: 12 }]}>
-            <Feather name="link" size={20} color={c.success} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.switchLabel, { color: c.foreground }]}>Bank activity</Text>
-            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Bring in recent activity without changing your planned bills, goals, or forecast.</Text>
-          </View>
-        </View>
-        <View style={[styles.priorityNote, { backgroundColor: c.primary + "12", borderRadius: 10, marginTop: 14 }]}>
-          <Feather name="shield" size={14} color={c.primary} />
-          <Text style={[styles.priorityNoteText, { color: c.mutedForeground }]}>Automatic bank linking is being restored separately. You can safely import a statement now; existing manual data stays unchanged.</Text>
-        </View>
+        <PlaidLinkButton colors={c} />
         <Pressable
           onPress={handleStatementImport}
           style={({ pressed }) => [styles.balanceSaveFullBtn, { backgroundColor: c.primary, opacity: pressed ? 0.78 : 1 }]}
