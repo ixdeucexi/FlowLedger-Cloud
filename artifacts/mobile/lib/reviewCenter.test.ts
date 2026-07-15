@@ -139,6 +139,12 @@ test("reviewed transfers do not affect spending categories", () => {
   }), []);
 });
 
+test("unreviewed bank activity does not affect spending categories", () => {
+  assert.deepEqual(transactionCategoryParts({
+    id: "unreviewed", date: "2026-07-03", amount: -125, category: "Other", note: "Bank charge", review_status: "needs_review",
+  }), []);
+});
+
 test("manual edits replace stale reviewed labels and categories", () => {
   const edited = {
     id: "edited-bank-charge",

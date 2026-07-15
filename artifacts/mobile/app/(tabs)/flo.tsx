@@ -26,6 +26,7 @@ import { FloSafetyStopModal } from "@/components/FloSafetyStopModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
+import { isCashFlowTransaction } from "@/lib/billMatching";
 import { loadFloMemory, updateFloMemory, type FloFacts } from "@/lib/flo";
 import {
   createFloConversation,
@@ -298,7 +299,7 @@ export default function FloScreen() {
         amount: getBillMonthlyTotal(bill, previousMonth, previousYear),
       }));
     const previousTransactions = getTransactionsForMonth(previousMonth, previousYear)
-      .filter(transaction => transaction.category !== "Debt" && transaction.category !== "Income")
+      .filter(transaction => isCashFlowTransaction(transaction) && transaction.category !== "Debt" && transaction.category !== "Income")
       .map(transaction => ({ category: transaction.category || "Other", amount: transaction.amount }));
     const monthBills = getMonthlyBills(month, year)
       .filter(bill => !bill.is_debt)
@@ -307,7 +308,7 @@ export default function FloScreen() {
         amount: getBillMonthlyTotal(bill, month, year),
       }));
     const monthTransactions = getTransactionsForMonth(month, year)
-      .filter(transaction => transaction.category !== "Debt" && transaction.category !== "Income")
+      .filter(transaction => isCashFlowTransaction(transaction) && transaction.category !== "Debt" && transaction.category !== "Income")
       .map(transaction => ({ category: transaction.category || "Other", amount: transaction.amount }));
     const rows = buildCategoryPlan(
       categories.filter(category => category !== "Debt"),
@@ -316,7 +317,7 @@ export default function FloScreen() {
       Object.entries(categoryBudgets).map(([category, amount]) => ({ category, amount })),
     );
     const transactionDetails = getTransactionsForMonth(month, year)
-      .filter(transaction => transaction.amount < 0 && transaction.category !== "Debt" && transaction.category !== "Income");
+      .filter(transaction => isCashFlowTransaction(transaction) && transaction.amount < 0 && transaction.category !== "Debt" && transaction.category !== "Income");
     return rows.map(row => {
       const topTransaction = transactionDetails
         .filter(transaction => (transaction.category || "Other") === row.category)
@@ -419,7 +420,7 @@ export default function FloScreen() {
     );
     const currentMonth = today.slice(0, 7);
     const unallocatedExpenses = transactions.filter(transaction =>
-      transaction.date.startsWith(currentMonth) && transaction.amount < 0 && !transaction.linked_bill_id
+      isCashFlowTransaction(transaction) && transaction.date.startsWith(currentMonth) && transaction.amount < 0 && !transaction.linked_bill_id
     );
     const month = now.getMonth();
     const year = now.getFullYear();
@@ -451,7 +452,7 @@ export default function FloScreen() {
         balance: bill.balance,
         interest_rate: bill.interest_rate,
       })),
-      transactions: getTransactionsForMonth(month, year).map(transaction => ({
+      transactions: getTransactionsForMonth(month, year).filter(isCashFlowTransaction).map(transaction => ({
         id: transaction.id,
         date: transaction.date,
         amount: transaction.amount,
@@ -1790,4 +1791,3 @@ const styles = StyleSheet.create({
   send: { minWidth: 70, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", paddingHorizontal: 15 },
   sendText: { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold" },
 });
-

@@ -23,7 +23,7 @@ import type { Bill, BillDateMove, DecisionRecord, IncomeItem, Transaction } from
 import { useBudget } from "@/context/BudgetContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
-import { isConfirmedBillMatch } from "@/lib/billMatching";
+import { isCashFlowTransaction, isConfirmedBillMatch } from "@/lib/billMatching";
 import { allocationLabel, matchedOccurrenceAllocations, occurrenceKey, reviewSettlementSummary, transactionDisplayName } from "@/lib/reviewCenter";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
 import { buildDayForecastFloPrompt, groupForecastEvents } from "@/lib/forecastDisplay";
@@ -326,7 +326,7 @@ export default function MonthlyScreen() {
   }), [txList]);
   const billOccurrenceMatches = useMemo(() => matchedOccurrenceAllocations(txList, "bill"), [txList]);
   const incomeOccurrenceMatches = useMemo(() => matchedOccurrenceAllocations(txList, "income"), [txList]);
-  const standaloneTxList = useMemo(() => txList.filter(transaction => transaction.review_status !== "transfer"), [txList]);
+  const standaloneTxList = useMemo(() => txList.filter(isCashFlowTransaction), [txList]);
   const dailyBalances = useMemo(() => getDailyBalances(month, selectedYear), [getDailyBalances, month, selectedYear]);
   const incomeOccurrences = useMemo(() => {
     const occurrences = getIncomeOccurrencesInMonth(month, selectedYear);

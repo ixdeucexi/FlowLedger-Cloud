@@ -31,6 +31,7 @@ import { useMembership } from "@/context/MembershipContext";
 import { useAuth } from "@/context/AuthContext";
 import { type AppFontStyle, type ThemeMode, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
+import { isCashFlowTransaction } from "@/lib/billMatching";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { parseStatementCsv } from "@/lib/accounts";
 import {
@@ -863,6 +864,7 @@ export default function MoreScreen() {
   const growthReportTransactions = useMemo(() => growthTransactions.flatMap(transaction => {
     const source = transactions.find(item => item.id === transaction.id);
     if (!source) return [transaction];
+    if (!isCashFlowTransaction(source)) return [];
     const parts = transactionCategoryParts(source);
     if (parts.length === 0) return source.amount > 0 ? [transaction] : [];
     return parts.map((part, index) => ({
@@ -3355,5 +3357,4 @@ const styles = StyleSheet.create({
   summaryLabel: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
 
 });
-
 
