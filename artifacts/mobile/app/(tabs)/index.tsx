@@ -188,7 +188,6 @@ export default function DashboardScreen() {
 
   const flipAnim   = useRef(new Animated.Value(0)).current;
   const [flipped, setFlipped] = useState(false);
-  const [cardHeight, setCardHeight] = useState(0);
 
   const doFlip = () => {
     const toValue = flipped ? 0 : 1;
@@ -585,6 +584,18 @@ export default function DashboardScreen() {
 
   // Budget goals use a negative current amount as a backwards-compatible type marker.
   const savingsGoals = useMemo(() => goals.filter(goal => goal.goal_type === "savings"), [goals]);
+  const currentGoals = useMemo(() => [...goals].sort((left, right) => {
+    const leftComplete = left.target_amount > 0 && left.current_amount >= left.target_amount;
+    const rightComplete = right.target_amount > 0 && right.current_amount >= right.target_amount;
+    if (leftComplete !== rightComplete) return leftComplete ? 1 : -1;
+    return left.target_date.localeCompare(right.target_date) || left.name.localeCompare(right.name);
+  }), [goals]);
+  const checkingBalance = useMemo(() => accounts
+    .filter(account => account.is_active && account.account_type === "checking")
+    .reduce((sum, account) => sum + account.current_balance, 0), [accounts]);
+  const savingsAccountBalance = useMemo(() => accounts
+    .filter(account => account.is_active && account.account_type === "savings")
+    .reduce((sum, account) => sum + account.current_balance, 0), [accounts]);
 
   // ── Savings summary for back of hero card ──────────────────────────────────
   const savingsData = useMemo(() => {
@@ -1270,31 +1281,94 @@ export default function DashboardScreen() {
       ) : null}
 
       <View style={[styles.referenceCommandHero, isCommandWide && styles.referenceCommandHeroWide]}>
-        <View style={styles.referenceHeroCopy}>
-          <AppText tone="title" style={styles.referenceGreeting}>{timeGreeting} 👋</AppText>
-          <AppText style={styles.referenceGreetingSub}>Here’s your financial flow for {MONTH_FULL[currentMonth]}.</AppText>
-          <AppText tone="label" style={styles.referenceHeroLabel}>Available to spend</AppText>
-          <AppText tone="number" style={styles.referenceHeroAmount}>
-            {formatDashboardCurrency(balanceMetrics?.currentBalance ?? cashFlow.remaining)}
-          </AppText>
-
-          <Pressable
-            onPress={() => router.push("/(tabs)/flo" as any)}
-            style={({ pressed }) => [styles.referencePlanSnapshot, { opacity: pressed ? 0.84 : 1 }]}
+        <View style={styles.referenceHeroFlipShell}>
+          <Animated.View
+            pointerEvents={flipped ? "none" : "auto"}
+            style={[styles.referenceHeroFace, { transform: [{ perspective: 1000 }, { rotateY: frontRotate }] }]}
           >
-            <View style={styles.referencePlanFocusBlock}>
-              <AppText tone="label" style={styles.referencePlanLabel}>Focus</AppText>
-              <AppText tone="title" style={styles.referencePlanFocusTitle} numberOfLines={1}>{setupPersonalization.title}</AppText>
-              <View style={styles.referencePlanNextRow}>
-                <AppText tone="label" style={styles.referencePlanNextLabel}>Next move</AppText>
-                <AppText style={styles.referencePlanNextText} numberOfLines={1}>{setupPersonalization.nextActionLabel}</AppText>
+            <View style={styles.referenceMoneyHeader}>
+              <View style={{ flex: 1 }}>
+                <AppText tone="title" style={styles.referenceGreeting}>{timeGreeting} 👋</AppText>
+                <AppText style={styles.referenceGreetingSub}>Here’s your financial flow for {MONTH_FULL[currentMonth]}.</AppText>
               </View>
+              <Pressable onPress={doFlip} accessibilityLabel="Show savings and goals" style={styles.referenceFlipButton}>
+                <Feather name="repeat" size={13} color="#c4b5fd" />
+                <AppText style={styles.referenceFlipButtonText}>Savings</AppText>
+              </Pressable>
             </View>
-            <View style={styles.referencePlanFloPill}>
-              <Feather name="message-circle" size={13} color="#f8fafc" />
-              <AppText style={styles.referencePlanFloText}>Flo</AppText>
+            <AppText tone="label" style={styles.referenceHeroLabel}>Available to spend · Checking</AppText>
+            <AppText tone="number" style={styles.referenceHeroAmount}>{formatDashboardCurrency(checkingBalance)}</AppText>
+            <AppText style={styles.referenceMoneyCaption}>
+              {accounts.some(account => account.is_active && account.account_type === "checking")
+                ? "Current balance across active checking accounts."
+                : "Add a checking account to see available-to-spend cash."}
+            </AppText>
+
+            <Pressable
+              onPress={() => router.push("/(tabs)/flo" as any)}
+              style={({ pressed }) => [styles.referencePlanSnapshot, { opacity: pressed ? 0.84 : 1 }]}
+            >
+              <View style={styles.referencePlanFocusBlock}>
+                <AppText tone="label" style={styles.referencePlanLabel}>Focus</AppText>
+                <AppText tone="title" style={styles.referencePlanFocusTitle} numberOfLines={1}>{setupPersonalization.title}</AppText>
+                <View style={styles.referencePlanNextRow}>
+                  <AppText tone="label" style={styles.referencePlanNextLabel}>Next move</AppText>
+                  <AppText style={styles.referencePlanNextText} numberOfLines={1}>{setupPersonalization.nextActionLabel}</AppText>
+                </View>
+              </View>
+              <View style={styles.referencePlanFloPill}>
+                <Feather name="message-circle" size={13} color="#f8fafc" />
+                <AppText style={styles.referencePlanFloText}>Flo</AppText>
+              </View>
+            </Pressable>
+          </Animated.View>
+
+          <Animated.View
+            pointerEvents={flipped ? "auto" : "none"}
+            style={[styles.referenceHeroFace, styles.referenceHeroBackFace, { transform: [{ perspective: 1000 }, { rotateY: backRotate }] }]}
+          >
+            <View style={styles.referenceMoneyHeader}>
+              <View style={{ flex: 1 }}>
+                <AppText tone="label" style={styles.referenceHeroLabel}>Savings accounts</AppText>
+                <AppText tone="number" style={[styles.referenceHeroAmount, styles.referenceSavingsAmount]}>{formatDashboardCurrency(savingsAccountBalance)}</AppText>
+              </View>
+              <Pressable onPress={doFlip} accessibilityLabel="Show checking balance" style={styles.referenceFlipButton}>
+                <Feather name="repeat" size={13} color="#c4b5fd" />
+                <AppText style={styles.referenceFlipButtonText}>Checking</AppText>
+              </Pressable>
             </View>
-          </Pressable>
+            <View style={styles.referenceGoalsHeader}>
+              <AppText tone="title" style={styles.referenceGoalsTitle}>Current goals</AppText>
+              <Pressable onPress={() => { setEditGoal(null); setGoalModalVisible(true); }} accessibilityLabel="Add goal" style={styles.referenceGoalAddButton}>
+                <Feather name="plus" size={14} color="#f8fafc" />
+              </Pressable>
+            </View>
+            {currentGoals.length > 0 ? currentGoals.slice(0, 3).map(goal => {
+              const percent = goal.target_amount > 0 ? Math.min(100, Math.max(0, (goal.current_amount / goal.target_amount) * 100)) : 0;
+              return (
+                <Pressable
+                  key={goal.id}
+                  onPress={() => { setEditGoal(goal); setGoalModalVisible(true); }}
+                  accessibilityLabel={`Edit ${goal.name} goal`}
+                  style={({ pressed }) => [styles.referenceGoalItem, { opacity: pressed ? 0.72 : 1 }]}
+                >
+                  <View style={styles.referenceGoalTopRow}>
+                    <AppText style={styles.referenceGoalName} numberOfLines={1}>{goal.name}</AppText>
+                    <AppText style={styles.referenceGoalAmounts}>{formatDashboardCurrency(goal.current_amount)} / {formatDashboardCurrency(goal.target_amount)}</AppText>
+                  </View>
+                  <View style={styles.referenceGoalTrack}>
+                    <View style={[styles.referenceGoalFill, { width: `${percent}%` as any }]} />
+                  </View>
+                </Pressable>
+              );
+            }) : (
+              <Pressable onPress={() => { setEditGoal(null); setGoalModalVisible(true); }} style={styles.referenceGoalsEmpty}>
+                <Feather name="target" size={17} color="#a78bfa" />
+                <AppText style={styles.referenceGoalsEmptyText}>No goals yet. Add one to start tracking progress.</AppText>
+              </Pressable>
+            )}
+            {currentGoals.length > 3 && <AppText style={styles.referenceGoalsMore}>+{currentGoals.length - 3} more goal{currentGoals.length - 3 === 1 ? "" : "s"}</AppText>}
+          </Animated.View>
         </View>
 
         <Pressable
@@ -2247,7 +2321,26 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   referenceCommandHeroWide: { flexDirection: "row", minHeight: 320, padding: 30, alignItems: "center", gap: 22 },
-  referenceHeroCopy: { flex: 1 },
+  referenceHeroFlipShell: { flex: 1, minHeight: 210, position: "relative" },
+  referenceHeroFace: { minHeight: 210, backfaceVisibility: "hidden" },
+  referenceHeroBackFace: { ...StyleSheet.absoluteFillObject },
+  referenceMoneyHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  referenceFlipButton: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, borderWidth: 1, borderColor: "rgba(196,181,253,0.28)", backgroundColor: "rgba(124,58,237,0.18)", paddingHorizontal: 9, paddingVertical: 6 },
+  referenceFlipButtonText: { color: "#c4b5fd", fontSize: 9, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.5 },
+  referenceMoneyCaption: { color: "#94a3b8", fontSize: 10, fontFamily: "Inter_500Medium", lineHeight: 14, marginTop: 1 },
+  referenceSavingsAmount: { color: "#6ee7b7", fontSize: 34, lineHeight: 38, letterSpacing: -1.4 },
+  referenceGoalsHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8, marginBottom: 5 },
+  referenceGoalsTitle: { color: "#f8fafc", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  referenceGoalAddButton: { width: 28, height: 28, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.42)", borderWidth: 1, borderColor: "rgba(196,181,253,0.28)" },
+  referenceGoalItem: { borderRadius: 10, backgroundColor: "rgba(15,23,42,0.56)", borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", paddingHorizontal: 9, paddingVertical: 6, marginTop: 4 },
+  referenceGoalTopRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  referenceGoalName: { flex: 1, color: "#e2e8f0", fontSize: 11, fontFamily: "Inter_700Bold" },
+  referenceGoalAmounts: { color: "#94a3b8", fontSize: 9, fontFamily: "Inter_700Bold" },
+  referenceGoalTrack: { height: 4, borderRadius: 999, overflow: "hidden", backgroundColor: "rgba(148,163,184,0.22)", marginTop: 5 },
+  referenceGoalFill: { height: "100%", borderRadius: 999, backgroundColor: "#34d399" },
+  referenceGoalsEmpty: { minHeight: 74, borderRadius: 14, borderWidth: 1, borderStyle: "dashed", borderColor: "rgba(167,139,250,0.38)", backgroundColor: "rgba(124,58,237,0.10)", alignItems: "center", justifyContent: "center", gap: 7, padding: 12 },
+  referenceGoalsEmptyText: { color: "#cbd5e1", fontSize: 11, lineHeight: 15, textAlign: "center", fontFamily: "Inter_600SemiBold" },
+  referenceGoalsMore: { color: "#a78bfa", fontSize: 9, fontFamily: "Inter_800ExtraBold", textAlign: "right", marginTop: 5 },
   referenceGreeting: { color: "#f8fafc", fontSize: 19, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.7 },
   referenceGreetingSub: { color: "#94a3b8", fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 1, marginBottom: 6 },
   referenceHeroLabel: { color: "#cbd5e1", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.4, textTransform: "uppercase" },
