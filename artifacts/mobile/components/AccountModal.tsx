@@ -14,6 +14,11 @@ const TYPES: { value: AccountType; label: string }[] = [
   { value: "cash", label: "Cash" },
 ];
 
+function localToday(): string {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+}
+
 export function AccountModal({
   visible,
   account,
@@ -35,7 +40,7 @@ export function AccountModal({
   const [name, setName] = useState("");
   const [type, setType] = useState<AccountType>("checking");
   const [balance, setBalance] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localToday);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -43,9 +48,9 @@ export function AccountModal({
     setName(account?.name ?? "");
     setType(account?.account_type ?? "checking");
     setBalance(account ? Math.abs(account.current_balance).toString() : "");
-    setDate(account?.balance_as_of ?? new Date().toISOString().slice(0, 10));
+    setDate(mode === "reconcile" ? localToday() : account?.balance_as_of ?? localToday());
     setError("");
-  }, [account, visible]);
+  }, [account, mode, visible]);
 
   const submit = async () => {
     if (saving) return;
@@ -122,7 +127,7 @@ export function AccountModal({
           <DatePickerField label="Balance as of" value={date} onChange={setDate} placeholder="Choose date" />
           {mode === "reconcile" ? (
             <Text style={[styles.help, { color: c.mutedForeground }]}>
-              Enter the balance shown by your bank today. This becomes the trusted starting point for your forecast.
+              Enter the balance shown by your bank for this date. This becomes the trusted starting point for your forecast.
             </Text>
           ) : null}
 

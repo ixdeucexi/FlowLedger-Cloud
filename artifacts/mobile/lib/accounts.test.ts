@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { evaluateForecastConfidence, openingBalanceForReconciledDay, parseStatementCsv, totalForecastBalance, type AccountSnapshot } from "./accounts";
+import { evaluateForecastConfidence, openingBalanceForReconciledDay, operatingAccountAnchor, parseStatementCsv, totalForecastBalance, type AccountSnapshot } from "./accounts";
 
 const accounts: AccountSnapshot[] = [
   { id: "checking", name: "Checking", type: "checking", currentBalance: 1200, balanceAsOf: "2026-06-23", lastReconciledAt: "2026-06-23", active: true },
@@ -8,6 +8,12 @@ const accounts: AccountSnapshot[] = [
 ];
 
 test("account total combines checking and savings", () => assert.equal(totalForecastBalance(accounts), 1500));
+test("calendar anchor uses checking cash without pulling savings into spendable money", () => {
+  assert.deepEqual(operatingAccountAnchor(accounts), { balance: 1200, date: "2026-06-23" });
+});
+test("calendar anchor falls back to active accounts when no checking account exists", () => {
+  assert.deepEqual(operatingAccountAnchor([accounts[1]]), { balance: 300, date: "2026-06-23" });
+});
 test("account balance anchor is the selected day's closing balance", () => {
   const opening = openingBalanceForReconciledDay(1000, "2026-06-24", [
     { date: "2026-06-20", amount: 500 },

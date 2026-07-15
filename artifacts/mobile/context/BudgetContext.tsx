@@ -18,7 +18,7 @@ import { decisionDbPayload } from "@/lib/decisionPersistence";
 import { recordDiagnostic } from "@/lib/diagnostics";
 import { isDevDemoMode } from "@/lib/demoMode";
 import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isIncomeActiveForMonth, moveSettledBillOverrideDate, resolveFinalizedBillOccurrenceDays } from "@/lib/schedule";
-import { evaluateForecastConfidence, openingBalanceForReconciledDay, totalForecastBalance, type AccountSnapshot, type AccountType, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
+import { evaluateForecastConfidence, openingBalanceForReconciledDay, operatingAccountAnchor, type AccountSnapshot, type AccountType, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
 import { scenarioDates, type DecisionResult, type DecisionScenario, type DecisionType } from "@/lib/decisions";
 import {
   acceptHouseholdInviteCode,
@@ -401,18 +401,6 @@ function toAccountSnapshot(account: Account): AccountSnapshot {
     currentBalance: account.current_balance, balanceAsOf: account.balance_as_of,
     lastReconciledAt: account.last_reconciled_at, active: account.is_active,
   };
-}
-
-function accountAnchorFromAccounts(accounts: Account[]) {
-  const active = accounts.filter(account => account.is_active);
-  if (!active.length) return null;
-  const balance = totalForecastBalance(active.map(toAccountSnapshot));
-  const date = active
-    .map(account => account.balance_as_of)
-    .filter(Boolean)
-    .sort()
-    .at(-1) ?? localDateString();
-  return { balance, date };
 }
 
 const DEFAULT_CATEGORIES = [
@@ -1164,7 +1152,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         setAccounts(loadedAccounts);
         setDecisions((dData ?? []).map((d: any) => ({ ...d, calendar_date: d.calendar_date ?? undefined, applied_change: d.applied_change ?? undefined })));
         if (sData) {
-          const accountAnchor = accountAnchorFromAccounts(loadedAccounts);
+          const accountAnchor = operatingAccountAnchor(loadedAccounts.map(toAccountSnapshot));
           const nextStartingBalance = accountAnchor ? accountAnchor.balance : Number(sData.starting_balance);
           const nextStartingBalanceDate = accountAnchor ? accountAnchor.date : (sData.starting_balance_date ?? undefined);
           setSettings({
@@ -1232,7 +1220,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     if (!settingsResult.error && settingsResult.data) {
       const sData = settingsResult.data;
-      const accountAnchor = accountAnchorFromAccounts(loadedAccounts ?? accountsRef.current);
+      const accountAnchor = operatingAccountAnchor((loadedAccounts ?? accountsRef.current).map(toAccountSnapshot));
       const nextStartingBalance = accountAnchor ? accountAnchor.balance : Number(sData.starting_balance);
       const nextStartingBalanceDate = accountAnchor ? accountAnchor.date : (sData.starting_balance_date ?? undefined);
       setSettings(prev => ({
@@ -3307,10 +3295,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, settings, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, saveSettingsRecord, assertCanEditHousehold]);
 
-  const persistAccountAnchor = useCallback(async (nextAccounts: Account[], asOfDate: string) => {
+  const persistAccountAnchor = useCallback(async (nextAccounts: Account[]) => {
     if (!user) return;
-    const nextBalance = totalForecastBalance(nextAccounts.map(toAccountSnapshot));
-    const nextSettings = { ...settings, starting_balance: nextBalance, starting_balance_date: asOfDate };
+    const accountAnchor = operatingAccountAnchor(nextAccounts.map(toAccountSnapshot));
+    if (!accountAnchor) return;
+    const nextSettings = { ...settings, starting_balance: accountAnchor.balance, starting_balance_date: accountAnchor.date };
     setSettings(nextSettings);
     if (demoMode) return;
     await saveSettingsRecord(nextSettings);
@@ -3324,7 +3313,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (demoMode) {
       const next = [...accounts, account];
       setAccounts(next);
-      await persistAccountAnchor(next, account.balance_as_of);
+      await persistAccountAnchor(next);
       return;
     }
     markSaveStarted();
@@ -3336,7 +3325,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       }), "Save opening balance");
       const next = [...accounts, account];
       setAccounts(next);
-      await persistAccountAnchor(next, account.balance_as_of);
+      await persistAccountAnchor(next);
       markSaveCompleted();
     } catch (error) {
       markSaveFailed(error, () => addAccount(input));
@@ -3351,7 +3340,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const next = accounts.map(item => item.id === account.id ? account : item);
     setAccounts(next);
     if (demoMode) {
-      await persistAccountAnchor(next, account.balance_as_of);
+      await persistAccountAnchor(next);
       return;
     }
     markSaveStarted();
@@ -3364,7 +3353,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         is_active: account.is_active,
       }).eq("id", account.id), "Update account");
       try {
-        await persistAccountAnchor(next, account.balance_as_of);
+        await persistAccountAnchor(next);
       } catch (anchorError) {
         void recordDiagnostic(user.id, {
           eventType: "save_failure", operation: "account_save", platform: diagnosticPlatform(),
@@ -3388,7 +3377,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     } : account);
     setAccounts(next);
     if (demoMode) {
-      await persistAccountAnchor(next, asOfDate);
+      await persistAccountAnchor(next);
       return;
     }
     markSaveStarted();
@@ -3407,7 +3396,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }).catch(() => undefined);
       }
       try {
-        await persistAccountAnchor(next, asOfDate);
+        await persistAccountAnchor(next);
       } catch (anchorError) {
         void recordDiagnostic(user.id, {
           eventType: "save_failure", operation: "reconciliation", platform: diagnosticPlatform(),

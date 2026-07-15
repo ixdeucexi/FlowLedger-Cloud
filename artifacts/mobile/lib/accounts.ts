@@ -31,6 +31,20 @@ export function totalForecastBalance(accounts: AccountSnapshot[]): number {
   return accounts.filter(account => account.active).reduce((sum, account) => sum + accountForecastValue(account), 0);
 }
 
+export function operatingAccountAnchor(accounts: AccountSnapshot[]): { balance: number; date: string } | null {
+  const active = accounts.filter(account => account.active);
+  if (!active.length) return null;
+  const checking = active.filter(account => account.type === "checking");
+  const operating = checking.length ? checking : active;
+  const date = operating
+    .map(account => account.balanceAsOf)
+    .filter(Boolean)
+    .sort()
+    .at(-1);
+  if (!date) return null;
+  return { balance: totalForecastBalance(operating), date };
+}
+
 export function openingBalanceForReconciledDay(
   endOfDayBalance: number,
   reconciliationDate: string,
