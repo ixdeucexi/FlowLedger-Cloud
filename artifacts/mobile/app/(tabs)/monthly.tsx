@@ -1912,23 +1912,74 @@ export default function MonthlyScreen() {
                     {displayedTxs.length > 0 ? (
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
                         <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Activity</Text>
-                        {displayedTxs.map(tx => (
-                          <View key={`overlay-tx-${tx.id}`} style={styles.dayOverlayRow}>
-                            <Pressable onPress={() => openEditTransaction(tx)} style={styles.dayOverlayRowMain}>
-                              <Text numberOfLines={1} style={[styles.dayOverlayRowName, { color: c.foreground }]}>{tx.note || tx.category}</Text>
-                              <Text style={[styles.dayOverlayAmount, { color: tx.amount > 0 ? c.success : c.destructive }]}>
-                                {tx.amount > 0 ? "+" : ""}{tx.amount.toFixed(2)}
-                              </Text>
-                            </Pressable>
-                            <Pressable
-                              onPress={() => handleDeleteTx(tx.id)}
-                              hitSlop={8}
-                              style={({ pressed }) => [styles.dayOverlayDeleteButton, { backgroundColor: c.destructive + "12", opacity: pressed ? 0.74 : 1 }]}
+                        {displayedTxs.map(tx => {
+                          const sourceLabel = tx.source === "plaid"
+                            ? "Bank sync"
+                            : tx.import_hash
+                              ? "Imported"
+                              : tx.linked_bill_id
+                                ? "Bill payment"
+                                : "Manual";
+                          const isMoneyIn = tx.amount > 0;
+                          const amountColor = isMoneyIn ? c.success : c.destructive;
+                          const displayName = tx.merchant_name || tx.note || tx.category;
+                          return (
+                            <View
+                              key={`overlay-tx-${tx.id}`}
+                              style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: amountColor + "40" }]}
                             >
-                              <Feather name="trash-2" size={14} color={c.destructive} />
-                            </Pressable>
-                          </View>
-                        ))}
+                              <View style={styles.dayBillTop}>
+                                <View style={{ flex: 1 }}>
+                                  <Text numberOfLines={1} style={[styles.dayBillName, { color: c.foreground }]}>{displayName}</Text>
+                                  <Text numberOfLines={1} style={[styles.dayBillMeta, { color: c.mutedForeground }]}>
+                                    {tx.category} · {sourceLabel}
+                                  </Text>
+                                </View>
+                                <View style={[styles.dayTransactionBadge, { backgroundColor: amountColor + "20" }]}>
+                                  <Text style={[styles.dayTransactionBadgeText, { color: amountColor }]}>{isMoneyIn ? "MONEY IN" : "MONEY OUT"}</Text>
+                                </View>
+                              </View>
+
+                              <View style={styles.dayBillNumbers}>
+                                <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
+                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Amount</Text>
+                                  <Text numberOfLines={1} style={[styles.dayBillNumberValue, { color: amountColor }]}>
+                                    {isMoneyIn ? "+" : "-"}${Math.abs(tx.amount).toFixed(2)}
+                                  </Text>
+                                </View>
+                                <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
+                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Category</Text>
+                                  <Text numberOfLines={1} style={[styles.dayTransactionTileValue, { color: c.foreground }]}>{tx.category}</Text>
+                                </View>
+                                <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
+                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Source</Text>
+                                  <Text numberOfLines={1} style={[styles.dayTransactionTileValue, { color: c.foreground }]}>{sourceLabel}</Text>
+                                </View>
+                              </View>
+
+                              <View style={styles.dayBillActions}>
+                                <Pressable
+                                  accessibilityRole="button"
+                                  accessibilityLabel={`Edit ${displayName}`}
+                                  onPress={() => openEditTransaction(tx)}
+                                  style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.primary + "16", borderColor: c.primary + "35", opacity: pressed ? 0.74 : 1 }]}
+                                >
+                                  <Feather name="edit-2" size={13} color={c.primary} />
+                                  <Text style={[styles.dayBillActionText, { color: c.primary }]}>Edit</Text>
+                                </Pressable>
+                                <Pressable
+                                  accessibilityRole="button"
+                                  accessibilityLabel={`Delete ${displayName}`}
+                                  onPress={() => handleDeleteTx(tx.id)}
+                                  style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.destructive + "12", borderColor: c.destructive + "35", opacity: pressed ? 0.74 : 1 }]}
+                                >
+                                  <Feather name="trash-2" size={13} color={c.destructive} />
+                                  <Text style={[styles.dayBillActionText, { color: c.destructive }]}>Delete</Text>
+                                </Pressable>
+                              </View>
+                            </View>
+                          );
+                        })}
                       </View>
                     ) : null}
 
@@ -2591,6 +2642,9 @@ const styles = StyleSheet.create({
   dayBillNumberTile: { flex: 1, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 8 },
   dayBillNumberLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.5 },
   dayBillNumberValue: { fontSize: 13, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
+  dayTransactionTileValue: { fontSize: 12, fontFamily: "Inter_700Bold", marginTop: 3 },
+  dayTransactionBadge: { paddingHorizontal: 7, paddingVertical: 4, borderRadius: 6 },
+  dayTransactionBadgeText: { fontSize: 9, fontFamily: "Inter_700Bold", letterSpacing: 0.45 },
   dayBillPaidTile: { borderWidth: 1 },
   dayBillPaidInputRow: { flexDirection: "row", alignItems: "center", marginTop: 1 },
   dayBillPaidDollar: { fontSize: 13, fontFamily: "Inter_800ExtraBold", marginRight: 1 },
