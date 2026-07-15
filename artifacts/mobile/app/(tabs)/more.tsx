@@ -1919,7 +1919,7 @@ export default function MoreScreen() {
       {activeSettingsSection === "plaid" && <>
       <SLabel c={c} text="Bank sync" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        <PlaidLinkButton colors={c} />
+        <PlaidLinkButton colors={c} onConnected={retryBudgetLoad} />
         <Pressable
           onPress={handleStatementImport}
           style={({ pressed }) => [styles.balanceSaveFullBtn, { backgroundColor: c.primary, opacity: pressed ? 0.78 : 1 }]}

@@ -96,7 +96,7 @@ async function upsertPlaidTransaction({ userId, accountRow, transaction, removed
   // Never overwrite an explicitly edited/manual FlowLedger transaction.
   const { data: existing, error: existingError } = await db
     .from("transactions")
-    .select("id,source")
+    .select("id,source,category,match_reason")
     .eq("user_id", userId)
     .eq("plaid_transaction_id", plaidTransactionId)
     .maybeSingle();
@@ -109,7 +109,7 @@ async function upsertPlaidTransaction({ userId, accountRow, transaction, removed
       user_id: userId,
       date: transactionDate,
       amount,
-      category,
+      category: existing && existing.match_reason === "confirmed_bill_match" ? existing.category : category,
       note: transaction.name || originalName,
       source: "plaid",
       plaid_transaction_id: plaidTransactionId,
@@ -154,6 +154,43 @@ async function upsertPlaidTransaction({ userId, accountRow, transaction, removed
     onConflict: "user_id,plaid_transaction_id",
   });
   if (importedError) throw importedError;
+
+  // Plaid can replace a pending transaction with a new posted transaction ID.
+  // Carry a user's confirmed bill match forward so the posted row does not
+  // become a second expense while the removed pending row keeps the paid bill.
+  const pendingTransactionId = transaction.pending_transaction_id;
+  if (!transaction.pending && pendingTransactionId && flowledgerId) {
+    const { data: pendingFlowTransaction, error: pendingLookupError } = await db
+      .from("transactions")
+      .select("id,linked_bill_id,match_reason")
+      .eq("user_id", userId)
+      .eq("plaid_transaction_id", pendingTransactionId)
+      .maybeSingle();
+    if (pendingLookupError) throw pendingLookupError;
+    if (
+      pendingFlowTransaction &&
+      pendingFlowTransaction.id !== flowledgerId &&
+      pendingFlowTransaction.linked_bill_id &&
+      pendingFlowTransaction.match_reason === "confirmed_bill_match"
+    ) {
+      const billId = pendingFlowTransaction.linked_bill_id;
+      const unmatched = await db.rpc("unmatch_transaction_from_bill", {
+        p_transaction_id: pendingFlowTransaction.id,
+      });
+      if (unmatched.error) throw unmatched.error;
+      const rematched = await db.rpc("match_transaction_to_bill", {
+        p_transaction_id: flowledgerId,
+        p_bill_id: billId,
+      });
+      if (rematched.error) {
+        await db.rpc("match_transaction_to_bill", {
+          p_transaction_id: pendingFlowTransaction.id,
+          p_bill_id: billId,
+        });
+        throw rematched.error;
+      }
+    }
+  }
 }
 
 async function syncTransactions({ client, userId, item, accessToken }) {

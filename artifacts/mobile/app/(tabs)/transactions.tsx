@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
-  Modal, Platform, Pressable, ScrollView, SectionList,
+  Alert, Modal, Platform, Pressable, ScrollView, SectionList,
   StyleSheet, Text, TextInput, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -24,11 +24,12 @@ import {
   type TransactionRule,
 } from "@/lib/competitiveGrowth";
 import { debtPaymentStatusLabel } from "@/lib/forecastDisplay";
+import { isConfirmedBillMatch, rankBillMatches } from "@/lib/billMatching";
 import { supabase } from "@/lib/supabase";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type ActivitySource = "transaction" | "bill_payment" | "income" | "extra_payment";
+type ActivitySource = "transaction" | "bank_transaction" | "bill_payment" | "income" | "extra_payment";
 type TypeFilter     = "all" | "expense" | "income";
 type SourceFilter   = "all" | ActivitySource;
 type DateFilter     = "all" | "this_month" | "last_month" | "this_year";
@@ -83,6 +84,7 @@ const SOURCE_META: Record<ActivitySource, {
   description: string;
 }> = {
   transaction:   { label: "Manual",   icon: "edit-3",      color: "#6366f1", description: "Manually recorded transaction" },
+  bank_transaction: { label: "Bank", icon: "credit-card", color: "#0f9b8e", description: "Imported securely from your connected bank" },
   bill_payment:  { label: "Bill",     icon: "file-text",   color: "#f0b429", description: "Bill marked as paid in Monthly view" },
   income:        { label: "Income",   icon: "trending-up", color: "#22c55e", description: "Scheduled income occurrence" },
   extra_payment: { label: "Debt Pay", icon: "zap",         color: "#e11d48", description: "Extra debt payment (Snowball / Avalanche)" },
@@ -187,7 +189,8 @@ export default function TransactionsScreen() {
   const {
     transactions, addTransaction, updateTransaction, deleteTransaction, deleteTransfer,
     bills, overrides, extraPayments, activeHousehold,
-    getIncomeOccurrencesInMonth,
+    getIncomeOccurrencesInMonth, getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal,
+    matchTransactionToBill, unmatchTransactionFromBill,
   } = useBudget();
 
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -202,12 +205,15 @@ export default function TransactionsScreen() {
   const [search, setSearch]                     = useState("");
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [weeklySummaryVisible, setWeeklySummaryVisible] = useState(false);
+  const [matchTx, setMatchTx] = useState<Transaction | null>(null);
+  const [savingMatch, setSavingMatch] = useState(false);
   const [reviewAlertLoaded, setReviewAlertLoaded] = useState(false);
   const [transactionRules, setTransactionRules] = useState<TransactionRule[]>([]);
   const [reviewDecisions, setReviewDecisions] = useState<Record<string, ReviewDecision>>({});
   useBackDismiss(!!detailItem, () => setDetailItem(null));
   useBackDismiss(filterModalVisible, () => setFilterModalVisible(false));
   useBackDismiss(weeklySummaryVisible, () => setWeeklySummaryVisible(false));
+  useBackDismiss(!!matchTx, () => setMatchTx(null));
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
   const listBottomPadding = insets.bottom + (Platform.OS === "web" ? 128 : 118);
@@ -281,16 +287,29 @@ export default function TransactionsScreen() {
     const today        = new Date();
     const currentMonth = today.getMonth();
     const currentYear  = today.getFullYear();
+    const confirmedBillMatchKeys = new Set(transactions
+      .filter(isConfirmedBillMatch)
+      .flatMap(transaction => {
+        if (!transaction.linked_bill_id) return [];
+        const [year, month] = transaction.date.split("-").map(Number);
+        return [`${transaction.linked_bill_id}:${year}:${month - 1}`];
+      }));
 
-    // 1. Manual transactions
+    // 1. Manual and bank transactions. Confirmed matches are presented as
+    // the actual bill payment instead of a second, separate expense.
     for (const tx of transactions) {
+      const matchedBill = tx.linked_bill_id ? bills.find(bill => bill.id === tx.linked_bill_id) : undefined;
+      const confirmedMatch = Boolean(matchedBill && isConfirmedBillMatch(tx));
+      const source: ActivitySource = confirmedMatch
+        ? "bill_payment"
+        : tx.source === "plaid" ? "bank_transaction" : "transaction";
       items.push({
         id:       `tx-${tx.id}`,
         date:     tx.date,
         amount:   tx.amount,
-        label:    tx.note || tx.category,
-        category: tx.category,
-        source:   "transaction",
+        label:    confirmedMatch ? matchedBill!.name : tx.merchant_name || tx.note || tx.category,
+        category: confirmedMatch ? matchedBill!.category : tx.category,
+        source,
         editable: true,
         rawTx:    tx,
         detail:   tx.note ? `${tx.note} · ${tx.category}` : tx.category,
@@ -301,6 +320,7 @@ export default function TransactionsScreen() {
     for (const override of overrides) {
       const bill = bills.find(b => b.id === override.bill_id);
       if (!bill) continue;
+      if (confirmedBillMatchKeys.has(`${override.bill_id}:${override.year}:${override.month}`)) continue;
       const extraApplied = extraPayments
         .filter(ep => ep.month === override.month && ep.year === override.year)
         .flatMap(ep => ep.allocations)
@@ -458,7 +478,7 @@ export default function TransactionsScreen() {
     category: transaction.category,
     accountId: transaction.account_id,
     importHash: transaction.import_hash,
-    source: transaction.import_hash ? "import" as const
+    source: transaction.source === "plaid" || transaction.import_hash ? "import" as const
       : transaction.debt_applied_bill_id ? "debt" as const
       : transaction.linked_bill_id ? "bill" as const
       : "manual" as const,
@@ -512,6 +532,7 @@ export default function TransactionsScreen() {
     { key: "in", label: "Money in", active: typeFilter === "income" && sourceFilter === "all", onPress: () => { setTypeFilter("income"); setSourceFilter("all"); } },
     { key: "bills", label: "Bills", active: sourceFilter === "bill_payment", onPress: () => { setTypeFilter("all"); setSourceFilter("bill_payment"); } },
     { key: "manual", label: "Manual", active: sourceFilter === "transaction", onPress: () => { setTypeFilter("all"); setSourceFilter("transaction"); } },
+    { key: "bank", label: "Bank", active: sourceFilter === "bank_transaction", onPress: () => { setTypeFilter("all"); setSourceFilter("bank_transaction"); } },
     { key: "debt", label: "Debt pay", active: sourceFilter === "extra_payment", onPress: () => { setTypeFilter("all"); setSourceFilter("extra_payment"); } },
   ];
 
@@ -554,7 +575,64 @@ export default function TransactionsScreen() {
     setEditTx(null);
   };
 
+  const billMatchOptions = useMemo(() => {
+    if (!matchTx) return [];
+    const [year, monthNumber] = matchTx.date.split("-").map(Number);
+    const month = monthNumber - 1;
+    const candidates = getMonthlyBills(month, year).flatMap(bill => {
+      const days = getBillOccurrencesInMonth(bill, month, year);
+      if (days.length === 0) return [];
+      const monthTotal = getBillMonthlyTotal(bill, month, year);
+      return [{
+        billId: bill.id,
+        name: bill.name,
+        category: bill.category,
+        plannedAmount: monthTotal / days.length,
+        occurrenceDates: days.map(day => `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`),
+      }];
+    });
+    return rankBillMatches({
+      date: matchTx.date,
+      amount: matchTx.amount,
+      description: matchTx.merchant_name || matchTx.note || matchTx.category,
+      category: matchTx.category,
+    }, candidates);
+  }, [matchTx, getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal]);
+  const matchedBillForModal = matchTx?.linked_bill_id && isConfirmedBillMatch(matchTx)
+    ? bills.find(bill => bill.id === matchTx.linked_bill_id)
+    : undefined;
+
+  const handleMatchBill = async (billId: string) => {
+    if (!matchTx || savingMatch) return;
+    setSavingMatch(true);
+    try {
+      await matchTransactionToBill(matchTx.id, billId);
+      setMatchTx(null);
+    } catch (error) {
+      Alert.alert("Could not match bill", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSavingMatch(false);
+    }
+  };
+
+  const handleUnmatchBill = async () => {
+    if (!matchTx || savingMatch) return;
+    setSavingMatch(true);
+    try {
+      await unmatchTransactionFromBill(matchTx.id);
+      setMatchTx(null);
+    } catch (error) {
+      Alert.alert("Could not undo match", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSavingMatch(false);
+    }
+  };
+
   const openItem = (item: ActivityItem) => {
+    if (item.rawTx?.source === "plaid" && item.rawTx.amount < 0) {
+      setMatchTx(item.rawTx);
+      return;
+    }
     if (item.editable && item.rawTx) {
       setEditTx(item.rawTx);
       setEditModalVisible(true);
@@ -956,6 +1034,101 @@ export default function TransactionsScreen() {
 
       {/* ── Filter sheet ── */}
       <Modal
+        visible={!!matchTx}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setMatchTx(null)}
+      >
+        <Pressable style={styles.matchOverlay} onPress={() => setMatchTx(null)}>
+          <Pressable style={[styles.matchSheet, { backgroundColor: c.background }]} onPress={() => {}}>
+            <View style={[styles.filterHandle, { backgroundColor: c.border }]} />
+            <View style={styles.matchHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.matchEyebrow, { color: c.mutedForeground }]}>BANK ACTIVITY</Text>
+                <Text style={[styles.matchTitle, { color: c.foreground }]} numberOfLines={2}>
+                  {matchTx?.merchant_name || matchTx?.note || "Imported transaction"}
+                </Text>
+                <Text style={[styles.matchAmount, { color: c.destructive }]}>−${Math.abs(matchTx?.amount ?? 0).toFixed(2)} · {matchTx ? formatDate(matchTx.date) : ""}</Text>
+              </View>
+              <Pressable accessibilityLabel="Close bill matching" onPress={() => setMatchTx(null)} hitSlop={10}>
+                <Feather name="x" size={22} color={c.mutedForeground} />
+              </Pressable>
+            </View>
+
+            {matchedBillForModal ? (
+              <View style={styles.matchBody}>
+                <View style={[styles.matchedCard, { backgroundColor: c.success + "16", borderColor: c.success + "55" }]}>
+                  <Feather name="check-circle" size={22} color={c.success} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.matchRowTitle, { color: c.foreground }]}>Matched to {matchedBillForModal.name}</Text>
+                    <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>This bank payment replaces the bill’s planned cash-flow event.</Text>
+                  </View>
+                </View>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Undo match to ${matchedBillForModal.name}`} disabled={savingMatch} onPress={() => void handleUnmatchBill()} style={[styles.unmatchButton, { borderColor: c.destructive, opacity: savingMatch ? 0.55 : 1 }]}>
+                  <Text style={[styles.unmatchButtonText, { color: c.destructive }]}>{savingMatch ? "Updating…" : "Undo match"}</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <>
+                <Text style={[styles.matchIntro, { color: c.mutedForeground }]}>Choose the bill this payment fulfilled. FlowLedger will mark it paid and count the money once.</Text>
+                <ScrollView style={styles.matchList} showsVerticalScrollIndicator={false}>
+                  {billMatchOptions.length > 0 ? billMatchOptions.map((option, index) => (
+                    <Pressable
+                      key={option.billId}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Match transaction to ${option.name}, planned ${option.plannedAmount.toFixed(2)}`}
+                      disabled={savingMatch}
+                      onPress={() => void handleMatchBill(option.billId)}
+                      style={({ pressed }) => [styles.matchRow, { backgroundColor: c.card, borderColor: index === 0 && option.score >= 48 ? c.success + "66" : c.border, opacity: savingMatch ? 0.55 : pressed ? 0.82 : 1 }]}
+                    >
+                      <View style={[styles.matchIcon, { backgroundColor: (index === 0 && option.score >= 48 ? c.success : c.primary) + "18" }]}>
+                        <Feather name="file-text" size={17} color={index === 0 && option.score >= 48 ? c.success : c.primary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <View style={styles.matchRowHeading}>
+                          <Text style={[styles.matchRowTitle, { color: c.foreground }]} numberOfLines={1}>{option.name}</Text>
+                          {index === 0 && option.score >= 48 && (
+                            <View style={[styles.suggestedBadge, { backgroundColor: c.success + "20" }]}>
+                              <Text style={[styles.suggestedBadgeText, { color: c.success }]}>Suggested</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>Planned ${option.plannedAmount.toFixed(2)} · {option.daysApart === 0 ? "due same day" : option.daysApart === 1 ? "1 day from due date" : option.daysApart !== null ? `${option.daysApart} days from due date` : option.category}</Text>
+                        {option.reasons.length > 0 && <Text style={[styles.matchReason, { color: c.success }]}>{option.reasons.slice(0, 2).join(" · ")}</Text>}
+                      </View>
+                      <Feather name="chevron-right" size={17} color={c.mutedForeground} />
+                    </Pressable>
+                  )) : (
+                    <View style={[styles.noMatchCard, { backgroundColor: c.card, borderColor: c.border }]}>
+                      <Text style={[styles.matchRowTitle, { color: c.foreground }]}>No bills due this month</Text>
+                      <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>Create the bill first, then return here to match it.</Text>
+                    </View>
+                  )}
+                </ScrollView>
+              </>
+            )}
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Edit imported transaction details"
+              onPress={() => {
+                const transaction = matchTx;
+                setMatchTx(null);
+                if (transaction) {
+                  setEditTx(transaction);
+                  setEditModalVisible(true);
+                }
+              }}
+              style={[styles.editImportedButton, { backgroundColor: c.muted }]}
+            >
+              <Feather name="edit-2" size={14} color={c.mutedForeground} />
+              <Text style={[styles.editImportedText, { color: c.foreground }]}>Edit transaction details</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
         visible={filterModalVisible}
         transparent
         animationType="slide"
@@ -1210,6 +1383,30 @@ const styles = StyleSheet.create({
   filterActions: { flexDirection: "row", gap: 10, marginTop: 18 },
   filterActionButton: { flex: 1, minHeight: 48, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 10 },
   filterActionText: { fontSize: 14, fontFamily: "Inter_700Bold" },
+
+  matchOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.62)" },
+  matchSheet: { borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 28, maxHeight: "88%" },
+  matchHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 14 },
+  matchEyebrow: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.1, marginBottom: 4 },
+  matchTitle: { fontSize: 20, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.3 },
+  matchAmount: { fontSize: 13, fontFamily: "Inter_700Bold", marginTop: 5 },
+  matchIntro: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 18, marginBottom: 12 },
+  matchList: { flexGrow: 0, maxHeight: 420 },
+  matchBody: { gap: 12 },
+  matchRow: { borderWidth: 1, borderRadius: 16, padding: 12, marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 10 },
+  matchIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  matchRowHeading: { flexDirection: "row", alignItems: "center", gap: 7 },
+  matchRowTitle: { flexShrink: 1, fontSize: 14, fontFamily: "Inter_700Bold" },
+  matchRowMeta: { fontSize: 11, fontFamily: "Inter_500Medium", lineHeight: 16, marginTop: 2 },
+  matchReason: { fontSize: 10, fontFamily: "Inter_700Bold", marginTop: 3, textTransform: "capitalize" },
+  suggestedBadge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999 },
+  suggestedBadgeText: { fontSize: 9, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase" },
+  matchedCard: { borderWidth: 1, borderRadius: 16, padding: 14, flexDirection: "row", alignItems: "flex-start", gap: 11 },
+  noMatchCard: { borderWidth: 1, borderRadius: 16, padding: 15 },
+  unmatchButton: { minHeight: 46, borderWidth: 1, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  unmatchButtonText: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  editImportedButton: { minHeight: 46, borderRadius: 13, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, marginTop: 12 },
+  editImportedText: { fontSize: 13, fontFamily: "Inter_700Bold" },
 
   list:          {},
   sectionHeader: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6 },

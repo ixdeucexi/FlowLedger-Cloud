@@ -39,6 +39,7 @@ import {
   type HouseholdRole,
 } from "@/lib/households";
 import { canEditHouseholdPlan, canManageHouseholdMembers } from "@/lib/householdPermissions";
+import { isActiveTransaction, isConfirmedBillMatch } from "@/lib/billMatching";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -107,6 +108,14 @@ export interface Transaction {
   transfer_group_id?: string;
   debt_applied_amount?: number;
   debt_applied_bill_id?: string;
+  source?: string;
+  plaid_transaction_id?: string;
+  plaid_account_id?: string;
+  merchant_name?: string;
+  pending?: boolean;
+  removed_at?: string;
+  match_confidence?: number;
+  match_reason?: string;
 }
 
 export interface Account {
@@ -303,6 +312,8 @@ interface BudgetContextType {
   updateTransaction: (tx: Transaction) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
   deleteTransfer: (transferGroupId: string) => Promise<void>;
+  matchTransactionToBill: (transactionId: string, billId: string) => Promise<void>;
+  unmatchTransactionFromBill: (transactionId: string) => Promise<void>;
   getTransactionsForMonth: (month: number, year: number) => Transaction[];
 
   addIncome: (item: Omit<IncomeItem, "id">) => Promise<string>;
@@ -734,6 +745,17 @@ function normalizeTransactionRow(transaction: any): Transaction {
   };
 }
 
+function normalizeMonthlyOverrideRow(override: any): MonthlyOverride {
+  return {
+    ...override,
+    paid_amount: Number(override.paid_amount),
+    custom_amount: override.custom_amount !== null ? Number(override.custom_amount) : undefined,
+    custom_due_day: override.custom_due_day !== null ? Number(override.custom_due_day) : undefined,
+    actual_amount: override.actual_amount !== null ? Number(override.actual_amount) : undefined,
+    paid_date: override.paid_date ?? undefined,
+  };
+}
+
 function roundMoney(value: number): number {
   return Math.round((Number(value) || 0) * 100) / 100;
 }
@@ -1058,18 +1080,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         ] = results;
 
         setBills(reorderDebtPriorities((bData ?? []).map(normalizeBillRow)));
-        setOverrides((oData ?? []).map((o: any) => ({
-          ...o,
-          paid_amount:   Number(o.paid_amount),
-          custom_amount: o.custom_amount !== null ? Number(o.custom_amount) : undefined,
-          custom_due_day: o.custom_due_day !== null ? Number(o.custom_due_day) : undefined,
-          actual_amount: o.actual_amount !== null ? Number(o.actual_amount) : undefined,
-          paid_date: o.paid_date ?? undefined,
-        })));
+        setOverrides((oData ?? []).map(normalizeMonthlyOverrideRow));
         const storedBillDateMoves = await withLoadTimeout(loadBillDateMoves(uid, scope), 8000, "Load moved bill dates");
         setBillDateMoves(storedBillDateMoves);
         billDateMovesRef.current = storedBillDateMoves;
-        setTransactions((tData ?? []).map(normalizeTransactionRow));
+        setTransactions((tData ?? []).map(normalizeTransactionRow).filter(isActiveTransaction));
         setIncomes((iData ?? []).map((i: any) => ({
           ...i,
           amount:         Number(i.amount),
@@ -2074,7 +2089,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (billRows.error) throw new Error(`Refresh debts: ${billRows.error.message}`);
     if (transactionRows.error) throw new Error(`Refresh transactions: ${transactionRows.error.message}`);
     setBills(reorderDebtPriorities((billRows.data ?? []).map(normalizeBillRow)));
-    setTransactions((transactionRows.data ?? []).map(normalizeTransactionRow));
+    setTransactions((transactionRows.data ?? []).map(normalizeTransactionRow).filter(isActiveTransaction));
   }, [user, applyHouseholdSelect]);
 
   const syncDebtTransactionsClientSide = useCallback(async () => {
@@ -2094,6 +2109,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const today = localDateString();
     const transactionsToCheck: Transaction[] = (transactionRows.data ?? [])
       .map(normalizeTransactionRow)
+      .filter(isActiveTransaction)
       .filter((transaction: Transaction) => transaction.linked_bill_id || transaction.debt_applied_bill_id || Number(transaction.debt_applied_amount ?? 0) > 0)
       .sort((left: Transaction, right: Transaction) => left.date.localeCompare(right.date) || left.id.localeCompare(right.id));
 
@@ -2249,6 +2265,92 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       throw error;
     }
   }, [user, transactions, syncDebtTransactionsAndRefresh, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, assertCanEditHousehold]);
+
+  const refreshBillMatchData = useCallback(async () => {
+    if (!user || demoMode) return;
+    const [transactionRows, overrideRows] = await Promise.all([
+      applyHouseholdSelect(supabase.from("transactions").select("*"), user.id),
+      applyHouseholdSelect(supabase.from("monthly_overrides").select("*"), user.id),
+    ]);
+    if (transactionRows.error) throw new Error(`Refresh matched transaction: ${transactionRows.error.message}`);
+    if (overrideRows.error) throw new Error(`Refresh matched bill: ${overrideRows.error.message}`);
+    setTransactions((transactionRows.data ?? []).map(normalizeTransactionRow).filter(isActiveTransaction));
+    const nextOverrides = (overrideRows.data ?? []).map(normalizeMonthlyOverrideRow);
+    overridesRef.current = nextOverrides;
+    setOverrides(nextOverrides);
+  }, [user, demoMode, applyHouseholdSelect]);
+
+  const matchTransactionToBill = useCallback(async (transactionId: string, billId: string) => {
+    if (!user) throw new Error("Sign in to match a bill");
+    assertCanEditHousehold("match a bank transaction to a bill");
+    const transaction = transactions.find(item => item.id === transactionId);
+    const bill = bills.find(item => item.id === billId);
+    if (!transaction || !bill) throw new Error("Transaction or bill not found");
+    if (transaction.amount >= 0) throw new Error("Only money-out transactions can be matched to bills");
+
+    if (demoMode) {
+      const [year, month] = transaction.date.split("-").map(Number);
+      setTransactions(previous => previous.map(item => item.id === transactionId ? {
+        ...item,
+        linked_bill_id: billId,
+        category: bill.category,
+        match_confidence: 1,
+        match_reason: "confirmed_bill_match",
+      } : item));
+      await upsertOverride(billId, month - 1, year, {
+        paid_amount: Math.abs(transaction.amount),
+        actual_amount: Math.abs(transaction.amount),
+        paid_date: transaction.date,
+      });
+      return;
+    }
+
+    markSaveStarted();
+    try {
+      const matched = await supabase.rpc("match_transaction_to_bill", {
+        p_transaction_id: transactionId,
+        p_bill_id: billId,
+      });
+      if (matched.error) throw new Error(`Match bill: ${matched.error.message}`);
+      await refreshBillMatchData();
+      if (bill.is_debt) await syncDebtTransactionsAndRefresh();
+      markSaveCompleted();
+    } catch (error) {
+      markSaveFailed(error, () => matchTransactionToBill(transactionId, billId));
+      throw error;
+    }
+  }, [user, transactions, bills, demoMode, upsertOverride, refreshBillMatchData, syncDebtTransactionsAndRefresh, markSaveStarted, markSaveCompleted, markSaveFailed, assertCanEditHousehold]);
+
+  const unmatchTransactionFromBill = useCallback(async (transactionId: string) => {
+    if (!user) throw new Error("Sign in to unmatch a bill");
+    assertCanEditHousehold("unmatch a bank transaction from a bill");
+    const transaction = transactions.find(item => item.id === transactionId);
+    if (!transaction || !isConfirmedBillMatch(transaction)) throw new Error("This transaction is not matched to a bill");
+    const matchedBill = bills.find(item => item.id === transaction.linked_bill_id);
+    if (demoMode) {
+      setTransactions(previous => previous.map(item => item.id === transactionId ? {
+        ...item,
+        linked_bill_id: undefined,
+        match_confidence: undefined,
+        match_reason: undefined,
+      } : item));
+      return;
+    }
+
+    markSaveStarted();
+    try {
+      const unmatched = await supabase.rpc("unmatch_transaction_from_bill", {
+        p_transaction_id: transactionId,
+      });
+      if (unmatched.error) throw new Error(`Unmatch bill: ${unmatched.error.message}`);
+      await refreshBillMatchData();
+      if (matchedBill?.is_debt) await syncDebtTransactionsAndRefresh();
+      markSaveCompleted();
+    } catch (error) {
+      markSaveFailed(error, () => unmatchTransactionFromBill(transactionId));
+      throw error;
+    }
+  }, [user, transactions, bills, demoMode, refreshBillMatchData, syncDebtTransactionsAndRefresh, markSaveStarted, markSaveCompleted, markSaveFailed, assertCanEditHousehold]);
 
   const deleteTransfer = useCallback(async (transferGroupId: string) => {
     if (!user) return;
@@ -2483,7 +2585,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const totalBillsDue = activeBills.reduce((s, b) => s + getBillEffectiveMonthlyTotal(b, month, year), 0);
     const totalPaid = activeBills.reduce((s, b) =>
       s + (overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year)?.paid_amount ?? 0), 0);
-    const monthTxs = transactions.filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === year && tm === month + 1; });
+    const monthTxs = transactions.filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === year && tm === month + 1 && !isConfirmedBillMatch(t); });
     const netTransactions = monthTxs.reduce((s, t) => s + t.amount, 0);
     const snowballExtra = extraPayments.find(ep => ep.month === month && ep.year === year)?.amount ?? 0;
     const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
@@ -2542,7 +2644,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         return s + dates.filter(includeDate).length * amountPerOccurrence;
       }, 0);
       const tx = transactions
-        .filter(t => t.date.startsWith(monthPrefix) && includeDate(t.date))
+        .filter(t => t.date.startsWith(monthPrefix) && includeDate(t.date) && !isConfirmedBillMatch(t))
         .reduce((s, t) => s + t.amount, 0);
       const goalDeductions = goals.reduce((s, g) => {
         if (g.goal_type !== "planned_expense") return s;
@@ -2604,7 +2706,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         });
       });
     });
-    const monthTxs = transactions.filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === year && tm === month + 1; });
+    const monthTxs = transactions.filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === year && tm === month + 1 && !isConfirmedBillMatch(t); });
     monthTxs.forEach(t => financialEvents.push({
       id: `transaction:${t.id}`, sourceType: "transaction", sourceId: t.id, date: t.date,
       kind: t.amount >= 0 ? "transaction_income" : "transaction_expense",
@@ -3171,7 +3273,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence, getBillDateMovesForMonth,
       getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal,
       runSnowball, previewDebtSnowball, applyDebtSnowballPayment, saveExtraPayment, getExtraPayment, deleteExtraPayment, removeDebtSnowballPayment, finalizeBillPayment,
-      addTransaction, updateTransaction, deleteTransaction, deleteTransfer, getTransactionsForMonth,
+      addTransaction, updateTransaction, deleteTransaction, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome, getIncomeOccurrencesInMonth,
       addGoal, updateGoal, deleteGoal, checkGoalAffordability,
       getCashFlow, getDailyBalances,

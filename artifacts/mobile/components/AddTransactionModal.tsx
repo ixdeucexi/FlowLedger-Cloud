@@ -194,7 +194,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
       account_id: accountId,
       linked_bill_id: isExpense ? linkedBillId : undefined,
     };
-    const payload = editTx ? { ...data, id: editTx.id } : data;
+    const payload = editTx ? { ...editTx, ...data, id: editTx.id } : data;
     const warning = previewSafetyStop(payload);
     if (warning) {
       setPendingStandardTx(payload);

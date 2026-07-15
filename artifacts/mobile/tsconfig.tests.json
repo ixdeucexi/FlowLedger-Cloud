@@ -55,5 +55,7 @@
     ,"lib/householdPermissions.test.ts"
     ,"lib/feedback.ts"
     ,"lib/feedback.test.ts"
+    ,"lib/billMatching.ts"
+    ,"lib/billMatching.test.ts"
   ]
 }

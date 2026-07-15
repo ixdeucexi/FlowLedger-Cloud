@@ -139,11 +139,12 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.message || "Could not sync bank activity.");
       setMessage("Bank activity is up to date.");
+      onConnected?.();
       void loadStatus();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not sync bank activity.");
     } finally { setBusy(false); }
-  }, [loadStatus]);
+  }, [loadStatus, onConnected]);
 
   const item = status.items?.[0];
   const connected = Boolean(item);
