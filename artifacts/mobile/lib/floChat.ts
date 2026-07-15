@@ -80,8 +80,13 @@ export async function renameFloConversation(conversationId: string, title: strin
 }
 
 export async function deleteFloConversation(conversationId: string): Promise<void> {
-  const { error } = await supabase.from("flo_conversations").delete().eq("id", conversationId);
+  const { data, error } = await supabase
+    .from("flo_conversations")
+    .delete()
+    .eq("id", conversationId)
+    .select("id");
   if (error) throw error;
+  if (!data?.length) throw new Error("Flo chat was not found or could not be deleted.");
 }
 
 export async function listFloMessages(
