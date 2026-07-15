@@ -1279,7 +1279,7 @@ export default function DashboardScreen() {
           </AppText>
 
           <Pressable
-            onPress={() => openFloWithPrompt(setupPersonalization.nextActionPrompt)}
+            onPress={() => router.push("/(tabs)/flo" as any)}
             style={({ pressed }) => [styles.referencePlanSnapshot, { opacity: pressed ? 0.84 : 1 }]}
           >
             <View style={styles.referencePlanFocusBlock}>
