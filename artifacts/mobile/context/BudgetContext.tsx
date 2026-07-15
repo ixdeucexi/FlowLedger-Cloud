@@ -294,6 +294,7 @@ interface BudgetContextType {
   loading: boolean;
   loadError: string | null;
   retryBudgetLoad: () => void;
+  refreshBankData: () => Promise<void>;
   demoMode: boolean;
   selectedYear: number;
   setSelectedYear: (y: number) => void;
@@ -851,11 +852,13 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const loaded = useRef(false);
   const overridesRef = useRef<MonthlyOverride[]>([]);
   const billDateMovesRef = useRef<BillDateMove[]>([]);
+  const accountsRef = useRef<Account[]>([]);
   const retrySaveRef = useRef<null | (() => Promise<void>)>(null);
   const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const householdScopeRef = useRef<HouseholdMembership | null>(null);
   useEffect(() => { overridesRef.current = overrides; }, [overrides]);
   useEffect(() => { billDateMovesRef.current = billDateMoves; }, [billDateMoves]);
+  useEffect(() => { accountsRef.current = accounts; }, [accounts]);
 
   const activeHousehold = useMemo(
     () => households.find(household => household.householdId === activeHouseholdId) ?? null,
@@ -1203,60 +1206,67 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     })();
   }, [user, demoMode, loadRetryNonce, resolveHouseholds, applyHouseholdSelect, loadScopedSettings]);
 
-  useEffect(() => {
+  const refreshBankData = useCallback(async () => {
     if (!user || demoMode) return;
-    const refreshAccountsAndSettings = async () => {
-      const uid = user.id;
-      let loadedAccounts: Account[] | null = null;
-      const scope = householdScopeRef.current;
-      const [accountResult, settingsResult] = await Promise.all([
-        applyHouseholdSelect(supabase.from("accounts").select("*"), uid).order("created_at"),
-        loadScopedSettings(uid, scope),
-      ]);
-      if (!accountResult.error) {
-        const nextAccounts = (accountResult.data ?? []).filter((a: any) => a.account_type !== "credit_card").map((a: any) => ({
-          ...a,
-          current_balance: Number(a.current_balance),
-          last_reconciled_at: a.last_reconciled_at ?? undefined,
-          is_active: a.is_active !== false,
-        }));
-        loadedAccounts = nextAccounts;
-        setAccounts(nextAccounts);
-      }
-      if (!settingsResult.error && settingsResult.data) {
-        const sData = settingsResult.data;
-        const accountAnchor = accountAnchorFromAccounts(loadedAccounts ?? accounts);
-        const nextStartingBalance = accountAnchor ? accountAnchor.balance : Number(sData.starting_balance);
-        const nextStartingBalanceDate = accountAnchor ? accountAnchor.date : (sData.starting_balance_date ?? undefined);
-        setSettings(prev => ({
-          ...prev,
-          planningMode:        normalizePlanningMode(sData.planning_mode),
-          paymentMethod:        sData.payment_method as Settings["paymentMethod"],
-          starting_balance:     nextStartingBalance,
-          starting_balance_date: nextStartingBalanceDate,
-          safety_floor:         Number(sData.safety_floor ?? 200),
+    const uid = user.id;
+    let loadedAccounts: Account[] | null = null;
+    const scope = householdScopeRef.current;
+    const [transactionResult, accountResult, settingsResult] = await Promise.all([
+      applyHouseholdSelect(supabase.from("transactions").select("*"), uid),
+      applyHouseholdSelect(supabase.from("accounts").select("*"), uid).order("created_at"),
+      loadScopedSettings(uid, scope),
+    ]);
+    if (!transactionResult.error) {
+      setTransactions((transactionResult.data ?? []).map(normalizeTransactionRow).filter(isActiveTransaction));
+    }
+    if (!accountResult.error) {
+      const nextAccounts = (accountResult.data ?? []).filter((a: any) => a.account_type !== "credit_card").map((a: any) => ({
+        ...a,
+        current_balance: Number(a.current_balance),
+        last_reconciled_at: a.last_reconciled_at ?? undefined,
+        is_active: a.is_active !== false,
+      }));
+      loadedAccounts = nextAccounts;
+      accountsRef.current = nextAccounts;
+      setAccounts(nextAccounts);
+    }
+    if (!settingsResult.error && settingsResult.data) {
+      const sData = settingsResult.data;
+      const accountAnchor = accountAnchorFromAccounts(loadedAccounts ?? accountsRef.current);
+      const nextStartingBalance = accountAnchor ? accountAnchor.balance : Number(sData.starting_balance);
+      const nextStartingBalanceDate = accountAnchor ? accountAnchor.date : (sData.starting_balance_date ?? undefined);
+      setSettings(prev => ({
+        ...prev,
+        planningMode:        normalizePlanningMode(sData.planning_mode),
+        paymentMethod:        sData.payment_method as Settings["paymentMethod"],
+        starting_balance:     nextStartingBalance,
+        starting_balance_date: nextStartingBalanceDate,
+        safety_floor:         Number(sData.safety_floor ?? 200),
+        forecast_horizon_months: Math.min(24, Math.max(1, Number(sData.forecast_horizon_months ?? 6))),
+        onboarding_completed: Boolean(sData.onboarding_completed),
+      }));
+      if (accountAnchor && (Number(sData.starting_balance) !== accountAnchor.balance || sData.starting_balance_date !== accountAnchor.date)) {
+        void supabase.from("settings").upsert({
+          user_id: uid,
+          planning_mode: sData.planning_mode ?? "snowball",
+          payment_method: sData.payment_method,
+          starting_balance: accountAnchor.balance,
+          starting_balance_date: accountAnchor.date,
+          safety_floor: Number(sData.safety_floor ?? 200),
           forecast_horizon_months: Math.min(24, Math.max(1, Number(sData.forecast_horizon_months ?? 6))),
           onboarding_completed: Boolean(sData.onboarding_completed),
-        }));
-        if (accountAnchor && (Number(sData.starting_balance) !== accountAnchor.balance || sData.starting_balance_date !== accountAnchor.date)) {
-          void supabase.from("settings").upsert({
-            user_id: uid,
-            planning_mode: sData.planning_mode ?? "snowball",
-            payment_method: sData.payment_method,
-            starting_balance: accountAnchor.balance,
-            starting_balance_date: accountAnchor.date,
-            safety_floor: Number(sData.safety_floor ?? 200),
-            forecast_horizon_months: Math.min(24, Math.max(1, Number(sData.forecast_horizon_months ?? 6))),
-            onboarding_completed: Boolean(sData.onboarding_completed),
-          }).then(undefined, () => undefined);
-        }
+        }).then(undefined, () => undefined);
       }
-    };
+    }
+  }, [user, demoMode, applyHouseholdSelect, loadScopedSettings]);
+
+  useEffect(() => {
+    if (!user || demoMode) return;
     const subscription = AppState.addEventListener("change", state => {
-      if (state === "active") void refreshAccountsAndSettings();
+      if (state === "active") void refreshBankData();
     });
     return () => subscription.remove();
-  }, [user, demoMode, accounts, applyHouseholdSelect, loadScopedSettings]);
+  }, [user, demoMode, refreshBankData]);
 
   // ─── Bills ────────────────────────────────────────────────────────────────────
 
@@ -3486,7 +3496,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       households, householdMembers, householdActivity, activeHousehold, householdRole, canEditHousehold,
       refreshHouseholds, refreshHouseholdActivity, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
       updateHouseholdMemberRole, removeHouseholdMember,
-      forecastConfidence, loading, loadError, retryBudgetLoad, demoMode,
+      forecastConfidence, loading, loadError, retryBudgetLoad, refreshBankData, demoMode,
       saveStatus, saveError, retryLastSave, clearSaveError,
       dashboardFilter, setDashboardFilter,
       addBill, updateBill, stopFutureBill, deleteBill, deleteBillMistake, getBillById,

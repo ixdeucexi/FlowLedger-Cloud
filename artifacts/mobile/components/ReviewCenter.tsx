@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { AddBillModal, type AddBillInitialValues } from "@/components/AddBillModal";
@@ -36,8 +36,11 @@ export function ReviewCenter() {
   const {
     transactions, goals, decisions, categories, canEditHousehold,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getIncomeOccurrencesInMonth,
-    addBill, deleteBillMistake, reconcileTransaction, undoTransactionReconciliation,
+    addBill, deleteBillMistake, reconcileTransaction, undoTransactionReconciliation, refreshBankData,
   } = useBudget();
+  useEffect(() => {
+    void refreshBankData();
+  }, [refreshBankData]);
   const queue = useMemo(() => buildCurrentMonthReviewQueue(transactions, todayIso()), [transactions]);
   const [saving, setSaving] = useState(false);
   const [variance, setVariance] = useState<VarianceChoice | null>(null);

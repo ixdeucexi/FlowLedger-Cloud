@@ -393,7 +393,7 @@ export default function MoreScreen() {
     households, householdMembers, householdActivity, activeHousehold, householdRole, canEditHousehold,
     refreshHouseholds, refreshHouseholdActivity, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
     updateHouseholdMemberRole, removeHouseholdMember,
-    retryBudgetLoad,
+    refreshBankData,
   } = useBudget();
 
   const [incomeModalVisible, setIncomeModalVisible] = useState(false);
@@ -1655,7 +1655,7 @@ export default function MoreScreen() {
       <SLabel c={c} text="Bank sync" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <PlanFeatureGate feature="plaid_sync" compact>
-        <PlaidLinkButton colors={c} onConnected={retryBudgetLoad} />
+        <PlaidLinkButton colors={c} onConnected={refreshBankData} />
         </PlanFeatureGate>
         <Pressable
           onPress={handleStatementImport}
