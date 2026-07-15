@@ -28,8 +28,10 @@ test("uses each occurrence amount for weekly bills", () => {
   assert.equal(ranked[0].confidence, "strong");
 });
 
-test("removed Plaid rows are not active", () => {
+test("removed or pending Plaid rows are not active", () => {
   assert.equal(isActiveTransaction({ removed_at: null }), true);
+  assert.equal(isActiveTransaction({ removed_at: null, pending: false }), true);
+  assert.equal(isActiveTransaction({ removed_at: null, pending: true }), false);
   assert.equal(isActiveTransaction({ removed_at: "2026-07-14T12:00:00Z" }), false);
 });
 

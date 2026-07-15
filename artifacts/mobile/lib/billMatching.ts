@@ -128,6 +128,6 @@ export function isMatchedPaymentLowerThanPlanned(transactionAmount: number, plan
   return Math.abs(transactionAmount) + 0.005 < plannedAmount;
 }
 
-export function isActiveTransaction(transaction: { removed_at?: string | null }): boolean {
-  return !transaction.removed_at;
+export function isActiveTransaction(transaction: { removed_at?: string | null; pending?: boolean | null }): boolean {
+  return !transaction.removed_at && transaction.pending !== true;
 }

@@ -32,6 +32,10 @@ function isTransactionsPending(error) {
   return ["PRODUCT_NOT_READY", "PRODUCT_NOT_SUPPORTED"].includes(plaidErrorCode(error));
 }
 
+function shouldImportPlaidTransaction(transaction) {
+  return !transaction || transaction.pending !== true;
+}
+
 async function syncAccounts({ client, userId, item, accessToken }) {
   const response = await client.accountsGet({ access_token: accessToken });
   const accounts = response.data.accounts || [];
@@ -102,8 +106,22 @@ async function upsertPlaidTransaction({ userId, accountRow, transaction, removed
     .maybeSingle();
   if (existingError) throw existingError;
 
-  let flowledgerId = existing && existing.id;
-  if (!existing || existing.source === "plaid") {
+  const shouldImport = shouldImportPlaidTransaction(transaction);
+  let flowledgerId = shouldImport && existing ? existing.id : null;
+
+  // Keep pending Plaid activity in the import ledger only. It must not affect
+  // FlowLedger balances, forecasts, matching, or transaction totals until the
+  // bank posts it. Retire any pending row created by an older deployment.
+  if (!shouldImport && existing && existing.source === "plaid") {
+    const { error } = await db
+      .from("transactions")
+      .update({ pending: true, removed_at: removedAt || now })
+      .eq("id", existing.id)
+      .eq("user_id", userId);
+    if (error) throw error;
+  }
+
+  if (shouldImport && (!existing || existing.source === "plaid")) {
     const canonicalRow = {
       id: flowledgerId || canonicalId,
       user_id: userId,
@@ -117,7 +135,7 @@ async function upsertPlaidTransaction({ userId, accountRow, transaction, removed
       authorized_date: authorizedDate,
       merchant_name: transaction.merchant_name || null,
       original_name: originalName,
-      pending: Boolean(transaction.pending),
+      pending: false,
       payment_channel: transaction.payment_channel || null,
       plaid_category_primary: personalCategory.primary || null,
       plaid_category_detailed: personalCategory.detailed || null,
@@ -134,7 +152,7 @@ async function upsertPlaidTransaction({ userId, accountRow, transaction, removed
   const plaidRow = {
     user_id: userId,
     plaid_account_id: accountRow ? accountRow.id : null,
-    flowledger_transaction_id: flowledgerId || null,
+    flowledger_transaction_id: shouldImport ? flowledgerId || null : null,
     plaid_transaction_id: plaidTransactionId,
     transaction_date: transactionDate,
     authorized_date: authorizedDate,
@@ -343,4 +361,10 @@ async function syncItem({ userId, item }) {
   }
 }
 
-module.exports = { syncItem, syncAccounts, syncTransactions, plaidAmountToFlowLedger };
+module.exports = {
+  syncItem,
+  syncAccounts,
+  syncTransactions,
+  plaidAmountToFlowLedger,
+  shouldImportPlaidTransaction,
+};
