@@ -24,7 +24,7 @@ import { useBudget } from "@/context/BudgetContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
 import { isConfirmedBillMatch } from "@/lib/billMatching";
-import { allocationLabel, matchedOccurrenceAllocations, occurrenceKey, transactionDisplayName } from "@/lib/reviewCenter";
+import { allocationLabel, matchedOccurrenceAllocations, occurrenceKey, reviewSettlementSummary, transactionDisplayName } from "@/lib/reviewCenter";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
 import { buildDayForecastFloPrompt, groupForecastEvents } from "@/lib/forecastDisplay";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
@@ -1102,7 +1102,12 @@ export default function MonthlyScreen() {
   }, [transactions, addBill]);
 
   const displayedTxs = selectedDate
-    ? calendarTransactions.filter(t => t.date === selectedDate)
+    ? calendarTransactions.filter(t => t.date === selectedDate).filter(transaction => !(transaction.review_allocations ?? []).some(allocation =>
+      allocation.type === "bill"
+      && allocation.settlement === "partial"
+      && allocation.occurrenceDate === selectedDate
+      && scheduledBillsForDay.some(bill => bill.id === allocation.targetId)
+    ))
     : [];
   const selectedForecastEventCount = selectedForecastGroups.reduce((sum, group) => sum + group.events.length, 0);
   const selectedVisibleItemCount = scheduledBillsForDay.length + displayedTxs.length + goalsForSelectedDay.length + plansForSelectedDay.length;
@@ -1622,30 +1627,38 @@ export default function MonthlyScreen() {
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
                         <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Income</Text>
                         {incomeForSelectedDay.map(item => (
-                          <View key={`overlay-income-${item.incomeId}-${item.day}`} style={styles.dayIncomeRow}>
-                            <View style={{ flex: 1 }}>
-                              <Text numberOfLines={1} style={[styles.dayOverlayRowName, { color: c.foreground }]}>{item.name}</Text>
-                              <Text style={[styles.dayBillMeta, { color: c.mutedForeground }]}>{FREQ_LABELS[item.frequency] ?? item.frequency}</Text>
+                          <View key={`overlay-income-${item.incomeId}-${item.day}`} style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: c.success + "40" }]}>
+                            <View style={styles.dayBillTop}>
+                              <View style={{ flex: 1, minWidth: 0 }}>
+                                <Text numberOfLines={1} style={[styles.dayBillName, { color: c.foreground }]}>{item.name}</Text>
+                                <Text style={[styles.dayBillMeta, { color: c.mutedForeground }]}>{FREQ_LABELS[item.frequency] ?? item.frequency}</Text>
+                              </View>
+                              <Text style={[styles.dayOverlayAmount, { color: c.success }]}>+${item.amount.toFixed(2)}</Text>
                             </View>
-                            <Text style={[styles.dayOverlayAmount, { color: c.success }]}>+${item.amount.toFixed(2)}</Text>
-                            <Pressable
-                              onPress={() => {
-                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                setSelectedDate(null);
-                                setIncomeDatePicker({ income: item.income, day: item.day, amount: item.amount });
-                              }}
-                              style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.primary + "16", borderColor: c.primary + "35", opacity: pressed ? 0.74 : 1 }]}
-                            >
-                              <Feather name="calendar" size={13} color={c.primary} />
-                              <Text style={[styles.dayBillActionText, { color: c.primary }]}>Change date</Text>
-                            </Pressable>
-                            <Pressable
-                              onPress={() => handleDeleteIncomeFromDay(item.income)}
-                              style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.destructive + "12", borderColor: c.destructive + "35", opacity: pressed ? 0.74 : 1 }]}
-                            >
-                              <Feather name="trash-2" size={13} color={c.destructive} />
-                              <Text style={[styles.dayBillActionText, { color: c.destructive }]}>Delete</Text>
-                            </Pressable>
+                            <View style={styles.dayBillActions}>
+                              <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={`Change date for ${item.name}`}
+                                onPress={() => {
+                                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                  setSelectedDate(null);
+                                  setIncomeDatePicker({ income: item.income, day: item.day, amount: item.amount });
+                                }}
+                                style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.primary + "16", borderColor: c.primary + "35", opacity: pressed ? 0.74 : 1 }]}
+                              >
+                                <Feather name="calendar" size={13} color={c.primary} />
+                                <Text style={[styles.dayBillActionText, { color: c.primary }]}>Change date</Text>
+                              </Pressable>
+                              <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={`Delete ${item.name}`}
+                                onPress={() => handleDeleteIncomeFromDay(item.income)}
+                                style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.destructive + "12", borderColor: c.destructive + "35", opacity: pressed ? 0.74 : 1 }]}
+                              >
+                                <Feather name="trash-2" size={13} color={c.destructive} />
+                                <Text style={[styles.dayBillActionText, { color: c.destructive }]}>Delete</Text>
+                              </Pressable>
+                            </View>
                           </View>
                         ))}
                       </View>
@@ -1842,12 +1855,28 @@ export default function MonthlyScreen() {
                                 ? "Bill payment"
                                 : "Manual";
                           const isMoneyIn = tx.amount > 0;
-                          const amountColor = isMoneyIn ? c.success : c.destructive;
                           const displayName = transactionDisplayName(tx);
+                          const settlement = reviewSettlementSummary(tx);
+                          const partialAllocations = (tx.review_allocations ?? []).filter(allocation => allocation.settlement === "partial");
+                          const aggregatedRemaining = partialAllocations.reduce((sum, allocation) => {
+                            if (!allocation.targetId || !allocation.occurrenceDate) {
+                              return sum + Math.max(0, Number(allocation.plannedAmount ?? allocation.amount) - Number(allocation.amount));
+                            }
+                            const aggregate = allocation.type === "bill"
+                              ? billOccurrenceMatches.get(occurrenceKey(allocation.targetId, allocation.occurrenceDate))
+                              : allocation.type === "income"
+                                ? incomeOccurrenceMatches.get(occurrenceKey(allocation.targetId, allocation.occurrenceDate))
+                                : undefined;
+                            if (!aggregate) return sum + Math.max(0, Number(allocation.plannedAmount ?? allocation.amount) - Number(allocation.amount));
+                            return sum + Math.max(0, Number(aggregate.plannedAmount ?? allocation.plannedAmount ?? aggregate.amount) - Number(aggregate.amount));
+                          }, 0);
+                          const remaining = Math.round((partialAllocations.length > 0 ? aggregatedRemaining : settlement.remaining) * 100) / 100;
+                          const statusColor = remaining > 0.005 ? c.warning : c.success;
+                          const statusLabel = remaining > 0.005 ? "PARTIAL" : isMoneyIn ? "RECEIVED" : "PAID";
                           return (
                             <View
                               key={`overlay-tx-${tx.id}`}
-                              style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: amountColor + "40" }]}
+                              style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: statusColor + "40" }]}
                             >
                               <View style={styles.dayBillTop}>
                                 <View style={{ flex: 1 }}>
@@ -1856,25 +1885,23 @@ export default function MonthlyScreen() {
                                     {tx.category} · {sourceLabel}
                                   </Text>
                                 </View>
-                                <View style={[styles.dayTransactionBadge, { backgroundColor: amountColor + "20" }]}>
-                                  <Text style={[styles.dayTransactionBadgeText, { color: amountColor }]}>{isMoneyIn ? "MONEY IN" : "MONEY OUT"}</Text>
+                                <View style={[styles.dayTransactionBadge, { backgroundColor: statusColor + "20" }]}>
+                                  <Text style={[styles.dayTransactionBadgeText, { color: statusColor }]}>{statusLabel}</Text>
                                 </View>
                               </View>
 
                               <View style={styles.dayBillNumbers}>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
                                   <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Amount</Text>
-                                  <Text numberOfLines={1} style={[styles.dayBillNumberValue, { color: amountColor }]}>
-                                    {isMoneyIn ? "+" : "-"}${Math.abs(tx.amount).toFixed(2)}
-                                  </Text>
+                                  <Text numberOfLines={1} style={[styles.dayBillNumberValue, { color: c.foreground }]}>${settlement.amount.toFixed(2)}</Text>
                                 </View>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
-                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Category</Text>
-                                  <Text numberOfLines={1} style={[styles.dayTransactionTileValue, { color: c.foreground }]}>{tx.category}</Text>
+                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>{isMoneyIn ? "Received" : "Paid"}</Text>
+                                  <Text numberOfLines={1} style={[styles.dayBillNumberValue, { color: c.success }]}>${settlement.paid.toFixed(2)}</Text>
                                 </View>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
-                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Source</Text>
-                                  <Text numberOfLines={1} style={[styles.dayTransactionTileValue, { color: c.foreground }]}>{sourceLabel}</Text>
+                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Left</Text>
+                                  <Text numberOfLines={1} style={[styles.dayBillNumberValue, { color: remaining > 0.005 ? c.warning : c.success }]}>${remaining.toFixed(2)}</Text>
                                 </View>
                               </View>
 
@@ -2557,7 +2584,6 @@ const styles = StyleSheet.create({
   dayOverlayRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: 30 },
   dayOverlayRowMain: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   dayOverlayDeleteButton: { width: 30, height: 30, borderRadius: 999, alignItems: "center", justifyContent: "center" },
-  dayIncomeRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: 42, flexWrap: "wrap" },
   dayOverlayRowName: { flex: 1, fontSize: 13, fontFamily: "Inter_600SemiBold" },
   dayOverlayAmount: { fontSize: 13, fontFamily: "Inter_700Bold" },
   dayBillCard: { borderWidth: 1, borderRadius: 16, padding: 11, gap: 10 },
@@ -2568,7 +2594,6 @@ const styles = StyleSheet.create({
   dayBillNumberTile: { flex: 1, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 8 },
   dayBillNumberLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.5 },
   dayBillNumberValue: { fontSize: 13, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
-  dayTransactionTileValue: { fontSize: 12, fontFamily: "Inter_700Bold", marginTop: 3 },
   dayTransactionBadge: { paddingHorizontal: 7, paddingVertical: 4, borderRadius: 6 },
   dayTransactionBadgeText: { fontSize: 9, fontFamily: "Inter_700Bold", letterSpacing: 0.45 },
   dayBillPaidTile: { borderWidth: 1 },

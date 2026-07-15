@@ -152,6 +152,23 @@ export function allocationAmount(transaction: ReviewTransactionLike, type: Revie
     .reduce((sum, allocation) => sum + Math.max(0, allocation.amount), 0) * 100) / 100;
 }
 
+export function reviewSettlementSummary(transaction: Pick<ReviewTransactionLike, "amount" | "review_allocations">): { amount: number; paid: number; remaining: number } {
+  const paid = Math.round(Math.abs(Number(transaction.amount) || 0) * 100) / 100;
+  const allocations = (transaction.review_allocations ?? []).filter(allocation => allocation.type !== "transfer");
+  if (allocations.length === 0) return { amount: paid, paid, remaining: 0 };
+
+  const amount = Math.round(allocations.reduce((sum, allocation) => {
+    const planned = allocation.plannedAmount ?? allocation.amount;
+    return sum + Math.max(0, Number(planned) || 0);
+  }, 0) * 100) / 100;
+  const remaining = Math.round(allocations.reduce((sum, allocation) => {
+    if (allocation.settlement !== "partial") return sum;
+    return sum + Math.max(0, Number(allocation.plannedAmount ?? allocation.amount) - Number(allocation.amount || 0));
+  }, 0) * 100) / 100;
+
+  return { amount: amount || paid, paid, remaining };
+}
+
 export function occurrenceKey(targetId: string, occurrenceDate: string): string {
   return `${targetId}:${occurrenceDate.slice(0, 10)}`;
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { allocationLabel, allocationTotal, buildCurrentMonthReviewQueue, buildForgottenBillDefaults, forgottenBillSettlement, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewAllocationsAreBalanced, reviewQueueAfterSkips, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
+import { allocationLabel, allocationTotal, buildCurrentMonthReviewQueue, buildForgottenBillDefaults, forgottenBillSettlement, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewAllocationsAreBalanced, reviewQueueAfterSkips, reviewSettlementSummary, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
 
 test("queues only active current-month posted Plaid transactions oldest first", () => {
   const queue = buildCurrentMonthReviewQueue([
@@ -81,6 +81,21 @@ test("split allocations must equal the single bank transaction", () => {
   assert.equal(allocationTotal(transaction.review_allocations), 390);
   assert.equal(reviewAllocationsAreBalanced(transaction), true);
   assert.equal(reviewAllocationsAreBalanced({ ...transaction, review_allocations: [{ type: "bill", amount: 370 }] }), false);
+});
+
+test("calendar settlement cards show planned, paid, and truly remaining money", () => {
+  assert.deepEqual(reviewSettlementSummary({
+    amount: -349,
+    review_allocations: [{ type: "bill", amount: 349, plannedAmount: 370, settlement: "partial" }],
+  }), { amount: 370, paid: 349, remaining: 21 });
+  assert.deepEqual(reviewSettlementSummary({
+    amount: -349,
+    review_allocations: [{ type: "bill", amount: 349, plannedAmount: 370, settlement: "full" }],
+  }), { amount: 370, paid: 349, remaining: 0 });
+  assert.deepEqual(reviewSettlementSummary({
+    amount: -63,
+    review_allocations: [{ type: "category", amount: 63, category: "Emergency" }],
+  }), { amount: 63, paid: 63, remaining: 0 });
 });
 
 test("partial payments accumulate on one occurrence without closing another", () => {
