@@ -100,6 +100,8 @@ create table if not exists settings (
   user_id                 uuid primary key references auth.users(id) on delete cascade,
   payment_method          text not null default 'snowball',
   planning_mode           text not null default 'snowball' check (planning_mode in ('snowball', 'zero_budget', 'free_flow')),
+  zero_based_budget_enabled boolean not null default false,
+  debt_payoff_enabled     boolean not null default true,
   starting_balance        numeric not null default 0,
   starting_balance_date   text,
   safety_floor            numeric not null default 200 check (safety_floor >= 0),

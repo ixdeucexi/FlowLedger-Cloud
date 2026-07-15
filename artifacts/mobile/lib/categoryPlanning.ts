@@ -23,6 +23,28 @@ export interface CategoryPlanRow {
   percentUsed: number;
 }
 
+export interface ZeroBudgetSummary {
+  plannedIncome: number;
+  assigned: number;
+  spent: number;
+  leftToAssign: number;
+  status: "balanced" | "to_assign" | "overassigned";
+}
+
+export function buildZeroBudgetSummary(plannedIncome: number, rows: CategoryPlanRow[]): ZeroBudgetSummary {
+  const income = Math.max(0, roundCurrency(Number(plannedIncome) || 0));
+  const assigned = roundCurrency(rows.reduce((sum, row) => sum + Math.max(0, Number(row.budgeted) || 0), 0));
+  const spent = roundCurrency(rows.reduce((sum, row) => sum + Math.max(0, Number(row.spent) || 0), 0));
+  const leftToAssign = roundCurrency(income - assigned);
+  return {
+    plannedIncome: income,
+    assigned,
+    spent,
+    leftToAssign,
+    status: Math.abs(leftToAssign) <= 0.01 ? "balanced" : leftToAssign > 0 ? "to_assign" : "overassigned",
+  };
+}
+
 export function applyCategoryBudgetMove(
   currentBudgets: Record<string, number>,
   rows: CategoryPlanRow[],

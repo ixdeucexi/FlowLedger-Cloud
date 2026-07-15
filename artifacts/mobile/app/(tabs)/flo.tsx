@@ -68,7 +68,7 @@ import { evaluateDecision, type DecisionResult, type DecisionScenario } from "@/
 import { buildDecisionHistory, type DecisionHistoryItem } from "@/lib/decisionHistory";
 import { buildDecisionRiskAlerts } from "@/lib/decisionRisk";
 import { applyCategoryBudgetMove, buildCategoryPlan } from "@/lib/categoryPlanning";
-import { CATEGORY_BUDGETS_EVENT, categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets } from "@/lib/categoryBudgetStore";
+import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
 import { DECISION_HUB_SETTINGS_EVENT, loadDecisionHubSettings, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { buildAlgorithmSuite } from "@/lib/algorithmSuite";
@@ -95,6 +95,11 @@ export default function FloScreen() {
   const { user } = useAuth();
   const { isFeatureLocked, previewTier } = useMembership();
   const { activeHousehold, bills, billDateMoves, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getPaidAmount, moveBillOccurrence, removeBillOccurrenceMove, saveDecision, updateDecision, updateBill, setCustomAmount, saveExtraPayment, getTransactionsForMonth, categories, incomes, goals } = useBudget();
+  const categoryBudgetScope = useMemo(() => ({
+    userId: user?.id,
+    householdId: activeHousehold?.householdId,
+    budgetId: activeHousehold?.budgetId,
+  }), [activeHousehold?.budgetId, activeHousehold?.householdId, user?.id]);
   const floProLocked = isFeatureLocked("flo_account_chat");
   const [chat, dispatch] = useReducer(reduceFloChat, initialChat);
   const [cardsByMessageId, setCardsByMessageId] = useState<Record<string, FloResponseCard[]>>({});
@@ -238,30 +243,29 @@ export default function FloScreen() {
   const categoryBudgetKey = useMemo(() => {
     const month = now.getMonth();
     const year = now.getFullYear();
-    return categoryBudgetStorageKey(month, year);
-  }, [today]);
+    return categoryBudgetStorageKey(month, year, categoryBudgetScope);
+  }, [categoryBudgetScope, today]);
 
   const readCategoryBudgetsFromStorage = (month = now.getMonth(), year = now.getFullYear()) =>
-    readCategoryBudgetCache(month, year);
+    readCategoryBudgetCache(month, year, categoryBudgetScope);
 
   useEffect(() => {
     let cancelled = false;
     const month = now.getMonth();
     const year = now.getFullYear();
     const refreshCategoryBudgets = () => {
-      setCategoryBudgets(readCategoryBudgetCache(month, year));
-      void loadCategoryBudgets(user?.id, month, year).then(next => {
+      setCategoryBudgets(readCategoryBudgetCache(month, year, categoryBudgetScope));
+      void loadCategoryBudgets(categoryBudgetScope, month, year).then(next => {
         if (!cancelled) setCategoryBudgets(next);
       });
     };
     refreshCategoryBudgets();
-    if (Platform.OS !== "web") return;
-    globalThis.addEventListener?.(CATEGORY_BUDGETS_EVENT, refreshCategoryBudgets);
+    const unsubscribe = subscribeCategoryBudgets(refreshCategoryBudgets);
     return () => {
       cancelled = true;
-      globalThis.removeEventListener?.(CATEGORY_BUDGETS_EVENT, refreshCategoryBudgets);
+      unsubscribe();
     };
-  }, [categoryBudgetKey, now, user?.id]);
+  }, [categoryBudgetKey, categoryBudgetScope, now]);
 
   useEffect(() => {
     let cancelled = false;
@@ -282,42 +286,29 @@ export default function FloScreen() {
 
   const writeCategoryBudgets = (budgets: Record<string, number>) => {
     setCategoryBudgets(budgets);
-    void saveCategoryBudgets(user?.id, now.getMonth(), now.getFullYear(), budgets).catch(() => undefined);
+    void saveCategoryBudgets(categoryBudgetScope, now.getMonth(), now.getFullYear(), budgets).catch(() => undefined);
   };
 
   const categoryPlan = useMemo(() => {
-    if (settings.planningMode !== "zero_budget") return [];
+    if (!settings.zeroBasedBudgetEnabled) return [];
     const month = now.getMonth();
     const year = now.getFullYear();
-    const previousDate = new Date(year, month - 1, 1);
-    const previousMonth = previousDate.getMonth();
-    const previousYear = previousDate.getFullYear();
-    const previousBills = getMonthlyBills(previousMonth, previousYear)
-      .filter(bill => !bill.is_debt)
-      .map(bill => ({
-        category: bill.category || "Other",
-        amount: getBillMonthlyTotal(bill, previousMonth, previousYear),
-      }));
-    const previousTransactions = getTransactionsForMonth(previousMonth, previousYear)
-      .filter(transaction => isCashFlowTransaction(transaction) && transaction.category !== "Debt" && transaction.category !== "Income")
-      .map(transaction => ({ category: transaction.category || "Other", amount: transaction.amount }));
     const monthBills = getMonthlyBills(month, year)
-      .filter(bill => !bill.is_debt)
       .map(bill => ({
-        category: bill.category || "Other",
+        category: bill.is_debt ? "Debt" : bill.category || "Other",
         amount: getBillMonthlyTotal(bill, month, year),
       }));
     const monthTransactions = getTransactionsForMonth(month, year)
-      .filter(transaction => isCashFlowTransaction(transaction) && transaction.category !== "Debt" && transaction.category !== "Income")
+      .filter(transaction => isCashFlowTransaction(transaction) && transaction.category !== "Income")
       .map(transaction => ({ category: transaction.category || "Other", amount: transaction.amount }));
     const rows = buildCategoryPlan(
-      categories.filter(category => category !== "Debt"),
+      categories,
       monthBills,
       monthTransactions,
       Object.entries(categoryBudgets).map(([category, amount]) => ({ category, amount })),
     );
     const transactionDetails = getTransactionsForMonth(month, year)
-      .filter(transaction => isCashFlowTransaction(transaction) && transaction.amount < 0 && transaction.category !== "Debt" && transaction.category !== "Income");
+      .filter(transaction => isCashFlowTransaction(transaction) && transaction.amount < 0 && transaction.category !== "Income");
     return rows.map(row => {
       const topTransaction = transactionDetails
         .filter(transaction => (transaction.category || "Other") === row.category)
@@ -336,7 +327,7 @@ export default function FloScreen() {
         } : undefined,
       };
     });
-  }, [categories, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, now, settings.planningMode]);
+  }, [categories, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, now, settings.zeroBasedBudgetEnabled]);
 
   const decisionHistory = useMemo(
     () => buildDecisionHistory(decisions.filter(decision => decisionStillHasSource(decision, transactions)), today, now.toISOString()),
@@ -598,7 +589,7 @@ export default function FloScreen() {
         lowestBalance: algorithmSuite.cashFlowGap.lowestBalance,
         detail: algorithmSuite.cashFlowGap.detail,
       } : undefined,
-      debtPayoff: settings.planningMode === "snowball" && isAlgorithmEnabled(decisionHubSettings, "debtPayoff") ? {
+      debtPayoff: settings.debtPayoffEnabled && isAlgorithmEnabled(decisionHubSettings, "debtPayoff") ? {
         nextDebtName: algorithmSuite.debtPayoff.nextDebtName,
         snowballBalance: algorithmSuite.debtPayoff.snowballBalance,
         avalancheName: algorithmSuite.debtPayoff.avalancheName,
@@ -834,14 +825,14 @@ export default function FloScreen() {
         if (conversationId && reply !== FLO_CONNECTION_ERROR_MESSAGE) {
           void persistFloFallback({ id: assistantMessageId, conversationId, householdId: activeHousehold.householdId, userId: user.id, text: reply });
         }
-        setChatError(reply === FLO_CONNECTION_ERROR_MESSAGE ? "Flo Pro is offline. Basic deterministic answers remain available when the question matches your current snapshot." : "Flo Pro was offline, so this answer used your deterministic FlowLedger calculation.");
+        setChatError(reply === FLO_CONNECTION_ERROR_MESSAGE ? "Flo is offline. Basic deterministic answers remain available when the question matches your current snapshot." : "Flo was offline, so this answer used your deterministic FlowLedger calculation.");
       }
     }
     const replyId = assistantMessageId;
     const cards = floResponseCards(clean, facts, baseline);
     if (cards.length) setCardsByMessageId(previous => ({ ...previous, [replyId]: cards }));
     const debtPayment = evaluateFloDebtPayment(clean, facts, today);
-    if (settings.planningMode === "snowball" && debtPayment?.allowed) {
+    if (settings.debtPayoffEnabled && debtPayment?.allowed) {
       const result = evaluateDecision(baseline, buildDebtPaymentScenario(debtPayment), settings.safety_floor);
       if (result.verdict !== "unsafe") {
         setDebtPaymentByMessageId(previous => ({ ...previous, [replyId]: debtPayment }));
@@ -1196,7 +1187,7 @@ export default function FloScreen() {
           </Pressable>
         ) : null}
         <View style={[styles.bubble, styles.floBubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.bubbleText, { color: colors.foreground }]}>Hi, I&apos;m Flo Pro. Ask me about this household&apos;s accounts, activity, bills, income, budget, debts, goals, forecasts, or plans.</Text>
+          <Text style={[styles.bubbleText, { color: colors.foreground }]}>Hi, I&apos;m Flo. Ask me about this household&apos;s accounts, activity, bills, income, budget, debts, goals, forecasts, or plans.</Text>
         </View>
 
         {chat.messages.map(message => (

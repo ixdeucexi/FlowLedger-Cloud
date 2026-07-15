@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyCategoryBudgetMove, buildCategoryPlan } from "./categoryPlanning";
+import { applyCategoryBudgetMove, buildCategoryPlan, buildZeroBudgetSummary } from "./categoryPlanning";
 
 test("builds category plan from budgeted bills and actual spending", () => {
   const rows = buildCategoryPlan(
@@ -67,4 +67,33 @@ test("ignores invalid category budget moves", () => {
   const rows = buildCategoryPlan(["Food"], [{ category: "Food", amount: 500 }], []);
   assert.deepEqual(applyCategoryBudgetMove({ Food: 500 }, rows, "Food", "Food", 50), { Food: 500 });
   assert.deepEqual(applyCategoryBudgetMove({ Food: 500 }, rows, "Food", "Other", -10), { Food: 500 });
+});
+
+test("balances planned income across spending, savings, and debt jobs", () => {
+  const rows = buildCategoryPlan(
+    ["Housing", "Savings", "Debt"],
+    [
+      { category: "Housing", amount: 1200 },
+      { category: "Debt", amount: 300, is_debt: true },
+    ],
+    [],
+    [
+      { category: "Housing", amount: 1200 },
+      { category: "Savings", amount: 500 },
+      { category: "Debt", amount: 300 },
+    ],
+  );
+  assert.deepEqual(buildZeroBudgetSummary(2000, rows), {
+    plannedIncome: 2000,
+    assigned: 2000,
+    spent: 0,
+    leftToAssign: 0,
+    status: "balanced",
+  });
+});
+
+test("distinguishes money left to assign from overassignment", () => {
+  const rows = buildCategoryPlan(["Food"], [], [], [{ category: "Food", amount: 600 }]);
+  assert.equal(buildZeroBudgetSummary(1000, rows).status, "to_assign");
+  assert.equal(buildZeroBudgetSummary(500, rows).status, "overassigned");
 });

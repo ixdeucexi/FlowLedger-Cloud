@@ -1,41 +1,31 @@
-export type PlanningMode = "snowball" | "zero_budget" | "free_flow";
-
-export interface PlanningModeOption {
-  id: PlanningMode;
-  label: string;
-  shortDescription: string;
-  description: string;
+export interface PlanningTools {
+  zeroBasedBudgetEnabled: boolean;
+  debtPayoffEnabled: boolean;
 }
 
-export const PLANNING_MODE_OPTIONS: readonly PlanningModeOption[] = [
-  {
-    id: "snowball",
-    label: "Snowball",
-    shortDescription: "Focus extra cash on debt",
-    description: "Track bills and cash flow while rolling safe extra money into your debt payoff plan.",
-  },
-  {
-    id: "zero_budget",
-    label: "Zero Budget",
-    shortDescription: "Give every dollar a job",
-    description: "Plan income by category, monitor what is left, and move money between categories.",
-  },
-  {
-    id: "free_flow",
-    label: "Free Flow",
-    shortDescription: "Track without a budget",
-    description: "Track balances, bills, income, and transactions without category budgets or snowball automation.",
-  },
-] as const;
+export const DEFAULT_PLANNING_TOOLS: PlanningTools = {
+  zeroBasedBudgetEnabled: false,
+  debtPayoffEnabled: true,
+};
 
-export function normalizePlanningMode(value: unknown): PlanningMode {
-  return value === "zero_budget" || value === "free_flow" ? value : "snowball";
-}
+export function normalizePlanningTools(value: {
+  zero_based_budget_enabled?: unknown;
+  debt_payoff_enabled?: unknown;
+  planning_mode?: unknown;
+} | null | undefined): PlanningTools {
+  const legacyMode = value?.planning_mode;
+  const legacyDefaults = legacyMode === "zero_budget"
+    ? { zeroBasedBudgetEnabled: true, debtPayoffEnabled: false }
+    : legacyMode === "free_flow"
+      ? { zeroBasedBudgetEnabled: false, debtPayoffEnabled: false }
+      : DEFAULT_PLANNING_TOOLS;
 
-export function usesSnowball(mode: PlanningMode): boolean {
-  return mode === "snowball";
-}
-
-export function usesZeroBudget(mode: PlanningMode): boolean {
-  return mode === "zero_budget";
+  return {
+    zeroBasedBudgetEnabled: typeof value?.zero_based_budget_enabled === "boolean"
+      ? value.zero_based_budget_enabled
+      : legacyDefaults.zeroBasedBudgetEnabled,
+    debtPayoffEnabled: typeof value?.debt_payoff_enabled === "boolean"
+      ? value.debt_payoff_enabled
+      : legacyDefaults.debtPayoffEnabled,
+  };
 }
