@@ -591,9 +591,7 @@ export default function DashboardScreen() {
     if (leftComplete !== rightComplete) return leftComplete ? 1 : -1;
     return left.target_date.localeCompare(right.target_date) || left.name.localeCompare(right.name);
   }), [goals]);
-  const checkingBalance = useMemo(() => accounts
-    .filter(account => account.is_active && account.account_type === "checking")
-    .reduce((sum, account) => sum + account.current_balance, 0), [accounts]);
+  const availableToSpend = balanceMetrics?.currentBalance ?? 0;
   const savingsAccountBalance = useMemo(() => accounts
     .filter(account => account.is_active && account.account_type === "savings")
     .reduce((sum, account) => sum + account.current_balance, 0), [accounts]);
@@ -1298,12 +1296,8 @@ export default function DashboardScreen() {
               </Pressable>
             </View>
             <AppText tone="label" style={styles.referenceHeroLabel}>Available to spend · Checking</AppText>
-            <AppText tone="number" style={styles.referenceHeroAmount}>{formatDashboardCurrency(checkingBalance)}</AppText>
-            <AppText style={styles.referenceMoneyCaption}>
-              {accounts.some(account => account.is_active && account.account_type === "checking")
-                ? "Current balance across active checking accounts."
-                : "Add a checking account to see available-to-spend cash."}
-            </AppText>
+            <AppText tone="number" style={styles.referenceHeroAmount}>{formatDashboardCurrency(availableToSpend)}</AppText>
+            <AppText style={styles.referenceMoneyCaption}>Today&apos;s Calendar closing balance.</AppText>
 
             <Pressable
               onPress={() => router.push("/(tabs)/flo" as any)}
