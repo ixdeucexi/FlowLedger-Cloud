@@ -315,8 +315,13 @@ export function ReviewCenter() {
               <Feather name="chevron-right" size={17} color={c.mutedForeground} />
             </Pressable>
           )}
-          <Pressable accessibilityRole="button" accessibilityLabel="Mark this transaction as a transfer" disabled={saving} onPress={() => void finish({ transactionId: current.id, resolution: "transfer" }, `${transactionName(current)} marked as transfer`)} style={({ pressed }) => [styles.transferButton, { borderColor: c.border, opacity: saving ? 0.55 : pressed ? 0.75 : 1 }]}>
-            <Feather name="repeat" size={16} color={c.primary} /><Text style={[styles.transferText, { color: c.foreground }]}>This was a transfer</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Mark as a transfer between tracked accounts" disabled={saving} onPress={() => void finish({ transactionId: current.id, resolution: "transfer" }, `${transactionName(current)} marked as transfer`)} style={({ pressed }) => [styles.optionButton, { borderColor: c.border, marginTop: 10, opacity: saving ? 0.55 : pressed ? 0.75 : 1 }]}>
+            <Feather name="repeat" size={17} color={c.primary} />
+            <View style={styles.optionCopy}>
+              <Text style={[styles.optionTitle, { color: c.foreground }]}>Transfer between my accounts</Text>
+              <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Only use this when money moved between accounts you track. Transfers are excluded from cash flow.</Text>
+            </View>
+            <Feather name="chevron-right" size={17} color={c.mutedForeground} />
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Skip this transaction for now" disabled={saving} onPress={skipCurrent} style={({ pressed }) => [styles.skipButton, { opacity: saving ? 0.55 : pressed ? 0.7 : 1 }]}>
             <Feather name="clock" size={16} color={c.mutedForeground} /><Text style={[styles.skipText, { color: c.mutedForeground }]}>Skip for now</Text>
@@ -422,8 +427,6 @@ const styles = StyleSheet.create({
   optionCopy: { flex: 1 }, optionTitle: { fontSize: 12, fontFamily: "Inter_800ExtraBold" }, optionDescription: { fontSize: 10, lineHeight: 14, fontFamily: "Inter_400Regular", marginTop: 2 },
   categoryPill: { minHeight: 36, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   categoryText: { fontSize: 11, fontFamily: "Inter_700Bold" },
-  transferButton: { minHeight: 44, borderWidth: 1, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 },
-  transferText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   skipButton: { minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, marginTop: 4 },
   skipText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.72)", alignItems: "center", justifyContent: "center", padding: 20 },

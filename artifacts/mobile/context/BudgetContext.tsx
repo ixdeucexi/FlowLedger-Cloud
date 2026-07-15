@@ -17,7 +17,7 @@ import { diagnosticErrorCode } from "@/lib/diagnosticPolicy";
 import { decisionDbPayload } from "@/lib/decisionPersistence";
 import { recordDiagnostic } from "@/lib/diagnostics";
 import { isDevDemoMode } from "@/lib/demoMode";
-import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isIncomeActiveForMonth, resolveFinalizedBillOccurrenceDays } from "@/lib/schedule";
+import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isIncomeActiveForMonth, moveSettledBillOverrideDate, resolveFinalizedBillOccurrenceDays } from "@/lib/schedule";
 import { evaluateForecastConfidence, openingBalanceForReconciledDay, totalForecastBalance, type AccountSnapshot, type AccountType, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
 import { scenarioDates, type DecisionResult, type DecisionScenario, type DecisionType } from "@/lib/decisions";
 import {
@@ -1673,6 +1673,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const cleanFrom = fromDate.slice(0, 10);
     const cleanTo = toDate.slice(0, 10);
     const previous = billDateMovesRef.current;
+    const previousOverrides = overridesRef.current;
     const existing = billDateMovesRef.current.find(move => move.bill_id === billId && move.from_date === cleanFrom);
     const nextMove: BillDateMove = existing
       ? { ...existing, to_date: cleanTo }
@@ -1682,6 +1683,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       : [...billDateMovesRef.current, nextMove];
     billDateMovesRef.current = next;
     setBillDateMoves(next);
+    const nextOverrides = moveSettledBillOverrideDate(
+      overridesRef.current,
+      billId,
+      cleanFrom,
+      existing?.to_date ?? cleanFrom,
+      cleanTo,
+    );
+    overridesRef.current = nextOverrides;
+    setOverrides(nextOverrides);
     writeStoredBillDateMoves(user.id, next, householdScopeRef.current?.householdId);
     if (demoMode) {
       markSaveCompleted();
@@ -1704,6 +1714,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       if (current?.to_date === cleanTo) {
         billDateMovesRef.current = previous;
         setBillDateMoves(previous);
+        overridesRef.current = previousOverrides;
+        setOverrides(previousOverrides);
         writeStoredBillDateMoves(user.id, previous, householdScopeRef.current?.householdId);
       }
       markSaveFailed(error, () => moveBillOccurrence(billId, fromDate, toDate));
@@ -1715,10 +1727,22 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     assertCanEditHousehold("restore a bill date");
     const previous = billDateMovesRef.current;
+    const previousOverrides = overridesRef.current;
     const existing = previous.find(move => move.id === id);
     const next = billDateMovesRef.current.filter(move => move.id !== id);
     billDateMovesRef.current = next;
     setBillDateMoves(next);
+    if (existing) {
+      const nextOverrides = moveSettledBillOverrideDate(
+        overridesRef.current,
+        existing.bill_id,
+        existing.from_date,
+        existing.to_date,
+        existing.from_date,
+      );
+      overridesRef.current = nextOverrides;
+      setOverrides(nextOverrides);
+    }
     writeStoredBillDateMoves(user.id, next, householdScopeRef.current?.householdId);
     if (demoMode || !existing) {
       markSaveCompleted();
@@ -1746,6 +1770,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       billDateMovesRef.current = previous;
       setBillDateMoves(previous);
+      overridesRef.current = previousOverrides;
+      setOverrides(previousOverrides);
       writeStoredBillDateMoves(user.id, previous, householdScopeRef.current?.householdId);
       markSaveFailed(error, () => removeBillOccurrenceMove(id));
       throw error;

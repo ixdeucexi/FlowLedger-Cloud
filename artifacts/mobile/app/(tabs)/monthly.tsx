@@ -1855,6 +1855,7 @@ export default function MonthlyScreen() {
                                 ? "Bill payment"
                                 : "Manual";
                           const isMoneyIn = tx.amount > 0;
+                          const isTransfer = tx.review_status === "transfer";
                           const displayName = transactionDisplayName(tx);
                           const settlement = reviewSettlementSummary(tx);
                           const partialAllocations = (tx.review_allocations ?? []).filter(allocation => allocation.settlement === "partial");
@@ -1871,8 +1872,8 @@ export default function MonthlyScreen() {
                             return sum + Math.max(0, Number(aggregate.plannedAmount ?? allocation.plannedAmount ?? aggregate.amount) - Number(aggregate.amount));
                           }, 0);
                           const remaining = Math.round((partialAllocations.length > 0 ? aggregatedRemaining : settlement.remaining) * 100) / 100;
-                          const statusColor = remaining > 0.005 ? c.warning : c.success;
-                          const statusLabel = remaining > 0.005 ? "PARTIAL" : isMoneyIn ? "RECEIVED" : "PAID";
+                          const statusColor = isTransfer ? c.primary : remaining > 0.005 ? c.warning : c.success;
+                          const statusLabel = isTransfer ? "TRANSFER" : remaining > 0.005 ? "PARTIAL" : isMoneyIn ? "RECEIVED" : "PAID";
                           return (
                             <View
                               key={`overlay-tx-${tx.id}`}
@@ -1896,7 +1897,7 @@ export default function MonthlyScreen() {
                                   <Text numberOfLines={1} style={[styles.dayBillNumberValue, { color: c.foreground }]}>${settlement.amount.toFixed(2)}</Text>
                                 </View>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
-                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>{isMoneyIn ? "Received" : "Paid"}</Text>
+                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>{isTransfer ? "Moved" : isMoneyIn ? "Received" : "Paid"}</Text>
                                   <Text numberOfLines={1} style={[styles.dayBillNumberValue, { color: c.success }]}>${settlement.paid.toFixed(2)}</Text>
                                 </View>
                                 <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>

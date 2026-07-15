@@ -49,6 +49,21 @@ describe("forecastBalances", () => {
     assert.ok(Math.abs(result.days[1].balance - 6.665) < 1e-8);
   });
 
+  it("includes a reviewed reimbursement and moved paid bill on their actual day", () => {
+    const result = forecastBalances({
+      openingBalance: 1_206,
+      startDate: "2026-07-09",
+      endDate: "2026-07-09",
+      events: [
+        event({ id: "payday", sourceType: "income", sourceId: "john-pay", date: "2026-07-09", amount: 2_308, kind: "scheduled_income" }),
+        event({ id: "reimbursement", sourceType: "transaction", sourceId: "danielle-payback", date: "2026-07-09", amount: 167, kind: "transaction_income", status: "actual" }),
+        event({ id: "card-payment", sourceType: "bill", sourceId: "tia-card", date: "2026-07-09", amount: -77, kind: "bill", status: "finalized" }),
+      ],
+    });
+
+    assert.equal(result.endingBalance, 3_604);
+  });
+
   it("rejects malformed and duplicate source events without leaking them into totals", () => {
     const built = buildFinancialEvents([
       event({ id: "same", date: "2026-06-01", amount: -10 }),

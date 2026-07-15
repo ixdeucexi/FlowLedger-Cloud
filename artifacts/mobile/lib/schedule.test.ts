@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isValidDateInMonth, resolveFinalizedBillOccurrenceDays } from "./schedule";
+import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isValidDateInMonth, moveSettledBillOverrideDate, resolveFinalizedBillOccurrenceDays } from "./schedule";
 
 describe("bill scheduling", () => {
   it("validates a selected calendar date inside the intended month", () => {
@@ -62,6 +62,36 @@ describe("bill scheduling", () => {
     assert.deepEqual(resolveFinalizedBillOccurrenceDays([10], "2026-07-06", 6, 2026), [6]);
     assert.deepEqual(resolveFinalizedBillOccurrenceDays([10], "2026-08-06", 6, 2026), [10]);
     assert.deepEqual(resolveFinalizedBillOccurrenceDays([3, 17], "2026-07-17", 6, 2026), [3, 17]);
+  });
+
+  it("keeps a settled override on the same date as its moved bill occurrence", () => {
+    const overrides = [{
+      id: "july-card",
+      bill_id: "credit-card",
+      month: 6,
+      year: 2026,
+      paid_amount: 77,
+      actual_amount: 77,
+      paid_date: "2026-07-11",
+    }];
+
+    const moved = moveSettledBillOverrideDate(overrides, "credit-card", "2026-07-11", "2026-07-11", "2026-07-09");
+    assert.equal(moved[0].paid_date, "2026-07-09");
+
+    const restored = moveSettledBillOverrideDate(moved, "credit-card", "2026-07-11", "2026-07-09", "2026-07-11");
+    assert.equal(restored[0].paid_date, "2026-07-11");
+  });
+
+  it("does not move an unpaid or unrelated override", () => {
+    const overrides = [
+      { bill_id: "credit-card", month: 6, year: 2026, paid_amount: 0, paid_date: "2026-07-11" },
+      { bill_id: "utilities", month: 6, year: 2026, paid_amount: 77, paid_date: "2026-07-11" },
+    ];
+
+    assert.deepEqual(
+      moveSettledBillOverrideDate(overrides, "credit-card", "2026-07-11", "2026-07-11", "2026-07-09"),
+      overrides,
+    );
   });
 });
 

@@ -23,6 +23,15 @@ export interface ScheduledBillDateMove {
   updated_at?: string;
 }
 
+export interface SettledBillOverride {
+  bill_id: string;
+  month: number;
+  year: number;
+  paid_amount: number;
+  actual_amount?: number;
+  paid_date?: string;
+}
+
 function moveFreshness(move: ScheduledBillDateMove): number {
   const parsed = Date.parse(move.updated_at ?? move.created_at ?? "");
   return Number.isFinite(parsed) ? parsed : 0;
@@ -45,6 +54,24 @@ export function resolveFinalizedBillOccurrenceDays(
 ): number[] {
   if (occurrences.length !== 1 || !paidDate || !isValidDateInMonth(paidDate, month, year)) return [...occurrences];
   return [Number(paidDate.slice(8, 10))];
+}
+
+export function moveSettledBillOverrideDate<T extends SettledBillOverride>(
+  overrides: T[],
+  billId: string,
+  occurrenceDate: string,
+  previousDate: string,
+  nextDate: string,
+): T[] {
+  const [year, month] = occurrenceDate.slice(0, 10).split("-").map(Number);
+  if (![year, month].every(Number.isFinite)) return overrides;
+
+  return overrides.map(override => {
+    const isOccurrence = override.bill_id === billId && override.year === year && override.month === month - 1;
+    const isSettled = override.actual_amount !== undefined || override.paid_amount > 0.005;
+    if (!isOccurrence || !isSettled || override.paid_date?.slice(0, 10) !== previousDate.slice(0, 10)) return override;
+    return { ...override, paid_date: nextDate.slice(0, 10) };
+  });
 }
 
 export function isBillActiveForMonth(bill: ScheduledBill, month: number, year: number): boolean {
