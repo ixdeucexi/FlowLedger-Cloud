@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert, Modal, Platform, Pressable, ScrollView, SectionList,
   StyleSheet, Text, TextInput, View,
@@ -54,6 +54,7 @@ type TransactionRuleRow = {
   is_active: boolean | null;
 };
 type ReviewDecisionRow = { transaction_id: string | null; status: "needs_review" | "approved" | "ignored" | "deleted" };
+const MODAL_HANDOFF_DELAY_MS = 350;
 type MatchedPaymentPrompt = {
   transaction: Transaction;
   bill: Bill;
@@ -222,7 +223,9 @@ export default function TransactionsScreen() {
   const [matchTx, setMatchTx] = useState<Transaction | null>(null);
   const [savingMatch, setSavingMatch] = useState(false);
   const [fullPaymentPrompt, setFullPaymentPrompt] = useState<MatchedPaymentPrompt | null>(null);
+  const [queuedFullPaymentPrompt, setQueuedFullPaymentPrompt] = useState<MatchedPaymentPrompt | null>(null);
   const [surplusPrompt, setSurplusPrompt] = useState<MatchedPaymentPrompt | null>(null);
+  const [queuedSurplusPrompt, setQueuedSurplusPrompt] = useState<MatchedPaymentPrompt | null>(null);
   const [surplusPaymentDate, setSurplusPaymentDate] = useState(todayIsoDate());
   const [reviewAlertLoaded, setReviewAlertLoaded] = useState(false);
   const [transactionRules, setTransactionRules] = useState<TransactionRule[]>([]);
@@ -231,6 +234,24 @@ export default function TransactionsScreen() {
   useBackDismiss(filterModalVisible, () => setFilterModalVisible(false));
   useBackDismiss(weeklySummaryVisible, () => setWeeklySummaryVisible(false));
   useBackDismiss(!!matchTx, () => setMatchTx(null));
+
+  useEffect(() => {
+    if (matchTx || fullPaymentPrompt || !queuedFullPaymentPrompt) return;
+    const timer = setTimeout(() => {
+      setFullPaymentPrompt(queuedFullPaymentPrompt);
+      setQueuedFullPaymentPrompt(null);
+    }, MODAL_HANDOFF_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [fullPaymentPrompt, matchTx, queuedFullPaymentPrompt]);
+
+  useEffect(() => {
+    if (fullPaymentPrompt || surplusPrompt || !queuedSurplusPrompt) return;
+    const timer = setTimeout(() => {
+      setSurplusPrompt(queuedSurplusPrompt);
+      setQueuedSurplusPrompt(null);
+    }, MODAL_HANDOFF_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [fullPaymentPrompt, queuedSurplusPrompt, surplusPrompt]);
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
   const listBottomPadding = insets.bottom + (Platform.OS === "web" ? 128 : 118);
@@ -658,13 +679,8 @@ export default function TransactionsScreen() {
     setSavingMatch(true);
     try {
       await matchTransactionToBill(transaction.id, billId);
+      setQueuedFullPaymentPrompt(nextFullPaymentPrompt);
       setMatchTx(null);
-      if (nextFullPaymentPrompt) {
-        setTimeout(
-          () => setFullPaymentPrompt(nextFullPaymentPrompt),
-          Platform.OS === "web" ? 0 : 250,
-        );
-      }
     } catch (error) {
       Alert.alert("Could not match bill", error instanceof Error ? error.message : "Please try again.");
     } finally {
@@ -675,7 +691,7 @@ export default function TransactionsScreen() {
   const confirmMatchedFullPayment = () => {
     if (!fullPaymentPrompt) return;
     setSurplusPaymentDate(fullPaymentPrompt.transaction.date);
-    setSurplusPrompt(fullPaymentPrompt);
+    setQueuedSurplusPrompt(fullPaymentPrompt);
     setFullPaymentPrompt(null);
   };
 
