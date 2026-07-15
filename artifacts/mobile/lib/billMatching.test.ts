@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isActiveTransaction, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "./billMatching";
+import { canMatchExpenseToBill, isActiveTransaction, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "./billMatching";
 
 test("ranks an exact nearby utility payment above unrelated bills", () => {
   const ranked = rankBillMatches(
@@ -38,6 +38,16 @@ test("removed or pending Plaid rows are not active", () => {
 test("only confirmed matches replace a planned bill event", () => {
   assert.equal(isConfirmedBillMatch({ match_reason: "confirmed_bill_match" }), true);
   assert.equal(isConfirmedBillMatch({ match_reason: "rule suggestion" }), false);
+});
+
+test("manual expenses can use bill matching without exposing generated transactions", () => {
+  assert.equal(canMatchExpenseToBill({ amount: -45 }), true);
+  assert.equal(canMatchExpenseToBill({ amount: -45, source: "plaid" }), true);
+  assert.equal(canMatchExpenseToBill({ amount: -45, linked_bill_id: "utility", match_reason: "confirmed_bill_match" }), true);
+  assert.equal(canMatchExpenseToBill({ amount: 45 }), false);
+  assert.equal(canMatchExpenseToBill({ amount: -45, transfer_group_id: "transfer" }), false);
+  assert.equal(canMatchExpenseToBill({ amount: -45, import_hash: "generated" }), false);
+  assert.equal(canMatchExpenseToBill({ amount: -45, linked_bill_id: "debt" }), false);
 });
 
 test("prompts for leftover money only when a confirmed payment is lower", () => {

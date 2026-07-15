@@ -27,7 +27,7 @@ import {
   type TransactionRule,
 } from "@/lib/competitiveGrowth";
 import { debtPaymentStatusLabel } from "@/lib/forecastDisplay";
-import { isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "@/lib/billMatching";
+import { canMatchExpenseToBill, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "@/lib/billMatching";
 import { isValidDateInMonth } from "@/lib/schedule";
 import { supabase } from "@/lib/supabase";
 
@@ -640,6 +640,7 @@ export default function TransactionsScreen() {
   const matchedBillForModal = matchTx?.linked_bill_id && isConfirmedBillMatch(matchTx)
     ? bills.find(bill => bill.id === matchTx.linked_bill_id)
     : undefined;
+  const matchingBankActivity = matchTx?.source === "plaid";
 
   const surplusSnowballOffer = useMemo(() => {
     if (!surplusPrompt) return null;
@@ -766,8 +767,8 @@ export default function TransactionsScreen() {
   };
 
   const openItem = (item: ActivityItem) => {
-    if (item.rawTx?.source === "plaid" && item.rawTx.amount < 0) {
-      if (isFeatureLocked("transaction_matching")) {
+    if (item.rawTx && canMatchExpenseToBill(item.rawTx)) {
+      if (item.rawTx.source === "plaid" && isFeatureLocked("transaction_matching")) {
         Alert.alert(
           "Bill matching is a Pro feature",
           "Free plan preview keeps imported transaction matching locked. This test does not change your real household plan.",
@@ -1198,7 +1199,7 @@ export default function TransactionsScreen() {
             <View style={[styles.filterHandle, { backgroundColor: c.border }]} />
             <View style={styles.matchHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.matchEyebrow, { color: c.mutedForeground }]}>BANK ACTIVITY</Text>
+                <Text style={[styles.matchEyebrow, { color: c.mutedForeground }]}>{matchingBankActivity ? "BANK ACTIVITY" : "MANUAL EXPENSE"}</Text>
                 <Text style={[styles.matchTitle, { color: c.foreground }]} numberOfLines={2}>
                   {matchTx?.merchant_name || matchTx?.note || "Imported transaction"}
                 </Text>
@@ -1264,7 +1265,7 @@ export default function TransactionsScreen() {
 
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Edit imported transaction details"
+              accessibilityLabel={matchingBankActivity ? "Edit imported transaction details" : "Edit manual transaction details"}
               onPress={() => {
                 const transaction = matchTx;
                 setMatchTx(null);
@@ -1276,7 +1277,7 @@ export default function TransactionsScreen() {
               style={[styles.editImportedButton, { backgroundColor: c.muted }]}
             >
               <Feather name="edit-2" size={14} color={c.mutedForeground} />
-              <Text style={[styles.editImportedText, { color: c.foreground }]}>Edit transaction details</Text>
+              <Text style={[styles.editImportedText, { color: c.foreground }]}>{matchingBankActivity ? "Edit imported transaction details" : "Edit manual transaction details"}</Text>
             </Pressable>
           </Pressable>
         </Pressable>

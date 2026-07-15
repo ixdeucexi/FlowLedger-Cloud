@@ -123,6 +123,23 @@ export function isConfirmedBillMatch(transaction: { match_reason?: string | null
   return transaction.match_reason === "confirmed_bill_match";
 }
 
+export function canMatchExpenseToBill(transaction: {
+  amount: number;
+  source?: string | null;
+  import_hash?: string | null;
+  transfer_group_id?: string | null;
+  linked_bill_id?: string | null;
+  debt_applied_bill_id?: string | null;
+  match_reason?: string | null;
+}): boolean {
+  if (!Number.isFinite(transaction.amount) || transaction.amount >= 0) return false;
+  if (transaction.source === "plaid" || isConfirmedBillMatch(transaction)) return true;
+  return !transaction.import_hash
+    && !transaction.transfer_group_id
+    && !transaction.linked_bill_id
+    && !transaction.debt_applied_bill_id;
+}
+
 export function isMatchedPaymentLowerThanPlanned(transactionAmount: number, plannedAmount: number): boolean {
   if (!Number.isFinite(transactionAmount) || !Number.isFinite(plannedAmount) || plannedAmount <= 0) return false;
   return Math.abs(transactionAmount) + 0.005 < plannedAmount;
