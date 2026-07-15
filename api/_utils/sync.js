@@ -1,6 +1,10 @@
 const { plaid } = require("./plaid");
 const { serviceSupabase, safeError } = require("./supabase");
 const { decryptAccessToken } = require("./crypto");
+const {
+  deliverPendingPostedTransactionNotifications,
+  queuePostedTransactionNotifications,
+} = require("./push");
 
 function tokenFor(item) {
   const encrypted = item && (item.encrypted_access_token || item.access_token_ciphertext);
@@ -34,6 +38,10 @@ function isTransactionsPending(error) {
 
 function shouldImportPlaidTransaction(transaction) {
   return !transaction || transaction.pending !== true;
+}
+
+function shouldQueuePostedNotification(originalCursor, imported) {
+  return Boolean(originalCursor && imported && imported.isNewPosted && imported.flowledgerId);
 }
 
 function editablePlaidFields(existing, imported) {
@@ -91,7 +99,7 @@ async function syncAccounts({ client, userId, item, accessToken }) {
 async function upsertPlaidTransaction({ userId, accountRow, transaction, removedAt }) {
   const db = serviceSupabase();
   const plaidTransactionId = transaction.transaction_id;
-  if (!plaidTransactionId) return;
+  if (!plaidTransactionId) return { flowledgerId: null, isNewPosted: false };
 
   const transactionDate = dateOnly(transaction.date || transaction.authorized_date);
   const authorizedDate = transaction.authorized_date ? dateOnly(transaction.authorized_date) : null;
@@ -117,6 +125,7 @@ async function upsertPlaidTransaction({ userId, accountRow, transaction, removed
   if (existingError) throw existingError;
 
   const shouldImport = shouldImportPlaidTransaction(transaction);
+  const isNewPosted = shouldImport && !existing;
   let flowledgerId = shouldImport && existing ? existing.id : null;
 
   // Keep pending Plaid activity in the import ledger only. It must not affect
@@ -223,6 +232,7 @@ async function upsertPlaidTransaction({ userId, accountRow, transaction, removed
       }
     }
   }
+  return { flowledgerId, isNewPosted };
 }
 
 async function syncTransactions({ client, userId, item, accessToken }) {
@@ -232,6 +242,7 @@ async function syncTransactions({ client, userId, item, accessToken }) {
   let added = 0;
   let modified = 0;
   let removed = 0;
+  const notificationTransactionIds = [];
 
   while (true) {
     let page;
@@ -271,11 +282,13 @@ async function syncTransactions({ client, userId, item, accessToken }) {
     }
 
     for (const transaction of page.added || []) {
-      await upsertPlaidTransaction({ userId, accountRow: accountRows[transaction.account_id], transaction });
+      const imported = await upsertPlaidTransaction({ userId, accountRow: accountRows[transaction.account_id], transaction });
+      if (shouldQueuePostedNotification(originalCursor, imported)) notificationTransactionIds.push(imported.flowledgerId);
       added += 1;
     }
     for (const transaction of page.modified || []) {
-      await upsertPlaidTransaction({ userId, accountRow: accountRows[transaction.account_id], transaction });
+      const imported = await upsertPlaidTransaction({ userId, accountRow: accountRows[transaction.account_id], transaction });
+      if (shouldQueuePostedNotification(originalCursor, imported)) notificationTransactionIds.push(imported.flowledgerId);
       modified += 1;
     }
     for (const transaction of page.removed || []) {
@@ -297,6 +310,17 @@ async function syncTransactions({ client, userId, item, accessToken }) {
 
     cursor = page.next_cursor || cursor;
     if (!page.has_more) break;
+  }
+  try {
+    if (originalCursor && notificationTransactionIds.length) {
+      await queuePostedTransactionNotifications(userId, notificationTransactionIds);
+    } else {
+      await deliverPendingPostedTransactionNotifications(userId);
+    }
+  } catch (error) {
+    console.error("[plaid:push] notification delivery deferred", {
+      error: safeError(error, "Push notification delivery failed."),
+    });
   }
   return { cursor, added, modified, removed };
 }
@@ -381,5 +405,6 @@ module.exports = {
   syncTransactions,
   plaidAmountToFlowLedger,
   shouldImportPlaidTransaction,
+  shouldQueuePostedNotification,
   editablePlaidFields,
 };

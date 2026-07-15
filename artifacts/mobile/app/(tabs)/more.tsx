@@ -19,6 +19,7 @@ import { AppText } from "@/components/AppText";
 import { FloLogo } from "@/components/FloLogo";
 import { IncomeModal } from "@/components/IncomeModal";
 import { MembershipPanel } from "@/components/MembershipPanel";
+import { NotificationSettings } from "@/components/NotificationSettings";
 import { PlanFeatureGate } from "@/components/PlanFeatureGate";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { ReviewCenter } from "@/components/ReviewCenter";
@@ -100,6 +101,7 @@ type SettingsSectionId =
   | "algorithms"
   | "accounts"
   | "plaid"
+  | "notifications"
   | "money"
   | "review"
   | "subscriptions"
@@ -238,6 +240,7 @@ const SETTINGS_SECTIONS: Array<{
   { id: "setup", label: "Setup walkthrough", description: "Restart setup and learning mode.", icon: "message-circle" },
   { id: "accounts", label: "Accounts", description: "Balances, reconcile, and household sharing.", icon: "credit-card" },
   { id: "plaid", label: "Bank sync", description: "Connect a bank or import activity safely.", icon: "link" },
+  { id: "notifications", label: "Notifications", description: "Private alerts for posted bank transactions.", icon: "bell" },
   { id: "money", label: "Money plan", description: "Income, categories, safety, and payoff.", icon: "sliders" },
   { id: "review", label: "Review Center", description: "Your money inbox for unclear activity.", icon: "check-square" },
   { id: "subscriptions", label: "Subscriptions", description: "Recurring charges, patterns, and cleanup.", icon: "repeat" },
@@ -1667,6 +1670,11 @@ export default function MoreScreen() {
           <Text style={[styles.balanceSaveBtnText, { color: c.primaryForeground }]}>Import a bank statement</Text>
         </Pressable>
       </View>
+      </>}
+
+      {activeSettingsSection === "notifications" && <>
+      <SLabel c={c} text="Phone notifications" />
+      <NotificationSettings />
       </>}
 
       {activeSettingsSection === "appearance" && <>

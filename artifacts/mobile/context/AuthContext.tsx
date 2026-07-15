@@ -4,6 +4,7 @@ import { AppState, Platform } from "react-native";
 
 import { DEV_DEMO_USER_ID, disableDevDemoMode, enableDevDemoMode, isDevDemoMode } from "@/lib/demoMode";
 import { clearLastAppRoute } from "@/lib/navigationMemory";
+import { disablePushNotifications } from "@/lib/pushNotifications";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 import { supabase } from "@/lib/supabase";
 
@@ -246,6 +247,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    if (session?.access_token) {
+      await disablePushNotifications(session.access_token).catch(() => undefined);
+    }
     setSession(null);
     clearLastAppRoute();
     if (demoMode) {
