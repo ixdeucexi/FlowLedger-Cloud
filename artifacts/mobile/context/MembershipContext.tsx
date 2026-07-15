@@ -131,9 +131,11 @@ export function MembershipProvider({ children }: { children: React.ReactNode }) 
 
   const effectiveTier = previewTier ?? actualPlan.tier;
   const isFeatureLocked = useCallback((feature: PlanFeature) => {
-    if (!isAdmin || !previewTier) return false;
     if (bypassedFeatures.includes(feature)) return false;
-    return !canUseFeature(effectiveTier, feature);
+    const lockedForTier = !canUseFeature(effectiveTier, feature);
+    if (isAdmin && previewTier) return lockedForTier;
+    if (feature === "transaction_matching") return lockedForTier;
+    return false;
   }, [bypassedFeatures, effectiveTier, isAdmin, previewTier]);
 
   const value = useMemo<MembershipContextValue>(() => ({

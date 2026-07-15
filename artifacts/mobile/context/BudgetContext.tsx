@@ -40,6 +40,7 @@ import {
 } from "@/lib/households";
 import { canEditHouseholdPlan, canManageHouseholdMembers } from "@/lib/householdPermissions";
 import { isActiveTransaction, isConfirmedBillMatch } from "@/lib/billMatching";
+import { matchedOccurrenceAllocations, occurrenceKey } from "@/lib/reviewCenter";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -116,6 +117,37 @@ export interface Transaction {
   removed_at?: string;
   match_confidence?: number;
   match_reason?: string;
+  review_status?: "needs_review" | "matched" | "categorized" | "transfer" | "legacy_reviewed";
+  review_resolution?: "bill" | "income" | "goal" | "decision" | "category" | "transfer";
+  review_allocations?: ReviewAllocation[];
+  reviewed_at?: string;
+  reviewed_by?: string;
+  linked_income_id?: string;
+  linked_plan_id?: string;
+  linked_plan_type?: "goal" | "decision";
+  matched_occurrence_date?: string;
+}
+
+export interface ReviewAllocation {
+  type: "bill" | "income" | "planned_expense" | "category" | "transfer" | "extra_principal";
+  targetId?: string | null;
+  source?: "goal" | "decision";
+  name?: string;
+  category?: string | null;
+  amount: number;
+  plannedAmount?: number;
+  occurrenceDate?: string;
+  settlement?: "exact" | "full" | "partial" | "split" | "extra_principal" | "regular";
+}
+
+export interface ReconcileTransactionInput {
+  transactionId: string;
+  resolution: "bill" | "income" | "goal" | "decision" | "category" | "transfer";
+  targetId?: string;
+  occurrenceDate?: string;
+  plannedAmount?: number;
+  settlement?: "exact" | "full" | "partial" | "split" | "extra_principal";
+  extraCategory?: string;
 }
 
 export interface Account {
@@ -314,6 +346,8 @@ interface BudgetContextType {
   deleteTransfer: (transferGroupId: string) => Promise<void>;
   matchTransactionToBill: (transactionId: string, billId: string) => Promise<void>;
   unmatchTransactionFromBill: (transactionId: string) => Promise<void>;
+  reconcileTransaction: (input: ReconcileTransactionInput) => Promise<void>;
+  undoTransactionReconciliation: (transactionId: string) => Promise<void>;
   getTransactionsForMonth: (month: number, year: number) => Transaction[];
 
   addIncome: (item: Omit<IncomeItem, "id">) => Promise<string>;
@@ -742,6 +776,17 @@ function normalizeTransactionRow(transaction: any): Transaction {
     amount: Number(transaction.amount),
     debt_applied_amount: Number(transaction.debt_applied_amount ?? 0),
     debt_applied_bill_id: transaction.debt_applied_bill_id ?? undefined,
+    review_allocations: Array.isArray(transaction.review_allocations)
+      ? transaction.review_allocations.map((allocation: any) => ({
+          ...allocation,
+          amount: Number(allocation.amount ?? 0),
+          plannedAmount: allocation.plannedAmount === undefined ? undefined : Number(allocation.plannedAmount),
+        }))
+      : [],
+    linked_income_id: transaction.linked_income_id ?? undefined,
+    linked_plan_id: transaction.linked_plan_id ?? undefined,
+    linked_plan_type: transaction.linked_plan_type ?? undefined,
+    matched_occurrence_date: transaction.matched_occurrence_date ?? undefined,
   };
 }
 
@@ -2268,17 +2313,133 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const refreshBillMatchData = useCallback(async () => {
     if (!user || demoMode) return;
-    const [transactionRows, overrideRows] = await Promise.all([
+    const [transactionRows, overrideRows, goalRows, decisionRows] = await Promise.all([
       applyHouseholdSelect(supabase.from("transactions").select("*"), user.id),
       applyHouseholdSelect(supabase.from("monthly_overrides").select("*"), user.id),
+      applyHouseholdSelect(supabase.from("goals").select("*"), user.id),
+      applyHouseholdSelect(supabase.from("decisions").select("*"), user.id),
     ]);
     if (transactionRows.error) throw new Error(`Refresh matched transaction: ${transactionRows.error.message}`);
     if (overrideRows.error) throw new Error(`Refresh matched bill: ${overrideRows.error.message}`);
+    if (goalRows.error) throw new Error(`Refresh planned expense: ${goalRows.error.message}`);
+    if (decisionRows.error) throw new Error(`Refresh calendar plan: ${decisionRows.error.message}`);
     setTransactions((transactionRows.data ?? []).map(normalizeTransactionRow).filter(isActiveTransaction));
     const nextOverrides = (overrideRows.data ?? []).map(normalizeMonthlyOverrideRow);
     overridesRef.current = nextOverrides;
     setOverrides(nextOverrides);
+    setGoals((goalRows.data ?? []).map((goal: any) => ({
+      ...goal,
+      target_amount: Number(goal.target_amount),
+      current_amount: Number(goal.current_amount),
+      goal_type: goal.goal_type ?? (Number(goal.current_amount) < 0 ? "planned_expense" : "savings"),
+    })));
+    setDecisions((decisionRows.data ?? []).map((decision: any) => ({
+      ...decision,
+      scenario: decision.scenario ?? {},
+      result: decision.result ?? {},
+    })));
   }, [user, demoMode, applyHouseholdSelect]);
+
+  const reconcileTransaction = useCallback(async (input: ReconcileTransactionInput) => {
+    if (!user) throw new Error("Sign in to review transactions");
+    assertCanEditHousehold("review transactions");
+    const transaction = transactions.find(item => item.id === input.transactionId);
+    if (!transaction) throw new Error("Transaction not found");
+
+    if (demoMode) {
+      const allocation: ReviewAllocation = {
+        type: input.resolution === "bill" ? "bill"
+          : input.resolution === "income" ? "income"
+          : input.resolution === "goal" || input.resolution === "decision" ? "planned_expense"
+          : input.resolution,
+        targetId: input.targetId,
+        category: input.resolution === "category" ? input.targetId : undefined,
+        amount: Math.abs(transaction.amount),
+        plannedAmount: input.plannedAmount,
+        occurrenceDate: input.occurrenceDate,
+        settlement: input.settlement ?? "regular",
+      };
+      setTransactions(previous => previous.map(item => item.id === input.transactionId ? {
+        ...item,
+        category: input.resolution === "category" ? input.targetId ?? item.category
+          : input.resolution === "transfer" ? "Transfer"
+          : input.resolution === "income" ? "Income"
+          : item.category,
+        linked_bill_id: input.resolution === "bill" ? input.targetId : undefined,
+        linked_income_id: input.resolution === "income" ? input.targetId : undefined,
+        linked_plan_id: input.resolution === "goal" || input.resolution === "decision" ? input.targetId : undefined,
+        linked_plan_type: input.resolution === "goal" || input.resolution === "decision" ? input.resolution : undefined,
+        matched_occurrence_date: input.occurrenceDate,
+        match_confidence: input.resolution === "category" || input.resolution === "transfer" ? undefined : 1,
+        match_reason: input.resolution === "bill" ? "confirmed_bill_match"
+          : input.resolution === "income" ? "confirmed_income_match"
+          : input.resolution === "goal" || input.resolution === "decision" ? "confirmed_plan_match"
+          : undefined,
+        review_status: input.resolution === "category" ? "categorized" : input.resolution === "transfer" ? "transfer" : "matched",
+        review_resolution: input.resolution,
+        review_allocations: [allocation],
+        reviewed_at: new Date().toISOString(),
+      } : item));
+      return;
+    }
+
+    markSaveStarted();
+    try {
+      const result = await supabase.rpc("reconcile_transaction", {
+        p_transaction_id: input.transactionId,
+        p_resolution: input.resolution,
+        p_target_id: input.targetId ?? null,
+        p_occurrence_date: input.occurrenceDate ?? null,
+        p_planned_amount: input.plannedAmount ?? null,
+        p_settlement: input.settlement ?? null,
+        p_extra_category: input.extraCategory ?? null,
+      });
+      if (result.error) throw new Error(`Review transaction: ${result.error.message}`);
+      await refreshBillMatchData();
+      if (input.resolution === "bill" && bills.some(bill => bill.id === input.targetId && bill.is_debt)) {
+        await syncDebtTransactionsAndRefresh();
+      }
+      markSaveCompleted();
+    } catch (error) {
+      markSaveFailed(error, () => reconcileTransaction(input));
+      throw error;
+    }
+  }, [user, assertCanEditHousehold, transactions, bills, demoMode, refreshBillMatchData, syncDebtTransactionsAndRefresh, markSaveStarted, markSaveCompleted, markSaveFailed]);
+
+  const undoTransactionReconciliation = useCallback(async (transactionId: string) => {
+    if (!user) throw new Error("Sign in to undo this review");
+    assertCanEditHousehold("undo a transaction review");
+    const reviewedTransaction = transactions.find(item => item.id === transactionId);
+    const wasDebtMatch = Boolean(reviewedTransaction?.linked_bill_id && bills.some(bill => bill.id === reviewedTransaction.linked_bill_id && bill.is_debt));
+    if (demoMode) {
+      setTransactions(previous => previous.map(item => item.id === transactionId ? {
+        ...item,
+        linked_bill_id: undefined,
+        linked_income_id: undefined,
+        linked_plan_id: undefined,
+        linked_plan_type: undefined,
+        matched_occurrence_date: undefined,
+        match_confidence: undefined,
+        match_reason: undefined,
+        review_status: item.source === "plaid" ? "needs_review" : "legacy_reviewed",
+        review_resolution: undefined,
+        review_allocations: [],
+        reviewed_at: undefined,
+      } : item));
+      return;
+    }
+    markSaveStarted();
+    try {
+      const result = await supabase.rpc("undo_transaction_reconciliation", { p_transaction_id: transactionId });
+      if (result.error) throw new Error(`Undo review: ${result.error.message}`);
+      await refreshBillMatchData();
+      if (wasDebtMatch) await syncDebtTransactionsAndRefresh();
+      markSaveCompleted();
+    } catch (error) {
+      markSaveFailed(error, () => undoTransactionReconciliation(transactionId));
+      throw error;
+    }
+  }, [user, assertCanEditHousehold, transactions, bills, demoMode, refreshBillMatchData, syncDebtTransactionsAndRefresh, markSaveStarted, markSaveCompleted, markSaveFailed]);
 
   const matchTransactionToBill = useCallback(async (transactionId: string, billId: string) => {
     if (!user) throw new Error("Sign in to match a bill");
@@ -2288,69 +2449,24 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!transaction || !bill) throw new Error("Transaction or bill not found");
     if (transaction.amount >= 0) throw new Error("Only money-out transactions can be matched to bills");
 
-    if (demoMode) {
-      const [year, month] = transaction.date.split("-").map(Number);
-      setTransactions(previous => previous.map(item => item.id === transactionId ? {
-        ...item,
-        linked_bill_id: billId,
-        category: bill.category,
-        match_confidence: 1,
-        match_reason: "confirmed_bill_match",
-      } : item));
-      await upsertOverride(billId, month - 1, year, {
-        paid_amount: Math.abs(transaction.amount),
-        actual_amount: Math.abs(transaction.amount),
-        paid_date: transaction.date,
-      });
-      return;
-    }
-
-    markSaveStarted();
-    try {
-      const matched = await supabase.rpc("match_transaction_to_bill", {
-        p_transaction_id: transactionId,
-        p_bill_id: billId,
-      });
-      if (matched.error) throw new Error(`Match bill: ${matched.error.message}`);
-      await refreshBillMatchData();
-      if (bill.is_debt) await syncDebtTransactionsAndRefresh();
-      markSaveCompleted();
-    } catch (error) {
-      markSaveFailed(error, () => matchTransactionToBill(transactionId, billId));
-      throw error;
-    }
-  }, [user, transactions, bills, demoMode, upsertOverride, refreshBillMatchData, syncDebtTransactionsAndRefresh, markSaveStarted, markSaveCompleted, markSaveFailed, assertCanEditHousehold]);
+    const actual = Math.abs(transaction.amount);
+    await reconcileTransaction({
+      transactionId,
+      resolution: "bill",
+      targetId: billId,
+      occurrenceDate: transaction.date,
+      plannedAmount: bill.amount,
+      settlement: Math.abs(actual - bill.amount) < 0.005 ? "exact" : actual < bill.amount ? "partial" : "full",
+    });
+  }, [user, transactions, bills, reconcileTransaction, assertCanEditHousehold]);
 
   const unmatchTransactionFromBill = useCallback(async (transactionId: string) => {
     if (!user) throw new Error("Sign in to unmatch a bill");
     assertCanEditHousehold("unmatch a transaction from a bill");
     const transaction = transactions.find(item => item.id === transactionId);
     if (!transaction || !isConfirmedBillMatch(transaction)) throw new Error("This transaction is not matched to a bill");
-    const matchedBill = bills.find(item => item.id === transaction.linked_bill_id);
-    if (demoMode) {
-      setTransactions(previous => previous.map(item => item.id === transactionId ? {
-        ...item,
-        linked_bill_id: undefined,
-        match_confidence: undefined,
-        match_reason: undefined,
-      } : item));
-      return;
-    }
-
-    markSaveStarted();
-    try {
-      const unmatched = await supabase.rpc("unmatch_transaction_from_bill", {
-        p_transaction_id: transactionId,
-      });
-      if (unmatched.error) throw new Error(`Unmatch bill: ${unmatched.error.message}`);
-      await refreshBillMatchData();
-      if (matchedBill?.is_debt) await syncDebtTransactionsAndRefresh();
-      markSaveCompleted();
-    } catch (error) {
-      markSaveFailed(error, () => unmatchTransactionFromBill(transactionId));
-      throw error;
-    }
-  }, [user, transactions, bills, demoMode, refreshBillMatchData, syncDebtTransactionsAndRefresh, markSaveStarted, markSaveCompleted, markSaveFailed, assertCanEditHousehold]);
+    await undoTransactionReconciliation(transactionId);
+  }, [user, transactions, bills, undoTransactionReconciliation, assertCanEditHousehold]);
 
   const deleteTransfer = useCallback(async (transferGroupId: string) => {
     if (!user) return;
@@ -2381,7 +2497,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       await deleteTransfer(groupId);
       return;
     }
-    if (existing && isConfirmedBillMatch(existing)) {
+    if (existing?.review_status === "matched") {
+      await undoTransactionReconciliation(existing.id);
+    } else if (existing && isConfirmedBillMatch(existing)) {
       await unmatchTransactionFromBill(existing.id);
     }
     const idsToDelete = groupId
@@ -2395,7 +2513,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     await ensureSaved(supabase.from("transactions").delete().eq("id", id), "Delete transaction");
     setTransactions(prev => prev.filter(t => !idsToDelete.includes(t.id)));
     if (idsToDelete.some(txId => transactions.find(transaction => transaction.id === txId)?.debt_applied_bill_id)) await syncDebtTransactionsAndRefresh();
-  }, [user, transactions, restoreDebtApplicationsForTransactions, syncDebtTransactionsAndRefresh, demoMode, deleteTransfer, unmatchTransactionFromBill, assertCanEditHousehold]);
+  }, [user, transactions, restoreDebtApplicationsForTransactions, syncDebtTransactionsAndRefresh, demoMode, deleteTransfer, unmatchTransactionFromBill, undoTransactionReconciliation, assertCanEditHousehold]);
 
   const getTransactionsForMonth = useCallback(
     (month: number, year: number) =>
@@ -2581,14 +2699,38 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   // ─── Cash Flow ────────────────────────────────────────────────────────────────
 
   const getCashFlow = useCallback((month: number, year: number): CashFlow => {
+    const billMatches = matchedOccurrenceAllocations(transactions, "bill");
+    const incomeMatches = matchedOccurrenceAllocations(transactions, "income");
     const monthlyIncome = incomes
       .filter(i => isIncomeActiveForMonth(i, month, year))
-      .reduce((s, i) => s + getIncomeOccurrenceDays(i, month, year).length * getEffectiveIncomeAmount(i, month, year), 0);
+      .reduce((sum, income) => {
+        const amount = getEffectiveIncomeAmount(income, month, year);
+        return sum + getIncomeOccurrenceDays(income, month, year).reduce((occurrenceSum, day) => {
+          const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+          const match = incomeMatches.get(occurrenceKey(income.id, date));
+          const remaining = match?.settlement === "partial"
+            ? Math.max(0, Number(match.plannedAmount ?? amount) - Number(match.amount || 0))
+            : match ? 0 : amount;
+          return occurrenceSum + remaining;
+        }, 0);
+      }, 0);
     const activeBills = getMonthlyBills(month, year);
-    const totalBillsDue = activeBills.reduce((s, b) => s + getBillEffectiveMonthlyTotal(b, month, year), 0);
-    const totalPaid = activeBills.reduce((s, b) =>
-      s + (overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year)?.paid_amount ?? 0), 0);
-    const monthTxs = transactions.filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === year && tm === month + 1 && !isConfirmedBillMatch(t); });
+    const totalBillsDue = activeBills.reduce((sum, bill) => {
+      const occurrences = getBillOccurrencesInMonth(bill, month, year);
+      const amount = occurrences.length > 0 ? getBillMonthlyTotal(bill, month, year) / occurrences.length : 0;
+      return sum + occurrences.reduce((occurrenceSum, day) => {
+        const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        const match = billMatches.get(occurrenceKey(bill.id, date));
+        const remaining = match?.settlement === "partial"
+          ? Math.max(0, Number(match.plannedAmount ?? amount) - Number(match.amount || 0))
+          : match ? 0 : amount;
+        return occurrenceSum + remaining;
+      }, 0);
+    }, 0);
+    const totalPaid = transactions.reduce((sum, transaction) => sum + (transaction.review_allocations ?? [])
+      .filter(allocation => allocation.type === "bill" && allocation.occurrenceDate?.startsWith(`${year}-${String(month + 1).padStart(2, "0")}`))
+      .reduce((allocationSum, allocation) => allocationSum + allocation.amount, 0), 0);
+    const monthTxs = transactions.filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === year && tm === month + 1 && t.review_status !== "transfer"; });
     const netTransactions = monthTxs.reduce((s, t) => s + t.amount, 0);
     const snowballExtra = extraPayments.find(ep => ep.month === month && ep.year === year)?.amount ?? 0;
     const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
@@ -2601,7 +2743,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         return sum + occurrences * signedAmount;
       }, 0);
     return { monthlyIncome, totalBillsDue, totalPaid, netTransactions, goalAllocations: 0, remaining: monthlyIncome - totalBillsDue - snowballExtra + netTransactions + plannedDecisionNet };
-  }, [incomes, transactions, overrides, extraPayments, decisions, getBillEffectiveMonthlyTotal, getMonthlyBills]);
+  }, [incomes, transactions, extraPayments, decisions, getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills]);
 
   // ─── Daily Balances ───────────────────────────────────────────────────────────
 
@@ -2623,11 +2765,17 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const monthPrefix = `${y}-${String(m + 1).padStart(2, "0")}`;
       const reconciliationDate = settings.starting_balance_date;
       const includeDate = (date: string) => !reconciliationDate || !date.startsWith(monthPrefix) || date >= reconciliationDate;
+      const billMatches = matchedOccurrenceAllocations(transactions, "bill");
+      const incomeMatches = matchedOccurrenceAllocations(transactions, "income");
       const inc = incomes.reduce((sum, income) => {
         const amount = getEffectiveIncomeAmount(income, m, y);
-        const count = getIncomeOccurrenceDays(income, m, y)
-          .filter(day => includeDate(`${monthPrefix}-${String(day).padStart(2, "0")}`)).length;
-        return sum + count * amount;
+        return sum + getIncomeOccurrenceDays(income, m, y).reduce((occurrenceSum, day) => {
+          const date = `${monthPrefix}-${String(day).padStart(2, "0")}`;
+          if (!includeDate(date)) return occurrenceSum;
+          const match = incomeMatches.get(occurrenceKey(income.id, date));
+          if (!match) return occurrenceSum + amount;
+          return occurrenceSum + (match.settlement === "partial" ? Math.max(0, Number(match.plannedAmount ?? amount) - Number(match.amount || 0)) : 0);
+        }, 0);
       }, 0);
       const debtPlan = getProjectedDebtSnowballMonth(m, y);
       const projectedDebtScheduledPayments = new Map(
@@ -2637,17 +2785,24 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         const occ = getBillOccurrencesInMonth(b, m, y);
         if (occ.length === 0) return s;
         const override = overrides.find(item => item.bill_id === b.id && item.month === m && item.year === y);
+        const hasReviewedOccurrence = Array.from(billMatches.keys()).some(key => key.startsWith(`${b.id}:${monthPrefix}`));
         const projectedDebtTotal = b.is_debt && debtPlan && override?.actual_amount === undefined
           ? projectedDebtScheduledPayments.get(b.id) ?? 0
           : undefined;
-        const total = projectedDebtTotal !== undefined ? projectedDebtTotal : getBillEffectiveMonthlyTotal(b, m, y);
+        const total = hasReviewedOccurrence
+          ? getBillMonthlyTotal(b, m, y)
+          : projectedDebtTotal !== undefined ? projectedDebtTotal : getBillEffectiveMonthlyTotal(b, m, y);
         if (total <= 0.005) return s;
         const dates = occ.map(day => `${monthPrefix}-${String(day).padStart(2, "0")}`);
         const amountPerOccurrence = total / dates.length;
-        return s + dates.filter(includeDate).length * amountPerOccurrence;
+        return s + dates.filter(includeDate).reduce((occurrenceSum, date) => {
+          const match = billMatches.get(occurrenceKey(b.id, date));
+          if (!match) return occurrenceSum + amountPerOccurrence;
+          return occurrenceSum + (match.settlement === "partial" ? Math.max(0, Number(match.plannedAmount ?? amountPerOccurrence) - Number(match.amount || 0)) : 0);
+        }, 0);
       }, 0);
       const tx = transactions
-        .filter(t => t.date.startsWith(monthPrefix) && includeDate(t.date) && !isConfirmedBillMatch(t))
+        .filter(t => t.date.startsWith(monthPrefix) && includeDate(t.date) && t.review_status !== "transfer")
         .reduce((s, t) => s + t.amount, 0);
       const goalDeductions = goals.reduce((s, g) => {
         if (g.goal_type !== "planned_expense") return s;
@@ -2695,21 +2850,27 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     };
     const carryover = computeCarryover(month, year);
     const financialEvents: FinancialEvent[] = [];
+    const billMatches = matchedOccurrenceAllocations(transactions, "bill");
+    const incomeMatches = matchedOccurrenceAllocations(transactions, "income");
     const incomeByDay: Record<number, number> = {};
     incomes.forEach(i => {
       const occ = getIncomeOccurrenceDays(i, month, year);
       const amt = getEffectiveIncomeAmount(i, month, year);
       occ.forEach(d => {
-        incomeByDay[d] = (incomeByDay[d] ?? 0) + amt;
+        const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+        const match = incomeMatches.get(occurrenceKey(i.id, date));
+        const scheduledAmount = !match ? amt : match.settlement === "partial" ? Math.max(0, Number(match.plannedAmount ?? amt) - Number(match.amount || 0)) : 0;
+        if (scheduledAmount <= 0.005) return;
+        incomeByDay[d] = (incomeByDay[d] ?? 0) + scheduledAmount;
         financialEvents.push({
           id: `income:${i.id}:${year}-${month + 1}-${d}`,
           sourceType: "income", sourceId: i.id,
-          date: `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`,
-          kind: "scheduled_income", amount: amt, status: "scheduled", name: i.name,
+          date,
+          kind: "scheduled_income", amount: scheduledAmount, status: "scheduled", name: i.name,
         });
       });
     });
-    const monthTxs = transactions.filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === year && tm === month + 1 && !isConfirmedBillMatch(t); });
+    const monthTxs = transactions.filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === year && tm === month + 1 && t.review_status !== "transfer"; });
     monthTxs.forEach(t => financialEvents.push({
       id: `transaction:${t.id}`, sourceType: "transaction", sourceId: t.id, date: t.date,
       kind: t.amount >= 0 ? "transaction_income" : "transaction_expense",
@@ -2724,31 +2885,42 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       let occ = getBillOccurrencesInMonth(b, month, year);
       if (occ.length === 0) return;
       const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
+      const hasReviewedOccurrence = Array.from(billMatches.keys()).some(key => key.startsWith(`${b.id}:${year}-${String(month + 1).padStart(2, "0")}`));
       const projectedDebtTotal = b.is_debt && debtPlan && o?.actual_amount === undefined
         ? projectedDebtScheduledPayments.get(b.id) ?? 0
         : undefined;
-      const total = projectedDebtTotal !== undefined ? projectedDebtTotal : getBillEffectiveMonthlyTotal(b, month, year);
+      const total = hasReviewedOccurrence
+        ? getBillMonthlyTotal(b, month, year)
+        : projectedDebtTotal !== undefined ? projectedDebtTotal : getBillEffectiveMonthlyTotal(b, month, year);
       if (total <= 0.005) return;
-      if (o?.actual_amount !== undefined) {
+      if (o?.actual_amount !== undefined && !hasReviewedOccurrence) {
         const finalizedOccurrences = resolveFinalizedBillOccurrenceDays(occ, o.paid_date, month, year);
         const finalizedAmount = finalizedOccurrences.length > 0 ? total / finalizedOccurrences.length : 0;
         finalizedOccurrences.forEach(d => {
-          billsByDay[d] = (billsByDay[d] ?? 0) + finalizedAmount;
+          const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+          const match = billMatches.get(occurrenceKey(b.id, date));
+          const remaining = match?.settlement === "partial" ? Math.max(0, Number(match.plannedAmount ?? finalizedAmount) - Number(match.amount || 0)) : match ? 0 : finalizedAmount;
+          if (remaining <= 0.005) return;
+          billsByDay[d] = (billsByDay[d] ?? 0) + remaining;
           financialEvents.push({
             id: `bill:${b.id}:${year}-${month + 1}-${d}`, sourceType: "bill", sourceId: b.id,
-            date: `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`,
-            kind: "bill", amount: -finalizedAmount, status: "finalized", name: b.name,
+            date,
+            kind: "bill", amount: -remaining, status: match ? "planned" : "finalized", name: b.name,
           });
         });
         return;
       }
       const amt = occ.length > 0 ? total / occ.length : 0;
       occ.forEach(d => {
-        billsByDay[d] = (billsByDay[d] ?? 0) + amt;
+        const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+        const match = billMatches.get(occurrenceKey(b.id, date));
+        const remaining = match?.settlement === "partial" ? Math.max(0, Number(match.plannedAmount ?? amt) - Number(match.amount || 0)) : match ? 0 : amt;
+        if (remaining <= 0.005) return;
+        billsByDay[d] = (billsByDay[d] ?? 0) + remaining;
         financialEvents.push({
           id: `bill:${b.id}:${year}-${month + 1}-${d}`, sourceType: "bill", sourceId: b.id,
-          date: `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`,
-          kind: "bill", amount: -amt, status: "planned", name: b.name,
+          date,
+          kind: "bill", amount: -remaining, status: "planned", name: b.name,
         });
       });
     });
@@ -2832,7 +3004,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     balanceComputationCache.daily.set(dailyKey, result);
     return result;
-  }, [bills, transactions, incomes, goals, decisions, overrides, billDateMoves, extraPayments, getBillEffectiveMonthlyTotal, getBillOccurrencesInMonth, getProjectedDebtSnowballMonth, settings.starting_balance, settings.starting_balance_date, balanceComputationCache, user]);
+  }, [bills, transactions, incomes, goals, decisions, overrides, billDateMoves, extraPayments, getBillEffectiveMonthlyTotal, getBillMonthlyTotal, getBillOccurrencesInMonth, getProjectedDebtSnowballMonth, settings.starting_balance, settings.starting_balance_date, balanceComputationCache, user]);
 
   const previewDebtSnowball = useCallback((month: number, year: number, requestedExtra?: number, additionalSafeCredit = 0, paymentDateOverride?: string): SnowballProjectionResult => {
     const debtInputs: SnowballDebtInput[] = bills
@@ -3278,7 +3450,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence, getBillDateMovesForMonth,
       getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal,
       runSnowball, previewDebtSnowball, applyDebtSnowballPayment, saveExtraPayment, getExtraPayment, deleteExtraPayment, removeDebtSnowballPayment, finalizeBillPayment,
-      addTransaction, updateTransaction, deleteTransaction, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, getTransactionsForMonth,
+      addTransaction, updateTransaction, deleteTransaction, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, reconcileTransaction, undoTransactionReconciliation, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome, getIncomeOccurrencesInMonth,
       addGoal, updateGoal, deleteGoal, checkGoalAffordability,
       getCashFlow, getDailyBalances,

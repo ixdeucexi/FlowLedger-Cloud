@@ -100,7 +100,7 @@ async function upsertPlaidTransaction({ userId, accountRow, transaction, removed
   // Never overwrite an explicitly edited/manual FlowLedger transaction.
   const { data: existing, error: existingError } = await db
     .from("transactions")
-    .select("id,source,category,match_reason")
+    .select("id,source,category,match_reason,review_status")
     .eq("user_id", userId)
     .eq("plaid_transaction_id", plaidTransactionId)
     .maybeSingle();
@@ -141,6 +141,7 @@ async function upsertPlaidTransaction({ userId, accountRow, transaction, removed
       plaid_category_detailed: personalCategory.detailed || null,
       iso_currency_code: transaction.iso_currency_code || "USD",
       removed_at: removedAt || null,
+      review_status: existing && existing.review_status ? existing.review_status : "needs_review",
     };
     const { error } = existing
       ? await db.from("transactions").update(canonicalRow).eq("id", existing.id).eq("user_id", userId)

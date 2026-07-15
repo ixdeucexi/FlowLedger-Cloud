@@ -24,6 +24,7 @@ import { useBudget } from "@/context/BudgetContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
 import { isConfirmedBillMatch } from "@/lib/billMatching";
+import { allocationLabel, matchedOccurrenceAllocations, occurrenceKey } from "@/lib/reviewCenter";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
 import { buildDayForecastFloPrompt, groupForecastEvents } from "@/lib/forecastDisplay";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
@@ -315,24 +316,33 @@ export default function MonthlyScreen() {
 
   const txList = useMemo(() => getTransactionsForMonth(month, selectedYear), [getTransactionsForMonth, month, selectedYear]);
   const calendarTransactions = useMemo(() => txList.map(transaction => {
-    if (!isConfirmedBillMatch(transaction) || !transaction.linked_bill_id) return transaction;
-    const matchedBill = bills.find(bill => bill.id === transaction.linked_bill_id);
-    return matchedBill ? { ...transaction, note: matchedBill.name, category: matchedBill.category } : transaction;
+    const reviewedLabel = allocationLabel(transaction);
+    const primaryAllocation = transaction.review_allocations?.[0];
+    return reviewedLabel ? {
+      ...transaction,
+      note: reviewedLabel,
+      category: primaryAllocation?.category || transaction.category,
+    } : transaction;
   }), [bills, txList]);
-  const matchedBillIdsForMonth = useMemo(() => new Set(txList
-    .filter(isConfirmedBillMatch)
-    .map(transaction => transaction.linked_bill_id)
-    .filter((billId): billId is string => Boolean(billId))), [txList]);
-  const standaloneTxList = useMemo(() => txList.filter(transaction => !isConfirmedBillMatch(transaction)), [txList]);
+  const billOccurrenceMatches = useMemo(() => matchedOccurrenceAllocations(txList, "bill"), [txList]);
+  const incomeOccurrenceMatches = useMemo(() => matchedOccurrenceAllocations(txList, "income"), [txList]);
+  const standaloneTxList = useMemo(() => txList.filter(transaction => transaction.review_status !== "transfer"), [txList]);
   const dailyBalances = useMemo(() => getDailyBalances(month, selectedYear), [getDailyBalances, month, selectedYear]);
   const incomeOccurrences = useMemo(() => {
     const occurrences = getIncomeOccurrencesInMonth(month, selectedYear);
     const flat: { day: number; name: string; amount: number; frequency: string; incomeId: string; income: IncomeItem }[] = [];
     occurrences.forEach(({ income: inc, days, effectiveAmount }) => {
-      days.forEach(day => flat.push({ day, name: inc.name, amount: effectiveAmount, frequency: inc.frequency, incomeId: inc.id, income: inc }));
+      days.forEach(day => {
+        const date = `${selectedYear}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        const match = incomeOccurrenceMatches.get(occurrenceKey(inc.id, date));
+        const remaining = !match ? effectiveAmount : match.settlement === "partial"
+          ? Math.max(0, Number(match.plannedAmount ?? effectiveAmount) - Number(match.amount || 0))
+          : 0;
+        if (remaining > 0.005) flat.push({ day, name: inc.name, amount: remaining, frequency: inc.frequency, incomeId: inc.id, income: inc });
+      });
     });
     return flat.sort((a, b) => a.day - b.day);
-  }, [getIncomeOccurrencesInMonth, month, selectedYear]);
+  }, [getIncomeOccurrencesInMonth, incomeOccurrenceMatches, month, selectedYear]);
   const txIncome = standaloneTxList.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
   const txExpense = standaloneTxList.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
   const monthSummary = useMemo(() => {
@@ -423,8 +433,13 @@ export default function MonthlyScreen() {
 
   const scheduledBillsForDay = useMemo(() => {
     if (selectedDay === null) return [];
-    return monthBills.filter(b => !matchedBillIdsForMonth.has(b.id) && getBillOccurrencesInMonth(b, month, selectedYear).includes(selectedDay));
-  }, [monthBills, matchedBillIdsForMonth, getBillOccurrencesInMonth, selectedDay, month, selectedYear]);
+    const occurrenceDate = `${selectedYear}-${String(month + 1).padStart(2, "0")}-${String(selectedDay).padStart(2, "0")}`;
+    return monthBills.filter(bill => {
+      if (!getBillOccurrencesInMonth(bill, month, selectedYear).includes(selectedDay)) return false;
+      const match = billOccurrenceMatches.get(occurrenceKey(bill.id, occurrenceDate));
+      return !match || match.settlement === "partial";
+    });
+  }, [monthBills, billOccurrenceMatches, getBillOccurrencesInMonth, selectedDay, month, selectedYear]);
 
   const movedInByBillId = useMemo(() => {
     if (!selectedDate) return new Map<string, BillDateMove>();
@@ -1807,6 +1822,12 @@ export default function MonthlyScreen() {
                         {displayedTxs.map(tx => {
                           const sourceLabel = isConfirmedBillMatch(tx)
                             ? "Bill payment"
+                            : tx.review_resolution === "income"
+                              ? "Income received"
+                              : tx.review_resolution === "goal" || tx.review_resolution === "decision"
+                                ? "Planned spending"
+                                : tx.review_resolution === "category"
+                                  ? "Reviewed spending"
                             : tx.source === "plaid"
                             ? "Bank sync"
                             : tx.import_hash

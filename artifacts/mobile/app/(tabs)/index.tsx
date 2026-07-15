@@ -26,6 +26,7 @@ import { CATEGORY_BUDGETS_EVENT, categoryBudgetStorageKey, loadCategoryBudgets, 
 import { DECISION_HUB_SETTINGS_EVENT, loadDecisionHubSettings, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { buildDecisionHistory } from "@/lib/decisionHistory";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
+import { transactionCategoryParts } from "@/lib/reviewCenter";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { buildAlgorithmSuite, type AlgorithmInsight } from "@/lib/algorithmSuite";
 import { isAlgorithmEnabled, type AlgorithmId } from "@/lib/algorithmCatalog";
@@ -370,8 +371,8 @@ export default function DashboardScreen() {
         amount: getBillMonthlyTotal(bill, month, year),
       }));
     const monthTransactions = getTransactionsForMonth(month, year)
-      .filter(transaction => transaction.category !== "Debt" && transaction.category !== "Income")
-      .map(transaction => ({ category: transaction.category || "Other", amount: transaction.amount }));
+      .flatMap(transaction => transactionCategoryParts(transaction))
+      .filter(transaction => transaction.category !== "Debt" && transaction.category !== "Income");
     const budgetLimits = Object.entries(readCategoryBudgetMap(month, year)).map(([category, amount]) => ({ category, amount }));
     return buildCategoryPlan(categories.filter(category => category !== "Debt"), monthBills, monthTransactions, budgetLimits);
   }, [categories, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, readCategoryBudgetMap, currentMonth, selectedYear]);
@@ -384,8 +385,8 @@ export default function DashboardScreen() {
         amount: getBillMonthlyTotal(bill, currentMonth, selectedYear),
       }));
     const monthTransactions = getTransactionsForMonth(currentMonth, selectedYear)
-      .filter(transaction => transaction.category !== "Debt" && transaction.category !== "Income")
-      .map(transaction => ({ category: transaction.category || "Other", amount: transaction.amount }));
+      .flatMap(transaction => transactionCategoryParts(transaction))
+      .filter(transaction => transaction.category !== "Debt" && transaction.category !== "Income");
     const budgetLimits = Object.entries(categoryBudgets).map(([category, amount]) => ({ category, amount }));
     return buildCategoryPlan(categories.filter(category => category !== "Debt"), monthBills, monthTransactions, budgetLimits);
   }, [categories, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, currentMonth, selectedYear]);
@@ -407,14 +408,16 @@ export default function DashboardScreen() {
       .sort((left, right) => left.dueDay - right.dueDay || left.name.localeCompare(right.name));
 
     const categoryTransactions = getTransactionsForMonth(currentMonth, selectedYear)
-      .filter(transaction => (transaction.category || "Other") === selectedCategory && transaction.category !== "Income")
-      .sort((left, right) => right.date.localeCompare(left.date))
-      .map(transaction => ({
-        id: transaction.id,
-        name: transaction.note?.trim() || selectedCategory,
-        amount: transaction.amount,
+      .flatMap(transaction => transactionCategoryParts(transaction).map((part, index) => ({
+        id: `${transaction.id}:${index}`,
+        name: part.label,
+        amount: part.amount,
         date: transaction.date,
-      }));
+        category: part.category,
+      })))
+      .filter(transaction => transaction.category === selectedCategory && transaction.category !== "Income")
+      .sort((left, right) => right.date.localeCompare(left.date))
+      .map(transaction => ({ id: transaction.id, name: transaction.name || selectedCategory, amount: transaction.amount, date: transaction.date }));
 
     const largestTransaction = categoryTransactions
       .filter(transaction => transaction.amount < 0)
@@ -846,13 +849,11 @@ export default function DashboardScreen() {
       interest_rate: bill.interest_rate,
       snowball_minimum_boost: bill.snowball_minimum_boost,
     })),
-    transactions: getTransactionsForMonth(currentMonth, selectedYear).map(transaction => ({
-      id: transaction.id,
-      date: transaction.date,
-      amount: transaction.amount,
-      category: transaction.category || "Other",
-      note: transaction.note,
-    })),
+    transactions: getTransactionsForMonth(currentMonth, selectedYear).flatMap(transaction => {
+      const parts = transactionCategoryParts(transaction);
+      if (parts.length === 0) return transaction.amount > 0 ? [{ id: transaction.id, date: transaction.date, amount: transaction.amount, category: "Income", note: transaction.note }] : [];
+      return parts.map((part, index) => ({ id: `${transaction.id}:${index}`, date: transaction.date, amount: part.amount, category: part.category, note: part.label }));
+    }),
     incomes: incomes.map(income => ({
       id: income.id,
       name: income.name,

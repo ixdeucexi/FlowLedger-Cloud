@@ -21,6 +21,7 @@ import { IncomeModal } from "@/components/IncomeModal";
 import { MembershipPanel } from "@/components/MembershipPanel";
 import { PlanFeatureGate } from "@/components/PlanFeatureGate";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
+import { ReviewCenter } from "@/components/ReviewCenter";
 import { PWA_INSTALL_EVENT } from "@/components/PwaInstallPrompt";
 import { PlaidLinkButton } from "@/components/PlaidLinkButton";
 import colors from "@/constants/colors";
@@ -50,6 +51,7 @@ import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onbo
 import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 import { supabase } from "@/lib/supabase";
+import { transactionCategoryParts } from "@/lib/reviewCenter";
 import {
   type AppFeedbackRow,
   type FeedbackStatus,
@@ -61,17 +63,14 @@ import {
   sanitizeFeedbackMessage,
 } from "@/lib/feedback";
 import {
-  applyTransactionRules,
   buildChildMoneySummary,
   buildGoalFundingPlans,
   buildReportsSummary,
-  buildReviewQueue,
   buildSmartReminders,
   detectSubscriptions,
   evaluateForecastReadiness,
   type ChildProfile,
   type SubscriptionCandidate,
-  type TransactionRule,
 } from "@/lib/competitiveGrowth";
 
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
@@ -111,28 +110,7 @@ type SettingsSectionId =
   | "security"
   | "legal";
 
-type ReviewDecision = "approved" | "ignored" | "deleted";
 type SubscriptionDecision = "keep" | "not_subscription" | "cancelled" | "bill_created";
-
-type TransactionRuleRow = {
-  id: string;
-  name: string;
-  match_type: TransactionRule["matchType"];
-  match_value: string | null;
-  amount_min: number | null;
-  amount_max: number | null;
-  direction: TransactionRule["direction"] | null;
-  category: string | null;
-  linked_bill_id: string | null;
-  mark_as_transfer: boolean | null;
-  priority: number | null;
-  is_active: boolean | null;
-};
-
-type ReviewDecisionRow = {
-  transaction_id: string | null;
-  status: "needs_review" | "approved" | "ignored" | "deleted";
-};
 
 type SubscriptionDecisionRow = {
   merchant: string;
@@ -199,61 +177,11 @@ function numberOrNull(value: unknown): number | null {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
-function normalizeRuleIds(rules: TransactionRule[]) {
-  return rules.map(rule => ({
-    ...rule,
-    id: isUuid(rule.id) ? rule.id : stableUuidFromString(`transaction-rule:${rule.id}:${rule.name}`),
-  }));
-}
-
 function normalizeChildProfileIds(profiles: ChildProfile[]) {
   return profiles.map(profile => ({
     ...profile,
     id: isUuid(profile.id) ? profile.id : stableUuidFromString(`child-profile:${profile.id}:${profile.name}`),
   }));
-}
-
-function mapRuleRow(row: TransactionRuleRow): TransactionRule {
-  return {
-    id: row.id,
-    name: row.name,
-    matchType: row.match_type,
-    matchValue: row.match_value,
-    amountMin: numberOrNull(row.amount_min),
-    amountMax: numberOrNull(row.amount_max),
-    direction: row.direction ?? "any",
-    category: row.category,
-    linkedBillId: row.linked_bill_id,
-    markAsTransfer: Boolean(row.mark_as_transfer),
-    priority: row.priority,
-    isActive: row.is_active !== false,
-  };
-}
-
-function mapRuleForSupabase(rule: TransactionRule, userId: string, householdId: string) {
-  const id = isUuid(rule.id) ? rule.id : stableUuidFromString(`transaction-rule:${rule.id}:${rule.name}`);
-  return {
-    id,
-    user_id: userId,
-    household_id: householdId,
-    name: rule.name,
-    match_type: rule.matchType,
-    match_value: rule.matchValue ?? null,
-    amount_min: rule.amountMin ?? null,
-    amount_max: rule.amountMax ?? null,
-    direction: rule.direction ?? "any",
-    category: rule.category ?? null,
-    linked_bill_id: isUuid(rule.linkedBillId) ? rule.linkedBillId : null,
-    mark_as_transfer: Boolean(rule.markAsTransfer),
-    priority: rule.priority ?? 100,
-    is_active: rule.isActive !== false,
-    updated_at: new Date().toISOString(),
-  };
-}
-
-function reviewStatusToDecision(status: ReviewDecisionRow["status"]): ReviewDecision | null {
-  if (status === "approved" || status === "ignored" || status === "deleted") return status;
-  return null;
 }
 
 function subscriptionStatusToDecision(status: SubscriptionDecisionRow["status"]): SubscriptionDecision | null {
@@ -505,8 +433,6 @@ export default function MoreScreen() {
   const [feedbackInbox, setFeedbackInbox] = useState<AppFeedbackRow[]>([]);
   const [feedbackInboxLoading, setFeedbackInboxLoading] = useState(false);
   const [feedbackStatusFilter, setFeedbackStatusFilter] = useState<FeedbackStatus | "all">("all");
-  const [transactionRules, setTransactionRules] = useState<TransactionRule[]>([]);
-  const [reviewDecisions, setReviewDecisions] = useState<Record<string, ReviewDecision>>({});
   const [subscriptionDecisions, setSubscriptionDecisions] = useState<Record<string, SubscriptionDecision>>({});
   const [growthNotice, setGrowthNotice] = useState<string | null>(null);
   const [childProfiles, setChildProfiles] = useState<ChildProfile[]>([]);
@@ -519,8 +445,6 @@ export default function MoreScreen() {
   });
   const [signingOut, setSigningOut] = useState(false);
   const inviteRoles = useMemo(() => householdInviteRolesFor(activeHousehold?.role), [activeHousehold?.role]);
-  const transactionRuleStorageKey = user?.id ? `flowledger_transaction_rules_${user.id}` : "flowledger_transaction_rules_guest";
-  const reviewDecisionStorageKey = user?.id ? `flowledger_review_decisions_${user.id}` : "flowledger_review_decisions_guest";
   const subscriptionDecisionStorageKey = user?.id ? `flowledger_subscription_decisions_${user.id}` : "flowledger_subscription_decisions_guest";
   const childProfileStorageKey = activeHousehold?.householdId
     ? `flowledger_child_profiles_${activeHousehold.householdId}`
@@ -574,63 +498,6 @@ export default function MoreScreen() {
       cancelled = true;
     };
   }, [user?.id]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const value = await AsyncStorage.getItem(transactionRuleStorageKey).catch(() => null);
-      if (!cancelled) {
-        if (cancelled) return;
-        if (!value) {
-          setTransactionRules([]);
-        } else {
-          const parsed = JSON.parse(value);
-          if (Array.isArray(parsed)) setTransactionRules(normalizeRuleIds(parsed));
-        }
-      }
-      if (!user?.id || !activeHousehold?.householdId) return;
-      const { data, error } = await supabase
-        .from("transaction_rules")
-        .select("id,name,match_type,match_value,amount_min,amount_max,direction,category,linked_bill_id,mark_as_transfer,priority,is_active")
-        .eq("household_id", activeHousehold.householdId)
-        .eq("is_active", true)
-        .order("priority", { ascending: true });
-      if (cancelled || error || !data) return;
-      const mapped = (data as TransactionRuleRow[]).map(mapRuleRow);
-      setTransactionRules(mapped);
-      await AsyncStorage.setItem(transactionRuleStorageKey, JSON.stringify(mapped)).catch(() => undefined);
-    })().catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [activeHousehold?.householdId, transactionRuleStorageKey, user?.id]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const value = await AsyncStorage.getItem(reviewDecisionStorageKey).catch(() => null);
-      if (!cancelled) setReviewDecisions(value ? normalizeStorageMap<ReviewDecision>(JSON.parse(value)) : {});
-      if (!user?.id || !activeHousehold?.householdId) return;
-      const { data, error } = await supabase
-        .from("transaction_reviews")
-        .select("transaction_id,status")
-        .eq("household_id", activeHousehold.householdId)
-        .in("status", ["approved", "ignored", "deleted"]);
-      if (cancelled || error || !data) return;
-      const mapped = (data as ReviewDecisionRow[]).reduce<Record<string, ReviewDecision>>((acc, row) => {
-        const decision = reviewStatusToDecision(row.status);
-        if (row.transaction_id && decision) acc[row.transaction_id] = decision;
-        return acc;
-      }, {});
-      setReviewDecisions(mapped);
-      await AsyncStorage.setItem(reviewDecisionStorageKey, JSON.stringify(mapped)).catch(() => undefined);
-    })().catch(() => {
-      if (!cancelled) setReviewDecisions({});
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeHousehold?.householdId, reviewDecisionStorageKey, user?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -992,6 +859,19 @@ export default function MoreScreen() {
       : "manual" as const,
     linkedBillId: transaction.linked_bill_id ?? transaction.debt_applied_bill_id ?? null,
   })), [transactions]);
+  const growthReportTransactions = useMemo(() => growthTransactions.flatMap(transaction => {
+    const source = transactions.find(item => item.id === transaction.id);
+    if (!source) return [transaction];
+    const parts = transactionCategoryParts(source);
+    if (parts.length === 0) return source.amount > 0 ? [transaction] : [];
+    return parts.map((part, index) => ({
+      ...transaction,
+      id: `${transaction.id}:${index}`,
+      amount: part.amount,
+      description: part.label,
+      category: part.category,
+    }));
+  }), [growthTransactions, transactions]);
   const growthBills = useMemo(() => bills.map(bill => ({
     id: bill.id,
     name: bill.name,
@@ -1019,26 +899,11 @@ export default function MoreScreen() {
     targetDate: goal.target_date,
     type: goal.goal_type === "planned_expense" ? "other" as const : goal.goal_type,
   })), [goals]);
-  const reviewQueue = useMemo(() => buildReviewQueue(growthTransactions, transactionRules), [growthTransactions, transactionRules]);
-  const reviewTransactions = useMemo(() => {
-    const byId = new Map(growthTransactions.map(transaction => [transaction.id, transaction]));
-    return reviewQueue
-      .filter(item => !reviewDecisions[item.transactionId])
-      .map(item => ({ item, transaction: byId.get(item.transactionId) }))
-      .filter(entry => entry.transaction);
-  }, [growthTransactions, reviewDecisions, reviewQueue]);
-  const reviewImpactSummary = useMemo(() => {
-    return reviewTransactions.reduce(
-      (summary, { transaction }) => {
-        const amount = transaction?.amount ?? 0;
-        if (amount > 0) summary.moneyIn += amount;
-        if (amount < 0) summary.moneyOut += Math.abs(amount);
-        summary.net += amount;
-        return summary;
-      },
-      { moneyIn: 0, moneyOut: 0, net: 0 },
-    );
-  }, [reviewTransactions]);
+  const reviewTransactionCount = useMemo(() => transactions.filter(transaction =>
+    transaction.source === "plaid"
+    && transaction.review_status === "needs_review"
+    && transaction.date.startsWith(todayIso.slice(0, 7)),
+  ).length, [todayIso, transactions]);
   const subscriptions = useMemo(
     () => detectSubscriptions(growthTransactions).filter(item => subscriptionDecisions[subscriptionKey(item)] !== "not_subscription"),
     [growthTransactions, subscriptionDecisions],
@@ -1063,8 +928,8 @@ export default function MoreScreen() {
     [growthGoals, safeMonthlyGoalFunding],
   );
   const reportsSummary = useMemo(
-    () => buildReportsSummary(growthTransactions, growthBills, growthDebts, growthGoals),
-    [growthBills, growthDebts, growthGoals, growthTransactions],
+    () => buildReportsSummary(growthReportTransactions, growthBills, growthDebts, growthGoals),
+    [growthBills, growthDebts, growthGoals, growthReportTransactions],
   );
   const forecastReadiness = useMemo(() => {
     const wantsDebt = onboardingPreferences.goals.includes("pay_off_debt") || bills.some(bill => bill.is_debt);
@@ -1091,46 +956,13 @@ export default function MoreScreen() {
   const smartReminders = useMemo(() => buildSmartReminders({
     today: todayIso,
     bills: growthBills,
-    reviewCount: reviewTransactions.length,
+    reviewCount: reviewTransactionCount,
     subscriptionIncreases: subscriptions.filter(subscription => subscription.priceIncrease).length,
     lowestBalance: null,
     safetyFloor: settings.safety_floor,
     goals: goalFundingPlans,
     needsReconcile: forecastReadiness.missing.includes("Reconcile an account"),
-  }), [forecastReadiness.missing, goalFundingPlans, growthBills, reviewTransactions.length, settings.safety_floor, subscriptions, todayIso]);
-  const saveTransactionRules = async (next: TransactionRule[]) => {
-    const normalized = normalizeRuleIds(next);
-    setTransactionRules(normalized);
-    await AsyncStorage.setItem(transactionRuleStorageKey, JSON.stringify(normalized)).catch(() => undefined);
-    if (!user?.id || !activeHousehold?.householdId || !canEditHousehold) return;
-    const rows = normalized.map(rule => mapRuleForSupabase(rule, user.id, activeHousehold.householdId));
-    if (!rows.length) return;
-    const { error } = await supabase.from("transaction_rules").upsert(rows);
-    if (error) return;
-  };
-
-  const saveReviewDecisions = async (next: Record<string, ReviewDecision>) => {
-    setReviewDecisions(next);
-    await AsyncStorage.setItem(reviewDecisionStorageKey, JSON.stringify(next)).catch(() => undefined);
-  };
-
-  const markReviewDecision = async (transactionId: string, decision: ReviewDecision) => {
-    await saveReviewDecisions({ ...reviewDecisions, [transactionId]: decision });
-    if (!user?.id || !activeHousehold?.householdId || !canEditHousehold) return;
-    const transaction = growthTransactions.find(item => item.id === transactionId);
-    const reviewItem = reviewQueue.find(item => item.transactionId === transactionId);
-    const { error } = await supabase.from("transaction_reviews").upsert({
-      id: isUuid(transactionId) ? transactionId : stableUuidFromString(`transaction-review:${activeHousehold.householdId}:${transactionId}`),
-      user_id: user.id,
-      household_id: activeHousehold.householdId,
-      transaction_id: isUuid(transactionId) ? transactionId : null,
-      reasons: reviewItem?.reasons ?? [],
-      status: decision,
-      priority: reviewItem?.priority ?? (Math.abs(transaction?.amount ?? 0) > 250 ? "medium" : "low"),
-      updated_at: new Date().toISOString(),
-    });
-    if (error) return;
-  };
+  }), [forecastReadiness.missing, goalFundingPlans, growthBills, reviewTransactionCount, settings.safety_floor, subscriptions, todayIso]);
 
   const saveSubscriptionDecisions = async (next: Record<string, SubscriptionDecision>) => {
     setSubscriptionDecisions(next);
@@ -1167,85 +999,6 @@ export default function MoreScreen() {
     if (!rows.length) return;
     const { error } = await supabase.from("child_profiles").upsert(rows);
     if (error) return;
-  };
-
-  const handleCreateRuleFromReview = (transactionId: string) => {
-    const transaction = growthTransactions.find(item => item.id === transactionId);
-    if (!transaction) return;
-    const merchant = (transaction.description || "Transaction").trim();
-    const nextRule: TransactionRule = {
-      id: makeClientUuid("transaction-rule"),
-      name: `Remember ${merchant.slice(0, 28)}`,
-      matchType: "contains",
-      matchValue: merchant,
-      direction: transaction.amount >= 0 ? "income" : "expense",
-      category: transaction.category && transaction.category !== "Other" ? transaction.category : "Other",
-      priority: 10,
-      isActive: true,
-    };
-    void saveTransactionRules([nextRule, ...transactionRules]).then(() => markReviewDecision(transactionId, "approved"));
-    setGrowthNotice("Rule saved. I’ll use it on future matching transactions.");
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  };
-
-  const handleApproveReview = (transactionId: string) => {
-    void markReviewDecision(transactionId, "approved");
-    setGrowthNotice("Transaction approved.");
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
-
-  const handleIgnoreReview = (transactionId: string) => {
-    void markReviewDecision(transactionId, "ignored");
-    setGrowthNotice("Review item ignored.");
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
-
-  const handleDeleteReviewTransaction = (transactionId: string, label: string) => {
-    confirmAction({
-      title: "Delete transaction?",
-      message: `This removes "${label}" from Activity and your forecast.`,
-      confirmText: "Delete",
-      destructive: true,
-      onConfirm: async () => {
-        try {
-          await deleteTransaction(transactionId);
-          await markReviewDecision(transactionId, "deleted");
-          setGrowthNotice("Transaction deleted.");
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        } catch (error) {
-          Alert.alert("Couldn’t delete transaction", error instanceof Error ? error.message : "Try again.");
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        }
-      },
-    });
-  };
-
-  const handleCategorizeReview = async (transactionId: string, category: string) => {
-    const original = transactions.find(item => item.id === transactionId);
-    if (!original) return;
-    try {
-      await updateTransaction({ ...original, category });
-      await markReviewDecision(transactionId, "approved");
-      setGrowthNotice(`Categorized as ${category}.`);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (error) {
-      Alert.alert("Couldn’t update transaction", error instanceof Error ? error.message : "Try again.");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    }
-  };
-
-  const handleApplySavedRules = async () => {
-    if (!transactionRules.length) return;
-    let changed = 0;
-    for (const growthTransaction of growthTransactions) {
-      const applied = applyTransactionRules(growthTransaction, transactionRules);
-      const original = transactions.find(item => item.id === growthTransaction.id);
-      if (!original || !applied.ruleId || !applied.category || applied.category === original.category) continue;
-      await updateTransaction({ ...original, category: applied.category });
-      changed += 1;
-    }
-    setGrowthNotice(changed ? `Applied saved rules to ${changed} transaction${changed === 1 ? "" : "s"}.` : "No uncategorized matches found.");
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
   const handleCreateBillFromSubscription = async (subscription: SubscriptionCandidate) => {
@@ -2537,6 +2290,11 @@ export default function MoreScreen() {
       </>}
 
       {activeSettingsSection === "review" && <>
+      <SLabel c={c} text="Transaction Reconciliation" />
+      <PlanFeatureGate feature="transaction_matching" compact>
+        <ReviewCenter />
+      </PlanFeatureGate>
+      {/* Legacy rules-based Review Center removed. Data remains in Supabase for rollback.
       <SLabel c={c} text="Forecast Readiness" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View style={styles.growthHeaderRow}>
@@ -2661,6 +2419,7 @@ export default function MoreScreen() {
         )}
       </View>
       </PlanFeatureGate>
+      */}
       </>}
 
       {activeSettingsSection === "subscriptions" && <>

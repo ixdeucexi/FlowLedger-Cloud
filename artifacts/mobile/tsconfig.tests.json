@@ -59,5 +59,7 @@
     ,"lib/billMatching.test.ts"
     ,"lib/membership.ts"
     ,"lib/membership.test.ts"
+    ,"lib/reviewCenter.ts"
+    ,"lib/reviewCenter.test.ts"
   ]
 }

@@ -1,6 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert, Modal, Platform, Pressable, ScrollView, SectionList,
@@ -16,44 +15,23 @@ import { EmptyState } from "@/components/EmptyState";
 import { FullPaymentPromptModal } from "@/components/FullPaymentPromptModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import colors from "@/constants/colors";
-import { useAuth } from "@/context/AuthContext";
 import type { Bill, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
-import {
-  buildReviewQueue,
-  type TransactionRule,
-} from "@/lib/competitiveGrowth";
 import { debtPaymentStatusLabel } from "@/lib/forecastDisplay";
 import { canMatchExpenseToBill, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "@/lib/billMatching";
 import { isValidDateInMonth } from "@/lib/schedule";
-import { supabase } from "@/lib/supabase";
+import { buildCurrentMonthReviewQueue, matchedOccurrenceAllocations, occurrenceKey } from "@/lib/reviewCenter";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type ActivitySource = "transaction" | "bank_transaction" | "bill_payment" | "income" | "extra_payment";
+type ActivitySource = "transaction" | "bank_transaction" | "bill_payment" | "income" | "extra_payment" | "transfer";
 type TypeFilter     = "all" | "expense" | "income";
 type SourceFilter   = "all" | ActivitySource;
 type DateFilter     = "all" | "this_month" | "last_month" | "this_year";
 type SortOrder      = "asc" | "desc";
-type ReviewDecision = "approved" | "ignored" | "deleted";
-type TransactionRuleRow = {
-  id: string;
-  name: string;
-  match_type: TransactionRule["matchType"];
-  match_value: string | null;
-  amount_min: number | null;
-  amount_max: number | null;
-  direction: TransactionRule["direction"] | null;
-  category: string | null;
-  linked_bill_id: string | null;
-  mark_as_transfer: boolean | null;
-  priority: number | null;
-  is_active: boolean | null;
-};
-type ReviewDecisionRow = { transaction_id: string | null; status: "needs_review" | "approved" | "ignored" | "deleted" };
 const MODAL_HANDOFF_DELAY_MS = 350;
 type MatchedPaymentPrompt = {
   transaction: Transaction;
@@ -101,6 +79,7 @@ const SOURCE_META: Record<ActivitySource, {
   bill_payment:  { label: "Bill",     icon: "file-text",   color: "#f0b429", description: "Bill marked as paid in Monthly view" },
   income:        { label: "Income",   icon: "trending-up", color: "#22c55e", description: "Scheduled income occurrence" },
   extra_payment: { label: "Debt Pay", icon: "zap",         color: "#e11d48", description: "Extra debt payment (Snowball / Avalanche)" },
+  transfer:      { label: "Transfer", icon: "repeat",      color: "#64748b", description: "Reviewed movement between your accounts" },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -140,69 +119,14 @@ function groupByMonth(items: ActivityItem[]): { title: string; data: ActivityIte
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
-function normalizeStorageMap<T extends string>(value: unknown): Record<string, T> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return Object.entries(value).reduce<Record<string, T>>((acc, [key, item]) => {
-    if (typeof key === "string" && typeof item === "string") acc[key] = item as T;
-    return acc;
-  }, {});
-}
-
-function parseDecisionMap<T extends string>(value: string | null): Record<string, T> {
-  if (!value) return {};
-  try {
-    return normalizeStorageMap<T>(JSON.parse(value));
-  } catch {
-    return {};
-  }
-}
-
-function parseTransactionRules(value: string | null): TransactionRule[] {
-  if (!value) return [];
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter(rule => rule && typeof rule === "object") as TransactionRule[] : [];
-  } catch {
-    return [];
-  }
-}
-
-function numberOrNull(value: unknown): number | null {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : null;
-}
-
-function mapRuleRow(row: TransactionRuleRow): TransactionRule {
-  return {
-    id: row.id,
-    name: row.name,
-    matchType: row.match_type,
-    matchValue: row.match_value,
-    amountMin: numberOrNull(row.amount_min),
-    amountMax: numberOrNull(row.amount_max),
-    direction: row.direction ?? "any",
-    category: row.category,
-    linkedBillId: row.linked_bill_id,
-    markAsTransfer: Boolean(row.mark_as_transfer),
-    priority: row.priority,
-    isActive: row.is_active !== false,
-  };
-}
-
-function reviewStatusToDecision(status: ReviewDecisionRow["status"]): ReviewDecision | null {
-  if (status === "approved" || status === "ignored" || status === "deleted") return status;
-  return null;
-}
-
 export default function TransactionsScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user } = useAuth();
   const { isFeatureLocked, bypassFeature } = useMembership();
   const {
     transactions, addTransaction, updateTransaction, deleteTransaction, deleteTransfer,
-    bills, overrides, extraPayments, activeHousehold, settings,
+    bills, incomes, overrides, extraPayments, settings,
     getIncomeOccurrencesInMonth, getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal,
     matchTransactionToBill, unmatchTransactionFromBill, setCustomAmount,
     getExtraPayment, previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment,
@@ -227,9 +151,6 @@ export default function TransactionsScreen() {
   const [surplusPrompt, setSurplusPrompt] = useState<MatchedPaymentPrompt | null>(null);
   const [queuedSurplusPrompt, setQueuedSurplusPrompt] = useState<MatchedPaymentPrompt | null>(null);
   const [surplusPaymentDate, setSurplusPaymentDate] = useState(todayIsoDate());
-  const [reviewAlertLoaded, setReviewAlertLoaded] = useState(false);
-  const [transactionRules, setTransactionRules] = useState<TransactionRule[]>([]);
-  const [reviewDecisions, setReviewDecisions] = useState<Record<string, ReviewDecision>>({});
   useBackDismiss(!!detailItem, () => setDetailItem(null));
   useBackDismiss(filterModalVisible, () => setFilterModalVisible(false));
   useBackDismiss(weeklySummaryVisible, () => setWeeklySummaryVisible(false));
@@ -255,69 +176,6 @@ export default function TransactionsScreen() {
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
   const listBottomPadding = insets.bottom + (Platform.OS === "web" ? 128 : 118);
-  const transactionRuleStorageKey = user?.id ? `flowledger_transaction_rules_${user.id}` : "flowledger_transaction_rules_guest";
-  const reviewDecisionStorageKey = user?.id ? `flowledger_review_decisions_${user.id}` : "flowledger_review_decisions_guest";
-
-  const loadReviewAlertState = useCallback(async () => {
-    setReviewAlertLoaded(false);
-    const [storedRules, storedReviews] = await Promise.all([
-      AsyncStorage.getItem(transactionRuleStorageKey).catch(() => null),
-      AsyncStorage.getItem(reviewDecisionStorageKey).catch(() => null),
-    ]);
-    let nextTransactionRules = parseTransactionRules(storedRules);
-    const nextReviewDecisions = parseDecisionMap<ReviewDecision>(storedReviews);
-
-    if (user?.id && activeHousehold?.householdId) {
-      let remoteRules: TransactionRuleRow[] | null = null;
-      let remoteReviews: ReviewDecisionRow[] | null = null;
-
-      try {
-        const { data } = await supabase
-          .from("transaction_rules")
-          .select("id,name,match_type,match_value,amount_min,amount_max,direction,category,linked_bill_id,mark_as_transfer,priority,is_active")
-          .eq("household_id", activeHousehold.householdId)
-          .eq("is_active", true)
-          .order("priority", { ascending: true });
-        remoteRules = data as TransactionRuleRow[] | null;
-      } catch {
-        remoteRules = null;
-      }
-
-      try {
-        const { data } = await supabase
-          .from("transaction_reviews")
-          .select("transaction_id,status")
-          .eq("household_id", activeHousehold.householdId)
-          .in("status", ["approved", "ignored", "deleted"]);
-        remoteReviews = data as ReviewDecisionRow[] | null;
-      } catch {
-        remoteReviews = null;
-      }
-
-      if (remoteRules) nextTransactionRules = remoteRules.map(mapRuleRow);
-      remoteReviews?.forEach(row => {
-        const decision = reviewStatusToDecision(row.status);
-        if (row.transaction_id && decision) nextReviewDecisions[row.transaction_id] = decision;
-      });
-
-      await Promise.all([
-        AsyncStorage.setItem(transactionRuleStorageKey, JSON.stringify(nextTransactionRules)).catch(() => undefined),
-        AsyncStorage.setItem(reviewDecisionStorageKey, JSON.stringify(nextReviewDecisions)).catch(() => undefined),
-      ]);
-    }
-
-    setTransactionRules(nextTransactionRules);
-    setReviewDecisions(nextReviewDecisions);
-    setReviewAlertLoaded(true);
-  }, [activeHousehold?.householdId, reviewDecisionStorageKey, transactionRuleStorageKey, user?.id]);
-
-  useFocusEffect(
-    useCallback(() => {
-      void loadReviewAlertState().catch(() => {
-        setReviewAlertLoaded(true);
-      });
-    }, [loadReviewAlertState]),
-  );
 
   // ── Build unified activity feed ───────────────────────────────────────────
   const allActivity = useMemo((): ActivityItem[] => {
@@ -338,19 +196,28 @@ export default function TransactionsScreen() {
     for (const tx of transactions) {
       const matchedBill = tx.linked_bill_id ? bills.find(bill => bill.id === tx.linked_bill_id) : undefined;
       const confirmedMatch = Boolean(matchedBill && isConfirmedBillMatch(tx));
+      const matchedIncome = tx.linked_income_id ? incomes.find(income => income.id === tx.linked_income_id) : undefined;
+      const allocationDetail = (tx.review_allocations ?? []).map(allocation => {
+        if (allocation.type === "bill" || allocation.type === "income" || allocation.type === "planned_expense") return `${allocation.name ?? allocation.type} $${allocation.amount.toFixed(2)}`;
+        if (allocation.type === "extra_principal") return `Extra principal $${allocation.amount.toFixed(2)}`;
+        if (allocation.type === "category") return `${allocation.category ?? "Other"} $${allocation.amount.toFixed(2)}`;
+        return `Transfer $${allocation.amount.toFixed(2)}`;
+      }).join(" · ");
       const source: ActivitySource = confirmedMatch
         ? "bill_payment"
+        : matchedIncome ? "income"
+        : tx.review_status === "transfer" ? "transfer"
         : tx.source === "plaid" ? "bank_transaction" : "transaction";
       items.push({
         id:       `tx-${tx.id}`,
         date:     tx.date,
         amount:   tx.amount,
-        label:    confirmedMatch ? matchedBill!.name : tx.merchant_name || tx.note || tx.category,
-        category: confirmedMatch ? matchedBill!.category : tx.category,
+        label:    confirmedMatch ? matchedBill!.name : matchedIncome?.name || tx.merchant_name || tx.note || tx.category,
+        category: confirmedMatch ? matchedBill!.category : matchedIncome ? "Income" : tx.category,
         source,
         editable: true,
         rawTx:    tx,
-        detail:   tx.note ? `${tx.note} · ${tx.category}` : tx.category,
+        detail:   allocationDetail || (tx.note ? `${tx.note} · ${tx.category}` : tx.category),
       });
     }
 
@@ -383,6 +250,7 @@ export default function TransactionsScreen() {
     }
 
     // 3. Income occurrences — past 24 months up to today
+    const incomeOccurrenceMatches = matchedOccurrenceAllocations(transactions, "income");
     for (let i = 24; i >= 0; i--) {
       const totalMonths = currentYear * 12 + currentMonth - i;
       const m = totalMonths % 12;
@@ -392,15 +260,20 @@ export default function TransactionsScreen() {
         for (const day of days) {
           const date = `${y}-${String(m + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
           if (new Date(date + "T00:00:00") > today) continue;
+          const match = incomeOccurrenceMatches.get(occurrenceKey(income.id, date));
+          const remaining = !match ? effectiveAmount : match.settlement === "partial"
+            ? Math.max(0, Number(match.plannedAmount ?? effectiveAmount) - Number(match.amount || 0))
+            : 0;
+          if (remaining <= 0.005) continue;
           items.push({
             id:       `income-${income.id}-${date}`,
             date,
-            amount:   effectiveAmount ?? 0,
+            amount:   remaining,
             label:    income.name,
             category: "Income",
             source:   "income",
             editable: false,
-            detail:   `${income.frequency.charAt(0).toUpperCase() + income.frequency.slice(1)} income — $${(effectiveAmount ?? 0).toFixed(2)} on ${formatDateLong(date)}`,
+            detail:   `${income.frequency.charAt(0).toUpperCase() + income.frequency.slice(1)} income — $${remaining.toFixed(2)} on ${formatDateLong(date)}`,
           });
         }
       }
@@ -426,7 +299,7 @@ export default function TransactionsScreen() {
     }
 
     return items;
-  }, [transactions, overrides, bills, extraPayments, getIncomeOccurrencesInMonth]);
+  }, [transactions, overrides, bills, incomes, extraPayments, getIncomeOccurrencesInMonth]);
 
   // ── Filter & sort ─────────────────────────────────────────────────────────
   const categoryOptions = useMemo(
@@ -508,27 +381,10 @@ export default function TransactionsScreen() {
 
   const sections = useMemo(() => groupByMonth(filtered), [filtered]);
 
-  const growthTransactions = useMemo(() => transactions.map(transaction => ({
-    id: transaction.id,
-    date: transaction.date,
-    amount: transaction.amount,
-    description: transaction.note?.trim() || transaction.category || "Transaction",
-    category: transaction.category,
-    accountId: transaction.account_id,
-    importHash: transaction.import_hash,
-    source: transaction.source === "plaid" || transaction.import_hash ? "import" as const
-      : transaction.debt_applied_bill_id ? "debt" as const
-      : transaction.linked_bill_id ? "bill" as const
-      : "manual" as const,
-    linkedBillId: transaction.linked_bill_id ?? transaction.debt_applied_bill_id ?? null,
-  })), [transactions]);
-
-  const reviewQueue = useMemo(() => buildReviewQueue(growthTransactions, transactionRules), [growthTransactions, transactionRules]);
-  const unresolvedReviewQueue = useMemo(
-    () => reviewQueue.filter(item => !reviewDecisions[item.transactionId]),
-    [reviewDecisions, reviewQueue],
+  const activityReviewCount = useMemo(
+    () => buildCurrentMonthReviewQueue(transactions, todayIsoDate()).length,
+    [transactions],
   );
-  const activityReviewCount = reviewAlertLoaded ? unresolvedReviewQueue.length : 0;
 
   // ── Summary stats ─────────────────────────────────────────────────────────
   const monthlySummary = useMemo(() => {
