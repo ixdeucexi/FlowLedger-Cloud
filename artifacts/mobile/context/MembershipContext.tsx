@@ -6,6 +6,7 @@ import { useBudget } from "@/context/BudgetContext";
 import {
   canUseFeature,
   mapHouseholdPlan,
+  membershipEnforcementEnabled,
   resolvePreviewTier,
   type HouseholdPlan,
   type PlanFeature,
@@ -19,6 +20,7 @@ interface MembershipContextValue {
   previewTier: PlanTier | null;
   isAdmin: boolean;
   loading: boolean;
+  enforcementEnabled: boolean;
   isFeatureLocked: (feature: PlanFeature) => boolean;
   bypassFeature: (feature: PlanFeature) => void;
   setPreviewTier: (tier: PlanTier) => Promise<void>;
@@ -130,13 +132,14 @@ export function MembershipProvider({ children }: { children: React.ReactNode }) 
   }, [isAdmin, previewTier]);
 
   const effectiveTier = previewTier ?? actualPlan.tier;
+  const enforcementEnabled = membershipEnforcementEnabled();
   const isFeatureLocked = useCallback((feature: PlanFeature) => {
     if (bypassedFeatures.includes(feature)) return false;
     const lockedForTier = !canUseFeature(effectiveTier, feature);
     if (isAdmin && previewTier) return lockedForTier;
     if (feature === "transaction_matching") return lockedForTier;
-    return false;
-  }, [bypassedFeatures, effectiveTier, isAdmin, previewTier]);
+    return enforcementEnabled ? lockedForTier : false;
+  }, [bypassedFeatures, effectiveTier, enforcementEnabled, isAdmin, previewTier]);
 
   const value = useMemo<MembershipContextValue>(() => ({
     actualPlan,
@@ -144,11 +147,12 @@ export function MembershipProvider({ children }: { children: React.ReactNode }) 
     previewTier,
     isAdmin,
     loading,
+    enforcementEnabled,
     isFeatureLocked,
     bypassFeature,
     setPreviewTier,
     resetPreview,
-  }), [actualPlan, effectiveTier, previewTier, isAdmin, loading, isFeatureLocked, bypassFeature, setPreviewTier, resetPreview]);
+  }), [actualPlan, effectiveTier, previewTier, isAdmin, loading, enforcementEnabled, isFeatureLocked, bypassFeature, setPreviewTier, resetPreview]);
 
   return <MembershipContext.Provider value={value}>{children}</MembershipContext.Provider>;
 }

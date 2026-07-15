@@ -16,15 +16,29 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
+import { useMembership } from "@/context/MembershipContext";
 import { useBudget, type DecisionRecord } from "@/context/BudgetContext";
+import { BasicFlo } from "@/components/BasicFlo";
 import { DatePickerField } from "@/components/DatePickerField";
+import { FloConversationBar } from "@/components/FloConversationBar";
 import { FloLogo } from "@/components/FloLogo";
-import { PlanFeatureGate } from "@/components/PlanFeatureGate";
 import { FloSafetyStopModal } from "@/components/FloSafetyStopModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
-import { askFlo, loadFloMemory, updateFloMemory, type FloFacts } from "@/lib/flo";
+import { loadFloMemory, updateFloMemory, type FloFacts } from "@/lib/flo";
+import {
+  createFloConversation,
+  createFloId,
+  deleteFloConversation,
+  listFloConversations,
+  listFloMessages,
+  persistFloFallback,
+  renameFloConversation,
+  streamFloChat,
+  type FloConversation,
+  type FloSource,
+} from "@/lib/floChat";
 import {
   FLO_CONNECTION_ERROR_MESSAGE,
   buildDebtPaymentScenario,
@@ -37,6 +51,7 @@ import {
   evaluateFloCategoryMove,
   floResponseCards,
   isFloPlanCreateCommand,
+  localFloAnswer,
   reduceFloChat,
   sanitizeFloSummary,
   type FloCategoryMoveResult,
@@ -70,8 +85,6 @@ const sampleQuestions = [
   "How do I add income?",
 ];
 
-const MIN_FLO_THINK_MS = 2000;
-
 const initialChat: FloChatState = { messages: [], sending: false };
 
 export default function FloScreen() {
@@ -79,7 +92,9 @@ export default function FloScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ prompt?: string; promptId?: string }>();
   const { user } = useAuth();
-  const { bills, billDateMoves, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getPaidAmount, moveBillOccurrence, removeBillOccurrenceMove, saveDecision, updateDecision, updateBill, setCustomAmount, saveExtraPayment, getTransactionsForMonth, categories, incomes, goals } = useBudget();
+  const { isFeatureLocked, previewTier } = useMembership();
+  const { activeHousehold, bills, billDateMoves, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getPaidAmount, moveBillOccurrence, removeBillOccurrenceMove, saveDecision, updateDecision, updateBill, setCustomAmount, saveExtraPayment, getTransactionsForMonth, categories, incomes, goals } = useBudget();
+  const floProLocked = isFeatureLocked("flo_account_chat");
   const [chat, dispatch] = useReducer(reduceFloChat, initialChat);
   const [cardsByMessageId, setCardsByMessageId] = useState<Record<string, FloResponseCard[]>>({});
   const [decisionByMessageId, setDecisionByMessageId] = useState<Record<string, { scenario: DecisionScenario; result: DecisionResult }>>({});
@@ -99,6 +114,12 @@ export default function FloScreen() {
   const [onboardingPreferences, setOnboardingPreferences] = useState(() => readOnboardingPreferences());
   const [input, setInput] = useState("");
   const [summary, setSummary] = useState("");
+  const [conversations, setConversations] = useState<FloConversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [olderMessageCursor, setOlderMessageCursor] = useState<string | null>(null);
+  const [sourcesByMessageId, setSourcesByMessageId] = useState<Record<string, FloSource[]>>({});
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [lastPrompt, setLastPrompt] = useState("");
   const [sampleIndex, setSampleIndex] = useState(0);
   const [completePlan, setCompletePlan] = useState<DecisionRecord | null>(null);
   const [completeActual, setCompleteActual] = useState("");
@@ -112,6 +133,9 @@ export default function FloScreen() {
   const [pendingUnsafeDecisionMessageId, setPendingUnsafeDecisionMessageId] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const handledPromptRef = useRef<string | null>(null);
+  const streamAbortRef = useRef<AbortController | null>(null);
+  const skipConversationLoadRef = useRef<string | null>(null);
+  const retryRequestRef = useRef<{ text: string; userMessageId: string; assistantMessageId: string; conversationId: string | null } | null>(null);
   const now = useMemo(() => new Date(), []);
   const today = now.toISOString().slice(0, 10);
 
@@ -120,8 +144,49 @@ export default function FloScreen() {
   useBackDismiss(Boolean(lowerPlan), () => setLowerPlan(null));
 
   useEffect(() => {
-    if (user) void loadFloMemory(user.id).then(setSummary);
-  }, [user]);
+    if (user && !floProLocked) void loadFloMemory(user.id).then(setSummary);
+  }, [floProLocked, user]);
+
+  useEffect(() => {
+    let cancelled = false;
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = null;
+    dispatch({ type: "hydrate", messages: [] });
+    setSourcesByMessageId({});
+    setOlderMessageCursor(null);
+    setChatError(null);
+    if (!user?.id || !activeHousehold?.householdId || floProLocked) {
+      setConversations([]);
+      setActiveConversationId(null);
+      return () => { cancelled = true; };
+    }
+    void listFloConversations(activeHousehold.householdId).then(next => {
+      if (cancelled) return;
+      setConversations(next);
+      setActiveConversationId(next[0]?.id ?? null);
+    }).catch(() => {
+      if (!cancelled) setChatError("Private Flo history is unavailable right now.");
+    });
+    return () => { cancelled = true; };
+  }, [activeHousehold?.householdId, floProLocked, user?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!activeConversationId || floProLocked) return () => { cancelled = true; };
+    if (skipConversationLoadRef.current === activeConversationId) {
+      skipConversationLoadRef.current = null;
+      return () => { cancelled = true; };
+    }
+    void listFloMessages(activeConversationId).then(page => {
+      if (cancelled) return;
+      dispatch({ type: "hydrate", messages: page.messages.map(message => ({ id: message.id, role: message.role, text: message.text })) });
+      setSourcesByMessageId(Object.fromEntries(page.messages.filter(message => message.sources.length).map(message => [message.id, message.sources])));
+      setOlderMessageCursor(page.nextCursor);
+    }).catch(() => {
+      if (!cancelled) setChatError("This private chat could not be loaded.");
+    });
+    return () => { cancelled = true; };
+  }, [activeConversationId, floProLocked]);
 
   useEffect(() => {
     let cancelled = false;
@@ -220,6 +285,7 @@ export default function FloScreen() {
   };
 
   const categoryPlan = useMemo(() => {
+    if (settings.planningMode !== "zero_budget") return [];
     const month = now.getMonth();
     const year = now.getFullYear();
     const previousDate = new Date(year, month - 1, 1);
@@ -269,7 +335,7 @@ export default function FloScreen() {
         } : undefined,
       };
     });
-  }, [categories, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, now]);
+  }, [categories, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, now, settings.planningMode]);
 
   const decisionHistory = useMemo(
     () => buildDecisionHistory(decisions.filter(decision => decisionStillHasSource(decision, transactions)), today, now.toISOString()),
@@ -531,7 +597,7 @@ export default function FloScreen() {
         lowestBalance: algorithmSuite.cashFlowGap.lowestBalance,
         detail: algorithmSuite.cashFlowGap.detail,
       } : undefined,
-      debtPayoff: isAlgorithmEnabled(decisionHubSettings, "debtPayoff") ? {
+      debtPayoff: settings.planningMode === "snowball" && isAlgorithmEnabled(decisionHubSettings, "debtPayoff") ? {
         nextDebtName: algorithmSuite.debtPayoff.nextDebtName,
         snowballBalance: algorithmSuite.debtPayoff.snowballBalance,
         avalancheName: algorithmSuite.debtPayoff.avalancheName,
@@ -655,28 +721,126 @@ export default function FloScreen() {
     return parts.join(" ");
   };
 
-  const send = async (text = input) => {
+  const startNewConversation = () => {
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = null;
+    setActiveConversationId(null);
+    setOlderMessageCursor(null);
+    setSourcesByMessageId({});
+    setChatError(null);
+    retryRequestRef.current = null;
+    dispatch({ type: "hydrate", messages: [] });
+  };
+
+  const selectConversation = (conversationId: string) => {
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = null;
+    setChatError(null);
+    retryRequestRef.current = null;
+    setActiveConversationId(conversationId);
+  };
+
+  const renameConversation = async (conversationId: string, title: string) => {
+    await renameFloConversation(conversationId, title);
+    setConversations(previous => previous.map(conversation => conversation.id === conversationId ? { ...conversation, title: title.trim().slice(0, 80) } : conversation));
+  };
+
+  const removeConversation = async (conversationId: string) => {
+    await deleteFloConversation(conversationId);
+    const remaining = conversations.filter(conversation => conversation.id !== conversationId);
+    setConversations(remaining);
+    setActiveConversationId(remaining[0]?.id ?? null);
+    if (!remaining.length) dispatch({ type: "hydrate", messages: [] });
+  };
+
+  const loadOlderMessages = async () => {
+    if (!activeConversationId || !olderMessageCursor) return;
+    const page = await listFloMessages(activeConversationId, olderMessageCursor);
+    dispatch({ type: "prepend", messages: page.messages.map(message => ({ id: message.id, role: message.role, text: message.text })) });
+    setSourcesByMessageId(previous => ({ ...previous, ...Object.fromEntries(page.messages.filter(message => message.sources.length).map(message => [message.id, message.sources])) }));
+    setOlderMessageCursor(page.nextCursor);
+  };
+
+  const stopStreaming = () => {
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = null;
+    dispatch({ type: "stop" });
+    setChatError("Response stopped. You can retry the last question.");
+  };
+
+  const send = async (text = input, retry = false) => {
     const clean = text.trim();
-    if (!clean || chat.sending) return;
+    if (!clean || chat.sending || floProLocked || !user?.id || !activeHousehold?.householdId) return;
     setInput("");
-    dispatch({ type: "submit", id: `u-${Date.now()}`, text: clean });
-    const thinkingStartedAt = Date.now();
-    let reply = FLO_CONNECTION_ERROR_MESSAGE;
+    setChatError(null);
+    setLastPrompt(clean);
+    const priorRequest = retry && retryRequestRef.current?.text === clean ? retryRequestRef.current : null;
+    const userMessageId = priorRequest?.userMessageId ?? createFloId();
+    const assistantMessageId = priorRequest?.assistantMessageId ?? createFloId();
+    dispatch({ type: "submit", id: userMessageId, assistantId: assistantMessageId, text: clean });
+    let conversationId = priorRequest?.conversationId ?? activeConversationId;
+    retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId };
+    let reply = "";
+    let streamError: string | null = null;
     try {
-      reply = buildCalendarDayReply(clean) ?? await askFlo(clean, facts, summary, baseline);
-    } catch {
-      reply = FLO_CONNECTION_ERROR_MESSAGE;
+      if (!conversationId) {
+        const created = await createFloConversation(user.id, activeHousehold.householdId, clean);
+        conversationId = created.id;
+        skipConversationLoadRef.current = created.id;
+        setConversations(previous => [created, ...previous]);
+        setActiveConversationId(created.id);
+        retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: created.id };
+      }
+      const controller = new AbortController();
+      streamAbortRef.current = controller;
+      await streamFloChat({
+        conversationId,
+        householdId: activeHousehold.householdId,
+        userMessageId,
+        assistantMessageId,
+        text: clean,
+        facts,
+        asOf: new Date().toISOString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        previewTier,
+        signal: controller.signal,
+        onEvent: event => {
+          if (event.type === "text-delta") {
+            reply += event.delta;
+            dispatch({ type: "stream-delta", id: assistantMessageId, delta: event.delta });
+          } else if (event.type === "sources") {
+            setSourcesByMessageId(previous => ({ ...previous, [assistantMessageId]: event.sources }));
+          } else if (event.type === "error") {
+            streamError = event.message;
+          } else if (event.type === "done" && !reply && event.text) {
+            reply = event.text;
+            dispatch({ type: "stream-delta", id: assistantMessageId, delta: event.text });
+          }
+        },
+      });
+      streamAbortRef.current = null;
+      if (streamError) throw new Error(streamError);
+      dispatch({ type: "stop" });
+    } catch (error) {
+      streamAbortRef.current = null;
+      if (reply) {
+        dispatch({ type: "stop" });
+        setChatError(error instanceof Error && error.name === "AbortError" ? "Response stopped. You can retry the last question." : "Flo's response was interrupted. Retry to continue.");
+      } else {
+        reply = buildCalendarDayReply(clean) ?? localFloAnswer(clean, facts, baseline) ?? FLO_CONNECTION_ERROR_MESSAGE;
+        dispatch({ type: "reply", id: assistantMessageId, text: reply });
+        setSourcesByMessageId(previous => ({ ...previous, [assistantMessageId]: [{ type: "deterministic", label: "FlowLedger calculation", asOf: new Date().toISOString() }] }));
+        if (conversationId && reply !== FLO_CONNECTION_ERROR_MESSAGE) {
+          void persistFloFallback({ id: assistantMessageId, conversationId, householdId: activeHousehold.householdId, userId: user.id, text: reply });
+        }
+        setChatError(reply === FLO_CONNECTION_ERROR_MESSAGE ? "Flo Pro is offline. Basic deterministic answers remain available when the question matches your current snapshot." : "Flo Pro was offline, so this answer used your deterministic FlowLedger calculation.");
+      }
     }
-    const remainingThinkTime = MIN_FLO_THINK_MS - (Date.now() - thinkingStartedAt);
-    if (remainingThinkTime > 0) {
-      await new Promise(resolve => setTimeout(resolve, remainingThinkTime));
-    }
-    const replyId = `f-${Date.now()}`;
-    dispatch({ type: "reply", id: replyId, text: reply });
+    const replyId = assistantMessageId;
     const cards = floResponseCards(clean, facts, baseline);
     if (cards.length) setCardsByMessageId(previous => ({ ...previous, [replyId]: cards }));
     const debtPayment = evaluateFloDebtPayment(clean, facts, today);
-    if (debtPayment?.allowed) {
+    if (settings.planningMode === "snowball" && debtPayment?.allowed) {
       const result = evaluateDecision(baseline, buildDebtPaymentScenario(debtPayment), settings.safety_floor);
       if (result.verdict !== "unsafe") {
         setDebtPaymentByMessageId(previous => ({ ...previous, [replyId]: debtPayment }));
@@ -984,8 +1148,11 @@ export default function FloScreen() {
 
   const composerBottom = Platform.OS === "web" ? 88 : Math.max(insets.bottom, 8) + 54;
 
+  if (floProLocked) {
+    return <BasicFlo facts={facts} baseline={baseline} asOf={new Date().toISOString()} />;
+  }
+
   return (
-    <PlanFeatureGate feature="flo_assistant">
     <KeyboardAvoidingView
       style={[styles.screen, { backgroundColor: colors.background }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -1000,10 +1167,20 @@ export default function FloScreen() {
         <FloLogo size={48} />
         <View style={styles.headerText}>
           <Text style={[styles.title, { color: colors.foreground }]}>Ask Flo</Text>
-          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Ask, preview, and apply money moves.</Text>
+          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Account-aware chat · private history · confirmed actions</Text>
         </View>
         <Feather name="message-circle" size={24} color={colors.primaryForeground} />
       </LinearGradient>
+
+      <FloConversationBar
+        conversations={conversations}
+        activeId={activeConversationId}
+        disabled={chat.sending}
+        onNew={startNewConversation}
+        onSelect={selectConversation}
+        onRename={renameConversation}
+        onDelete={removeConversation}
+      />
 
       <ScrollView
         ref={scrollRef}
@@ -1012,8 +1189,13 @@ export default function FloScreen() {
         keyboardShouldPersistTaps="handled"
         onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
       >
+        {olderMessageCursor ? (
+          <Pressable accessibilityRole="button" onPress={() => void loadOlderMessages()} style={[styles.loadOlderButton, { backgroundColor: colors.muted }]}>
+            <Text style={[styles.loadOlderText, { color: colors.mutedForeground }]}>Load older messages</Text>
+          </Pressable>
+        ) : null}
         <View style={[styles.bubble, styles.floBubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.bubbleText, { color: colors.foreground }]}>Hi, my name&apos;s Flo! Ask me something.</Text>
+          <Text style={[styles.bubbleText, { color: colors.foreground }]}>Hi, I&apos;m Flo Pro. Ask me about this household&apos;s accounts, activity, bills, income, budget, debts, goals, forecasts, or plans.</Text>
         </View>
 
         {chat.messages.map(message => (
@@ -1040,6 +1222,16 @@ export default function FloScreen() {
                     <Text style={[styles.insightTitle, { color: colors.mutedForeground }]}>{card.title}</Text>
                     <Text style={[styles.insightValue, { color: toneColor(card.tone, colors) }]}>{card.value}</Text>
                     <Text style={[styles.insightDetail, { color: colors.mutedForeground }]}>{card.detail}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+            {message.role === "flo" && sourcesByMessageId[message.id]?.length ? (
+              <View style={styles.sourceRow}>
+                {sourcesByMessageId[message.id].map(source => (
+                  <View key={`${message.id}-${source.type}-${source.label}`} style={[styles.sourceChip, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+                    <Feather name="database" size={11} color={colors.mutedForeground} />
+                    <Text style={[styles.sourceText, { color: colors.mutedForeground }]}>{source.label}</Text>
                   </View>
                 ))}
               </View>
@@ -1385,6 +1577,17 @@ export default function FloScreen() {
       />
 
       <View style={[styles.composerArea, { backgroundColor: colors.background, borderColor: colors.border, paddingBottom: composerBottom }]}>
+        {chatError ? (
+          <View style={styles.errorRow}>
+            <Text style={[styles.chatError, { color: colors.mutedForeground }]}>{chatError}</Text>
+            {lastPrompt && !chat.sending ? (
+              <Pressable accessibilityRole="button" onPress={() => void send(lastPrompt, true)} style={[styles.retryButton, { backgroundColor: colors.primary + "18" }]}>
+                <Feather name="rotate-ccw" size={13} color={colors.primary} />
+                <Text style={[styles.retryText, { color: colors.primary }]}>Retry</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -1427,20 +1630,19 @@ export default function FloScreen() {
           />
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Send message"
-            onPress={() => void send()}
-            disabled={!input.trim() || chat.sending}
+            accessibilityLabel={chat.sending ? "Stop response" : "Send message"}
+            onPress={chat.sending ? stopStreaming : () => void send()}
+            disabled={!chat.sending && !input.trim()}
             style={[
               styles.send,
-              { backgroundColor: colors.primary, opacity: !input.trim() || chat.sending ? 0.45 : 1 },
+              { backgroundColor: chat.sending ? colors.destructive : colors.primary, opacity: !chat.sending && !input.trim() ? 0.45 : 1 },
             ]}
           >
-            <Text style={styles.sendText}>Send</Text>
+            <Text style={styles.sendText}>{chat.sending ? "Stop" : "Send"}</Text>
           </Pressable>
         </View>
       </View>
     </KeyboardAvoidingView>
-    </PlanFeatureGate>
   );
 }
 
@@ -1500,6 +1702,8 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 12, marginTop: 1 },
   conversation: { flex: 1 },
   conversationContent: { padding: 16, paddingBottom: 22, gap: 12 },
+  loadOlderButton: { alignSelf: "center", minHeight: 36, borderRadius: 999, justifyContent: "center", paddingHorizontal: 14 },
+  loadOlderText: { fontSize: 11, fontFamily: "Inter_700Bold" },
   historyCard: { borderWidth: 1, borderRadius: 20, padding: 14, gap: 12 },
   historyHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
   historyIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
@@ -1546,6 +1750,9 @@ const styles = StyleSheet.create({
   insightTitle: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.5 },
   insightValue: { fontSize: 18, fontFamily: "Inter_700Bold", marginTop: 3 },
   insightDetail: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2, lineHeight: 15 },
+  sourceRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 9 },
+  sourceChip: { minHeight: 28, maxWidth: 240, borderWidth: 1, borderRadius: 999, flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 9 },
+  sourceText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
   decisionActions: { gap: 6, marginTop: 2 },
   saveDecisionButton: { minHeight: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, paddingHorizontal: 12 },
   saveDecisionText: { color: "#fff", fontSize: 13, fontFamily: "Inter_700Bold" },
@@ -1559,6 +1766,10 @@ const styles = StyleSheet.create({
   reductionButton: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 8 },
   reductionButtonText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   composerArea: { borderTopWidth: 1, paddingHorizontal: 12, paddingTop: 10 },
+  errorRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+  chatError: { flex: 1, fontSize: 11, lineHeight: 15, fontFamily: "Inter_500Medium" },
+  retryButton: { minHeight: 34, borderRadius: 999, flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 11 },
+  retryText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   quickPromptScroller: { marginBottom: 8, maxHeight: 38 },
   quickPromptContent: { gap: 8, paddingRight: 12 },
   quickPromptChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },

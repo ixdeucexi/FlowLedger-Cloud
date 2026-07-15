@@ -52,6 +52,7 @@ import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 import { supabase } from "@/lib/supabase";
 import { transactionCategoryParts } from "@/lib/reviewCenter";
+import { PLANNING_MODE_OPTIONS } from "@/lib/planningMode";
 import {
   type AppFeedbackRow,
   type FeedbackStatus,
@@ -2075,6 +2076,41 @@ export default function MoreScreen() {
       </>}
 
       {activeSettingsSection === "money" && <>
+      <SLabel c={c} text="Planning Mode" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <Text style={[styles.planningModeIntro, { color: c.mutedForeground }]}>Choose how FlowLedger helps with your money. Switching modes keeps your debts and saved category amounts intact.</Text>
+        <View style={styles.planningModeList}>
+          {PLANNING_MODE_OPTIONS.map(option => {
+            const active = settings.planningMode === option.id;
+            const icon = option.id === "snowball" ? "trending-down" : option.id === "zero_budget" ? "pie-chart" : "wind";
+            return (
+              <Pressable
+                key={option.id}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: active }}
+                onPress={() => void updateSettings({ planningMode: option.id })}
+                style={({ pressed }) => [
+                  styles.planningModeOption,
+                  { backgroundColor: active ? c.primary + "16" : c.muted, borderColor: active ? c.primary : c.border, opacity: pressed ? 0.78 : 1 },
+                ]}
+              >
+                <View style={[styles.planningModeIcon, { backgroundColor: active ? c.primary : c.card }]}>
+                  <Feather name={icon} size={17} color={active ? c.primaryForeground : c.mutedForeground} />
+                </View>
+                <View style={styles.planningModeCopy}>
+                  <Text style={[styles.planningModeTitle, { color: c.foreground }]}>{option.label}</Text>
+                  <Text style={[styles.planningModeShort, { color: c.mutedForeground }]}>{option.shortDescription}</Text>
+                </View>
+                <Feather name={active ? "check-circle" : "circle"} size={19} color={active ? c.primary : c.mutedForeground} />
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={[styles.planningModeDescription, { color: c.mutedForeground }]}>
+          {PLANNING_MODE_OPTIONS.find(option => option.id === settings.planningMode)?.description}
+        </Text>
+      </View>
+
       <SLabel c={c} text="Income" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         {incomes.length === 0 ? (
@@ -2124,9 +2160,9 @@ export default function MoreScreen() {
       </View>
 
       {/* ── Categories ── */}
-      <SLabel c={c} text="Budget Categories" />
+      <SLabel c={c} text={settings.planningMode === "zero_budget" ? "Budget Categories" : "Spending Categories"} />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        <Pressable
+        {settings.planningMode === "zero_budget" && <Pressable
           onPress={() => router.push("/(tabs)/category-budget" as any)}
           style={({ pressed }) => [styles.categoryBudgetLink, { backgroundColor: c.primary + "18", borderColor: c.primary + "30", opacity: pressed ? 0.75 : 1 }]}
         >
@@ -2138,7 +2174,7 @@ export default function MoreScreen() {
             <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Edit budgets, move money, and ask Flo by category.</Text>
           </View>
           <Feather name="chevron-right" size={18} color={c.primary} />
-        </Pressable>
+        </Pressable>}
         {categories.map((cat, i) => (
           <View
             key={cat}
@@ -2213,6 +2249,7 @@ export default function MoreScreen() {
       </View>
 
       {/* ── Debt Payoff Strategy ── */}
+      {settings.planningMode === "snowball" && <>
       <SLabel c={c} text="Debt Payoff Strategy" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View style={[styles.methodRow, { backgroundColor: c.muted, borderRadius: 10 }]}>
@@ -2243,6 +2280,7 @@ export default function MoreScreen() {
       </View>
 
       {/* ── Behavior ── */}
+      </>}
       <SLabel c={c} text="Forecast Controls" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View>
@@ -2313,6 +2351,7 @@ export default function MoreScreen() {
           Missing: {forecastReadiness.missing.length ? forecastReadiness.missing.join(", ") : "Nothing major — your forecast is ready."}
         </Text>
       </View>
+      </>}
 
       <PlanFeatureGate feature="connected_insights" compact>
       <SLabel c={c} text="Transaction Review Queue" />
@@ -3109,6 +3148,14 @@ const styles = StyleSheet.create({
   settingsBackText: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   settingsLauncher: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 20, padding: 14, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.16, shadowRadius: 18, elevation: 4 },
   card: { padding: 16, marginBottom: 20, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", shadowColor: "#000", shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 22, elevation: 5 },
+  planningModeIntro: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 18, marginBottom: 12 },
+  planningModeList: { gap: 9 },
+  planningModeOption: { minHeight: 66, borderWidth: 1, borderRadius: 16, padding: 11, flexDirection: "row", alignItems: "center", gap: 11 },
+  planningModeIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  planningModeCopy: { flex: 1 },
+  planningModeTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
+  planningModeShort: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
+  planningModeDescription: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 18, marginTop: 12 },
   emptyText: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", paddingVertical: 8 },
 
   incomeRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, gap: 10 },

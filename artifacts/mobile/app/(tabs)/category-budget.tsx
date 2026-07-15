@@ -31,8 +31,11 @@ export default function CategoryBudgetScreen() {
     categories,
     getMonthlyBills,
     getBillMonthlyTotal,
+    getMonthlyIncome,
     getTransactionsForMonth,
     selectedYear,
+    settings,
+    updateSettings,
   } = useBudget();
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth());
@@ -76,6 +79,8 @@ export default function CategoryBudgetScreen() {
     spent: sum.spent + row.spent,
     left: sum.left + row.remaining,
   }), { planned: 0, spent: 0, left: 0 });
+  const monthlyIncome = getMonthlyIncome(month, year);
+  const unassigned = monthlyIncome - totals.planned;
 
   const persistBudgets = (next: Record<string, number>) => {
     setCategoryBudgets(next);
@@ -119,6 +124,30 @@ export default function CategoryBudgetScreen() {
     setMoveTarget(null);
   };
 
+  if (settings.planningMode !== "zero_budget") {
+    return (
+      <View style={[styles.screen, { backgroundColor: c.background, paddingTop: insets.top + 10 }]}>
+        <PremiumBackdrop variant="green" />
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: c.card }]}>
+            <Feather name="chevron-left" size={20} color={c.foreground} />
+          </Pressable>
+          <Text style={[styles.title, { color: c.foreground }]}>Category Budget</Text>
+        </View>
+        <View style={[styles.modeGate, { backgroundColor: c.card, borderColor: c.border }]}>
+          <View style={[styles.modeGateIcon, { backgroundColor: c.primary + "18" }]}>
+            <Feather name="pie-chart" size={24} color={c.primary} />
+          </View>
+          <Text style={[styles.modeGateTitle, { color: c.foreground }]}>Zero Budget is off</Text>
+          <Text style={[styles.modeGateText, { color: c.mutedForeground }]}>Switch to Zero Budget to give every dollar a category, track what remains, and move money between categories. Your saved category amounts are still here.</Text>
+          <Pressable onPress={() => void updateSettings({ planningMode: "zero_budget" })} style={[styles.modeGateButton, { backgroundColor: c.primary }]}>
+            <Text style={[styles.modeGateButtonText, { color: c.primaryForeground }]}>Use Zero Budget</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.screen, { backgroundColor: c.background, paddingTop: insets.top + 10 }]}>
       <PremiumBackdrop variant="green" />
@@ -128,7 +157,7 @@ export default function CategoryBudgetScreen() {
         </Pressable>
         <View style={{ flex: 1 }}>
           <Text style={[styles.title, { color: c.foreground }]}>Category Budget</Text>
-          <Text style={[styles.subtitle, { color: c.mutedForeground }]}>Safe-to-spend by category</Text>
+          <Text style={[styles.subtitle, { color: c.mutedForeground }]}>Give every dollar a job</Text>
         </View>
         <Pressable onPress={saveDrafts} style={[styles.saveBtn, { backgroundColor: c.primary }]}>
           <Text style={[styles.saveText, { color: c.primaryForeground }]}>Save</Text>
@@ -142,9 +171,9 @@ export default function CategoryBudgetScreen() {
       </View>
 
       <View style={styles.summaryRow}>
-        <SummaryBox label="Planned" value={`$${totals.planned.toFixed(0)}`} color={c.primary} />
-        <SummaryBox label="Spent" value={`$${totals.spent.toFixed(0)}`} color={c.destructive} />
-        <SummaryBox label="Left" value={`${totals.left < 0 ? "-" : ""}$${Math.abs(totals.left).toFixed(0)}`} color={totals.left < 0 ? c.destructive : c.success} />
+        <SummaryBox label="Income" value={`$${monthlyIncome.toFixed(0)}`} color={c.success} />
+        <SummaryBox label="Assigned" value={`$${totals.planned.toFixed(0)}`} color={c.primary} />
+        <SummaryBox label={Math.abs(unassigned) < 0.005 ? "Ready" : unassigned > 0 ? "To assign" : "Over"} value={`${unassigned < -0.005 ? "-" : ""}$${Math.abs(unassigned).toFixed(0)}`} color={Math.abs(unassigned) < 0.005 ? c.success : unassigned > 0 ? c.warning : c.destructive} />
       </View>
 
       <View style={styles.filterRow}>
@@ -258,6 +287,12 @@ const styles = StyleSheet.create({
   summaryBox: { flex: 1, borderRadius: 14, paddingVertical: 12, alignItems: "center", backgroundColor: "rgba(148,163,184,0.10)" },
   summaryValue: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
   summaryLabel: { fontSize: 10, fontFamily: "Inter_700Bold", color: "#94a3b8", marginTop: 2, textTransform: "uppercase" },
+  modeGate: { margin: 20, marginTop: 48, borderWidth: 1, borderRadius: 24, padding: 22, alignItems: "center" },
+  modeGateIcon: { width: 52, height: 52, borderRadius: 17, alignItems: "center", justifyContent: "center", marginBottom: 14 },
+  modeGateTitle: { fontSize: 20, fontFamily: "Inter_800ExtraBold", marginBottom: 7 },
+  modeGateText: { fontSize: 13, fontFamily: "Inter_500Medium", lineHeight: 19, textAlign: "center" },
+  modeGateButton: { minHeight: 46, borderRadius: 14, alignItems: "center", justifyContent: "center", paddingHorizontal: 18, marginTop: 18 },
+  modeGateButtonText: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   filterRow: { flexDirection: "row", gap: 8, paddingHorizontal: 16, marginBottom: 2 },
   filterChip: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   filterText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },

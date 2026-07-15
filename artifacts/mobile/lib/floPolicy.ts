@@ -244,8 +244,12 @@ export function buildFloCategoryQuickPrompts(categories: FloCategoryFact[]): str
 }
 export type FloChatState = { messages: FloChatMessage[]; sending: boolean };
 export type FloChatAction =
-  | { type: "submit"; id: string; text: string }
-  | { type: "reply"; id: string; text: string };
+  | { type: "submit"; id: string; text: string; assistantId?: string }
+  | { type: "reply"; id: string; text: string }
+  | { type: "hydrate"; messages: FloChatMessage[] }
+  | { type: "prepend"; messages: FloChatMessage[] }
+  | { type: "stream-delta"; id: string; delta: string }
+  | { type: "stop" };
 
 export const AI_USAGE_UNAVAILABLE_MESSAGE =
   "Flo is connected, but AI usage is currently unavailable. Check OpenAI billing or usage limits.";
@@ -272,16 +276,36 @@ const MONTHS: Record<string, number> = {
 };
 
 export function reduceFloChat(state: FloChatState, action: FloChatAction): FloChatState {
+  if (action.type === "hydrate") return { messages: action.messages, sending: false };
+  if (action.type === "prepend") {
+    const existing = new Set(state.messages.map(message => message.id));
+    return { ...state, messages: [...action.messages.filter(message => !existing.has(message.id)), ...state.messages] };
+  }
   if (action.type === "submit") {
     const text = action.text.trim();
     if (!text || state.sending) return state;
+    const assistantId = action.assistantId ?? `${action.id}-thinking`;
     return {
       messages: [
-        ...state.messages,
+        ...state.messages.filter(message => message.id !== action.id && message.id !== assistantId),
         { id: action.id, role: "user", text },
-        { id: `${action.id}-thinking`, role: "flo", text: "Flo thinking...", thinking: true },
+        { id: assistantId, role: "flo", text: "Flo thinking...", thinking: true },
       ],
       sending: true,
+    };
+  }
+  if (action.type === "stream-delta") {
+    return {
+      messages: state.messages.map(message => message.id === action.id
+        ? { ...message, text: message.thinking ? action.delta : `${message.text}${action.delta}`, thinking: false }
+        : message),
+      sending: true,
+    };
+  }
+  if (action.type === "stop") {
+    return {
+      messages: state.messages.map(message => message.thinking ? { ...message, thinking: false, text: message.text || "Response stopped." } : message),
+      sending: false,
     };
   }
   return {
@@ -483,6 +507,15 @@ export function sanitizeFloFacts(facts: FloFacts): FloFacts {
 export function localFloAnswer(message: string, facts: FloFacts, days: DecisionBaselineDay[]): string | null {
   if (isUnsafeFloRequest(message)) return FLO_SECURITY_REFUSAL_MESSAGE;
   const lower = message.toLowerCase();
+  if (/\b(money|financial) snapshot\b|\baccount overview\b/.test(lower)) {
+    return `Your current projected balance is $${facts.balanceToday.toFixed(2)}. This month shows $${facts.monthlyIncome.toFixed(2)} income, $${facts.monthlyBills.toFixed(2)} in planned bills, and ${facts.monthlyRemaining >= 0 ? "$" + facts.monthlyRemaining.toFixed(2) + " remaining" : "$" + Math.abs(facts.monthlyRemaining).toFixed(2) + " short"}. The forecast low is $${facts.lowestBalance.toFixed(2)} on ${facts.lowestBalanceDate}.`;
+  }
+  if (/\bdebt\b.*\b(balance|snapshot|total|owe)\b|\b(balance|total)\b.*\bdebt\b/.test(lower)) {
+    const debts = sanitizeDebtFacts(facts.debts);
+    if (!debts.length) return "I don't see an active debt balance right now. Add debts in Bills to include them in this snapshot.";
+    const total = debts.reduce((sum, debt) => sum + debt.balance, 0);
+    return `Your active debt balance is $${total.toFixed(2)} across ${debts.length} debt${debts.length === 1 ? "" : "s"}: ${debts.slice(0, 5).map(debt => `${debt.name} $${debt.balance.toFixed(2)}`).join(", ")}.`;
+  }
   const asksTodayForecast = /\b(today|available today|balance today|current balance|today's balance|dashboard number|command balance)\b/.test(lower)
     && /\b(why|balance|available|number|forecast|close|source|explain)\b/.test(lower);
   if (asksTodayForecast && facts.todayForecast) {

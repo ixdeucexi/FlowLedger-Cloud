@@ -474,7 +474,7 @@ export default function MonthlyScreen() {
   const monthlyIncome = getMonthlyIncome();
 
   const surplusSnowballOffer = useMemo(() => {
-    if (!surplusPrompt) return null;
+    if (!surplusPrompt || settings.planningMode !== "snowball") return null;
     const surplus = Math.max(0, surplusPrompt.budgeted - surplusPrompt.actual);
     const existing = getExtraPayment(month, selectedYear);
     const previousSource = existing?.sources?.find(source => source.type === "bill_surplus" && source.billId === surplusPrompt.bill.id)?.amount ?? 0;
@@ -482,7 +482,7 @@ export default function MonthlyScreen() {
     const validDate = isValidDateInMonth(surplusPaymentDate, month, selectedYear);
     const preview = previewDebtSnowball(month, selectedYear, total, surplus - previousSource, validDate ? surplusPaymentDate : undefined);
     return { preview, total, targetDebt: preview.months[0]?.targetName ?? preview.allocations[0]?.billName, dateValid: validDate, safe: validDate && preview.selectedExtra + 0.005 >= total };
-  }, [surplusPrompt, surplusPaymentDate, getExtraPayment, previewDebtSnowball, month, selectedYear]);
+  }, [surplusPrompt, surplusPaymentDate, getExtraPayment, previewDebtSnowball, month, selectedYear, settings.planningMode]);
 
   const askToTreatPaidAsFullPayment = useCallback((prompt: { bill: Bill; budgeted: number; actual: number; paidDate: string }) => {
     const { bill, budgeted, actual, paidDate } = prompt;
@@ -707,6 +707,12 @@ export default function MonthlyScreen() {
 
   const keepBillSurplus = async () => {
     if (!surplusPrompt) return;
+    if (settings.planningMode !== "snowball") {
+      await finalizeBillAtActualForMonth(surplusPrompt);
+      await matchSurplusAmountToActual(surplusPrompt);
+      setSurplusPrompt(null);
+      return;
+    }
     if (surplusPrompt.bill.is_debt) {
       const directPaidBefore = getPaidAmount(surplusPrompt.bill.id, month, selectedYear);
       await finalizeBillAtActualForMonth(surplusPrompt);
@@ -1322,7 +1328,7 @@ export default function MonthlyScreen() {
                   </View>
                 )}
 
-                <View style={[styles.extraCard, { backgroundColor: c.card, marginHorizontal: 16, borderRadius: colors.radius, marginTop: 8 }]}>
+                {settings.planningMode === "snowball" && <View style={[styles.extraCard, { backgroundColor: c.card, marginHorizontal: 16, borderRadius: colors.radius, marginTop: 8 }]}>
                   <View style={styles.extraHeader}>
                     <Feather name="zap" size={14} color={c.primary} />
                     <Text style={[styles.extraTitle, { color: c.foreground }]}>
@@ -1363,7 +1369,7 @@ export default function MonthlyScreen() {
                       </Pressable>
                     </View>
                   )}
-                </View>
+                </View>}
 
                 <View style={[styles.billFilterRow, { paddingHorizontal: 16, marginTop: 8, marginBottom: 4 }]}>
                   {(["all", "paid", "unpaid"] as const).map(f => (
@@ -2353,7 +2359,7 @@ export default function MonthlyScreen() {
         </Pressable>
       </Modal>
       <SnowballPreviewModal
-        visible={snowballModalVisible}
+        visible={settings.planningMode === "snowball" && snowballModalVisible}
         preview={snowballPreview}
         amount={extraPayment}
         existingPayment={!!getExtraPayment(month, selectedYear)}
@@ -2383,6 +2389,7 @@ export default function MonthlyScreen() {
         actual={surplusPrompt?.actual ?? 0}
         targetDebt={surplusSnowballOffer?.targetDebt}
         snowballSafe={surplusSnowballOffer?.safe ?? false}
+        snowballEnabled={settings.planningMode === "snowball"}
         safetyFloor={settings.safety_floor}
         forecastHorizonMonths={settings.forecast_horizon_months}
         paymentDate={surplusPaymentDate}

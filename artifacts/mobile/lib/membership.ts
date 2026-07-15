@@ -2,7 +2,8 @@ export type PlanTier = "free" | "pro";
 
 export type PlanFeature =
   | "manual_budgeting"
-  | "flo_assistant"
+  | "flo_basic"
+  | "flo_account_chat"
   | "debt_payoff"
   | "plaid_sync"
   | "transaction_matching"
@@ -38,8 +39,9 @@ export const PLAN_CATALOG: Record<PlanTier, PlanDefinition> = {
     description: "The complete manual FlowLedger app for building and running your money plan.",
     monthlyPrice: 0,
     annualPrice: 0,
-    features: ["manual_budgeting"],
+    features: ["manual_budgeting", "flo_basic"],
     highlights: [
+      "Basic Flo guided answers with no AI usage",
       "Manual accounts and transactions",
       "Bills, income, categories, and goals",
       "Forecasts, reports, and reconciliation",
@@ -55,14 +57,16 @@ export const PLAN_CATALOG: Record<PlanTier, PlanDefinition> = {
     annualPrice: 89,
     features: [
       "manual_budgeting",
-      "flo_assistant",
+      "flo_basic",
+      "flo_account_chat",
       "debt_payoff",
       "plaid_sync",
       "transaction_matching",
       "connected_insights",
     ],
     highlights: [
-      "Flo guidance and confirmed actions",
+      "Basic Flo guided answers",
+      "Account-aware Flo chat and confirmed actions",
       "Snowball and avalanche payoff tools",
       "Plaid bank sync and transaction matching",
       "Automatic review and connected insights",
@@ -70,10 +74,10 @@ export const PLAN_CATALOG: Record<PlanTier, PlanDefinition> = {
   },
 };
 
-export const PLAN_FEATURE_COPY: Record<Exclude<PlanFeature, "manual_budgeting">, { title: string; description: string }> = {
-  flo_assistant: {
-    title: "Flo is a Pro feature",
-    description: "Upgrade to Pro to ask Flo questions and let her preview and apply confirmed money-plan changes.",
+export const PLAN_FEATURE_COPY: Record<Exclude<PlanFeature, "manual_budgeting" | "flo_basic">, { title: string; description: string }> = {
+  flo_account_chat: {
+    title: "Account-aware Flo chat is Pro",
+    description: "Upgrade to Pro for free-form chat, private history, live household records, and confirmed money-plan proposals. Basic Flo guided answers remain available.",
   },
   debt_payoff: {
     title: "Debt payoff tools are Pro",
@@ -100,6 +104,10 @@ export function normalizePlanTier(value: unknown, fallback: PlanTier = "free"): 
 export function canUseFeature(plan: PlanTier | Pick<HouseholdPlan, "tier">, feature: PlanFeature): boolean {
   const tier = typeof plan === "string" ? plan : plan.tier;
   return PLAN_CATALOG[tier].features.includes(feature);
+}
+
+export function membershipEnforcementEnabled(value = process.env.EXPO_PUBLIC_MEMBERSHIP_ENFORCEMENT_ENABLED): boolean {
+  return String(value ?? "false").trim().toLowerCase() === "true";
 }
 
 export function annualSavings(tier: PlanTier): number {

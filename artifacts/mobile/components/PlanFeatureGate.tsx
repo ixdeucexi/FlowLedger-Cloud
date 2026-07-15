@@ -6,7 +6,7 @@ import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { PLAN_FEATURE_COPY, type PlanFeature } from "@/lib/membership";
 
-export function PlanFeatureGate({ feature, children, compact = false }: { feature: Exclude<PlanFeature, "manual_budgeting">; children: React.ReactNode; compact?: boolean }) {
+export function PlanFeatureGate({ feature, children, compact = false }: { feature: Exclude<PlanFeature, "manual_budgeting" | "flo_basic">; children: React.ReactNode; compact?: boolean }) {
   const c = useColors();
   const { isFeatureLocked, bypassFeature, isAdmin, previewTier } = useMembership();
 

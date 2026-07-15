@@ -8,7 +8,7 @@ import { PLAN_CATALOG, PLAN_TIERS, annualMonthlyEquivalent, annualSavings, type 
 
 export function MembershipPanel() {
   const c = useColors();
-  const { actualPlan, previewTier, isAdmin, loading, setPreviewTier, resetPreview } = useMembership();
+  const { actualPlan, previewTier, isAdmin, loading, enforcementEnabled, setPreviewTier, resetPreview } = useMembership();
   const [billingCadence, setBillingCadence] = useState<"monthly" | "annual">("annual");
 
   return (
@@ -21,14 +21,14 @@ export function MembershipPanel() {
           <Text style={[styles.eyebrow, { color: c.primary }]}>CURRENT HOUSEHOLD PLAN</Text>
           <Text style={[styles.currentTitle, { color: c.foreground }]}>{loading ? "Loading…" : PLAN_CATALOG[actualPlan.tier].name}</Text>
           <Text style={[styles.currentDescription, { color: c.mutedForeground }]}>
-            {actualPlan.source === "grandfathered" ? "Grandfathered early access · no expiration" : "Early access · all features remain unlocked"}
+            {actualPlan.source === "grandfathered" ? "Grandfathered Pro access · no expiration" : enforcementEnabled ? "Your household's live plan is enforced" : "Early access · paid feature enforcement is off"}
           </Text>
         </View>
       </View>
 
       <View style={[styles.earlyAccess, { backgroundColor: c.success + "10", borderColor: c.success + "35" }]}>
         <Feather name="check-circle" size={17} color={c.success} />
-        <Text style={[styles.earlyAccessText, { color: c.foreground }]}>Billing is not active yet. Everyone keeps full app access during early access.</Text>
+        <Text style={[styles.earlyAccessText, { color: c.foreground }]}>{enforcementEnabled ? "Plan enforcement is active. Basic Flo remains available to every household." : "Billing is not active yet. Basic Flo is free, and account-aware Flo Pro remains unlocked during early access."}</Text>
       </View>
 
       {isAdmin ? (

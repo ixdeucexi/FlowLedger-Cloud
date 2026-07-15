@@ -15,6 +15,7 @@ interface Props {
   actual: number;
   targetDebt?: string;
   snowballSafe: boolean;
+  snowballEnabled?: boolean;
   safetyFloor?: number;
   forecastHorizonMonths?: number;
   paymentDate: string;
@@ -27,7 +28,7 @@ interface Props {
   onClose: () => void;
 }
 
-export function BillSurplusModal({ visible, billName, itemType = "bill", budgeted, actual, targetDebt, snowballSafe, safetyFloor = 200, forecastHorizonMonths = 6, paymentDate, paymentDateValid, paymentDateMin, paymentDateMax, onPaymentDateChange, onKeep, onSnowball, onClose }: Props) {
+export function BillSurplusModal({ visible, billName, itemType = "bill", budgeted, actual, targetDebt, snowballSafe, snowballEnabled = true, safetyFloor = 200, forecastHorizonMonths = 6, paymentDate, paymentDateValid, paymentDateMin, paymentDateMax, onPaymentDateChange, onKeep, onSnowball, onClose }: Props) {
   const c = useColors();
   useBackDismiss(visible, onClose);
   const difference = Math.max(0, budgeted - actual);
@@ -44,29 +45,29 @@ export function BillSurplusModal({ visible, billName, itemType = "bill", budgete
             Hey, I see {billName} was paid under the planned {itemLabel}. You have ${difference.toFixed(2)} available.
           </Text>
           <Text style={[styles.sub, { color: c.mutedForeground }]}>
-            I can add it to {targetDebt ?? "your snowball"} for you, or you can keep it available.
+            {snowballEnabled ? `I can add it to ${targetDebt ?? "your snowball"} for you, or you can keep it available.` : "Your current planning mode keeps this difference available in your cash flow."}
           </Text>
           <View style={[styles.breakdown, { backgroundColor: c.background, borderColor: c.border }]}>
             <View style={styles.row}><Text style={[styles.rowLabel, { color: c.mutedForeground }]}>Budgeted</Text><Text style={[styles.rowValue, { color: c.foreground }]}>${budgeted.toFixed(2)}</Text></View>
             <View style={styles.row}><Text style={[styles.rowLabel, { color: c.mutedForeground }]}>Actual</Text><Text style={[styles.rowValue, { color: c.foreground }]}>${actual.toFixed(2)}</Text></View>
             <View style={styles.row}><Text style={[styles.rowLabel, { color: c.success }]}>Available</Text><Text style={[styles.rowValue, { color: c.success }]}>${difference.toFixed(2)}</Text></View>
           </View>
-          <DatePickerField
+          {snowballEnabled && <DatePickerField
             label="Apply leftover on"
             value={paymentDate}
             onChange={onPaymentDateChange}
             placeholder="Choose payment date"
             minDate={paymentDateMin}
             maxDate={paymentDateMax}
-          />
-          <Text style={[styles.dateHelp, { color: c.mutedForeground }]}>This date will appear as the extra debt payment on your calendar.</Text>
-          {!targetDebt && <Text style={[styles.note, { color: c.mutedForeground }]}>No debt is currently included in your snowball.</Text>}
-          {targetDebt && !paymentDateValid && <Text style={[styles.note, { color: c.warning }]}>Choose a valid date in this bill&apos;s month.</Text>}
-          {targetDebt && paymentDateValid && !snowballSafe && <Text style={[styles.note, { color: c.warning }]}>Keep this money available to preserve your ${safetyFloor.toFixed(0)} floor across {forecastHorizonMonths} months.</Text>}
-          <Pressable disabled={!targetDebt || !snowballSafe} onPress={onSnowball} style={[styles.primary, { backgroundColor: targetDebt && snowballSafe ? c.primary : c.muted }]}> 
+          />}
+          {snowballEnabled && <Text style={[styles.dateHelp, { color: c.mutedForeground }]}>This date will appear as the extra debt payment on your calendar.</Text>}
+          {snowballEnabled && !targetDebt && <Text style={[styles.note, { color: c.mutedForeground }]}>No debt is currently included in your snowball.</Text>}
+          {snowballEnabled && targetDebt && !paymentDateValid && <Text style={[styles.note, { color: c.warning }]}>Choose a valid date in this bill&apos;s month.</Text>}
+          {snowballEnabled && targetDebt && paymentDateValid && !snowballSafe && <Text style={[styles.note, { color: c.warning }]}>Keep this money available to preserve your ${safetyFloor.toFixed(0)} floor across {forecastHorizonMonths} months.</Text>}
+          {snowballEnabled && <Pressable disabled={!targetDebt || !snowballSafe} onPress={onSnowball} style={[styles.primary, { backgroundColor: targetDebt && snowballSafe ? c.primary : c.muted }]}>
             <Feather name="zap" size={16} color={targetDebt && snowballSafe ? c.primaryForeground : c.mutedForeground} />
             <Text style={[styles.primaryText, { color: targetDebt && snowballSafe ? c.primaryForeground : c.mutedForeground }]}>Add ${difference.toFixed(2)} to {targetDebt ?? "Snowball"}</Text>
-          </Pressable>
+          </Pressable>}
           <Pressable onPress={onKeep} style={[styles.secondary, { borderColor: c.border }]}><Text style={[styles.secondaryText, { color: c.foreground }]}>No, keep ${difference.toFixed(2)} available</Text></Pressable>
         </Pressable>
       </Pressable>

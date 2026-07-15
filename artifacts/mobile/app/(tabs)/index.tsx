@@ -361,6 +361,7 @@ export default function DashboardScreen() {
   }, []);
 
   const previousCategoryPlan = useMemo(() => {
+    if (settings.planningMode !== "zero_budget") return [];
     const previousDate = new Date(selectedYear, currentMonth - 1, 1);
     const month = previousDate.getMonth();
     const year = previousDate.getFullYear();
@@ -375,9 +376,10 @@ export default function DashboardScreen() {
       .filter(transaction => transaction.category !== "Debt" && transaction.category !== "Income");
     const budgetLimits = Object.entries(readCategoryBudgetMap(month, year)).map(([category, amount]) => ({ category, amount }));
     return buildCategoryPlan(categories.filter(category => category !== "Debt"), monthBills, monthTransactions, budgetLimits);
-  }, [categories, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, readCategoryBudgetMap, currentMonth, selectedYear]);
+  }, [categories, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, readCategoryBudgetMap, currentMonth, selectedYear, settings.planningMode]);
 
   const categoryPlan = useMemo(() => {
+    if (settings.planningMode !== "zero_budget") return [];
     const monthBills = getMonthlyBills(currentMonth, selectedYear)
       .filter(bill => !bill.is_debt)
       .map(bill => ({
@@ -389,7 +391,7 @@ export default function DashboardScreen() {
       .filter(transaction => transaction.category !== "Debt" && transaction.category !== "Income");
     const budgetLimits = Object.entries(categoryBudgets).map(([category, amount]) => ({ category, amount }));
     return buildCategoryPlan(categories.filter(category => category !== "Debt"), monthBills, monthTransactions, budgetLimits);
-  }, [categories, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, currentMonth, selectedYear]);
+  }, [categories, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, currentMonth, selectedYear, settings.planningMode]);
 
   const categoryDetail = useMemo(() => {
     if (!selectedCategory) return null;
@@ -1057,6 +1059,7 @@ export default function DashboardScreen() {
     const focusOrder = new Map(setupPersonalization.recommendedAlgorithms.map((id, index) => [id, index]));
     return cards
       .filter((card): card is typeof card & { settingId: AlgorithmId } => Boolean(card.settingId))
+      .filter(card => settings.planningMode === "snowball" || card.settingId !== "debtPayoff")
       .filter(card => isAlgorithmEnabled(decisionHubSettings, card.settingId))
       .sort((left, right) => {
         const leftFocus = focusOrder.get(left.settingId) ?? 99;
@@ -1064,7 +1067,7 @@ export default function DashboardScreen() {
         if (leftFocus !== rightFocus) return leftFocus - rightFocus;
         return cards.findIndex(card => card.id === left.id) - cards.findIndex(card => card.id === right.id);
       });
-  }, [algorithmSuite, currentMonth, decisionHubSettings, setupPersonalization.recommendedAlgorithms]);
+  }, [algorithmSuite, currentMonth, decisionHubSettings, settings.planningMode, setupPersonalization.recommendedAlgorithms]);
   const activeAlgorithmCardNumber = algorithmCards.length ? Math.min(activeAlgoCard + 1, algorithmCards.length) : 0;
   const selectedAlgorithmDetail = selectedAlgorithmDetailId ? algorithmSuite.algorithmDetails[selectedAlgorithmDetailId] : null;
   const selectedAlgorithmCard = selectedAlgorithmDetailId ? algorithmCards.find(card => card.settingId === selectedAlgorithmDetailId) : null;

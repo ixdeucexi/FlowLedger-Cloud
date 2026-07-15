@@ -31,7 +31,7 @@ interface AddBillModalProps {
 export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture, onDeleteMistake, editBill, forceDebt }: AddBillModalProps) {
   const c = useColors();
   useBackDismiss(visible, onClose);
-  const { categories } = useBudget();
+  const { categories, settings } = useBudget();
 
   const [name,          setName]          = useState("");
   const [amount,        setAmount]        = useState("");
@@ -407,20 +407,20 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
                 <Text style={lbl}>Interest Rate (% APR)</Text>
                 <TextInput style={inp} value={interestRate} onChangeText={setInterestRate}
                   placeholder="0.0" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
-                <View style={[styles.toggleCard, { backgroundColor: c.card }]}>
+                {settings.planningMode === "snowball" && <View style={[styles.toggleCard, { backgroundColor: c.card }]}>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.toggleLabel, { color: c.foreground }]}>Include in Snowball</Text>
                     <Text style={[styles.toggleSub, { color: c.mutedForeground }]}>Send extra payments to this debt</Text>
                   </View>
                   <Switch value={includeInSnowball} onValueChange={setIncludeInSnowball}
                     trackColor={{ false: c.muted, true: c.primary }} thumbColor="#fff" />
-                </View>
-                <View style={[styles.infoBox, { backgroundColor: c.primary + "15" }]}>
+                </View>}
+                {settings.planningMode === "snowball" && <View style={[styles.infoBox, { backgroundColor: c.primary + "15" }]}>
                   <Feather name="info" size={13} color={c.primary} />
                   <Text style={[styles.infoText, { color: c.primary }]}>
                     Payoff priority auto-assigned: lowest balance = #1.
                   </Text>
-                </View>
+                </View>}
               </>
             ) : (
               <>

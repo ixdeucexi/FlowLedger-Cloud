@@ -634,7 +634,7 @@ export default function BillsScreen() {
             </View>
           )}
 
-          {debts.length > 0 && (
+          {settings.planningMode === "snowball" && debts.length > 0 && (
             <View style={[styles.debtAlgoCard, { backgroundColor: c.card, borderColor: c.border, marginHorizontal: 0, borderRadius: colors.radius }]}>
               <View style={styles.debtAlgoHeader}>
                 <View style={[styles.dataIcon, { backgroundColor: c.primary + "18" }]}>
@@ -682,7 +682,7 @@ export default function BillsScreen() {
             </View>
           )}
 
-          <View style={[styles.methodRow, { marginHorizontal: 0, marginTop: 10 }]}>
+          {settings.planningMode === "snowball" && <View style={[styles.methodRow, { marginHorizontal: 0, marginTop: 10 }]}>
             <View style={[styles.methodToggle, { backgroundColor: c.muted, borderRadius: 10 }]}>
               {(["snowball", "avalanche"] as const).map(m => (
                 <Pressable
@@ -711,7 +711,7 @@ export default function BillsScreen() {
                 </Pressable>
               ))}
             </View>
-          </View>
+          </View>}
             </PlanFeatureGate>
           </>
           {debts.length === 0 ? (
@@ -818,7 +818,7 @@ export default function BillsScreen() {
         forceDebt={activeTab === "debt"}
       />
       <SnowballPreviewModal
-        visible={snowballModalVisible}
+        visible={settings.planningMode === "snowball" && snowballModalVisible}
         preview={snowballPreview}
         amount={snowballAmount}
         existingPayment={!!existingSnowball}
