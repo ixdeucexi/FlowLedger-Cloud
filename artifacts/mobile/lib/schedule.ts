@@ -37,6 +37,16 @@ export function isValidDateInMonth(date: string, month: number, year: number): b
   return parsedYear === year && parsedMonth === month + 1 && day >= 1 && day <= new Date(year, month + 1, 0).getDate();
 }
 
+export function resolveFinalizedBillOccurrenceDays(
+  occurrences: number[],
+  paidDate: string | undefined,
+  month: number,
+  year: number,
+): number[] {
+  if (occurrences.length !== 1 || !paidDate || !isValidDateInMonth(paidDate, month, year)) return [...occurrences];
+  return [Number(paidDate.slice(8, 10))];
+}
+
 export function isBillActiveForMonth(bill: ScheduledBill, month: number, year: number): boolean {
   const date = new Date(year, month, 1);
   if (bill.start_date) {

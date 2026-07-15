@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isValidDateInMonth } from "./schedule";
+import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isValidDateInMonth, resolveFinalizedBillOccurrenceDays } from "./schedule";
 
 describe("bill scheduling", () => {
   it("validates a selected calendar date inside the intended month", () => {
@@ -56,6 +56,12 @@ describe("bill scheduling", () => {
     ]);
 
     assert.deepEqual(moved, [4]);
+  });
+
+  it("moves a finalized monthly bill to its actual payment date", () => {
+    assert.deepEqual(resolveFinalizedBillOccurrenceDays([10], "2026-07-06", 6, 2026), [6]);
+    assert.deepEqual(resolveFinalizedBillOccurrenceDays([10], "2026-08-06", 6, 2026), [10]);
+    assert.deepEqual(resolveFinalizedBillOccurrenceDays([3, 17], "2026-07-17", 6, 2026), [3, 17]);
   });
 });
 

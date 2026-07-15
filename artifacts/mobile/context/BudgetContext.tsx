@@ -17,7 +17,7 @@ import { diagnosticErrorCode } from "@/lib/diagnosticPolicy";
 import { decisionDbPayload } from "@/lib/decisionPersistence";
 import { recordDiagnostic } from "@/lib/diagnostics";
 import { isDevDemoMode } from "@/lib/demoMode";
-import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isIncomeActiveForMonth } from "@/lib/schedule";
+import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isIncomeActiveForMonth, resolveFinalizedBillOccurrenceDays } from "@/lib/schedule";
 import { evaluateForecastConfidence, openingBalanceForReconciledDay, totalForecastBalance, type AccountSnapshot, type AccountType, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
 import { scenarioDates, type DecisionResult, type DecisionScenario, type DecisionType } from "@/lib/decisions";
 import {
@@ -2282,7 +2282,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const matchTransactionToBill = useCallback(async (transactionId: string, billId: string) => {
     if (!user) throw new Error("Sign in to match a bill");
-    assertCanEditHousehold("match a bank transaction to a bill");
+    assertCanEditHousehold("match a transaction to a bill");
     const transaction = transactions.find(item => item.id === transactionId);
     const bill = bills.find(item => item.id === billId);
     if (!transaction || !bill) throw new Error("Transaction or bill not found");
@@ -2323,7 +2323,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const unmatchTransactionFromBill = useCallback(async (transactionId: string) => {
     if (!user) throw new Error("Sign in to unmatch a bill");
-    assertCanEditHousehold("unmatch a bank transaction from a bill");
+    assertCanEditHousehold("unmatch a transaction from a bill");
     const transaction = transactions.find(item => item.id === transactionId);
     if (!transaction || !isConfirmedBillMatch(transaction)) throw new Error("This transaction is not matched to a bill");
     const matchedBill = bills.find(item => item.id === transaction.linked_bill_id);
@@ -2381,6 +2381,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       await deleteTransfer(groupId);
       return;
     }
+    if (existing && isConfirmedBillMatch(existing)) {
+      await unmatchTransactionFromBill(existing.id);
+    }
     const idsToDelete = groupId
       ? transactions.filter(transaction => transaction.transfer_group_id === groupId).map(transaction => transaction.id)
       : [id];
@@ -2392,7 +2395,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     await ensureSaved(supabase.from("transactions").delete().eq("id", id), "Delete transaction");
     setTransactions(prev => prev.filter(t => !idsToDelete.includes(t.id)));
     if (idsToDelete.some(txId => transactions.find(transaction => transaction.id === txId)?.debt_applied_bill_id)) await syncDebtTransactionsAndRefresh();
-  }, [user, transactions, restoreDebtApplicationsForTransactions, syncDebtTransactionsAndRefresh, demoMode, deleteTransfer, assertCanEditHousehold]);
+  }, [user, transactions, restoreDebtApplicationsForTransactions, syncDebtTransactionsAndRefresh, demoMode, deleteTransfer, unmatchTransactionFromBill, assertCanEditHousehold]);
 
   const getTransactionsForMonth = useCallback(
     (month: number, year: number) =>
@@ -2726,18 +2729,20 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         : undefined;
       const total = projectedDebtTotal !== undefined ? projectedDebtTotal : getBillEffectiveMonthlyTotal(b, month, year);
       if (total <= 0.005) return;
-      const amt = occ.length > 0 ? total / occ.length : 0;
       if (o?.actual_amount !== undefined) {
-        occ.forEach(d => {
-          billsByDay[d] = (billsByDay[d] ?? 0) + amt;
+        const finalizedOccurrences = resolveFinalizedBillOccurrenceDays(occ, o.paid_date, month, year);
+        const finalizedAmount = finalizedOccurrences.length > 0 ? total / finalizedOccurrences.length : 0;
+        finalizedOccurrences.forEach(d => {
+          billsByDay[d] = (billsByDay[d] ?? 0) + finalizedAmount;
           financialEvents.push({
             id: `bill:${b.id}:${year}-${month + 1}-${d}`, sourceType: "bill", sourceId: b.id,
             date: `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`,
-            kind: "bill", amount: -amt, status: "finalized", name: b.name,
+            kind: "bill", amount: -finalizedAmount, status: "finalized", name: b.name,
           });
         });
         return;
       }
+      const amt = occ.length > 0 ? total / occ.length : 0;
       occ.forEach(d => {
         billsByDay[d] = (billsByDay[d] ?? 0) + amt;
         financialEvents.push({

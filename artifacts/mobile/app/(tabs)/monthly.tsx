@@ -23,6 +23,7 @@ import type { Bill, BillDateMove, DecisionRecord, IncomeItem, Transaction } from
 import { useBudget } from "@/context/BudgetContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
+import { isConfirmedBillMatch } from "@/lib/billMatching";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
 import { buildDayForecastFloPrompt, groupForecastEvents } from "@/lib/forecastDisplay";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
@@ -313,6 +314,16 @@ export default function MonthlyScreen() {
   const totalPaid = billSummary.totalPaid;
 
   const txList = useMemo(() => getTransactionsForMonth(month, selectedYear), [getTransactionsForMonth, month, selectedYear]);
+  const calendarTransactions = useMemo(() => txList.map(transaction => {
+    if (!isConfirmedBillMatch(transaction) || !transaction.linked_bill_id) return transaction;
+    const matchedBill = bills.find(bill => bill.id === transaction.linked_bill_id);
+    return matchedBill ? { ...transaction, note: matchedBill.name, category: matchedBill.category } : transaction;
+  }), [bills, txList]);
+  const matchedBillIdsForMonth = useMemo(() => new Set(txList
+    .filter(isConfirmedBillMatch)
+    .map(transaction => transaction.linked_bill_id)
+    .filter((billId): billId is string => Boolean(billId))), [txList]);
+  const standaloneTxList = useMemo(() => txList.filter(transaction => !isConfirmedBillMatch(transaction)), [txList]);
   const dailyBalances = useMemo(() => getDailyBalances(month, selectedYear), [getDailyBalances, month, selectedYear]);
   const incomeOccurrences = useMemo(() => {
     const occurrences = getIncomeOccurrencesInMonth(month, selectedYear);
@@ -322,8 +333,8 @@ export default function MonthlyScreen() {
     });
     return flat.sort((a, b) => a.day - b.day);
   }, [getIncomeOccurrencesInMonth, month, selectedYear]);
-  const txIncome = txList.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
-  const txExpense = txList.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+  const txIncome = standaloneTxList.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+  const txExpense = standaloneTxList.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
   const monthSummary = useMemo(() => {
     const first = dailyBalances[0];
     const last = dailyBalances[dailyBalances.length - 1];
@@ -358,15 +369,15 @@ export default function MonthlyScreen() {
       details: {
         income: [
           ...detailsFor(event => event.sourceType === "income" || event.kind === "scheduled_income"),
-          ...txList.filter(tx => tx.amount > 0).slice(0, 10).map(tx => `${formatShortDate(tx.date)}: ${tx.note || tx.category} ${money(tx.amount, "auto")}`),
+          ...standaloneTxList.filter(tx => tx.amount > 0).slice(0, 10).map(tx => `${formatShortDate(tx.date)}: ${tx.note || tx.category} ${money(tx.amount, "auto")}`),
         ],
         bills: detailsFor(event => event.sourceType === "bill" || event.kind === "bill"),
-        transactions: txList.slice(0, 10).map(tx => `${formatShortDate(tx.date)}: ${tx.note || tx.category} ${money(tx.amount, "auto")}`),
+        transactions: standaloneTxList.slice(0, 10).map(tx => `${formatShortDate(tx.date)}: ${tx.note || tx.category} ${money(tx.amount, "auto")}`),
         planned: detailsFor(event => event.sourceType === "decision"),
         debtExtras: detailsFor(event => event.sourceType === "extra_payment" || event.kind === "debt_payment"),
       },
     };
-  }, [dailyBalances, month, settings.starting_balance, txIncome, txExpense, txList]);
+  }, [dailyBalances, month, settings.starting_balance, standaloneTxList, txIncome, txExpense]);
 
   const monthWatchInsight = useMemo(() => {
     if (!monthSummary.lowestDay || monthSummary.lowest >= settings.safety_floor) return null;
@@ -412,8 +423,8 @@ export default function MonthlyScreen() {
 
   const scheduledBillsForDay = useMemo(() => {
     if (selectedDay === null) return [];
-    return monthBills.filter(b => getBillOccurrencesInMonth(b, month, selectedYear).includes(selectedDay));
-  }, [monthBills, getBillOccurrencesInMonth, selectedDay, month, selectedYear]);
+    return monthBills.filter(b => !matchedBillIdsForMonth.has(b.id) && getBillOccurrencesInMonth(b, month, selectedYear).includes(selectedDay));
+  }, [monthBills, matchedBillIdsForMonth, getBillOccurrencesInMonth, selectedDay, month, selectedYear]);
 
   const movedInByBillId = useMemo(() => {
     if (!selectedDate) return new Map<string, BillDateMove>();
@@ -1070,7 +1081,7 @@ export default function MonthlyScreen() {
   }, [transactions, addBill]);
 
   const displayedTxs = selectedDate
-    ? txList.filter(t => t.date === selectedDate)
+    ? calendarTransactions.filter(t => t.date === selectedDate)
     : [];
   const selectedForecastEventCount = selectedForecastGroups.reduce((sum, group) => sum + group.events.length, 0);
   const selectedVisibleItemCount = scheduledBillsForDay.length + displayedTxs.length + goalsForSelectedDay.length + plansForSelectedDay.length;
@@ -1529,7 +1540,7 @@ export default function MonthlyScreen() {
               <CalendarView
                 month={month}
                 year={selectedYear}
-                transactions={txList}
+                transactions={calendarTransactions}
                 selectedDate={selectedDate}
                 onDayPress={(date) => setSelectedDate(date)}
                 dailyBalances={dailyBalances}
@@ -1794,7 +1805,9 @@ export default function MonthlyScreen() {
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
                         <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Activity</Text>
                         {displayedTxs.map(tx => {
-                          const sourceLabel = tx.source === "plaid"
+                          const sourceLabel = isConfirmedBillMatch(tx)
+                            ? "Bill payment"
+                            : tx.source === "plaid"
                             ? "Bank sync"
                             : tx.import_hash
                               ? "Imported"
