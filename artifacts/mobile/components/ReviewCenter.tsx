@@ -212,8 +212,8 @@ export function ReviewCenter() {
             <Text style={[styles.transactionAmount, { color: current.amount < 0 ? c.destructive : c.success }]}>{current.amount < 0 ? "−" : "+"}{money(current.amount)}</Text>
           </View>
 
-          <Text style={[styles.sectionTitle, { color: c.foreground }]}>{current.amount < 0 ? "Match to your calendar" : "Match to planned income"}</Text>
-          <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>{targets.length ? "Best matches are ranked by amount, date, name, and category." : "No planned item was found for this month. Categorize it below to finish."}</Text>
+          <Text style={[styles.sectionTitle, { color: c.foreground }]}>{current.amount < 0 ? "Choose the planned item" : "Choose the expected income"}</Text>
+          <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>{targets.length ? "Matches compare the bank amount with your plan amount, date, and name." : "No planned item was found for this month. Categorize it below to finish."}</Text>
           {targets.map((target, index) => (
             <Pressable accessibilityRole="button" accessibilityLabel={`Match ${transactionName(current)} to ${target.name}`} key={`${target.type}-${target.id}-${target.occurrenceDate}`} disabled={saving} onPress={() => chooseTarget(target)} style={({ pressed }) => [styles.targetRow, { backgroundColor: c.muted, borderColor: index === 0 && target.score >= 48 ? c.success + "66" : c.border, opacity: saving ? 0.55 : pressed ? 0.8 : 1 }]}>
               <View style={[styles.targetIcon, { backgroundColor: (target.type === "income" ? c.success : target.isDebt ? c.warning : c.primary) + "18" }]}>
@@ -221,7 +221,7 @@ export function ReviewCenter() {
               </View>
               <View style={{ flex: 1 }}>
                 <View style={styles.targetHeading}><Text style={[styles.targetName, { color: c.foreground }]} numberOfLines={1}>{target.name}</Text>{index === 0 && target.score >= 48 ? <Text style={[styles.suggested, { color: c.success }]}>SUGGESTED</Text> : null}</View>
-                <Text style={[styles.targetMeta, { color: c.mutedForeground }]}>Planned {money(target.plannedAmount)} · {displayDate(target.occurrenceDate)}</Text>
+                <Text style={[styles.targetMeta, { color: c.mutedForeground }]}>{target.type === "income" ? "Expected" : "Plan"}: {money(target.plannedAmount)} · {target.type === "income" ? "Expected" : "Due"} {displayDate(target.occurrenceDate)}</Text>
                 {target.reasons.length ? <Text style={[styles.targetReason, { color: c.success }]}>{target.reasons.slice(0, 2).join(" · ")}</Text> : null}
               </View>
               <Feather name="chevron-right" size={18} color={c.mutedForeground} />
@@ -256,9 +256,9 @@ export function ReviewCenter() {
                   : `${variance.target.name} was ${money(Math.abs(variance.transaction.amount) - variance.target.plannedAmount)} over plan`}
               </Text>
               <View style={[styles.amountBox, { backgroundColor: c.muted }]}>
-                <View style={styles.amountLine}><Text style={[styles.amountLabel, { color: c.mutedForeground }]}>Planned</Text><Text style={[styles.amountValue, { color: c.foreground }]}>{money(variance.target.plannedAmount)}</Text></View>
-                <View style={styles.amountLine}><Text style={[styles.amountLabel, { color: c.mutedForeground }]}>Actual</Text><Text style={[styles.amountValue, { color: c.foreground }]}>{money(variance.transaction.amount)}</Text></View>
-                <View style={styles.amountLine}><Text style={[styles.amountLabel, { color: variance.direction === "higher" ? c.destructive : c.success }]}>{variance.direction === "higher" ? "Over plan" : "Available"}</Text><Text style={[styles.amountValue, { color: variance.direction === "higher" ? c.destructive : c.success }]}>{money(Math.abs(Math.abs(variance.transaction.amount) - variance.target.plannedAmount))}</Text></View>
+                <View style={styles.amountLine}><Text style={[styles.amountLabel, { color: c.mutedForeground }]}>Plan amount</Text><Text style={[styles.amountValue, { color: c.foreground }]}>{money(variance.target.plannedAmount)}</Text></View>
+                <View style={styles.amountLine}><Text style={[styles.amountLabel, { color: c.mutedForeground }]}>Bank amount</Text><Text style={[styles.amountValue, { color: c.foreground }]}>{money(variance.transaction.amount)}</Text></View>
+                <View style={styles.amountLine}><Text style={[styles.amountLabel, { color: variance.direction === "higher" ? c.destructive : c.success }]}>{variance.direction === "higher" ? "Over plan" : "Money left"}</Text><Text style={[styles.amountValue, { color: variance.direction === "higher" ? c.destructive : c.success }]}>{money(Math.abs(Math.abs(variance.transaction.amount) - variance.target.plannedAmount))}</Text></View>
               </View>
 
               {variance.direction === "lower" ? <>

@@ -27,6 +27,18 @@ test("ranks exact same-day calendar matches first", () => {
   assert.ok((targets[0]?.score ?? 0) > (targets[1]?.score ?? 0));
 });
 
+test("uses the meaningful bank name to break equal amount and date ties", () => {
+  const targets = rankReviewTargets(
+    { amount: -14, date: "2026-07-08", note: "Electronic Withdrawal CAPITAL / ONE - ONLINE PMT", category: "Loan payments" },
+    [
+      { type: "bill", id: "other", name: "Kids Transfer", category: "Other", plannedAmount: 14, occurrenceDate: "2026-07-08" },
+      { type: "bill", id: "capital-one", name: "John Capital One 1", category: "Debt", plannedAmount: 14, occurrenceDate: "2026-07-08" },
+    ],
+  );
+  assert.equal(targets[0]?.id, "capital-one");
+  assert.ok(targets[0]?.reasons.includes("Name strongly matches"));
+});
+
 test("split allocations must equal the single bank transaction", () => {
   const transaction = {
     amount: -390,

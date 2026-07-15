@@ -49,8 +49,17 @@ function parseIsoDate(value: string) {
   return Date.UTC(year, month - 1, day);
 }
 
+const GENERIC_BANK_TOKENS = new Set([
+  "bank", "card", "debit", "electronic", "online", "payment", "pmt", "posted", "purchase", "transaction", "withdrawal",
+]);
+
 function normalizedTokens(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/).filter(token => token.length > 2);
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(token => token.length > 2 && !GENERIC_BANK_TOKENS.has(token));
 }
 
 export function buildCurrentMonthReviewQueue<T extends ReviewTransactionLike>(transactions: T[], todayIso: string): T[] {
@@ -88,7 +97,8 @@ export function rankReviewTargets(transaction: Pick<ReviewTransactionLike, "amou
     else if (daysApart <= 7) { score += 14; reasons.push(`${daysApart} days from plan`); }
     else if (daysApart <= 14) score += 5;
 
-    if (tokenMatches > 0) { score += Math.min(14, tokenMatches * 7); reasons.push("Name or category matches"); }
+    if (tokenMatches >= 2) { score += 30; reasons.push("Name strongly matches"); }
+    else if (tokenMatches === 1) { score += 14; reasons.push("Name matches"); }
     if ((transaction.amount > 0) === (target.type === "income")) score += 4;
 
     return { ...target, score, daysApart, amountDifference, reasons };
