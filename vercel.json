@@ -1,4 +1,10 @@
 {
+  "crons": [
+    {
+      "path": "/api/plaid/automatic-sync",
+      "schedule": "24 22 * * *"
+    }
+  ],
   "headers": [
     {
       "source": "/",
