@@ -19,7 +19,9 @@ export interface ReviewTransactionLike {
   merchant_name?: string;
   source?: string;
   review_status?: string;
+  review_resolution?: string;
   review_allocations?: ReviewAllocationLike[];
+  user_edited_at?: string;
   pending?: boolean;
   removed_at?: string;
 }
@@ -198,6 +200,7 @@ export function matchedOccurrenceAllocations(
 }
 
 export function allocationLabel(transaction: ReviewTransactionLike): string | null {
+  if (transaction.user_edited_at && transaction.note.trim()) return transaction.note.trim();
   const allocations = transaction.review_allocations ?? [];
   if (allocations.length === 0) return null;
   return allocations.map(allocation => {
@@ -206,8 +209,17 @@ export function allocationLabel(transaction: ReviewTransactionLike): string | nu
   }).join(" + ");
 }
 
+export function transactionDisplayName(transaction: ReviewTransactionLike, plannedLabel?: string): string {
+  if (transaction.user_edited_at && transaction.note.trim()) return transaction.note.trim();
+  return plannedLabel || transaction.merchant_name?.trim() || transaction.note.trim() || transaction.category || "Transaction";
+}
+
 export function transactionCategoryParts(transaction: ReviewTransactionLike): { category: string; amount: number; label: string }[] {
   if (transaction.amount >= 0 || transaction.review_status === "transfer") return [];
+  if (transaction.user_edited_at && transaction.review_resolution === "category") {
+    const category = transaction.category || "Other";
+    return [{ category, amount: transaction.amount, label: transaction.note.trim() || category }];
+  }
   const allocations = transaction.review_allocations ?? [];
   if (allocations.length === 0) {
     return [{ category: transaction.category || "Other", amount: transaction.amount, label: transaction.note || transaction.category || "Transaction" }];

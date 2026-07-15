@@ -123,6 +123,7 @@ export interface Transaction {
   review_allocations?: ReviewAllocation[];
   reviewed_at?: string;
   reviewed_by?: string;
+  user_edited_at?: string;
   linked_income_id?: string;
   linked_plan_id?: string;
   linked_plan_type?: "goal" | "decision";
@@ -2307,17 +2308,35 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     assertCanEditHousehold("update a transaction");
     const existing = transactions.find(item => item.id === tx.id);
-    setTransactions(prev => prev.map(t => t.id === tx.id ? tx : t));
+    const editedTransaction: Transaction = { ...tx, user_edited_at: new Date().toISOString() };
+    setTransactions(prev => prev.map(t => t.id === tx.id ? editedTransaction : t));
     if (demoMode) return;
     markSaveStarted();
     try {
-      await ensureSaved(supabase.from("transactions").update({ ...tx }).eq("id", tx.id), "Update transaction");
-      if (tx.linked_bill_id || existing?.linked_bill_id || existing?.debt_applied_bill_id) await syncDebtTransactionsAndRefresh();
+      const persisted = await supabase.from("transactions")
+        .update({ ...editedTransaction })
+        .eq("id", tx.id)
+        .select("*")
+        .single();
+      if (persisted.error) throw new Error(`Update transaction: ${persisted.error.message}`);
+      const savedTransaction = normalizeTransactionRow(persisted.data);
+      setTransactions(prev => prev.map(item => item.id === tx.id ? savedTransaction : item));
       markSaveCompleted();
     } catch (error) {
       if (existing) setTransactions(prev => prev.map(item => item.id === existing.id ? existing : item));
-      markSaveFailed(error, () => updateTransaction(tx));
+      markSaveFailed(error, () => updateTransaction(editedTransaction));
       throw error;
+    }
+    if (editedTransaction.linked_bill_id || existing?.linked_bill_id || existing?.debt_applied_bill_id) {
+      try {
+        await syncDebtTransactionsAndRefresh();
+      } catch (error) {
+        console.warn("Transaction saved; debt sync will retry", diagnosticErrorCode(error));
+        void recordDiagnostic(user.id, {
+          eventType: "save_failure", operation: "reconciliation", platform: diagnosticPlatform(),
+          errorCode: diagnosticErrorCode(error),
+        }).catch(() => undefined);
+      }
     }
   }, [user, transactions, syncDebtTransactionsAndRefresh, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, assertCanEditHousehold]);
 

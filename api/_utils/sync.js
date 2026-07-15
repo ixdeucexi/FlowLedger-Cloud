@@ -36,6 +36,16 @@ function shouldImportPlaidTransaction(transaction) {
   return !transaction || transaction.pending !== true;
 }
 
+function editablePlaidFields(existing, imported) {
+  if (!existing || !existing.user_edited_at) return { ...imported, user_edited_at: null };
+  return {
+    date: existing.date,
+    category: existing.category,
+    note: existing.note,
+    user_edited_at: existing.user_edited_at,
+  };
+}
+
 async function syncAccounts({ client, userId, item, accessToken }) {
   const response = await client.accountsGet({ access_token: accessToken });
   const accounts = response.data.accounts || [];
@@ -100,7 +110,7 @@ async function upsertPlaidTransaction({ userId, accountRow, transaction, removed
   // Never overwrite an explicitly edited/manual FlowLedger transaction.
   const { data: existing, error: existingError } = await db
     .from("transactions")
-    .select("id,source,category,match_reason,review_status")
+    .select("id,source,date,category,note,match_reason,review_status,user_edited_at")
     .eq("user_id", userId)
     .eq("plaid_transaction_id", plaidTransactionId)
     .maybeSingle();
@@ -122,13 +132,16 @@ async function upsertPlaidTransaction({ userId, accountRow, transaction, removed
   }
 
   if (shouldImport && (!existing || existing.source === "plaid")) {
+    const editableFields = editablePlaidFields(existing, {
+      date: transactionDate,
+      category: existing && existing.match_reason === "confirmed_bill_match" ? existing.category : category,
+      note: transaction.name || originalName,
+    });
     const canonicalRow = {
       id: flowledgerId || canonicalId,
       user_id: userId,
-      date: transactionDate,
+      ...editableFields,
       amount,
-      category: existing && existing.match_reason === "confirmed_bill_match" ? existing.category : category,
-      note: transaction.name || originalName,
       source: "plaid",
       plaid_transaction_id: plaidTransactionId,
       plaid_account_id: transaction.account_id || null,
@@ -368,4 +381,5 @@ module.exports = {
   syncTransactions,
   plaidAmountToFlowLedger,
   shouldImportPlaidTransaction,
+  editablePlaidFields,
 };

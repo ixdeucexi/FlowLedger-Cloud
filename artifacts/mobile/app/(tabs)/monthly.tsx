@@ -24,7 +24,7 @@ import { useBudget } from "@/context/BudgetContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
 import { isConfirmedBillMatch } from "@/lib/billMatching";
-import { allocationLabel, matchedOccurrenceAllocations, occurrenceKey } from "@/lib/reviewCenter";
+import { allocationLabel, matchedOccurrenceAllocations, occurrenceKey, transactionDisplayName } from "@/lib/reviewCenter";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
 import { buildDayForecastFloPrompt, groupForecastEvents } from "@/lib/forecastDisplay";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
@@ -321,9 +321,9 @@ export default function MonthlyScreen() {
     return reviewedLabel ? {
       ...transaction,
       note: reviewedLabel,
-      category: primaryAllocation?.category || transaction.category,
+      category: transaction.user_edited_at ? transaction.category : primaryAllocation?.category || transaction.category,
     } : transaction;
-  }), [bills, txList]);
+  }), [txList]);
   const billOccurrenceMatches = useMemo(() => matchedOccurrenceAllocations(txList, "bill"), [txList]);
   const incomeOccurrenceMatches = useMemo(() => matchedOccurrenceAllocations(txList, "income"), [txList]);
   const standaloneTxList = useMemo(() => txList.filter(transaction => transaction.review_status !== "transfer"), [txList]);
@@ -1843,7 +1843,7 @@ export default function MonthlyScreen() {
                                 : "Manual";
                           const isMoneyIn = tx.amount > 0;
                           const amountColor = isMoneyIn ? c.success : c.destructive;
-                          const displayName = tx.merchant_name || tx.note || tx.category;
+                          const displayName = transactionDisplayName(tx);
                           return (
                             <View
                               key={`overlay-tx-${tx.id}`}

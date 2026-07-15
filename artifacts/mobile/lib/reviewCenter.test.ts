@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { allocationTotal, buildCurrentMonthReviewQueue, buildForgottenBillDefaults, forgottenBillSettlement, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewAllocationsAreBalanced, reviewQueueAfterSkips, transactionCategoryParts } from "./reviewCenter";
+import { allocationLabel, allocationTotal, buildCurrentMonthReviewQueue, buildForgottenBillDefaults, forgottenBillSettlement, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewAllocationsAreBalanced, reviewQueueAfterSkips, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
 
 test("queues only active current-month posted Plaid transactions oldest first", () => {
   const queue = buildCurrentMonthReviewQueue([
@@ -122,4 +122,21 @@ test("reviewed transfers do not affect spending categories", () => {
     id: "transfer", date: "2026-07-03", amount: -500, category: "Transfer", note: "Move money", review_status: "transfer",
     review_allocations: [{ type: "transfer", amount: 500 }],
   }), []);
+});
+
+test("manual edits replace stale reviewed labels and categories", () => {
+  const edited = {
+    id: "edited-bank-charge",
+    date: "2026-07-01",
+    amount: -4.34,
+    category: "Debt",
+    note: "Tia Game",
+    review_status: "categorized",
+    review_resolution: "category",
+    user_edited_at: "2026-07-15T15:00:00.000Z",
+    review_allocations: [{ type: "category" as const, category: "Utilities", amount: 4.34 }],
+  };
+  assert.equal(allocationLabel(edited), "Tia Game");
+  assert.equal(transactionDisplayName({ ...edited, merchant_name: "Apple" }), "Tia Game");
+  assert.deepEqual(transactionCategoryParts(edited), [{ category: "Debt", amount: -4.34, label: "Tia Game" }]);
 });

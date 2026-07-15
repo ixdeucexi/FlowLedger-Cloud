@@ -129,8 +129,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
       setPendingStandardTx(null);
       setSafetyStop(null);
       onClose();
-    } catch {
-      const error = new Error("Please try again.");
+    } catch (error) {
       Alert.alert("Could not save transaction", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSaving(false);

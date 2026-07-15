@@ -23,7 +23,7 @@ import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { debtPaymentStatusLabel } from "@/lib/forecastDisplay";
 import { canMatchExpenseToBill, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "@/lib/billMatching";
 import { isValidDateInMonth } from "@/lib/schedule";
-import { buildCurrentMonthReviewQueue, matchedOccurrenceAllocations, occurrenceKey } from "@/lib/reviewCenter";
+import { buildCurrentMonthReviewQueue, matchedOccurrenceAllocations, occurrenceKey, transactionDisplayName } from "@/lib/reviewCenter";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -212,7 +212,7 @@ export default function TransactionsScreen() {
         id:       `tx-${tx.id}`,
         date:     tx.date,
         amount:   tx.amount,
-        label:    confirmedMatch ? matchedBill!.name : matchedIncome?.name || tx.merchant_name || tx.note || tx.category,
+        label:    transactionDisplayName(tx, confirmedMatch ? matchedBill!.name : matchedIncome?.name),
         category: confirmedMatch ? matchedBill!.category : matchedIncome ? "Income" : tx.category,
         source,
         editable: true,
