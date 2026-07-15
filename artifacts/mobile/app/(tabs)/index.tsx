@@ -20,6 +20,7 @@ import type { Bill, DashboardFilter, Goal } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { isCashFlowTransaction } from "@/lib/billMatching";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { applyCategoryBudgetMove, buildCategoryPlan } from "@/lib/categoryPlanning";
 import { CATEGORY_BUDGETS_EVENT, categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets as saveCategoryBudgetsRemote } from "@/lib/categoryBudgetStore";
@@ -862,7 +863,7 @@ export default function DashboardScreen() {
       interest_rate: bill.interest_rate,
       snowball_minimum_boost: bill.snowball_minimum_boost,
     })),
-    transactions: getTransactionsForMonth(currentMonth, selectedYear).flatMap(transaction => {
+    transactions: getTransactionsForMonth(currentMonth, selectedYear).filter(isCashFlowTransaction).flatMap(transaction => {
       const parts = transactionCategoryParts(transaction);
       if (parts.length === 0) return transaction.amount > 0 ? [{ id: transaction.id, date: transaction.date, amount: transaction.amount, category: "Income", note: transaction.note }] : [];
       return parts.map((part, index) => ({ id: `${transaction.id}:${index}`, date: transaction.date, amount: part.amount, category: part.category, note: part.label }));
@@ -2745,4 +2746,3 @@ const styles = StyleSheet.create({
   savingsSave:        { flex: 1.5, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 6, paddingVertical: 14, borderRadius: 12 },
   savingsSaveText:    { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold" },
 });
-

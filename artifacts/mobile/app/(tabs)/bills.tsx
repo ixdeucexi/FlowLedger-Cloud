@@ -17,6 +17,7 @@ import colors from "@/constants/colors";
 import type { Bill } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
+import { isCashFlowTransaction } from "@/lib/billMatching";
 import { confirmAction } from "@/lib/confirmAction";
 import { buildAlgorithmSuite } from "@/lib/algorithmSuite";
 import type { SnowballProjectionResult } from "@/lib/snowball";
@@ -227,7 +228,7 @@ export default function BillsScreen() {
         interest_rate: bill.interest_rate,
         snowball_minimum_boost: bill.snowball_minimum_boost,
       })),
-      transactions: getTransactionsForMonth(currentMonth, currentYear).map(transaction => ({
+      transactions: getTransactionsForMonth(currentMonth, currentYear).filter(isCashFlowTransaction).map(transaction => ({
         id: transaction.id,
         date: transaction.date,
         amount: transaction.amount,

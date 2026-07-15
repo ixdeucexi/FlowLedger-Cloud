@@ -232,7 +232,7 @@ export function transactionDisplayName(transaction: ReviewTransactionLike, plann
 }
 
 export function transactionCategoryParts(transaction: ReviewTransactionLike): { category: string; amount: number; label: string }[] {
-  if (transaction.amount >= 0 || transaction.review_status === "transfer") return [];
+  if (transaction.amount >= 0 || transaction.review_status === "transfer" || transaction.review_status === "needs_review") return [];
   if (transaction.user_edited_at && transaction.review_resolution === "category") {
     const category = transaction.category || "Other";
     return [{ category, amount: transaction.amount, label: transaction.note.trim() || category }];

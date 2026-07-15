@@ -39,7 +39,7 @@ import {
   type HouseholdRole,
 } from "@/lib/households";
 import { canEditHouseholdPlan, canManageHouseholdMembers } from "@/lib/householdPermissions";
-import { isActiveTransaction, isConfirmedBillMatch } from "@/lib/billMatching";
+import { isActiveTransaction, isCashFlowTransaction, isConfirmedBillMatch } from "@/lib/billMatching";
 import { matchedOccurrenceAllocations, occurrenceKey } from "@/lib/reviewCenter";
 import { normalizePlanningMode, usesSnowball, type PlanningMode } from "@/lib/planningMode";
 
@@ -2795,7 +2795,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const totalPaid = transactions.reduce((sum, transaction) => sum + (transaction.review_allocations ?? [])
       .filter(allocation => allocation.type === "bill" && allocation.occurrenceDate?.startsWith(`${year}-${String(month + 1).padStart(2, "0")}`))
       .reduce((allocationSum, allocation) => allocationSum + allocation.amount, 0), 0);
-    const monthTxs = transactions.filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === year && tm === month + 1 && t.review_status !== "transfer"; });
+    const monthTxs = transactions.filter(t => {
+      const [ty, tm] = t.date.split("-").map(Number);
+      return ty === year && tm === month + 1 && isCashFlowTransaction(t);
+    });
     const netTransactions = monthTxs.reduce((s, t) => s + t.amount, 0);
     const snowballExtra = extraPayments.find(ep => ep.month === month && ep.year === year)?.amount ?? 0;
     const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
@@ -2867,7 +2870,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }, 0);
       }, 0);
       const tx = transactions
-        .filter(t => t.date.startsWith(monthPrefix) && includeDate(t.date) && t.review_status !== "transfer")
+        .filter(t => t.date.startsWith(monthPrefix) && includeDate(t.date) && isCashFlowTransaction(t))
         .reduce((s, t) => s + t.amount, 0);
       const goalDeductions = goals.reduce((s, g) => {
         if (g.goal_type !== "planned_expense") return s;
@@ -2935,7 +2938,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         });
       });
     });
-    const monthTxs = transactions.filter(t => { const [ty, tm] = t.date.split("-").map(Number); return ty === year && tm === month + 1 && t.review_status !== "transfer"; });
+    const monthTxs = transactions.filter(t => {
+      const [ty, tm] = t.date.split("-").map(Number);
+      return ty === year && tm === month + 1 && isCashFlowTransaction(t);
+    });
     monthTxs.forEach(t => financialEvents.push({
       id: `transaction:${t.id}`, sourceType: "transaction", sourceId: t.id, date: t.date,
       kind: t.amount >= 0 ? "transaction_income" : "transaction_expense",

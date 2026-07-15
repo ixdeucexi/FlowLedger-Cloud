@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { canMatchExpenseToBill, isActiveTransaction, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "./billMatching";
+import { canMatchExpenseToBill, isActiveTransaction, isCashFlowTransaction, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "./billMatching";
 
 test("ranks an exact nearby utility payment above unrelated bills", () => {
   const ranked = rankBillMatches(
@@ -33,6 +33,14 @@ test("removed or pending Plaid rows are not active", () => {
   assert.equal(isActiveTransaction({ removed_at: null, pending: false }), true);
   assert.equal(isActiveTransaction({ removed_at: null, pending: true }), false);
   assert.equal(isActiveTransaction({ removed_at: "2026-07-14T12:00:00Z" }), false);
+});
+
+test("cash flow waits for posted bank activity to be reviewed", () => {
+  assert.equal(isCashFlowTransaction({ review_status: "needs_review" }), false);
+  assert.equal(isCashFlowTransaction({ review_status: "transfer" }), false);
+  assert.equal(isCashFlowTransaction({ review_status: "matched" }), true);
+  assert.equal(isCashFlowTransaction({ review_status: "categorized" }), true);
+  assert.equal(isCashFlowTransaction({}), true);
 });
 
 test("only confirmed matches replace a planned bill event", () => {

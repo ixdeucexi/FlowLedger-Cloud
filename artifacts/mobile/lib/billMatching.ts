@@ -154,3 +154,17 @@ export function resolveMatchedBillBudget(plannedAmount: number, recurringBillAmo
 export function isActiveTransaction(transaction: { removed_at?: string | null; pending?: boolean | null }): boolean {
   return !transaction.removed_at && transaction.pending !== true;
 }
+
+/**
+ * Keep unresolved bank activity visible without letting it change money totals
+ * before the matching plan item is known.
+ */
+export function isCashFlowTransaction(transaction: {
+  removed_at?: string | null;
+  pending?: boolean | null;
+  review_status?: string | null;
+}): boolean {
+  return isActiveTransaction(transaction)
+    && transaction.review_status !== "needs_review"
+    && transaction.review_status !== "transfer";
+}
