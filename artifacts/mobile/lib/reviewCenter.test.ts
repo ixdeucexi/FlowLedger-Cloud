@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { allocationTotal, buildCurrentMonthReviewQueue, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewAllocationsAreBalanced, reviewQueueAfterSkips, transactionCategoryParts } from "./reviewCenter";
+import { allocationTotal, buildCurrentMonthReviewQueue, buildForgottenBillDefaults, forgottenBillSettlement, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewAllocationsAreBalanced, reviewQueueAfterSkips, transactionCategoryParts } from "./reviewCenter";
 
 test("queues only active current-month posted Plaid transactions oldest first", () => {
   const queue = buildCurrentMonthReviewQueue([
@@ -23,6 +23,27 @@ test("skip moves an item aside without changing its review state", () => {
   assert.deepEqual(reviewQueueAfterSkips(queue, ["first"]).map(transaction => transaction.id), ["second"]);
   assert.equal(queue[0]?.review_status, "needs_review");
   assert.deepEqual(reviewQueueAfterSkips(queue, ["first", "second"]), []);
+});
+
+test("prefills a forgotten recurring bill from the posted bank charge", () => {
+  assert.deepEqual(buildForgottenBillDefaults({
+    amount: -21.8,
+    date: "2026-07-08",
+    note: "OPENAI CHATGPT SUBSCRIPTION",
+    merchant_name: "ChatGPT",
+    category: "Subscriptions",
+  }), {
+    name: "ChatGPT",
+    amount: 21.8,
+    category: "Subscriptions",
+    dueDay: 8,
+    nextPaymentDate: "2026-07-08",
+    startDate: "2026-07-08",
+    isRecurring: true,
+    frequency: "monthly",
+  });
+  assert.equal(forgottenBillSettlement(-21.8, 21.8), "exact");
+  assert.equal(forgottenBillSettlement(-21.8, 20), "full");
 });
 
 test("ranks exact same-day calendar matches first", () => {

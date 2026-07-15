@@ -17,6 +17,17 @@ import { confirmAction } from "@/lib/confirmAction";
 
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
+export interface AddBillInitialValues {
+  name?: string;
+  amount?: number;
+  category?: string;
+  dueDay?: number;
+  nextPaymentDate?: string;
+  startDate?: string;
+  isRecurring?: boolean;
+  frequency?: Bill["frequency"];
+}
+
 interface AddBillModalProps {
   visible: boolean;
   onClose: () => void;
@@ -26,9 +37,12 @@ interface AddBillModalProps {
   onDeleteMistake?: (id: string) => void | Promise<unknown>;
   editBill?: Bill | null;
   forceDebt?: boolean;
+  initialValues?: AddBillInitialValues;
+  title?: string;
+  saveLabel?: string;
 }
 
-export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture, onDeleteMistake, editBill, forceDebt }: AddBillModalProps) {
+export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture, onDeleteMistake, editBill, forceDebt, initialValues, title, saveLabel }: AddBillModalProps) {
   const c = useColors();
   useBackDismiss(visible, onClose);
   const { categories, settings } = useBudget();
@@ -102,12 +116,26 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       setBillStartDate(editBill.start_date ?? "");
       setBillEndDate(editBill.end_date ?? "");
     } else {
-      setName(""); setAmount(""); setCategory("Other");
+      const paymentDate = initialValues?.nextPaymentDate ?? "";
+      const [year, month, day] = paymentDate.split("-").map(Number);
+      const hasValidPaymentDate = [year, month, day].every(Number.isFinite);
+      setName(initialValues?.name ?? "");
+      setAmount(initialValues?.amount ? initialValues.amount.toString() : "");
+      setCategory(initialValues?.category ?? "Other");
       setIsDebt(forceDebt ?? false); setBalance(""); setInterestRate(""); setIncludeInSnowball(true);
-      setDueDay("1"); setDayOfWeek(0); setIsRecurring(true);
-      setFrequency("monthly"); setNextPaymentDate(""); setBillStartDate(""); setBillEndDate("");
+      setDueDay(String(initialValues?.dueDay ?? (hasValidPaymentDate ? day : 1)));
+      setDayOfWeek(hasValidPaymentDate ? new Date(year, month - 1, day).getDay() : 0);
+      setIsRecurring(initialValues?.isRecurring ?? true);
+      setFrequency(initialValues?.frequency ?? "monthly");
+      setNextPaymentDate(paymentDate);
+      setBillStartDate(initialValues?.startDate ?? "");
+      setBillEndDate("");
+      if (hasValidPaymentDate) {
+        setPickerYear(year);
+        setPickerMonth(month - 1);
+      }
     }
-  }, [editBill, visible, forceDebt]);
+  }, [editBill, visible, forceDebt, initialValues]);
 
   const noun = forceDebt || isDebt ? "Debt" : "Bill";
 
@@ -140,7 +168,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       else await onSave(data);
       onClose();
     } catch (error) {
-      Alert.alert("Couldn’t save date", error instanceof Error ? error.message : "Please try again.");
+      Alert.alert(`Couldn’t save ${noun.toLowerCase()}`, error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSaving(false);
     }
@@ -207,7 +235,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
           <View style={styles.handle} />
           <View style={styles.header}>
             <Text style={[styles.title, { color: c.foreground }]}>
-              {editBill ? `Edit ${noun}` : `Add ${noun}`}
+              {title ?? (editBill ? `Edit ${noun}` : `Add ${noun}`)}
             </Text>
             <Pressable onPress={onClose} hitSlop={8}>
               <Feather name="x" size={22} color={c.mutedForeground} />
@@ -456,7 +484,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
               style={({ pressed }) => [styles.saveBtn, { backgroundColor: c.primary, borderRadius: colors.radius, opacity: saving ? 0.55 : pressed ? 0.85 : 1 }]}
             >
               <Text style={[styles.saveBtnText, { color: c.primaryForeground }]}>
-                {saving ? "Saving…" : editBill ? `Update ${noun}` : `Add ${noun}`}
+                {saving ? "Saving…" : saveLabel ?? (editBill ? `Update ${noun}` : `Add ${noun}`)}
               </Text>
             </Pressable>
 

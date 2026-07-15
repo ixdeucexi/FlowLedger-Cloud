@@ -24,6 +24,17 @@ export interface ReviewTransactionLike {
   removed_at?: string;
 }
 
+export interface ForgottenBillDefaults {
+  name: string;
+  amount: number;
+  category: string;
+  dueDay: number;
+  nextPaymentDate: string;
+  startDate: string;
+  isRecurring: true;
+  frequency: "monthly";
+}
+
 export type ReviewTargetType = "bill" | "income" | "goal" | "decision";
 
 export interface ReviewTarget {
@@ -60,6 +71,24 @@ function normalizedTokens(value: string) {
     .trim()
     .split(/\s+/)
     .filter(token => token.length > 2 && !GENERIC_BANK_TOKENS.has(token));
+}
+
+export function buildForgottenBillDefaults(transaction: Pick<ReviewTransactionLike, "amount" | "date" | "note" | "merchant_name" | "category">): ForgottenBillDefaults {
+  const parsedDay = Number(transaction.date.slice(8, 10));
+  return {
+    name: transaction.merchant_name?.trim() || transaction.note?.trim() || transaction.category || "New bill",
+    amount: Math.abs(transaction.amount),
+    category: transaction.category && transaction.category !== "Income" ? transaction.category : "Other",
+    dueDay: Number.isFinite(parsedDay) && parsedDay > 0 ? parsedDay : 1,
+    nextPaymentDate: transaction.date,
+    startDate: transaction.date,
+    isRecurring: true,
+    frequency: "monthly",
+  };
+}
+
+export function forgottenBillSettlement(actualAmount: number, plannedAmount: number): "exact" | "full" {
+  return Math.abs(Math.abs(actualAmount) - Math.abs(plannedAmount)) < 0.005 ? "exact" : "full";
 }
 
 export function buildCurrentMonthReviewQueue<T extends ReviewTransactionLike>(transactions: T[], todayIso: string): T[] {

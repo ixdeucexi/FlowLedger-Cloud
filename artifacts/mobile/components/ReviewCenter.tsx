@@ -3,10 +3,12 @@ import * as Haptics from "expo-haptics";
 import React, { useMemo, useRef, useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import type { ReconcileTransactionInput, Transaction } from "@/context/BudgetContext";
+import { AddBillModal, type AddBillInitialValues } from "@/components/AddBillModal";
+import { UnplannedChargeModal } from "@/components/UnplannedChargeModal";
+import type { Bill, ReconcileTransactionInput, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
-import { buildCurrentMonthReviewQueue, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewQueueAfterSkips, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
+import { buildCurrentMonthReviewQueue, buildForgottenBillDefaults, forgottenBillSettlement, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewQueueAfterSkips, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
 
 function todayIso() {
   const now = new Date();
@@ -34,18 +36,24 @@ export function ReviewCenter() {
   const {
     transactions, goals, decisions, categories, canEditHousehold,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getIncomeOccurrencesInMonth,
-    reconcileTransaction, undoTransactionReconciliation,
+    addBill, deleteBillMistake, reconcileTransaction, undoTransactionReconciliation,
   } = useBudget();
   const queue = useMemo(() => buildCurrentMonthReviewQueue(transactions, todayIso()), [transactions]);
   const [saving, setSaving] = useState(false);
   const [variance, setVariance] = useState<VarianceChoice | null>(null);
   const [splitCategory, setSplitCategory] = useState<string | null>(null);
-  const [showOneTimeCategories, setShowOneTimeCategories] = useState(false);
+  const [unplannedChargeVisible, setUnplannedChargeVisible] = useState(false);
+  const [forgottenBillVisible, setForgottenBillVisible] = useState(false);
   const [skippedIds, setSkippedIds] = useState<string[]>([]);
   const [lastCompleted, setLastCompleted] = useState<{ id: string; label: string } | null>(null);
   const [completedThisVisit, setCompletedThisVisit] = useState(0);
   const availableQueue = useMemo(() => reviewQueueAfterSkips(queue, skippedIds), [queue, skippedIds]);
   const current = availableQueue[0] ?? null;
+  const forgottenBillDefaults = useMemo<AddBillInitialValues | undefined>(() => {
+    if (!current) return undefined;
+    const defaults = buildForgottenBillDefaults(current);
+    return { ...defaults, category: categories.includes(defaults.category) ? defaults.category : "Other" };
+  }, [categories, current]);
   const initialTotal = useRef(0);
   if (queue.length + completedThisVisit > initialTotal.current) initialTotal.current = queue.length + completedThisVisit;
 
@@ -97,8 +105,8 @@ export function ReviewCenter() {
     return rankReviewTargets(current, candidates).slice(0, 8);
   }, [current, decisions, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getMonthlyBills, goals, transactions]);
 
-  const finish = async (input: ReconcileTransactionInput, notice?: string) => {
-    if (!current || saving) return;
+  const completeReview = async (input: ReconcileTransactionInput, notice?: string) => {
+    if (!current || saving) throw new Error("This transaction is no longer available for review.");
     const reviewed = current;
     setSaving(true);
     try {
@@ -107,13 +115,44 @@ export function ReviewCenter() {
       setCompletedThisVisit(value => value + 1);
       setVariance(null);
       setSplitCategory(null);
-      setShowOneTimeCategories(false);
+      setUnplannedChargeVisible(false);
+      setForgottenBillVisible(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const finish = async (input: ReconcileTransactionInput, notice?: string) => {
+    try {
+      await completeReview(input, notice);
     } catch (error) {
       Alert.alert("Couldn’t finish this review", error instanceof Error ? error.message : "Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setSaving(false);
+    }
+  };
+
+  const saveForgottenBill = async (data: Omit<Bill, "id" | "created_at"> | Bill) => {
+    if (!current) throw new Error("This bank charge is no longer available.");
+    const reviewed = current;
+    const billData = data as Omit<Bill, "id" | "created_at">;
+    const billId = await addBill(billData);
+    try {
+      await completeReview({
+        transactionId: reviewed.id,
+        resolution: "bill",
+        targetId: billId,
+        occurrenceDate: reviewed.date,
+        plannedAmount: billData.amount,
+        settlement: forgottenBillSettlement(reviewed.amount, billData.amount),
+      }, `${billData.name} added as a bill and paid`);
+    } catch (error) {
+      try {
+        await deleteBillMistake(billId);
+      } catch {
+        // Keep the original reconciliation error; the new bill remains removable from Bills.
+      }
+      throw error;
     }
   };
 
@@ -164,7 +203,8 @@ export function ReviewCenter() {
     setSkippedIds(previous => previous.includes(current.id) ? previous : [...previous, current.id]);
     setVariance(null);
     setSplitCategory(null);
-    setShowOneTimeCategories(false);
+    setUnplannedChargeVisible(false);
+    setForgottenBillVisible(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
@@ -254,24 +294,14 @@ export function ReviewCenter() {
           <Text style={[styles.sectionTitle, { color: c.foreground }]}>Other options</Text>
           <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Handle activity that was not part of the plan, or come back to it later.</Text>
           {current.amount < 0 ? <>
-            <Pressable accessibilityRole="button" accessibilityLabel="Mark as a one-time charge" disabled={saving} onPress={() => setShowOneTimeCategories(value => !value)} style={({ pressed }) => [styles.optionButton, { borderColor: showOneTimeCategories ? c.primary : c.border, backgroundColor: showOneTimeCategories ? c.primary + "12" : "transparent", opacity: saving ? 0.55 : pressed ? 0.75 : 1 }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Open forgotten expense options" disabled={saving} onPress={() => setUnplannedChargeVisible(true)} style={({ pressed }) => [styles.optionButton, { borderColor: c.border, backgroundColor: "transparent", opacity: saving ? 0.55 : pressed ? 0.75 : 1 }]}>
               <Feather name="shopping-bag" size={17} color={c.primary} />
               <View style={styles.optionCopy}>
-                <Text style={[styles.optionTitle, { color: c.foreground }]}>One-time charge</Text>
-                <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Keep one bank transaction and choose its spending category.</Text>
+                <Text style={[styles.optionTitle, { color: c.foreground }]}>Forgotten or one-time expense</Text>
+                <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Handle an emergency swipe, one-time charge, or forgotten subscription.</Text>
               </View>
-              <Feather name={showOneTimeCategories ? "chevron-up" : "chevron-down"} size={17} color={c.mutedForeground} />
+              <Feather name="chevron-right" size={17} color={c.mutedForeground} />
             </Pressable>
-            {showOneTimeCategories ? <>
-              <Text style={[styles.categoryPrompt, { color: c.mutedForeground }]}>Choose a category</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
-                {categories.slice(0, 12).filter(category => category !== "Income").map(category => (
-                  <Pressable accessibilityRole="button" accessibilityLabel={`Save one-time charge as ${category}`} key={category} disabled={saving} onPress={() => void finish({ transactionId: current.id, resolution: "category", targetId: category }, `${transactionName(current)} saved as a one-time charge`)} style={({ pressed }) => [styles.categoryPill, { backgroundColor: c.muted, borderColor: c.border, opacity: pressed ? 0.75 : 1 }]}>
-                    <Text style={[styles.categoryText, { color: c.foreground }]}>{category}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </> : null}
           </> : (
             <Pressable accessibilityRole="button" accessibilityLabel="Save as unplanned income" disabled={saving} onPress={() => void finish({ transactionId: current.id, resolution: "category", targetId: "Income" }, `${transactionName(current)} saved as unplanned income`)} style={({ pressed }) => [styles.optionButton, { borderColor: c.border, opacity: saving ? 0.55 : pressed ? 0.75 : 1 }]}>
               <Feather name="plus-circle" size={17} color={c.success} />
@@ -290,6 +320,31 @@ export function ReviewCenter() {
           </Pressable>
         </View>
       )}
+
+      <UnplannedChargeModal
+        visible={unplannedChargeVisible && !!current}
+        transaction={current}
+        categories={categories}
+        saving={saving}
+        onClose={() => setUnplannedChargeVisible(false)}
+        onSaveOneTime={category => {
+          if (!current) return;
+          void finish({ transactionId: current.id, resolution: "category", targetId: category }, `${transactionName(current)} saved as a one-time charge`);
+        }}
+        onCreateBill={() => {
+          setUnplannedChargeVisible(false);
+          setForgottenBillVisible(true);
+        }}
+      />
+
+      <AddBillModal
+        visible={forgottenBillVisible && !!current}
+        onClose={() => setForgottenBillVisible(false)}
+        onSave={saveForgottenBill}
+        initialValues={forgottenBillDefaults}
+        title="Add forgotten bill"
+        saveLabel="Save bill and match payment"
+      />
 
       <Modal visible={!!variance} transparent animationType="fade" onRequestClose={() => { setVariance(null); setSplitCategory(null); }}>
         <Pressable style={styles.overlay} onPress={() => { setVariance(null); setSplitCategory(null); }}>
@@ -362,7 +417,6 @@ const styles = StyleSheet.create({
   divider: { borderTopWidth: 1, marginVertical: 12 }, categoryRow: { gap: 8, paddingVertical: 4 },
   optionButton: { minHeight: 58, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 9, flexDirection: "row", alignItems: "center", gap: 10 },
   optionCopy: { flex: 1 }, optionTitle: { fontSize: 12, fontFamily: "Inter_800ExtraBold" }, optionDescription: { fontSize: 10, lineHeight: 14, fontFamily: "Inter_400Regular", marginTop: 2 },
-  categoryPrompt: { fontSize: 10, fontFamily: "Inter_700Bold", marginTop: 10 },
   categoryPill: { minHeight: 36, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   categoryText: { fontSize: 11, fontFamily: "Inter_700Bold" },
   transferButton: { minHeight: 44, borderWidth: 1, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 },
