@@ -41,6 +41,7 @@ export async function getPushNotificationStatus(): Promise<PushNotificationStatu
   if (window.Notification.permission === "denied") return "blocked";
   const registered = await navigator.serviceWorker.getRegistration("/");
   if (!registered) return "disabled";
+  await registered.update().catch(() => undefined);
   return (await registered.pushManager.getSubscription()) ? "enabled" : "disabled";
 }
 
