@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isActiveTransaction, isConfirmedBillMatch, rankBillMatches } from "./billMatching";
+import { isActiveTransaction, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches } from "./billMatching";
 
 test("ranks an exact nearby utility payment above unrelated bills", () => {
   const ranked = rankBillMatches(
@@ -36,4 +36,11 @@ test("removed Plaid rows are not active", () => {
 test("only confirmed matches replace a planned bill event", () => {
   assert.equal(isConfirmedBillMatch({ match_reason: "confirmed_bill_match" }), true);
   assert.equal(isConfirmedBillMatch({ match_reason: "rule suggestion" }), false);
+});
+
+test("prompts for leftover money only when a confirmed payment is lower", () => {
+  assert.equal(isMatchedPaymentLowerThanPlanned(-350, 370), true);
+  assert.equal(isMatchedPaymentLowerThanPlanned(-370, 370), false);
+  assert.equal(isMatchedPaymentLowerThanPlanned(-400, 370), false);
+  assert.equal(isMatchedPaymentLowerThanPlanned(-369.999, 370), false);
 });

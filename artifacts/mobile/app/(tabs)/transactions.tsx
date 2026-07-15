@@ -9,9 +9,11 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddTransactionModal } from "@/components/AddTransactionModal";
+import { BillSurplusModal } from "@/components/BillSurplusModal";
 import { CommandPlusButton } from "@/components/CommandPlusButton";
 import { DebtPaymentAppliedModal, type DebtPaymentAppliedDetail } from "@/components/DebtPaymentAppliedModal";
 import { EmptyState } from "@/components/EmptyState";
+import { FullPaymentPromptModal } from "@/components/FullPaymentPromptModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import colors from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
@@ -25,7 +27,8 @@ import {
   type TransactionRule,
 } from "@/lib/competitiveGrowth";
 import { debtPaymentStatusLabel } from "@/lib/forecastDisplay";
-import { isConfirmedBillMatch, rankBillMatches } from "@/lib/billMatching";
+import { isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches } from "@/lib/billMatching";
+import { isValidDateInMonth } from "@/lib/schedule";
 import { supabase } from "@/lib/supabase";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -51,6 +54,14 @@ type TransactionRuleRow = {
   is_active: boolean | null;
 };
 type ReviewDecisionRow = { transaction_id: string | null; status: "needs_review" | "approved" | "ignored" | "deleted" };
+type MatchedPaymentPrompt = {
+  transaction: Transaction;
+  bill: Bill;
+  budgeted: number;
+  actual: number;
+  month: number;
+  year: number;
+};
 
 interface ActivityItem {
   id: string;
@@ -190,9 +201,10 @@ export default function TransactionsScreen() {
   const { isFeatureLocked, bypassFeature } = useMembership();
   const {
     transactions, addTransaction, updateTransaction, deleteTransaction, deleteTransfer,
-    bills, overrides, extraPayments, activeHousehold,
+    bills, overrides, extraPayments, activeHousehold, settings,
     getIncomeOccurrencesInMonth, getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal,
-    matchTransactionToBill, unmatchTransactionFromBill,
+    matchTransactionToBill, unmatchTransactionFromBill, setCustomAmount,
+    getExtraPayment, previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment,
   } = useBudget();
 
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -209,6 +221,9 @@ export default function TransactionsScreen() {
   const [weeklySummaryVisible, setWeeklySummaryVisible] = useState(false);
   const [matchTx, setMatchTx] = useState<Transaction | null>(null);
   const [savingMatch, setSavingMatch] = useState(false);
+  const [fullPaymentPrompt, setFullPaymentPrompt] = useState<MatchedPaymentPrompt | null>(null);
+  const [surplusPrompt, setSurplusPrompt] = useState<MatchedPaymentPrompt | null>(null);
+  const [surplusPaymentDate, setSurplusPaymentDate] = useState(todayIsoDate());
   const [reviewAlertLoaded, setReviewAlertLoaded] = useState(false);
   const [transactionRules, setTransactionRules] = useState<TransactionRule[]>([]);
   const [reviewDecisions, setReviewDecisions] = useState<Record<string, ReviewDecision>>({});
@@ -604,16 +619,119 @@ export default function TransactionsScreen() {
     ? bills.find(bill => bill.id === matchTx.linked_bill_id)
     : undefined;
 
+  const surplusSnowballOffer = useMemo(() => {
+    if (!surplusPrompt) return null;
+    const surplus = Math.max(0, surplusPrompt.budgeted - surplusPrompt.actual);
+    const existing = getExtraPayment(surplusPrompt.month, surplusPrompt.year);
+    const previousSource = existing?.sources?.find(source => source.type === "bill_surplus" && source.billId === surplusPrompt.bill.id)?.amount ?? 0;
+    const total = Math.max(0, (existing?.amount ?? 0) - previousSource + surplus);
+    const dateValid = isValidDateInMonth(surplusPaymentDate, surplusPrompt.month, surplusPrompt.year);
+    const preview = previewDebtSnowball(
+      surplusPrompt.month,
+      surplusPrompt.year,
+      total,
+      surplus - previousSource,
+      dateValid ? surplusPaymentDate : undefined,
+    );
+    return {
+      preview,
+      targetDebt: preview.months[0]?.targetName ?? preview.allocations[0]?.billName,
+      dateValid,
+      safe: dateValid && preview.selectedExtra + 0.005 >= total,
+    };
+  }, [getExtraPayment, previewDebtSnowball, surplusPaymentDate, surplusPrompt]);
+  const surplusMonth = surplusPrompt?.month ?? new Date().getMonth();
+  const surplusYear = surplusPrompt?.year ?? new Date().getFullYear();
+  const surplusMonthText = String(surplusMonth + 1).padStart(2, "0");
+  const surplusMonthLastDay = String(new Date(surplusYear, surplusMonth + 1, 0).getDate()).padStart(2, "0");
+
   const handleMatchBill = async (billId: string) => {
     if (!matchTx || savingMatch) return;
+    const transaction = matchTx;
+    const bill = bills.find(item => item.id === billId);
+    const option = billMatchOptions.find(item => item.billId === billId);
+    const [year, monthNumber] = transaction.date.split("-").map(Number);
+    const actual = Math.abs(transaction.amount);
+    const nextFullPaymentPrompt = bill && option && isMatchedPaymentLowerThanPlanned(transaction.amount, option.plannedAmount)
+      ? { transaction, bill, budgeted: option.plannedAmount, actual, month: monthNumber - 1, year }
+      : null;
     setSavingMatch(true);
     try {
-      await matchTransactionToBill(matchTx.id, billId);
+      await matchTransactionToBill(transaction.id, billId);
       setMatchTx(null);
+      if (nextFullPaymentPrompt) {
+        setTimeout(
+          () => setFullPaymentPrompt(nextFullPaymentPrompt),
+          Platform.OS === "web" ? 0 : 250,
+        );
+      }
     } catch (error) {
       Alert.alert("Could not match bill", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSavingMatch(false);
+    }
+  };
+
+  const confirmMatchedFullPayment = () => {
+    if (!fullPaymentPrompt) return;
+    setSurplusPaymentDate(fullPaymentPrompt.transaction.date);
+    setSurplusPrompt(fullPaymentPrompt);
+    setFullPaymentPrompt(null);
+  };
+
+  const saveMatchedBillAtActual = async (prompt: MatchedPaymentPrompt) => {
+    await setCustomAmount(
+      prompt.bill.id,
+      prompt.month,
+      prompt.year,
+      Math.abs(prompt.actual - prompt.bill.amount) < 0.005 ? undefined : prompt.actual,
+    );
+  };
+
+  const keepMatchedSurplusAvailable = async () => {
+    if (!surplusPrompt) return;
+    try {
+      await saveMatchedBillAtActual(surplusPrompt);
+      const existing = getExtraPayment(surplusPrompt.month, surplusPrompt.year);
+      const sources = (existing?.sources ?? []).filter(source => !(source.type === "bill_surplus" && source.billId === surplusPrompt.bill.id));
+      if ((existing?.sources?.length ?? 0) !== sources.length) {
+        const total = sources.reduce((sum, source) => sum + source.amount, 0);
+        if (total > 0.005) {
+          await applyDebtSnowballPayment(
+            previewDebtSnowball(surplusPrompt.month, surplusPrompt.year, total),
+            sources,
+          );
+        } else {
+          await removeDebtSnowballPayment(surplusPrompt.month, surplusPrompt.year);
+        }
+      }
+      setSurplusPrompt(null);
+    } catch (error) {
+      Alert.alert("Could not finish bill", error instanceof Error ? error.message : "Please try again.");
+    }
+  };
+
+  const addMatchedSurplusToSnowball = async () => {
+    if (!surplusPrompt || !surplusSnowballOffer?.safe || !surplusSnowballOffer.preview.allocations.length) return;
+    const surplus = surplusPrompt.budgeted - surplusPrompt.actual;
+    const existing = getExtraPayment(surplusPrompt.month, surplusPrompt.year);
+    const otherSources = (existing?.sources ?? [{ type: "manual" as const, amount: existing?.amount ?? 0 }])
+      .filter(source => !(source.type === "bill_surplus" && source.billId === surplusPrompt.bill.id));
+    const sources = [
+      ...otherSources,
+      {
+        type: "bill_surplus" as const,
+        amount: surplus,
+        billId: surplusPrompt.bill.id,
+        billName: surplusPrompt.bill.name,
+      },
+    ].filter(source => source.amount > 0.005);
+    try {
+      await saveMatchedBillAtActual(surplusPrompt);
+      await applyDebtSnowballPayment(surplusSnowballOffer.preview, sources);
+      setSurplusPrompt(null);
+    } catch (error) {
+      Alert.alert("Could not route extra money", error instanceof Error ? error.message : "The matched payment is safe; please try the snowball again.");
     }
   };
 
@@ -1146,6 +1264,38 @@ export default function TransactionsScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <FullPaymentPromptModal
+        visible={!!fullPaymentPrompt}
+        prompt={fullPaymentPrompt ? {
+          billName: fullPaymentPrompt.bill.name,
+          budgeted: fullPaymentPrompt.budgeted,
+          actual: fullPaymentPrompt.actual,
+        } : null}
+        onClose={() => setFullPaymentPrompt(null)}
+        onKeepPartial={() => setFullPaymentPrompt(null)}
+        onFullPayment={confirmMatchedFullPayment}
+      />
+
+      <BillSurplusModal
+        visible={!!surplusPrompt}
+        billName={surplusPrompt?.bill.name ?? "Bill"}
+        itemType={surplusPrompt?.bill.is_debt ? "debt" : "bill"}
+        budgeted={surplusPrompt?.budgeted ?? 0}
+        actual={surplusPrompt?.actual ?? 0}
+        targetDebt={surplusSnowballOffer?.targetDebt}
+        snowballSafe={surplusSnowballOffer?.safe ?? false}
+        safetyFloor={settings.safety_floor}
+        forecastHorizonMonths={settings.forecast_horizon_months}
+        paymentDate={surplusPaymentDate}
+        paymentDateValid={surplusSnowballOffer?.dateValid ?? false}
+        paymentDateMin={`${surplusYear}-${surplusMonthText}-01`}
+        paymentDateMax={`${surplusYear}-${surplusMonthText}-${surplusMonthLastDay}`}
+        onPaymentDateChange={setSurplusPaymentDate}
+        onKeep={() => void keepMatchedSurplusAvailable()}
+        onSnowball={() => void addMatchedSurplusToSnowball()}
+        onClose={() => setSurplusPrompt(null)}
+      />
 
       <Modal
         visible={filterModalVisible}

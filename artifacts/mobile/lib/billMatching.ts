@@ -123,6 +123,11 @@ export function isConfirmedBillMatch(transaction: { match_reason?: string | null
   return transaction.match_reason === "confirmed_bill_match";
 }
 
+export function isMatchedPaymentLowerThanPlanned(transactionAmount: number, plannedAmount: number): boolean {
+  if (!Number.isFinite(transactionAmount) || !Number.isFinite(plannedAmount) || plannedAmount <= 0) return false;
+  return Math.abs(transactionAmount) + 0.005 < plannedAmount;
+}
+
 export function isActiveTransaction(transaction: { removed_at?: string | null }): boolean {
   return !transaction.removed_at;
 }
