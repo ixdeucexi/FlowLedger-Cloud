@@ -9,6 +9,7 @@ import { BudgetProvider, useBudget } from "@/context/BudgetContext";
 import { SaveStatusBanner } from "@/components/SaveStatusBanner";
 import { DecisionDueModal } from "@/components/DecisionDueModal";
 import { FloLogo } from "@/components/FloLogo";
+import { PlanPreviewBanner } from "@/components/PlanPreviewBanner";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useEffectiveThemeMode } from "@/hooks/useEffectiveThemeMode";
@@ -20,6 +21,7 @@ import {
   writeLearningTourState,
 } from "@/lib/learningTour";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
+import { MembershipProvider } from "@/context/MembershipContext";
 
 const MIN_BUDGET_LOADING_MS = 220;
 
@@ -484,6 +486,7 @@ function TabContent() {
           <Tabs.Screen name="category-budget" options={{ href: null }} />
         </Tabs>
         {demoMode ? <DemoModeBanner /> : null}
+        <PlanPreviewBanner />
         <SaveStatusBanner />
         <DecisionDueModal />
         <FloLearningTour />
@@ -498,7 +501,9 @@ function TabContent() {
 export default function TabLayout() {
   return (
     <BudgetProvider>
-      <TabContent />
+      <MembershipProvider>
+        <TabContent />
+      </MembershipProvider>
     </BudgetProvider>
   );
 }

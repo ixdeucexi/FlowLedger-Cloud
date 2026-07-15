@@ -57,5 +57,7 @@
     ,"lib/feedback.test.ts"
     ,"lib/billMatching.ts"
     ,"lib/billMatching.test.ts"
+    ,"lib/membership.ts"
+    ,"lib/membership.test.ts"
   ]
 }

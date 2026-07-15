@@ -11,6 +11,7 @@ import { AddBillModal } from "@/components/AddBillModal";
 import { CommandPlusButton } from "@/components/CommandPlusButton";
 import { EmptyState } from "@/components/EmptyState";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
+import { PlanFeatureGate } from "@/components/PlanFeatureGate";
 import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
 import colors from "@/constants/colors";
 import type { Bill } from "@/context/BudgetContext";
@@ -615,8 +616,9 @@ export default function BillsScreen() {
       {/* ════════════════════ DEBT VIEW ════════════════════ */}
       {activeTab === "debt" && (
         <View style={styles.list}>
-            <>
-          {debts.length > 0 && (
+          <>
+            <PlanFeatureGate feature="debt_payoff" compact>
+            {debts.length > 0 && (
             <View style={[styles.statsRow, { marginHorizontal: 0, gap: 10 }]}>
               {[
                 { label: "Total Debt", value: `$${totalDebt.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, color: c.destructive, icon: "trending-down" as const },
@@ -710,7 +712,8 @@ export default function BillsScreen() {
               ))}
             </View>
           </View>
-            </>
+            </PlanFeatureGate>
+          </>
           {debts.length === 0 ? (
             <EmptyState
               icon="credit-card"

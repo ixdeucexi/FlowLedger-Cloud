@@ -19,6 +19,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useBudget, type DecisionRecord } from "@/context/BudgetContext";
 import { DatePickerField } from "@/components/DatePickerField";
 import { FloLogo } from "@/components/FloLogo";
+import { PlanFeatureGate } from "@/components/PlanFeatureGate";
 import { FloSafetyStopModal } from "@/components/FloSafetyStopModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
@@ -984,6 +985,7 @@ export default function FloScreen() {
   const composerBottom = Platform.OS === "web" ? 88 : Math.max(insets.bottom, 8) + 54;
 
   return (
+    <PlanFeatureGate feature="flo_assistant">
     <KeyboardAvoidingView
       style={[styles.screen, { backgroundColor: colors.background }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -1438,6 +1440,7 @@ export default function FloScreen() {
         </View>
       </View>
     </KeyboardAvoidingView>
+    </PlanFeatureGate>
   );
 }
 

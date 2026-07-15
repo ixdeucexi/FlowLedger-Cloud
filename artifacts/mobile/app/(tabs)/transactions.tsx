@@ -17,6 +17,7 @@ import colors from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import type { Bill, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
+import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import {
@@ -186,6 +187,7 @@ export default function TransactionsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
+  const { isFeatureLocked, bypassFeature } = useMembership();
   const {
     transactions, addTransaction, updateTransaction, deleteTransaction, deleteTransfer,
     bills, overrides, extraPayments, activeHousehold,
@@ -630,6 +632,23 @@ export default function TransactionsScreen() {
 
   const openItem = (item: ActivityItem) => {
     if (item.rawTx?.source === "plaid" && item.rawTx.amount < 0) {
+      if (isFeatureLocked("transaction_matching")) {
+        Alert.alert(
+          "Bill matching is a Pro feature",
+          "Free plan preview keeps imported transaction matching locked. This test does not change your real household plan.",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Admin bypass",
+              onPress: () => {
+                bypassFeature("transaction_matching");
+                setMatchTx(item.rawTx ?? null);
+              },
+            },
+          ],
+        );
+        return;
+      }
       setMatchTx(item.rawTx);
       return;
     }

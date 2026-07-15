@@ -18,12 +18,15 @@ import { AccountModal } from "@/components/AccountModal";
 import { AppText } from "@/components/AppText";
 import { FloLogo } from "@/components/FloLogo";
 import { IncomeModal } from "@/components/IncomeModal";
+import { MembershipPanel } from "@/components/MembershipPanel";
+import { PlanFeatureGate } from "@/components/PlanFeatureGate";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { PWA_INSTALL_EVENT } from "@/components/PwaInstallPrompt";
 import { PlaidLinkButton } from "@/components/PlaidLinkButton";
 import colors from "@/constants/colors";
 import type { Account, IncomeItem } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
+import { useMembership } from "@/context/MembershipContext";
 import { useAuth } from "@/context/AuthContext";
 import { type AppFontStyle, type ThemeMode, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
@@ -91,6 +94,7 @@ const BACKUP_COMPLETE_KEY = "flowledger_backup_exported";
 type AlgorithmCatalogItem = typeof ALGORITHM_CATALOG[number];
 type SettingsSectionId =
   | "overview"
+  | "membership"
   | "setup"
   | "appearance"
   | "algorithms"
@@ -301,6 +305,7 @@ const SETTINGS_SECTIONS: Array<{
   description: string;
   icon: string;
 }> = [
+  { id: "membership", label: "Membership", description: "Free, Pro, pricing, and admin plan preview.", icon: "award" },
   { id: "setup", label: "Setup walkthrough", description: "Restart setup and learning mode.", icon: "message-circle" },
   { id: "accounts", label: "Accounts", description: "Balances, reconcile, and household sharing.", icon: "credit-card" },
   { id: "plaid", label: "Bank sync", description: "Connect a bank or import activity safely.", icon: "link" },
@@ -447,6 +452,7 @@ export default function MoreScreen() {
     setLightningFlashesEnabled,
   } = useThemeMode();
   const { signOut, user, session, loading: authLoading } = useAuth();
+  const { isAdmin: feedbackAdmin } = useMembership();
   const {
     bills, transactions, overrides, incomes, goals, importBills, settings, updateSettings, accounts, forecastConfidence,
     addBill, updateBill,
@@ -496,7 +502,6 @@ export default function MoreScreen() {
   const [feedbackCanContact, setFeedbackCanContact] = useState(true);
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
-  const [feedbackAdmin, setFeedbackAdmin] = useState(false);
   const [feedbackInbox, setFeedbackInbox] = useState<AppFeedbackRow[]>([]);
   const [feedbackInboxLoading, setFeedbackInboxLoading] = useState(false);
   const [feedbackStatusFilter, setFeedbackStatusFilter] = useState<FeedbackStatus | "all">("all");
@@ -680,32 +685,6 @@ export default function MoreScreen() {
       cancelled = true;
     };
   }, [activeHousehold?.householdId, childProfileStorageKey, user?.id]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!user?.id) {
-      setFeedbackAdmin(false);
-      setFeedbackInbox([]);
-      return () => {
-        cancelled = true;
-      };
-    }
-    void (async () => {
-      try {
-        const { data } = await supabase
-          .from("feedback_admins")
-          .select("user_id")
-          .eq("user_id", user.id)
-          .maybeSingle();
-        if (!cancelled) setFeedbackAdmin(Boolean(data));
-      } catch {
-        if (!cancelled) setFeedbackAdmin(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id]);
 
   useEffect(() => {
     if (inviteRoles.length > 0 && !inviteRoles.includes(householdInviteRole)) {
@@ -1794,6 +1773,8 @@ export default function MoreScreen() {
         </>
       )}
 
+      {activeSettingsSection === "membership" && <MembershipPanel />}
+
       {activeSettingsSection === "setup" && shouldShowFloSetup && <>
       <SLabel c={c} text="Flo Setup" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
@@ -1919,7 +1900,9 @@ export default function MoreScreen() {
       {activeSettingsSection === "plaid" && <>
       <SLabel c={c} text="Bank sync" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <PlanFeatureGate feature="plaid_sync" compact>
         <PlaidLinkButton colors={c} onConnected={retryBudgetLoad} />
+        </PlanFeatureGate>
         <Pressable
           onPress={handleStatementImport}
           style={({ pressed }) => [styles.balanceSaveFullBtn, { backgroundColor: c.primary, opacity: pressed ? 0.78 : 1 }]}
@@ -2573,6 +2556,7 @@ export default function MoreScreen() {
         </Text>
       </View>
 
+      <PlanFeatureGate feature="connected_insights" compact>
       <SLabel c={c} text="Transaction Review Queue" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View style={[styles.priorityNote, { backgroundColor: c.primary + "12", borderRadius: 10, marginTop: 0, marginBottom: 12 }]}>
@@ -2676,9 +2660,11 @@ export default function MoreScreen() {
           </View>
         )}
       </View>
+      </PlanFeatureGate>
       </>}
 
       {activeSettingsSection === "subscriptions" && <>
+      <PlanFeatureGate feature="connected_insights" compact>
       <SLabel c={c} text="Subscription Cleanup" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View style={[styles.priorityNote, { backgroundColor: c.warning + "12", borderRadius: 10, marginTop: 0, marginBottom: 12 }]}>
@@ -2776,6 +2762,7 @@ export default function MoreScreen() {
           </View>
         )}
       </View>
+      </PlanFeatureGate>
       </>}
 
       {activeSettingsSection === "reports" && <>
