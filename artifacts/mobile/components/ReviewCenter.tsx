@@ -6,7 +6,7 @@ import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "rea
 import type { ReconcileTransactionInput, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
-import { buildCurrentMonthReviewQueue, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
+import { buildCurrentMonthReviewQueue, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewQueueAfterSkips, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
 
 function todayIso() {
   const now = new Date();
@@ -37,12 +37,15 @@ export function ReviewCenter() {
     reconcileTransaction, undoTransactionReconciliation,
   } = useBudget();
   const queue = useMemo(() => buildCurrentMonthReviewQueue(transactions, todayIso()), [transactions]);
-  const current = queue[0] ?? null;
   const [saving, setSaving] = useState(false);
   const [variance, setVariance] = useState<VarianceChoice | null>(null);
   const [splitCategory, setSplitCategory] = useState<string | null>(null);
+  const [showOneTimeCategories, setShowOneTimeCategories] = useState(false);
+  const [skippedIds, setSkippedIds] = useState<string[]>([]);
   const [lastCompleted, setLastCompleted] = useState<{ id: string; label: string } | null>(null);
   const [completedThisVisit, setCompletedThisVisit] = useState(0);
+  const availableQueue = useMemo(() => reviewQueueAfterSkips(queue, skippedIds), [queue, skippedIds]);
+  const current = availableQueue[0] ?? null;
   const initialTotal = useRef(0);
   if (queue.length + completedThisVisit > initialTotal.current) initialTotal.current = queue.length + completedThisVisit;
 
@@ -104,6 +107,7 @@ export function ReviewCenter() {
       setCompletedThisVisit(value => value + 1);
       setVariance(null);
       setSplitCategory(null);
+      setShowOneTimeCategories(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       Alert.alert("Couldn’t finish this review", error instanceof Error ? error.message : "Please try again.");
@@ -155,6 +159,15 @@ export function ReviewCenter() {
     }
   };
 
+  const skipCurrent = () => {
+    if (!current || saving) return;
+    setSkippedIds(previous => previous.includes(current.id) ? previous : [...previous, current.id]);
+    setVariance(null);
+    setSplitCategory(null);
+    setShowOneTimeCategories(false);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
   if (!canEditHousehold) {
     return (
       <View style={[styles.emptyCard, { backgroundColor: c.card, borderColor: c.border }]}>
@@ -166,7 +179,7 @@ export function ReviewCenter() {
   }
 
   const total = Math.max(initialTotal.current, completedThisVisit + queue.length);
-  const position = Math.min(total, completedThisVisit + 1);
+  const position = Math.min(total, completedThisVisit + skippedIds.length + 1);
 
   return (
     <>
@@ -187,7 +200,16 @@ export function ReviewCenter() {
         </View>
       ) : null}
 
-      {!current ? (
+      {!current && queue.length > 0 ? (
+        <View style={[styles.emptyCard, { backgroundColor: c.card, borderColor: c.warning + "44" }]}>
+          <Feather name="clock" size={30} color={c.warning} />
+          <Text style={[styles.emptyTitle, { color: c.foreground }]}>Skipped for now</Text>
+          <Text style={[styles.emptyText, { color: c.mutedForeground }]}>These transactions are still waiting. Nothing was marked reviewed or changed.</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Review skipped transactions" onPress={() => setSkippedIds([])} style={[styles.primaryButton, styles.reviewSkippedButton, { backgroundColor: c.primary }]}>
+            <Text style={[styles.primaryButtonText, { color: c.primaryForeground }]}>Review skipped items</Text>
+          </Pressable>
+        </View>
+      ) : !current ? (
         <View style={[styles.emptyCard, { backgroundColor: c.card, borderColor: c.success + "44" }]}>
           <Feather name="check-circle" size={32} color={c.success} />
           <Text style={[styles.emptyTitle, { color: c.foreground }]}>You’re caught up</Text>
@@ -197,9 +219,9 @@ export function ReviewCenter() {
         <View style={[styles.reviewCard, { backgroundColor: c.card, borderColor: c.border }]}>
           <View style={styles.progressRow}>
             <Text style={[styles.progressText, { color: c.primary }]}>{position} of {total}</Text>
-            <Text style={[styles.progressText, { color: c.mutedForeground }]}>{queue.length} left</Text>
+            <Text style={[styles.progressText, { color: c.mutedForeground }]}>{queue.length} left{skippedIds.length ? ` · ${skippedIds.length} skipped` : ""}</Text>
           </View>
-          <View style={[styles.progressTrack, { backgroundColor: c.muted }]}><View style={[styles.progressFill, { backgroundColor: c.primary, width: `${total ? Math.max(5, (completedThisVisit / total) * 100) : 100}%` }]} /></View>
+          <View style={[styles.progressTrack, { backgroundColor: c.muted }]}><View style={[styles.progressFill, { backgroundColor: c.primary, width: `${total ? Math.max(5, ((completedThisVisit + skippedIds.length) / total) * 100) : 100}%` }]} /></View>
 
           <View style={styles.transactionRow}>
             <View style={[styles.transactionIcon, { backgroundColor: current.amount < 0 ? c.destructive + "16" : c.success + "16" }]}>
@@ -229,17 +251,42 @@ export function ReviewCenter() {
           ))}
 
           <View style={[styles.divider, { borderTopColor: c.border }]} />
-          <Text style={[styles.sectionTitle, { color: c.foreground }]}>Not planned?</Text>
-          <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Choose where it belongs, keep it as one transaction, and move on.</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
-            {categories.slice(0, 10).filter(category => category !== "Income").map(category => (
-              <Pressable accessibilityRole="button" accessibilityLabel={`Categorize as ${category}`} key={category} disabled={saving} onPress={() => void finish({ transactionId: current.id, resolution: "category", targetId: category }, `${transactionName(current)} categorized`)} style={({ pressed }) => [styles.categoryPill, { backgroundColor: c.muted, borderColor: c.border, opacity: pressed ? 0.75 : 1 }]}>
-                <Text style={[styles.categoryText, { color: c.foreground }]}>{category}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
+          <Text style={[styles.sectionTitle, { color: c.foreground }]}>Other options</Text>
+          <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Handle activity that was not part of the plan, or come back to it later.</Text>
+          {current.amount < 0 ? <>
+            <Pressable accessibilityRole="button" accessibilityLabel="Mark as a one-time charge" disabled={saving} onPress={() => setShowOneTimeCategories(value => !value)} style={({ pressed }) => [styles.optionButton, { borderColor: showOneTimeCategories ? c.primary : c.border, backgroundColor: showOneTimeCategories ? c.primary + "12" : "transparent", opacity: saving ? 0.55 : pressed ? 0.75 : 1 }]}>
+              <Feather name="shopping-bag" size={17} color={c.primary} />
+              <View style={styles.optionCopy}>
+                <Text style={[styles.optionTitle, { color: c.foreground }]}>One-time charge</Text>
+                <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Keep one bank transaction and choose its spending category.</Text>
+              </View>
+              <Feather name={showOneTimeCategories ? "chevron-up" : "chevron-down"} size={17} color={c.mutedForeground} />
+            </Pressable>
+            {showOneTimeCategories ? <>
+              <Text style={[styles.categoryPrompt, { color: c.mutedForeground }]}>Choose a category</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
+                {categories.slice(0, 12).filter(category => category !== "Income").map(category => (
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Save one-time charge as ${category}`} key={category} disabled={saving} onPress={() => void finish({ transactionId: current.id, resolution: "category", targetId: category }, `${transactionName(current)} saved as a one-time charge`)} style={({ pressed }) => [styles.categoryPill, { backgroundColor: c.muted, borderColor: c.border, opacity: pressed ? 0.75 : 1 }]}>
+                    <Text style={[styles.categoryText, { color: c.foreground }]}>{category}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </> : null}
+          </> : (
+            <Pressable accessibilityRole="button" accessibilityLabel="Save as unplanned income" disabled={saving} onPress={() => void finish({ transactionId: current.id, resolution: "category", targetId: "Income" }, `${transactionName(current)} saved as unplanned income`)} style={({ pressed }) => [styles.optionButton, { borderColor: c.border, opacity: saving ? 0.55 : pressed ? 0.75 : 1 }]}>
+              <Feather name="plus-circle" size={17} color={c.success} />
+              <View style={styles.optionCopy}>
+                <Text style={[styles.optionTitle, { color: c.foreground }]}>Unplanned income</Text>
+                <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Keep this deposit without matching expected income.</Text>
+              </View>
+              <Feather name="chevron-right" size={17} color={c.mutedForeground} />
+            </Pressable>
+          )}
           <Pressable accessibilityRole="button" accessibilityLabel="Mark this transaction as a transfer" disabled={saving} onPress={() => void finish({ transactionId: current.id, resolution: "transfer" }, `${transactionName(current)} marked as transfer`)} style={({ pressed }) => [styles.transferButton, { borderColor: c.border, opacity: saving ? 0.55 : pressed ? 0.75 : 1 }]}>
             <Feather name="repeat" size={16} color={c.primary} /><Text style={[styles.transferText, { color: c.foreground }]}>This was a transfer</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Skip this transaction for now" disabled={saving} onPress={skipCurrent} style={({ pressed }) => [styles.skipButton, { opacity: saving ? 0.55 : pressed ? 0.7 : 1 }]}>
+            <Feather name="clock" size={16} color={c.mutedForeground} /><Text style={[styles.skipText, { color: c.mutedForeground }]}>Skip for now</Text>
           </Pressable>
         </View>
       )}
@@ -313,10 +360,15 @@ const styles = StyleSheet.create({
   suggested: { fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7 },
   targetMeta: { fontSize: 10, fontFamily: "Inter_500Medium", marginTop: 3 }, targetReason: { fontSize: 9, fontFamily: "Inter_700Bold", marginTop: 3 },
   divider: { borderTopWidth: 1, marginVertical: 12 }, categoryRow: { gap: 8, paddingVertical: 4 },
+  optionButton: { minHeight: 58, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 9, flexDirection: "row", alignItems: "center", gap: 10 },
+  optionCopy: { flex: 1 }, optionTitle: { fontSize: 12, fontFamily: "Inter_800ExtraBold" }, optionDescription: { fontSize: 10, lineHeight: 14, fontFamily: "Inter_400Regular", marginTop: 2 },
+  categoryPrompt: { fontSize: 10, fontFamily: "Inter_700Bold", marginTop: 10 },
   categoryPill: { minHeight: 36, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   categoryText: { fontSize: 11, fontFamily: "Inter_700Bold" },
   transferButton: { minHeight: 44, borderWidth: 1, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10 },
   transferText: { fontSize: 12, fontFamily: "Inter_700Bold" },
+  skipButton: { minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, marginTop: 4 },
+  skipText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.72)", alignItems: "center", justifyContent: "center", padding: 20 },
   modalCard: { width: "100%", maxWidth: 500, maxHeight: "88%", borderWidth: 1, borderRadius: 24, padding: 20, alignItems: "stretch" },
   modalIcon: { width: 50, height: 50, borderRadius: 25, alignItems: "center", justifyContent: "center", alignSelf: "center" },
@@ -325,6 +377,7 @@ const styles = StyleSheet.create({
   amountBox: { borderRadius: 16, padding: 14, marginTop: 16, marginBottom: 12, gap: 9 },
   amountLine: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }, amountLabel: { fontSize: 13, fontFamily: "Inter_500Medium" }, amountValue: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   primaryButton: { minHeight: 52, borderRadius: 15, alignItems: "center", justifyContent: "center", paddingHorizontal: 14, marginTop: 8 },
+  reviewSkippedButton: { width: "100%", marginTop: 8 },
   primaryButtonText: { fontSize: 13, fontFamily: "Inter_800ExtraBold", textAlign: "center" },
   secondaryButton: { minHeight: 48, borderRadius: 15, borderWidth: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 14, marginTop: 8 },
   secondaryButtonText: { fontSize: 13, fontFamily: "Inter_700Bold", textAlign: "center" },

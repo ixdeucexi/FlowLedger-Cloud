@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { allocationTotal, buildCurrentMonthReviewQueue, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewAllocationsAreBalanced, transactionCategoryParts } from "./reviewCenter";
+import { allocationTotal, buildCurrentMonthReviewQueue, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewAllocationsAreBalanced, reviewQueueAfterSkips, transactionCategoryParts } from "./reviewCenter";
 
 test("queues only active current-month posted Plaid transactions oldest first", () => {
   const queue = buildCurrentMonthReviewQueue([
@@ -13,6 +13,16 @@ test("queues only active current-month posted Plaid transactions oldest first", 
     { id: "manual", date: "2026-07-04", amount: -7, category: "Other", note: "Manual", source: "manual", review_status: "needs_review" },
   ], "2026-07-14");
   assert.deepEqual(queue.map(transaction => transaction.id), ["older", "newer"]);
+});
+
+test("skip moves an item aside without changing its review state", () => {
+  const queue = [
+    { id: "first", review_status: "needs_review" },
+    { id: "second", review_status: "needs_review" },
+  ];
+  assert.deepEqual(reviewQueueAfterSkips(queue, ["first"]).map(transaction => transaction.id), ["second"]);
+  assert.equal(queue[0]?.review_status, "needs_review");
+  assert.deepEqual(reviewQueueAfterSkips(queue, ["first", "second"]), []);
 });
 
 test("ranks exact same-day calendar matches first", () => {

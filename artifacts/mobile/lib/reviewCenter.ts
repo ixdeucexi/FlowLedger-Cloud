@@ -72,6 +72,12 @@ export function buildCurrentMonthReviewQueue<T extends ReviewTransactionLike>(tr
     .sort((left, right) => left.date.localeCompare(right.date) || left.id.localeCompare(right.id));
 }
 
+export function reviewQueueAfterSkips<T extends Pick<ReviewTransactionLike, "id">>(queue: T[], skippedIds: string[]): T[] {
+  if (skippedIds.length === 0) return queue;
+  const skipped = new Set(skippedIds);
+  return queue.filter(transaction => !skipped.has(transaction.id));
+}
+
 export function rankReviewTargets(transaction: Pick<ReviewTransactionLike, "amount" | "date" | "note" | "merchant_name" | "category">, targets: ReviewTarget[]): RankedReviewTarget[] {
   const actual = Math.abs(transaction.amount);
   const txDate = parseIsoDate(transaction.date);
