@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import { Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
@@ -11,8 +11,8 @@ import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { isCashFlowTransaction } from "@/lib/billMatching";
-import { applyCategoryBudgetMove, buildCategoryPlan, type CategoryPlanRow } from "@/lib/categoryPlanning";
-import { CATEGORY_BUDGETS_EVENT, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets } from "@/lib/categoryBudgetStore";
+import { applyCategoryBudgetMove, buildCategoryPlan, buildZeroBudgetSummary, type CategoryPlanRow } from "@/lib/categoryPlanning";
+import { loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets } from "@/lib/categoryBudgetStore";
 
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const CAT_COLORS: Record<string, string> = {
@@ -37,6 +37,8 @@ export default function CategoryBudgetScreen() {
     selectedYear,
     settings,
     updateSettings,
+    activeHousehold,
+    canEditHousehold,
   } = useBudget();
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth());
@@ -49,16 +51,21 @@ export default function CategoryBudgetScreen() {
   const [moveAmount, setMoveAmount] = useState("");
   const [moveError, setMoveError] = useState("");
   useBackDismiss(!!moveTarget, () => setMoveTarget(null));
-  const editableCategories = useMemo(() => categories.filter(category => category !== "Debt"), [categories]);
+  const editableCategories = useMemo(() => categories, [categories]);
+  const budgetScope = useMemo(() => ({
+    userId: user?.id,
+    householdId: activeHousehold?.householdId,
+    budgetId: activeHousehold?.budgetId,
+  }), [activeHousehold?.budgetId, activeHousehold?.householdId, user?.id]);
 
   useEffect(() => {
     let cancelled = false;
-    setCategoryBudgets(readCategoryBudgetCache(month, year));
-    void loadCategoryBudgets(user?.id, month, year).then(next => {
+    setCategoryBudgets(readCategoryBudgetCache(month, year, budgetScope));
+    void loadCategoryBudgets(budgetScope, month, year).then(next => {
       if (!cancelled) setCategoryBudgets(next);
     });
     return () => { cancelled = true; };
-  }, [month, year, user?.id]);
+  }, [budgetScope, month, year]);
 
   useEffect(() => {
     setDrafts(Object.fromEntries(editableCategories.map(category => [category, categoryBudgets[category] === undefined ? "" : String(categoryBudgets[category])])) as Record<string, string>);
@@ -67,26 +74,26 @@ export default function CategoryBudgetScreen() {
   const categoryPlan = useMemo(() => {
     return buildCategoryPlan(
       editableCategories,
-      getMonthlyBills(month, year).filter(bill => !bill.is_debt).map(bill => ({ category: bill.category || "Other", amount: getBillMonthlyTotal(bill, month, year) })),
-      getTransactionsForMonth(month, year).filter(tx => isCashFlowTransaction(tx) && tx.category !== "Debt" && tx.category !== "Income").map(tx => ({ category: tx.category || "Other", amount: tx.amount })),
+      getMonthlyBills(month, year).map(bill => ({ category: bill.is_debt ? "Debt" : bill.category || "Other", amount: getBillMonthlyTotal(bill, month, year) })),
+      getTransactionsForMonth(month, year).filter(tx => isCashFlowTransaction(tx) && tx.category !== "Income").map(tx => ({ category: tx.category || "Other", amount: tx.amount })),
       Object.entries(categoryBudgets).map(([category, amount]) => ({ category, amount })),
     ).sort((left, right) => statusRank(left.status) - statusRank(right.status) || left.remaining - right.remaining);
   }, [categoryBudgets, editableCategories, getBillMonthlyTotal, getMonthlyBills, getTransactionsForMonth, month, year]);
 
   const visibleRows = categoryPlan.filter(row => filter === "all" || row.status === filter);
   const sourceOptions = categoryPlan.filter(row => moveTarget && row.category !== moveTarget.category && row.remaining > 0.005);
-  const totals = categoryPlan.reduce((sum, row) => ({
-    planned: sum.planned + row.budgeted,
-    spent: sum.spent + row.spent,
-    left: sum.left + row.remaining,
-  }), { planned: 0, spent: 0, left: 0 });
   const monthlyIncome = getMonthlyIncome(month, year);
-  const unassigned = monthlyIncome - totals.planned;
+  const zeroBudgetSummary = buildZeroBudgetSummary(monthlyIncome, categoryPlan);
+  const unassigned = zeroBudgetSummary.leftToAssign;
 
-  const persistBudgets = (next: Record<string, number>) => {
+  const persistBudgets = async (next: Record<string, number>) => {
+    if (!canEditHousehold) return;
     setCategoryBudgets(next);
-    void saveCategoryBudgets(user?.id, month, year, next).catch(() => undefined);
-    globalThis.dispatchEvent?.(new Event(CATEGORY_BUDGETS_EVENT));
+    try {
+      await saveCategoryBudgets(budgetScope, month, year, next);
+    } catch (error) {
+      Alert.alert("Category budget", error instanceof Error ? error.message : "Could not save these assignments.");
+    }
   };
 
   const saveDrafts = () => {
@@ -95,7 +102,7 @@ export default function CategoryBudgetScreen() {
       const parsed = Number(raw);
       if (Number.isFinite(parsed) && parsed >= 0) next[category] = parsed;
     });
-    persistBudgets(next);
+    void persistBudgets(next);
     Keyboard.dismiss();
   };
 
@@ -121,11 +128,29 @@ export default function CategoryBudgetScreen() {
       setMoveError(`You can move up to $${Math.max(0, source?.remaining ?? 0).toFixed(0)} from ${moveSource}.`);
       return;
     }
-    persistBudgets(applyCategoryBudgetMove(categoryBudgets, categoryPlan, moveSource, moveTarget.category, amount));
+    void persistBudgets(applyCategoryBudgetMove(categoryBudgets, categoryPlan, moveSource, moveTarget.category, amount));
     setMoveTarget(null);
   };
 
-  if (settings.planningMode !== "zero_budget") {
+  const copyPreviousMonth = async () => {
+    const previousDate = new Date(year, month - 1, 1);
+    const previous = await loadCategoryBudgets(budgetScope, previousDate.getMonth(), previousDate.getFullYear());
+    if (!Object.keys(previous).length) {
+      Alert.alert("Nothing to copy", "The previous month does not have any saved assignments yet.");
+      return;
+    }
+    const applyCopy = () => void persistBudgets(previous);
+    if (!Object.keys(categoryBudgets).length) {
+      applyCopy();
+      return;
+    }
+    Alert.alert("Replace this month?", "Copying will replace this month's saved assignments. Planned bill amounts will still refresh for this month.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Replace", style: "destructive", onPress: applyCopy },
+    ]);
+  };
+
+  if (!settings.zeroBasedBudgetEnabled) {
     return (
       <View style={[styles.screen, { backgroundColor: c.background, paddingTop: insets.top + 10 }]}>
         <PremiumBackdrop variant="green" />
@@ -139,9 +164,9 @@ export default function CategoryBudgetScreen() {
           <View style={[styles.modeGateIcon, { backgroundColor: c.primary + "18" }]}>
             <Feather name="pie-chart" size={24} color={c.primary} />
           </View>
-          <Text style={[styles.modeGateTitle, { color: c.foreground }]}>Zero Budget is off</Text>
+          <Text style={[styles.modeGateTitle, { color: c.foreground }]}>Zero-Based Budget is off</Text>
           <Text style={[styles.modeGateText, { color: c.mutedForeground }]}>Switch to Zero Budget to give every dollar a category, track what remains, and move money between categories. Your saved category amounts are still here.</Text>
-          <Pressable onPress={() => void updateSettings({ planningMode: "zero_budget" })} style={[styles.modeGateButton, { backgroundColor: c.primary }]}>
+          <Pressable onPress={() => void updateSettings({ zeroBasedBudgetEnabled: true })} style={[styles.modeGateButton, { backgroundColor: c.primary }]}>
             <Text style={[styles.modeGateButtonText, { color: c.primaryForeground }]}>Use Zero Budget</Text>
           </Pressable>
         </View>
@@ -160,7 +185,7 @@ export default function CategoryBudgetScreen() {
           <Text style={[styles.title, { color: c.foreground }]}>Category Budget</Text>
           <Text style={[styles.subtitle, { color: c.mutedForeground }]}>Give every dollar a job</Text>
         </View>
-        <Pressable onPress={saveDrafts} style={[styles.saveBtn, { backgroundColor: c.primary }]}>
+        <Pressable disabled={!canEditHousehold} onPress={saveDrafts} style={[styles.saveBtn, { backgroundColor: c.primary, opacity: canEditHousehold ? 1 : 0.5 }]}>
           <Text style={[styles.saveText, { color: c.primaryForeground }]}>Save</Text>
         </Pressable>
       </View>
@@ -170,10 +195,14 @@ export default function CategoryBudgetScreen() {
         <Text style={[styles.monthTitle, { color: c.foreground }]}>{MONTH_FULL[month]} {year}</Text>
         <Pressable onPress={() => shiftMonth(1)} style={styles.monthBtn}><Feather name="chevron-right" size={18} color={c.foreground} /></Pressable>
       </View>
+      <Pressable disabled={!canEditHousehold} onPress={() => void copyPreviousMonth()} style={styles.copyPreviousButton}>
+        <Feather name="copy" size={13} color={canEditHousehold ? c.primary : c.mutedForeground} />
+        <Text style={[styles.copyPreviousText, { color: canEditHousehold ? c.primary : c.mutedForeground }]}>Copy previous month</Text>
+      </Pressable>
 
       <View style={styles.summaryRow}>
-        <SummaryBox label="Income" value={`$${monthlyIncome.toFixed(0)}`} color={c.success} />
-        <SummaryBox label="Assigned" value={`$${totals.planned.toFixed(0)}`} color={c.primary} />
+        <SummaryBox label="Income" value={`$${zeroBudgetSummary.plannedIncome.toFixed(0)}`} color={c.success} />
+        <SummaryBox label="Assigned" value={`$${zeroBudgetSummary.assigned.toFixed(0)}`} color={c.primary} />
         <SummaryBox label={Math.abs(unassigned) < 0.005 ? "Ready" : unassigned > 0 ? "To assign" : "Over"} value={`${unassigned < -0.005 ? "-" : ""}$${Math.abs(unassigned).toFixed(0)}`} color={Math.abs(unassigned) < 0.005 ? c.success : unassigned > 0 ? c.warning : c.destructive} />
       </View>
 
@@ -204,12 +233,13 @@ export default function CategoryBudgetScreen() {
                 <View style={[styles.fill, { backgroundColor: color, width: `${Math.min(100, row.percentUsed)}%` as any }]} />
               </View>
               <View style={styles.editLine}>
-                <Text style={[styles.inputLabel, { color: c.mutedForeground }]}>Monthly budget</Text>
+                  <Text style={[styles.inputLabel, { color: c.mutedForeground }]}>Monthly assignment</Text>
                 <View style={[styles.inputWrap, { backgroundColor: c.muted }]}>
                   <Text style={[styles.dollar, { color: c.mutedForeground }]}>$</Text>
                   <TextInput
                     value={drafts[row.category] ?? ""}
                     onChangeText={value => setDrafts(previous => ({ ...previous, [row.category]: value }))}
+                    editable={canEditHousehold}
                     keyboardType="decimal-pad"
                     placeholder={row.budgeted.toFixed(0)}
                     placeholderTextColor={c.mutedForeground}
@@ -217,14 +247,14 @@ export default function CategoryBudgetScreen() {
                   />
                 </View>
               </View>
-              <View style={styles.actions}>
+              {canEditHousehold && <View style={styles.actions}>
                 <Pressable onPress={() => openMove(row)} style={[styles.actionBtn, { backgroundColor: c.success + "18" }]}>
                   <Text style={[styles.actionText, { color: c.success }]}>Move money</Text>
                 </Pressable>
                 <Pressable onPress={() => router.push({ pathname: "/(tabs)/flo", params: { prompt: row.remaining < 0 ? `Why is ${row.category} over?` : `How much do I have left for ${row.category}?` } } as any)} style={[styles.actionBtn, { backgroundColor: c.primary + "18" }]}>
                   <Text style={[styles.actionText, { color: c.primary }]}>Ask Flo</Text>
                 </Pressable>
-              </View>
+              </View>}
             </View>
           );
         })}
@@ -284,6 +314,8 @@ const styles = StyleSheet.create({
   monthCard: { marginHorizontal: 16, borderRadius: 20, padding: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)" },
   monthBtn: { padding: 6 },
   monthTitle: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
+  copyPreviousButton: { alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 6, minHeight: 36, paddingHorizontal: 12, marginTop: -6, marginBottom: 8 },
+  copyPreviousText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   summaryRow: { flexDirection: "row", gap: 8, paddingHorizontal: 16, marginBottom: 10 },
   summaryBox: { flex: 1, borderRadius: 14, paddingVertical: 12, alignItems: "center", backgroundColor: "rgba(148,163,184,0.10)" },
   summaryValue: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },

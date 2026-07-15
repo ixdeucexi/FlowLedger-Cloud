@@ -1,17 +1,32 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizePlanningMode, usesSnowball, usesZeroBudget } from "./planningMode";
+import { normalizePlanningTools } from "./planningMode";
 
-test("normalizes missing and legacy planning modes to snowball", () => {
-  assert.equal(normalizePlanningMode(undefined), "snowball");
-  assert.equal(normalizePlanningMode("unexpected"), "snowball");
+test("preserves the existing debt-plan experience by default", () => {
+  assert.deepEqual(normalizePlanningTools(undefined), {
+    zeroBasedBudgetEnabled: false,
+    debtPayoffEnabled: true,
+  });
 });
 
-test("keeps supported planning modes and exposes their capabilities", () => {
-  assert.equal(normalizePlanningMode("zero_budget"), "zero_budget");
-  assert.equal(normalizePlanningMode("free_flow"), "free_flow");
-  assert.equal(usesSnowball("snowball"), true);
-  assert.equal(usesSnowball("free_flow"), false);
-  assert.equal(usesZeroBudget("zero_budget"), true);
-  assert.equal(usesZeroBudget("snowball"), false);
+test("migrates legacy exclusive modes into independent planning tools", () => {
+  assert.deepEqual(normalizePlanningTools({ planning_mode: "zero_budget" }), {
+    zeroBasedBudgetEnabled: true,
+    debtPayoffEnabled: false,
+  });
+  assert.deepEqual(normalizePlanningTools({ planning_mode: "free_flow" }), {
+    zeroBasedBudgetEnabled: false,
+    debtPayoffEnabled: false,
+  });
+});
+
+test("supports zero-based budgeting and debt payoff at the same time", () => {
+  assert.deepEqual(normalizePlanningTools({
+    zero_based_budget_enabled: true,
+    debt_payoff_enabled: true,
+    planning_mode: "free_flow",
+  }), {
+    zeroBasedBudgetEnabled: true,
+    debtPayoffEnabled: true,
+  });
 });

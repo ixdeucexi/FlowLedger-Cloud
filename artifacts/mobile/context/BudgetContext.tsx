@@ -41,7 +41,7 @@ import {
 import { canEditHouseholdPlan, canManageHouseholdMembers } from "@/lib/householdPermissions";
 import { isActiveTransaction, isCashFlowTransaction, isConfirmedBillMatch } from "@/lib/billMatching";
 import { matchedOccurrenceAllocations, occurrenceKey } from "@/lib/reviewCenter";
-import { normalizePlanningMode, usesSnowball, type PlanningMode } from "@/lib/planningMode";
+import { normalizePlanningTools } from "@/lib/planningMode";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -231,7 +231,8 @@ export interface ExtraPayment {
 }
 
 export interface Settings {
-  planningMode: PlanningMode;
+  zeroBasedBudgetEnabled: boolean;
+  debtPayoffEnabled: boolean;
   paymentMethod: "snowball" | "avalanche";
   starting_balance: number;
   starting_balance_date?: string;
@@ -387,7 +388,8 @@ interface BudgetContextType {
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
 const DEFAULT_SETTINGS: Settings = {
-  planningMode: "snowball",
+  zeroBasedBudgetEnabled: false,
+  debtPayoffEnabled: true,
   paymentMethod: "snowball",
   starting_balance: 0,
   safety_floor: 200,
@@ -1156,7 +1158,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           const nextStartingBalance = accountAnchor ? accountAnchor.balance : Number(sData.starting_balance);
           const nextStartingBalanceDate = accountAnchor ? accountAnchor.date : (sData.starting_balance_date ?? undefined);
           setSettings({
-            planningMode:        normalizePlanningMode(sData.planning_mode),
+            ...normalizePlanningTools(sData),
             paymentMethod:        sData.payment_method as Settings["paymentMethod"],
             starting_balance:     nextStartingBalance,
             starting_balance_date: nextStartingBalanceDate,
@@ -1167,7 +1169,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           if (accountAnchor && (Number(sData.starting_balance) !== accountAnchor.balance || sData.starting_balance_date !== accountAnchor.date)) {
             void supabase.from("settings").upsert({
               user_id: uid,
-              planning_mode: sData.planning_mode ?? "snowball",
+              zero_based_budget_enabled: normalizePlanningTools(sData).zeroBasedBudgetEnabled,
+              debt_payoff_enabled: normalizePlanningTools(sData).debtPayoffEnabled,
               payment_method: sData.payment_method,
               starting_balance: accountAnchor.balance,
               starting_balance_date: accountAnchor.date,
@@ -1223,9 +1226,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const accountAnchor = operatingAccountAnchor((loadedAccounts ?? accountsRef.current).map(toAccountSnapshot));
       const nextStartingBalance = accountAnchor ? accountAnchor.balance : Number(sData.starting_balance);
       const nextStartingBalanceDate = accountAnchor ? accountAnchor.date : (sData.starting_balance_date ?? undefined);
-      setSettings(prev => ({
-        ...prev,
-        planningMode:        normalizePlanningMode(sData.planning_mode),
+        setSettings(prev => ({
+          ...prev,
+          ...normalizePlanningTools(sData),
         paymentMethod:        sData.payment_method as Settings["paymentMethod"],
         starting_balance:     nextStartingBalance,
         starting_balance_date: nextStartingBalanceDate,
@@ -1236,7 +1239,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       if (accountAnchor && (Number(sData.starting_balance) !== accountAnchor.balance || sData.starting_balance_date !== accountAnchor.date)) {
         void supabase.from("settings").upsert({
           user_id: uid,
-          planning_mode: sData.planning_mode ?? "snowball",
+            zero_based_budget_enabled: normalizePlanningTools(sData).zeroBasedBudgetEnabled,
+            debt_payoff_enabled: normalizePlanningTools(sData).debtPayoffEnabled,
           payment_method: sData.payment_method,
           starting_balance: accountAnchor.balance,
           starting_balance_date: accountAnchor.date,
@@ -1806,7 +1810,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const runSnowball = useCallback(
     (month: number, year: number, extraAmount: number): SnowballAllocation[] => {
-      if (!usesSnowball(settings.planningMode)) return [];
+      if (!settings.debtPayoffEnabled) return [];
       const debts = bills.filter(b => b.is_debt && b.balance > 0).map(b => ({
         id: b.id, name: b.name, balance: b.balance, minimum: getBillMonthlyTotal(b, month, year),
         apr: b.interest_rate, dueDay: b.due_day, included: b.include_in_snowball !== false,
@@ -1820,7 +1824,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const paymentDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(Math.min(new Date(year, month + 1, 0).getDate(), day)).padStart(2, "0")}`;
       return allocateSnowballExtra(debts, extraAmount, settings.paymentMethod, paymentDate).allocations;
     },
-    [bills, settings.paymentMethod, settings.planningMode, getBillMonthlyTotal]
+    [bills, settings.paymentMethod, settings.debtPayoffEnabled, getBillMonthlyTotal]
   );
 
   const saveExtraPayment = useCallback(async (month: number, year: number, amount: number, allocations: SnowballAllocation[], paymentDate?: string, sources: SnowballFundingSource[] = [{ type: "manual", amount }]) => {
@@ -1855,7 +1859,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   );
 
   const getProjectedDebtSnowballMonth = useCallback((month: number, year: number) => {
-    if (!usesSnowball(settings.planningMode)) return null;
+    if (!settings.debtPayoffEnabled) return null;
     const now = new Date();
     const startMonth = now.getMonth();
     const startYear = now.getFullYear();
@@ -1902,7 +1906,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
 
     return result;
-  }, [bills, extraPayments, getBillMonthlyTotal, settings.paymentMethod, settings.planningMode]);
+  }, [bills, extraPayments, getBillMonthlyTotal, settings.paymentMethod, settings.debtPayoffEnabled]);
 
   const deleteExtraPayment = useCallback(async (id: string) => {
     if (!user) return;
@@ -1920,7 +1924,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     sources: SnowballFundingSource[] = [{ type: "manual", amount: preview.selectedExtra }],
   ) => {
     if (!user) return;
-    if (!usesSnowball(settings.planningMode)) throw new Error("Switch to Snowball mode before applying an automatic debt payment.");
+    if (!settings.debtPayoffEnabled) throw new Error("Turn on Debt Payoff Plan before applying an automatic debt payment.");
     assertCanEditHousehold("apply a debt snowball payment");
     const [year, monthNumber] = preview.paymentDate.split("-").map(Number);
     const month = monthNumber - 1;
@@ -2003,7 +2007,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setExtraPayments(prev => existing
       ? prev.map(ep => ep.id === existing.id ? nextPayment : ep)
       : [...prev, nextPayment]);
-  }, [user, extraPayments, saveExtraPayment, demoMode, applyHouseholdSelect, assertCanEditHousehold, settings.planningMode]);
+  }, [user, extraPayments, saveExtraPayment, demoMode, applyHouseholdSelect, assertCanEditHousehold, settings.debtPayoffEnabled]);
 
   const removeDebtSnowballPayment = useCallback(async (month: number, year: number) => {
     const existing = extraPayments.find(ep => ep.month === month && ep.year === year);
@@ -3090,7 +3094,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const validOverride = paymentDateOverride?.startsWith(`${year}-${String(month + 1).padStart(2, "0")}-`);
     const paymentDate = validOverride ? paymentDateOverride! : defaultPaymentDate;
 
-    if (!usesSnowball(settings.planningMode)) {
+    if (!settings.debtPayoffEnabled) {
       return {
         safeMaximum: 0,
         selectedExtra: 0,
@@ -3164,7 +3168,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       debtFreeDate: endingDebt <= 0.009 ? `${year}-${String(month + 1).padStart(2, "0")}` : simulated.debtFreeDate,
       lowestSixMonthBalance: Math.min(currentLowest, ...simulated.months.slice(0, 5).map(item => item.lowestAccountBalance)),
     };
-  }, [bills, settings.paymentMethod, settings.planningMode, settings.safety_floor, settings.forecast_horizon_months, extraPayments, getBillMonthlyTotal, getDailyBalances]);
+  }, [bills, settings.paymentMethod, settings.debtPayoffEnabled, settings.safety_floor, settings.forecast_horizon_months, extraPayments, getBillMonthlyTotal, getDailyBalances]);
 
   // ─── Categories ───────────────────────────────────────────────────────────────
 
@@ -3245,7 +3249,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const householdResult = await supabase.from("household_settings").upsert({
         household_id: scope.householdId,
         budget_id: scope.budgetId,
-        planning_mode: next.planningMode,
+        zero_based_budget_enabled: next.zeroBasedBudgetEnabled,
+        debt_payoff_enabled: next.debtPayoffEnabled,
         payment_method: next.paymentMethod,
         starting_balance: next.starting_balance,
         starting_balance_date: next.starting_balance_date ?? null,
@@ -3263,7 +3268,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
     await ensureSaved(supabase.from("settings").upsert({
       user_id:               user.id,
-      planning_mode:         next.planningMode,
+      zero_based_budget_enabled: next.zeroBasedBudgetEnabled,
+      debt_payoff_enabled: next.debtPayoffEnabled,
       payment_method:        next.paymentMethod,
       starting_balance:      next.starting_balance,
       starting_balance_date: next.starting_balance_date ?? null,

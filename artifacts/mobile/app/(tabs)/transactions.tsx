@@ -499,7 +499,7 @@ export default function TransactionsScreen() {
   const matchingBankActivity = matchTx?.source === "plaid";
 
   const surplusSnowballOffer = useMemo(() => {
-    if (!surplusPrompt || settings.planningMode !== "snowball") return null;
+    if (!surplusPrompt || !settings.debtPayoffEnabled) return null;
     const surplus = Math.max(0, surplusPrompt.budgeted - surplusPrompt.actual);
     const existing = getExtraPayment(surplusPrompt.month, surplusPrompt.year);
     const previousSource = existing?.sources?.find(source => source.type === "bill_surplus" && source.billId === surplusPrompt.bill.id)?.amount ?? 0;
@@ -518,7 +518,7 @@ export default function TransactionsScreen() {
       dateValid,
       safe: dateValid && preview.selectedExtra + 0.005 >= total,
     };
-  }, [getExtraPayment, previewDebtSnowball, settings.planningMode, surplusPaymentDate, surplusPrompt]);
+  }, [getExtraPayment, previewDebtSnowball, settings.debtPayoffEnabled, surplusPaymentDate, surplusPrompt]);
   const surplusMonth = surplusPrompt?.month ?? new Date().getMonth();
   const surplusYear = surplusPrompt?.year ?? new Date().getFullYear();
   const surplusMonthText = String(surplusMonth + 1).padStart(2, "0");
@@ -566,7 +566,7 @@ export default function TransactionsScreen() {
     if (!surplusPrompt) return;
     try {
       await saveMatchedBillAtActual(surplusPrompt);
-      if (settings.planningMode !== "snowball") {
+      if (!settings.debtPayoffEnabled) {
         setSurplusPrompt(null);
         return;
       }
@@ -1163,7 +1163,7 @@ export default function TransactionsScreen() {
         actual={surplusPrompt?.actual ?? 0}
         targetDebt={surplusSnowballOffer?.targetDebt}
         snowballSafe={surplusSnowballOffer?.safe ?? false}
-        snowballEnabled={settings.planningMode === "snowball"}
+        snowballEnabled={settings.debtPayoffEnabled}
         safetyFloor={settings.safety_floor}
         forecastHorizonMonths={settings.forecast_horizon_months}
         paymentDate={surplusPaymentDate}

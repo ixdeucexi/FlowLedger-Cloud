@@ -16,6 +16,7 @@ import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
 import colors from "@/constants/colors";
 import type { Bill } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
+import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { isCashFlowTransaction } from "@/lib/billMatching";
 import { confirmAction } from "@/lib/confirmAction";
@@ -25,6 +26,7 @@ import { sortDebtsLeastToGreatest } from "@/lib/debtOrder";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { DECISION_HUB_SETTINGS_EVENT, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { isAlgorithmEnabled } from "@/lib/algorithmCatalog";
+import { loadCategoryBudgets } from "@/lib/categoryBudgetStore";
 
 const CAT_COLORS: Record<string, string> = {
   Housing: "#0f9b8e", Utilities: "#f0b429", Insurance: "#6366f1",
@@ -47,6 +49,7 @@ export default function BillsScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { user } = useAuth();
   const {
     bills, addBill, updateBill, stopFutureBill, deleteBill, deleteBillMistake,
     incomes, goals, forecastConfidence,
@@ -54,7 +57,7 @@ export default function BillsScreen() {
     settings, updateSettings,
     previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, getExtraPayment,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getPaidAmount,
-    getDailyBalances, getIncomeOccurrencesInMonth, getTransactionsForMonth, getCashFlow,
+    getDailyBalances, getIncomeOccurrencesInMonth, getTransactionsForMonth, getCashFlow, activeHousehold,
   } = useBudget();
 
   const [activeTab, setActiveTab]       = useState<Tab>("bills");
@@ -68,6 +71,7 @@ export default function BillsScreen() {
   const [snowballPreview, setSnowballPreview] = useState<SnowballProjectionResult | null>(null);
   const [decisionHubSettings, setDecisionHubSettings] = useState<DecisionHubSettings>(() => readDecisionHubSettings());
   const [dismissedBillPromptKey, setDismissedBillPromptKey] = useState<string | null>(null);
+  const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (dashboardFilter === "debt") {
@@ -89,6 +93,23 @@ export default function BillsScreen() {
   const now          = new Date();
   const currentMonth = now.getMonth();
   const currentYear  = now.getFullYear();
+  const categoryBudgetScope = useMemo(() => ({
+    userId: user?.id,
+    householdId: activeHousehold?.householdId,
+    budgetId: activeHousehold?.budgetId,
+  }), [activeHousehold?.budgetId, activeHousehold?.householdId, user?.id]);
+
+  useEffect(() => {
+    if (!settings.zeroBasedBudgetEnabled) {
+      setCategoryBudgets({});
+      return;
+    }
+    let cancelled = false;
+    void loadCategoryBudgets(categoryBudgetScope, currentMonth, currentYear).then(budgets => {
+      if (!cancelled) setCategoryBudgets(budgets);
+    });
+    return () => { cancelled = true; };
+  }, [categoryBudgetScope, currentMonth, currentYear, settings.zeroBasedBudgetEnabled]);
   const currentDay   = now.getDate();
   const billOccurrenceDays = useCallback(
     (bill: Bill) => getBillOccurrencesInMonth(bill, currentMonth, currentYear),
@@ -271,7 +292,7 @@ export default function BillsScreen() {
     settings.safety_floor,
   ]);
   const debtPayoffEngine = debtAlgorithmSuite.debtPayoff;
-  const safeSnowballAmount = debtPayoffEngine.safeExtraAmount;
+  const cashFlowSafeSnowballAmount = debtPayoffEngine.safeExtraAmount;
 
   const debts = (() => {
     const debtBills = visibleBills.filter(b => b.is_debt);
@@ -286,6 +307,12 @@ export default function BillsScreen() {
   const totalMinPayments = debts
     .filter(debt => debt.balance > 0.009)
     .reduce((sum, debt) => sum + debt.amount + Number(debt.snowball_minimum_boost ?? 0), 0);
+  const assignedDebtExtra = settings.zeroBasedBudgetEnabled
+    ? Math.max(0, Number(categoryBudgets.Debt ?? totalMinPayments) - totalMinPayments)
+    : cashFlowSafeSnowballAmount;
+  const safeSnowballAmount = settings.zeroBasedBudgetEnabled
+    ? Math.min(cashFlowSafeSnowballAmount, assignedDebtExtra)
+    : cashFlowSafeSnowballAmount;
   const highestAPR       = debts.length ? Math.max(...debts.map(b => b.interest_rate)) : 0;
   const activeDebts = debts.filter(debt => debt.balance > 0.009);
   const snowballTarget = sortDebtsLeastToGreatest(activeDebts)[0] ?? null;
@@ -308,7 +335,9 @@ export default function BillsScreen() {
   const debtPayoffDetail = debtAlgorithmSuite.algorithmDetails.debtPayoff;
   const debtRoomExplanation = safeSnowballAmount > 0
     ? debtPayoffDetail.nextAction
-    : `Keep extra cash available for now. ${debtPayoffDetail.nextAction}`;
+    : settings.zeroBasedBudgetEnabled && cashFlowSafeSnowballAmount > 0
+      ? `Your cash flow can support extra debt payoff, but that money needs a Debt assignment first.`
+      : `Keep extra cash available for now. ${debtPayoffDetail.nextAction}`;
 
   const priorityColors = ["#22c55e", "#f0b429", "#ef4444", "#8b5cf6", "#ec4899"];
   const todayIso = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -385,6 +414,13 @@ export default function BillsScreen() {
   }, [addBill, updateBill]);
 
   const handleApplySnowball = () => {
+    if (settings.zeroBasedBudgetEnabled && cashFlowSafeSnowballAmount > 0 && assignedDebtExtra <= 0) {
+      Alert.alert("Assign money to Debt", "Zero-Based Budget is protecting your category plan. Assign money above your debt minimums before scheduling an extra payment.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Open Budget", onPress: () => router.push("/(tabs)/category-budget" as any) },
+      ]);
+      return;
+    }
     if (safeSnowballAmount <= 0) {
       Alert.alert("Safety Floor Protected", `There is no extra amount available without moving the ${settings.forecast_horizon_months}-month forecast below $${settings.safety_floor.toFixed(0)}.`);
       return;
@@ -635,7 +671,7 @@ export default function BillsScreen() {
             </View>
           )}
 
-          {settings.planningMode === "snowball" && debts.length > 0 && (
+          {settings.debtPayoffEnabled && debts.length > 0 && (
             <View style={[styles.debtAlgoCard, { backgroundColor: c.card, borderColor: c.border, marginHorizontal: 0, borderRadius: colors.radius }]}>
               <View style={styles.debtAlgoHeader}>
                 <View style={[styles.dataIcon, { backgroundColor: c.primary + "18" }]}>
@@ -649,15 +685,15 @@ export default function BillsScreen() {
                 </View>
                 <Pressable
                   onPress={handleApplySnowball}
-                  disabled={safeSnowballAmount <= 0}
+                  disabled={cashFlowSafeSnowballAmount <= 0}
                   style={({ pressed }) => [
                     styles.debtPlanApplyButton,
-                    { backgroundColor: safeSnowballAmount > 0 ? c.primary : c.muted, opacity: pressed ? 0.8 : safeSnowballAmount > 0 ? 1 : 0.65 },
+                    { backgroundColor: cashFlowSafeSnowballAmount > 0 ? c.primary : c.muted, opacity: pressed ? 0.8 : cashFlowSafeSnowballAmount > 0 ? 1 : 0.65 },
                   ]}
                 >
-                  <Feather name="zap" size={13} color={safeSnowballAmount > 0 ? c.primaryForeground : c.mutedForeground} />
+                  <Feather name="zap" size={13} color={cashFlowSafeSnowballAmount > 0 ? c.primaryForeground : c.mutedForeground} />
                   <Text style={[styles.debtPlanApplyText, { color: safeSnowballAmount > 0 ? c.primaryForeground : c.mutedForeground }]}>
-                    Apply
+                    {settings.zeroBasedBudgetEnabled && assignedDebtExtra <= 0 && cashFlowSafeSnowballAmount > 0 ? "Assign first" : "Apply"}
                   </Text>
                 </Pressable>
               </View>
@@ -683,7 +719,7 @@ export default function BillsScreen() {
             </View>
           )}
 
-          {settings.planningMode === "snowball" && <View style={[styles.methodRow, { marginHorizontal: 0, marginTop: 10 }]}>
+          {settings.debtPayoffEnabled && <View style={[styles.methodRow, { marginHorizontal: 0, marginTop: 10 }]}>
             <View style={[styles.methodToggle, { backgroundColor: c.muted, borderRadius: 10 }]}>
               {(["snowball", "avalanche"] as const).map(m => (
                 <Pressable
@@ -819,7 +855,7 @@ export default function BillsScreen() {
         forceDebt={activeTab === "debt"}
       />
       <SnowballPreviewModal
-        visible={settings.planningMode === "snowball" && snowballModalVisible}
+        visible={settings.debtPayoffEnabled && snowballModalVisible}
         preview={snowballPreview}
         amount={snowballAmount}
         existingPayment={!!existingSnowball}

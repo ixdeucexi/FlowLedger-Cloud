@@ -22,8 +22,8 @@ import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { isCashFlowTransaction } from "@/lib/billMatching";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
-import { applyCategoryBudgetMove, buildCategoryPlan } from "@/lib/categoryPlanning";
-import { CATEGORY_BUDGETS_EVENT, categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets as saveCategoryBudgetsRemote } from "@/lib/categoryBudgetStore";
+import { applyCategoryBudgetMove, buildCategoryPlan, buildZeroBudgetSummary } from "@/lib/categoryPlanning";
+import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets as saveCategoryBudgetsRemote, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
 import { DECISION_HUB_SETTINGS_EVENT, loadDecisionHubSettings, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { buildDecisionHistory } from "@/lib/decisionHistory";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
@@ -123,12 +123,17 @@ export default function DashboardScreen() {
   const { user } = useAuth();
   const {
     bills, getPaidAmount, getBillMonthlyTotal, getMonthlyBills, selectedYear, setDashboardFilter,
-    getBillOccurrencesInMonth, getIncomeOccurrencesInMonth,
+    getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getMonthlyIncome,
     goals, addGoal, updateGoal, deleteGoal, checkGoalAffordability,
     getCashFlow, addBill, addTransaction, getDailyBalances, getTransactionsForMonth, settings,
     accounts, incomes, decisions, updateSettings, forecastConfidence,
-    categories,
+    categories, activeHousehold, canEditHousehold,
   } = useBudget();
+  const categoryBudgetScope = useMemo(() => ({
+    userId: user?.id,
+    householdId: activeHousehold?.householdId,
+    budgetId: activeHousehold?.budgetId,
+  }), [activeHousehold?.budgetId, activeHousehold?.householdId, user?.id]);
 
   const [goalModalVisible, setGoalModalVisible]     = useState(false);
   const [editGoal, setEditGoal]                     = useState<Goal | null>(null);
@@ -318,26 +323,25 @@ export default function DashboardScreen() {
   }, [bills]);
 
   const categoryBudgetKey = useMemo(
-    () => categoryBudgetStorageKey(currentMonth, selectedYear),
-    [selectedYear, currentMonth],
+    () => categoryBudgetStorageKey(currentMonth, selectedYear, categoryBudgetScope),
+    [categoryBudgetScope, selectedYear, currentMonth],
   );
 
   useEffect(() => {
     let cancelled = false;
     const refreshCategoryBudgets = () => {
-      setCategoryBudgets(readCategoryBudgetCache(currentMonth, selectedYear));
-      void loadCategoryBudgets(user?.id, currentMonth, selectedYear).then(next => {
+      setCategoryBudgets(readCategoryBudgetCache(currentMonth, selectedYear, categoryBudgetScope));
+      void loadCategoryBudgets(categoryBudgetScope, currentMonth, selectedYear).then(next => {
         if (!cancelled) setCategoryBudgets(next);
       });
     };
     refreshCategoryBudgets();
-    if (Platform.OS !== "web") return;
-    globalThis.addEventListener?.(CATEGORY_BUDGETS_EVENT, refreshCategoryBudgets);
+    const unsubscribe = subscribeCategoryBudgets(refreshCategoryBudgets);
     return () => {
       cancelled = true;
-      globalThis.removeEventListener?.(CATEGORY_BUDGETS_EVENT, refreshCategoryBudgets);
+      unsubscribe();
     };
-  }, [categoryBudgetKey, currentMonth, selectedYear, user?.id]);
+  }, [categoryBudgetKey, categoryBudgetScope, currentMonth, selectedYear]);
 
   useEffect(() => {
     let cancelled = false;
@@ -357,41 +361,39 @@ export default function DashboardScreen() {
   }, [user?.id]);
 
   const readCategoryBudgetMap = useCallback((month: number, year: number) => {
-    return readCategoryBudgetCache(month, year);
-  }, []);
+    return readCategoryBudgetCache(month, year, categoryBudgetScope);
+  }, [categoryBudgetScope]);
 
   const previousCategoryPlan = useMemo(() => {
-    if (settings.planningMode !== "zero_budget") return [];
+    if (!settings.zeroBasedBudgetEnabled) return [];
     const previousDate = new Date(selectedYear, currentMonth - 1, 1);
     const month = previousDate.getMonth();
     const year = previousDate.getFullYear();
     const monthBills = getMonthlyBills(month, year)
-      .filter(bill => !bill.is_debt)
       .map(bill => ({
-        category: bill.category || "Other",
+        category: bill.is_debt ? "Debt" : bill.category || "Other",
         amount: getBillMonthlyTotal(bill, month, year),
       }));
     const monthTransactions = getTransactionsForMonth(month, year)
       .flatMap(transaction => transactionCategoryParts(transaction))
-      .filter(transaction => transaction.category !== "Debt" && transaction.category !== "Income");
+      .filter(transaction => transaction.category !== "Income");
     const budgetLimits = Object.entries(readCategoryBudgetMap(month, year)).map(([category, amount]) => ({ category, amount }));
-    return buildCategoryPlan(categories.filter(category => category !== "Debt"), monthBills, monthTransactions, budgetLimits);
-  }, [categories, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, readCategoryBudgetMap, currentMonth, selectedYear, settings.planningMode]);
+    return buildCategoryPlan(categories, monthBills, monthTransactions, budgetLimits);
+  }, [categories, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, readCategoryBudgetMap, currentMonth, selectedYear, settings.zeroBasedBudgetEnabled]);
 
   const categoryPlan = useMemo(() => {
-    if (settings.planningMode !== "zero_budget") return [];
+    if (!settings.zeroBasedBudgetEnabled) return [];
     const monthBills = getMonthlyBills(currentMonth, selectedYear)
-      .filter(bill => !bill.is_debt)
       .map(bill => ({
-        category: bill.category || "Other",
+        category: bill.is_debt ? "Debt" : bill.category || "Other",
         amount: getBillMonthlyTotal(bill, currentMonth, selectedYear),
       }));
     const monthTransactions = getTransactionsForMonth(currentMonth, selectedYear)
       .flatMap(transaction => transactionCategoryParts(transaction))
-      .filter(transaction => transaction.category !== "Debt" && transaction.category !== "Income");
+      .filter(transaction => transaction.category !== "Income");
     const budgetLimits = Object.entries(categoryBudgets).map(([category, amount]) => ({ category, amount }));
-    return buildCategoryPlan(categories.filter(category => category !== "Debt"), monthBills, monthTransactions, budgetLimits);
-  }, [categories, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, currentMonth, selectedYear, settings.planningMode]);
+    return buildCategoryPlan(categories, monthBills, monthTransactions, budgetLimits);
+  }, [categories, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, currentMonth, selectedYear, settings.zeroBasedBudgetEnabled]);
 
   const categoryDetail = useMemo(() => {
     if (!selectedCategory) return null;
@@ -399,7 +401,7 @@ export default function DashboardScreen() {
     if (!row) return null;
 
     const categoryBills = getMonthlyBills(currentMonth, selectedYear)
-      .filter(bill => !bill.is_debt && (bill.category || "Other") === selectedCategory)
+      .filter(bill => (bill.is_debt ? "Debt" : bill.category || "Other") === selectedCategory)
       .map(bill => ({
         id: bill.id,
         name: bill.name,
@@ -440,7 +442,7 @@ export default function DashboardScreen() {
 
   const budgetEditableCategories = useMemo(() => {
     const names = new Set<string>();
-    categories.filter(category => category !== "Debt").forEach(category => names.add(category));
+    categories.forEach(category => names.add(category));
     categoryPlan.forEach(row => names.add(row.category));
     return Array.from(names).sort((left, right) => left.localeCompare(right));
   }, [categories, categoryPlan]);
@@ -452,11 +454,17 @@ export default function DashboardScreen() {
       .sort((left, right) => right.remaining - left.remaining);
   }, [categoryPlan, moveTargetCategory]);
 
-  const categoryPlanTotals = useMemo(() => categoryPlan.reduce((totals, row) => ({
-    budgeted: totals.budgeted + row.budgeted,
-    spent: totals.spent + row.spent,
-    remaining: totals.remaining + row.remaining,
-  }), { budgeted: 0, spent: 0, remaining: 0 }), [categoryPlan]);
+  const zeroBudgetSummary = buildZeroBudgetSummary(
+    settings.zeroBasedBudgetEnabled ? getMonthlyIncome(currentMonth, selectedYear) : 0,
+    categoryPlan,
+  );
+  const zeroBudgetIncome = zeroBudgetSummary.plannedIncome;
+  const zeroBudgetLeftToAssign = zeroBudgetSummary.leftToAssign;
+  const postedIncome = settings.zeroBasedBudgetEnabled
+    ? getTransactionsForMonth(currentMonth, selectedYear)
+      .filter(transaction => transaction.amount > 0 && transaction.review_status !== "transfer")
+      .reduce((sum, transaction) => sum + transaction.amount, 0)
+    : 0;
   const categoryDecisionAlert = useMemo(() => {
     if (!decisionHubSettings.algorithmSuiteEnabled) return null;
     const over = categoryPlan
@@ -500,7 +508,7 @@ export default function DashboardScreen() {
 
   const persistCategoryBudgets = (next: Record<string, number>) => {
     setCategoryBudgets(next);
-    void saveCategoryBudgetsRemote(user?.id, currentMonth, selectedYear, next).catch(() => undefined);
+    void saveCategoryBudgetsRemote(categoryBudgetScope, currentMonth, selectedYear, next).catch(() => undefined);
   };
 
   const openCategoryBudgetEditorForCategory = (category: string) => {
@@ -566,7 +574,7 @@ export default function DashboardScreen() {
   const clearCategoryBudgets = () => {
     setCategoryBudgets({});
     setCategoryBudgetDrafts({});
-    void saveCategoryBudgetsRemote(user?.id, currentMonth, selectedYear, {}).catch(() => undefined);
+    void saveCategoryBudgetsRemote(categoryBudgetScope, currentMonth, selectedYear, {}).catch(() => undefined);
     setCategoryBudgetModalVisible(false);
   };
 
@@ -1069,7 +1077,7 @@ export default function DashboardScreen() {
     const focusOrder = new Map(setupPersonalization.recommendedAlgorithms.map((id, index) => [id, index]));
     return cards
       .filter((card): card is typeof card & { settingId: AlgorithmId } => Boolean(card.settingId))
-      .filter(card => settings.planningMode === "snowball" || card.settingId !== "debtPayoff")
+      .filter(card => settings.debtPayoffEnabled || card.settingId !== "debtPayoff")
       .filter(card => isAlgorithmEnabled(decisionHubSettings, card.settingId))
       .sort((left, right) => {
         const leftFocus = focusOrder.get(left.settingId) ?? 99;
@@ -1077,7 +1085,7 @@ export default function DashboardScreen() {
         if (leftFocus !== rightFocus) return leftFocus - rightFocus;
         return cards.findIndex(card => card.id === left.id) - cards.findIndex(card => card.id === right.id);
       });
-  }, [algorithmSuite, currentMonth, decisionHubSettings, settings.planningMode, setupPersonalization.recommendedAlgorithms]);
+  }, [algorithmSuite, currentMonth, decisionHubSettings, settings.debtPayoffEnabled, setupPersonalization.recommendedAlgorithms]);
   const activeAlgorithmCardNumber = algorithmCards.length ? Math.min(activeAlgoCard + 1, algorithmCards.length) : 0;
   const selectedAlgorithmDetail = selectedAlgorithmDetailId ? algorithmSuite.algorithmDetails[selectedAlgorithmDetailId] : null;
   const selectedAlgorithmCard = selectedAlgorithmDetailId ? algorithmCards.find(card => card.settingId === selectedAlgorithmDetailId) : null;
@@ -1375,6 +1383,39 @@ export default function DashboardScreen() {
           <View style={styles.referenceScoreUnderline} />
         </Pressable>
       </View>
+
+      {settings.zeroBasedBudgetEnabled && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open this month's zero-based budget"
+          onPress={() => router.push("/(tabs)/category-budget" as any)}
+          style={({ pressed }) => [styles.zeroBudgetDashboardCard, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.84 : 1 }]}
+        >
+          <View style={styles.zeroBudgetDashboardHeader}>
+            <View style={[styles.categoryPlanIcon, { backgroundColor: c.primary + "18" }]}>
+              <Feather name="pie-chart" size={16} color={c.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.zeroBudgetDashboardTitle, { color: c.foreground }]}>Zero-Based Budget</Text>
+              <Text style={[styles.zeroBudgetDashboardSub, { color: c.mutedForeground }]}>{MONTH_FULL[currentMonth]} · ${postedIncome.toFixed(0)} received so far</Text>
+            </View>
+            <View style={[styles.categoryPlanBadge, { backgroundColor: Math.abs(zeroBudgetLeftToAssign) <= 0.01 ? c.success + "18" : zeroBudgetLeftToAssign > 0 ? c.warning + "18" : c.destructive + "18" }]}>
+              <Text style={[styles.categoryPlanBadgeText, { color: Math.abs(zeroBudgetLeftToAssign) <= 0.01 ? c.success : zeroBudgetLeftToAssign > 0 ? c.warning : c.destructive }]}>
+                {Math.abs(zeroBudgetLeftToAssign) <= 0.01 ? "Balanced" : zeroBudgetLeftToAssign > 0 ? "To assign" : "Overassigned"}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.zeroBudgetDashboardStats}>
+            <ZeroBudgetStat label="Income" value={zeroBudgetIncome} color={c.success} />
+            <ZeroBudgetStat label="Assigned" value={zeroBudgetSummary.assigned} color={c.primary} />
+            <ZeroBudgetStat label={zeroBudgetLeftToAssign < -0.01 ? "Over" : "Left"} value={Math.abs(zeroBudgetLeftToAssign)} color={Math.abs(zeroBudgetLeftToAssign) <= 0.01 ? c.success : zeroBudgetLeftToAssign > 0 ? c.warning : c.destructive} />
+          </View>
+          <View style={styles.zeroBudgetDashboardAction}>
+            <Text style={[styles.categoryBudgetEditText, { color: c.primary }]}>{canEditHousehold ? "Assign or move money" : "View category assignments"}</Text>
+            <Feather name="chevron-right" size={15} color={c.primary} />
+          </View>
+        </Pressable>
+      )}
 
       <View style={[styles.referenceLowerGrid, isCommandWide && styles.referenceLowerGridWide]}>
         <View style={styles.referenceAlgoCarouselPanel}>
@@ -2237,6 +2278,15 @@ function formatMonthDay(month: number, year: number, day: number | null | undefi
   return `${MONTH_FULL[month] ?? "Month"} ${day}, ${year}`;
 }
 
+function ZeroBudgetStat({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <View style={styles.zeroBudgetDashboardStat}>
+      <Text style={[styles.zeroBudgetDashboardValue, { color }]}>${value.toFixed(0)}</Text>
+      <Text style={styles.zeroBudgetDashboardLabel}>{label}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   screen:  { flex: 1 },
   dashboardStage: { backgroundColor: "#030712" },
@@ -2560,6 +2610,15 @@ const styles = StyleSheet.create({
 
   // Phase 4 category planning
   categoryPlanHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 },
+  zeroBudgetDashboardCard: { borderWidth: 1, borderRadius: 20, padding: 14, marginBottom: 14 },
+  zeroBudgetDashboardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  zeroBudgetDashboardTitle: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
+  zeroBudgetDashboardSub: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
+  zeroBudgetDashboardStats: { flexDirection: "row", marginTop: 14 },
+  zeroBudgetDashboardStat: { flex: 1, alignItems: "center" },
+  zeroBudgetDashboardValue: { fontSize: 18, fontFamily: "Inter_800ExtraBold" },
+  zeroBudgetDashboardLabel: { color: "#94a3b8", fontSize: 9, fontFamily: "Inter_700Bold", textTransform: "uppercase", marginTop: 2 },
+  zeroBudgetDashboardAction: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 4, marginTop: 12 },
   categoryDecisionAlert: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 12 },
   categoryDecisionAlertTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   categoryDecisionAlertText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 2 },

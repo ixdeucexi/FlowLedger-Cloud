@@ -474,7 +474,7 @@ export default function MonthlyScreen() {
   const monthlyIncome = getMonthlyIncome();
 
   const surplusSnowballOffer = useMemo(() => {
-    if (!surplusPrompt || settings.planningMode !== "snowball") return null;
+    if (!surplusPrompt || !settings.debtPayoffEnabled) return null;
     const surplus = Math.max(0, surplusPrompt.budgeted - surplusPrompt.actual);
     const existing = getExtraPayment(month, selectedYear);
     const previousSource = existing?.sources?.find(source => source.type === "bill_surplus" && source.billId === surplusPrompt.bill.id)?.amount ?? 0;
@@ -482,7 +482,7 @@ export default function MonthlyScreen() {
     const validDate = isValidDateInMonth(surplusPaymentDate, month, selectedYear);
     const preview = previewDebtSnowball(month, selectedYear, total, surplus - previousSource, validDate ? surplusPaymentDate : undefined);
     return { preview, total, targetDebt: preview.months[0]?.targetName ?? preview.allocations[0]?.billName, dateValid: validDate, safe: validDate && preview.selectedExtra + 0.005 >= total };
-  }, [surplusPrompt, surplusPaymentDate, getExtraPayment, previewDebtSnowball, month, selectedYear, settings.planningMode]);
+  }, [surplusPrompt, surplusPaymentDate, getExtraPayment, previewDebtSnowball, month, selectedYear, settings.debtPayoffEnabled]);
 
   const askToTreatPaidAsFullPayment = useCallback((prompt: { bill: Bill; budgeted: number; actual: number; paidDate: string }) => {
     const { bill, budgeted, actual, paidDate } = prompt;
@@ -707,7 +707,7 @@ export default function MonthlyScreen() {
 
   const keepBillSurplus = async () => {
     if (!surplusPrompt) return;
-    if (settings.planningMode !== "snowball") {
+    if (!settings.debtPayoffEnabled) {
       await finalizeBillAtActualForMonth(surplusPrompt);
       await matchSurplusAmountToActual(surplusPrompt);
       setSurplusPrompt(null);
@@ -1299,6 +1299,22 @@ export default function MonthlyScreen() {
                   ))}
                 </View>
 
+                {settings.zeroBasedBudgetEnabled && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open ${MONTH_FULL[month]} zero-based budget`}
+                    onPress={() => router.push("/(tabs)/category-budget" as any)}
+                    style={({ pressed }) => [styles.zeroBudgetMonthlyLink, { backgroundColor: c.primary + "14", borderColor: c.primary + "35", opacity: pressed ? 0.78 : 1 }]}
+                  >
+                    <View style={[styles.zeroBudgetMonthlyIcon, { backgroundColor: c.primary + "18" }]}><Feather name="pie-chart" size={15} color={c.primary} /></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.zeroBudgetMonthlyTitle, { color: c.foreground }]}>Zero-Based Plan</Text>
+                      <Text style={[styles.zeroBudgetMonthlyText, { color: c.mutedForeground }]}>Review assignments or move money between categories.</Text>
+                    </View>
+                    <Feather name="chevron-right" size={16} color={c.primary} />
+                  </Pressable>
+                )}
+
                 {monthlyIncome > 0 && (
                   <View style={[styles.cfBar, { backgroundColor: c.card, marginHorizontal: 16, borderRadius: 10, marginTop: 8 }]}>
                     <View style={styles.cfBarInner}>
@@ -1333,7 +1349,7 @@ export default function MonthlyScreen() {
                   </View>
                 )}
 
-                {settings.planningMode === "snowball" && <View style={[styles.extraCard, { backgroundColor: c.card, marginHorizontal: 16, borderRadius: colors.radius, marginTop: 8 }]}>
+                {settings.debtPayoffEnabled && <View style={[styles.extraCard, { backgroundColor: c.card, marginHorizontal: 16, borderRadius: colors.radius, marginTop: 8 }]}>
                   <View style={styles.extraHeader}>
                     <Feather name="zap" size={14} color={c.primary} />
                     <Text style={[styles.extraTitle, { color: c.foreground }]}>
@@ -2387,7 +2403,7 @@ export default function MonthlyScreen() {
         </Pressable>
       </Modal>
       <SnowballPreviewModal
-        visible={settings.planningMode === "snowball" && snowballModalVisible}
+        visible={settings.debtPayoffEnabled && snowballModalVisible}
         preview={snowballPreview}
         amount={extraPayment}
         existingPayment={!!getExtraPayment(month, selectedYear)}
@@ -2417,7 +2433,7 @@ export default function MonthlyScreen() {
         actual={surplusPrompt?.actual ?? 0}
         targetDebt={surplusSnowballOffer?.targetDebt}
         snowballSafe={surplusSnowballOffer?.safe ?? false}
-        snowballEnabled={settings.planningMode === "snowball"}
+        snowballEnabled={settings.debtPayoffEnabled}
         safetyFloor={settings.safety_floor}
         forecastHorizonMonths={settings.forecast_horizon_months}
         paymentDate={surplusPaymentDate}
@@ -2470,6 +2486,10 @@ const styles = StyleSheet.create({
   tabBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 9 },
   tabBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   summaryRow: { flexDirection: "row", padding: 12 },
+  zeroBudgetMonthlyLink: { marginHorizontal: 16, marginTop: 8, borderWidth: 1, borderRadius: 14, padding: 11, flexDirection: "row", alignItems: "center", gap: 10 },
+  zeroBudgetMonthlyIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  zeroBudgetMonthlyTitle: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  zeroBudgetMonthlyText: { fontSize: 10, fontFamily: "Inter_500Medium", marginTop: 2 },
   summaryItem: { flex: 1, alignItems: "center" },
   summaryLabel: { fontSize: 10, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 },
   summaryValue: { fontSize: 16, fontFamily: "Inter_700Bold" },

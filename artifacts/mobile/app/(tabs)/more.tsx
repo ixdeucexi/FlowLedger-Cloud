@@ -53,7 +53,6 @@ import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 import { supabase } from "@/lib/supabase";
 import { transactionCategoryParts } from "@/lib/reviewCenter";
-import { PLANNING_MODE_OPTIONS } from "@/lib/planningMode";
 import {
   type AppFeedbackRow,
   type FeedbackStatus,
@@ -398,6 +397,7 @@ export default function MoreScreen() {
   } = useBudget();
 
   const [incomeModalVisible, setIncomeModalVisible] = useState(false);
+  const [zeroBudgetIntroVisible, setZeroBudgetIntroVisible] = useState(false);
   const [accountModalVisible, setAccountModalVisible] = useState(false);
   const [accountMode, setAccountMode] = useState<"add" | "edit" | "reconcile">("add");
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
@@ -2078,38 +2078,40 @@ export default function MoreScreen() {
       </>}
 
       {activeSettingsSection === "money" && <>
-      <SLabel c={c} text="Planning Mode" />
+      <SLabel c={c} text="Planning Tools" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        <Text style={[styles.planningModeIntro, { color: c.mutedForeground }]}>Choose how FlowLedger helps with your money. Switching modes keeps your debts and saved category amounts intact.</Text>
+        <Text style={[styles.planningModeIntro, { color: c.mutedForeground }]}>Turn either tool on or off. You can use zero-based budgeting with Snowball or Avalanche, and switching tools never removes saved data.</Text>
         <View style={styles.planningModeList}>
-          {PLANNING_MODE_OPTIONS.map(option => {
-            const active = settings.planningMode === option.id;
-            const icon = option.id === "snowball" ? "trending-down" : option.id === "zero_budget" ? "pie-chart" : "wind";
-            return (
-              <Pressable
-                key={option.id}
-                accessibilityRole="radio"
-                accessibilityState={{ checked: active }}
-                onPress={() => void updateSettings({ planningMode: option.id })}
-                style={({ pressed }) => [
-                  styles.planningModeOption,
-                  { backgroundColor: active ? c.primary + "16" : c.muted, borderColor: active ? c.primary : c.border, opacity: pressed ? 0.78 : 1 },
-                ]}
-              >
-                <View style={[styles.planningModeIcon, { backgroundColor: active ? c.primary : c.card }]}>
-                  <Feather name={icon} size={17} color={active ? c.primaryForeground : c.mutedForeground} />
-                </View>
-                <View style={styles.planningModeCopy}>
-                  <Text style={[styles.planningModeTitle, { color: c.foreground }]}>{option.label}</Text>
-                  <Text style={[styles.planningModeShort, { color: c.mutedForeground }]}>{option.shortDescription}</Text>
-                </View>
-                <Feather name={active ? "check-circle" : "circle"} size={19} color={active ? c.primary : c.mutedForeground} />
-              </Pressable>
-            );
-          })}
+          <PlanningToolToggle
+            c={c}
+            icon="pie-chart"
+            label="Zero-Based Budget"
+            description="Give every dollar a job across spending, savings, and debt."
+            enabled={settings.zeroBasedBudgetEnabled}
+            disabled={!canEditHousehold}
+            onPress={() => {
+              if (settings.zeroBasedBudgetEnabled) void updateSettings({ zeroBasedBudgetEnabled: false });
+              else setZeroBudgetIntroVisible(true);
+            }}
+          />
+          <PlanningToolToggle
+            c={c}
+            icon="trending-down"
+            label="Debt Payoff Plan"
+            description="Show Snowball or Avalanche recommendations and safe extra payments."
+            enabled={settings.debtPayoffEnabled}
+            disabled={!canEditHousehold}
+            onPress={() => void updateSettings({ debtPayoffEnabled: !settings.debtPayoffEnabled })}
+          />
         </View>
         <Text style={[styles.planningModeDescription, { color: c.mutedForeground }]}>
-          {PLANNING_MODE_OPTIONS.find(option => option.id === settings.planningMode)?.description}
+          {settings.zeroBasedBudgetEnabled && settings.debtPayoffEnabled
+            ? "Balanced view: category assignments first, followed by your debt payoff plan."
+            : settings.zeroBasedBudgetEnabled
+              ? "Budget view: focus on income, assignments, and category availability."
+              : settings.debtPayoffEnabled
+                ? "Debt view: keep cash-flow tracking with payoff recommendations."
+                : "Tracking view: focus on balances, bills, transactions, and forecasts."}
         </Text>
       </View>
 
@@ -2162,9 +2164,9 @@ export default function MoreScreen() {
       </View>
 
       {/* ── Categories ── */}
-      <SLabel c={c} text={settings.planningMode === "zero_budget" ? "Budget Categories" : "Spending Categories"} />
+      <SLabel c={c} text={settings.zeroBasedBudgetEnabled ? "Budget Categories" : "Spending Categories"} />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        {settings.planningMode === "zero_budget" && <Pressable
+        {settings.zeroBasedBudgetEnabled && <Pressable
           onPress={() => router.push("/(tabs)/category-budget" as any)}
           style={({ pressed }) => [styles.categoryBudgetLink, { backgroundColor: c.primary + "18", borderColor: c.primary + "30", opacity: pressed ? 0.75 : 1 }]}
         >
@@ -2251,7 +2253,7 @@ export default function MoreScreen() {
       </View>
 
       {/* ── Debt Payoff Strategy ── */}
-      {settings.planningMode === "snowball" && <>
+      {settings.debtPayoffEnabled && <>
       <SLabel c={c} text="Debt Payoff Strategy" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View style={[styles.methodRow, { backgroundColor: c.muted, borderRadius: 10 }]}>
@@ -3022,6 +3024,49 @@ export default function MoreScreen() {
       </>}
 
       <Modal
+        visible={zeroBudgetIntroVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setZeroBudgetIntroVisible(false)}
+      >
+        <Pressable style={styles.infoOverlay} onPress={() => setZeroBudgetIntroVisible(false)}>
+          <Pressable style={[styles.infoSheet, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => undefined}>
+            <View style={styles.infoSheetHeader}>
+              <View style={[styles.infoSheetIcon, { backgroundColor: c.primary + "18" }]}>
+                <Feather name="pie-chart" size={20} color={c.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.infoSheetEyebrow, { color: c.primary }]}>Planning tool</Text>
+                <Text style={[styles.infoSheetTitle, { color: c.foreground }]}>Use Zero-Based Budget</Text>
+              </View>
+            </View>
+            <Text style={[styles.infoSheetDesc, { color: c.mutedForeground }]}>FlowLedger will use planned take-home income, bills, savings, and debt to help you give every dollar a job. This does not turn off your debt payoff plan.</Text>
+            <View style={styles.zeroBudgetIntroSteps}>
+              {["Confirm monthly income", "Review suggested assignments", "Reach $0 left to assign"].map((step, index) => (
+                <View key={step} style={styles.zeroBudgetIntroStep}>
+                  <View style={[styles.zeroBudgetIntroNumber, { backgroundColor: c.primary + "18" }]}><Text style={[styles.zeroBudgetIntroNumberText, { color: c.primary }]}>{index + 1}</Text></View>
+                  <Text style={[styles.switchLabel, { color: c.foreground, flex: 1 }]}>{step}</Text>
+                </View>
+              ))}
+            </View>
+            <Pressable
+              onPress={async () => {
+                await updateSettings({ zeroBasedBudgetEnabled: true });
+                setZeroBudgetIntroVisible(false);
+                router.push("/(tabs)/category-budget" as any);
+              }}
+              style={({ pressed }) => [styles.infoDoneButton, { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 }]}
+            >
+              <Text style={[styles.infoDoneText, { color: c.primaryForeground }]}>Turn on and set up this month</Text>
+            </Pressable>
+            <Pressable onPress={() => setZeroBudgetIntroVisible(false)} style={styles.zeroBudgetIntroLater}>
+              <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Not now</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
         visible={Boolean(selectedAlgorithm)}
         transparent
         animationType="fade"
@@ -3134,6 +3179,46 @@ function SLabel({ c, text }: { c: any; text: string }) {
   );
 }
 
+function PlanningToolToggle({ c, icon, label, description, enabled, disabled, onPress }: {
+  c: any;
+  icon: React.ComponentProps<typeof Feather>["name"];
+  label: string;
+  description: string;
+  enabled: boolean;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="switch"
+      accessibilityLabel={label}
+      accessibilityHint={description}
+      accessibilityState={{ checked: enabled, disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.planningModeOption,
+        {
+          backgroundColor: enabled ? c.primary + "16" : c.muted,
+          borderColor: enabled ? c.primary : c.border,
+          opacity: disabled ? 0.55 : pressed ? 0.78 : 1,
+        },
+      ]}
+    >
+      <View style={[styles.planningModeIcon, { backgroundColor: enabled ? c.primary : c.card }]}>
+        <Feather name={icon} size={17} color={enabled ? c.primaryForeground : c.mutedForeground} />
+      </View>
+      <View style={styles.planningModeCopy}>
+        <Text style={[styles.planningModeTitle, { color: c.foreground }]}>{label}</Text>
+        <Text style={[styles.planningModeShort, { color: c.mutedForeground }]}>{description}</Text>
+      </View>
+      <View style={[styles.planningToolSwitch, { backgroundColor: enabled ? c.primary : c.border }]}>
+        <View style={[styles.planningToolThumb, { backgroundColor: c.primaryForeground, transform: [{ translateX: enabled ? 18 : 0 }] }]} />
+      </View>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   scroller: { flex: 1 },
@@ -3158,6 +3243,13 @@ const styles = StyleSheet.create({
   planningModeTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   planningModeShort: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
   planningModeDescription: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 18, marginTop: 12 },
+  planningToolSwitch: { width: 44, height: 26, borderRadius: 13, padding: 3, justifyContent: "center" },
+  planningToolThumb: { width: 20, height: 20, borderRadius: 10 },
+  zeroBudgetIntroSteps: { gap: 10, marginTop: 16, marginBottom: 4 },
+  zeroBudgetIntroStep: { flexDirection: "row", alignItems: "center", gap: 10 },
+  zeroBudgetIntroNumber: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  zeroBudgetIntroNumberText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
+  zeroBudgetIntroLater: { minHeight: 42, alignItems: "center", justifyContent: "center" },
   emptyText: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", paddingVertical: 8 },
 
   incomeRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, gap: 10 },
