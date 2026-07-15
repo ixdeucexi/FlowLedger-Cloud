@@ -27,7 +27,7 @@ import {
   type TransactionRule,
 } from "@/lib/competitiveGrowth";
 import { debtPaymentStatusLabel } from "@/lib/forecastDisplay";
-import { isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches } from "@/lib/billMatching";
+import { isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "@/lib/billMatching";
 import { isValidDateInMonth } from "@/lib/schedule";
 import { supabase } from "@/lib/supabase";
 
@@ -621,11 +621,12 @@ export default function TransactionsScreen() {
       const days = getBillOccurrencesInMonth(bill, month, year);
       if (days.length === 0) return [];
       const monthTotal = getBillMonthlyTotal(bill, month, year);
+      const occurrenceBudget = resolveMatchedBillBudget(monthTotal / days.length, bill.amount);
       return [{
         billId: bill.id,
         name: bill.name,
         category: bill.category,
-        plannedAmount: monthTotal / days.length,
+        plannedAmount: occurrenceBudget,
         occurrenceDates: days.map(day => `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`),
       }];
     });

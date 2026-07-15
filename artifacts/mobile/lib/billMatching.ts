@@ -128,6 +128,12 @@ export function isMatchedPaymentLowerThanPlanned(transactionAmount: number, plan
   return Math.abs(transactionAmount) + 0.005 < plannedAmount;
 }
 
+export function resolveMatchedBillBudget(plannedAmount: number, recurringBillAmount: number): number {
+  const planned = Number.isFinite(plannedAmount) ? Math.max(0, plannedAmount) : 0;
+  const recurring = Number.isFinite(recurringBillAmount) ? Math.max(0, recurringBillAmount) : 0;
+  return Math.max(planned, recurring);
+}
+
 export function isActiveTransaction(transaction: { removed_at?: string | null; pending?: boolean | null }): boolean {
   return !transaction.removed_at && transaction.pending !== true;
 }

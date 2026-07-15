@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isActiveTransaction, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches } from "./billMatching";
+import { isActiveTransaction, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "./billMatching";
 
 test("ranks an exact nearby utility payment above unrelated bills", () => {
   const ranked = rankBillMatches(
@@ -45,4 +45,11 @@ test("prompts for leftover money only when a confirmed payment is lower", () => 
   assert.equal(isMatchedPaymentLowerThanPlanned(-370, 370), false);
   assert.equal(isMatchedPaymentLowerThanPlanned(-400, 370), false);
   assert.equal(isMatchedPaymentLowerThanPlanned(-369.999, 370), false);
+});
+
+test("regular bill matching keeps the bill budget when a monthly override is lower", () => {
+  const budgeted = resolveMatchedBillBudget(349, 370);
+  assert.equal(budgeted, 370);
+  assert.equal(isMatchedPaymentLowerThanPlanned(-349, budgeted), true);
+  assert.equal(resolveMatchedBillBudget(390, 370), 390);
 });
