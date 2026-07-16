@@ -915,6 +915,24 @@ export default function DashboardScreen() {
   const openStabilityExplanation = useCallback(() => {
     openFloWithPrompt(stabilityPrompt);
   }, [openFloWithPrompt, stabilityPrompt]);
+  const openStabilityGuide = useCallback(() => {
+    router.push({
+      pathname: "/(tabs)/how-flowledger-works",
+      params: {
+        stage: algorithmSuite.stability.stage,
+        stageLabel: algorithmSuite.stability.stageLabel,
+        protectedDays: String(algorithmSuite.stability.protectedDays),
+        protectedAmount: String(algorithmSuite.stability.protectedAmount),
+        reserveTarget: String(algorithmSuite.stability.reserveTarget),
+        nextAction: algorithmSuite.stability.nextAction,
+        nextMilestone: algorithmSuite.stability.nextMilestone,
+        nextMilestoneAmount: String(algorithmSuite.stability.nextMilestoneAmount),
+        lowestBalance: String(algorithmSuite.safeCushion.lowestBalance),
+        safetyFloor: String(settings.safety_floor),
+        confidence: forecastConfidence.label,
+      },
+    } as any);
+  }, [algorithmSuite.safeCushion.lowestBalance, algorithmSuite.stability, forecastConfidence.label, router, settings.safety_floor]);
   return (
     <ScrollView
       style={[styles.screen, styles.dashboardStage]}
@@ -1115,21 +1133,25 @@ export default function DashboardScreen() {
 
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Ask Flo about ${algorithmSuite.stability.stageLabel}`}
-              onPress={openStabilityExplanation}
+              accessibilityLabel={`View the full Stability Path from ${algorithmSuite.stability.stageLabel}`}
+              onPress={openStabilityGuide}
               style={({ pressed }) => [styles.referencePlanSnapshot, { opacity: pressed ? 0.84 : 1 }]}
             >
               <View style={styles.referencePlanFocusBlock}>
                 <AppText tone="label" style={styles.referencePlanLabel}>Current stage</AppText>
                 <AppText tone="title" style={styles.referencePlanFocusTitle} numberOfLines={1}>{algorithmSuite.stability.stageLabel}</AppText>
                 <View style={styles.referencePlanNextRow}>
-                  <AppText tone="label" style={styles.referencePlanNextLabel}>Next move</AppText>
-                  <AppText style={styles.referencePlanNextText} numberOfLines={2}>{algorithmSuite.stability.nextAction}</AppText>
+                  <AppText tone="label" style={styles.referencePlanNextLabel}>Next milestone</AppText>
+                  <AppText style={styles.referencePlanNextText} numberOfLines={2}>
+                    {algorithmSuite.stability.nextMilestoneAmount > 0
+                      ? `${algorithmSuite.stability.nextMilestone} - ${formatDashboardCurrency(algorithmSuite.stability.nextMilestoneAmount)} to go`
+                      : algorithmSuite.stability.nextMilestone}
+                  </AppText>
                 </View>
               </View>
               <View style={styles.referencePlanFloPill}>
-                <Feather name="message-circle" size={13} color="#f8fafc" />
-                <AppText style={styles.referencePlanFloText}>Flo</AppText>
+                <Feather name="map" size={13} color="#f8fafc" />
+                <AppText style={styles.referencePlanFloText}>Path</AppText>
               </View>
             </Pressable>
           </Animated.View>
@@ -1194,8 +1216,7 @@ export default function DashboardScreen() {
 
       <StabilityPathCard
         progress={algorithmSuite.stability}
-        lowestForecastBalance={algorithmSuite.safeCushion.lowestBalance}
-        safetyFloor={settings.safety_floor}
+        onViewGuide={openStabilityGuide}
         onAskFlo={openStabilityExplanation}
       />
 

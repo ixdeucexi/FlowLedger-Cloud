@@ -71,5 +71,9 @@
     ,"lib/plaidActivity.test.ts"
     ,"lib/flowmentumHandoff.ts"
     ,"lib/flowmentumHandoff.test.ts"
+    ,"lib/pushNotificationPreference.ts"
+    ,"lib/pushNotificationPreference.test.ts"
+    ,"lib/flowledgerGuide.ts"
+    ,"lib/flowledgerGuide.test.ts"
   ]
 }

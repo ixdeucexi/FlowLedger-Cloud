@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import React, { memo, useState } from "react";
+import React, { memo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { AppText } from "@/components/AppText";
@@ -7,8 +7,7 @@ import type { StabilityProgress } from "@/lib/stability";
 
 interface StabilityPathCardProps {
   progress: StabilityProgress;
-  lowestForecastBalance: number;
-  safetyFloor: number;
+  onViewGuide: () => void;
   onAskFlo: () => void;
 }
 
@@ -26,8 +25,7 @@ function statusColor(status: StabilityProgress["status"]) {
   return "#34d399";
 }
 
-function StabilityPathCardView({ progress, lowestForecastBalance, safetyFloor, onAskFlo }: StabilityPathCardProps) {
-  const [showCalculation, setShowCalculation] = useState(false);
+function StabilityPathCardView({ progress, onViewGuide, onAskFlo }: StabilityPathCardProps) {
   const color = statusColor(progress.status);
   const progressWidth = `${Math.round(progress.reserveProgress * 100)}%` as const;
 
@@ -83,24 +81,15 @@ function StabilityPathCardView({ progress, lowestForecastBalance, safetyFloor, o
         </View>
       </View>
 
-      {showCalculation ? (
-        <View style={styles.calculation}>
-          <CalculationRow label="Lowest upcoming balance" value={currency(lowestForecastBalance)} />
-          <CalculationRow label="Protected safety floor" value={`−${currency(safetyFloor)}`} />
-          <CalculationRow label="Breathing room" value={currency(progress.protectedAmount)} emphasized />
-          <CalculationRow label="One-month required-expense target" value={currency(progress.reserveTarget)} />
-        </View>
-      ) : null}
-
       <View style={styles.actions}>
         <Pressable
           accessibilityRole="button"
-          accessibilityState={{ expanded: showCalculation }}
-          onPress={() => setShowCalculation(value => !value)}
+          accessibilityLabel="See how the Stability Path and algorithms work"
+          onPress={onViewGuide}
           style={({ pressed }) => [styles.secondaryButton, { opacity: pressed ? 0.72 : 1 }]}
         >
-          <Feather name={showCalculation ? "chevron-up" : "list"} size={14} color="#93c5fd" />
-          <AppText style={styles.secondaryButtonText}>{showCalculation ? "Hide calculation" : "View calculation"}</AppText>
+          <Feather name="map" size={14} color="#93c5fd" />
+          <AppText style={styles.secondaryButtonText}>See how this works</AppText>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -111,15 +100,6 @@ function StabilityPathCardView({ progress, lowestForecastBalance, safetyFloor, o
           <AppText style={styles.primaryButtonText}>Ask Flo why</AppText>
         </Pressable>
       </View>
-    </View>
-  );
-}
-
-function CalculationRow({ label, value, emphasized = false }: { label: string; value: string; emphasized?: boolean }) {
-  return (
-    <View style={styles.calculationRow}>
-      <AppText style={[styles.calculationLabel, emphasized && styles.calculationEmphasized]}>{label}</AppText>
-      <AppText tone="number" style={[styles.calculationValue, emphasized && styles.calculationEmphasized]}>{value}</AppText>
     </View>
   );
 }
@@ -164,11 +144,6 @@ const styles = StyleSheet.create({
   nextMoveCopy: { flex: 1 },
   nextMoveLabel: { color: "#c4b5fd", fontSize: 8, fontFamily: "Inter_800ExtraBold" },
   nextMoveText: { color: "#ede9fe", fontSize: 12, lineHeight: 16, fontFamily: "Inter_700Bold", marginTop: 2 },
-  calculation: { marginTop: 12, borderTopWidth: 1, borderTopColor: "rgba(148,163,184,0.14)", paddingTop: 7 },
-  calculationRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingVertical: 6 },
-  calculationLabel: { flex: 1, color: "#94a3b8", fontSize: 11, fontFamily: "Inter_600SemiBold" },
-  calculationValue: { color: "#cbd5e1", fontSize: 12, fontFamily: "Inter_800ExtraBold" },
-  calculationEmphasized: { color: "#67e8f9" },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
   secondaryButton: { flex: 1, minWidth: 140, minHeight: 42, borderRadius: 14, borderWidth: 1, borderColor: "rgba(96,165,250,0.22)", backgroundColor: "rgba(37,99,235,0.12)", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingHorizontal: 10 },
   secondaryButtonText: { color: "#bfdbfe", fontSize: 11, fontFamily: "Inter_800ExtraBold" },

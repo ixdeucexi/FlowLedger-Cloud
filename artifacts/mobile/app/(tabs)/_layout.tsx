@@ -516,6 +516,7 @@ function TabContent() {
           })}
           <Tabs.Screen name="flo" options={{ href: null }} />
           <Tabs.Screen name="category-budget" options={{ href: null }} />
+          <Tabs.Screen name="how-flowledger-works" options={{ href: null, tabBarStyle: { display: "none" } }} />
         </Tabs>
         {demoMode ? <DemoModeBanner /> : null}
         <PlanPreviewBanner />

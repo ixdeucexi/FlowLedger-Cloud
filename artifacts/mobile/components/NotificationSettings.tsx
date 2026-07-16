@@ -14,15 +14,19 @@ import {
 
 export function NotificationSettings() {
   const c = useColors();
-  const { session } = useAuth();
+  const { session, user } = useAuth();
   const [status, setStatus] = useState<PushNotificationStatus>("checking");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const refreshStatus = useCallback(async () => {
-    try { setStatus(await getPushNotificationStatus()); }
+    if (!user?.id) {
+      setStatus("disabled");
+      return;
+    }
+    try { setStatus(await getPushNotificationStatus(user.id)); }
     catch { setStatus("unsupported"); }
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     void refreshStatus();
@@ -37,15 +41,15 @@ export function NotificationSettings() {
   }, [refreshStatus]);
 
   const toggle = async (enabled: boolean) => {
-    if (!session?.access_token || busy) return;
+    if (!session?.access_token || !user?.id || busy) return;
     setBusy(true);
     setMessage(null);
     try {
       if (enabled) {
-        await enablePushNotifications(session.access_token);
+        await enablePushNotifications(session.access_token, user.id);
         setMessage("Notifications are on for this device.");
       } else {
-        await disablePushNotifications(session.access_token);
+        await disablePushNotifications(session.access_token, user.id);
         setMessage("Notifications are off for this device.");
       }
       await refreshStatus();

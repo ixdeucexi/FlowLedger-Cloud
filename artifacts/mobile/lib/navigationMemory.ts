@@ -15,6 +15,7 @@ const MAIN_APP_PREFIXES = [
 const BLOCKED_PREFIXES = [
   "/login",
   "/setup",
+  "/how-flowledger-works",
 ] as const;
 
 function normalizeRoute(route: string | null | undefined) {

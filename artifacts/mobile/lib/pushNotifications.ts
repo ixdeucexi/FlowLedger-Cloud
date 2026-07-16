@@ -1,9 +1,14 @@
 import { Platform } from "react-native";
 
+import {
+  LEGACY_PUSH_PREFERENCE_KEY,
+  pushPreferenceStorageKey,
+  shouldRestorePushNotifications,
+} from "@/lib/pushNotificationPreference";
+
 export type PushNotificationStatus = "checking" | "unsupported" | "blocked" | "disabled" | "enabled";
 
 type ApiError = { message?: string };
-const PUSH_PREFERENCE_KEY = "flowledger_push_notifications_enabled_v1";
 
 function supported() {
   return Platform.OS === "web"
@@ -33,17 +38,30 @@ async function registration() {
   return registered;
 }
 
-function savePreference(enabled: boolean) {
-  try { window.localStorage.setItem(PUSH_PREFERENCE_KEY, enabled ? "true" : "false"); } catch {}
+function savePreference(userId: string, enabled: boolean) {
+  try {
+    window.localStorage.setItem(pushPreferenceStorageKey(userId), enabled ? "true" : "false");
+    window.localStorage.removeItem(LEGACY_PUSH_PREFERENCE_KEY);
+  } catch {}
 }
 
-function readPreference() {
-  try { return window.localStorage.getItem(PUSH_PREFERENCE_KEY) === "true"; } catch { return false; }
+function readPreference(userId: string) {
+  try {
+    const key = pushPreferenceStorageKey(userId);
+    const stored = window.localStorage.getItem(key);
+    if (stored !== null) return stored === "true";
+    const legacyEnabled = window.localStorage.getItem(LEGACY_PUSH_PREFERENCE_KEY) === "true";
+    if (legacyEnabled) window.localStorage.setItem(key, "true");
+    window.localStorage.removeItem(LEGACY_PUSH_PREFERENCE_KEY);
+    return legacyEnabled;
+  } catch {
+    return false;
+  }
 }
 
-async function settledRegistration() {
+async function settledRegistration(userId: string) {
   const existing = await navigator.serviceWorker.getRegistration("/");
-  if (existing || !readPreference() || window.Notification.permission !== "granted") return existing;
+  if (existing || !readPreference(userId) || window.Notification.permission !== "granted") return existing;
   return Promise.race([
     navigator.serviceWorker.ready,
     new Promise<undefined>(resolve => setTimeout(() => resolve(undefined), 3000)),
@@ -54,18 +72,18 @@ function authorization(accessToken: string) {
   return { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
 }
 
-export async function getPushNotificationStatus(): Promise<PushNotificationStatus> {
+export async function getPushNotificationStatus(userId: string): Promise<PushNotificationStatus> {
   if (!supported()) return "unsupported";
   if (window.Notification.permission === "denied") return "blocked";
-  const registered = await settledRegistration();
+  if (!readPreference(userId)) return "disabled";
+  const registered = await settledRegistration(userId);
   if (!registered) return "disabled";
   await registered.update().catch(() => undefined);
   const subscription = await registered.pushManager.getSubscription();
-  if (!subscription) savePreference(false);
   return subscription ? "enabled" : "disabled";
 }
 
-export async function enablePushNotifications(accessToken: string) {
+export async function enablePushNotifications(accessToken: string, userId: string) {
   if (!supported()) throw new Error("This browser or installed app does not support phone notifications.");
   const configResponse = await fetch("/api/notifications/config");
   if (!configResponse.ok) throw new Error(await apiMessage(configResponse, "Notifications are not configured yet."));
@@ -90,15 +108,15 @@ export async function enablePushNotifications(accessToken: string) {
     if (!existing) await subscription.unsubscribe().catch(() => false);
     throw new Error(await apiMessage(response, "Could not enable notifications."));
   }
-  savePreference(true);
+  savePreference(userId, true);
 }
 
-export async function disablePushNotifications(accessToken: string) {
+export async function disablePushNotifications(accessToken: string, userId: string) {
   if (!supported()) return;
   const registered = await navigator.serviceWorker.getRegistration("/");
   const subscription = await registered?.pushManager.getSubscription();
   if (!subscription) {
-    savePreference(false);
+    savePreference(userId, false);
     return;
   }
   const response = await fetch("/api/notifications/subscription", {
@@ -108,7 +126,28 @@ export async function disablePushNotifications(accessToken: string) {
   });
   if (!response.ok) throw new Error(await apiMessage(response, "Could not disable notifications."));
   await subscription.unsubscribe();
-  savePreference(false);
+  savePreference(userId, false);
+}
+
+export async function detachPushNotifications(accessToken: string) {
+  if (!supported()) return;
+  const registered = await navigator.serviceWorker.getRegistration("/");
+  const subscription = await registered?.pushManager.getSubscription();
+  if (!subscription) return;
+  const response = await fetch("/api/notifications/subscription", {
+    method: "DELETE",
+    headers: authorization(accessToken),
+    body: JSON.stringify({ endpoint: subscription.endpoint }),
+  });
+  if (!response.ok) {
+    await subscription.unsubscribe().catch(() => false);
+    throw new Error(await apiMessage(response, "Could not pause notifications for sign out."));
+  }
+}
+
+export async function restorePushNotifications(accessToken: string, userId: string) {
+  if (!supported() || !shouldRestorePushNotifications(readPreference(userId), window.Notification.permission)) return;
+  await enablePushNotifications(accessToken, userId);
 }
 
 export async function sendTestPushNotification(accessToken: string) {
