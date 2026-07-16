@@ -2,11 +2,57 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 const {
+  duplicatePlaidAccountIds,
   editablePlaidFields,
+  plaidAccountIdentity,
+  stablePlaidFingerprint,
   shouldImportPlaidTransaction,
   shouldQueuePendingNotification,
   shouldQueuePostedNotification,
 } = require("./sync");
+
+test("Plaid account identity falls back to institution, mask, type, and name", () => {
+  const account = { id: "account-1", mask: "1234", account_type: "depository", account_subtype: "checking", name: "Checking" };
+  assert.equal(plaidAccountIdentity(account, "ins_1"), "fallback:ins_1:1234:depository:checking:checking");
+  assert.notEqual(plaidAccountIdentity(account, "ins_1"), plaidAccountIdentity(account, "ins_2"));
+});
+
+test("duplicate bank links keep the existing Plaid item account", () => {
+  const accounts = [
+    { id: "account-retired", user_id: "user-1", plaid_item_id: "item-retired", mask: "1234", account_type: "depository", account_subtype: "checking", name: "Checking", is_active: false, created_at: "2026-07-12T00:00:00Z" },
+    { id: "account-old", user_id: "user-1", plaid_item_id: "item-old", mask: "1234", account_type: "depository", account_subtype: "checking", name: "Checking", is_active: true, created_at: "2026-07-14T00:00:00Z" },
+    { id: "account-new", user_id: "user-1", plaid_item_id: "item-new", mask: "1234", account_type: "depository", account_subtype: "checking", name: "Checking", is_active: true, created_at: "2026-07-16T00:00:00Z" },
+  ];
+  const items = new Map([
+    ["item-retired", { institution_id: "ins_1", created_at: "2026-07-12T00:00:00Z" }],
+    ["item-old", { institution_id: "ins_1", created_at: "2026-07-14T00:00:00Z" }],
+    ["item-new", { institution_id: "ins_1", created_at: "2026-07-16T00:00:00Z" }],
+  ]);
+  assert.deepEqual(duplicatePlaidAccountIds(accounts, items), ["account-new"]);
+});
+
+test("Plaid fingerprints ignore only connection-specific IDs", () => {
+  const first = {
+    account_id: "account-old",
+    transaction_id: "transaction-old",
+    pending_transaction_id: "pending-old",
+    amount: 51.38,
+    date: "2026-07-16",
+    merchant_name: "Capital One",
+    personal_finance_category: { detailed: "LOAN_PAYMENTS_CAR_PAYMENT", primary: "LOAN_PAYMENTS" },
+  };
+  const copy = {
+    personal_finance_category: { primary: "LOAN_PAYMENTS", detailed: "LOAN_PAYMENTS_CAR_PAYMENT" },
+    merchant_name: "Capital One",
+    date: "2026-07-16",
+    amount: 51.38,
+    pending_transaction_id: "pending-new",
+    transaction_id: "transaction-new",
+    account_id: "account-new",
+  };
+  assert.equal(stablePlaidFingerprint(first), stablePlaidFingerprint(copy));
+  assert.notEqual(stablePlaidFingerprint(first), stablePlaidFingerprint({ ...copy, amount: 52.38 }));
+});
 
 test("only posted Plaid activity becomes a FlowLedger transaction", () => {
   assert.equal(shouldImportPlaidTransaction({ pending: true }), false);

@@ -59,6 +59,153 @@ function editablePlaidFields(existing, imported) {
   };
 }
 
+function normalizedAccountText(value) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function plaidAccountIdentity(account, institutionId) {
+  const persistentId = normalizedAccountText(account && account.persistent_account_id);
+  if (persistentId) return `persistent:${persistentId}`;
+  const mask = normalizedAccountText(account && account.mask);
+  const institution = normalizedAccountText(institutionId);
+  if (!mask || !institution) return null;
+  const name = normalizedAccountText((account && account.official_name) || (account && account.name));
+  const type = normalizedAccountText((account && account.account_type) || (account && account.type));
+  const subtype = normalizedAccountText((account && account.account_subtype) || (account && account.subtype));
+  return ["fallback", institution, mask, type, subtype, name].join(":");
+}
+
+function stableJson(value) {
+  if (Array.isArray(value)) return value.map(stableJson);
+  if (!value || typeof value !== "object") return value;
+  return Object.keys(value).sort().reduce((result, key) => {
+    result[key] = stableJson(value[key]);
+    return result;
+  }, {});
+}
+
+function stablePlaidFingerprint(transaction) {
+  const normalized = { ...(transaction || {}) };
+  delete normalized.account_id;
+  delete normalized.transaction_id;
+  delete normalized.pending_transaction_id;
+  return JSON.stringify(stableJson(normalized));
+}
+
+function duplicatePlaidAccountIds(accounts, itemsById) {
+  const groups = new Map();
+  for (const account of accounts || []) {
+    if (account.is_active === false) continue;
+    const itemId = account.plaid_item_record_id || account.plaid_item_id;
+    const item = itemsById.get(itemId) || {};
+    const identity = plaidAccountIdentity(account, item.institution_id);
+    if (!identity) continue;
+    const key = `${account.user_id}:${identity}`;
+    const group = groups.get(key) || [];
+    group.push({ account, item });
+    groups.set(key, group);
+  }
+
+  const duplicateIds = [];
+  for (const group of groups.values()) {
+    group.sort((left, right) => {
+      const itemDate = String(left.item.created_at || "").localeCompare(String(right.item.created_at || ""));
+      if (itemDate) return itemDate;
+      const accountDate = String(left.account.created_at || "").localeCompare(String(right.account.created_at || ""));
+      if (accountDate) return accountDate;
+      return String(left.account.id).localeCompare(String(right.account.id));
+    });
+    duplicateIds.push(...group.slice(1).map(entry => entry.account.id));
+  }
+  return duplicateIds;
+}
+
+async function findEquivalentPlaidTransaction({ db, userId, accountRow, transactionDate, amount, transaction }) {
+  if (!accountRow) return null;
+  const { data: candidates, error: candidateError } = await db
+    .from("plaid_transactions")
+    .select("plaid_transaction_id,plaid_account_id,flowledger_transaction_id,raw")
+    .eq("user_id", userId)
+    .eq("transaction_date", transactionDate)
+    .eq("amount", amount)
+    .eq("pending", false)
+    .is("removed_at", null)
+    .neq("plaid_transaction_id", transaction.transaction_id)
+    .limit(20);
+  if (candidateError) throw candidateError;
+  if (!candidates || !candidates.length) return null;
+
+  const candidateAccountIds = [...new Set(candidates.map(candidate => candidate.plaid_account_id).filter(Boolean))];
+  if (!candidateAccountIds.length) return null;
+  const { data: candidateAccounts, error: accountError } = await db
+    .from("plaid_accounts")
+    .select("id,persistent_account_id,name,official_name,mask,type,subtype,account_type,account_subtype")
+    .in("id", candidateAccountIds);
+  if (accountError) throw accountError;
+  const accountsById = new Map((candidateAccounts || []).map(account => [account.id, account]));
+  const currentIdentity = plaidAccountIdentity(accountRow, "same-institution");
+  const fingerprint = stablePlaidFingerprint(transaction);
+  return candidates
+    .filter(candidate => plaidAccountIdentity(accountsById.get(candidate.plaid_account_id), "same-institution") === currentIdentity)
+    .filter(candidate => stablePlaidFingerprint(candidate.raw) === fingerprint)
+    .sort((left, right) => Number(Boolean(right.flowledger_transaction_id)) - Number(Boolean(left.flowledger_transaction_id)))[0] || null;
+}
+
+async function canonicalizePlaidAccounts({ userId }) {
+  const db = serviceSupabase();
+  const [{ data: accounts, error: accountsError }, { data: items, error: itemsError }] = await Promise.all([
+    db.from("plaid_accounts")
+      .select("id,user_id,plaid_item_id,plaid_item_record_id,persistent_account_id,name,official_name,mask,type,subtype,account_type,account_subtype,is_active,created_at")
+      .eq("user_id", userId),
+    db.from("plaid_items")
+      .select("id,institution_id,status,created_at")
+      .eq("user_id", userId),
+  ]);
+  if (accountsError) throw accountsError;
+  if (itemsError) throw itemsError;
+
+  const itemsById = new Map((items || []).map(item => [item.id, item]));
+  const duplicateAccountIds = duplicatePlaidAccountIds(accounts || [], itemsById);
+  const duplicateAccountSet = new Set(duplicateAccountIds);
+  const now = new Date().toISOString();
+  if (duplicateAccountIds.length) {
+    const { error: deactivateError } = await db
+      .from("plaid_accounts")
+      .update({ is_active: false, updated_at: now })
+      .in("id", duplicateAccountIds);
+    if (deactivateError) throw deactivateError;
+    const { error: retirePendingError } = await db
+      .from("plaid_transactions")
+      .update({ removed_at: now, updated_at: now })
+      .eq("pending", true)
+      .is("removed_at", null)
+      .in("plaid_account_id", duplicateAccountIds);
+    if (retirePendingError) throw retirePendingError;
+  }
+
+  const accountsByItem = new Map();
+  const activeItemIds = new Set();
+  for (const account of accounts || []) {
+    const itemId = account.plaid_item_record_id || account.plaid_item_id;
+    if (!itemId) continue;
+    accountsByItem.set(itemId, (accountsByItem.get(itemId) || 0) + 1);
+    if (account.is_active !== false && !duplicateAccountSet.has(account.id)) activeItemIds.add(itemId);
+  }
+  const duplicateItemIds = (items || [])
+    .filter(item => ["active", "needs_repair"].includes(item.status))
+    .filter(item => accountsByItem.has(item.id) && !activeItemIds.has(item.id))
+    .map(item => item.id);
+  if (duplicateItemIds.length) {
+    const { error: duplicateItemError } = await db
+      .from("plaid_items")
+      .update({ status: "removed", updated_at: now })
+      .in("id", duplicateItemIds);
+    if (duplicateItemError) throw duplicateItemError;
+  }
+
+  return { duplicateAccountIds, duplicateItemIds };
+}
+
 async function syncAccounts({ client, userId, item, accessToken }) {
   const response = await client.accountsGet({ access_token: accessToken });
   const accounts = response.data.accounts || [];
@@ -99,7 +246,8 @@ async function syncAccounts({ client, userId, item, accessToken }) {
     });
     if (error) throw error;
   }
-  return accounts;
+  const canonical = await canonicalizePlaidAccounts({ userId });
+  return { accounts, duplicateItemIds: canonical.duplicateItemIds };
 }
 
 async function upsertPlaidTransaction({ userId, householdId, accountRow, transaction, removedAt }) {
@@ -124,7 +272,7 @@ async function upsertPlaidTransaction({ userId, householdId, accountRow, transac
   // Never overwrite an explicitly edited/manual FlowLedger transaction.
   const { data: existing, error: existingError } = await db
     .from("transactions")
-    .select("id,source,date,category,note,match_reason,review_status,user_edited_at")
+    .select("id,source,date,category,note,match_reason,review_status,user_edited_at,removed_at")
     .eq("user_id", userId)
     .eq("plaid_transaction_id", plaidTransactionId)
     .maybeSingle();
@@ -139,6 +287,41 @@ async function upsertPlaidTransaction({ userId, householdId, accountRow, transac
   if (existingPlaidError) throw existingPlaidError;
 
   const shouldImport = shouldImportPlaidTransaction(transaction);
+  if (shouldImport && accountRow && accountRow.has_duplicate_history && (!existing || existing.removed_at)) {
+    const equivalent = await findEquivalentPlaidTransaction({ db, userId, accountRow, transactionDate, amount, transaction });
+    if (equivalent) {
+      const duplicateLedgerRow = {
+        user_id: userId,
+        household_id: householdId || null,
+        plaid_account_id: accountRow.id,
+        flowledger_transaction_id: equivalent.flowledger_transaction_id || null,
+        plaid_transaction_id: plaidTransactionId,
+        transaction_date: transactionDate,
+        authorized_date: authorizedDate,
+        amount,
+        name: merchantName,
+        merchant_name: transaction.merchant_name || null,
+        original_name: originalName,
+        category,
+        pending: false,
+        payment_channel: transaction.payment_channel || null,
+        iso_currency_code: transaction.iso_currency_code || "USD",
+        removed_at: removedAt || now,
+        raw: transaction,
+        updated_at: now,
+      };
+      const { error: duplicateError } = await db.from("plaid_transactions").upsert(duplicateLedgerRow, {
+        onConflict: "user_id,plaid_transaction_id",
+      });
+      if (duplicateError) throw duplicateError;
+      return {
+        flowledgerId: equivalent.flowledger_transaction_id || null,
+        plaidTransactionId,
+        isNewPosted: false,
+        isNewPending: false,
+      };
+    }
+  }
   const isNewPosted = shouldImport && !existing;
   let flowledgerId = shouldImport && existing ? existing.id : null;
 
@@ -302,25 +485,40 @@ async function syncTransactions({ client, userId, item, accessToken }) {
       .filter(Boolean);
     const accountRows = {};
     if (accountIds.length) {
-      const { data, error } = await serviceSupabase()
+      const db = serviceSupabase();
+      const { data, error } = await db
         .from("plaid_accounts")
-        .select("id,plaid_account_id")
+        .select("id,plaid_account_id,persistent_account_id,name,official_name,mask,type,subtype,account_type,account_subtype")
         .eq("user_id", userId)
+        .eq("is_active", true)
         .in("plaid_account_id", [...new Set(accountIds)]);
       if (error) throw error;
+      const { data: inactiveAccounts, error: inactiveError } = await db
+        .from("plaid_accounts")
+        .select("persistent_account_id,name,official_name,mask,type,subtype,account_type,account_subtype")
+        .eq("user_id", userId)
+        .eq("is_active", false);
+      if (inactiveError) throw inactiveError;
+      const inactiveIdentities = new Set((inactiveAccounts || []).map(account => plaidAccountIdentity(account, "same-institution")).filter(Boolean));
       (data || []).forEach((row) => {
+        const identity = plaidAccountIdentity(row, "same-institution");
+        row.has_duplicate_history = Boolean(identity && inactiveIdentities.has(identity));
         accountRows[row.plaid_account_id] = row;
       });
     }
 
     for (const transaction of page.added || []) {
-      const imported = await upsertPlaidTransaction({ userId, householdId: item.household_id, accountRow: accountRows[transaction.account_id], transaction });
+      const accountRow = accountRows[transaction.account_id];
+      if (!accountRow) continue;
+      const imported = await upsertPlaidTransaction({ userId, householdId: item.household_id, accountRow, transaction });
       if (shouldQueuePostedNotification(originalCursor, imported)) notificationTransactionIds.push(imported.flowledgerId);
       if (shouldQueuePendingNotification(originalCursor, imported)) pendingNotificationTransactionIds.push(imported.plaidTransactionId);
       added += 1;
     }
     for (const transaction of page.modified || []) {
-      const imported = await upsertPlaidTransaction({ userId, householdId: item.household_id, accountRow: accountRows[transaction.account_id], transaction });
+      const accountRow = accountRows[transaction.account_id];
+      if (!accountRow) continue;
+      const imported = await upsertPlaidTransaction({ userId, householdId: item.household_id, accountRow, transaction });
       if (shouldQueuePostedNotification(originalCursor, imported)) notificationTransactionIds.push(imported.flowledgerId);
       if (shouldQueuePendingNotification(originalCursor, imported)) pendingNotificationTransactionIds.push(imported.plaidTransactionId);
       modified += 1;
@@ -380,7 +578,16 @@ async function syncItem({ userId, item }) {
     .eq("user_id", userId);
 
   try {
-    const accounts = await syncAccounts({ client, userId, item, accessToken });
+    const accountSync = await syncAccounts({ client, userId, item, accessToken });
+    const accounts = accountSync.accounts;
+    if (accountSync.duplicateItemIds.includes(item.id)) {
+      return {
+        accounts: accounts.length,
+        transactions: { cursor: item.transactions_cursor || item.cursor || null, added: 0, modified: 0, removed: 0 },
+        transactions_pending: false,
+        duplicate: true,
+      };
+    }
     let transactions;
     try {
       transactions = await syncTransactions({ client, userId, item, accessToken });
@@ -440,6 +647,10 @@ module.exports = {
   syncItem,
   syncAccounts,
   syncTransactions,
+  canonicalizePlaidAccounts,
+  duplicatePlaidAccountIds,
+  plaidAccountIdentity,
+  stablePlaidFingerprint,
   plaidAmountToFlowLedger,
   shouldImportPlaidTransaction,
   shouldQueuePendingNotification,

@@ -42,6 +42,7 @@ import { canEditHouseholdPlan, canManageHouseholdMembers } from "@/lib/household
 import { isActiveTransaction, isCashFlowTransaction, isConfirmedBillMatch } from "@/lib/billMatching";
 import { matchedOccurrenceAllocations, occurrenceKey } from "@/lib/reviewCenter";
 import { normalizePlanningTools } from "@/lib/planningMode";
+import { canonicalConnectedAccounts, visiblePendingPlaidActivity } from "@/lib/plaidActivity";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -176,11 +177,15 @@ export interface Account {
 export interface ConnectedBankAccount {
   id: string;
   name: string;
+  official_name?: string;
+  mask?: string;
+  persistent_account_id?: string;
   account_type?: string;
   account_subtype?: string;
   current_balance: number;
   available_balance?: number;
   is_active: boolean;
+  updated_at?: string;
 }
 
 export interface IncomeAmountEntry {
@@ -807,6 +812,27 @@ function normalizeTransactionRow(transaction: any): Transaction {
   };
 }
 
+function normalizePendingBankRows(rows: any[]): PendingBankTransaction[] {
+  return rows.map(row => ({
+    plaid_transaction_id: String(row.plaid_transaction_id),
+    transaction_date: String(row.transaction_date).slice(0, 10),
+    amount: Number(row.amount),
+    name: String(row.name || row.merchant_name || "Pending transaction"),
+    merchant_name: row.merchant_name || undefined,
+    category: String(row.category || "Other"),
+    plaid_account_id: row.plaid_account_id || undefined,
+  }));
+}
+
+function normalizeConnectedBankRows(rows: any[]): ConnectedBankAccount[] {
+  return rows.map(account => ({
+    ...account,
+    current_balance: Number(account.current_balance || 0),
+    available_balance: account.available_balance == null ? undefined : Number(account.available_balance),
+    is_active: account.is_active !== false,
+  }));
+}
+
 function normalizeMonthlyOverrideRow(override: any): MonthlyOverride {
   return {
     ...override,
@@ -1138,7 +1164,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
             applyHouseholdSelect(supabase.from("accounts").select("*"), uid).order("created_at"),
             applyHouseholdSelect(
               supabase.from("plaid_accounts")
-                .select("id,name,account_type,account_subtype,current_balance,available_balance,is_active")
+                .select("id,name,official_name,mask,persistent_account_id,account_type,account_subtype,current_balance,available_balance,is_active,updated_at")
                 .eq("is_active", true)
                 .order("name"),
               uid,
@@ -1171,15 +1197,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         setBillDateMoves(storedBillDateMoves);
         billDateMovesRef.current = storedBillDateMoves;
         setTransactions((tData ?? []).map(normalizeTransactionRow).filter(isActiveTransaction));
-        setPendingBankTransactions((pendingData ?? []).map((row: any) => ({
-          plaid_transaction_id: String(row.plaid_transaction_id),
-          transaction_date: String(row.transaction_date).slice(0, 10),
-          amount: Number(row.amount),
-          name: String(row.name || row.merchant_name || "Pending transaction"),
-          merchant_name: row.merchant_name || undefined,
-          category: String(row.category || "Other"),
-          plaid_account_id: row.plaid_account_id || undefined,
-        })));
+        const rawConnectedAccounts = normalizeConnectedBankRows(connectedAccountData ?? []);
+        setConnectedBankAccounts(canonicalConnectedAccounts(rawConnectedAccounts));
+        setPendingBankTransactions(visiblePendingPlaidActivity(normalizePendingBankRows(pendingData ?? []), rawConnectedAccounts));
         setIncomes((iData ?? []).map((i: any) => ({
           ...i,
           amount:         Number(i.amount),
@@ -1205,12 +1225,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           is_active: a.is_active !== false,
         }));
         setAccounts(loadedAccounts);
-        setConnectedBankAccounts((connectedAccountData ?? []).map((account: any) => ({
-          ...account,
-          current_balance: Number(account.current_balance || 0),
-          available_balance: account.available_balance == null ? undefined : Number(account.available_balance),
-          is_active: account.is_active !== false,
-        })));
         setDecisions((dData ?? []).map((d: any) => ({ ...d, calendar_date: d.calendar_date ?? undefined, applied_change: d.applied_change ?? undefined })));
         if (sData) {
           const accountAnchor = operatingAccountAnchor(loadedAccounts.map(toAccountSnapshot));
@@ -1275,7 +1289,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       applyHouseholdSelect(supabase.from("accounts").select("*"), uid).order("created_at"),
       applyHouseholdSelect(
         supabase.from("plaid_accounts")
-          .select("id,name,account_type,account_subtype,current_balance,available_balance,is_active")
+          .select("id,name,official_name,mask,persistent_account_id,account_type,account_subtype,current_balance,available_balance,is_active,updated_at")
           .eq("is_active", true)
           .order("name"),
         uid,
@@ -1284,17 +1298,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     ]);
     if (!transactionResult.error) {
       setTransactions((transactionResult.data ?? []).map(normalizeTransactionRow).filter(isActiveTransaction));
-    }
-    if (!pendingResult.error) {
-      setPendingBankTransactions((pendingResult.data ?? []).map((row: any) => ({
-        plaid_transaction_id: String(row.plaid_transaction_id),
-        transaction_date: String(row.transaction_date).slice(0, 10),
-        amount: Number(row.amount),
-        name: String(row.name || row.merchant_name || "Pending transaction"),
-        merchant_name: row.merchant_name || undefined,
-        category: String(row.category || "Other"),
-        plaid_account_id: row.plaid_account_id || undefined,
-      })));
     }
     if (!accountResult.error) {
       const nextAccounts = (accountResult.data ?? []).filter((a: any) => a.account_type !== "credit_card").map((a: any) => ({
@@ -1308,12 +1311,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setAccounts(nextAccounts);
     }
     if (!connectedAccountResult.error) {
-      setConnectedBankAccounts((connectedAccountResult.data ?? []).map((account: any) => ({
-        ...account,
-        current_balance: Number(account.current_balance || 0),
-        available_balance: account.available_balance == null ? undefined : Number(account.available_balance),
-        is_active: account.is_active !== false,
-      })));
+      const rawConnectedAccounts = normalizeConnectedBankRows(connectedAccountResult.data ?? []);
+      setConnectedBankAccounts(canonicalConnectedAccounts(rawConnectedAccounts));
+      if (!pendingResult.error) {
+        setPendingBankTransactions(visiblePendingPlaidActivity(normalizePendingBankRows(pendingResult.data ?? []), rawConnectedAccounts));
+      }
     }
     if (!settingsResult.error && settingsResult.data) {
       const sData = settingsResult.data;

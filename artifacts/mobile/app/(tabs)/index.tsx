@@ -120,7 +120,7 @@ export default function DashboardScreen() {
   const isCommandWide = Platform.OS === "web" && viewportWidth >= 900;
   const isIosWeb = Platform.OS === "web" && typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent);
   const dashboardTopPadding = Platform.OS === "web" ? (isIosWeb ? 72 : 16) : insets.top + 16;
-  const dashboardBottomPadding = Platform.OS === "web" ? (isIosWeb ? 8 : 58) : insets.bottom + 58;
+  const dashboardBottomPadding = Platform.OS === "web" ? (isIosWeb ? 120 : 76) : insets.bottom + 128;
   const { user } = useAuth();
   const {
     bills, getPaidAmount, getBillMonthlyTotal, getMonthlyBills, selectedYear, setDashboardFilter,
@@ -1148,8 +1148,12 @@ export default function DashboardScreen() {
     }, 110);
   };
   return (
-    <View
-      style={[styles.screen, styles.dashboardStage, styles.content, isCommandWide && styles.contentWide, { paddingTop: dashboardTopPadding, paddingBottom: dashboardBottomPadding }]}
+    <ScrollView
+      style={[styles.screen, styles.dashboardStage]}
+      contentContainerStyle={[styles.content, isCommandWide && styles.contentWide, { paddingTop: dashboardTopPadding, paddingBottom: dashboardBottomPadding }]}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      contentInsetAdjustmentBehavior="never"
     >
       <PremiumBackdrop variant="purple" />
       {isCommandWide ? (
@@ -2317,7 +2321,7 @@ export default function DashboardScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -2344,7 +2348,7 @@ function ZeroBudgetStat({ label, value, color }: { label: string; value: number;
 const styles = StyleSheet.create({
   screen:  { flex: 1 },
   dashboardStage: { backgroundColor: "#030712" },
-  content: { paddingHorizontal: 16, position: "relative", overflow: "hidden" },
+  content: { minHeight: "100%", paddingHorizontal: 16, position: "relative" },
   contentWide: { paddingLeft: 220, paddingRight: 28, maxWidth: 1320, alignSelf: "center", width: "100%" },
   referenceDesktopRail: {
     position: "absolute",

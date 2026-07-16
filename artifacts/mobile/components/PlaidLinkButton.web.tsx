@@ -85,7 +85,9 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.message || "Could not finish connecting this bank.");
       setStatus((current) => ({ ...current, items: [{ institution_name: result.institution_name, status: result.status }] }));
-      finish("Bank connected. Recent activity is syncing now.");
+      finish(result.already_connected
+        ? "That account is already connected. FlowLedger kept the existing secure connection."
+        : "Bank connected. Recent activity is syncing now.");
       onConnected?.();
       void loadStatus();
     } catch (error) {

@@ -67,5 +67,7 @@
     ,"lib/reviewCenter.test.ts"
     ,"lib/settingsHub.ts"
     ,"lib/settingsHub.test.ts"
+    ,"lib/plaidActivity.ts"
+    ,"lib/plaidActivity.test.ts"
   ]
 }
