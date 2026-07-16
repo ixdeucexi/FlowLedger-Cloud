@@ -38,7 +38,7 @@ export async function loadOnboardingPreferences(userId?: string | null): Promise
     .maybeSingle();
   if (error) return cached;
   const remote = normalizeOnboardingPreferences(data?.onboarding_preferences);
-  const next = remote.help.length || remote.goals.length || remote.savingsGoal ? remote : cached;
+  const next = remote.startingPoint || remote.help.length || remote.goals.length || remote.savingsGoal ? remote : cached;
   writeOnboardingPreferences(next);
   return next;
 }

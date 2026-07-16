@@ -14,6 +14,7 @@ import { CommandPlusButton } from "@/components/CommandPlusButton";
 import { DatePickerField } from "@/components/DatePickerField";
 import { GoalModal } from "@/components/GoalModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
+import { StabilityPathCard } from "@/components/StabilityPathCard";
 
 import colors from "@/constants/colors";
 import type { Bill, DashboardFilter, Goal } from "@/context/BudgetContext";
@@ -599,7 +600,6 @@ export default function DashboardScreen() {
     if (leftComplete !== rightComplete) return leftComplete ? 1 : -1;
     return left.target_date.localeCompare(right.target_date) || left.name.localeCompare(right.name);
   }), [goals]);
-  const availableToSpend = balanceMetrics?.currentBalance ?? 0;
   const savingsAccountBalance = useMemo(() => accounts
     .filter(account => account.is_active && account.account_type === "savings")
     .reduce((sum, account) => sum + account.current_balance, 0), [accounts]);
@@ -938,20 +938,24 @@ export default function DashboardScreen() {
       return () => clearTimeout(timer);
     }
   }, [nextWeekRisk]);
-  const openFloWithPrompt = (prompt: string) => {
+  const openFloWithPrompt = useCallback((prompt: string) => {
     router.push({ pathname: "/(tabs)/flo", params: { prompt } } as any);
-  };
+  }, [router]);
   const setupPersonalization = useMemo(
     () => buildSetupPersonalization(onboardingPreferences),
     [onboardingPreferences],
   );
-  const openPersonalizedNextAction = () => {
-    if (setupPersonalization.nextRoute === "/(tabs)/flo") {
-      openFloWithPrompt(setupPersonalization.nextActionPrompt);
-      return;
-    }
-    router.push(setupPersonalization.nextRoute as any);
-  };
+  const availableBeforePayday = paycheckPlan?.nextPaycheck
+    ? paycheckPlan.safeToSpend
+    : algorithmSuite.purchaseDecision.safeNowLimit;
+  const availabilityLabel = paycheckPlan?.nextPaycheck ? "Available before payday" : "Available after planned money";
+  const availabilityCaption = paycheckPlan?.nextPaycheck
+    ? `After bills through ${formatShortDate(paycheckPlan.windowEnd)} and your $${settings.safety_floor.toFixed(0)} safety floor are protected.`
+    : "After this month's required money and your safety floor are protected.";
+  const stabilityPrompt = `Explain my stability path. I have ${algorithmSuite.stability.protectedDays} protected days, $${algorithmSuite.stability.protectedAmount.toFixed(0)} of breathing room, and a $${algorithmSuite.stability.reserveTarget.toFixed(0)} one-month target. What is my single best next action?`;
+  const openStabilityExplanation = useCallback(() => {
+    openFloWithPrompt(stabilityPrompt);
+  }, [openFloWithPrompt, stabilityPrompt]);
   const algorithmCardWidth = isCommandWide ? 500 : Math.max(286, viewportWidth - 68);
   const algorithmSnapInterval = algorithmCardWidth + 12;
   const algorithmCards = useMemo(() => {
@@ -978,18 +982,18 @@ export default function DashboardScreen() {
       {
         id: "safeCushion",
         settingId: "safeCushion" as AlgorithmId,
-        title: "Safe Cushion",
+        title: "Breathing Room",
         value: `$${algorithmSuite.safeCushion.amount.toFixed(0)}`,
         detail: algorithmSuite.safeCushion.compactReason,
         action: algorithmSuite.safeCushion.topAction,
         icon: "shield" as const,
         color: safeTone,
-        prompt: "Can you explain my Safe Cushion and what I should protect first?",
+        prompt: "Can you explain my breathing room, show the calculation, and tell me what to protect first?",
       },
       {
         id: "purchaseDecision",
         settingId: "purchaseDecision" as AlgorithmId,
-        title: "Purchase Decision",
+        title: "Purchase Check",
         value: `$${algorithmSuite.purchaseDecision.safeNowLimit.toFixed(0)} safe now`,
         detail: algorithmSuite.purchaseDecision.detail,
         action: algorithmSuite.purchaseDecision.nextMove,
@@ -1000,7 +1004,7 @@ export default function DashboardScreen() {
       {
         id: "billPriority",
         settingId: "billPriority" as AlgorithmId,
-        title: "Bill Priority",
+        title: "Next Bill",
         value: algorithmSuite.billPriority.nextBill?.name ?? "All clear",
         detail: algorithmSuite.billPriority.summary,
         action: algorithmSuite.billPriority.nextMove,
@@ -1011,7 +1015,7 @@ export default function DashboardScreen() {
       {
         id: "cashFlowGap",
         settingId: "cashFlowGap" as AlgorithmId,
-        title: "Cash Flow Gap",
+        title: "Tightest Stretch",
         value: gapDateLabel,
         detail: algorithmSuite.cashFlowGap.detail,
         action: `Low point: $${algorithmSuite.cashFlowGap.lowestBalance.toFixed(0)}`,
@@ -1033,7 +1037,7 @@ export default function DashboardScreen() {
       {
         id: "paydaySplit",
         settingId: "paydaySplit" as AlgorithmId,
-        title: "Payday Split",
+        title: "Paycheck Plan",
         value: "Next paycheck",
         detail: algorithmSuite.paydaySplit.summary,
         action: `Bills ${algorithmSuite.paydaySplit.bills.toFixed(0)}% / Debt ${algorithmSuite.paydaySplit.debt.toFixed(0)}% / Savings ${algorithmSuite.paydaySplit.savings.toFixed(0)}%`,
@@ -1044,7 +1048,7 @@ export default function DashboardScreen() {
       {
         id: "spendingLimit",
         settingId: "spendingLimit" as AlgorithmId,
-        title: "Spending Limit",
+        title: "Spending Pace",
         value: `$${algorithmSuite.spendingLimit.daily.toFixed(0)}/day`,
         detail: algorithmSuite.spendingLimit.detail,
         action: `$${algorithmSuite.spendingLimit.weekly.toFixed(0)} weekly limit`,
@@ -1055,7 +1059,7 @@ export default function DashboardScreen() {
       {
         id: "extraMoneyRouter",
         settingId: "extraMoneyRouter" as AlgorithmId,
-        title: "Extra Money Router",
+        title: "Next Dollar",
         value: `$${algorithmSuite.extraMoneyRouter.amount.toFixed(0)}`,
         detail: algorithmSuite.extraMoneyRouter.detail,
         action: algorithmSuite.extraMoneyRouter.nextMove,
@@ -1295,28 +1299,30 @@ export default function DashboardScreen() {
           >
             <View style={styles.referenceMoneyHeader}>
               <View style={{ flex: 1 }}>
-                <AppText tone="title" style={styles.referenceGreeting}>{timeGreeting} 👋</AppText>
-                <AppText style={styles.referenceGreetingSub}>Here’s your financial flow for {MONTH_FULL[currentMonth]}.</AppText>
+                <AppText tone="title" style={styles.referenceGreeting}>{timeGreeting}</AppText>
+                <AppText style={styles.referenceGreetingSub}>Here is what is protected and what needs attention next.</AppText>
               </View>
               <Pressable onPress={doFlip} accessibilityLabel="Show savings and goals" style={styles.referenceFlipButton}>
                 <Feather name="repeat" size={13} color="#c4b5fd" />
                 <AppText style={styles.referenceFlipButtonText}>Savings</AppText>
               </Pressable>
             </View>
-            <AppText tone="label" style={styles.referenceHeroLabel}>Available to spend · Checking</AppText>
-            <AppText tone="number" style={styles.referenceHeroAmount}>{formatDashboardCurrency(availableToSpend)}</AppText>
-            <AppText style={styles.referenceMoneyCaption}>Today&apos;s Calendar closing balance.</AppText>
+            <AppText tone="label" style={styles.referenceHeroLabel}>{availabilityLabel}</AppText>
+            <AppText tone="number" style={styles.referenceHeroAmount}>{formatDashboardCurrency(availableBeforePayday)}</AppText>
+            <AppText style={styles.referenceMoneyCaption}>{availabilityCaption}</AppText>
 
             <Pressable
-              onPress={() => router.push("/(tabs)/flo" as any)}
+              accessibilityRole="button"
+              accessibilityLabel={`Ask Flo about ${algorithmSuite.stability.stageLabel}`}
+              onPress={openStabilityExplanation}
               style={({ pressed }) => [styles.referencePlanSnapshot, { opacity: pressed ? 0.84 : 1 }]}
             >
               <View style={styles.referencePlanFocusBlock}>
-                <AppText tone="label" style={styles.referencePlanLabel}>Focus</AppText>
-                <AppText tone="title" style={styles.referencePlanFocusTitle} numberOfLines={1}>{setupPersonalization.title}</AppText>
+                <AppText tone="label" style={styles.referencePlanLabel}>Current stage</AppText>
+                <AppText tone="title" style={styles.referencePlanFocusTitle} numberOfLines={1}>{algorithmSuite.stability.stageLabel}</AppText>
                 <View style={styles.referencePlanNextRow}>
                   <AppText tone="label" style={styles.referencePlanNextLabel}>Next move</AppText>
-                  <AppText style={styles.referencePlanNextText} numberOfLines={1}>{setupPersonalization.nextActionLabel}</AppText>
+                  <AppText style={styles.referencePlanNextText} numberOfLines={2}>{algorithmSuite.stability.nextAction}</AppText>
                 </View>
               </View>
               <View style={styles.referencePlanFloPill}>
@@ -1384,6 +1390,13 @@ export default function DashboardScreen() {
         </Pressable>
       </View>
 
+      <StabilityPathCard
+        progress={algorithmSuite.stability}
+        lowestForecastBalance={algorithmSuite.safeCushion.lowestBalance}
+        safetyFloor={settings.safety_floor}
+        onAskFlo={openStabilityExplanation}
+      />
+
       {settings.zeroBasedBudgetEnabled && (
         <Pressable
           accessibilityRole="button"
@@ -1421,7 +1434,8 @@ export default function DashboardScreen() {
         <View style={styles.referenceAlgoCarouselPanel}>
           <View style={styles.referenceAlgoHeaderRow}>
             <View style={{ flex: 1 }}>
-              <AppText tone="title" style={styles.referenceInsightTitle}>Algorithm Suite</AppText>
+              <AppText tone="title" style={styles.referenceInsightTitle}>Your plan, explained</AppText>
+              <AppText style={styles.referenceAlgoSubtitle}>Tap a card to see the numbers, reason, and next action.</AppText>
             </View>
             <View style={styles.referenceAlgoCountPill}>
               <AppText tone="number" style={styles.referenceAlgoCountActive}>{String(activeAlgorithmCardNumber).padStart(2, "0")}</AppText>
@@ -1656,7 +1670,7 @@ export default function DashboardScreen() {
         <Pressable style={styles.modalOverlay} onPress={() => setSafeCushionVisible(false)}>
           <Pressable style={[styles.actionSheet, { backgroundColor: c.card }]} onPress={() => {}}>
             <View style={[styles.sheetHandle, { backgroundColor: c.muted }]} />
-            <Text style={[styles.sheetTitle, { color: c.foreground }]}>Safe Cushion</Text>
+            <Text style={[styles.sheetTitle, { color: c.foreground }]}>Breathing Room</Text>
             <Text style={[styles.sheetSub, { color: c.mutedForeground }]}>
               The calm number: what is still safe after your plan protects the floor.
             </Text>
@@ -1700,7 +1714,7 @@ export default function DashboardScreen() {
             <Pressable
               onPress={() => {
                 setSafeCushionVisible(false);
-                openFloWithPrompt("What is my Safe Cushion and what can I safely do with it?");
+                openFloWithPrompt("What is my breathing room, how was it calculated, and what can I safely do with it?");
               }}
               style={({ pressed }) => [styles.flowScoreFloButton, { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 }]}
             >

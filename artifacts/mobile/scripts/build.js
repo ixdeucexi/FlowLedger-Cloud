@@ -23,7 +23,7 @@ function findWorkspaceRoot(startDir) {
 
 const workspaceRoot = findWorkspaceRoot(projectRoot);
 const basePath = (process.env.BASE_PATH || "/").replace(/\/+$/, "");
-const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+const expoCliPath = require.resolve("@expo/cli/build/bin/cli");
 
 function exitWithError(message) {
   console.error(message);
@@ -187,10 +187,9 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
   }
 
   metroProcess = spawn(
-    pnpmCommand,
+    process.execPath,
     [
-      "exec",
-      "expo",
+      expoCliPath,
       "start",
       "--no-dev",
       "--minify",
@@ -203,7 +202,6 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
       detached: false,
       cwd: projectRoot,
       env,
-      shell: process.platform === "win32",
     },
   );
 

@@ -20,6 +20,13 @@ export type SavingsGoalOption =
   | "debt_payoff"
   | "something_else";
 
+export type SetupStartingPoint =
+  | "first_budget"
+  | "switching_apps"
+  | "catching_up"
+  | "paycheck_to_paycheck"
+  | "building_room";
+
 export type MoneySetupKey =
   | "account"
   | "money"
@@ -39,6 +46,7 @@ export interface SetupPathItem {
 }
 
 export interface OnboardingPreferences {
+  startingPoint: SetupStartingPoint | null;
   help: SetupHelpOption[];
   goals: SetupGoalOption[];
   savingsGoal: SavingsGoalOption | null;
@@ -46,10 +54,19 @@ export interface OnboardingPreferences {
 }
 
 export const DEFAULT_ONBOARDING_PREFERENCES: OnboardingPreferences = {
+  startingPoint: null,
   help: [],
   goals: [],
   savingsGoal: null,
 };
+
+const STARTING_POINTS = new Set<SetupStartingPoint>([
+  "first_budget",
+  "switching_apps",
+  "catching_up",
+  "paycheck_to_paycheck",
+  "building_room",
+]);
 
 const HELP_OPTIONS = new Set<SetupHelpOption>([
   "track_spending",
@@ -87,6 +104,9 @@ export function normalizeOnboardingPreferences(value: unknown): OnboardingPrefer
     ? parsed.savingsGoal as SavingsGoalOption
     : null;
   return {
+    startingPoint: typeof parsed.startingPoint === "string" && STARTING_POINTS.has(parsed.startingPoint as SetupStartingPoint)
+      ? parsed.startingPoint as SetupStartingPoint
+      : null,
     help: normalizeArray(parsed.help, HELP_OPTIONS),
     goals: normalizeArray(parsed.goals, GOAL_OPTIONS),
     savingsGoal,
@@ -197,7 +217,7 @@ export function buildSetupCompletionMessage(preferences: OnboardingPreferences):
   const setupLabels = buildPersonalizedSetupKeys(preferences)
     .filter(key => key !== "finish")
     .map(key => getSetupPathItem(key).shortLabel.toLowerCase());
-  return `${focus} Once ${setupLabels.join(", ")} are in place, Flo can answer affordability, timing, and payoff questions from your real forecast.`;
+  return `${focus} Once ${setupLabels.join(", ")} are in place, your real forecast can show what is protected through payday, how many stability days you have, and the next action that helps most.`;
 }
 
 export function describeSetupPlan(preferences: OnboardingPreferences): string {
@@ -212,6 +232,24 @@ export function describeSetupPlan(preferences: OnboardingPreferences): string {
   if (preferences.help.includes("track_spending") || preferences.help.includes("create_budget")) {
     parts.push("spending and budget setup");
   }
-  if (parts.length === 0) return "I'll build the full forecast path: accounts, income, bills, debt, goals, and your safety cushion.";
-  return `I'll focus setup around ${parts.join(", ")} while still protecting your forecast.`;
+  const startingPoint = describeStartingPoint(preferences.startingPoint);
+  if (parts.length === 0) return `${startingPoint} I'll build the full forecast path: accounts, income, bills, debt, goals, and your safety floor.`;
+  return `${startingPoint} I'll focus setup around ${parts.join(", ")} while still protecting your forecast.`;
+}
+
+export function describeStartingPoint(startingPoint: SetupStartingPoint | null): string {
+  switch (startingPoint) {
+    case "first_budget":
+      return "I'll explain each step and start with only the money facts needed for your first useful plan.";
+    case "switching_apps":
+      return "I'll keep setup efficient and help you confirm imported or existing information instead of making you start over.";
+    case "catching_up":
+      return "I'll put overdue necessities and the next low-balance day first.";
+    case "paycheck_to_paycheck":
+      return "I'll focus first on reaching the next paycheck safely, then building protected days.";
+    case "building_room":
+      return "I'll focus on turning extra room into a one-month stability reserve.";
+    default:
+      return "I'll meet you where your money plan is today.";
+  }
 }

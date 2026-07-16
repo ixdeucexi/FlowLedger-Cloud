@@ -11,6 +11,7 @@ import {
 
 test("normalizes onboarding preferences safely", () => {
   const prefs = normalizeOnboardingPreferences({
+    startingPoint: "paycheck_to_paycheck",
     help: ["track_spending", "bad", "track_spending"],
     goals: ["pay_off_debt", "unknown"],
     savingsGoal: "emergency_fund",
@@ -18,6 +19,12 @@ test("normalizes onboarding preferences safely", () => {
   assert.deepEqual(prefs.help, ["track_spending"]);
   assert.deepEqual(prefs.goals, ["pay_off_debt"]);
   assert.equal(prefs.savingsGoal, "emergency_fund");
+  assert.equal(prefs.startingPoint, "paycheck_to_paycheck");
+});
+
+test("ignores an unknown starting point", () => {
+  const prefs = normalizeOnboardingPreferences({ startingPoint: "expert_mode" });
+  assert.equal(prefs.startingPoint, null);
 });
 
 test("asks the savings question only when savings is selected", () => {

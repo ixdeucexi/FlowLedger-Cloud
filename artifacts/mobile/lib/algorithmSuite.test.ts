@@ -69,8 +69,12 @@ test("builds Flow Score, Safe Cushion, and practical algorithm outputs", () => {
   assert.equal(suite.billPriority.nextBill?.name, "Phone");
   assert.match(suite.billPriority.summary, /Phone|bill/i);
   assert.match(suite.purchaseDecision.nextMove, /Flo|purchase|date/i);
-  assert.equal(suite.paydaySplit.dollars.bills, 1400);
+  assert.equal(suite.paydaySplit.dollars.bills, 900);
   assert.ok(suite.paydaySplit.dollars.debt >= 120);
+  assert.equal(
+    suite.paydaySplit.dollars.bills + suite.paydaySplit.dollars.debt + suite.paydaySplit.dollars.goals + suite.paydaySplit.dollars.savings + suite.paydaySplit.dollars.spending,
+    3000,
+  );
   assert.match(suite.paydaySplit.summary, /bills/i);
   assert.equal(suite.debtPayoff.nextDebtName, "Credit Card");
   assert.equal(suite.debtPayoff.status, "ready");
@@ -262,7 +266,7 @@ test("Extra Money Router protects current bills before routing leftover to debt"
   assert.match(suite.algorithmDetails.extraMoneyRouter.whyItMatters, /protect the floor first/i);
 });
 
-test("debt pressure uses monthly minimums instead of total balance", () => {
+test("debt standing uses monthly minimums instead of total balance", () => {
   const suite = buildAlgorithmSuite(baseInput({
     cashFlow: {
       monthlyIncome: 10000,
@@ -278,7 +282,7 @@ test("debt pressure uses monthly minimums instead of total balance", () => {
   }));
 
   assert.ok(suite.flowScore.score > 70);
-  assert.equal(suite.flowScore.breakdownItems.find(item => item.label === "Debt Pressure")?.value, "$500/mo");
+  assert.equal(suite.debtPayoff.totalMonthlyMinimum, 500);
   assert.ok(suite.flowScore.negativeFactors.every(factor => !/large part|500000/i.test(factor)));
 });
 
