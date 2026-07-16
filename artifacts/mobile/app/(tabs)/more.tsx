@@ -37,11 +37,6 @@ import { useColors } from "@/hooks/useColors";
 import { isCashFlowTransaction } from "@/lib/billMatching";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { parseStatementCsv } from "@/lib/accounts";
-import {
-  ALGORITHM_CATALOG,
-  type AlgorithmId,
-} from "@/lib/algorithmCatalog";
-import { loadDecisionHubSettings, readDecisionHubSettings, saveDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
 import { resetFloMemory } from "@/lib/flo";
 import { startLearningTour } from "@/lib/learningTour";
 import { confirmAction } from "@/lib/confirmAction";
@@ -52,7 +47,6 @@ import {
   householdRoleLabel,
 } from "@/lib/householdPermissions";
 import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
-import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 import {
   SETTINGS_SECTIONS,
@@ -105,8 +99,6 @@ const FONT_OPTIONS: { label: string; value: AppFontStyle; icon: string; desc: st
 ];
 
 const BACKUP_COMPLETE_KEY = "flowledger_backup_exported";
-type AlgorithmCatalogItem = typeof ALGORITHM_CATALOG[number];
-
 type SubscriptionDecision = "keep" | "not_subscription" | "cancelled" | "bill_created";
 
 type SubscriptionDecisionRow = {
@@ -384,13 +376,9 @@ export default function MoreScreen() {
   const [renameValue, setRenameValue] = useState("");
   const [safetyFloorText, setSafetyFloorText] = useState(settings.safety_floor.toString());
   const [forecastHorizonText, setForecastHorizonText] = useState(settings.forecast_horizon_months.toString());
-  const [decisionHubSettings, setDecisionHubSettings] = useState<DecisionHubSettings>(() => readDecisionHubSettings());
   const [onboardingPreferences, setOnboardingPreferences] = useState(() => readOnboardingPreferences());
-  const [selectedAlgorithm, setSelectedAlgorithm] = useState<AlgorithmCatalogItem | null>(null);
-  useBackDismiss(Boolean(selectedAlgorithm), () => setSelectedAlgorithm(null));
   const [legalDoc, setLegalDoc] = useState<"terms" | "privacy" | null>(null);
   useBackDismiss(Boolean(legalDoc), () => setLegalDoc(null));
-  const [showAlgorithmSuite, setShowAlgorithmSuite] = useState(false);
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>(() => readStoredSettingsSection());
   const [activeSettingsGroup, setActiveSettingsGroup] = useState<SettingsGroup["id"] | null>(() => {
     const storedSection = readStoredSettingsSection();
@@ -466,17 +454,6 @@ export default function MoreScreen() {
     setSafetyFloorText(settings.safety_floor.toString());
     setForecastHorizonText(settings.forecast_horizon_months.toString());
   }, [settings.safety_floor, settings.forecast_horizon_months]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setDecisionHubSettings(readDecisionHubSettings());
-    void loadDecisionHubSettings(user?.id).then(next => {
-      if (!cancelled) setDecisionHubSettings(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -788,27 +765,7 @@ export default function MoreScreen() {
     ]);
   };
 
-  const updateDecisionHubSetting = (next: Partial<DecisionHubSettings>) => {
-    const merged = { ...decisionHubSettings, ...next };
-    setDecisionHubSettings(merged);
-    void saveDecisionHubSettings(user?.id, merged).catch(() => undefined);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
-  const updateAlgorithmToggle = (algorithmId: AlgorithmId, enabled: boolean) => {
-    updateDecisionHubSetting({
-      algorithmToggles: {
-        ...decisionHubSettings.algorithmToggles,
-        [algorithmId]: enabled,
-      },
-    });
-  };
-
   const totalMonthlyIncome = getMonthlyIncome();
-  const setupPersonalization = useMemo(
-    () => buildSetupPersonalization(onboardingPreferences),
-    [onboardingPreferences],
-  );
-  const hasSetupAnswers = onboardingPreferences.help.length > 0 || onboardingPreferences.goals.length > 0 || Boolean(onboardingPreferences.savingsGoal);
   const setupSteps = [
     { key: "account", label: "What account should I track first?", detail: "Tell me about your checking, savings, or cash account so I know where your money starts.", done: accounts.some(account => account.is_active), action: "Answer" },
     { key: "money", label: "How much money is in that account today?", detail: "Give me the current balance and date so my forecast starts from the right number.", done: accounts.some(account => account.is_active && Math.abs(account.current_balance) > 0), action: "Answer" },
@@ -963,7 +920,6 @@ export default function MoreScreen() {
     review: attentionCountStatus(reviewTransactionCount, "Clear", "to review", "to review"),
     subscriptions: { label: `${subscriptions.length} found` },
     reports: { label: formatCountStatus(smartReminders.length, "reminder") },
-    algorithms: { label: decisionHubSettings.algorithmSuiteEnabled ? "On" : "Off" },
     setup: setupIsComplete
       ? { label: "Complete" }
       : { label: `${setupComplete}/${setupSteps.length} complete`, tone: "attention" },
@@ -974,7 +930,6 @@ export default function MoreScreen() {
     activeAccounts.length,
     backupExported,
     childProfiles.length,
-    decisionHubSettings.algorithmSuiteEnabled,
     goals.length,
     membershipStatusLabel,
     reviewTransactionCount,
@@ -1520,7 +1475,6 @@ export default function MoreScreen() {
           }}
           onBackToGroups={() => setActiveSettingsGroup(null)}
           onOpenSection={sectionId => {
-            if (sectionId === "algorithms") setShowAlgorithmSuite(true);
             openSettingsSection(sectionId);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           }}
@@ -1725,99 +1679,6 @@ export default function MoreScreen() {
           );
         })}
       </View>
-      </>}
-
-      {activeSettingsSection === "algorithms" && <>
-      <Pressable
-        onPress={() => {
-          setShowAlgorithmSuite(current => !current);
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        }}
-        style={({ pressed }) => [styles.settingsLauncher, { backgroundColor: c.card, borderColor: showAlgorithmSuite ? c.primary + "70" : c.border, opacity: pressed ? 0.82 : 1 }]}
-      >
-        <View style={[styles.dataIcon, { backgroundColor: c.primary + "18" }]}>
-          <Feather name="cpu" size={17} color={c.primary} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.switchLabel, { color: c.foreground }]}>Algorithm Suite</Text>
-          <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Focused tools for debt payoff, safer spending, paycheck planning, and extra-money decisions.</Text>
-        </View>
-        <Feather name={showAlgorithmSuite ? "chevron-up" : "chevron-down"} size={20} color={c.mutedForeground} />
-      </Pressable>
-
-      {showAlgorithmSuite && <>
-      <SLabel c={c} text="Algorithm Suite" />
-      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        <Pressable
-          onPress={() => updateDecisionHubSetting({ algorithmSuiteEnabled: !decisionHubSettings.algorithmSuiteEnabled })}
-          style={({ pressed }) => [styles.decisionSettingRow, { opacity: pressed ? 0.75 : 1 }]}
-        >
-          <View style={[styles.dataIcon, { backgroundColor: c.primary + "18" }]}>
-            <Feather name="cpu" size={17} color={c.primary} />
-          </View>
-          <View style={styles.switchInfo}>
-            <Text style={[styles.switchLabel, { color: c.foreground }]}>FlowLedger Algo</Text>
-            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>
-              Deterministic money guidance to protect your floor, route extra cash, and make better debt decisions.
-            </Text>
-          </View>
-          <View style={[styles.toggleTrack, { backgroundColor: decisionHubSettings.algorithmSuiteEnabled ? c.primary : c.muted }]}>
-            <View style={[styles.toggleKnob, { backgroundColor: "#fff", alignSelf: decisionHubSettings.algorithmSuiteEnabled ? "flex-end" : "flex-start" }]} />
-          </View>
-        </Pressable>
-
-        {hasSetupAnswers ? (
-          <View style={[styles.algorithmRecommendation, { borderColor: c.primary + "30", backgroundColor: c.primary + "10" }]}>
-            <View style={styles.algorithmRecommendationHeader}>
-              <Feather name="compass" size={14} color={c.primary} />
-              <Text style={[styles.algorithmRecommendationTitle, { color: c.foreground }]}>
-                Flo recommends for {setupPersonalization.title.toLowerCase()}
-              </Text>
-            </View>
-            <Text style={[styles.algorithmRecommendationText, { color: c.mutedForeground }]}>
-              {setupPersonalization.recommendedAlgorithms
-                .map(id => ALGORITHM_CATALOG.find(algorithm => algorithm.id === id)?.name ?? id)
-                .slice(0, 4)
-                .join(" • ")}
-            </Text>
-          </View>
-        ) : null}
-
-        <View style={[styles.algorithmList, { borderTopColor: c.border }]}>
-          {ALGORITHM_CATALOG.map(algorithm => {
-            const enabled = decisionHubSettings.algorithmSuiteEnabled && decisionHubSettings.algorithmToggles[algorithm.id] !== false;
-            return (
-              <Pressable
-                key={algorithm.id}
-                onPress={() => {
-                  setSelectedAlgorithm(algorithm);
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                }}
-                style={({ pressed }) => [styles.algorithmToggleRow, { borderTopColor: c.border, opacity: pressed ? 0.72 : 1 }]}
-              >
-                <View style={[styles.dataIcon, { backgroundColor: c.primary + "16" }]}>
-                  <Feather name={algorithm.icon as any} size={16} color={c.primary} />
-                </View>
-                <View style={styles.switchInfo}>
-                  <Text style={[styles.switchLabel, { color: c.foreground }]}>{algorithm.name}</Text>
-                </View>
-                <Pressable
-                  onPress={(event) => {
-                    event.stopPropagation();
-                    updateAlgorithmToggle(algorithm.id, !enabled);
-                  }}
-                  style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
-                >
-                  <View style={[styles.toggleTrack, { backgroundColor: enabled ? c.primary : c.muted }]}>
-                    <View style={[styles.toggleKnob, { backgroundColor: "#fff", alignSelf: enabled ? "flex-end" : "flex-start" }]} />
-                  </View>
-                </Pressable>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
-      </>}
       </>}
 
       {activeSettingsSection === "accounts" && <>
@@ -3048,41 +2909,6 @@ export default function MoreScreen() {
       </Modal>
 
       <Modal
-        visible={Boolean(selectedAlgorithm)}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setSelectedAlgorithm(null)}
-      >
-        <Pressable style={styles.infoOverlay} onPress={() => setSelectedAlgorithm(null)}>
-          <Pressable style={[styles.infoSheet, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => undefined}>
-            {selectedAlgorithm && (
-              <>
-                <View style={styles.infoSheetHeader}>
-                  <View style={[styles.infoSheetIcon, { backgroundColor: c.primary + "18" }]}>
-                    <Feather name={selectedAlgorithm.icon as any} size={20} color={c.primary} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.infoSheetEyebrow, { color: c.primary }]}>Algorithm</Text>
-                    <Text style={[styles.infoSheetTitle, { color: c.foreground }]}>{selectedAlgorithm.name}</Text>
-                  </View>
-                  <Pressable onPress={() => setSelectedAlgorithm(null)} style={[styles.infoCloseButton, { backgroundColor: c.muted }]}>
-                    <Feather name="x" size={18} color={c.mutedForeground} />
-                  </Pressable>
-                </View>
-                <Text style={[styles.infoSheetDesc, { color: c.mutedForeground }]}>{selectedAlgorithm.desc}</Text>
-                <Pressable
-                  onPress={() => setSelectedAlgorithm(null)}
-                  style={({ pressed }) => [styles.infoDoneButton, { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 }]}
-                >
-                  <Text style={[styles.infoDoneText, { color: c.primaryForeground }]}>Got it</Text>
-                </Pressable>
-              </>
-            )}
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      <Modal
         visible={Boolean(legalDoc)}
         transparent
         animationType="fade"
@@ -3205,7 +3031,6 @@ const styles = StyleSheet.create({
   scroller: { flex: 1 },
   content: { width: "100%", maxWidth: 760, alignSelf: "center", paddingHorizontal: 16 },
   settingsSectionIcon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
-  settingsLauncher: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 20, padding: 14, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.16, shadowRadius: 18, elevation: 4 },
   card: { padding: 16, marginBottom: 20, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", shadowColor: "#000", shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 22, elevation: 5 },
   planningModeIntro: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 18, marginBottom: 12 },
   planningModeList: { gap: 9 },
@@ -3352,15 +3177,6 @@ const styles = StyleSheet.create({
   switchInfo: { flex: 1, marginRight: 12 },
   switchLabel: { fontSize: 15, fontFamily: "Inter_500Medium" },
   switchDesc: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
-  decisionSettingRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  algorithmRecommendation: { borderWidth: 1, borderRadius: 16, padding: 12, marginTop: 14 },
-  algorithmRecommendationHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
-  algorithmRecommendationTitle: { flex: 1, fontSize: 13, fontFamily: "Inter_800ExtraBold" },
-  algorithmRecommendationText: { fontSize: 12, fontFamily: "Inter_600SemiBold", lineHeight: 17, marginTop: 7 },
-  toggleTrack: { width: 48, height: 28, borderRadius: 999, padding: 3, justifyContent: "center" },
-  toggleKnob: { width: 22, height: 22, borderRadius: 11 },
-  algorithmList: { borderTopWidth: 1, marginTop: 14, paddingTop: 2 },
-  algorithmToggleRow: { flexDirection: "row", alignItems: "center", gap: 12, borderTopWidth: 1, paddingTop: 12, marginTop: 12 },
   infoOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end", padding: 16 },
   infoSheet: { borderWidth: 1, borderRadius: 24, padding: 18, marginBottom: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.22, shadowRadius: 24, elevation: 12 },
   infoSheetHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },

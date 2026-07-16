@@ -29,18 +29,14 @@ export function defaultAlgorithmToggles(): Record<AlgorithmId, boolean> {
 }
 
 export function normalizeAlgorithmToggles(value: unknown): Record<AlgorithmId, boolean> {
-  const defaults = defaultAlgorithmToggles();
-  const parsed = value && typeof value === "object" ? value as Partial<Record<string, unknown>> : {};
-  ALGORITHM_CATALOG.forEach(algorithm => {
-    const legacyValue = algorithm.id === "extraMoneyRouter" ? parsed.savingsSweep : undefined;
-    defaults[algorithm.id] = (parsed[algorithm.id] ?? legacyValue) !== false;
-  });
-  return defaults;
+  void value;
+  return defaultAlgorithmToggles();
 }
 
 export function isAlgorithmEnabled(settings: AlgorithmSettingsShape, algorithmId: AlgorithmId): boolean {
-  if (!settings.algorithmSuiteEnabled) return false;
-  return settings.algorithmToggles[algorithmId] !== false;
+  void settings;
+  void algorithmId;
+  return true;
 }
 
 export function enabledAlgorithmCount(settings: AlgorithmSettingsShape): number {

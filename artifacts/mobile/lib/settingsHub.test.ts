@@ -22,7 +22,7 @@ test("settings hub places every destination in exactly one group", () => {
 test("settings hub preserves the intended group order", () => {
   assert.deepEqual(SETTINGS_GROUPS.map(group => group.sectionIds), [
     ["accounts", "plaid", "money", "goals", "children"],
-    ["review", "subscriptions", "reports", "algorithms"],
+    ["review", "subscriptions", "reports"],
     ["setup", "notifications", "appearance", "backup"],
     ["membership", "security", "help", "legal"],
   ]);

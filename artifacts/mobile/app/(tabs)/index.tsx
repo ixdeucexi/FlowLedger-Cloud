@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Animated, Image, Keyboard, Modal, NativeScrollEvent, NativeSyntheticEvent, PanResponder, Platform, Pressable,
+  Animated, Image, Keyboard, Modal, PanResponder, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -25,15 +25,11 @@ import { isCashFlowTransaction } from "@/lib/billMatching";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { applyCategoryBudgetMove, buildCategoryPlan, buildZeroBudgetSummary } from "@/lib/categoryPlanning";
 import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets as saveCategoryBudgetsRemote, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
-import { DECISION_HUB_SETTINGS_EVENT, loadDecisionHubSettings, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
+import { DEFAULT_DECISION_HUB_SETTINGS } from "@/lib/decisionHubSettings";
 import { buildDecisionHistory } from "@/lib/decisionHistory";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { transactionCategoryParts } from "@/lib/reviewCenter";
-import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { buildAlgorithmSuite, type AlgorithmInsight } from "@/lib/algorithmSuite";
-import { isAlgorithmEnabled, type AlgorithmId } from "@/lib/algorithmCatalog";
-import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
-import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
 
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const MONTH_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -124,7 +120,7 @@ export default function DashboardScreen() {
   const { user } = useAuth();
   const {
     bills, getPaidAmount, getBillMonthlyTotal, getMonthlyBills, selectedYear, setDashboardFilter,
-    getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getMonthlyIncome,
+    getMonthlyIncome,
     goals, addGoal, updateGoal, deleteGoal, checkGoalAffordability,
     getCashFlow, addBill, addTransaction, getDailyBalances, getTransactionsForMonth, settings,
     accounts, connectedBankAccounts, incomes, decisions, updateSettings, forecastConfidence,
@@ -153,7 +149,7 @@ export default function DashboardScreen() {
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
   const [categoryBudgetDrafts, setCategoryBudgetDrafts] = useState<Record<string, string>>({});
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [decisionHubSettings, setDecisionHubSettings] = useState<DecisionHubSettings>(() => readDecisionHubSettings());
+  const decisionHubSettings = DEFAULT_DECISION_HUB_SETTINGS;
   const [moveMoneyVisible, setMoveMoneyVisible] = useState(false);
   const [moveTargetCategory, setMoveTargetCategory] = useState<string | null>(null);
   const [moveSourceCategory, setMoveSourceCategory] = useState("");
@@ -161,12 +157,7 @@ export default function DashboardScreen() {
   const [moveError, setMoveError] = useState("");
   const [flowScoreVisible, setFlowScoreVisible] = useState(false);
   const [safeCushionVisible, setSafeCushionVisible] = useState(false);
-  const [selectedAlgorithmDetailId, setSelectedAlgorithmDetailId] = useState<AlgorithmId | null>(null);
-  const [activeAlgoCard, setActiveAlgoCard] = useState(0);
   const [startupAlertVisible, setStartupAlertVisible] = useState(false);
-  const [onboardingPreferences, setOnboardingPreferences] = useState(() => readOnboardingPreferences());
-  const algorithmCarouselRef = useRef<ScrollView | null>(null);
-  const algorithmSnapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startupAlertShownRef = useRef(false);
   const flowScoreSwipeResponder = useMemo(() => PanResponder.create({
     onMoveShouldSetPanResponder: (_event, gesture) => gesture.dy > 10 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
@@ -184,7 +175,6 @@ export default function DashboardScreen() {
   useBackDismiss(moveMoneyVisible, () => setMoveMoneyVisible(false));
   useBackDismiss(flowScoreVisible, () => setFlowScoreVisible(false));
   useBackDismiss(safeCushionVisible, () => setSafeCushionVisible(false));
-  useBackDismiss(Boolean(selectedAlgorithmDetailId), () => setSelectedAlgorithmDetailId(null));
   useBackDismiss(startupAlertVisible, () => setStartupAlertVisible(false));
 
   useFocusEffect(useCallback(() => {
@@ -193,12 +183,6 @@ export default function DashboardScreen() {
   }, []));
 
   // ── Hero card flip ──────────────────────────────────────────────────────────
-  useEffect(() => {
-    return () => {
-      if (algorithmSnapTimerRef.current) clearTimeout(algorithmSnapTimerRef.current);
-    };
-  }, []);
-
   const flipAnim   = useRef(new Animated.Value(0)).current;
   const [flipped, setFlipped] = useState(false);
 
@@ -210,16 +194,6 @@ export default function DashboardScreen() {
 
   const frontRotate = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] });
   const backRotate  = flipAnim.interpolate({ inputRange: [0, 1], outputRange: ["180deg", "360deg"] });
-
-  useEffect(() => {
-    let cancelled = false;
-    void loadOnboardingPreferences(user?.id).then(next => {
-      if (!cancelled) setOnboardingPreferences(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id]);
 
   const now          = new Date();
   const currentMonth = now.getMonth();
@@ -350,23 +324,6 @@ export default function DashboardScreen() {
     };
   }, [categoryBudgetKey, categoryBudgetScope, currentMonth, selectedYear]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const refreshDecisionHubSettings = () => {
-      setDecisionHubSettings(readDecisionHubSettings());
-      void loadDecisionHubSettings(user?.id).then(next => {
-        if (!cancelled) setDecisionHubSettings(next);
-      });
-    };
-    refreshDecisionHubSettings();
-    if (Platform.OS !== "web") return;
-    globalThis.addEventListener?.(DECISION_HUB_SETTINGS_EVENT, refreshDecisionHubSettings);
-    return () => {
-      cancelled = true;
-      globalThis.removeEventListener?.(DECISION_HUB_SETTINGS_EVENT, refreshDecisionHubSettings);
-    };
-  }, [user?.id]);
-
   const readCategoryBudgetMap = useCallback((month: number, year: number) => {
     return readCategoryBudgetCache(month, year, categoryBudgetScope);
   }, [categoryBudgetScope]);
@@ -473,7 +430,6 @@ export default function DashboardScreen() {
       .reduce((sum, transaction) => sum + transaction.amount, 0)
     : 0;
   const categoryDecisionAlert = useMemo(() => {
-    if (!decisionHubSettings.algorithmSuiteEnabled) return null;
     const over = categoryPlan
       .filter(row => row.remaining < -0.005)
       .sort((left, right) => left.remaining - right.remaining)[0];
@@ -502,7 +458,7 @@ export default function DashboardScreen() {
       detail: `$${Math.max(0, watch.remaining).toFixed(0)} left this month. Ask Flo before spending more.`,
       prompt: `How much do I have left for ${watch.category}?`,
     };
-  }, [categoryPlan, decisionHubSettings]);
+  }, [categoryPlan]);
 
   const openCategoryBudgetEditor = () => {
     const drafts: Record<string, string> = {};
@@ -752,69 +708,6 @@ export default function DashboardScreen() {
     : "";
   const breakdownText =
     `$${cashFlow.monthlyIncome.toFixed(0)} income − $${cashFlow.totalBillsDue.toFixed(0)} bills${txDisplay} = $${Math.abs(cashFlow.remaining).toFixed(0)} ${cashFlow.remaining >= 0 ? "left" : "short"}`;
-  const currentYear = now.getFullYear();
-  const paycheckPlan = useMemo(() => {
-    if (!isAlgorithmEnabled(decisionHubSettings, "paydaySplit")) return null;
-    const horizon = Math.max(2, Math.min(settings.forecast_horizon_months, 6));
-    const incomeEvents: { id?: string; name: string; amount: number; date: string }[] = [];
-    const billEvents: { id?: string; name: string; amount: number; dueDate: string }[] = [];
-    const balanceEvents: { date: string; balance: number }[] = [];
-
-    for (let i = 0; i < horizon; i += 1) {
-      const absoluteMonth = currentMonth + i;
-      const month = absoluteMonth % 12;
-      const year = currentYear + Math.floor(absoluteMonth / 12);
-
-      getIncomeOccurrencesInMonth(month, year).forEach(({ income, days, effectiveAmount }) => {
-        days.forEach(day => incomeEvents.push({
-          id: income.id,
-          name: income.name,
-          amount: effectiveAmount,
-          date: makeDateKey(year, month, day),
-        }));
-      });
-
-      getMonthlyBills(month, year).forEach(bill => {
-        const occurrences = getBillOccurrencesInMonth(bill, month, year);
-        if (!occurrences.length) return;
-        const monthlyTotal = getBillMonthlyTotal(bill, month, year);
-        const perOccurrence = monthlyTotal / occurrences.length;
-        let paidRemaining = getPaidAmount(bill.id, month, year);
-        occurrences.forEach(day => {
-          const appliedPaid = Math.min(perOccurrence, Math.max(0, paidRemaining));
-          paidRemaining = Math.max(0, paidRemaining - perOccurrence);
-          const remaining = Math.max(0, perOccurrence - appliedPaid);
-          if (remaining > 0.005) {
-            billEvents.push({
-              id: bill.id,
-              name: bill.name,
-              amount: remaining,
-              dueDate: makeDateKey(year, month, day),
-            });
-          }
-        });
-      });
-
-      getDailyBalances(month, year).forEach(day => {
-        balanceEvents.push({ date: makeDateKey(year, month, day.day), balance: day.balance });
-      });
-    }
-
-    return buildPaycheckPlan(incomeEvents, billEvents, balanceEvents, settings.safety_floor, todayIso);
-  }, [
-    currentMonth,
-    currentYear,
-    decisionHubSettings,
-    getBillMonthlyTotal,
-    getBillOccurrencesInMonth,
-    getDailyBalances,
-    getIncomeOccurrencesInMonth,
-    getMonthlyBills,
-    getPaidAmount,
-    settings.forecast_horizon_months,
-    settings.safety_floor,
-    todayIso,
-  ]);
   const decisionHistory = useMemo(
     () => buildDecisionHistory(decisions, todayIso, now.toISOString()),
     [decisions, todayIso, now],
@@ -934,7 +827,6 @@ export default function DashboardScreen() {
     today,
   ]);
   const nextWeekRisk = useMemo(() => {
-    if (!decisionHubSettings.algorithmSuiteEnabled) return null;
     const weekEndDate = new Date(now);
     weekEndDate.setDate(now.getDate() + 7);
     const weekEnd = `${weekEndDate.getFullYear()}-${String(weekEndDate.getMonth() + 1).padStart(2, "0")}-${String(weekEndDate.getDate()).padStart(2, "0")}`;
@@ -955,7 +847,7 @@ export default function DashboardScreen() {
       saferBillPrompt: "Which bill should I move?",
       reducePlanPrompt: "Which planned decisions should I reduce or postpone?",
     };
-  }, [decisionForecastDays, decisionHubSettings, now, settings.safety_floor, todayIso]);
+  }, [decisionForecastDays, now, settings.safety_floor, todayIso]);
   useEffect(() => {
     if (nextWeekRisk && !startupAlertShownRef.current) {
       startupAlertShownRef.current = true;
@@ -966,187 +858,10 @@ export default function DashboardScreen() {
   const openFloWithPrompt = useCallback((prompt: string) => {
     router.push({ pathname: "/(tabs)/flo", params: { prompt } } as any);
   }, [router]);
-  const setupPersonalization = useMemo(
-    () => buildSetupPersonalization(onboardingPreferences),
-    [onboardingPreferences],
-  );
-  const availableBeforePayday = paycheckPlan?.nextPaycheck
-    ? paycheckPlan.safeToSpend
-    : algorithmSuite.purchaseDecision.safeNowLimit;
-  const availabilityLabel = paycheckPlan?.nextPaycheck ? "Available before payday" : "Available after plans";
-  const availabilityCaption = paycheckPlan?.nextPaycheck
-    ? `After bills through ${formatShortDate(paycheckPlan.windowEnd)} and your $${settings.safety_floor.toFixed(0)} safety floor are protected.`
-    : "After this month's required money and your safety floor are protected.";
   const stabilityPrompt = `Explain my stability path. I have ${algorithmSuite.stability.protectedDays} protected days, $${algorithmSuite.stability.protectedAmount.toFixed(0)} of breathing room, and a $${algorithmSuite.stability.reserveTarget.toFixed(0)} one-month target. What is my single best next action?`;
   const openStabilityExplanation = useCallback(() => {
     openFloWithPrompt(stabilityPrompt);
   }, [openFloWithPrompt, stabilityPrompt]);
-  const algorithmCardWidth = isCommandWide ? 500 : Math.max(286, viewportWidth - 68);
-  const algorithmSnapInterval = algorithmCardWidth + 12;
-  const algorithmCards = useMemo(() => {
-    const safeTone = algoToneColor(algorithmSuite.safeCushion.status);
-    const gapStart = algorithmSuite.cashFlowGap.startDay;
-    const gapEnd = algorithmSuite.cashFlowGap.endDay;
-    const gapDateLabel = gapStart && gapEnd
-      ? gapStart === gapEnd
-        ? formatMonthDay(currentMonth, selectedYear, gapStart)
-        : `${formatMonthDay(currentMonth, selectedYear, gapStart)} to ${formatMonthDay(currentMonth, selectedYear, gapEnd)}`
-      : "No tight gap";
-    const cards = [
-      {
-        id: "flowScore",
-        settingId: "flowScore" as AlgorithmId,
-        title: "Flow Score",
-        value: `${algorithmSuite.flowScore.score} - ${algorithmSuite.flowScore.label}`,
-        detail: algorithmSuite.flowScore.topReason,
-        action: algorithmSuite.flowScore.topAction,
-        icon: "activity" as const,
-        color: "#a855f7",
-        prompt: `Why is my Flow Score ${algorithmSuite.flowScore.score}?`,
-      },
-      {
-        id: "safeCushion",
-        settingId: "safeCushion" as AlgorithmId,
-        title: "Breathing Room",
-        value: `$${algorithmSuite.safeCushion.amount.toFixed(0)}`,
-        detail: algorithmSuite.safeCushion.compactReason,
-        action: algorithmSuite.safeCushion.topAction,
-        icon: "shield" as const,
-        color: safeTone,
-        prompt: "Can you explain my breathing room, show the calculation, and tell me what to protect first?",
-      },
-      {
-        id: "purchaseDecision",
-        settingId: "purchaseDecision" as AlgorithmId,
-        title: "Purchase Check",
-        value: `$${algorithmSuite.purchaseDecision.safeNowLimit.toFixed(0)} safe now`,
-        detail: algorithmSuite.purchaseDecision.detail,
-        action: algorithmSuite.purchaseDecision.nextMove,
-        icon: "shopping-bag" as const,
-        color: "#22d3ee",
-        prompt: "Can you explain my Purchase Decision and help me find the safest way to buy something?",
-      },
-      {
-        id: "billPriority",
-        settingId: "billPriority" as AlgorithmId,
-        title: "Next Bill",
-        value: algorithmSuite.billPriority.nextBill?.name ?? "All clear",
-        detail: algorithmSuite.billPriority.summary,
-        action: algorithmSuite.billPriority.nextMove,
-        icon: "file-text" as const,
-        color: "#fbbf24",
-        prompt: "Flo, explain my Bill Priority card. Which bill should I handle first, why is it first, and what safer action should I take?",
-      },
-      {
-        id: "cashFlowGap",
-        settingId: "cashFlowGap" as AlgorithmId,
-        title: "Tightest Stretch",
-        value: gapDateLabel,
-        detail: algorithmSuite.cashFlowGap.detail,
-        action: `Low point: $${algorithmSuite.cashFlowGap.lowestBalance.toFixed(0)}`,
-        icon: "clock" as const,
-        color: "#38bdf8",
-        prompt: "Where is my tightest cash-flow stretch, and how should I protect it?",
-      },
-      {
-        id: "debtPayoff",
-        settingId: "debtPayoff" as AlgorithmId,
-        title: "Debt Payoff",
-        value: algorithmSuite.debtPayoff.nextDebtName ?? "No debt target",
-        detail: algorithmSuite.debtPayoff.detail,
-        action: algorithmSuite.debtPayoff.nextMove,
-        icon: "trending-down" as const,
-        color: "#fb7185",
-        prompt: "Can you explain my debt payoff target and the next clean move?",
-      },
-      {
-        id: "paydaySplit",
-        settingId: "paydaySplit" as AlgorithmId,
-        title: "Paycheck Plan",
-        value: "Next paycheck",
-        detail: algorithmSuite.paydaySplit.summary,
-        action: `Bills ${algorithmSuite.paydaySplit.bills.toFixed(0)}% / Debt ${algorithmSuite.paydaySplit.debt.toFixed(0)}% / Savings ${algorithmSuite.paydaySplit.savings.toFixed(0)}%`,
-        icon: "git-branch" as const,
-        color: "#818cf8",
-        prompt: "How should my next paycheck be split so I can stop living paycheck to paycheck?",
-      },
-      {
-        id: "spendingLimit",
-        settingId: "spendingLimit" as AlgorithmId,
-        title: "Spending Pace",
-        value: `$${algorithmSuite.spendingLimit.daily.toFixed(0)}/day`,
-        detail: algorithmSuite.spendingLimit.detail,
-        action: `$${algorithmSuite.spendingLimit.weekly.toFixed(0)} weekly limit`,
-        icon: "sliders" as const,
-        color: "#60a5fa",
-        prompt: "What can I safely spend daily and weekly without breaking the plan?",
-      },
-      {
-        id: "extraMoneyRouter",
-        settingId: "extraMoneyRouter" as AlgorithmId,
-        title: "Next Dollar",
-        value: `$${algorithmSuite.extraMoneyRouter.amount.toFixed(0)}`,
-        detail: algorithmSuite.extraMoneyRouter.detail,
-        action: algorithmSuite.extraMoneyRouter.nextMove,
-        icon: "corner-up-right" as const,
-        color: "#34d399",
-        prompt: "Where should my extra money go safely?",
-      },
-      {
-        id: "monthly-health",
-        title: "Monthly Health",
-        value: `${algorithmSuite.monthlyHealth.grade} - ${algorithmSuite.monthlyHealth.score}`,
-        detail: algorithmSuite.monthlyHealth.summary,
-        action: algorithmSuite.forecastConfidence.reason,
-        icon: "bar-chart-2" as const,
-        color: "#8b5cf6",
-        prompt: "Review my monthly health and tell me the cleanest next move.",
-      },
-    ];
-    const focusOrder = new Map(setupPersonalization.recommendedAlgorithms.map((id, index) => [id, index]));
-    return cards
-      .filter((card): card is typeof card & { settingId: AlgorithmId } => Boolean(card.settingId))
-      .filter(card => settings.debtPayoffEnabled || card.settingId !== "debtPayoff")
-      .filter(card => isAlgorithmEnabled(decisionHubSettings, card.settingId))
-      .sort((left, right) => {
-        const leftFocus = focusOrder.get(left.settingId) ?? 99;
-        const rightFocus = focusOrder.get(right.settingId) ?? 99;
-        if (leftFocus !== rightFocus) return leftFocus - rightFocus;
-        return cards.findIndex(card => card.id === left.id) - cards.findIndex(card => card.id === right.id);
-      });
-  }, [algorithmSuite, currentMonth, decisionHubSettings, settings.debtPayoffEnabled, setupPersonalization.recommendedAlgorithms]);
-  const activeAlgorithmCardNumber = algorithmCards.length ? Math.min(activeAlgoCard + 1, algorithmCards.length) : 0;
-  const selectedAlgorithmDetail = selectedAlgorithmDetailId ? algorithmSuite.algorithmDetails[selectedAlgorithmDetailId] : null;
-  const selectedAlgorithmCard = selectedAlgorithmDetailId ? algorithmCards.find(card => card.settingId === selectedAlgorithmDetailId) : null;
-  useEffect(() => {
-    if (algorithmCards.length === 0 && activeAlgoCard !== 0) {
-      setActiveAlgoCard(0);
-    } else if (algorithmCards.length > 0 && activeAlgoCard >= algorithmCards.length) {
-      setActiveAlgoCard(algorithmCards.length - 1);
-    }
-  }, [activeAlgoCard, algorithmCards.length]);
-  const syncActiveAlgorithmCard = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const index = Math.round(event.nativeEvent.contentOffset.x / Math.max(1, algorithmSnapInterval));
-    const nextIndex = Math.max(0, Math.min(algorithmCards.length - 1, index));
-    setActiveAlgoCard(current => current === nextIndex ? current : nextIndex);
-  };
-  const snapAlgorithmCarouselToNearest = (offsetX: number, animated = true) => {
-    const index = Math.round(offsetX / Math.max(1, algorithmSnapInterval));
-    const nextIndex = Math.max(0, Math.min(algorithmCards.length - 1, index));
-    setActiveAlgoCard(current => current === nextIndex ? current : nextIndex);
-    algorithmCarouselRef.current?.scrollTo({
-      x: nextIndex * algorithmSnapInterval,
-      animated,
-    });
-  };
-  const scheduleAlgorithmCarouselSnap = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const offsetX = event.nativeEvent.contentOffset.x;
-    syncActiveAlgorithmCard(event);
-    if (algorithmSnapTimerRef.current) clearTimeout(algorithmSnapTimerRef.current);
-    algorithmSnapTimerRef.current = setTimeout(() => {
-      snapAlgorithmCarouselToNearest(offsetX, true);
-    }, 110);
-  };
   return (
     <ScrollView
       style={[styles.screen, styles.dashboardStage]}
@@ -1337,22 +1052,6 @@ export default function DashboardScreen() {
             </View>
             <AppText tone="label" style={styles.referenceHeroLabel}>Checking balance</AppText>
             <AppText tone="number" style={styles.referenceHeroAmount}>{formatDashboardCurrency(checkingAccountBalance)}</AppText>
-            <AppText style={styles.referenceMoneyCaption}>
-              {connectedCheckingAccounts.length
-                ? `Current balance across ${connectedCheckingAccounts.length} connected checking account${connectedCheckingAccounts.length === 1 ? "" : "s"}.`
-                : "Current balance across active checking accounts."}
-            </AppText>
-
-            <View style={styles.referenceAvailableStrip}>
-              <View style={styles.referenceAvailableIcon}>
-                <Feather name="shield" size={14} color="#4ade80" />
-              </View>
-              <View style={styles.referenceAvailableCopy}>
-                <AppText tone="label" style={styles.referenceAvailableLabel}>{availabilityLabel}</AppText>
-                <AppText style={styles.referenceAvailableCaption} numberOfLines={1}>{availabilityCaption}</AppText>
-              </View>
-              <AppText tone="number" style={styles.referenceAvailableAmount}>{formatDashboardCurrency(availableBeforePayday)}</AppText>
-            </View>
 
             <Pressable
               accessibilityRole="button"
@@ -1473,73 +1172,6 @@ export default function DashboardScreen() {
         </Pressable>
       )}
 
-      <View style={[styles.referenceLowerGrid, isCommandWide && styles.referenceLowerGridWide]}>
-        <View style={styles.referenceAlgoCarouselPanel}>
-          <View style={styles.referenceAlgoHeaderRow}>
-            <View style={{ flex: 1 }}>
-              <AppText tone="title" style={styles.referenceInsightTitle}>Your plan, explained</AppText>
-              <AppText style={styles.referenceAlgoSubtitle}>Tap a card to see the numbers, reason, and next action.</AppText>
-            </View>
-            <View style={styles.referenceAlgoCountPill}>
-              <AppText tone="number" style={styles.referenceAlgoCountActive}>{String(activeAlgorithmCardNumber).padStart(2, "0")}</AppText>
-              <AppText style={styles.referenceAlgoCountTotal}>/{String(algorithmCards.length).padStart(2, "0")}</AppText>
-            </View>
-          </View>
-
-          <ScrollView
-            ref={algorithmCarouselRef}
-            style={styles.referenceAlgoScroll}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            decelerationRate="fast"
-            snapToInterval={algorithmSnapInterval}
-            snapToAlignment="start"
-            disableIntervalMomentum
-            scrollEventThrottle={16}
-            contentContainerStyle={styles.referenceAlgoScrollContent}
-            onScroll={scheduleAlgorithmCarouselSnap}
-            onScrollEndDrag={(event) => snapAlgorithmCarouselToNearest(event.nativeEvent.contentOffset.x)}
-            onMomentumScrollEnd={(event) => snapAlgorithmCarouselToNearest(event.nativeEvent.contentOffset.x)}
-          >
-            {algorithmCards.map(card => (
-              <Pressable
-                key={card.id}
-                onPress={() => setSelectedAlgorithmDetailId(card.settingId)}
-                style={({ pressed }) => [
-                  styles.referenceAlgorithmCard,
-                  {
-                    width: algorithmCardWidth,
-                    borderColor: `${card.color}55`,
-                    opacity: pressed ? 0.84 : 1,
-                  },
-                ]}
-              >
-                <View style={[styles.referenceAlgorithmIcon, { backgroundColor: `${card.color}22` }]}>
-                  <Feather name={card.icon} size={20} color={card.color} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <AppText tone="label" style={styles.referenceAlgorithmTitle}>{card.title}</AppText>
-                  <AppText tone="title" style={[styles.referenceAlgorithmValue, { color: card.color }]}>{card.value}</AppText>
-                  <AppText style={styles.referenceAlgorithmDetail}>{card.detail}</AppText>
-                  <AppText style={styles.referenceAlgorithmAction}>{card.action}</AppText>
-                </View>
-                <Feather name="message-circle" size={16} color="rgba(226,232,240,0.72)" />
-              </Pressable>
-            ))}
-          </ScrollView>
-
-          <View style={styles.referenceAlgoProgressTrack}>
-            <View
-              style={[
-                styles.referenceAlgoProgressFill,
-                { width: `${Math.round(((activeAlgoCard + 1) / Math.max(algorithmCards.length, 1)) * 100)}%` as any },
-              ]}
-            />
-          </View>
-        </View>
-
-      </View>
-
       {/* ── HERO: flip card — front = Balance Today, back = Savings ── */}
 
       {/* ── Stat Pill Cards ── */}
@@ -1571,75 +1203,6 @@ export default function DashboardScreen() {
 
       {/* ── Upcoming Bills ── */}
 
-
-      {/* ── "What can I do?" modal ── */}
-      <Modal
-        visible={Boolean(selectedAlgorithmDetail)}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setSelectedAlgorithmDetailId(null)}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => setSelectedAlgorithmDetailId(null)}>
-          <Pressable style={[styles.actionSheet, { backgroundColor: c.card }]} onPress={() => {}}>
-            <View style={[styles.sheetHandle, { backgroundColor: c.muted }]} />
-            {selectedAlgorithmDetail ? (
-              <>
-                <View style={styles.flowScoreSheetHeader}>
-                  <View style={[
-                    styles.algoIconCircle,
-                    {
-                      backgroundColor: algoToneColor(selectedAlgorithmDetail.status) + "18",
-                      borderColor: algoToneColor(selectedAlgorithmDetail.status) + "35",
-                    },
-                  ]}>
-                    <Feather name={(selectedAlgorithmCard?.icon ?? "activity") as any} size={22} color={algoToneColor(selectedAlgorithmDetail.status)} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.sheetTitle, { color: c.foreground }]}>{selectedAlgorithmDetail.headline}</Text>
-                    <Text style={[styles.sheetSub, { color: c.mutedForeground }]}>{selectedAlgorithmCard?.title ?? "Algorithm detail"}</Text>
-                  </View>
-                </View>
-
-                <View style={[styles.flowScoreNextMove, { backgroundColor: c.primary + "12", borderColor: c.primary + "2f" }]}>
-                  <Text style={[styles.flowScoreColumnTitle, { color: c.primary }]}>What I found</Text>
-                  <Text style={[styles.flowScoreFactor, { color: c.foreground }]}>{selectedAlgorithmDetail.whatIFound}</Text>
-                </View>
-
-                <View style={[styles.flowScoreNextMove, { backgroundColor: c.muted, borderColor: c.border }]}>
-                  <Text style={[styles.flowScoreColumnTitle, { color: c.warning }]}>Why this matters</Text>
-                  <Text style={[styles.flowScoreFactor, { color: c.foreground }]}>{selectedAlgorithmDetail.whyItMatters}</Text>
-                </View>
-
-                <View style={[styles.flowScoreNextMove, { backgroundColor: algoToneColor(selectedAlgorithmDetail.status) + "12", borderColor: algoToneColor(selectedAlgorithmDetail.status) + "35" }]}>
-                  <Text style={[styles.flowScoreColumnTitle, { color: algoToneColor(selectedAlgorithmDetail.status) }]}>What I’d do next</Text>
-                  <Text style={[styles.flowScoreFactor, { color: c.foreground }]}>{selectedAlgorithmDetail.nextAction}</Text>
-                </View>
-
-                <View style={styles.flowScoreBreakdown}>
-                  {selectedAlgorithmDetail.sourceNumbers.map(item => (
-                    <View key={item.label} style={[styles.flowScoreBreakdownRow, { borderTopColor: c.border }]}>
-                      <Text style={[styles.flowScoreBreakdownLabel, { color: c.mutedForeground }]}>{item.label}</Text>
-                      <Text style={[styles.flowScoreBreakdownValue, { color: algoToneColor(item.tone === "watch" ? "watch" : item.tone === "risk" ? "risk" : item.tone === "safe" ? "safe" : "info") }]}>{item.value}</Text>
-                    </View>
-                  ))}
-                </View>
-
-                <Pressable
-                  onPress={() => {
-                    const prompt = selectedAlgorithmDetail.floPrompt;
-                    setSelectedAlgorithmDetailId(null);
-                    openFloWithPrompt(prompt);
-                  }}
-                  style={({ pressed }) => [styles.flowScoreFloButton, { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 }]}
-                >
-                  <Feather name="message-circle" size={16} color={c.primaryForeground} />
-                  <Text style={[styles.flowScoreFloText, { color: c.primaryForeground }]}>Ask Flo about this</Text>
-                </Pressable>
-              </>
-            ) : null}
-          </Pressable>
-        </Pressable>
-      </Modal>
 
       <Modal
         visible={flowScoreVisible}
@@ -2430,13 +1993,6 @@ const styles = StyleSheet.create({
   referenceMoneyHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   referenceFlipButton: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, borderWidth: 1, borderColor: "rgba(196,181,253,0.28)", backgroundColor: "rgba(124,58,237,0.18)", paddingHorizontal: 9, paddingVertical: 6 },
   referenceFlipButtonText: { color: "#c4b5fd", fontSize: 9, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.5 },
-  referenceMoneyCaption: { color: "#94a3b8", fontSize: 10, fontFamily: "Inter_500Medium", lineHeight: 14, marginTop: 1 },
-  referenceAvailableStrip: { marginTop: 8, minHeight: 48, borderRadius: 16, borderWidth: 1, borderColor: "rgba(74,222,128,0.24)", backgroundColor: "rgba(20,83,45,0.18)", paddingHorizontal: 10, paddingVertical: 7, flexDirection: "row", alignItems: "center", gap: 8 },
-  referenceAvailableIcon: { width: 30, height: 30, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(34,197,94,0.14)" },
-  referenceAvailableCopy: { flex: 1, minWidth: 0 },
-  referenceAvailableLabel: { color: "#bbf7d0", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7, textTransform: "uppercase" },
-  referenceAvailableCaption: { color: "#94a3b8", fontSize: 8, lineHeight: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
-  referenceAvailableAmount: { color: "#f8fafc", fontSize: 17, lineHeight: 21, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.4 },
   referenceSavingsAmount: { color: "#6ee7b7", fontSize: 34, lineHeight: 38, letterSpacing: -1.4 },
   referenceGoalsHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8, marginBottom: 5 },
   referenceGoalsTitle: { color: "#f8fafc", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
@@ -2486,28 +2042,8 @@ const styles = StyleSheet.create({
   referenceScoreUnderline: { width: 64, height: 3, borderRadius: 3, backgroundColor: "#22c55e", marginTop: 4, marginBottom: 4 },
   referenceScoreReason: { color: "#94a3b8", maxWidth: 220, textAlign: "center", fontSize: 10, fontFamily: "Inter_600SemiBold", lineHeight: 13 },
   referenceScoreTapHint: { color: "#60a5fa", fontSize: 9, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
-  referenceLowerGrid: { flex: 1, gap: 8, marginBottom: 0, minHeight: 190 },
-  referenceLowerGridWide: { flexDirection: "row" },
-  referenceAlgoCarouselPanel: { flex: 1, position: "relative", borderRadius: 22, borderWidth: 1, borderColor: "rgba(168,85,247,0.22)", backgroundColor: "rgba(15,23,42,0.72)", padding: 12, paddingBottom: 58, shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.22, shadowRadius: 26, elevation: 8 },
-  referenceAlgoHeaderRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 7 },
-  referenceAlgoSubtitle: { color: "#94a3b8", fontSize: 10, fontFamily: "Inter_600SemiBold", lineHeight: 14, marginTop: 1 },
-  referenceAlgoCount: { color: "#a78bfa", fontSize: 12, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
-  referenceAlgoCountPill: { minWidth: 60, height: 28, borderRadius: 999, paddingHorizontal: 9, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(37,99,235,0.16)", borderWidth: 1, borderColor: "rgba(96,165,250,0.28)" },
-  referenceAlgoCountActive: { color: "#dbeafe", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
-  referenceAlgoCountTotal: { color: "#818cf8", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
-  referenceAlgoScroll: { flex: 1, marginBottom: 8 },
-  referenceAlgoScrollContent: { flexGrow: 1, gap: 12, paddingRight: 4 },
-  referenceAlgorithmCard: { height: "100%", minHeight: 124, borderRadius: 18, borderWidth: 1, backgroundColor: "rgba(2,6,23,0.62)", padding: 12, flexDirection: "row", gap: 10, alignItems: "flex-start" },
-  referenceAlgorithmIcon: { width: 38, height: 38, borderRadius: 14, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(226,232,240,0.08)" },
-  referenceAlgorithmTitle: { color: "#e2e8f0", fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.8, textTransform: "uppercase" },
-  referenceAlgorithmValue: { fontSize: 21, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
-  referenceAlgorithmDetail: { color: "#cbd5e1", fontSize: 12, fontFamily: "Inter_600SemiBold", lineHeight: 16, marginTop: 2 },
-  referenceAlgorithmAction: { color: "#a78bfa", fontSize: 11, fontFamily: "Inter_800ExtraBold", marginTop: 5 },
-  referenceAlgoProgressTrack: { position: "absolute", left: 12, right: 12, bottom: 46, height: 7, borderRadius: 999, overflow: "hidden", backgroundColor: "rgba(168,85,247,0.22)" },
-  referenceAlgoProgressFill: { height: "100%", borderRadius: 999, backgroundColor: "#8b5cf6", shadowColor: "#a855f7", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.75, shadowRadius: 8 },
   referenceInsightCard: { flex: 1.45, minHeight: 130, borderRadius: 24, borderWidth: 1, borderColor: "rgba(168,85,247,0.22)", backgroundColor: "rgba(15,23,42,0.72)", padding: 16, flexDirection: "row", alignItems: "center", gap: 12, shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.22, shadowRadius: 26 },
   referenceInsightIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.28)" },
-  referenceInsightTitle: { color: "#d8b4fe", fontSize: 14, fontFamily: "Inter_800ExtraBold", marginBottom: 6 },
   referenceInsightText: { color: "#f8fafc", fontSize: 13, fontFamily: "Inter_600SemiBold", lineHeight: 18 },
   referenceInsightLink: { color: "#c084fc", fontSize: 12, fontFamily: "Inter_800ExtraBold", marginTop: 8 },
   referenceMiniChart: { flexDirection: "row", alignItems: "flex-end", gap: 4, height: 82, width: 90 },
@@ -2547,7 +2083,6 @@ const styles = StyleSheet.create({
   algoSuiteCard: { borderRadius: 30, padding: 15, marginBottom: 12, backgroundColor: "rgba(2,6,23,0.72)", borderWidth: 1, borderColor: "rgba(168,85,247,0.24)", shadowColor: "#38bdf8", shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.22, shadowRadius: 26, elevation: 9 },
   algoSuiteHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
   algoScoreRing: { width: 68, height: 68, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.24)", borderWidth: 1, borderColor: "rgba(34,211,238,0.42)" },
-  algoIconCircle: { width: 58, height: 58, borderRadius: 20, alignItems: "center", justifyContent: "center", borderWidth: 1 },
   algoScoreValue: { color: "#f8fafc", fontSize: 24, fontFamily: "Inter_800ExtraBold", lineHeight: 27 },
   algoScoreLabel: { color: "#93c5fd", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 1 },
   algoEyebrow: { color: "#38bdf8", fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.1, marginBottom: 2 },
@@ -2650,23 +2185,6 @@ const styles = StyleSheet.create({
   monthlyReviewActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
   monthlyReviewAction: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 8 },
   monthlyReviewActionText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
-  paycheckPlanCard: { borderWidth: 1, borderRadius: 16, padding: 14, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
-  paycheckPlanHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
-  paycheckPlanIcon: { width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center" },
-  paycheckPlanTitle: { fontSize: 16, fontFamily: "Inter_700Bold" },
-  paycheckPlanSafe: { fontSize: 23, fontFamily: "Inter_800ExtraBold" },
-  paycheckPlanDesc: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 10 },
-  paycheckPlanStats: { flexDirection: "row", gap: 8, marginTop: 12 },
-  paycheckPlanStatBox: { flex: 1, borderRadius: 12, padding: 10 },
-  paycheckPlanStatLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 },
-  paycheckPlanStatValue: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
-  paycheckPlanBills: { borderTopWidth: 1, marginTop: 12, paddingTop: 10, gap: 7 },
-  paycheckPlanBillRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  paycheckPlanBillName: { flex: 1, fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  paycheckPlanBillAmount: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
-  paycheckPlanActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
-  paycheckPlanAction: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
-  paycheckPlanActionText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   whatBtn:     { flexDirection: "row", alignItems: "center", gap: 12, padding: 16, marginBottom: 14, borderWidth: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
   whatBtnIcon: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   whatBtnText: { flex: 1, fontSize: 16, fontFamily: "Inter_700Bold" },

@@ -3,7 +3,6 @@ export type SettingsSectionId =
   | "membership"
   | "setup"
   | "appearance"
-  | "algorithms"
   | "accounts"
   | "plaid"
   | "notifications"
@@ -47,7 +46,6 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
   { id: "review", label: "Review Center", description: "Resolve activity that needs your attention.", icon: "check-square" },
   { id: "subscriptions", label: "Subscriptions", description: "Review recurring charges and price changes.", icon: "repeat" },
   { id: "reports", label: "Reports & insights", description: "See spending, debt, goals, and recent changes.", icon: "bar-chart-2" },
-  { id: "algorithms", label: "Algorithm Suite", description: "Choose which money engines are active.", icon: "cpu" },
   { id: "setup", label: "Flo setup", description: "Review setup progress and replay the Demo.", icon: "message-circle" },
   { id: "notifications", label: "Notifications", description: "Private alerts for posted bank transactions.", icon: "bell" },
   { id: "appearance", label: "Appearance", description: "Theme, text style, motion, and effects.", icon: "moon" },
@@ -60,7 +58,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
 
 export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
   { id: "money", label: "Manage your money", sectionIds: ["accounts", "plaid", "money", "goals", "children"] },
-  { id: "insights", label: "Review & insights", sectionIds: ["review", "subscriptions", "reports", "algorithms"] },
+  { id: "insights", label: "Review & insights", sectionIds: ["review", "subscriptions", "reports"] },
   { id: "preferences", label: "App preferences", sectionIds: ["setup", "notifications", "appearance", "backup"] },
   { id: "account", label: "Account & support", sectionIds: ["membership", "security", "help", "legal"] },
 ] as const;

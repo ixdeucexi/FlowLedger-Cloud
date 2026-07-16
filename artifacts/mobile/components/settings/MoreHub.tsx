@@ -17,7 +17,7 @@ const GROUP_PRESENTATION: Record<SettingsGroup["id"], {
   description: string;
 }> = {
   money: { icon: "dollar-sign", description: "Accounts, bank sync, plans, goals, and child money." },
-  insights: { icon: "bar-chart-2", description: "Reviews, subscriptions, reports, and algorithms." },
+  insights: { icon: "bar-chart-2", description: "Reviews, subscriptions, and reports." },
   preferences: { icon: "sliders", description: "Flo setup, appearance, notifications, and data." },
   account: { icon: "user", description: "Membership, security, support, and legal." },
 };

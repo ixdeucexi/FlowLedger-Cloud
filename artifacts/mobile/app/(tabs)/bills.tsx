@@ -24,7 +24,7 @@ import { buildAlgorithmSuite } from "@/lib/algorithmSuite";
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { sortDebtsLeastToGreatest } from "@/lib/debtOrder";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
-import { DECISION_HUB_SETTINGS_EVENT, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
+import { DEFAULT_DECISION_HUB_SETTINGS } from "@/lib/decisionHubSettings";
 import { isAlgorithmEnabled } from "@/lib/algorithmCatalog";
 import { loadCategoryBudgets } from "@/lib/categoryBudgetStore";
 
@@ -69,7 +69,7 @@ export default function BillsScreen() {
   const [snowballModalVisible, setSnowballModalVisible] = useState(false);
   const [snowballAmount, setSnowballAmount] = useState("");
   const [snowballPreview, setSnowballPreview] = useState<SnowballProjectionResult | null>(null);
-  const [decisionHubSettings, setDecisionHubSettings] = useState<DecisionHubSettings>(() => readDecisionHubSettings());
+  const decisionHubSettings = DEFAULT_DECISION_HUB_SETTINGS;
   const [dismissedBillPromptKey, setDismissedBillPromptKey] = useState<string | null>(null);
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
 
@@ -79,13 +79,6 @@ export default function BillsScreen() {
       setDashboardFilter(null);
     }
   }, [dashboardFilter]);
-
-  useEffect(() => {
-    if (Platform.OS !== "web") return;
-    const refresh = () => setDecisionHubSettings(readDecisionHubSettings());
-    globalThis.addEventListener?.(DECISION_HUB_SETTINGS_EVENT, refresh);
-    return () => globalThis.removeEventListener?.(DECISION_HUB_SETTINGS_EVENT, refresh);
-  }, []);
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
 

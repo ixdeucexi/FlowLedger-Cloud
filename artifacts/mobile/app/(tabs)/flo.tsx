@@ -69,7 +69,7 @@ import { buildDecisionHistory, type DecisionHistoryItem } from "@/lib/decisionHi
 import { buildDecisionRiskAlerts } from "@/lib/decisionRisk";
 import { applyCategoryBudgetMove, buildCategoryPlan } from "@/lib/categoryPlanning";
 import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
-import { DECISION_HUB_SETTINGS_EVENT, loadDecisionHubSettings, readDecisionHubSettings, type DecisionHubSettings } from "@/lib/decisionHubSettings";
+import { DEFAULT_DECISION_HUB_SETTINGS } from "@/lib/decisionHubSettings";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { buildAlgorithmSuite } from "@/lib/algorithmSuite";
 import { isAlgorithmEnabled } from "@/lib/algorithmCatalog";
@@ -116,7 +116,7 @@ export default function FloScreen() {
   const [billChangeByMessageId, setBillChangeByMessageId] = useState<Record<string, FloRecurringBillChangeResult>>({});
   const [billChangeState, setBillChangeState] = useState<Record<string, "idle" | "saving" | "saved" | "failed">>({});
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
-  const [decisionHubSettings, setDecisionHubSettings] = useState<DecisionHubSettings>(() => readDecisionHubSettings());
+  const decisionHubSettings = DEFAULT_DECISION_HUB_SETTINGS;
   const [onboardingPreferences, setOnboardingPreferences] = useState(() => readOnboardingPreferences());
   const [input, setInput] = useState("");
   const [summary, setSummary] = useState("");
@@ -266,23 +266,6 @@ export default function FloScreen() {
       unsubscribe();
     };
   }, [categoryBudgetKey, categoryBudgetScope, now]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const refreshDecisionHubSettings = () => {
-      setDecisionHubSettings(readDecisionHubSettings());
-      void loadDecisionHubSettings(user?.id).then(next => {
-        if (!cancelled) setDecisionHubSettings(next);
-      });
-    };
-    refreshDecisionHubSettings();
-    if (Platform.OS !== "web") return;
-    globalThis.addEventListener?.(DECISION_HUB_SETTINGS_EVENT, refreshDecisionHubSettings);
-    return () => {
-      cancelled = true;
-      globalThis.removeEventListener?.(DECISION_HUB_SETTINGS_EVENT, refreshDecisionHubSettings);
-    };
-  }, [user?.id]);
 
   const writeCategoryBudgets = (budgets: Record<string, number>) => {
     setCategoryBudgets(budgets);

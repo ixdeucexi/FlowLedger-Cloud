@@ -286,7 +286,7 @@ test("debt standing uses monthly minimums instead of total balance", () => {
   assert.ok(suite.flowScore.negativeFactors.every(factor => !/large part|500000/i.test(factor)));
 });
 
-test("visible algorithm catalog is trimmed to user-facing suite", () => {
+test("algorithm catalog keeps the supported internal engines", () => {
   assert.deepEqual(ALGORITHM_CATALOG.map(item => item.id), [
     "flowScore",
     "safeCushion",
@@ -298,23 +298,23 @@ test("visible algorithm catalog is trimmed to user-facing suite", () => {
     "spendingLimit",
     "extraMoneyRouter",
   ]);
-  assert.equal(normalizeAlgorithmToggles({ savingsSweep: false }).extraMoneyRouter, false);
+  assert.equal(normalizeAlgorithmToggles({ savingsSweep: false }).extraMoneyRouter, true);
 });
 
-test("respects disabled algorithm toggles without growth-stage gating", () => {
+test("legacy disabled toggle values do not disable calculations", () => {
   const toggles = defaultAlgorithmToggles();
   toggles.safeCushion = false;
   const suite = buildAlgorithmSuite(baseInput({
     settings: {
-      algorithmSuiteEnabled: true,
+      algorithmSuiteEnabled: false,
       algorithmToggles: toggles,
     },
   }));
 
-  assert.equal(suite.safeCushion.amount, 0);
+  assert.ok(suite.safeCushion.amount > 0);
   assert.equal(suite.extraMoneyRouter.targetLabel, "Credit Card");
-  assert.ok(suite.activeCount < 20);
-  assert.ok(suite.insights.every(insight => insight.id !== "safeCushion"));
+  assert.equal(suite.activeCount, ALGORITHM_CATALOG.length);
+  assert.ok(suite.insights.some(insight => insight.id === "safeCushion"));
 });
 
 test("flags risk days and low balance warnings deterministically", () => {

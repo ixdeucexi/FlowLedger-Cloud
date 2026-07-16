@@ -55,7 +55,7 @@ export const LEARNING_TOUR_STEPS: LearningTourStep[] = [
     path: "/(tabs)/more?section=overview",
     title: "More",
     focus: "Control center",
-    floSays: "I use More as your control center for accounts, setup, app install, exports, safety cushion, and the Algorithm Suite.",
+    floSays: "I use More as your control center for accounts, bank sync, notifications, membership, setup, and app preferences.",
     tryThis: "I brought you to the main Settings page. Tap the section you want to change from here.",
   },
 ];
