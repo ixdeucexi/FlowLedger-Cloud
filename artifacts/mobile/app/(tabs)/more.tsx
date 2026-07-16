@@ -58,7 +58,10 @@ import {
   SETTINGS_SECTIONS,
   attentionCountStatus,
   formatCountStatus,
+  settingsGroupById,
+  settingsGroupForSection,
   type SettingsDestinationId,
+  type SettingsGroup,
   type SettingsSectionId,
   type SettingsStatus,
 } from "@/lib/settingsHub";
@@ -391,12 +394,20 @@ export default function MoreScreen() {
   useBackDismiss(Boolean(legalDoc), () => setLegalDoc(null));
   const [showAlgorithmSuite, setShowAlgorithmSuite] = useState(false);
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>(() => readStoredSettingsSection());
+  const [activeSettingsGroup, setActiveSettingsGroup] = useState<SettingsGroup["id"] | null>(() => {
+    const storedSection = readStoredSettingsSection();
+    return storedSection === "overview" ? null : settingsGroupForSection(storedSection).id;
+  });
   const openSettingsSection = useCallback((sectionId: SettingsSectionId) => {
     const safeSectionId = sectionId;
+    if (safeSectionId !== "overview") {
+      setActiveSettingsGroup(settingsGroupForSection(safeSectionId).id);
+    }
     setActiveSettingsSection(safeSectionId);
     writeStoredSettingsSection(safeSectionId);
   }, []);
   useBackDismiss(activeSettingsSection !== "overview", () => openSettingsSection("overview"));
+  useBackDismiss(activeSettingsSection === "overview" && activeSettingsGroup !== null, () => setActiveSettingsGroup(null));
   const [householdInviteRole, setHouseholdInviteRole] = useState<HouseholdInviteRole>("editor");
   const [householdInviteCode, setHouseholdInviteCode] = useState("");
   const [householdJoinCode, setHouseholdJoinCode] = useState("");
@@ -442,12 +453,14 @@ export default function MoreScreen() {
     if (isSettingsSectionId(requestedSection)) {
       const safeSection = requestedSection as SettingsSectionId;
       setActiveSettingsSection(safeSection);
+      setActiveSettingsGroup(safeSection === "overview" ? null : settingsGroupForSection(safeSection).id);
       writeStoredSettingsSection(safeSection);
       return;
     }
     const storedSection = readStoredSettingsSection();
     if (storedSection !== "overview") {
       setActiveSettingsSection(storedSection);
+      setActiveSettingsGroup(settingsGroupForSection(storedSection).id);
     }
   }, [routeParams.section]);
 
@@ -1486,6 +1499,7 @@ export default function MoreScreen() {
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
   const activeSettingsMeta = VISIBLE_SETTINGS_SECTIONS.find(section => section.id === activeSettingsSection);
+  const activeSettingsGroupMeta = activeSettingsGroup ? settingsGroupById(activeSettingsGroup) : null;
 
   return (
     <View style={[styles.screen, { backgroundColor: c.background }]}>
@@ -1501,6 +1515,12 @@ export default function MoreScreen() {
           identity={user?.email ?? "Signed in"}
           membershipLabel={membershipStatusLabel}
           statuses={hubStatuses}
+          activeGroupId={activeSettingsGroup}
+          onOpenGroup={groupId => {
+            setActiveSettingsGroup(groupId);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          }}
+          onBackToGroups={() => setActiveSettingsGroup(null)}
           onOpenSection={sectionId => {
             if (sectionId === "algorithms") setShowAlgorithmSuite(true);
             openSettingsSection(sectionId);
@@ -1509,7 +1529,11 @@ export default function MoreScreen() {
         />
       ) : (
         activeSettingsMeta ? (
-          <SettingsSectionHeader section={activeSettingsMeta} onBack={() => openSettingsSection("overview")} />
+          <SettingsSectionHeader
+            section={activeSettingsMeta}
+            backLabel={activeSettingsGroupMeta?.label ?? "More"}
+            onBack={() => openSettingsSection("overview")}
+          />
         ) : null
       )}
 

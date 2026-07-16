@@ -8,22 +8,23 @@ import type { SettingsSectionMeta } from "@/lib/settingsHub";
 interface SettingsSectionHeaderProps {
   section: SettingsSectionMeta;
   onBack: () => void;
+  backLabel?: string;
 }
 
-export function SettingsSectionHeader({ section, onBack }: SettingsSectionHeaderProps) {
+export function SettingsSectionHeader({ section, onBack, backLabel = "More" }: SettingsSectionHeaderProps) {
   const colors = useColors();
 
   return (
     <View style={styles.container}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Back to More"
+        accessibilityLabel={`Back to ${backLabel}`}
         onPress={onBack}
         hitSlop={8}
         style={({ pressed }) => [styles.backRow, { opacity: pressed ? 0.65 : 1 }]}
       >
         <Feather name="chevron-left" size={22} color={colors.primary} />
-        <Text style={[styles.backText, { color: colors.primary }]}>More</Text>
+        <Text style={[styles.backText, { color: colors.primary }]}>{backLabel}</Text>
       </Pressable>
       <View style={styles.headingRow}>
         <View style={[styles.icon, { backgroundColor: colors.primary + "16" }]}>

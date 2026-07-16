@@ -38,13 +38,6 @@ export interface SettingsStatus {
   tone?: "neutral" | "attention";
 }
 
-export function toggleSettingsGroup(
-  currentGroupId: SettingsGroup["id"] | null,
-  selectedGroupId: SettingsGroup["id"],
-): SettingsGroup["id"] | null {
-  return currentGroupId === selectedGroupId ? null : selectedGroupId;
-}
-
 export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
   { id: "accounts", label: "Accounts & household", description: "Balances, reconciliation, and household sharing.", icon: "credit-card" },
   { id: "plaid", label: "Bank sync", description: "Connect a bank or import activity safely.", icon: "link" },
@@ -71,6 +64,18 @@ export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
   { id: "preferences", label: "App preferences", sectionIds: ["setup", "notifications", "appearance", "backup"] },
   { id: "account", label: "Account & support", sectionIds: ["membership", "security", "help", "legal"] },
 ] as const;
+
+export function settingsGroupById(groupId: SettingsGroup["id"]): SettingsGroup {
+  const group = SETTINGS_GROUPS.find(item => item.id === groupId);
+  if (!group) throw new Error(`Unknown settings group: ${groupId}`);
+  return group;
+}
+
+export function settingsGroupForSection(sectionId: SettingsDestinationId): SettingsGroup {
+  const group = SETTINGS_GROUPS.find(item => item.sectionIds.includes(sectionId));
+  if (!group) throw new Error(`No settings group for section: ${sectionId}`);
+  return group;
+}
 
 export function settingsSectionById(sectionId: SettingsDestinationId): SettingsSectionMeta {
   const section = SETTINGS_SECTIONS.find(item => item.id === sectionId);

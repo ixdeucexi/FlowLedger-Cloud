@@ -6,8 +6,9 @@ import {
   SETTINGS_SECTIONS,
   attentionCountStatus,
   formatCountStatus,
+  settingsGroupById,
+  settingsGroupForSection,
   settingsSectionById,
-  toggleSettingsGroup,
 } from "./settingsHub";
 
 test("settings hub places every destination in exactly one group", () => {
@@ -40,8 +41,9 @@ test("attention statuses only highlight positive counts", () => {
   assert.deepEqual(attentionCountStatus(8, "Clear", "to review", "to review"), { label: "8 to review", tone: "attention" });
 });
 
-test("settings groups open one at a time and collapse when selected again", () => {
-  assert.equal(toggleSettingsGroup(null, "money"), "money");
-  assert.equal(toggleSettingsGroup("money", "insights"), "insights");
-  assert.equal(toggleSettingsGroup("insights", "insights"), null);
+test("settings group lookups preserve the destination hierarchy", () => {
+  assert.equal(settingsGroupById("money").label, "Manage your money");
+  assert.equal(settingsGroupForSection("accounts").id, "money");
+  assert.equal(settingsGroupForSection("appearance").id, "preferences");
+  assert.equal(settingsGroupForSection("legal").id, "account");
 });
