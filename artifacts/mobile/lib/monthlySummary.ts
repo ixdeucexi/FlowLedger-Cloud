@@ -8,6 +8,60 @@ export interface MonthlyBillSummary {
   billProgressPercent: number;
 }
 
+export interface ActivitySummaryEntry {
+  date: string;
+  amount: number;
+  pending?: boolean;
+  excludeFromCashFlow?: boolean;
+}
+
+export interface ActivityWeekSummary {
+  startDay: number;
+  endDay: number;
+  total: number;
+}
+
+export interface MonthlyActivitySummary {
+  income: number;
+  out: number;
+  net: number;
+  weeks: ActivityWeekSummary[];
+}
+
+export function summarizeActivityMonth(
+  entries: ActivitySummaryEntry[],
+  year: number,
+  monthIndex: number,
+): MonthlyActivitySummary {
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+  const monthPrefix = `${year}-${String(monthIndex + 1).padStart(2, "0")}-`;
+  const monthEntries = entries.filter(entry => (
+    !entry.pending
+    && !entry.excludeFromCashFlow
+    && entry.date.startsWith(monthPrefix)
+  ));
+  const income = monthEntries
+    .filter(entry => entry.amount > 0)
+    .reduce((sum, entry) => sum + entry.amount, 0);
+  const out = monthEntries
+    .filter(entry => entry.amount < 0)
+    .reduce((sum, entry) => sum + Math.abs(entry.amount), 0);
+  const weeks = [1, 8, 15, 22, 29]
+    .filter(startDay => startDay <= daysInMonth)
+    .map(startDay => {
+      const endDay = Math.min(startDay + 6, daysInMonth);
+      const total = monthEntries
+        .filter(entry => {
+          const day = Number(entry.date.slice(8, 10));
+          return day >= startDay && day <= endDay;
+        })
+        .reduce((sum, entry) => sum + entry.amount, 0);
+      return { startDay, endDay, total };
+    });
+
+  return { income, out, net: income - out, weeks };
+}
+
 export function summarizeMonthlyBills<T>(
   bills: T[],
   getMonthlyTotal: (bill: T) => number,

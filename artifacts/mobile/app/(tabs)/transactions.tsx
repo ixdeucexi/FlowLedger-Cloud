@@ -21,7 +21,8 @@ import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { debtPaymentStatusLabel } from "@/lib/forecastDisplay";
-import { canMatchExpenseToBill, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "@/lib/billMatching";
+import { canMatchExpenseToBill, isCashFlowTransaction, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "@/lib/billMatching";
+import { summarizeActivityMonth } from "@/lib/monthlySummary";
 import { isValidDateInMonth } from "@/lib/schedule";
 import { buildCurrentMonthReviewQueue, matchedOccurrenceAllocations, occurrenceKey, transactionDisplayName } from "@/lib/reviewCenter";
 
@@ -266,7 +267,8 @@ export default function TransactionsScreen() {
       });
     }
 
-    // 3. Income occurrences — past 24 months up to today
+    // 3. Income occurrences — past 24 months plus every occurrence in the current month.
+    // Matched deposits replace their planned occurrence instead of being added twice.
     const incomeOccurrenceMatches = matchedOccurrenceAllocations(transactions, "income");
     for (let i = 24; i >= 0; i--) {
       const totalMonths = currentYear * 12 + currentMonth - i;
@@ -276,7 +278,6 @@ export default function TransactionsScreen() {
       for (const { income, days, effectiveAmount } of occurrences) {
         for (const day of days) {
           const date = `${y}-${String(m + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-          if (new Date(date + "T00:00:00") > today) continue;
           const match = incomeOccurrenceMatches.get(occurrenceKey(income.id, date));
           const remaining = !match ? effectiveAmount : match.settlement === "partial"
             ? Math.max(0, Number(match.plannedAmount ?? effectiveAmount) - Number(match.amount || 0))
@@ -408,30 +409,28 @@ export default function TransactionsScreen() {
   const monthlySummary = useMemo(() => {
     const now = new Date();
     const year = now.getFullYear();
-    const month = now.getMonth() + 1;
-    const daysInMonth = new Date(year, month, 0).getDate();
-    const monthPrefix = `${year}-${String(month).padStart(2, "0")}-`;
-    const monthItems = allActivity.filter(item => !item.pending && item.date.startsWith(monthPrefix));
-    const income = monthItems.filter(item => item.amount > 0).reduce((sum, item) => sum + item.amount, 0);
-    const out = monthItems.filter(item => item.amount < 0).reduce((sum, item) => sum + Math.abs(item.amount), 0);
-    const weeks = [1, 8, 15, 22, 29]
-      .filter(start => start <= daysInMonth)
-      .map(start => {
-        const end = Math.min(start + 6, daysInMonth);
-        const total = monthItems
-          .filter(item => {
-            const day = Number(item.date.slice(8, 10));
-            return day >= start && day <= end;
-          })
-          .reduce((sum, item) => sum + item.amount, 0);
-        return {
-          label: end === start
-            ? `${MONTH_NAMES_LONG[month - 1]} ${start}, ${year}`
-            : `${MONTH_NAMES_LONG[month - 1]} ${start}, ${year} to ${MONTH_NAMES_LONG[month - 1]} ${end}, ${year}`,
-          total,
-        };
-      });
-    return { title: `${MONTH_NAMES_LONG[month - 1]} ${year}`, income, out, net: income - out, weeks };
+    const monthIndex = now.getMonth();
+    const summary = summarizeActivityMonth(
+      allActivity.map(item => ({
+        date: item.date,
+        amount: item.amount,
+        pending: item.pending,
+        excludeFromCashFlow: item.source === "transfer"
+          || Boolean(item.rawTx && !isCashFlowTransaction(item.rawTx)),
+      })),
+      year,
+      monthIndex,
+    );
+    return {
+      title: `${MONTH_NAMES_LONG[monthIndex]} ${year}`,
+      ...summary,
+      weeks: summary.weeks.map(week => ({
+        ...week,
+        label: week.startDay === week.endDay
+          ? `${MONTH_NAMES_LONG[monthIndex]} ${week.startDay}`
+          : `${MONTH_NAMES_LONG[monthIndex]} ${week.startDay}–${week.endDay}`,
+      })),
+    };
   }, [allActivity]);
 
   const feedOrderLabel = hasActiveFilters
@@ -711,16 +710,10 @@ export default function TransactionsScreen() {
           </View>
 
           <View style={styles.summaryWeekList}>
-            {monthlySummary.weeks.map((week, index) => (
+            {monthlySummary.weeks.map(week => (
               <View key={week.label} style={[styles.summaryWeekCard, { backgroundColor: c.background, borderColor: c.border }]}>
-                <View style={[styles.summaryWeekNumber, { backgroundColor: c.primary + "18" }]}>
-                  <Text style={[styles.summaryWeekNumberText, { color: c.primary }]}>W{index + 1}</Text>
-                </View>
                 <View style={styles.summaryWeekMiddle}>
                   <Text style={[styles.summaryWeekLabel, { color: c.foreground }]}>{week.label}</Text>
-                  <Text style={[styles.summaryWeekSub, { color: c.mutedForeground }]}>
-                    {week.total >= 0 ? "Money moved in this stretch" : "Net spending this stretch"}
-                  </Text>
                 </View>
                 <Text style={[styles.summaryWeekValue, { color: week.total >= 0 ? c.success : c.destructive }]}>
                   {week.total >= 0 ? "+" : "-"}${Math.abs(week.total).toFixed(0)}
@@ -1432,8 +1425,8 @@ const styles = StyleSheet.create({
   weekSummaryTitle: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   weekSummarySub: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2, lineHeight: 15 },
 
-  summaryOverlay: { flex: 1, justifyContent: "center", paddingHorizontal: 18, backgroundColor: "rgba(2,6,23,0.72)" },
-  summarySheet: { borderWidth: 1, borderRadius: 26, padding: 18, shadowColor: "#7c3aed", shadowOpacity: 0.22, shadowRadius: 24, shadowOffset: { width: 0, height: 12 }, elevation: 8 },
+  summaryOverlay: { flex: 1, justifyContent: "center", paddingHorizontal: 16, backgroundColor: "rgba(2,6,23,0.72)" },
+  summarySheet: { width: "100%", maxWidth: 520, maxHeight: "92%", alignSelf: "center", borderWidth: 1, borderRadius: 24, padding: 16, shadowColor: "#7c3aed", shadowOpacity: 0.22, shadowRadius: 24, shadowOffset: { width: 0, height: 12 }, elevation: 8 },
   summarySheetHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 14 },
   summarySheetTitle: { fontSize: 24, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.7, marginTop: 3 },
   summaryTotalRow: { borderWidth: 1, borderRadius: 18, padding: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14 },
@@ -1442,12 +1435,9 @@ const styles = StyleSheet.create({
   summaryTotalRight: { alignItems: "flex-end", gap: 3 },
   summaryMiniValue: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   summaryWeekList: { gap: 8 },
-  summaryWeekCard: { borderWidth: 1, borderRadius: 16, padding: 11, flexDirection: "row", alignItems: "center", gap: 10 },
-  summaryWeekNumber: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  summaryWeekNumberText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
+  summaryWeekCard: { minHeight: 52, borderWidth: 1, borderRadius: 15, paddingHorizontal: 14, paddingVertical: 11, flexDirection: "row", alignItems: "center", gap: 12 },
   summaryWeekMiddle: { flex: 1 },
-  summaryWeekLabel: { fontSize: 12, fontFamily: "Inter_800ExtraBold", lineHeight: 16 },
-  summaryWeekSub: { fontSize: 10, fontFamily: "Inter_500Medium", marginTop: 2 },
+  summaryWeekLabel: { fontSize: 13, fontFamily: "Inter_700Bold", lineHeight: 18 },
   summaryWeekValue: { fontSize: 15, fontFamily: "Inter_800ExtraBold" },
 
   searchWrap:  { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16 },

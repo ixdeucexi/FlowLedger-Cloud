@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { summarizeMonthlyBills } from "./monthlySummary";
+import { summarizeActivityMonth, summarizeMonthlyBills } from "./monthlySummary";
 
 type TestBill = { id: string; amount: number; paid: number };
 
@@ -49,4 +49,23 @@ test("ignores zero-amount bills when calculating progress", () => {
   assert.equal(summary.billCount, 1);
   assert.equal(summary.paidCount, 1);
   assert.equal(summary.billProgressPercent, 100);
+});
+
+test("activity summary includes the full month's income without counting transfers or pending activity", () => {
+  const summary = summarizeActivityMonth([
+    { date: "2026-07-01", amount: 1500 },
+    { date: "2026-07-09", amount: 2308 },
+    { date: "2026-07-23", amount: 2308 },
+    { date: "2026-07-09", amount: 167, excludeFromCashFlow: true },
+    { date: "2026-07-08", amount: -100 },
+    { date: "2026-07-16", amount: -50, excludeFromCashFlow: true },
+    { date: "2026-07-16", amount: 999, pending: true },
+    { date: "2026-08-01", amount: 1000 },
+  ], 2026, 6);
+
+  assert.equal(summary.income, 6116);
+  assert.equal(summary.out, 100);
+  assert.equal(summary.net, 6016);
+  assert.equal(summary.weeks[1]?.total, 2208);
+  assert.equal(summary.weeks[3]?.total, 2308);
 });
