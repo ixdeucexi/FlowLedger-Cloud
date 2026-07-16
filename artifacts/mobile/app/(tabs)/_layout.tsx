@@ -22,8 +22,14 @@ import {
 } from "@/lib/learningTour";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 import { MembershipProvider } from "@/context/MembershipContext";
+import { buildCurrentMonthReviewQueue } from "@/lib/reviewCenter";
 
 const MIN_BUDGET_LOADING_MS = 220;
+
+function todayIsoDate() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
 
 const TABS = [
   { name: "index",        title: "Dashboard",    icon: "bar-chart-2"     },
@@ -351,7 +357,7 @@ function FloLearningTour() {
 
 function TabContent() {
   const colors = useColors();
-  const { loading, loadError, retryBudgetLoad, demoMode } = useBudget();
+  const { loading, loadError, retryBudgetLoad, demoMode, transactions } = useBudget();
   const [minimumBudgetLoadingReady, setMinimumBudgetLoadingReady] = React.useState(false);
   const [showLoadingOverlay, setShowLoadingOverlay] = React.useState(true);
   const loadingOpacity = React.useRef(new Animated.Value(1)).current;
@@ -361,6 +367,10 @@ function TabContent() {
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
   const isIosWeb = isWeb && typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const activityReviewCount = React.useMemo(
+    () => buildCurrentMonthReviewQueue(transactions, todayIsoDate()).length,
+    [transactions],
+  );
 
   React.useEffect(() => {
     const t = setTimeout(() => setMinimumBudgetLoadingReady(true), MIN_BUDGET_LOADING_MS);
@@ -472,16 +482,27 @@ function TabContent() {
               ) : null,
           }}
         >
-          {TABS.map(tab => (
-            <Tabs.Screen
-              key={tab.name}
-              name={tab.name}
-              options={{
-                title: tab.title,
-                tabBarIcon: ({ color }) => <Feather name={tab.icon} size={22} color={color} />,
-              }}
-            />
-          ))}
+          {TABS.map(tab => {
+            const isActivity = tab.name === "transactions";
+            const reviewBadge = isActivity && activityReviewCount > 0
+              ? activityReviewCount > 99 ? "99+" : activityReviewCount
+              : undefined;
+            return (
+              <Tabs.Screen
+                key={tab.name}
+                name={tab.name}
+                options={{
+                  title: tab.title,
+                  tabBarIcon: ({ color }) => <Feather name={tab.icon} size={22} color={color} />,
+                  tabBarBadge: reviewBadge,
+                  tabBarBadgeStyle: reviewBadge ? styles.activityTabBadge : undefined,
+                  tabBarAccessibilityLabel: reviewBadge
+                    ? `Activity, ${activityReviewCount} item${activityReviewCount === 1 ? "" : "s"} need review`
+                    : tab.title,
+                }}
+              />
+            );
+          })}
           <Tabs.Screen name="flo" options={{ href: null }} />
           <Tabs.Screen name="category-budget" options={{ href: null }} />
         </Tabs>
@@ -515,6 +536,16 @@ const styles = StyleSheet.create({
   },
   tabTransitionContent: {
     flex: 1,
+  },
+  activityTabBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#ef4444",
+    color: "#ffffff",
+    fontFamily: "Inter_800ExtraBold",
+    fontSize: 10,
+    lineHeight: 18,
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
