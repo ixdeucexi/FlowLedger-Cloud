@@ -36,6 +36,7 @@ interface CalendarViewProps {
   goals?: Goal[];
   decisions?: DecisionRecord[];
   safetyFloor?: number;
+  startDate?: string;
 }
 
 function fmt(n: number) {
@@ -71,6 +72,7 @@ export function CalendarView({
   goals = [],
   decisions = [],
   safetyFloor = 200,
+  startDate,
 }: CalendarViewProps) {
   const c = useColors();
   const calendarTheme = c.isDark
@@ -184,19 +186,20 @@ export function CalendarView({
         {cells.map((day, i) => {
           if (!day) return <View key={`empty-${i}`} style={[styles.cellOuter, styles.emptyCell, { borderColor: calendarTheme.line }]} />;
           const ds = dateStr(day);
+          const isBeforeStart = Boolean(startDate && ds < startDate);
           const isToday = ds === todayStr;
           const isSelected = ds === selectedDate;
-          const db = balanceByDay[day];
-          const dayTxs = txByDay[day] ?? [];
+          const db = isBeforeStart ? undefined : balanceByDay[day];
+          const dayTxs = isBeforeStart ? [] : (txByDay[day] ?? []);
           const billEvents = (db?.events ?? [])
             .filter(event => event.amount < 0 && (event.sourceType === "bill" || event.kind === "bill"))
             .slice(0, 3);
           const calendarGoals = [...(db?.goalExpenses ?? [])];
-          (goalsByDay[day] ?? []).forEach(goal => {
+          (isBeforeStart ? [] : (goalsByDay[day] ?? [])).forEach(goal => {
             if (!calendarGoals.some(existing => existing.id === goal.id)) calendarGoals.push(goal);
           });
 
-          const decisionAmount = decisionsByDay[day] ?? 0;
+          const decisionAmount = isBeforeStart ? 0 : (decisionsByDay[day] ?? 0);
           const isLowRiskDay = Boolean(db && db.balance < safetyFloor);
           const chips: { label: string; kind: ChipKind }[] = [];
 
@@ -218,11 +221,12 @@ export function CalendarView({
           return (
             <Pressable
               key={ds}
+              disabled={isBeforeStart}
               onPress={() => onDayPress(ds)}
               style={({ pressed }) => [
                 styles.cellOuter,
                 { borderColor: calendarTheme.line },
-                { opacity: pressed ? 0.72 : 1 },
+                { opacity: isBeforeStart ? 0.58 : pressed ? 0.72 : 1 },
               ]}
             >
               <View

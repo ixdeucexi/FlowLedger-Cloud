@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Tabs, useRouter, useSegments } from "expo-router";
 import React from "react";
-import { Animated, Easing, Image, Modal, Platform, Pressable, StyleSheet, StyleProp, Text, View, ViewStyle } from "react-native";
+import { Animated, Easing, Image, Platform, Pressable, StyleSheet, StyleProp, Text, View, ViewStyle } from "react-native";
 
 import { useAuth } from "@/context/AuthContext";
 import { BudgetProvider, useBudget } from "@/context/BudgetContext";
@@ -248,7 +248,7 @@ function DemoModeBanner() {
   );
 }
 
-function FloLearningTour() {
+function FloDemo() {
   const colors = useColors();
   const router = useRouter();
   const segments = useSegments();
@@ -299,14 +299,16 @@ function FloLearningTour() {
   if (!state.active) return null;
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={closeTour}>
-      <View style={styles.learningBackdrop}>
-        <Pressable style={styles.learningDismissZone} onPress={closeTour} />
+      <View pointerEvents="box-none" style={styles.learningLayer}>
+        <View pointerEvents="none" style={styles.learningPointer}>
+          <Feather name="mouse-pointer" size={16} color="#38bdf8" />
+          <Text style={styles.learningPointerText}>{activeStep.tryThis}</Text>
+        </View>
         <View style={[styles.learningSheet, { borderColor: colors.primary + "55" }]}>
           <View style={styles.learningHeader}>
-            <FloLogo size={58} />
+            <FloLogo size={46} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.learningEyebrow}>Flo learning mode</Text>
+              <Text style={styles.learningEyebrow}>Flo Demo · {state.stepIndex + 1} of {LEARNING_TOUR_STEPS.length}</Text>
               <Text style={styles.learningTitle}>{activeStep.title}</Text>
             </View>
             <Pressable onPress={closeTour} style={styles.learningClose} hitSlop={8}>
@@ -320,8 +322,6 @@ function FloLearningTour() {
           </View>
 
           <Text style={styles.learningBody}>{activeStep.floSays}</Text>
-          <Text style={styles.learningTry}>{activeStep.tryThis}</Text>
-
           <View style={styles.learningDots}>
             {LEARNING_TOUR_STEPS.map((step, index) => (
               <Pressable
@@ -351,7 +351,6 @@ function FloLearningTour() {
           </View>
         </View>
       </View>
-    </Modal>
   );
 }
 
@@ -510,7 +509,7 @@ function TabContent() {
         <PlanPreviewBanner />
         <SaveStatusBanner />
         <DecisionDueModal />
-        <FloLearningTour />
+        <FloDemo />
       </Animated.View>
       {showLoadingOverlay ? (
         <BudgetLoadingScreen style={[styles.loadingOverlay, { opacity: loadingOpacity }]} />
@@ -703,21 +702,40 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     textAlign: "center",
   },
-  learningBackdrop: {
-    flex: 1,
-    justifyContent: "flex-end",
-    backgroundColor: "rgba(2,6,23,0.34)",
-    padding: 14,
-  },
-  learningDismissZone: {
+  learningLayer: {
     ...StyleSheet.absoluteFillObject,
+    zIndex: 110,
+    justifyContent: "flex-end",
+    paddingHorizontal: 12,
+    paddingBottom: 92,
+  },
+  learningPointer: {
+    alignSelf: "center",
+    width: "94%",
+    maxWidth: 460,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(56,189,248,0.38)",
+    backgroundColor: "rgba(2,6,23,0.82)",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  learningPointerText: {
+    flex: 1,
+    color: "#bae6fd",
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "800",
   },
   learningSheet: {
     borderWidth: 1,
-    borderRadius: 28,
-    padding: 18,
-    marginBottom: 78,
-    backgroundColor: "rgba(15,23,42,0.88)",
+    borderRadius: 22,
+    padding: 14,
+    backgroundColor: "rgba(15,23,42,0.92)",
     shadowColor: "#8b5cf6",
     shadowOpacity: 0.24,
     shadowRadius: 26,
@@ -738,7 +756,7 @@ const styles = StyleSheet.create({
   },
   learningTitle: {
     color: "#f8fafc",
-    fontSize: 24,
+    fontSize: 19,
     fontWeight: "900",
     marginTop: 2,
   },
@@ -761,7 +779,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(56,189,248,0.14)",
     borderWidth: 1,
     borderColor: "rgba(56,189,248,0.24)",
-    marginTop: 16,
+    marginTop: 10,
   },
   learningFocusText: {
     color: "#bae6fd",
@@ -770,13 +788,6 @@ const styles = StyleSheet.create({
   },
   learningBody: {
     color: "#f8fafc",
-    fontSize: 16,
-    lineHeight: 23,
-    fontWeight: "700",
-    marginTop: 14,
-  },
-  learningTry: {
-    color: "#c4b5fd",
     fontSize: 14,
     lineHeight: 20,
     fontWeight: "700",
@@ -786,7 +797,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     gap: 7,
-    marginTop: 16,
+    marginTop: 11,
   },
   learningDot: {
     width: 7,
@@ -801,11 +812,11 @@ const styles = StyleSheet.create({
   learningActions: {
     flexDirection: "row",
     gap: 10,
-    marginTop: 16,
+    marginTop: 11,
   },
   learningSecondary: {
     flex: 1,
-    minHeight: 48,
+    minHeight: 42,
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
@@ -820,7 +831,7 @@ const styles = StyleSheet.create({
   },
   learningPrimary: {
     flex: 1,
-    minHeight: 48,
+    minHeight: 42,
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",

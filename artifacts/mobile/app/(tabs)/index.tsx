@@ -1300,7 +1300,6 @@ export default function DashboardScreen() {
             <View style={styles.referenceMoneyHeader}>
               <View style={{ flex: 1 }}>
                 <AppText tone="title" style={styles.referenceGreeting}>{timeGreeting}</AppText>
-                <AppText style={styles.referenceGreetingSub}>Here is what is protected and what needs attention next.</AppText>
               </View>
               <Pressable onPress={doFlip} accessibilityLabel="Show savings and goals" style={styles.referenceFlipButton}>
                 <Feather name="repeat" size={13} color="#c4b5fd" />
@@ -2401,7 +2400,6 @@ const styles = StyleSheet.create({
   referenceGoalsEmptyText: { color: "#cbd5e1", fontSize: 11, lineHeight: 15, textAlign: "center", fontFamily: "Inter_600SemiBold" },
   referenceGoalsMore: { color: "#a78bfa", fontSize: 9, fontFamily: "Inter_800ExtraBold", textAlign: "right", marginTop: 5 },
   referenceGreeting: { color: "#f8fafc", fontSize: 19, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.7 },
-  referenceGreetingSub: { color: "#94a3b8", fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 1, marginBottom: 6 },
   referenceHeroLabel: { color: "#cbd5e1", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.4, textTransform: "uppercase" },
   referenceHeroAmount: { color: "#ffffff", fontSize: 40, lineHeight: 44, fontFamily: "Inter_800ExtraBold", letterSpacing: -2.2, textShadowColor: "rgba(34,211,238,0.25)", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 18 },
   referencePlanSnapshot: {

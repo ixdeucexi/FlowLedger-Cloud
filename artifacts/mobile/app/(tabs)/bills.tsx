@@ -174,6 +174,12 @@ export default function BillsScreen() {
     .filter(b => b.is_recurring)
     .reduce((s, b) => s + getBillMonthlyTotal(b, currentMonth, currentYear), 0);
   const totalCount  = activeNonDebtBills.length;
+  const currentNonDebtBills = currentMonthBills.filter(bill => !bill.is_debt);
+  const currentBillTotal = currentNonDebtBills.reduce((sum, bill) => sum + getBillMonthlyTotal(bill, currentMonth, currentYear), 0);
+  const paidBillCount = currentNonDebtBills.filter(bill => {
+    const planned = getBillMonthlyTotal(bill, currentMonth, currentYear);
+    return planned > 0 && getPaidAmount(bill.id, currentMonth, currentYear) >= planned - 0.005;
+  }).length;
   const formatBillDueText = useCallback((bill: Bill) => {
     const days = billOccurrenceDays(bill);
     if (days.length === 1) return `Due ${MONTH_FULL[currentMonth]} ${days[0]}, ${currentYear}`;
@@ -477,6 +483,34 @@ export default function BillsScreen() {
           accessibilityLabel={activeTab === "debt" ? "Add debt" : "Add bill"}
         />
       </View>
+
+      {activeTab === "bills" ? (
+        <View style={[styles.billSnapshotCard, { backgroundColor: c.card, borderColor: c.border }]}>
+          <View style={styles.billSnapshotHeader}>
+            <View>
+              <Text style={[styles.billSnapshotLabel, { color: c.mutedForeground }]}>Bill snapshot</Text>
+              <Text style={[styles.billSnapshotTitle, { color: c.foreground }]}>{MONTH_FULL[currentMonth]} {currentYear}</Text>
+            </View>
+            <View style={[styles.billSnapshotBadge, { backgroundColor: paidBillCount === currentNonDebtBills.length && currentNonDebtBills.length > 0 ? c.success + "18" : c.warning + "18" }]}>
+              <Text style={[styles.billSnapshotBadgeText, { color: paidBillCount === currentNonDebtBills.length && currentNonDebtBills.length > 0 ? c.success : c.warning }]}>{paidBillCount} paid</Text>
+            </View>
+          </View>
+          <View style={styles.billSnapshotStats}>
+            <View style={[styles.billSnapshotStat, { backgroundColor: c.background, borderColor: c.border }]}>
+              <Text style={[styles.billSnapshotValue, { color: c.foreground }]}>${currentBillTotal.toFixed(0)}</Text>
+              <Text style={[styles.billSnapshotStatLabel, { color: c.mutedForeground }]}>Due this month</Text>
+            </View>
+            <View style={[styles.billSnapshotStat, { backgroundColor: c.background, borderColor: c.border }]}>
+              <Text style={[styles.billSnapshotValue, { color: c.primary }]}>{currentNonDebtBills.length}</Text>
+              <Text style={[styles.billSnapshotStatLabel, { color: c.mutedForeground }]}>Scheduled</Text>
+            </View>
+            <View style={[styles.billSnapshotStat, { backgroundColor: c.background, borderColor: c.border }]}>
+              <Text style={[styles.billSnapshotValue, { color: c.success }]}>{paidBillCount}</Text>
+              <Text style={[styles.billSnapshotStatLabel, { color: c.mutedForeground }]}>Paid</Text>
+            </View>
+          </View>
+        </View>
+      ) : null}
 
       {/* ── Bills / Debt segment toggle ── */}
       {activeTab === "bills" && billOptimizationPrompt ? (
@@ -882,6 +916,16 @@ const styles = StyleSheet.create({
   billPromptActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
   billPromptAction: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999 },
   billPromptActionText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
+  billSnapshotCard: { borderWidth: 1, borderRadius: 22, padding: 14, marginHorizontal: 16, marginBottom: 12, shadowColor: "#2563eb", shadowOpacity: 0.10, shadowRadius: 18, shadowOffset: { width: 0, height: 10 } },
+  billSnapshotHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10 },
+  billSnapshotLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8 },
+  billSnapshotTitle: { fontSize: 20, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
+  billSnapshotBadge: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
+  billSnapshotBadgeText: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.4 },
+  billSnapshotStats: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
+  billSnapshotStat: { flex: 1, minWidth: 86, borderWidth: 1, borderRadius: 14, padding: 10 },
+  billSnapshotValue: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
+  billSnapshotStatLabel: { fontSize: 9, lineHeight: 12, fontFamily: "Inter_700Bold", marginTop: 2 },
 
   // Segment toggle
   segmentWrap: {},

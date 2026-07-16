@@ -1,5 +1,5 @@
 import React from "react";
-import { Platform, Text, type TextProps, type TextStyle } from "react-native";
+import { Platform, StyleSheet, Text, type TextProps, type TextStyle } from "react-native";
 
 import { type AppFontStyle, useThemeMode } from "@/context/ThemeContext";
 import { fontFamilyForStyle, nativeFontFamilyForStyle } from "@/lib/appTypography";
@@ -38,7 +38,15 @@ export function AppText({ tone = "body", fontStyleOverride, style, ...props }: A
   const { fontStyle } = useThemeMode();
   const selectedStyle = fontStyleOverride ?? fontStyle;
   const fontFamily = getFontFamily(selectedStyle);
-  const dynamicStyle = fontFamily ? { fontFamily } : undefined;
+  const flattened = StyleSheet.flatten(style) ?? {};
+  const baseFontSize = typeof flattened.fontSize === "number" ? flattened.fontSize : 14;
+  const scale = selectedStyle === "bold" ? 0.92 : selectedStyle === "playful" ? 0.94 : selectedStyle === "elegant" ? 0.96 : 1;
+  const lineHeightRatio = tone === "number" ? 1.08 : tone === "title" ? 1.18 : tone === "label" ? 1.25 : 1.34;
+  const dynamicStyle: TextStyle = {
+    ...(fontFamily ? { fontFamily } : {}),
+    ...(selectedStyle === "default" ? {} : { fontSize: Math.max(8, Math.round(baseFontSize * scale * 10) / 10) }),
+    ...(typeof flattened.lineHeight === "number" ? {} : { lineHeight: Math.ceil(baseFontSize * lineHeightRatio) }),
+  };
 
   return <Text {...props} style={[style, toneStyle(tone), dynamicStyle]} />;
 }

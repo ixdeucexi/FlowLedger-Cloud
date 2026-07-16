@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 export type PushNotificationStatus = "checking" | "unsupported" | "blocked" | "disabled" | "enabled";
 
 type ApiError = { message?: string };
+const PUSH_PREFERENCE_KEY = "flowledger_push_notifications_enabled_v1";
 
 function supported() {
   return Platform.OS === "web"
@@ -32,6 +33,23 @@ async function registration() {
   return registered;
 }
 
+function savePreference(enabled: boolean) {
+  try { window.localStorage.setItem(PUSH_PREFERENCE_KEY, enabled ? "true" : "false"); } catch {}
+}
+
+function readPreference() {
+  try { return window.localStorage.getItem(PUSH_PREFERENCE_KEY) === "true"; } catch { return false; }
+}
+
+async function settledRegistration() {
+  const existing = await navigator.serviceWorker.getRegistration("/");
+  if (existing || !readPreference() || window.Notification.permission !== "granted") return existing;
+  return Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise<undefined>(resolve => setTimeout(() => resolve(undefined), 3000)),
+  ]);
+}
+
 function authorization(accessToken: string) {
   return { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
 }
@@ -39,10 +57,12 @@ function authorization(accessToken: string) {
 export async function getPushNotificationStatus(): Promise<PushNotificationStatus> {
   if (!supported()) return "unsupported";
   if (window.Notification.permission === "denied") return "blocked";
-  const registered = await navigator.serviceWorker.getRegistration("/");
+  const registered = await settledRegistration();
   if (!registered) return "disabled";
   await registered.update().catch(() => undefined);
-  return (await registered.pushManager.getSubscription()) ? "enabled" : "disabled";
+  const subscription = await registered.pushManager.getSubscription();
+  if (!subscription) savePreference(false);
+  return subscription ? "enabled" : "disabled";
 }
 
 export async function enablePushNotifications(accessToken: string) {
@@ -70,13 +90,17 @@ export async function enablePushNotifications(accessToken: string) {
     if (!existing) await subscription.unsubscribe().catch(() => false);
     throw new Error(await apiMessage(response, "Could not enable notifications."));
   }
+  savePreference(true);
 }
 
 export async function disablePushNotifications(accessToken: string) {
   if (!supported()) return;
   const registered = await navigator.serviceWorker.getRegistration("/");
   const subscription = await registered?.pushManager.getSubscription();
-  if (!subscription) return;
+  if (!subscription) {
+    savePreference(false);
+    return;
+  }
   const response = await fetch("/api/notifications/subscription", {
     method: "DELETE",
     headers: authorization(accessToken),
@@ -84,6 +108,7 @@ export async function disablePushNotifications(accessToken: string) {
   });
   if (!response.ok) throw new Error(await apiMessage(response, "Could not disable notifications."));
   await subscription.unsubscribe();
+  savePreference(false);
 }
 
 export async function sendTestPushNotification(accessToken: string) {

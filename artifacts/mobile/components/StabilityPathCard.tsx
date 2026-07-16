@@ -63,12 +63,10 @@ function StabilityPathCardView({ progress, lowestForecastBalance, safetyFloor, o
           <AppText tone="number" style={styles.metricValue}>{progress.protectedDays}</AppText>
           <AppText style={styles.metricLabel}>days protected</AppText>
         </View>
-        <View style={styles.metricDivider} />
         <View style={styles.metric}>
           <AppText tone="number" style={styles.metricValue}>{currency(progress.protectedAmount)}</AppText>
           <AppText style={styles.metricLabel}>breathing room</AppText>
         </View>
-        <View style={styles.metricDivider} />
         <View style={styles.metric}>
           <AppText tone="number" style={styles.metricValue}>{currency(progress.reserveTarget)}</AppText>
           <AppText style={styles.metricLabel}>30-day target</AppText>
@@ -142,9 +140,9 @@ const styles = StyleSheet.create({
     shadowRadius: 28,
     elevation: 8,
   },
-  header: { flexDirection: "row", alignItems: "center", gap: 10 },
+  header: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 10 },
   icon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center", borderWidth: 1 },
-  headerCopy: { flex: 1 },
+  headerCopy: { flex: 1, minWidth: 150 },
   eyebrow: { color: "#67e8f9", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.1 },
   stage: { color: "#f8fafc", fontSize: 16, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
   statusPill: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 6 },
@@ -157,9 +155,8 @@ const styles = StyleSheet.create({
   progressValue: { color: "#f8fafc", fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   progressTrack: { height: 7, borderRadius: 999, overflow: "hidden", backgroundColor: "rgba(148,163,184,0.18)" },
   progressFill: { height: "100%", borderRadius: 999 },
-  metrics: { flexDirection: "row", alignItems: "stretch", marginTop: 14 },
-  metric: { flex: 1, minWidth: 0 },
-  metricDivider: { width: 1, marginHorizontal: 8, backgroundColor: "rgba(148,163,184,0.15)" },
+  metrics: { flexDirection: "row", alignItems: "stretch", flexWrap: "wrap", gap: 8, marginTop: 14 },
+  metric: { flexGrow: 1, flexBasis: 90, minWidth: 82, borderRadius: 12, backgroundColor: "rgba(2,6,23,0.34)", padding: 9 },
   metricValue: { color: "#f8fafc", fontSize: 17, fontFamily: "Inter_800ExtraBold" },
   metricLabel: { color: "#64748b", fontSize: 9, lineHeight: 12, fontFamily: "Inter_700Bold", marginTop: 2 },
   nextMove: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 16, borderWidth: 1, borderColor: "rgba(192,132,252,0.22)", backgroundColor: "rgba(124,58,237,0.12)", padding: 11, marginTop: 14 },

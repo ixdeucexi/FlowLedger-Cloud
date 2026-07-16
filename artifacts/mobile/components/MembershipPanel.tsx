@@ -1,15 +1,43 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
+import { useAuth } from "@/context/AuthContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { PLAN_CATALOG, PLAN_TIERS, annualMonthlyEquivalent, annualSavings, type PlanTier } from "@/lib/membership";
 
 export function MembershipPanel() {
   const c = useColors();
-  const { actualPlan, previewTier, isAdmin, loading, enforcementEnabled, setPreviewTier, resetPreview } = useMembership();
+  const { session } = useAuth();
+  const { actualPlan, previewTier, isAdmin, loading, setPreviewTier, resetPreview } = useMembership();
   const [billingCadence, setBillingCadence] = useState<"monthly" | "annual">("annual");
+  const [testerEmail, setTesterEmail] = useState("");
+  const [testerBusy, setTesterBusy] = useState(false);
+  const [testerMessage, setTesterMessage] = useState("");
+
+  const setTesterPlan = async (tier: PlanTier) => {
+    if (!session?.access_token || !testerEmail.trim() || testerBusy) return;
+    setTesterBusy(true);
+    setTesterMessage("");
+    try {
+      const response = await fetch("/api/admin/tester-plan", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: testerEmail.trim(), tier }),
+      });
+      const payload = await response.json().catch(() => ({})) as { message?: string; householdName?: string };
+      if (!response.ok) throw new Error(payload.message || "Could not update tester access.");
+      setTesterMessage(`${testerEmail.trim()} now has ${PLAN_CATALOG[tier].name} on ${payload.householdName || "their household"}. They can refresh to test it.`);
+    } catch (error) {
+      setTesterMessage(error instanceof Error ? error.message : "Could not update tester access.");
+    } finally {
+      setTesterBusy(false);
+    }
+  };
 
   return (
     <View style={styles.root}>
@@ -21,17 +49,17 @@ export function MembershipPanel() {
           <Text style={[styles.eyebrow, { color: c.primary }]}>CURRENT HOUSEHOLD PLAN</Text>
           <Text style={[styles.currentTitle, { color: c.foreground }]}>{loading ? "Loading…" : PLAN_CATALOG[actualPlan.tier].name}</Text>
           <Text style={[styles.currentDescription, { color: c.mutedForeground }]}>
-            {actualPlan.source === "grandfathered" ? "Grandfathered Pro access · no expiration" : enforcementEnabled ? "Your household's live plan is enforced" : "Early access · paid feature enforcement is off"}
+            {actualPlan.source === "grandfathered" ? "Grandfathered Pro access · no expiration" : actualPlan.source === "admin" ? "Pro granted by a FlowLedger admin" : "Your household's live plan"}
           </Text>
         </View>
       </View>
 
       <View style={[styles.earlyAccess, { backgroundColor: c.success + "10", borderColor: c.success + "35" }]}>
         <Feather name="check-circle" size={17} color={c.success} />
-        <Text style={[styles.earlyAccessText, { color: c.foreground }]}>{enforcementEnabled ? "Plan enforcement is active. Basic Flo remains available to every household." : "Billing is not active yet. Basic Flo is free, and account-aware Flo Pro remains unlocked during early access."}</Text>
+        <Text style={[styles.earlyAccessText, { color: c.foreground }]}>Basic Flo and manual planning are included with Free. Bank connections, reconciliation, and account-aware Flo require Pro.</Text>
       </View>
 
-      {isAdmin ? (
+      {isAdmin ? (<>
         <View style={[styles.adminCard, { backgroundColor: c.card, borderColor: c.warning + "55" }]}>
           <View style={styles.adminHeader}>
             <Feather name="tool" size={18} color={c.warning} />
@@ -66,7 +94,44 @@ export function MembershipPanel() {
             </Pressable>
           </View>
         </View>
-      ) : null}
+        <View style={[styles.adminCard, { backgroundColor: c.card, borderColor: c.primary + "55" }]}>
+          <View style={styles.adminHeader}>
+            <Feather name="user-check" size={18} color={c.primary} />
+            <View style={styles.currentCopy}>
+              <Text style={[styles.adminTitle, { color: c.foreground }]}>Tester Access</Text>
+              <Text style={[styles.adminDescription, { color: c.mutedForeground }]}>Grant or remove real Pro access for a tester's personal household. This is separate from Plan Preview.</Text>
+            </View>
+          </View>
+          <TextInput
+            accessibilityLabel="Tester email"
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            placeholder="tester@example.com"
+            placeholderTextColor={c.mutedForeground}
+            value={testerEmail}
+            onChangeText={setTesterEmail}
+            style={[styles.testerInput, { color: c.foreground, backgroundColor: c.muted, borderColor: c.border }]}
+          />
+          <View style={styles.adminActions}>
+            <Pressable
+              disabled={testerBusy || !testerEmail.trim()}
+              onPress={() => void setTesterPlan("pro")}
+              style={({ pressed }) => [styles.testerButton, { backgroundColor: c.primary, opacity: testerBusy || !testerEmail.trim() ? 0.45 : pressed ? 0.76 : 1 }]}
+            >
+              <Text style={[styles.previewButtonText, { color: c.primaryForeground }]}>{testerBusy ? "Saving…" : "Grant Pro"}</Text>
+            </Pressable>
+            <Pressable
+              disabled={testerBusy || !testerEmail.trim()}
+              onPress={() => void setTesterPlan("free")}
+              style={({ pressed }) => [styles.testerButton, { backgroundColor: c.muted, borderColor: c.border, opacity: testerBusy || !testerEmail.trim() ? 0.45 : pressed ? 0.76 : 1 }]}
+            >
+              <Text style={[styles.previewButtonText, { color: c.foreground }]}>Return to Free</Text>
+            </Pressable>
+          </View>
+          {testerMessage ? <Text style={[styles.testerMessage, { color: testerMessage.includes("now has") ? c.success : c.destructive }]}>{testerMessage}</Text> : null}
+        </View>
+      </>) : null}
 
       <View style={[styles.cadence, { backgroundColor: c.muted, borderColor: c.border }]}>
         {(["monthly", "annual"] as const).map(cadence => {
@@ -144,6 +209,9 @@ const styles = StyleSheet.create({
   adminActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
   previewButton: { minHeight: 40, minWidth: 78, borderWidth: 1, borderRadius: 12, alignItems: "center", justifyContent: "center", paddingHorizontal: 12 },
   previewButtonText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
+  testerInput: { minHeight: 48, borderWidth: 1, borderRadius: 12, paddingHorizontal: 13, fontSize: 14, fontFamily: "Inter_600SemiBold", marginTop: 12 },
+  testerButton: { flex: 1, minHeight: 43, minWidth: 120, borderWidth: 1, borderColor: "transparent", borderRadius: 12, alignItems: "center", justifyContent: "center", paddingHorizontal: 12 },
+  testerMessage: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_700Bold", marginTop: 10 },
   cadence: { alignSelf: "center", flexDirection: "row", borderWidth: 1, borderRadius: 14, padding: 4 },
   cadenceButton: { minWidth: 112, minHeight: 38, borderRadius: 10, alignItems: "center", justifyContent: "center", paddingHorizontal: 12 },
   cadenceText: { fontSize: 12, fontFamily: "Inter_700Bold" },

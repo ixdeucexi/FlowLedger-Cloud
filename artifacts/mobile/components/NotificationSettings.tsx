@@ -24,7 +24,17 @@ export function NotificationSettings() {
     catch { setStatus("unsupported"); }
   }, []);
 
-  useEffect(() => { void refreshStatus(); }, [refreshStatus]);
+  useEffect(() => {
+    void refreshStatus();
+    if (typeof window === "undefined") return;
+    const refresh = () => { void refreshStatus(); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [refreshStatus]);
 
   const toggle = async (enabled: boolean) => {
     if (!session?.access_token || busy) return;

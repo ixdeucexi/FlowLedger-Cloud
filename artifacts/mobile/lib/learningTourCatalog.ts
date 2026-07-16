@@ -16,7 +16,7 @@ export const LEARNING_TOUR_STEPS: LearningTourStep[] = [
     title: "Dashboard",
     focus: "Your command center",
     floSays: "I use this page to give you the short answer first: what is available, how tight the month is, and which algorithm needs your attention.",
-    tryThis: "Tap the Flow Score when you want me to explain what is helping or hurting your plan.",
+    tryThis: "I want you to tap the Flow Score here whenever you want me to explain what is helping or hurting your plan.",
   },
   {
     route: "monthly",
@@ -24,7 +24,7 @@ export const LEARNING_TOUR_STEPS: LearningTourStep[] = [
     title: "Monthly",
     focus: "Calendar forecast",
     floSays: "This is where I show your money by date. Tap any day to see the bills, income, plans, transactions, and projected balance behind that day.",
-    tryThis: "Tap a low-balance day, then ask me why that day is tight.",
+    tryThis: "I want you to tap a day here. I will show the money behind it so you can see why it is safe or tight.",
   },
   {
     route: "bills",
@@ -32,7 +32,7 @@ export const LEARNING_TOUR_STEPS: LearningTourStep[] = [
     title: "Bills and Debt",
     focus: "Obligations and payoff",
     floSays: "This is where your recurring bills and debt snowball live. I use these dates and minimums to protect the forecast before you make new decisions.",
-    tryThis: "Open Debt to see which balance is the current snowball target.",
+    tryThis: "I want you to touch Debt here to see which balance I would make the current snowball target.",
   },
   {
     route: "transactions",
@@ -40,7 +40,7 @@ export const LEARNING_TOUR_STEPS: LearningTourStep[] = [
     title: "Activity",
     focus: "What actually happened",
     floSays: "This page is your money trail. I compare actual activity against the plan so FlowLedger can stay honest instead of guessing.",
-    tryThis: "Use the filters when you want to review bills, manual spending, income, or debt payments.",
+    tryThis: "I want you to use these filters when you need to review bills, manual spending, income, or debt payments.",
   },
   {
     route: "flo",
@@ -48,7 +48,7 @@ export const LEARNING_TOUR_STEPS: LearningTourStep[] = [
     title: "Flo",
     focus: "Ask before changing the plan",
     floSays: "This is where you ask me money questions. I can explain, preview, and help create plans, but I should confirm before changing real data.",
-    tryThis: "Ask: “Can I afford $100 on July 15?” or “Why is next week tight?”",
+    tryThis: "I want you to ask me: “Can I afford $100 on July 15?” or “Why is next week tight?”",
   },
   {
     route: "more",
@@ -56,6 +56,6 @@ export const LEARNING_TOUR_STEPS: LearningTourStep[] = [
     title: "More",
     focus: "Control center",
     floSays: "I use More as your control center for accounts, setup, app install, exports, safety cushion, and the Algorithm Suite.",
-    tryThis: "Open Algorithm Suite to turn financial engines on or off as the account grows.",
+    tryThis: "I want you to open a section here whenever you need to change setup, accounts, notifications, or my Demo.",
   },
 ];

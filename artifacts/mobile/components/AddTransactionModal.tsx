@@ -332,6 +332,14 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
               </View>
             </>}
 
+            <Pressable
+              disabled={saving}
+              onPress={handleSave}
+              style={({ pressed }) => [styles.saveBtn, { backgroundColor: c.primary, borderRadius: colors.radius, opacity: saving ? 0.55 : pressed ? 0.85 : 1 }]}
+            >
+              <Text style={[styles.saveBtnText, { color: c.primaryForeground }]}>{saving ? "Saving…" : editTx ? "Update" : isTransfer ? "Add Transfer" : "Add Transaction"}</Text>
+            </Pressable>
+
             {editTx && onDelete && (
               <Pressable
                 onPress={handleDelete}
@@ -341,14 +349,6 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
                 <Text style={[styles.deleteBtnText, { color: c.destructive }]}>{editTx.transfer_group_id ? "Delete Transfer" : "Delete Transaction"}</Text>
               </Pressable>
             )}
-
-            <Pressable
-              disabled={saving}
-              onPress={handleSave}
-              style={({ pressed }) => [styles.saveBtn, { backgroundColor: c.primary, borderRadius: colors.radius, opacity: saving ? 0.55 : pressed ? 0.85 : 1 }]}
-            >
-              <Text style={[styles.saveBtnText, { color: c.primaryForeground }]}>{saving ? "Saving…" : editTx ? "Update" : isTransfer ? "Add Transfer" : "Add Transaction"}</Text>
-            </Pressable>
           </ScrollView>
         </View>
         <FloSafetyStopModal

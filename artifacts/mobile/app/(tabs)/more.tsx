@@ -351,8 +351,6 @@ export default function MoreScreen() {
     setThemeMode,
     fontStyle,
     setFontStyle,
-    lightningFlashesEnabled,
-    setLightningFlashesEnabled,
   } = useThemeMode();
   const { signOut, user, session, loading: authLoading } = useAuth();
   const {
@@ -1631,7 +1629,7 @@ export default function MoreScreen() {
             <Feather name="check-circle" size={16} color={c.success} />
             <View style={{ flex: 1 }}>
               <Text style={[styles.accountName, { color: c.foreground }]}>Setup is complete</Text>
-              <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>You can restart Flo setup or replay learning mode any time.</Text>
+              <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>You can restart Flo setup or replay the Demo any time.</Text>
             </View>
           </View>
           <Pressable
@@ -1655,7 +1653,7 @@ export default function MoreScreen() {
             style={({ pressed }) => [styles.addBtn, { backgroundColor: c.muted, borderRadius: 10, opacity: pressed ? 0.7 : 1 }]}
           >
             <Feather name="compass" size={16} color={c.primary} />
-            <Text style={[styles.addBtnText, { color: c.primary }]}>Replay learning mode</Text>
+            <Text style={[styles.addBtnText, { color: c.primary }]}>Replay Demo</Text>
           </Pressable>
         </View>
       )}
@@ -1726,27 +1724,6 @@ export default function MoreScreen() {
             </Pressable>
           );
         })}
-      </View>
-      <SLabel c={c} text="Motion & effects" />
-      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        <Pressable
-          onPress={() => {
-            setLightningFlashesEnabled(!lightningFlashesEnabled);
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          }}
-          style={({ pressed }) => [styles.decisionSettingRow, { opacity: pressed ? 0.75 : 1 }]}
-        >
-          <View style={[styles.dataIcon, { backgroundColor: c.primary + "18" }]}>
-            <Feather name="zap" size={17} color={c.primary} />
-          </View>
-          <View style={styles.switchInfo}>
-              <Text style={[styles.switchLabel, { color: c.foreground }]}>Flow shimmer</Text>
-              <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Turn this off if pulsing background motion is uncomfortable.</Text>
-          </View>
-          <View style={[styles.toggleTrack, { backgroundColor: lightningFlashesEnabled ? c.primary : c.muted }]}>
-            <View style={[styles.toggleKnob, { backgroundColor: "#fff", alignSelf: lightningFlashesEnabled ? "flex-end" : "flex-start" }]} />
-          </View>
-        </Pressable>
       </View>
       </>}
 

@@ -36,6 +36,7 @@ import {
   type SetupStartingPoint,
 } from "@/lib/onboarding";
 import { loadOnboardingPreferences, saveOnboardingPreferences } from "@/lib/onboardingPreferences";
+import { LEARNING_TOUR_STEPS, writeLearningTourState } from "@/lib/learningTour";
 import { readStoredSetupStep, writeStoredSetupStep, type SetupStepKey } from "@/lib/setupProgress";
 
 interface SetupStep {
@@ -118,7 +119,9 @@ function SetupWizard() {
   const {
     accounts, incomes, bills, goals, settings,
     addAccount, updateAccount, reconcileAccount,
-    addIncome, addBill, addGoal, updateSettings,
+    addIncome, updateIncome, deleteIncome,
+    addBill, updateBill, deleteBillMistake,
+    addGoal, updateSettings,
   } = useBudget();
 
   const [preferences, setPreferences] = useState<OnboardingPreferences>(DEFAULT_ONBOARDING_PREFERENCES);
@@ -129,6 +132,9 @@ function SetupWizard() {
   const [incomeModalVisible, setIncomeModalVisible] = useState(false);
   const [billModalVisible, setBillModalVisible] = useState(false);
   const [debtModalVisible, setDebtModalVisible] = useState(false);
+  const [editIncome, setEditIncome] = useState<IncomeItem | null>(null);
+  const [editBill, setEditBill] = useState<Bill | null>(null);
+  const [editDebt, setEditDebt] = useState<Bill | null>(null);
   const [goalModalVisible, setGoalModalVisible] = useState(false);
   const [safetyFloorText, setSafetyFloorText] = useState(String(settings.safety_floor));
   const [horizonText, setHorizonText] = useState(String(settings.forecast_horizon_months));
@@ -408,7 +414,8 @@ function SetupWizard() {
   const finish = async () => {
     writeStoredSetupStep(null);
     await updateSettings({ onboarding_completed: true });
-    router.replace("/(tabs)" as any);
+    writeLearningTourState(true, 0);
+    router.replace(LEARNING_TOUR_STEPS[0].path as any);
   };
 
   const createInvite = async () => {
@@ -480,12 +487,15 @@ function SetupWizard() {
         setAccountModalVisible(true);
         return;
       case "income":
+        setEditIncome(null);
         setIncomeModalVisible(true);
         return;
       case "bills":
+        setEditBill(null);
         setBillModalVisible(true);
         return;
       case "debts":
+        setEditDebt(null);
         setDebtModalVisible(true);
         return;
       case "goal_setup":
@@ -725,6 +735,59 @@ function SetupWizard() {
     );
   };
 
+  const renderExistingMoneyItems = () => {
+    const items = current.key === "income"
+      ? incomes.map(item => ({
+          id: item.id,
+          title: item.name,
+          detail: `$${Number(item.amount).toFixed(2)} · ${item.frequency}`,
+          onPress: () => { setEditIncome(item); setIncomeModalVisible(true); },
+        }))
+      : current.key === "bills"
+        ? bills.filter(item => !item.is_debt).map(item => ({
+            id: item.id,
+            title: item.name,
+            detail: `$${Number(item.amount).toFixed(2)} · ${item.is_recurring ? item.frequency : "one-time"}`,
+            onPress: () => { setEditBill(item); setBillModalVisible(true); },
+          }))
+        : current.key === "debts"
+          ? bills.filter(item => item.is_debt).map(item => ({
+              id: item.id,
+              title: item.name,
+              detail: `$${Number(item.amount).toFixed(2)} minimum · $${Number(item.balance ?? 0).toFixed(2)} balance`,
+              onPress: () => { setEditDebt(item); setDebtModalVisible(true); },
+            }))
+          : [];
+
+    if (items.length === 0) return null;
+    return (
+      <View style={styles.setupItemsCard}>
+        <View style={styles.setupItemsHeader}>
+          <Text style={styles.setupItemsTitle}>Added during setup</Text>
+          <Text style={styles.setupItemsHint}>Tap one to edit</Text>
+        </View>
+        {items.map(item => (
+          <Pressable
+            key={item.id}
+            accessibilityRole="button"
+            accessibilityLabel={`Edit ${item.title}`}
+            onPress={item.onPress}
+            style={({ pressed }) => [styles.setupItemRow, { opacity: pressed ? 0.72 : 1 }]}
+          >
+            <View style={styles.setupItemIcon}>
+              <Feather name="edit-2" size={15} color="#c084fc" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.setupItemTitle}>{item.title}</Text>
+              <Text style={styles.setupItemDetail}>{item.detail}</Text>
+            </View>
+            <Feather name="chevron-right" size={18} color="#64748b" />
+          </Pressable>
+        ))}
+      </View>
+    );
+  };
+
   const renderFinishCards = () => {
     if (current.key !== "finish") return null;
     return FINISH_CARDS.map(card => (
@@ -796,6 +859,7 @@ function SetupWizard() {
           <View style={styles.optionStack}>
             {renderTrustCards()}
             {renderActionPathCard()}
+            {renderExistingMoneyItems()}
             {renderHouseholdStep()}
             {renderOptions()}
             {renderPlanCards()}
@@ -854,7 +918,7 @@ function SetupWizard() {
           </Pressable>
           {!isPreferenceStep(current.key) && current.key !== "finish" ? (
             <Pressable onPress={goNext}>
-              <Text style={styles.navText}>Skip for now</Text>
+              <Text style={styles.navText}>{current.done ? "Done adding" : "Skip for now"}</Text>
             </Pressable>
           ) : <View />}
         </View>
@@ -886,30 +950,54 @@ function SetupWizard() {
       />
       <IncomeModal
         visible={incomeModalVisible}
-        onClose={() => setIncomeModalVisible(false)}
+        editItem={editIncome}
+        onClose={() => { setIncomeModalVisible(false); setEditIncome(null); }}
+        onDelete={async id => {
+          await deleteIncome(id);
+          setEditIncome(null);
+          setFloConfirmation("Income removed. Add the correct one when you're ready.");
+        }}
         onSave={async data => {
-          await addIncome(data as Omit<IncomeItem, "id">);
+          if (editIncome) await updateIncome(data as IncomeItem);
+          else await addIncome(data as Omit<IncomeItem, "id">);
           setIncomeModalVisible(false);
-          confirmAndNext("Nice — I'll include that income when I check future cash flow.");
+          setEditIncome(null);
+          setFloConfirmation(editIncome ? "Income updated. You can review it again or keep adding." : "Income added. Add another one, or tap Done adding.");
         }}
       />
       <AddBillModal
         visible={billModalVisible}
-        onClose={() => setBillModalVisible(false)}
+        editBill={editBill}
+        onClose={() => { setBillModalVisible(false); setEditBill(null); }}
+        onDelete={async id => {
+          await deleteBillMistake(id);
+          setEditBill(null);
+          setFloConfirmation("Bill removed. Add the correct one when you're ready.");
+        }}
         onSave={async data => {
-          await addBill(data as Omit<Bill, "id" | "created_at">);
+          if (editBill) await updateBill(data as Bill);
+          else await addBill(data as Omit<Bill, "id" | "created_at">);
           setBillModalVisible(false);
-          confirmAndNext("Got it — I'll watch that bill date when I forecast your month.");
+          setEditBill(null);
+          setFloConfirmation(editBill ? "Bill updated. Check it again or keep adding." : "Bill added. Add another one, or tap Done adding.");
         }}
       />
       <AddBillModal
         visible={debtModalVisible}
-        onClose={() => setDebtModalVisible(false)}
+        editBill={editDebt}
+        onClose={() => { setDebtModalVisible(false); setEditDebt(null); }}
         forceDebt
+        onDelete={async id => {
+          await deleteBillMistake(id);
+          setEditDebt(null);
+          setFloConfirmation("Debt removed. Add the correct one when you're ready.");
+        }}
         onSave={async data => {
-          await addBill(data as Omit<Bill, "id" | "created_at">);
+          if (editDebt) await updateBill(data as Bill);
+          else await addBill(data as Omit<Bill, "id" | "created_at">);
           setDebtModalVisible(false);
-          confirmAndNext("Debt added — I'll use it for payoff and extra-payment decisions.");
+          setEditDebt(null);
+          setFloConfirmation(editDebt ? "Debt updated. Check it again or keep adding." : "Debt added. Add another one, or tap Done adding.");
         }}
       />
       <GoalModal
@@ -1059,6 +1147,14 @@ const styles = StyleSheet.create({
   pathPillText: { color: "#94a3b8", fontSize: 10, fontFamily: "Inter_800ExtraBold" },
   pathPillTextActive: { color: "#ddd6fe" },
   pathPillTextDone: { color: "#bbf7d0" },
+  setupItemsCard: { borderRadius: 20, borderWidth: 1, borderColor: "rgba(192,132,252,0.26)", backgroundColor: "rgba(15,23,42,0.78)", padding: 12, gap: 8 },
+  setupItemsHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingHorizontal: 2, paddingBottom: 2 },
+  setupItemsTitle: { color: "#f8fafc", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  setupItemsHint: { color: "#94a3b8", fontSize: 10, fontFamily: "Inter_700Bold" },
+  setupItemRow: { minHeight: 58, borderRadius: 15, borderWidth: 1, borderColor: "rgba(148,163,184,0.14)", backgroundColor: "rgba(2,6,23,0.42)", padding: 10, flexDirection: "row", alignItems: "center", gap: 10 },
+  setupItemIcon: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(168,85,247,0.14)" },
+  setupItemTitle: { color: "#f8fafc", fontSize: 14, fontFamily: "Inter_800ExtraBold" },
+  setupItemDetail: { color: "#94a3b8", fontSize: 11, lineHeight: 16, fontFamily: "Inter_500Medium", marginTop: 2, textTransform: "capitalize" },
   finishCard: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 18, borderWidth: 1, borderColor: "rgba(192,132,252,0.22)", backgroundColor: "rgba(30,27,75,0.45)", padding: 14 },
   finishIcon: { width: 38, height: 38, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(139,92,246,0.18)" },
   finishTitle: { color: "#f8fafc", fontSize: 14, fontFamily: "Inter_800ExtraBold" },

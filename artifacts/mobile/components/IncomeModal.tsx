@@ -29,10 +29,11 @@ interface Props {
   visible: boolean;
   onClose: () => void;
   onSave: (item: Omit<IncomeItem, "id"> | IncomeItem) => void | Promise<unknown>;
+  onDelete?: (id: string) => void | Promise<unknown>;
   editItem?: IncomeItem | null;
 }
 
-export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
+export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Props) {
   const c = useColors();
   useBackDismiss(visible, onClose);
   const [name,            setName]            = useState("");
@@ -46,6 +47,30 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
   const [raiseAmount,     setRaiseAmount]     = useState("");
   const [raiseDate,       setRaiseDate]       = useState("");
   const [saving,          setSaving]          = useState(false);
+
+  const handleDelete = () => {
+    if (!editItem || !onDelete || saving) return;
+    Alert.alert(
+      "Delete income?",
+      `Delete "${editItem.name}" from Income and Calendar?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setSaving(true);
+            try {
+              await onDelete(editItem.id);
+              onClose();
+            } finally {
+              setSaving(false);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   useEffect(() => {
     if (editItem) {
@@ -323,6 +348,16 @@ export function IncomeModal({ visible, onClose, onSave, editItem }: Props) {
             >
               <Text style={[styles.saveBtnText, { color: c.primaryForeground }]}>{saving ? "Saving…" : editItem ? "Update" : "Add Income"}</Text>
             </Pressable>
+            {editItem && onDelete ? (
+              <Pressable
+                disabled={saving}
+                onPress={handleDelete}
+                style={({ pressed }) => [styles.deleteBtn, { borderColor: c.destructive, opacity: saving ? 0.55 : pressed ? 0.78 : 1 }]}
+              >
+                <Feather name="trash-2" size={15} color={c.destructive} />
+                <Text style={[styles.deleteBtnText, { color: c.destructive }]}>Delete Income</Text>
+              </Pressable>
+            ) : null}
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
@@ -373,6 +408,8 @@ const styles = StyleSheet.create({
   raiseInfoText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
   confirmRaiseBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 44, borderRadius: 10, marginTop: 12 },
   confirmRaiseBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-  saveBtn: { height: 52, alignItems: "center", justifyContent: "center", marginTop: 20, marginBottom: 32 },
+  saveBtn: { height: 52, alignItems: "center", justifyContent: "center", marginTop: 20, marginBottom: 12 },
   saveBtnText: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  deleteBtn: { minHeight: 48, borderWidth: 1, borderRadius: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 32 },
+  deleteBtnText: { fontSize: 14, fontFamily: "Inter_700Bold" },
 });

@@ -7,7 +7,6 @@ import {
   annualSavings,
   canUseFeature,
   mapHouseholdPlan,
-  membershipEnforcementEnabled,
   normalizePlanTier,
   resolvePreviewTier,
 } from "./membership";
@@ -47,10 +46,4 @@ test("only resolves stored previews for approved admins", () => {
   assert.equal(resolvePreviewTier(true, "pro"), "pro");
   assert.equal(resolvePreviewTier(false, "free"), null);
   assert.equal(resolvePreviewTier(true, "plus"), null);
-});
-
-test("keeps paid enforcement off unless explicitly enabled", () => {
-  assert.equal(membershipEnforcementEnabled(undefined), false);
-  assert.equal(membershipEnforcementEnabled("false"), false);
-  assert.equal(membershipEnforcementEnabled("TRUE"), true);
 });

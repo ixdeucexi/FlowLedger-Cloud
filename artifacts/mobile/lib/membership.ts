@@ -106,10 +106,6 @@ export function canUseFeature(plan: PlanTier | Pick<HouseholdPlan, "tier">, feat
   return PLAN_CATALOG[tier].features.includes(feature);
 }
 
-export function membershipEnforcementEnabled(value = process.env.EXPO_PUBLIC_MEMBERSHIP_ENFORCEMENT_ENABLED): boolean {
-  return String(value ?? "false").trim().toLowerCase() === "true";
-}
-
 export function annualSavings(tier: PlanTier): number {
   const plan = PLAN_CATALOG[tier];
   return Math.max(0, Math.round((plan.monthlyPrice * 12 - plan.annualPrice) * 100) / 100);

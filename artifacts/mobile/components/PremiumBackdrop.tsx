@@ -1,7 +1,6 @@
 import { StyleSheet, View } from "react-native";
 
 import { FlowWaveBackground } from "@/components/FlowWaveBackground";
-import { useThemeMode } from "@/context/ThemeContext";
 import { useEffectiveThemeMode } from "@/hooks/useEffectiveThemeMode";
 
 type Props = {
@@ -24,7 +23,6 @@ const LIGHT_GLOWS: Record<NonNullable<Props["variant"]>, { primary: string; seco
 };
 
 export function PremiumBackdrop({ variant = "blue" }: Props) {
-  const { lightningFlashesEnabled } = useThemeMode();
   const themeMode = useEffectiveThemeMode();
 
   if (themeMode === "light") {
@@ -39,7 +37,7 @@ export function PremiumBackdrop({ variant = "blue" }: Props) {
     );
   }
 
-  return <FlowWaveBackground variant={variant} flashesEnabled={lightningFlashesEnabled} />;
+  return <FlowWaveBackground variant={variant} />;
 }
 
 const styles = StyleSheet.create({

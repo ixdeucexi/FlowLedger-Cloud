@@ -7,7 +7,6 @@ type FlowWaveVariant = "blue" | "green" | "purple";
 type Props = {
   variant?: FlowWaveVariant;
   intensity?: "soft" | "standard";
-  flashesEnabled?: boolean;
 };
 
 const VARIANT_GLOWS: Record<FlowWaveVariant, { primary: string; secondary: string; edge: string }> = {
