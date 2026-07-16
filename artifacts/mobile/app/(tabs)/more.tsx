@@ -20,6 +20,8 @@ import { FloLogo } from "@/components/FloLogo";
 import { IncomeModal } from "@/components/IncomeModal";
 import { MembershipPanel } from "@/components/MembershipPanel";
 import { NotificationSettings } from "@/components/NotificationSettings";
+import { MoreHub } from "@/components/settings/MoreHub";
+import { SettingsSectionHeader } from "@/components/settings/SettingsSectionHeader";
 import { PlanFeatureGate } from "@/components/PlanFeatureGate";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { ReviewCenter } from "@/components/ReviewCenter";
@@ -52,6 +54,14 @@ import {
 import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
+import {
+  SETTINGS_SECTIONS,
+  attentionCountStatus,
+  formatCountStatus,
+  type SettingsDestinationId,
+  type SettingsSectionId,
+  type SettingsStatus,
+} from "@/lib/settingsHub";
 import { supabase } from "@/lib/supabase";
 import { transactionCategoryParts } from "@/lib/reviewCenter";
 import {
@@ -93,25 +103,6 @@ const FONT_OPTIONS: { label: string; value: AppFontStyle; icon: string; desc: st
 
 const BACKUP_COMPLETE_KEY = "flowledger_backup_exported";
 type AlgorithmCatalogItem = typeof ALGORITHM_CATALOG[number];
-type SettingsSectionId =
-  | "overview"
-  | "membership"
-  | "setup"
-  | "appearance"
-  | "algorithms"
-  | "accounts"
-  | "plaid"
-  | "notifications"
-  | "money"
-  | "review"
-  | "subscriptions"
-  | "reports"
-  | "goals"
-  | "children"
-  | "help"
-  | "backup"
-  | "security"
-  | "legal";
 
 type SubscriptionDecision = "keep" | "not_subscription" | "cancelled" | "bill_created";
 
@@ -229,31 +220,6 @@ function mapChildForSupabase(profile: ChildProfile, userId: string, householdId:
     updated_at: new Date().toISOString(),
   };
 }
-
-const SETTINGS_SECTIONS: Array<{
-  id: Exclude<SettingsSectionId, "overview">;
-  label: string;
-  description: string;
-  icon: string;
-}> = [
-  { id: "membership", label: "Membership", description: "Free, Pro, pricing, and admin plan preview.", icon: "award" },
-  { id: "setup", label: "Setup walkthrough", description: "Restart setup and learning mode.", icon: "message-circle" },
-  { id: "accounts", label: "Accounts", description: "Balances, reconcile, and household sharing.", icon: "credit-card" },
-  { id: "plaid", label: "Bank sync", description: "Connect a bank or import activity safely.", icon: "link" },
-  { id: "notifications", label: "Notifications", description: "Private alerts for posted bank transactions.", icon: "bell" },
-  { id: "money", label: "Money plan", description: "Income, categories, safety, and payoff.", icon: "sliders" },
-  { id: "review", label: "Review Center", description: "Your money inbox for unclear activity.", icon: "check-square" },
-  { id: "subscriptions", label: "Subscriptions", description: "Recurring charges, patterns, and cleanup.", icon: "repeat" },
-  { id: "reports", label: "Reports & insights", description: "Spending, debt, goals, and changes.", icon: "bar-chart-2" },
-  { id: "goals", label: "Goal funding", description: "Safe monthly goal plans.", icon: "target" },
-  { id: "algorithms", label: "Algorithm Suite", description: "Turn money engines on or off.", icon: "cpu" },
-  { id: "appearance", label: "Appearance", description: "Theme, text, and motion.", icon: "moon" },
-  { id: "children", label: "Child money", description: "Profiles, allowance, and goals.", icon: "smile" },
-  { id: "help", label: "Help & Feedback", description: "Send feedback and view the inbox.", icon: "message-square" },
-  { id: "backup", label: "Backup, import, and install", description: "CSV, imports, install, and Flo memory.", icon: "download" },
-  { id: "security", label: "Security and profile", description: "Signed-in account and sign out.", icon: "lock" },
-  { id: "legal", label: "Legal", description: "Terms, privacy, and data use.", icon: "file-text" },
-];
 
 const VISIBLE_SETTINGS_SECTIONS = SETTINGS_SECTIONS;
 const ACTIVE_SETTINGS_SECTION_KEY = "flowledger_active_settings_section";
@@ -384,7 +350,12 @@ export default function MoreScreen() {
     setLightningFlashesEnabled,
   } = useThemeMode();
   const { signOut, user, session, loading: authLoading } = useAuth();
-  const { isAdmin: feedbackAdmin } = useMembership();
+  const {
+    effectiveTier,
+    isAdmin: feedbackAdmin,
+    loading: membershipLoading,
+    previewTier,
+  } = useMembership();
   const {
     bills, transactions, overrides, incomes, goals, importBills, settings, updateSettings, accounts, forecastConfidence,
     addBill, updateBill,
@@ -969,6 +940,38 @@ export default function MoreScreen() {
     goals: goalFundingPlans,
     needsReconcile: forecastReadiness.missing.includes("Reconcile an account"),
   }), [forecastReadiness.missing, goalFundingPlans, growthBills, reviewTransactionCount, settings.safety_floor, subscriptions, todayIso]);
+  const membershipStatusLabel = membershipLoading
+    ? "Loading"
+    : `${effectiveTier === "pro" ? "Pro" : "Free"}${previewTier ? " preview" : ""}`;
+  const hubStatuses = useMemo<Partial<Record<SettingsDestinationId, SettingsStatus>>>(() => ({
+    accounts: { label: formatCountStatus(activeAccounts.length, "account") },
+    goals: { label: formatCountStatus(goals.length, "goal") },
+    children: { label: formatCountStatus(childProfiles.length, "profile") },
+    review: attentionCountStatus(reviewTransactionCount, "Clear", "to review", "to review"),
+    subscriptions: { label: `${subscriptions.length} found` },
+    reports: { label: formatCountStatus(smartReminders.length, "reminder") },
+    algorithms: { label: decisionHubSettings.algorithmSuiteEnabled ? "On" : "Off" },
+    setup: setupIsComplete
+      ? { label: "Complete" }
+      : { label: `${setupComplete}/${setupSteps.length} complete`, tone: "attention" },
+    appearance: { label: themeMode === "auto" ? "Auto" : themeMode === "dark" ? "Dark" : "Light" },
+    backup: backupExported ? { label: "Backup saved" } : { label: "Not backed up", tone: "attention" },
+    membership: { label: membershipStatusLabel },
+  }), [
+    activeAccounts.length,
+    backupExported,
+    childProfiles.length,
+    decisionHubSettings.algorithmSuiteEnabled,
+    goals.length,
+    membershipStatusLabel,
+    reviewTransactionCount,
+    setupComplete,
+    setupIsComplete,
+    setupSteps.length,
+    smartReminders.length,
+    subscriptions.length,
+    themeMode,
+  ]);
 
   const saveSubscriptionDecisions = async (next: Record<string, SubscriptionDecision>) => {
     setSubscriptionDecisions(next);
@@ -1490,52 +1493,27 @@ export default function MoreScreen() {
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 + webTopPad, paddingBottom: insets.bottom + 100 }]}
       >
       {activeSettingsSection === "overview" ? (
-        <>
-          <Text style={[styles.pageTitle, { color: c.foreground }]}>Settings</Text>
-          <View style={styles.settingsSectionList}>
-            {VISIBLE_SETTINGS_SECTIONS.map(section => (
-              <Pressable
-                key={section.id}
-                onPress={() => {
-                  if (section.id === "algorithms") setShowAlgorithmSuite(true);
-                  openSettingsSection(section.id);
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                }}
-                style={({ pressed }) => [
-                  styles.settingsSectionCard,
-                  { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.76 : 1 },
-                ]}
-              >
-                <View style={[styles.settingsSectionIcon, { backgroundColor: c.primary + "16" }]}>
-                  <Feather name={section.icon as any} size={20} color={c.primary} />
-                </View>
-                <View style={styles.settingsSectionCopy}>
-                  <Text style={[styles.settingsSectionTitle, { color: c.foreground }]}>{section.label}</Text>
-                  <Text style={[styles.settingsSectionDesc, { color: c.mutedForeground }]} numberOfLines={1}>{section.description}</Text>
-                </View>
-                <Feather name="chevron-right" size={18} color={c.mutedForeground} />
-              </Pressable>
-            ))}
-          </View>
-        </>
+        <MoreHub
+          householdName={activeHousehold?.name ?? "Personal household"}
+          householdRole={householdRole ? `${householdRoleLabel(householdRole)} access` : "Private plan"}
+          identity={user?.email ?? "Signed in"}
+          membershipLabel={membershipStatusLabel}
+          statuses={hubStatuses}
+          onOpenSection={sectionId => {
+            if (sectionId === "algorithms") setShowAlgorithmSuite(true);
+            openSettingsSection(sectionId);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          }}
+        />
       ) : (
-        <>
-          <Pressable
-            onPress={() => openSettingsSection("overview")}
-            style={({ pressed }) => [styles.settingsBackRow, { opacity: pressed ? 0.7 : 1 }]}
-          >
-            <Feather name="chevron-left" size={22} color={c.primary} />
-            <Text style={[styles.settingsBackText, { color: c.primary }]}>Settings</Text>
-          </Pressable>
-          <Text style={[styles.pageTitle, { color: c.foreground }]}>{activeSettingsMeta?.label ?? "Settings"}</Text>
-          <Text style={[styles.pageSubtitle, { color: c.mutedForeground }]}>{activeSettingsMeta?.description}</Text>
-        </>
+        activeSettingsMeta ? (
+          <SettingsSectionHeader section={activeSettingsMeta} onBack={() => openSettingsSection("overview")} />
+        ) : null
       )}
 
       {activeSettingsSection === "membership" && <MembershipPanel />}
 
       {activeSettingsSection === "setup" && shouldShowFloSetup && <>
-      <SLabel c={c} text="Flo Setup" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View style={[styles.floSetupHero, { backgroundColor: c.primary + "10", borderColor: c.primary + "30" }]}>
           <FloLogo size={54} />
@@ -1657,7 +1635,6 @@ export default function MoreScreen() {
       )}
 
       {activeSettingsSection === "plaid" && <>
-      <SLabel c={c} text="Bank sync" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <PlanFeatureGate feature="plaid_sync" compact>
         <PlaidLinkButton colors={c} onConnected={refreshBankData} />
@@ -1748,7 +1725,6 @@ export default function MoreScreen() {
       </>}
 
       {activeSettingsSection === "algorithms" && <>
-      <SLabel c={c} text="Algorithms" />
       <Pressable
         onPress={() => {
           setShowAlgorithmSuite(current => !current);
@@ -2576,7 +2552,6 @@ export default function MoreScreen() {
       </>}
 
       {activeSettingsSection === "reports" && <>
-      <SLabel c={c} text="Reports & Insights" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View style={styles.growthMetricGrid}>
           <View style={[styles.growthMetric, { backgroundColor: c.muted }]}>
@@ -2634,7 +2609,6 @@ export default function MoreScreen() {
       </>}
 
       {activeSettingsSection === "goals" && <>
-      <SLabel c={c} text="Goal Funding Plans" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         {goalFundingPlans.map((plan, index) => {
           const goal = goals.find(item => item.id === plan.goalId);
@@ -2669,7 +2643,6 @@ export default function MoreScreen() {
       </>}
 
       {activeSettingsSection === "children" && <>
-      <SLabel c={c} text="Child Money Management" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         {growthNotice ? <Text style={[styles.feedbackNotice, { color: c.success }]}>{growthNotice}</Text> : null}
         <View style={styles.growthHeaderRow}>
@@ -2742,7 +2715,6 @@ export default function MoreScreen() {
       </>}
 
       {activeSettingsSection === "backup" && <>
-      <SLabel c={c} text="Backup & Data" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         {[
           { icon: "upload" as const,   label: "Import Bills from CSV", desc: "Name, Amount, Category, Balance, Interest Rate…", onPress: handleImport, color: c.primary },
@@ -2970,7 +2942,6 @@ export default function MoreScreen() {
       </>}
 
       {activeSettingsSection === "legal" && <>
-      <SLabel c={c} text="Legal" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         {[
           { id: "terms" as const, title: "Terms & Conditions", desc: "How FlowLedger Algo should be used and what users are responsible for.", icon: "file-text" },
@@ -3002,7 +2973,6 @@ export default function MoreScreen() {
 
       {activeSettingsSection === "security" && <>
       <View style={{ marginTop: 8, marginBottom: 8 }}>
-        <SLabel c={c} text="Security & Profile" />
         <View style={[styles.card, { borderRadius: 14, backgroundColor: c.card }]}>
           <View style={{ flexDirection: "row", alignItems: "center", paddingBottom: 12, marginBottom: 12, borderBottomWidth: 1, borderBottomColor: c.border }}>
             <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: c.primary + "22", alignItems: "center", justifyContent: "center", marginRight: 12 }}>
@@ -3230,17 +3200,8 @@ function PlanningToolToggle({ c, icon, label, description, enabled, disabled, on
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   scroller: { flex: 1 },
-  content: { paddingHorizontal: 16 },
-  pageTitle:    { fontSize: 34, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.1, marginBottom: 14 },
-  pageSubtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginBottom: 20 },
-  settingsSectionList: { gap: 10, marginBottom: 20 },
-  settingsSectionCard: { minHeight: 82, borderWidth: 1, borderRadius: 22, padding: 14, flexDirection: "row", alignItems: "center", gap: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.14, shadowRadius: 18, elevation: 4 },
+  content: { width: "100%", maxWidth: 760, alignSelf: "center", paddingHorizontal: 16 },
   settingsSectionIcon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
-  settingsSectionCopy: { flex: 1, gap: 3 },
-  settingsSectionTitle: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
-  settingsSectionDesc: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 17 },
-  settingsBackRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10, alignSelf: "flex-start" },
-  settingsBackText: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   settingsLauncher: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 20, padding: 14, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.16, shadowRadius: 18, elevation: 4 },
   card: { padding: 16, marginBottom: 20, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", shadowColor: "#000", shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 22, elevation: 5 },
   planningModeIntro: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 18, marginBottom: 12 },

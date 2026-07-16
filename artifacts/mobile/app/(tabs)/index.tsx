@@ -1138,7 +1138,7 @@ export default function DashboardScreen() {
             { label: "Bills", icon: "file-text" as const, to: "/(tabs)/bills" },
             { label: "Activity", icon: "repeat" as const, to: "/(tabs)/transactions" },
             { label: "Flo", icon: "message-circle" as const, to: "/(tabs)/flo" },
-            { label: "Settings", icon: "settings" as const, to: "/(tabs)/more" },
+            { label: "More", icon: "settings" as const, to: "/(tabs)/more" },
           ].map(item => (
             <Pressable
               key={item.label}

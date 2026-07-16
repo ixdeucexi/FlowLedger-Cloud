@@ -77,17 +77,17 @@ const DEMO_TOUR_STEPS = [
     route: "flo",
     title: "Flo",
     path: "/(tabs)/flo",
-    nextLabel: "Open Settings",
+    nextLabel: "Open More",
     short: "This is the action and decision layer.",
     detail: "Flo is where users ask money questions, create plans, preview changes, and get plain-English explanations. Flo should confirm before changing the real plan.",
   },
   {
     route: "more",
-    title: "Settings",
+    title: "More",
     path: "/(tabs)/more",
     nextLabel: "Finish tour",
     short: "This is the control room.",
-    detail: "Settings is where users manage accounts, setup, safety cushion, forecast horizon, imports, exports, app install help, Flo memory, and decision settings.",
+    detail: "More is where users manage accounts, setup, safety cushion, forecast horizon, imports, exports, app install help, Flo memory, and decision settings.",
   },
 ] as const;
 

@@ -53,9 +53,9 @@ export const LEARNING_TOUR_STEPS: LearningTourStep[] = [
   {
     route: "more",
     path: "/(tabs)/more",
-    title: "Settings",
+    title: "More",
     focus: "Control center",
-    floSays: "I use Settings as your control center for accounts, setup, app install, exports, safety cushion, and the Algorithm Suite.",
+    floSays: "I use More as your control center for accounts, setup, app install, exports, safety cushion, and the Algorithm Suite.",
     tryThis: "Open Algorithm Suite to turn financial engines on or off as the account grows.",
   },
 ];

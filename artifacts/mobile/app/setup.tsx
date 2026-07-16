@@ -377,7 +377,7 @@ function SetupWizard() {
 
   const createInvite = async () => {
     if (!householdForInvite) {
-      setHouseholdMessage("No household is ready yet. You can invite someone later from Settings.");
+      setHouseholdMessage("No household is ready yet. You can invite someone later from More.");
       return;
     }
     setHouseholdBusy(true);
@@ -422,7 +422,7 @@ function SetupWizard() {
         goNext();
         return;
       case "household":
-        setFloConfirmation(householdCode ? "Invite code is ready. You can continue setup while they join." : "No problem — household setup can wait until Settings.");
+        setFloConfirmation(householdCode ? "Invite code is ready. You can continue setup while they join." : "No problem — household setup can wait until More.");
         goNext();
         return;
       case "help":
@@ -598,7 +598,7 @@ function SetupWizard() {
         </View>
 
         {householdMessage ? <Text style={styles.householdMessage}>{householdMessage}</Text> : null}
-        <Text style={styles.householdFootnote}>You can skip this and invite people later from Settings → Accounts.</Text>
+        <Text style={styles.householdFootnote}>You can skip this and invite people later from More → Accounts & household.</Text>
       </View>
     );
   };
