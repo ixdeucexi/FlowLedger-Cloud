@@ -8,8 +8,8 @@ module.exports = async function testNotification(req, res) {
   try {
     const result = await sendPushToUser(auth.user.id, {
       title: "FlowLedger notifications are on",
-      body: "New posted transactions will notify you and open Review Center.",
-      url: "/more?section=review",
+      body: "Pending bank activity opens Activity. Posted transactions open Review Center.",
+      url: "/transactions",
       tag: "flowledger-test",
     });
     if (!result.delivered) {

@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Animated, Image, Keyboard, Modal, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable,
+  Animated, Image, Keyboard, Modal, NativeScrollEvent, NativeSyntheticEvent, PanResponder, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -127,7 +127,7 @@ export default function DashboardScreen() {
     getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getMonthlyIncome,
     goals, addGoal, updateGoal, deleteGoal, checkGoalAffordability,
     getCashFlow, addBill, addTransaction, getDailyBalances, getTransactionsForMonth, settings,
-    accounts, incomes, decisions, updateSettings, forecastConfidence,
+    accounts, connectedBankAccounts, incomes, decisions, updateSettings, forecastConfidence,
     categories, activeHousehold, canEditHousehold,
   } = useBudget();
   const categoryBudgetScope = useMemo(() => ({
@@ -168,6 +168,12 @@ export default function DashboardScreen() {
   const algorithmCarouselRef = useRef<ScrollView | null>(null);
   const algorithmSnapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startupAlertShownRef = useRef(false);
+  const flowScoreSwipeResponder = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_event, gesture) => gesture.dy > 10 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+    onPanResponderRelease: (_event, gesture) => {
+      if (gesture.dy > 64 || gesture.vy > 0.75) setFlowScoreVisible(false);
+    },
+  }), []);
 
   useBackDismiss(actionModalVisible, () => setActionModalVisible(false));
   useBackDismiss(expenseNameModal, () => setExpenseNameModal(false));
@@ -600,9 +606,28 @@ export default function DashboardScreen() {
     if (leftComplete !== rightComplete) return leftComplete ? 1 : -1;
     return left.target_date.localeCompare(right.target_date) || left.name.localeCompare(right.name);
   }), [goals]);
-  const savingsAccountBalance = useMemo(() => accounts
-    .filter(account => account.is_active && account.account_type === "savings")
-    .reduce((sum, account) => sum + account.current_balance, 0), [accounts]);
+  const connectedCheckingAccounts = useMemo(() => connectedBankAccounts.filter(account =>
+    account.is_active && account.account_subtype === "checking"
+  ), [connectedBankAccounts]);
+  const connectedSavingsAccounts = useMemo(() => connectedBankAccounts.filter(account =>
+    account.is_active && account.account_subtype === "savings"
+  ), [connectedBankAccounts]);
+  const savingsAccountBalance = useMemo(() => {
+    if (connectedSavingsAccounts.length) {
+      return connectedSavingsAccounts.reduce((sum, account) => sum + account.current_balance, 0);
+    }
+    return accounts
+      .filter(account => account.is_active && account.account_type === "savings")
+      .reduce((sum, account) => sum + account.current_balance, 0);
+  }, [accounts, connectedSavingsAccounts]);
+  const checkingAccountBalance = useMemo(() => {
+    if (connectedCheckingAccounts.length) {
+      return connectedCheckingAccounts.reduce((sum, account) => sum + account.current_balance, 0);
+    }
+    return accounts
+      .filter(account => account.is_active && account.account_type === "checking")
+      .reduce((sum, account) => sum + account.current_balance, 0);
+  }, [accounts, connectedCheckingAccounts]);
 
   // ── Savings summary for back of hero card ──────────────────────────────────
   const savingsData = useMemo(() => {
@@ -948,7 +973,7 @@ export default function DashboardScreen() {
   const availableBeforePayday = paycheckPlan?.nextPaycheck
     ? paycheckPlan.safeToSpend
     : algorithmSuite.purchaseDecision.safeNowLimit;
-  const availabilityLabel = paycheckPlan?.nextPaycheck ? "Available before payday" : "Available after planned money";
+  const availabilityLabel = paycheckPlan?.nextPaycheck ? "Available before payday" : "Available after plans";
   const availabilityCaption = paycheckPlan?.nextPaycheck
     ? `After bills through ${formatShortDate(paycheckPlan.windowEnd)} and your $${settings.safety_floor.toFixed(0)} safety floor are protected.`
     : "After this month's required money and your safety floor are protected.";
@@ -1306,9 +1331,24 @@ export default function DashboardScreen() {
                 <AppText style={styles.referenceFlipButtonText}>Savings</AppText>
               </Pressable>
             </View>
-            <AppText tone="label" style={styles.referenceHeroLabel}>{availabilityLabel}</AppText>
-            <AppText tone="number" style={styles.referenceHeroAmount}>{formatDashboardCurrency(availableBeforePayday)}</AppText>
-            <AppText style={styles.referenceMoneyCaption}>{availabilityCaption}</AppText>
+            <AppText tone="label" style={styles.referenceHeroLabel}>Checking balance</AppText>
+            <AppText tone="number" style={styles.referenceHeroAmount}>{formatDashboardCurrency(checkingAccountBalance)}</AppText>
+            <AppText style={styles.referenceMoneyCaption}>
+              {connectedCheckingAccounts.length
+                ? `Current balance across ${connectedCheckingAccounts.length} connected checking account${connectedCheckingAccounts.length === 1 ? "" : "s"}.`
+                : "Current balance across active checking accounts."}
+            </AppText>
+
+            <View style={styles.referenceAvailableStrip}>
+              <View style={styles.referenceAvailableIcon}>
+                <Feather name="shield" size={14} color="#4ade80" />
+              </View>
+              <View style={styles.referenceAvailableCopy}>
+                <AppText tone="label" style={styles.referenceAvailableLabel}>{availabilityLabel}</AppText>
+                <AppText style={styles.referenceAvailableCaption} numberOfLines={1}>{availabilityCaption}</AppText>
+              </View>
+              <AppText tone="number" style={styles.referenceAvailableAmount}>{formatDashboardCurrency(availableBeforePayday)}</AppText>
+            </View>
 
             <Pressable
               accessibilityRole="button"
@@ -1604,8 +1644,9 @@ export default function DashboardScreen() {
         onRequestClose={() => setFlowScoreVisible(false)}
       >
         <Pressable style={styles.modalOverlay} onPress={() => setFlowScoreVisible(false)}>
-          <Pressable style={[styles.actionSheet, { backgroundColor: c.card }]} onPress={() => {}}>
+          <Pressable {...flowScoreSwipeResponder.panHandlers} style={[styles.actionSheet, { backgroundColor: c.card }]} onPress={() => {}}>
             <View style={[styles.sheetHandle, { backgroundColor: c.muted }]} />
+            <Text style={[styles.swipeDismissHint, { color: c.mutedForeground }]}>Swipe down to close</Text>
             <View style={styles.flowScoreSheetHeader}>
               <View style={styles.algoScoreRing}>
                 <Text style={styles.algoScoreValue}>{algorithmSuite.flowScore.score}</Text>
@@ -2386,6 +2427,12 @@ const styles = StyleSheet.create({
   referenceFlipButton: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, borderWidth: 1, borderColor: "rgba(196,181,253,0.28)", backgroundColor: "rgba(124,58,237,0.18)", paddingHorizontal: 9, paddingVertical: 6 },
   referenceFlipButtonText: { color: "#c4b5fd", fontSize: 9, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.5 },
   referenceMoneyCaption: { color: "#94a3b8", fontSize: 10, fontFamily: "Inter_500Medium", lineHeight: 14, marginTop: 1 },
+  referenceAvailableStrip: { marginTop: 8, minHeight: 48, borderRadius: 16, borderWidth: 1, borderColor: "rgba(74,222,128,0.24)", backgroundColor: "rgba(20,83,45,0.18)", paddingHorizontal: 10, paddingVertical: 7, flexDirection: "row", alignItems: "center", gap: 8 },
+  referenceAvailableIcon: { width: 30, height: 30, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(34,197,94,0.14)" },
+  referenceAvailableCopy: { flex: 1, minWidth: 0 },
+  referenceAvailableLabel: { color: "#bbf7d0", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7, textTransform: "uppercase" },
+  referenceAvailableCaption: { color: "#94a3b8", fontSize: 8, lineHeight: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
+  referenceAvailableAmount: { color: "#f8fafc", fontSize: 17, lineHeight: 21, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.4 },
   referenceSavingsAmount: { color: "#6ee7b7", fontSize: 34, lineHeight: 38, letterSpacing: -1.4 },
   referenceGoalsHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8, marginBottom: 5 },
   referenceGoalsTitle: { color: "#f8fafc", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
@@ -2787,6 +2834,7 @@ const styles = StyleSheet.create({
   modalOverlay:    { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.5)" },
   actionSheet:     { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 12, paddingBottom: 36, paddingHorizontal: 20 },
   sheetHandle:     { width: 40, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 16 },
+  swipeDismissHint: { fontSize: 10, fontFamily: "Inter_600SemiBold", textAlign: "center", marginTop: -10, marginBottom: 12 },
   sheetTitle:      { fontSize: 20, fontFamily: "Inter_700Bold", marginBottom: 4 },
   sheetSub:        { fontSize: 13, fontFamily: "Inter_400Regular", marginBottom: 16 },
   actionRow:       { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 14, borderTopWidth: 1 },

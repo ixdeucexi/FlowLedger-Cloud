@@ -56,11 +56,10 @@ test("keeps a full setup path when preferences are empty", () => {
 
 test("summarizes the selected path for Flo", () => {
   const summary = describeSetupPlan(normalizeOnboardingPreferences({
-    help: ["lower_bills", "track_spending"],
+    help: ["track_spending"],
     goals: ["grow_savings"],
   }));
   assert.match(summary, /savings goals/);
-  assert.match(summary, /bill review/);
   assert.match(summary, /spending and budget setup/);
 });
 

@@ -52,6 +52,7 @@ interface ActivityItem {
   editable: boolean;
   rawTx?: Transaction;
   detail?: string;          // human-readable explanation shown in detail sheet
+  pending?: boolean;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -125,7 +126,7 @@ export default function TransactionsScreen() {
   const router = useRouter();
   const { isFeatureLocked, bypassFeature } = useMembership();
   const {
-    transactions, addTransaction, updateTransaction, deleteTransaction, deleteTransfer,
+    transactions, pendingBankTransactions, addTransaction, updateTransaction, deleteTransaction, deleteTransfer,
     bills, incomes, overrides, extraPayments, settings,
     getIncomeOccurrencesInMonth, getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal,
     matchTransactionToBill, unmatchTransactionFromBill, setCustomAmount,
@@ -190,6 +191,22 @@ export default function TransactionsScreen() {
         const [year, month] = transaction.date.split("-").map(Number);
         return [`${transaction.linked_bill_id}:${year}:${month - 1}`];
       }));
+
+    // Pending Plaid rows are previews only. They stay outside the authoritative
+    // transaction list so forecasts, reports, matching, and totals cannot count them.
+    for (const pending of pendingBankTransactions) {
+      items.push({
+        id: `pending-${pending.plaid_transaction_id}`,
+        date: pending.transaction_date,
+        amount: pending.amount,
+        label: pending.merchant_name || pending.name,
+        category: pending.category || "Other",
+        source: "bank_transaction",
+        editable: false,
+        pending: true,
+        detail: "Pending at your bank. FlowLedger is showing this as a preview and will not count it until it posts.",
+      });
+    }
 
     // 1. Manual and bank transactions. Confirmed matches are presented as
     // the actual bill payment instead of a second, separate expense.
@@ -299,7 +316,7 @@ export default function TransactionsScreen() {
     }
 
     return items;
-  }, [transactions, overrides, bills, incomes, extraPayments, getIncomeOccurrencesInMonth]);
+  }, [transactions, pendingBankTransactions, overrides, bills, incomes, extraPayments, getIncomeOccurrencesInMonth]);
 
   // ── Filter & sort ─────────────────────────────────────────────────────────
   const categoryOptions = useMemo(
@@ -385,6 +402,7 @@ export default function TransactionsScreen() {
     () => buildCurrentMonthReviewQueue(transactions, todayIsoDate()).length,
     [transactions],
   );
+  const pendingActivityCount = pendingBankTransactions.length;
 
   // ── Summary stats ─────────────────────────────────────────────────────────
   const monthlySummary = useMemo(() => {
@@ -393,7 +411,7 @@ export default function TransactionsScreen() {
     const month = now.getMonth() + 1;
     const daysInMonth = new Date(year, month, 0).getDate();
     const monthPrefix = `${year}-${String(month).padStart(2, "0")}-`;
-    const monthItems = allActivity.filter(item => item.date.startsWith(monthPrefix));
+    const monthItems = allActivity.filter(item => !item.pending && item.date.startsWith(monthPrefix));
     const income = monthItems.filter(item => item.amount > 0).reduce((sum, item) => sum + item.amount, 0);
     const out = monthItems.filter(item => item.amount < 0).reduce((sum, item) => sum + Math.abs(item.amount), 0);
     const weeks = [1, 8, 15, 22, 29]
@@ -789,6 +807,8 @@ export default function TransactionsScreen() {
               <Text style={[styles.sheetNoteText, { color: c.mutedForeground }]}>
                 {detailItem.source === "bill_payment"
                   ? "Edit this entry by adjusting the paid amount in Monthly view."
+                  : detailItem.pending
+                  ? "This is a bank preview only. It cannot be edited or matched until it posts."
                   : detailItem.source === "income"
                   ? "Edit this entry by updating your income in More → Income Sources."
                   : "Edit this entry from the Bills → Debt tab."}
@@ -816,14 +836,13 @@ export default function TransactionsScreen() {
             {feedOrderLabel}
           </Text>
         </View>
-        {activityReviewCount > 0 ? (
+        {activityReviewCount > 0 || pendingActivityCount > 0 ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Open Review Center, ${activityReviewCount} item${activityReviewCount === 1 ? "" : "s"} need review`}
-            onPress={() => router.push({
-              pathname: "/(tabs)/more",
-              params: { section: "review" },
-            } as any)}
+            accessibilityLabel={`${activityReviewCount} item${activityReviewCount === 1 ? "" : "s"} need review and ${pendingActivityCount} transaction${pendingActivityCount === 1 ? "" : "s"} are pending`}
+            onPress={() => activityReviewCount > 0
+              ? router.push({ pathname: "/(tabs)/more", params: { section: "review" } } as any)
+              : Alert.alert("Pending bank activity", "Pending transactions are shown at the top of Activity and are not counted until they post.")}
             style={({ pressed }) => [
               styles.reviewAlertButton,
               {
@@ -833,9 +852,9 @@ export default function TransactionsScreen() {
               },
             ]}
           >
-            <Feather name="alert-triangle" size={23} color={c.warning} />
+            <Feather name={activityReviewCount > 0 ? "alert-triangle" : "clock"} size={23} color={c.warning} />
             <View style={[styles.reviewAlertBadge, { backgroundColor: c.destructive }]}>
-              <Text style={styles.reviewAlertBadgeText}>{activityReviewCount}</Text>
+              <Text style={styles.reviewAlertBadgeText}>{activityReviewCount + pendingActivityCount}</Text>
             </View>
           </Pressable>
         ) : (
@@ -845,6 +864,18 @@ export default function TransactionsScreen() {
           />
         )}
       </View>
+
+      {pendingActivityCount > 0 ? (
+        <View style={[styles.pendingNotice, { borderColor: c.warning + "55", backgroundColor: c.warning + "12" }]}>
+          <Feather name="clock" size={17} color={c.warning} />
+          <View style={styles.pendingNoticeCopy}>
+            <Text style={[styles.pendingNoticeTitle, { color: c.foreground }]}>
+              {pendingActivityCount} pending bank transaction{pendingActivityCount === 1 ? "" : "s"}
+            </Text>
+            <Text style={[styles.pendingNoticeBody, { color: c.mutedForeground }]}>Visible below, but not counted until posted.</Text>
+          </View>
+        </View>
+      ) : null}
 
       <Pressable
         onPress={() => setWeeklySummaryVisible(true)}
@@ -1024,6 +1055,11 @@ export default function TransactionsScreen() {
                       <Text style={[styles.catBadgeText, { color: catColor }]}>{item.category}</Text>
                     </View>
                   )}
+                  {item.pending ? (
+                    <View style={[styles.sourceBadge, { backgroundColor: c.warning + "18" }]}>
+                      <Text style={[styles.sourceBadgeText, { color: c.warning }]}>Pending</Text>
+                    </View>
+                  ) : null}
                   <Text style={[styles.txDate, { color: c.mutedForeground }]}>
                     {formatDate(item.date)}
                   </Text>
@@ -1373,6 +1409,10 @@ const styles = StyleSheet.create({
     borderColor: "#020617",
   },
   reviewAlertBadgeText: { color: "#fff", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
+  pendingNotice: { marginHorizontal: 16, marginBottom: 10, borderWidth: 1, borderRadius: 16, paddingHorizontal: 13, paddingVertical: 11, flexDirection: "row", alignItems: "center", gap: 10 },
+  pendingNoticeCopy: { flex: 1 },
+  pendingNoticeTitle: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  pendingNoticeBody: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_500Medium", marginTop: 2 },
 
   activityHeroLabel: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 1, textTransform: "uppercase" },
   activityHeroBadge: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999 },

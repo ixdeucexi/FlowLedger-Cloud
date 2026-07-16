@@ -21,7 +21,6 @@ function has(preferences: OnboardingPreferences, value: string) {
 export function determineUserFocus(preferences: OnboardingPreferences): UserFocusId {
   if (has(preferences, "pay_off_debt")) return "debt";
   if (has(preferences, "grow_savings") || preferences.savingsGoal) return "savings";
-  if (preferences.help.includes("lower_bills")) return "bills";
   if (preferences.help.includes("track_spending") || preferences.goals.includes("reduce_spending")) return "spending";
   if (preferences.help.includes("create_budget")) return "budget";
   if (preferences.help.includes("stay_organized") || preferences.goals.includes("stay_on_top")) return "organized";

@@ -1,6 +1,5 @@
 export type SetupHelpOption =
   | "track_spending"
-  | "lower_bills"
   | "pay_off_debt"
   | "grow_savings"
   | "create_budget"
@@ -70,7 +69,6 @@ const STARTING_POINTS = new Set<SetupStartingPoint>([
 
 const HELP_OPTIONS = new Set<SetupHelpOption>([
   "track_spending",
-  "lower_bills",
   "pay_off_debt",
   "grow_savings",
   "create_budget",
@@ -132,7 +130,7 @@ export function buildPersonalizedSetupKeys(preferences: OnboardingPreferences): 
     preferences.goals.includes("something_else");
   const wantsDebt = preferences.help.includes("pay_off_debt") || preferences.goals.includes("pay_off_debt");
   const wantsSavings = preferences.help.includes("grow_savings") || preferences.goals.includes("grow_savings");
-  const wantsBills = preferences.help.includes("lower_bills") || preferences.help.includes("create_budget");
+  const wantsBills = preferences.help.includes("create_budget");
 
   add("income");
   if (wantsBudget || wantsBills || preferences.help.length === 0) add("bills");
@@ -228,7 +226,6 @@ export function describeSetupPlan(preferences: OnboardingPreferences): string {
   if (preferences.goals.includes("grow_savings") || preferences.help.includes("grow_savings")) {
     parts.push("savings goals");
   }
-  if (preferences.help.includes("lower_bills")) parts.push("bill review");
   if (preferences.help.includes("track_spending") || preferences.help.includes("create_budget")) {
     parts.push("spending and budget setup");
   }

@@ -29,7 +29,12 @@ async function sendPushToUser(userId, payload) {
           keys: { p256dh: subscription.p256dh, auth: subscription.auth },
         },
         JSON.stringify(payload),
-        { TTL: 60 * 60 * 12, urgency: "high", topic: "flowledger-review", vapidDetails: vapidDetails() },
+        {
+          TTL: 60 * 60 * 12,
+          urgency: "high",
+          topic: String(payload.tag || "flowledger-activity").slice(0, 32),
+          vapidDetails: vapidDetails(),
+        },
       );
       delivered += 1;
       activeSubscriptions += 1;
@@ -50,11 +55,32 @@ async function sendPushToUser(userId, payload) {
   return { delivered, activeSubscriptions, errors };
 }
 
+async function recordDeliveryResult(db, events, result) {
+  const eventIds = events.map(event => event.id);
+  const now = new Date().toISOString();
+  if (result.delivered > 0 || result.activeSubscriptions === 0) {
+    const { error } = await db
+      .from("push_notification_events")
+      .update({
+        delivered_at: now,
+        last_error: result.delivered > 0 ? null : "No active push subscription.",
+      })
+      .in("id", eventIds);
+    if (error) throw error;
+    return;
+  }
+  const { error } = await db
+    .from("push_notification_events")
+    .update({ last_error: result.errors[0] || "Push delivery failed." })
+    .in("id", eventIds);
+  if (error) throw error;
+}
+
 async function deliverPendingPostedTransactionNotifications(userId) {
   const db = serviceSupabase();
   const { data: events, error } = await db
     .from("push_notification_events")
-    .select("id")
+    .select("id,event_type")
     .eq("user_id", userId)
     .is("delivered_at", null)
     .order("created_at", { ascending: true })
@@ -62,36 +88,32 @@ async function deliverPendingPostedTransactionNotifications(userId) {
   if (error) throw error;
   if (!events?.length) return { delivered: 0, events: 0 };
 
-  const count = events.length;
-  const result = await sendPushToUser(userId, {
-    title: count === 1 ? "New transaction ready" : `${count} new transactions ready`,
-    body: count === 1
-      ? "A posted bank transaction is waiting in Review Center."
-      : "Posted bank transactions are waiting in Review Center.",
-    url: "/more?section=review",
-    tag: "flowledger-review",
-  });
-
-  const eventIds = events.map(event => event.id);
-  const now = new Date().toISOString();
-  if (result.delivered > 0 || result.activeSubscriptions === 0) {
-    const { error: updateError } = await db
-      .from("push_notification_events")
-      .update({
-        delivered_at: now,
-        last_error: result.delivered > 0 ? null : "No active push subscription.",
-      })
-      .in("id", eventIds);
-    if (updateError) throw updateError;
-  } else {
-    const { error: updateError } = await db
-      .from("push_notification_events")
-      .update({ last_error: result.errors[0] || "Push delivery failed." })
-      .in("id", eventIds);
-    if (updateError) throw updateError;
+  let delivered = 0;
+  for (const eventType of ["pending", "posted"]) {
+    const matching = events.filter(event => (event.event_type || "posted") === eventType);
+    if (!matching.length) continue;
+    const count = matching.length;
+    const isPending = eventType === "pending";
+    const result = await sendPushToUser(userId, isPending ? {
+      title: count === 1 ? "New pending transaction" : `${count} pending transactions`,
+      body: count === 1
+        ? "A bank transaction is pending. It is visible in Activity but is not counted yet."
+        : "New pending bank activity is visible and will not be counted until it posts.",
+      url: "/transactions",
+      tag: "flowledger-pending",
+    } : {
+      title: count === 1 ? "New transaction ready" : `${count} new transactions ready`,
+      body: count === 1
+        ? "A posted bank transaction is waiting in Review Center."
+        : "Posted bank transactions are waiting in Review Center.",
+      url: "/more?section=review",
+      tag: "flowledger-review",
+    });
+    delivered += result.delivered;
+    await recordDeliveryResult(db, matching, result);
   }
 
-  return { delivered: result.delivered, events: count };
+  return { delivered, events: events.length };
 }
 
 async function queuePostedTransactionNotifications(userId, transactionIds) {
@@ -109,8 +131,41 @@ async function queuePostedTransactionNotifications(userId, transactionIds) {
   if (!subscription) return { delivered: 0, events: 0 };
 
   const { error } = await db.from("push_notification_events").upsert(
-    uniqueIds.map(transactionId => ({ user_id: userId, transaction_id: transactionId })),
-    { onConflict: "user_id,transaction_id", ignoreDuplicates: true },
+    uniqueIds.map(transactionId => ({
+      user_id: userId,
+      transaction_id: transactionId,
+      event_type: "posted",
+      event_key: `posted:${transactionId}`,
+    })),
+    { onConflict: "user_id,event_key", ignoreDuplicates: true },
+  );
+  if (error) throw error;
+  return deliverPendingPostedTransactionNotifications(userId);
+}
+
+async function queuePendingTransactionNotifications(userId, plaidTransactionIds) {
+  const uniqueIds = [...new Set((plaidTransactionIds || []).filter(Boolean))];
+  if (!uniqueIds.length) return deliverPendingPostedTransactionNotifications(userId);
+
+  const db = serviceSupabase();
+  const { data: subscription, error: subscriptionError } = await db
+    .from("push_subscriptions")
+    .select("id")
+    .eq("user_id", userId)
+    .limit(1)
+    .maybeSingle();
+  if (subscriptionError) throw subscriptionError;
+  if (!subscription) return { delivered: 0, events: 0 };
+
+  const { error } = await db.from("push_notification_events").upsert(
+    uniqueIds.map(plaidTransactionId => ({
+      user_id: userId,
+      transaction_id: null,
+      plaid_transaction_id: plaidTransactionId,
+      event_type: "pending",
+      event_key: `pending:${plaidTransactionId}`,
+    })),
+    { onConflict: "user_id,event_key", ignoreDuplicates: true },
   );
   if (error) throw error;
   return deliverPendingPostedTransactionNotifications(userId);
@@ -118,6 +173,7 @@ async function queuePostedTransactionNotifications(userId, transactionIds) {
 
 module.exports = {
   deliverPendingPostedTransactionNotifications,
+  queuePendingTransactionNotifications,
   queuePostedTransactionNotifications,
   sendPushToUser,
 };

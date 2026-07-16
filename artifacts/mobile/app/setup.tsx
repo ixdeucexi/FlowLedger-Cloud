@@ -51,7 +51,6 @@ interface SetupStep {
 
 const HELP_OPTIONS: { id: SetupHelpOption; label: string; icon: React.ComponentProps<typeof Feather>["name"] }[] = [
   { id: "track_spending", label: "Track my spending", icon: "bar-chart-2" },
-  { id: "lower_bills", label: "Lower my bills", icon: "file-text" },
   { id: "pay_off_debt", label: "Pay off my debt", icon: "trending-down" },
   { id: "grow_savings", label: "Grow my savings", icon: "shield" },
   { id: "create_budget", label: "Create a budget", icon: "grid" },
@@ -279,7 +278,7 @@ function SetupWizard() {
         done: preferences.goals.length > 0,
         title: "What are your top financial goals?",
         ask: "Pick the goals that matter most right now.",
-        body: "I'll use this to make FlowLedger feel less like a form and more like a plan.",
+        body: "Your goals tell me what to protect first, so I can guide you toward the next move that matters most to you.",
         button: "Continue",
         kind: "multi",
       },
@@ -806,7 +805,7 @@ function SetupWizard() {
   return (
     <LinearGradient colors={colors.isDark ? ["#050711", "#0a0d1a", "#111827"] : ["#f8fafc", "#eef2ff", "#f8fafc"]} style={styles.root}>
       <PremiumBackdrop variant="purple" />
-      <View style={[styles.fixedProgress, { top: insets.top + 22 }]}>
+      <View pointerEvents="none" style={[styles.fixedProgress, { paddingTop: insets.top + 18 }]}>
         <View style={styles.progressRow}>
           {steps.map((step, stepIndex) => (
             <View
@@ -916,9 +915,13 @@ function SetupWizard() {
           <Pressable onPress={goBack} disabled={index === 0} style={{ opacity: index === 0 ? 0.35 : 1 }}>
             <Text style={styles.navText}>Back</Text>
           </Pressable>
-          {!isPreferenceStep(current.key) && current.key !== "finish" ? (
-            <Pressable onPress={goNext}>
-              <Text style={styles.navText}>{current.done ? "Done adding" : "Skip for now"}</Text>
+          {current.key !== "finish" ? (
+            <Pressable
+              onPress={goNext}
+              disabled={isPreferenceStep(current.key) && !canContinue}
+              style={{ opacity: isPreferenceStep(current.key) && !canContinue ? 0.35 : 1 }}
+            >
+              <Text style={[styles.navText, styles.navNextText]}>Next</Text>
             </Pressable>
           ) : <View />}
         </View>
@@ -962,7 +965,7 @@ function SetupWizard() {
           else await addIncome(data as Omit<IncomeItem, "id">);
           setIncomeModalVisible(false);
           setEditIncome(null);
-          setFloConfirmation(editIncome ? "Income updated. You can review it again or keep adding." : "Income added. Add another one, or tap Done adding.");
+          setFloConfirmation(editIncome ? "Income updated. You can review it again or keep adding." : "Income added. Add another one, or tap Next.");
         }}
       />
       <AddBillModal
@@ -979,7 +982,7 @@ function SetupWizard() {
           else await addBill(data as Omit<Bill, "id" | "created_at">);
           setBillModalVisible(false);
           setEditBill(null);
-          setFloConfirmation(editBill ? "Bill updated. Check it again or keep adding." : "Bill added. Add another one, or tap Done adding.");
+          setFloConfirmation(editBill ? "Bill updated. Check it again or keep adding." : "Bill added. Add another one, or tap Next.");
         }}
       />
       <AddBillModal
@@ -997,7 +1000,7 @@ function SetupWizard() {
           else await addBill(data as Omit<Bill, "id" | "created_at">);
           setDebtModalVisible(false);
           setEditDebt(null);
-          setFloConfirmation(editDebt ? "Debt updated. Check it again or keep adding." : "Debt added. Add another one, or tap Done adding.");
+          setFloConfirmation(editDebt ? "Debt updated. Check it again or keep adding." : "Debt added. Add another one, or tap Next.");
         }}
       />
       <GoalModal
@@ -1078,7 +1081,7 @@ export default function SetupScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { flexGrow: 1, paddingHorizontal: 28 },
-  fixedProgress: { position: "absolute", left: 28, right: 28, zIndex: 20 },
+  fixedProgress: { position: "absolute", top: 0, left: 0, right: 0, zIndex: 40, elevation: 24, paddingHorizontal: 28, paddingBottom: 14, backgroundColor: "rgba(5,7,17,0.98)", borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "rgba(148,163,184,0.16)" },
   progressRow: { flexDirection: "row", gap: 6 },
   progressBar: { flex: 1, height: 4, borderRadius: 999 },
   hero: { alignItems: "center" },
@@ -1168,6 +1171,7 @@ const styles = StyleSheet.create({
   primaryText: { color: "#f8fafc", fontSize: 17, fontFamily: "Inter_800ExtraBold", textAlign: "center", paddingHorizontal: 12 },
   navRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 12 },
   navText: { color: "#94a3b8", fontSize: 14, fontFamily: "Inter_700Bold" },
+  navNextText: { color: "#c4b5fd" },
   coachOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.72)", alignItems: "center", justifyContent: "center", padding: 24 },
   coachSheet: { width: "100%", maxWidth: 420, borderRadius: 28, borderWidth: 1, borderColor: "rgba(139,92,246,0.45)", backgroundColor: "#0f172a", padding: 22, alignItems: "center" },
   coachSpotlight: { width: 108, height: 108, borderRadius: 54, backgroundColor: "rgba(139,92,246,0.16)", alignItems: "center", justifyContent: "center", marginBottom: 14 },

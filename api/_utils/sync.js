@@ -3,6 +3,7 @@ const { serviceSupabase, safeError } = require("./supabase");
 const { decryptAccessToken } = require("./crypto");
 const {
   deliverPendingPostedTransactionNotifications,
+  queuePendingTransactionNotifications,
   queuePostedTransactionNotifications,
 } = require("./push");
 
@@ -44,6 +45,10 @@ function shouldQueuePostedNotification(originalCursor, imported) {
   return Boolean(originalCursor && imported && imported.isNewPosted && imported.flowledgerId);
 }
 
+function shouldQueuePendingNotification(originalCursor, imported) {
+  return Boolean(originalCursor && imported && imported.isNewPending && imported.plaidTransactionId);
+}
+
 function editablePlaidFields(existing, imported) {
   if (!existing || !existing.user_edited_at) return { ...imported, user_edited_at: null };
   return {
@@ -60,6 +65,7 @@ async function syncAccounts({ client, userId, item, accessToken }) {
   const db = serviceSupabase();
   const rows = accounts.map((account) => ({
     user_id: userId,
+    household_id: item.household_id || null,
     plaid_item_id: item.id,
     plaid_item_record_id: item.id,
     plaid_account_id: account.account_id,
@@ -96,10 +102,10 @@ async function syncAccounts({ client, userId, item, accessToken }) {
   return accounts;
 }
 
-async function upsertPlaidTransaction({ userId, accountRow, transaction, removedAt }) {
+async function upsertPlaidTransaction({ userId, householdId, accountRow, transaction, removedAt }) {
   const db = serviceSupabase();
   const plaidTransactionId = transaction.transaction_id;
-  if (!plaidTransactionId) return { flowledgerId: null, isNewPosted: false };
+  if (!plaidTransactionId) return { flowledgerId: null, plaidTransactionId: null, isNewPosted: false, isNewPending: false };
 
   const transactionDate = dateOnly(transaction.date || transaction.authorized_date);
   const authorizedDate = transaction.authorized_date ? dateOnly(transaction.authorized_date) : null;
@@ -123,6 +129,14 @@ async function upsertPlaidTransaction({ userId, accountRow, transaction, removed
     .eq("plaid_transaction_id", plaidTransactionId)
     .maybeSingle();
   if (existingError) throw existingError;
+
+  const { data: existingPlaid, error: existingPlaidError } = await db
+    .from("plaid_transactions")
+    .select("id,removed_at")
+    .eq("user_id", userId)
+    .eq("plaid_transaction_id", plaidTransactionId)
+    .maybeSingle();
+  if (existingPlaidError) throw existingPlaidError;
 
   const shouldImport = shouldImportPlaidTransaction(transaction);
   const isNewPosted = shouldImport && !existing;
@@ -149,6 +163,7 @@ async function upsertPlaidTransaction({ userId, accountRow, transaction, removed
     const canonicalRow = {
       id: flowledgerId || canonicalId,
       user_id: userId,
+      household_id: householdId || null,
       ...editableFields,
       amount,
       source: "plaid",
@@ -174,6 +189,7 @@ async function upsertPlaidTransaction({ userId, accountRow, transaction, removed
 
   const plaidRow = {
     user_id: userId,
+    household_id: householdId || null,
     plaid_account_id: accountRow ? accountRow.id : null,
     flowledger_transaction_id: shouldImport ? flowledgerId || null : null,
     plaid_transaction_id: plaidTransactionId,
@@ -200,6 +216,16 @@ async function upsertPlaidTransaction({ userId, accountRow, transaction, removed
   // Carry a user's confirmed bill match forward so the posted row does not
   // become a second expense while the removed pending row keeps the paid bill.
   const pendingTransactionId = transaction.pending_transaction_id;
+  if (!transaction.pending && pendingTransactionId) {
+    const { error: retirePendingError } = await db
+      .from("plaid_transactions")
+      .update({ removed_at: now, updated_at: now })
+      .eq("user_id", userId)
+      .eq("plaid_transaction_id", pendingTransactionId)
+      .eq("pending", true);
+    if (retirePendingError) throw retirePendingError;
+  }
+
   if (!transaction.pending && pendingTransactionId && flowledgerId) {
     const { data: pendingFlowTransaction, error: pendingLookupError } = await db
       .from("transactions")
@@ -232,7 +258,12 @@ async function upsertPlaidTransaction({ userId, accountRow, transaction, removed
       }
     }
   }
-  return { flowledgerId, isNewPosted };
+  return {
+    flowledgerId,
+    plaidTransactionId,
+    isNewPosted,
+    isNewPending: !shouldImport && (!existingPlaid || Boolean(existingPlaid.removed_at)),
+  };
 }
 
 async function syncTransactions({ client, userId, item, accessToken }) {
@@ -243,6 +274,7 @@ async function syncTransactions({ client, userId, item, accessToken }) {
   let modified = 0;
   let removed = 0;
   const notificationTransactionIds = [];
+  const pendingNotificationTransactionIds = [];
 
   while (true) {
     let page;
@@ -282,13 +314,15 @@ async function syncTransactions({ client, userId, item, accessToken }) {
     }
 
     for (const transaction of page.added || []) {
-      const imported = await upsertPlaidTransaction({ userId, accountRow: accountRows[transaction.account_id], transaction });
+      const imported = await upsertPlaidTransaction({ userId, householdId: item.household_id, accountRow: accountRows[transaction.account_id], transaction });
       if (shouldQueuePostedNotification(originalCursor, imported)) notificationTransactionIds.push(imported.flowledgerId);
+      if (shouldQueuePendingNotification(originalCursor, imported)) pendingNotificationTransactionIds.push(imported.plaidTransactionId);
       added += 1;
     }
     for (const transaction of page.modified || []) {
-      const imported = await upsertPlaidTransaction({ userId, accountRow: accountRows[transaction.account_id], transaction });
+      const imported = await upsertPlaidTransaction({ userId, householdId: item.household_id, accountRow: accountRows[transaction.account_id], transaction });
       if (shouldQueuePostedNotification(originalCursor, imported)) notificationTransactionIds.push(imported.flowledgerId);
+      if (shouldQueuePendingNotification(originalCursor, imported)) pendingNotificationTransactionIds.push(imported.plaidTransactionId);
       modified += 1;
     }
     for (const transaction of page.removed || []) {
@@ -312,9 +346,12 @@ async function syncTransactions({ client, userId, item, accessToken }) {
     if (!page.has_more) break;
   }
   try {
+    if (originalCursor && pendingNotificationTransactionIds.length) {
+      await queuePendingTransactionNotifications(userId, pendingNotificationTransactionIds);
+    }
     if (originalCursor && notificationTransactionIds.length) {
       await queuePostedTransactionNotifications(userId, notificationTransactionIds);
-    } else {
+    } else if (!pendingNotificationTransactionIds.length) {
       await deliverPendingPostedTransactionNotifications(userId);
     }
   } catch (error) {
@@ -405,6 +442,7 @@ module.exports = {
   syncTransactions,
   plaidAmountToFlowLedger,
   shouldImportPlaidTransaction,
+  shouldQueuePendingNotification,
   shouldQueuePostedNotification,
   editablePlaidFields,
 };

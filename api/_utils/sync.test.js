@@ -1,7 +1,12 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const { editablePlaidFields, shouldImportPlaidTransaction, shouldQueuePostedNotification } = require("./sync");
+const {
+  editablePlaidFields,
+  shouldImportPlaidTransaction,
+  shouldQueuePendingNotification,
+  shouldQueuePostedNotification,
+} = require("./sync");
 
 test("only posted Plaid activity becomes a FlowLedger transaction", () => {
   assert.equal(shouldImportPlaidTransaction({ pending: true }), false);
@@ -30,4 +35,11 @@ test("only a newly posted transaction after the initial cursor queues a phone no
   assert.equal(shouldQueuePostedNotification("cursor-1", posted), true);
   assert.equal(shouldQueuePostedNotification(null, posted), false);
   assert.equal(shouldQueuePostedNotification("cursor-1", { ...posted, isNewPosted: false }), false);
+});
+
+test("only newly seen pending activity after the initial cursor queues a pending alert", () => {
+  const pending = { plaidTransactionId: "pending-1", isNewPending: true };
+  assert.equal(shouldQueuePendingNotification("cursor-1", pending), true);
+  assert.equal(shouldQueuePendingNotification(null, pending), false);
+  assert.equal(shouldQueuePendingNotification("cursor-1", { ...pending, isNewPending: false }), false);
 });

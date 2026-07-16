@@ -3,6 +3,7 @@ import { BlurView } from "expo-blur";
 import { Tabs, useRouter, useSegments } from "expo-router";
 import React from "react";
 import { Animated, Easing, Image, Platform, Pressable, StyleSheet, StyleProp, Text, View, ViewStyle } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/context/AuthContext";
 import { BudgetProvider, useBudget } from "@/context/BudgetContext";
@@ -252,7 +253,9 @@ function FloDemo() {
   const colors = useColors();
   const router = useRouter();
   const segments = useSegments();
+  const insets = useSafeAreaInsets();
   const [state, setState] = React.useState(readLearningTourState);
+  const [collapsed, setCollapsed] = React.useState(false);
   const activeStep = LEARNING_TOUR_STEPS[state.stepIndex] ?? LEARNING_TOUR_STEPS[0];
   const currentRoute = routeKeyFromSegments(segments.map(String));
   const isOnStepRoute = currentRoute === activeStep.route;
@@ -281,6 +284,8 @@ function FloDemo() {
     router.push(activeStep.path as any);
   }, [activeStep.path, isOnStepRoute, router, state.active]);
 
+  React.useEffect(() => setCollapsed(false), [state.stepIndex]);
+
   const goToStep = (stepIndex: number) => {
     const bounded = Math.max(0, Math.min(LEARNING_TOUR_STEPS.length - 1, stepIndex));
     writeLearningTourState(true, bounded);
@@ -298,57 +303,63 @@ function FloDemo() {
 
   if (!state.active) return null;
 
+  const targetPosition: ViewStyle = activeStep.route === "index"
+    ? { top: "48%", right: 34 }
+    : activeStep.route === "monthly"
+      ? { top: "40%", left: "44%" }
+      : activeStep.route === "bills"
+        ? { top: "34%", left: "44%" }
+        : activeStep.route === "transactions"
+          ? { top: 126, right: 24 }
+          : activeStep.route === "flo"
+            ? { bottom: 116, left: 32 }
+            : { top: 176, left: "42%" };
+
   return (
       <View pointerEvents="box-none" style={styles.learningLayer}>
-        <View pointerEvents="none" style={styles.learningPointer}>
-          <Feather name="mouse-pointer" size={16} color="#38bdf8" />
-          <Text style={styles.learningPointerText}>{activeStep.tryThis}</Text>
+        <View pointerEvents="none" style={[styles.learningTarget, targetPosition]}>
+          <View style={styles.learningTargetRing} />
+          <Feather name="mouse-pointer" size={24} color="#f8fafc" style={styles.learningCursor} />
+          <Text style={styles.learningTargetText}>Tap here</Text>
         </View>
-        <View style={[styles.learningSheet, { borderColor: colors.primary + "55" }]}>
+        <View style={[styles.learningSheet, collapsed && styles.learningSheetCollapsed, { top: insets.top + 10, borderColor: colors.primary + "55" }]}>
           <View style={styles.learningHeader}>
-            <FloLogo size={46} />
+            <FloLogo size={36} />
             <View style={{ flex: 1 }}>
               <Text style={styles.learningEyebrow}>Flo Demo · {state.stepIndex + 1} of {LEARNING_TOUR_STEPS.length}</Text>
-              <Text style={styles.learningTitle}>{activeStep.title}</Text>
+              <Text style={styles.learningTitle}>{activeStep.title} - {activeStep.focus}</Text>
             </View>
-            <Pressable onPress={closeTour} style={styles.learningClose} hitSlop={8}>
+            <Pressable onPress={() => setCollapsed(value => !value)} style={styles.learningClose} hitSlop={8} accessibilityLabel={collapsed ? "Expand Flo Demo" : "Minimize Flo Demo"}>
+              <Feather name={collapsed ? "chevron-down" : "chevron-up"} size={18} color="#cbd5e1" />
+            </Pressable>
+            <Pressable onPress={closeTour} style={styles.learningClose} hitSlop={8} accessibilityLabel="Close Flo Demo">
               <Feather name="x" size={18} color="#cbd5e1" />
             </Pressable>
           </View>
 
-          <View style={styles.learningFocusPill}>
-            <Feather name="crosshair" size={15} color="#38bdf8" />
-            <Text style={styles.learningFocusText}>{activeStep.focus}</Text>
-          </View>
-
-          <Text style={styles.learningBody}>{activeStep.floSays}</Text>
-          <View style={styles.learningDots}>
-            {LEARNING_TOUR_STEPS.map((step, index) => (
-              <Pressable
-                key={step.route}
-                onPress={() => goToStep(index)}
-                style={[
-                  styles.learningDot,
-                  index === state.stepIndex && styles.learningDotActive,
-                ]}
-              />
-            ))}
-          </View>
-
-          <View style={styles.learningActions}>
-            <Pressable
-              onPress={() => goToStep(state.stepIndex - 1)}
-              disabled={state.stepIndex === 0}
-              style={[styles.learningSecondary, { opacity: state.stepIndex === 0 ? 0.42 : 1 }]}
-            >
-              <Text style={styles.learningSecondaryText}>Back</Text>
-            </Pressable>
-            <Pressable onPress={next} style={[styles.learningPrimary, { backgroundColor: colors.primary }]}>
-              <Text style={[styles.learningPrimaryText, { color: colors.primaryForeground }]}>
-                {state.stepIndex >= LEARNING_TOUR_STEPS.length - 1 ? "Finish" : "Next"}
-              </Text>
-            </Pressable>
-          </View>
+          {!collapsed ? (
+            <>
+              <Text style={styles.learningBody}>{activeStep.floSays}</Text>
+              <View style={styles.learningTryRow}>
+                <Feather name="mouse-pointer" size={15} color="#38bdf8" />
+                <Text style={styles.learningTryText}>{activeStep.tryThis}</Text>
+              </View>
+              <View style={styles.learningActions}>
+                <Pressable
+                  onPress={() => goToStep(state.stepIndex - 1)}
+                  disabled={state.stepIndex === 0}
+                  style={[styles.learningSecondary, { opacity: state.stepIndex === 0 ? 0.42 : 1 }]}
+                >
+                  <Text style={styles.learningSecondaryText}>Back</Text>
+                </Pressable>
+                <Pressable onPress={next} style={[styles.learningPrimary, { backgroundColor: colors.primary }]}>
+                  <Text style={[styles.learningPrimaryText, { color: colors.primaryForeground }]}>
+                    {state.stepIndex >= LEARNING_TOUR_STEPS.length - 1 ? "Finish" : "Next"}
+                  </Text>
+                </Pressable>
+              </View>
+            </>
+          ) : null}
         </View>
       </View>
   );
@@ -356,7 +367,7 @@ function FloDemo() {
 
 function TabContent() {
   const colors = useColors();
-  const { loading, loadError, retryBudgetLoad, demoMode, transactions } = useBudget();
+  const { loading, loadError, retryBudgetLoad, demoMode, transactions, pendingBankTransactions } = useBudget();
   const [minimumBudgetLoadingReady, setMinimumBudgetLoadingReady] = React.useState(false);
   const [showLoadingOverlay, setShowLoadingOverlay] = React.useState(true);
   const loadingOpacity = React.useRef(new Animated.Value(1)).current;
@@ -370,6 +381,7 @@ function TabContent() {
     () => buildCurrentMonthReviewQueue(transactions, todayIsoDate()).length,
     [transactions],
   );
+  const activityAlertCount = activityReviewCount + pendingBankTransactions.length;
 
   React.useEffect(() => {
     const t = setTimeout(() => setMinimumBudgetLoadingReady(true), MIN_BUDGET_LOADING_MS);
@@ -483,8 +495,8 @@ function TabContent() {
         >
           {TABS.map(tab => {
             const isActivity = tab.name === "transactions";
-            const reviewBadge = isActivity && activityReviewCount > 0
-              ? activityReviewCount > 99 ? "99+" : activityReviewCount
+            const reviewBadge = isActivity && activityAlertCount > 0
+              ? activityAlertCount > 99 ? "99+" : activityAlertCount
               : undefined;
             return (
               <Tabs.Screen
@@ -496,7 +508,7 @@ function TabContent() {
                   tabBarBadge: reviewBadge,
                   tabBarBadgeStyle: reviewBadge ? styles.activityTabBadge : undefined,
                   tabBarAccessibilityLabel: reviewBadge
-                    ? `Activity, ${activityReviewCount} item${activityReviewCount === 1 ? "" : "s"} need review`
+                    ? `Activity, ${activityReviewCount} item${activityReviewCount === 1 ? "" : "s"} need review and ${pendingBankTransactions.length} transaction${pendingBankTransactions.length === 1 ? "" : "s"} pending`
                     : tab.title,
                 }}
               />
@@ -705,58 +717,61 @@ const styles = StyleSheet.create({
   learningLayer: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 110,
-    justifyContent: "flex-end",
-    paddingHorizontal: 12,
-    paddingBottom: 92,
   },
-  learningPointer: {
-    alignSelf: "center",
-    width: "94%",
-    maxWidth: 460,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(56,189,248,0.38)",
-    backgroundColor: "rgba(2,6,23,0.82)",
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    flexDirection: "row",
+  learningTarget: {
+    position: "absolute",
+    width: 66,
+    height: 78,
     alignItems: "center",
-    gap: 8,
-    marginBottom: 8,
+    justifyContent: "center",
+    zIndex: 111,
   },
-  learningPointerText: {
-    flex: 1,
-    color: "#bae6fd",
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: "800",
+  learningTargetRing: {
+    position: "absolute",
+    top: 0,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    borderWidth: 3,
+    borderColor: "#38bdf8",
+    backgroundColor: "rgba(56,189,248,0.14)",
+    shadowColor: "#38bdf8",
+    shadowOpacity: 0.9,
+    shadowRadius: 14,
+    elevation: 12,
   },
+  learningCursor: { position: "absolute", top: 34, right: 2, textShadowColor: "#020617", textShadowRadius: 5 },
+  learningTargetText: { position: "absolute", bottom: 0, color: "#e0f2fe", backgroundColor: "rgba(2,6,23,0.88)", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, fontSize: 10, fontWeight: "900" },
   learningSheet: {
+    position: "absolute",
+    left: 12,
+    right: 12,
     borderWidth: 1,
-    borderRadius: 22,
-    padding: 14,
-    backgroundColor: "rgba(15,23,42,0.92)",
+    borderRadius: 20,
+    padding: 11,
+    backgroundColor: "rgba(15,23,42,0.96)",
     shadowColor: "#8b5cf6",
     shadowOpacity: 0.24,
     shadowRadius: 26,
     shadowOffset: { width: 0, height: 14 },
     elevation: 16,
   },
+  learningSheetCollapsed: { left: 58 },
   learningHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 8,
   },
   learningEyebrow: {
     color: "#a78bfa",
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "900",
     letterSpacing: 1,
     textTransform: "uppercase",
   },
   learningTitle: {
     color: "#f8fafc",
-    fontSize: 19,
+    fontSize: 14,
     fontWeight: "900",
     marginTop: 2,
   },
@@ -768,51 +783,29 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(148,163,184,0.12)",
   },
-  learningFocusPill: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderRadius: 999,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-    backgroundColor: "rgba(56,189,248,0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(56,189,248,0.24)",
-    marginTop: 10,
-  },
-  learningFocusText: {
-    color: "#bae6fd",
-    fontSize: 12,
-    fontWeight: "900",
-  },
   learningBody: {
     color: "#f8fafc",
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 12,
+    lineHeight: 17,
     fontWeight: "700",
-    marginTop: 10,
+    marginTop: 8,
   },
-  learningDots: {
+  learningTryRow: {
     flexDirection: "row",
-    justifyContent: "center",
+    alignItems: "flex-start",
     gap: 7,
-    marginTop: 11,
+    marginTop: 8,
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: "rgba(56,189,248,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(56,189,248,0.22)",
   },
-  learningDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 999,
-    backgroundColor: "rgba(148,163,184,0.35)",
-  },
-  learningDotActive: {
-    width: 24,
-    backgroundColor: "#8b5cf6",
-  },
+  learningTryText: { flex: 1, color: "#bae6fd", fontSize: 11, lineHeight: 15, fontWeight: "800" },
   learningActions: {
     flexDirection: "row",
     gap: 10,
-    marginTop: 11,
+    marginTop: 8,
   },
   learningSecondary: {
     flex: 1,

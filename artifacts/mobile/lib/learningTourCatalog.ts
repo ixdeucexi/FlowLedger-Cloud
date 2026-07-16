@@ -15,7 +15,7 @@ export const LEARNING_TOUR_STEPS: LearningTourStep[] = [
     path: "/(tabs)",
     title: "Dashboard",
     focus: "Your command center",
-    floSays: "I use this page to give you the short answer first: what is available, how tight the month is, and which algorithm needs your attention.",
+    floSays: "I use this page to show your real checking balance first, then what is safe before payday and what needs your attention.",
     tryThis: "I want you to tap the Flow Score here whenever you want me to explain what is helping or hurting your plan.",
   },
   {
@@ -52,10 +52,10 @@ export const LEARNING_TOUR_STEPS: LearningTourStep[] = [
   },
   {
     route: "more",
-    path: "/(tabs)/more",
+    path: "/(tabs)/more?section=overview",
     title: "More",
     focus: "Control center",
     floSays: "I use More as your control center for accounts, setup, app install, exports, safety cushion, and the Algorithm Suite.",
-    tryThis: "I want you to open a section here whenever you need to change setup, accounts, notifications, or my Demo.",
+    tryThis: "I brought you to the main Settings page. Tap the section you want to change from here.",
   },
 ];

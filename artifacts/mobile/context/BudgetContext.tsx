@@ -130,6 +130,16 @@ export interface Transaction {
   matched_occurrence_date?: string;
 }
 
+export interface PendingBankTransaction {
+  plaid_transaction_id: string;
+  transaction_date: string;
+  amount: number;
+  name: string;
+  merchant_name?: string;
+  category: string;
+  plaid_account_id?: string;
+}
+
 export interface ReviewAllocation {
   type: "bill" | "income" | "planned_expense" | "category" | "transfer" | "extra_principal";
   targetId?: string | null;
@@ -161,6 +171,16 @@ export interface Account {
   last_reconciled_at?: string;
   is_active: boolean;
   created_at: string;
+}
+
+export interface ConnectedBankAccount {
+  id: string;
+  name: string;
+  account_type?: string;
+  account_subtype?: string;
+  current_balance: number;
+  available_balance?: number;
+  is_active: boolean;
 }
 
 export interface IncomeAmountEntry {
@@ -278,12 +298,14 @@ interface BudgetContextType {
   overrides: MonthlyOverride[];
   billDateMoves: BillDateMove[];
   transactions: Transaction[];
+  pendingBankTransactions: PendingBankTransaction[];
   incomes: IncomeItem[];
   goals: Goal[];
   extraPayments: ExtraPayment[];
   categories: string[];
   settings: Settings;
   accounts: Account[];
+  connectedBankAccounts: ConnectedBankAccount[];
   decisions: DecisionRecord[];
   households: HouseholdMembership[];
   householdMembers: HouseholdMember[];
@@ -820,11 +842,13 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [overrides,     setOverrides]     = useState<MonthlyOverride[]>([]);
   const [billDateMoves, setBillDateMoves] = useState<BillDateMove[]>([]);
   const [transactions,  setTransactions]  = useState<Transaction[]>([]);
+  const [pendingBankTransactions, setPendingBankTransactions] = useState<PendingBankTransaction[]>([]);
   const [incomes,       setIncomes]       = useState<IncomeItem[]>([]);
   const [goals,         setGoals]         = useState<Goal[]>([]);
   const [extraPayments, setExtraPayments] = useState<ExtraPayment[]>([]);
   const [categories,    setCategories]    = useState<string[]>([]);
   const [accounts,      setAccounts]      = useState<Account[]>([]);
+  const [connectedBankAccounts, setConnectedBankAccounts] = useState<ConnectedBankAccount[]>([]);
   const [decisions,     setDecisions]     = useState<DecisionRecord[]>([]);
   const [households,    setHouseholds]    = useState<HouseholdMembership[]>([]);
   const [householdMembers, setHouseholdMembers] = useState<HouseholdMember[]>([]);
@@ -1047,11 +1071,13 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setBillDateMoves(demo.billDateMoves);
       billDateMovesRef.current = demo.billDateMoves;
       setTransactions(demo.transactions);
+      setPendingBankTransactions([]);
       setIncomes(demo.incomes);
       setGoals(demo.goals);
       setExtraPayments(demo.extraPayments);
       setCategories(demo.categories);
       setAccounts(demo.accounts);
+      setConnectedBankAccounts([]);
       setDecisions(demo.decisions);
       setSettings(demo.settings);
       loaded.current = true;
@@ -1060,8 +1086,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     if (!user) {
       setLoadError(null);
-      setBills([]); setOverrides([]); setBillDateMoves([]); setTransactions([]); setIncomes([]);
-      setGoals([]); setExtraPayments([]); setCategories([]); setAccounts([]); setDecisions([]); setSettings(DEFAULT_SETTINGS);
+      setBills([]); setOverrides([]); setBillDateMoves([]); setTransactions([]); setPendingBankTransactions([]); setIncomes([]);
+      setGoals([]); setExtraPayments([]); setCategories([]); setAccounts([]); setConnectedBankAccounts([]); setDecisions([]); setSettings(DEFAULT_SETTINGS);
       setHouseholds([]); setHouseholdMembers([]); setHouseholdActivity([]); setActiveHouseholdId(null); householdScopeRef.current = null;
       billDateMovesRef.current = [];
       loaded.current = false;
@@ -1095,12 +1121,28 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
             applyHouseholdSelect(supabase.from("bills").select("*"), uid),
             applyHouseholdSelect(supabase.from("monthly_overrides").select("*"), uid),
             applyHouseholdSelect(supabase.from("transactions").select("*"), uid),
+            applyHouseholdSelect(
+              supabase.from("plaid_transactions")
+                .select("plaid_transaction_id,transaction_date,amount,name,merchant_name,category,plaid_account_id")
+                .eq("pending", true)
+                .is("removed_at", null)
+                .order("transaction_date", { ascending: false })
+                .limit(100),
+              uid,
+            ),
             applyHouseholdSelect(supabase.from("incomes").select("*"), uid),
             applyHouseholdSelect(supabase.from("goals").select("*"), uid),
             applyHouseholdSelect(supabase.from("extra_payments").select("*"), uid),
             loadScopedSettings(uid, scope),
             applyHouseholdSelect(supabase.from("categories").select("name"), uid),
             applyHouseholdSelect(supabase.from("accounts").select("*"), uid).order("created_at"),
+            applyHouseholdSelect(
+              supabase.from("plaid_accounts")
+                .select("id,name,account_type,account_subtype,current_balance,available_balance,is_active")
+                .eq("is_active", true)
+                .order("name"),
+              uid,
+            ),
             applyHouseholdSelect(supabase.from("decisions").select("*"), uid).order("created_at", { ascending: false }),
           ]),
           12000,
@@ -1112,12 +1154,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           { data: bData },
           { data: oData },
           { data: tData },
+          { data: pendingData },
           { data: iData },
           { data: gData },
           { data: epData },
           { data: sData },
           { data: cData },
           { data: aData },
+          { data: connectedAccountData },
           { data: dData },
         ] = results;
 
@@ -1127,6 +1171,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         setBillDateMoves(storedBillDateMoves);
         billDateMovesRef.current = storedBillDateMoves;
         setTransactions((tData ?? []).map(normalizeTransactionRow).filter(isActiveTransaction));
+        setPendingBankTransactions((pendingData ?? []).map((row: any) => ({
+          plaid_transaction_id: String(row.plaid_transaction_id),
+          transaction_date: String(row.transaction_date).slice(0, 10),
+          amount: Number(row.amount),
+          name: String(row.name || row.merchant_name || "Pending transaction"),
+          merchant_name: row.merchant_name || undefined,
+          category: String(row.category || "Other"),
+          plaid_account_id: row.plaid_account_id || undefined,
+        })));
         setIncomes((iData ?? []).map((i: any) => ({
           ...i,
           amount:         Number(i.amount),
@@ -1152,6 +1205,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           is_active: a.is_active !== false,
         }));
         setAccounts(loadedAccounts);
+        setConnectedBankAccounts((connectedAccountData ?? []).map((account: any) => ({
+          ...account,
+          current_balance: Number(account.current_balance || 0),
+          available_balance: account.available_balance == null ? undefined : Number(account.available_balance),
+          is_active: account.is_active !== false,
+        })));
         setDecisions((dData ?? []).map((d: any) => ({ ...d, calendar_date: d.calendar_date ?? undefined, applied_change: d.applied_change ?? undefined })));
         if (sData) {
           const accountAnchor = operatingAccountAnchor(loadedAccounts.map(toAccountSnapshot));
@@ -1202,13 +1261,40 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const uid = user.id;
     let loadedAccounts: Account[] | null = null;
     const scope = householdScopeRef.current;
-    const [transactionResult, accountResult, settingsResult] = await Promise.all([
+    const [transactionResult, pendingResult, accountResult, connectedAccountResult, settingsResult] = await Promise.all([
       applyHouseholdSelect(supabase.from("transactions").select("*"), uid),
+      applyHouseholdSelect(
+        supabase.from("plaid_transactions")
+          .select("plaid_transaction_id,transaction_date,amount,name,merchant_name,category,plaid_account_id")
+          .eq("pending", true)
+          .is("removed_at", null)
+          .order("transaction_date", { ascending: false })
+          .limit(100),
+        uid,
+      ),
       applyHouseholdSelect(supabase.from("accounts").select("*"), uid).order("created_at"),
+      applyHouseholdSelect(
+        supabase.from("plaid_accounts")
+          .select("id,name,account_type,account_subtype,current_balance,available_balance,is_active")
+          .eq("is_active", true)
+          .order("name"),
+        uid,
+      ),
       loadScopedSettings(uid, scope),
     ]);
     if (!transactionResult.error) {
       setTransactions((transactionResult.data ?? []).map(normalizeTransactionRow).filter(isActiveTransaction));
+    }
+    if (!pendingResult.error) {
+      setPendingBankTransactions((pendingResult.data ?? []).map((row: any) => ({
+        plaid_transaction_id: String(row.plaid_transaction_id),
+        transaction_date: String(row.transaction_date).slice(0, 10),
+        amount: Number(row.amount),
+        name: String(row.name || row.merchant_name || "Pending transaction"),
+        merchant_name: row.merchant_name || undefined,
+        category: String(row.category || "Other"),
+        plaid_account_id: row.plaid_account_id || undefined,
+      })));
     }
     if (!accountResult.error) {
       const nextAccounts = (accountResult.data ?? []).filter((a: any) => a.account_type !== "credit_card").map((a: any) => ({
@@ -1220,6 +1306,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       loadedAccounts = nextAccounts;
       accountsRef.current = nextAccounts;
       setAccounts(nextAccounts);
+    }
+    if (!connectedAccountResult.error) {
+      setConnectedBankAccounts((connectedAccountResult.data ?? []).map((account: any) => ({
+        ...account,
+        current_balance: Number(account.current_balance || 0),
+        available_balance: account.available_balance == null ? undefined : Number(account.available_balance),
+        is_active: account.is_active !== false,
+      })));
     }
     if (!settingsResult.error && settingsResult.data) {
       const sData = settingsResult.data;
@@ -3519,7 +3613,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <BudgetContext.Provider value={{
-      bills, overrides, billDateMoves, transactions, incomes, goals, extraPayments, categories, settings, accounts, decisions,
+      bills, overrides, billDateMoves, transactions, pendingBankTransactions, incomes, goals, extraPayments, categories, settings, accounts, connectedBankAccounts, decisions,
       households, householdMembers, householdActivity, activeHousehold, householdRole, canEditHousehold,
       refreshHouseholds, refreshHouseholdActivity, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
       updateHouseholdMemberRole, removeHouseholdMember,
