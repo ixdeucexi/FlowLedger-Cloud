@@ -4,6 +4,7 @@ export type SetupStepKey =
   | "welcome"
   | "intro"
   | "household"
+  | "starting_point"
   | "help"
   | "goals_intro"
   | "goals"

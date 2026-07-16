@@ -1,0 +1,180 @@
+import { Feather } from "@expo/vector-icons";
+import React, { memo, useState } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
+
+import { AppText } from "@/components/AppText";
+import type { StabilityProgress } from "@/lib/stability";
+
+interface StabilityPathCardProps {
+  progress: StabilityProgress;
+  lowestForecastBalance: number;
+  safetyFloor: number;
+  onAskFlo: () => void;
+}
+
+function currency(value: number) {
+  return value.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+}
+
+function statusColor(status: StabilityProgress["status"]) {
+  if (status === "risk") return "#fb7185";
+  if (status === "watch") return "#fbbf24";
+  return "#34d399";
+}
+
+function StabilityPathCardView({ progress, lowestForecastBalance, safetyFloor, onAskFlo }: StabilityPathCardProps) {
+  const [showCalculation, setShowCalculation] = useState(false);
+  const color = statusColor(progress.status);
+  const progressWidth = `${Math.round(progress.reserveProgress * 100)}%` as const;
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.header}>
+        <View style={[styles.icon, { backgroundColor: `${color}18`, borderColor: `${color}38` }]}>
+          <Feather name="shield" size={18} color={color} />
+        </View>
+        <View style={styles.headerCopy}>
+          <AppText tone="label" style={styles.eyebrow}>Your stability path</AppText>
+          <AppText tone="title" style={styles.stage}>{progress.stageLabel}</AppText>
+        </View>
+        <View style={[styles.statusPill, { backgroundColor: `${color}18`, borderColor: `${color}38` }]}>
+          <View style={[styles.statusDot, { backgroundColor: color }]} />
+          <AppText style={[styles.statusText, { color }]}>{progress.status === "risk" ? "Act now" : progress.status === "watch" ? "Building" : "On track"}</AppText>
+        </View>
+      </View>
+
+      <AppText tone="title" style={styles.headline}>{progress.headline}</AppText>
+      <AppText style={styles.explanation}>{progress.explanation}</AppText>
+
+      <View style={styles.progressHeader}>
+        <AppText style={styles.progressLabel}>One-month stability reserve</AppText>
+        <AppText tone="number" style={styles.progressValue}>{Math.round(progress.reserveProgress * 100)}%</AppText>
+      </View>
+      <View style={styles.progressTrack} accessibilityLabel={`${Math.round(progress.reserveProgress * 100)} percent of stability reserve protected`}>
+        <View style={[styles.progressFill, { backgroundColor: color, width: progressWidth }]} />
+      </View>
+
+      <View style={styles.metrics}>
+        <View style={styles.metric}>
+          <AppText tone="number" style={styles.metricValue}>{progress.protectedDays}</AppText>
+          <AppText style={styles.metricLabel}>days protected</AppText>
+        </View>
+        <View style={styles.metricDivider} />
+        <View style={styles.metric}>
+          <AppText tone="number" style={styles.metricValue}>{currency(progress.protectedAmount)}</AppText>
+          <AppText style={styles.metricLabel}>breathing room</AppText>
+        </View>
+        <View style={styles.metricDivider} />
+        <View style={styles.metric}>
+          <AppText tone="number" style={styles.metricValue}>{currency(progress.reserveTarget)}</AppText>
+          <AppText style={styles.metricLabel}>30-day target</AppText>
+        </View>
+      </View>
+
+      <View style={styles.nextMove}>
+        <View style={styles.nextMoveIcon}>
+          <Feather name="arrow-up-right" size={15} color="#c4b5fd" />
+        </View>
+        <View style={styles.nextMoveCopy}>
+          <AppText tone="label" style={styles.nextMoveLabel}>Next action</AppText>
+          <AppText style={styles.nextMoveText}>{progress.nextAction}</AppText>
+        </View>
+      </View>
+
+      {showCalculation ? (
+        <View style={styles.calculation}>
+          <CalculationRow label="Lowest upcoming balance" value={currency(lowestForecastBalance)} />
+          <CalculationRow label="Protected safety floor" value={`−${currency(safetyFloor)}`} />
+          <CalculationRow label="Breathing room" value={currency(progress.protectedAmount)} emphasized />
+          <CalculationRow label="One-month required-expense target" value={currency(progress.reserveTarget)} />
+        </View>
+      ) : null}
+
+      <View style={styles.actions}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: showCalculation }}
+          onPress={() => setShowCalculation(value => !value)}
+          style={({ pressed }) => [styles.secondaryButton, { opacity: pressed ? 0.72 : 1 }]}
+        >
+          <Feather name={showCalculation ? "chevron-up" : "list"} size={14} color="#93c5fd" />
+          <AppText style={styles.secondaryButtonText}>{showCalculation ? "Hide calculation" : "View calculation"}</AppText>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onAskFlo}
+          style={({ pressed }) => [styles.primaryButton, { opacity: pressed ? 0.78 : 1 }]}
+        >
+          <Feather name="message-circle" size={14} color="#f8fafc" />
+          <AppText style={styles.primaryButtonText}>Ask Flo why</AppText>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function CalculationRow({ label, value, emphasized = false }: { label: string; value: string; emphasized?: boolean }) {
+  return (
+    <View style={styles.calculationRow}>
+      <AppText style={[styles.calculationLabel, emphasized && styles.calculationEmphasized]}>{label}</AppText>
+      <AppText tone="number" style={[styles.calculationValue, emphasized && styles.calculationEmphasized]}>{value}</AppText>
+    </View>
+  );
+}
+
+export const StabilityPathCard = memo(StabilityPathCardView);
+
+const styles = StyleSheet.create({
+  card: {
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(34,211,238,0.22)",
+    backgroundColor: "rgba(15,23,42,0.78)",
+    padding: 15,
+    marginBottom: 10,
+    shadowColor: "#22d3ee",
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.18,
+    shadowRadius: 28,
+    elevation: 8,
+  },
+  header: { flexDirection: "row", alignItems: "center", gap: 10 },
+  icon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center", borderWidth: 1 },
+  headerCopy: { flex: 1 },
+  eyebrow: { color: "#67e8f9", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.1 },
+  stage: { color: "#f8fafc", fontSize: 16, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
+  statusPill: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 6 },
+  statusDot: { width: 6, height: 6, borderRadius: 3 },
+  statusText: { fontSize: 9, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.4 },
+  headline: { color: "#f8fafc", fontSize: 20, lineHeight: 25, fontFamily: "Inter_800ExtraBold", marginTop: 14 },
+  explanation: { color: "#94a3b8", fontSize: 12, lineHeight: 17, fontFamily: "Inter_500Medium", marginTop: 4 },
+  progressHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 14, marginBottom: 6 },
+  progressLabel: { color: "#cbd5e1", fontSize: 11, fontFamily: "Inter_700Bold" },
+  progressValue: { color: "#f8fafc", fontSize: 12, fontFamily: "Inter_800ExtraBold" },
+  progressTrack: { height: 7, borderRadius: 999, overflow: "hidden", backgroundColor: "rgba(148,163,184,0.18)" },
+  progressFill: { height: "100%", borderRadius: 999 },
+  metrics: { flexDirection: "row", alignItems: "stretch", marginTop: 14 },
+  metric: { flex: 1, minWidth: 0 },
+  metricDivider: { width: 1, marginHorizontal: 8, backgroundColor: "rgba(148,163,184,0.15)" },
+  metricValue: { color: "#f8fafc", fontSize: 17, fontFamily: "Inter_800ExtraBold" },
+  metricLabel: { color: "#64748b", fontSize: 9, lineHeight: 12, fontFamily: "Inter_700Bold", marginTop: 2 },
+  nextMove: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 16, borderWidth: 1, borderColor: "rgba(192,132,252,0.22)", backgroundColor: "rgba(124,58,237,0.12)", padding: 11, marginTop: 14 },
+  nextMoveIcon: { width: 31, height: 31, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.24)" },
+  nextMoveCopy: { flex: 1 },
+  nextMoveLabel: { color: "#c4b5fd", fontSize: 8, fontFamily: "Inter_800ExtraBold" },
+  nextMoveText: { color: "#ede9fe", fontSize: 12, lineHeight: 16, fontFamily: "Inter_700Bold", marginTop: 2 },
+  calculation: { marginTop: 12, borderTopWidth: 1, borderTopColor: "rgba(148,163,184,0.14)", paddingTop: 7 },
+  calculationRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingVertical: 6 },
+  calculationLabel: { flex: 1, color: "#94a3b8", fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  calculationValue: { color: "#cbd5e1", fontSize: 12, fontFamily: "Inter_800ExtraBold" },
+  calculationEmphasized: { color: "#67e8f9" },
+  actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
+  secondaryButton: { flex: 1, minWidth: 140, minHeight: 42, borderRadius: 14, borderWidth: 1, borderColor: "rgba(96,165,250,0.22)", backgroundColor: "rgba(37,99,235,0.12)", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingHorizontal: 10 },
+  secondaryButtonText: { color: "#bfdbfe", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
+  primaryButton: { flex: 1, minWidth: 120, minHeight: 42, borderRadius: 14, backgroundColor: "rgba(124,58,237,0.72)", borderWidth: 1, borderColor: "rgba(216,180,254,0.28)", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingHorizontal: 10 },
+  primaryButtonText: { color: "#f8fafc", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
+});

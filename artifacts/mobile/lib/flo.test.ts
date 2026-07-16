@@ -90,6 +90,17 @@ const facts: FloFacts = {
     { id: "utilities", name: "Utilities", amount: 370, dueDay: 4, category: "Utilities" },
     { id: "internet", name: "Internet", amount: 90, dueDay: 13, category: "Utilities" },
   ],
+  stability: {
+    stageLabel: "Build your stability reserve",
+    status: "safe",
+    protectedAmount: 600,
+    reserveTarget: 1200,
+    reserveProgress: 0.5,
+    protectedDays: 15,
+    headline: "15 days of required expenses protected.",
+    explanation: "Your next milestone is 30 protected days.",
+    nextAction: "Keep the next $600 of safe extra money available.",
+  },
   flowScore: {
     score: 72,
     label: "Stable",
@@ -177,6 +188,13 @@ const days = [{ date: "2026-06-24", balance: 1000 }, { date: "2026-07-01", balan
 
 test("Flo affordability uses deterministic result", () => {
   assert.match(localFloAnswer("Can I afford $700 on 2026-06-24?", facts, days) ?? "", /^Not safely\./);
+});
+
+test("Flo explains the stability path from verified facts", () => {
+  const answer = localFloAnswer("Explain my stability path and protected days.", facts, days) ?? "";
+  assert.match(answer, /15 of 30 target days/);
+  assert.match(answer, /lowest upcoming balance is \$800/);
+  assert.match(answer, /next action/i);
 });
 
 test("all Flo quick prompts work without AI", () => {

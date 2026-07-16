@@ -33,8 +33,9 @@ import {
   type SavingsGoalOption,
   type SetupGoalOption,
   type SetupHelpOption,
+  type SetupStartingPoint,
 } from "@/lib/onboarding";
-import { saveOnboardingPreferences } from "@/lib/onboardingPreferences";
+import { loadOnboardingPreferences, saveOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { readStoredSetupStep, writeStoredSetupStep, type SetupStepKey } from "@/lib/setupProgress";
 
 interface SetupStep {
@@ -72,12 +73,25 @@ const SAVINGS_OPTIONS: { id: SavingsGoalOption; label: string; icon: React.Compo
   { id: "something_else", label: "Something else", icon: "more-horizontal" },
 ];
 
+const STARTING_POINT_OPTIONS: {
+  id: SetupStartingPoint;
+  label: string;
+  description: string;
+  icon: React.ComponentProps<typeof Feather>["name"];
+}[] = [
+  { id: "first_budget", label: "This is my first budget", description: "Guide me through the essentials and explain the numbers.", icon: "book-open" },
+  { id: "switching_apps", label: "I'm switching from another app", description: "Help me confirm what I already have without starting over.", icon: "refresh-cw" },
+  { id: "catching_up", label: "I need to catch up", description: "Put urgent bills and low-balance days first.", icon: "alert-circle" },
+  { id: "paycheck_to_paycheck", label: "I keep running out before payday", description: "Help me reach the next paycheck safely and build breathing room.", icon: "calendar" },
+  { id: "building_room", label: "I want to get further ahead", description: "Help me turn extra room into a stability reserve.", icon: "trending-up" },
+];
+
 function moneyKeyToStepKey(key: MoneySetupKey): SetupStepKey {
   return key === "goals" ? "goal_setup" : key;
 }
 
 function isPreferenceStep(key: SetupStepKey) {
-  return ["welcome", "intro", "household", "help", "goals", "savings_goal", "plan"].includes(key);
+  return ["welcome", "intro", "starting_point", "household", "help", "goals", "savings_goal", "plan"].includes(key);
 }
 
 function toggleArrayValue<T extends string>(values: T[], value: T): T[] {
@@ -91,9 +105,9 @@ const TRUST_CARDS: { icon: React.ComponentProps<typeof Feather>["name"]; title: 
 ];
 
 const FINISH_CARDS: { icon: React.ComponentProps<typeof Feather>["name"]; title: string; text: string }[] = [
-  { icon: "shopping-bag", title: "Ask before spending", text: "Flo can check purchases against your forecast and safety cushion." },
-  { icon: "calendar", title: "See tight dates early", text: "Calendar and bills show when cash flow gets squeezed." },
-  { icon: "trending-down", title: "Move debt faster", text: "Extra money can be tested before it goes toward the snowball." },
+  { icon: "shield", title: "Know what is protected", text: "See what remains after required bills and your safety floor are covered." },
+  { icon: "calendar", title: "Reach payday safely", text: "See tight dates early and get one clear next action." },
+  { icon: "trending-up", title: "Build protected days", text: "Track progress from the next paycheck toward a one-month stability reserve." },
 ];
 
 function SetupWizard() {
@@ -196,9 +210,9 @@ function SetupWizard() {
       },
       safety: {
         done: true,
-        title: "How much cushion should I protect?",
+        title: "What safety floor should I protect?",
         ask: "Let's choose your comfort zone.",
-        body: "This is the floor I try not to let your forecast cross. The default is $200, but you can set the cushion that feels right.",
+        body: "This is the minimum balance your forecast should protect. The default is $200, but you can choose the amount that helps you feel secure.",
         button: "Save Safety Settings",
       },
       reconcile: {
@@ -210,10 +224,10 @@ function SetupWizard() {
       },
       finish: {
         done: false,
-        title: "You're ready to use Flo.",
-        ask: "Now ask me before money decisions.",
+        title: "Your first stability plan is ready.",
+        ask: "Start with what is protected and one clear next action.",
         body: buildSetupCompletionMessage(preferences),
-        button: "Ask Flo if I can afford $100",
+        button: "Open My Stability Plan",
       },
     };
 
@@ -226,6 +240,15 @@ function SetupWizard() {
         body: "I'm Flo. I'll learn what you want help with, keep your real data safe, and walk you through the setup steps that match your goals.",
         button: "Get Started",
         kind: "intro",
+      },
+      {
+        key: "starting_point",
+        done: Boolean(preferences.startingPoint),
+        title: "Where are you starting from?",
+        ask: "Choose the answer that feels closest.",
+        body: "I'll adjust the guidance and setup pace without taking away useful details or control.",
+        button: "Continue",
+        kind: "single",
       },
       {
         key: "household",
@@ -297,8 +320,20 @@ function SetupWizard() {
     const key = moneyKeyToStepKey(item.key);
     return steps.find(step => step.key === key)?.done;
   }).length;
-  const preferenceChoiceCount = preferences.help.length + preferences.goals.length + (preferences.savingsGoal ? 1 : 0);
+  const preferenceChoiceCount = preferences.help.length + preferences.goals.length + (preferences.savingsGoal ? 1 : 0) + (preferences.startingPoint ? 1 : 0);
   const savePreferences = (next = preferences) => saveOnboardingPreferences(user?.id, next).catch(() => undefined);
+
+  useEffect(() => {
+    let active = true;
+    loadOnboardingPreferences(user?.id)
+      .then(next => {
+        if (active) setPreferences(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     let active = true;
@@ -363,6 +398,7 @@ function SetupWizard() {
   };
 
   const canContinue = useMemo(() => {
+    if (current.key === "starting_point") return Boolean(preferences.startingPoint);
     if (current.key === "help") return preferences.help.length > 0;
     if (current.key === "goals") return preferences.goals.length > 0;
     if (current.key === "savings_goal") return Boolean(preferences.savingsGoal);
@@ -372,7 +408,7 @@ function SetupWizard() {
   const finish = async () => {
     writeStoredSetupStep(null);
     await updateSettings({ onboarding_completed: true });
-    router.replace({ pathname: "/(tabs)/flo", params: { prompt: "Can I afford $100?" } } as any);
+    router.replace("/(tabs)" as any);
   };
 
   const createInvite = async () => {
@@ -425,6 +461,7 @@ function SetupWizard() {
         setFloConfirmation(householdCode ? "Invite code is ready. You can continue setup while they join." : "No problem — household setup can wait until More.");
         goNext();
         return;
+      case "starting_point":
       case "help":
       case "goals":
       case "savings_goal":
@@ -460,7 +497,7 @@ function SetupWizard() {
         setSafetyFloorText(String(floor));
         setHorizonText(String(horizon));
         await updateSettings({ safety_floor: floor, forecast_horizon_months: horizon });
-        confirmAndNext(`Got it — I'll protect a $${floor.toFixed(0)} cushion across ${horizon} month${horizon === 1 ? "" : "s"}.`);
+        confirmAndNext(`Got it — I'll protect a $${floor.toFixed(0)} safety floor across ${horizon} month${horizon === 1 ? "" : "s"}.`);
         return;
       }
       case "reconcile":
@@ -481,6 +518,12 @@ function SetupWizard() {
     void savePreferences(next);
   };
 
+  const updateStartingPoint = (startingPoint: SetupStartingPoint) => {
+    const next = { ...preferences, startingPoint };
+    setPreferences(next);
+    void savePreferences(next);
+  };
+
   const updateGoal = (id: SetupGoalOption) => {
     const next = { ...preferences, goals: toggleArrayValue(preferences.goals, id) };
     if (!shouldAskSavingsGoal(next)) next.savingsGoal = null;
@@ -495,6 +538,18 @@ function SetupWizard() {
   };
 
   const renderOptions = () => {
+    if (current.key === "starting_point") {
+      return STARTING_POINT_OPTIONS.map(option => (
+        <OptionCard
+          key={option.id}
+          icon={option.icon}
+          label={option.label}
+          description={option.description}
+          selected={preferences.startingPoint === option.id}
+          onPress={() => updateStartingPoint(option.id)}
+        />
+      ));
+    }
     if (current.key === "help") {
       return HELP_OPTIONS.map(option => (
         <OptionCard
@@ -870,14 +925,17 @@ function SetupWizard() {
   );
 }
 
-function OptionCard({ icon, label, selected, onPress }: {
+function OptionCard({ icon, label, description, selected, onPress }: {
   icon: React.ComponentProps<typeof Feather>["name"];
   label: string;
+  description?: string;
   selected: boolean;
   onPress: () => void;
 }) {
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
       onPress={onPress}
       style={({ pressed }) => [
         styles.optionCard,
@@ -888,7 +946,10 @@ function OptionCard({ icon, label, selected, onPress }: {
       <View style={[styles.optionIcon, selected && styles.optionIconSelected]}>
         <Feather name={icon} size={18} color={selected ? "#f8fafc" : "#cbd5e1"} />
       </View>
-      <Text style={styles.optionText}>{label}</Text>
+      <View style={styles.optionCopy}>
+        <Text style={styles.optionText}>{label}</Text>
+        {description ? <Text style={styles.optionDescription}>{description}</Text> : null}
+      </View>
       {selected ? <Feather name="check-circle" size={18} color="#22c55e" /> : null}
     </Pressable>
   );
@@ -975,7 +1036,9 @@ const styles = StyleSheet.create({
   optionCardSelected: { borderColor: "rgba(139,92,246,0.8)", backgroundColor: "rgba(88,28,135,0.45)" },
   optionIcon: { width: 34, height: 34, borderRadius: 12, backgroundColor: "rgba(148,163,184,0.12)", alignItems: "center", justifyContent: "center" },
   optionIconSelected: { backgroundColor: "rgba(139,92,246,0.55)" },
-  optionText: { flex: 1, color: "#f8fafc", fontSize: 16, lineHeight: 21, fontFamily: "Inter_700Bold" },
+  optionCopy: { flex: 1, paddingVertical: 10 },
+  optionText: { color: "#f8fafc", fontSize: 16, lineHeight: 21, fontFamily: "Inter_700Bold" },
+  optionDescription: { color: "#94a3b8", fontSize: 12, lineHeight: 17, fontFamily: "Inter_500Medium", marginTop: 3 },
   planRow: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 16, borderWidth: 1, borderColor: "rgba(56,189,248,0.2)", backgroundColor: "rgba(15,23,42,0.72)", padding: 12 },
   planNumber: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(56,189,248,0.2)" },
   planNumberText: { color: "#38bdf8", fontSize: 12, fontFamily: "Inter_800ExtraBold" },

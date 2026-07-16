@@ -526,6 +526,17 @@ export default function FloScreen() {
           dueDay: bill.due_day,
           category: bill.category || "Other",
         })),
+      stability: {
+        stageLabel: algorithmSuite.stability.stageLabel,
+        status: algorithmSuite.stability.status,
+        protectedAmount: algorithmSuite.stability.protectedAmount,
+        reserveTarget: algorithmSuite.stability.reserveTarget,
+        reserveProgress: algorithmSuite.stability.reserveProgress,
+        protectedDays: algorithmSuite.stability.protectedDays,
+        headline: algorithmSuite.stability.headline,
+        explanation: algorithmSuite.stability.explanation,
+        nextAction: algorithmSuite.stability.nextAction,
+      },
       flowScore: {
         score: algorithmSuite.flowScore.score,
         label: algorithmSuite.flowScore.label,

@@ -48,6 +48,17 @@ export interface FloFacts {
   billDateMoves?: FloBillMoveFact[];
   debts?: FloDebtFact[];
   recurringBills?: FloRecurringBillFact[];
+  stability?: {
+    stageLabel: string;
+    status: "safe" | "watch" | "risk";
+    protectedAmount: number;
+    reserveTarget: number;
+    reserveProgress: number;
+    protectedDays: number;
+    headline: string;
+    explanation: string;
+    nextAction: string;
+  };
   flowScore?: {
     score: number;
     label: string;
@@ -401,6 +412,17 @@ export function sanitizeFloFacts(facts: FloFacts): FloFacts {
     billDateMoves: sanitizeBillMoveFacts(facts.billDateMoves),
     debts: sanitizeDebtFacts(facts.debts),
     recurringBills: sanitizeRecurringBillFacts(facts.recurringBills),
+    stability: facts.stability ? {
+      stageLabel: String(facts.stability.stageLabel ?? "Build the plan").slice(0, 60),
+      status: facts.stability.status === "safe" || facts.stability.status === "watch" || facts.stability.status === "risk" ? facts.stability.status : "watch",
+      protectedAmount: Math.max(0, num(facts.stability.protectedAmount)),
+      reserveTarget: Math.max(0, num(facts.stability.reserveTarget)),
+      reserveProgress: Math.max(0, Math.min(1, num(facts.stability.reserveProgress))),
+      protectedDays: Math.max(0, Math.round(num(facts.stability.protectedDays))),
+      headline: String(facts.stability.headline ?? "").slice(0, 180),
+      explanation: String(facts.stability.explanation ?? "").slice(0, 220),
+      nextAction: String(facts.stability.nextAction ?? "").slice(0, 180),
+    } : undefined,
     flowScore: facts.flowScore ? {
       score: num(facts.flowScore.score),
       label: String(facts.flowScore.label ?? "").slice(0, 40),
@@ -507,6 +529,16 @@ export function sanitizeFloFacts(facts: FloFacts): FloFacts {
 export function localFloAnswer(message: string, facts: FloFacts, days: DecisionBaselineDay[]): string | null {
   if (isUnsafeFloRequest(message)) return FLO_SECURITY_REFUSAL_MESSAGE;
   const lower = message.toLowerCase();
+  const asksStability = /stability path|stability reserve|protected days|days protected|breathing room|further ahead/.test(lower);
+  if (asksStability && facts.stability) {
+    const calculation = facts.safeCushion
+      ? `Your lowest upcoming balance is $${facts.safeCushion.lowestBalance.toFixed(0)}. After protecting the $${facts.safeCushion.safetyFloor.toFixed(0)} safety floor, that leaves $${facts.stability.protectedAmount.toFixed(0)} of breathing room.`
+      : `You have $${facts.stability.protectedAmount.toFixed(0)} of breathing room.`;
+    const target = facts.stability.reserveTarget > 0
+      ? `That protects ${facts.stability.protectedDays} of 30 target days, with a one-month required-expense target of $${facts.stability.reserveTarget.toFixed(0)}.`
+      : "Add required bills before I measure progress toward a one-month reserve.";
+    return `${facts.stability.stageLabel}: ${facts.stability.headline} ${calculation} ${target} Your next action is: ${facts.stability.nextAction}`;
+  }
   if (/\b(money|financial) snapshot\b|\baccount overview\b/.test(lower)) {
     return `Your current projected balance is $${facts.balanceToday.toFixed(2)}. This month shows $${facts.monthlyIncome.toFixed(2)} income, $${facts.monthlyBills.toFixed(2)} in planned bills, and ${facts.monthlyRemaining >= 0 ? "$" + facts.monthlyRemaining.toFixed(2) + " remaining" : "$" + Math.abs(facts.monthlyRemaining).toFixed(2) + " short"}. The forecast low is $${facts.lowestBalance.toFixed(2)} on ${facts.lowestBalanceDate}.`;
   }
