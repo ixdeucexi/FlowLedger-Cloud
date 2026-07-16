@@ -1,8 +1,9 @@
 import { Feather } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Animated, Image, Keyboard, Modal, PanResponder, Platform, Pressable,
+  Alert, Animated, Image, Keyboard, Linking, Modal, PanResponder, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -12,6 +13,7 @@ import { AddBillModal } from "@/components/AddBillModal";
 import { AppText } from "@/components/AppText";
 import { CommandPlusButton } from "@/components/CommandPlusButton";
 import { DatePickerField } from "@/components/DatePickerField";
+import { FlowmentumHandoffModal } from "@/components/FlowmentumHandoffModal";
 import { GoalModal } from "@/components/GoalModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { StabilityPathCard } from "@/components/StabilityPathCard";
@@ -20,6 +22,7 @@ import colors from "@/constants/colors";
 import type { Bill, DashboardFilter, Goal } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useAuth } from "@/context/AuthContext";
+import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { isCashFlowTransaction } from "@/lib/billMatching";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
@@ -27,6 +30,7 @@ import { applyCategoryBudgetMove, buildCategoryPlan, buildZeroBudgetSummary } fr
 import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets as saveCategoryBudgetsRemote, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
 import { DEFAULT_DECISION_HUB_SETTINGS } from "@/lib/decisionHubSettings";
 import { buildDecisionHistory } from "@/lib/decisionHistory";
+import { FLOWMENTUM_URL, flowmentumPreviewStorageKey, flowmentumSeenStorageKey, isFlowmentumHandoffEligible } from "@/lib/flowmentumHandoff";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { transactionCategoryParts } from "@/lib/reviewCenter";
 import { buildAlgorithmSuite, type AlgorithmInsight } from "@/lib/algorithmSuite";
@@ -118,6 +122,7 @@ export default function DashboardScreen() {
   const dashboardTopPadding = Platform.OS === "web" ? (isIosWeb ? 72 : 16) : insets.top + 16;
   const dashboardBottomPadding = Platform.OS === "web" ? (isIosWeb ? 120 : 76) : insets.bottom + 128;
   const { user } = useAuth();
+  const { isAdmin } = useMembership();
   const {
     bills, getPaidAmount, getBillMonthlyTotal, getMonthlyBills, selectedYear, setDashboardFilter,
     getMonthlyIncome,
@@ -131,6 +136,9 @@ export default function DashboardScreen() {
     householdId: activeHousehold?.householdId,
     budgetId: activeHousehold?.budgetId,
   }), [activeHousehold?.budgetId, activeHousehold?.householdId, user?.id]);
+  const flowmentumHouseholdId = activeHousehold?.householdId ?? activeHousehold?.budgetId ?? "personal";
+  const flowmentumSeenKey = user?.id ? flowmentumSeenStorageKey(user.id, flowmentumHouseholdId) : null;
+  const flowmentumPreviewKey = user?.id ? flowmentumPreviewStorageKey(user.id, flowmentumHouseholdId) : null;
 
   const [goalModalVisible, setGoalModalVisible]     = useState(false);
   const [editGoal, setEditGoal]                     = useState<Goal | null>(null);
@@ -158,6 +166,8 @@ export default function DashboardScreen() {
   const [flowScoreVisible, setFlowScoreVisible] = useState(false);
   const [safeCushionVisible, setSafeCushionVisible] = useState(false);
   const [startupAlertVisible, setStartupAlertVisible] = useState(false);
+  const [flowmentumVisible, setFlowmentumVisible] = useState(false);
+  const [flowmentumAdminPreview, setFlowmentumAdminPreview] = useState(false);
   const startupAlertShownRef = useRef(false);
   const flowScoreSwipeResponder = useMemo(() => PanResponder.create({
     onMoveShouldSetPanResponder: (_event, gesture) => gesture.dy > 10 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
@@ -176,6 +186,20 @@ export default function DashboardScreen() {
   useBackDismiss(flowScoreVisible, () => setFlowScoreVisible(false));
   useBackDismiss(safeCushionVisible, () => setSafeCushionVisible(false));
   useBackDismiss(startupAlertVisible, () => setStartupAlertVisible(false));
+  const dismissFlowmentum = useCallback(() => {
+    setFlowmentumVisible(false);
+    if (!flowmentumAdminPreview && flowmentumSeenKey) {
+      void AsyncStorage.setItem(flowmentumSeenKey, new Date().toISOString()).catch(() => undefined);
+    }
+    setFlowmentumAdminPreview(false);
+  }, [flowmentumAdminPreview, flowmentumSeenKey]);
+  useBackDismiss(flowmentumVisible, dismissFlowmentum);
+  const exploreFlowmentum = useCallback(() => {
+    dismissFlowmentum();
+    void Linking.openURL(FLOWMENTUM_URL).catch(() => {
+      Alert.alert("Could not open Flowmentum", "Visit flowmentum-algo.com in your browser.");
+    });
+  }, [dismissFlowmentum]);
 
   useFocusEffect(useCallback(() => {
     setIsFocused(true);
@@ -826,6 +850,35 @@ export default function DashboardScreen() {
     settings.safety_floor,
     today,
   ]);
+  const flowmentumEligible = isFlowmentumHandoffEligible({
+    protectedDays: algorithmSuite.stability.protectedDays,
+    stage: algorithmSuite.stability.stage,
+    status: algorithmSuite.stability.status,
+    riskDays: algorithmSuite.stability.riskDays,
+    forecastConfidence: forecastConfidence.level,
+  });
+  useFocusEffect(useCallback(() => {
+    if (!flowmentumSeenKey || !flowmentumPreviewKey || (!flowmentumEligible && !isAdmin)) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    void AsyncStorage.multiGet([flowmentumSeenKey, flowmentumPreviewKey]).then(values => {
+      if (cancelled) return;
+      const seen = Boolean(values[0]?.[1]);
+      const previewRequested = isAdmin && values[1]?.[1] === "true";
+      if (previewRequested) {
+        void AsyncStorage.removeItem(flowmentumPreviewKey).catch(() => undefined);
+      }
+      if (!previewRequested && (!flowmentumEligible || seen)) return;
+      setFlowmentumAdminPreview(previewRequested);
+      timer = setTimeout(() => {
+        if (!cancelled) setFlowmentumVisible(true);
+      }, previewRequested ? 250 : 1400);
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [flowmentumEligible, flowmentumPreviewKey, flowmentumSeenKey, isAdmin]));
   const nextWeekRisk = useMemo(() => {
     const weekEndDate = new Date(now);
     weekEndDate.setDate(now.getDate() + 7);
@@ -989,6 +1042,13 @@ export default function DashboardScreen() {
           )}
         </View>
       </Modal>
+
+      <FlowmentumHandoffModal
+        visible={flowmentumVisible}
+        isAdminPreview={flowmentumAdminPreview}
+        onDismiss={dismissFlowmentum}
+        onExplore={exploreFlowmentum}
+      />
 
       {false ? (
         <Pressable

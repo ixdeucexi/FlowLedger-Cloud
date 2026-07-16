@@ -69,5 +69,7 @@
     ,"lib/settingsHub.test.ts"
     ,"lib/plaidActivity.ts"
     ,"lib/plaidActivity.test.ts"
+    ,"lib/flowmentumHandoff.ts"
+    ,"lib/flowmentumHandoff.test.ts"
   ]
 }
