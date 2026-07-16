@@ -38,6 +38,13 @@ export interface SettingsStatus {
   tone?: "neutral" | "attention";
 }
 
+export function toggleSettingsGroup(
+  currentGroupId: SettingsGroup["id"] | null,
+  selectedGroupId: SettingsGroup["id"],
+): SettingsGroup["id"] | null {
+  return currentGroupId === selectedGroupId ? null : selectedGroupId;
+}
+
 export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
   { id: "accounts", label: "Accounts & household", description: "Balances, reconciliation, and household sharing.", icon: "credit-card" },
   { id: "plaid", label: "Bank sync", description: "Connect a bank or import activity safely.", icon: "link" },

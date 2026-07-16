@@ -1,14 +1,27 @@
 import { Feather } from "@expo/vector-icons";
 import type { ComponentProps } from "react";
+import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
 import {
   SETTINGS_GROUPS,
   settingsSectionById,
+  toggleSettingsGroup,
   type SettingsDestinationId,
+  type SettingsGroup,
   type SettingsStatus,
 } from "@/lib/settingsHub";
+
+const GROUP_PRESENTATION: Record<SettingsGroup["id"], {
+  icon: ComponentProps<typeof Feather>["name"];
+  description: string;
+}> = {
+  money: { icon: "dollar-sign", description: "Accounts, bank sync, plans, goals, and child money." },
+  insights: { icon: "bar-chart-2", description: "Reviews, subscriptions, reports, and algorithms." },
+  preferences: { icon: "sliders", description: "Flo setup, appearance, notifications, and data." },
+  account: { icon: "user", description: "Membership, security, support, and legal." },
+};
 
 interface MoreHubProps {
   householdName: string;
@@ -28,6 +41,7 @@ export function MoreHub({
   onOpenSection,
 }: MoreHubProps) {
   const colors = useColors();
+  const [openGroupId, setOpenGroupId] = useState<SettingsGroup["id"] | null>(null);
 
   return (
     <>
@@ -49,11 +63,34 @@ export function MoreHub({
         </View>
       </View>
 
-      {SETTINGS_GROUPS.map(group => (
-        <View key={group.id} style={styles.groupBlock}>
-          <Text style={[styles.groupLabel, { color: colors.mutedForeground }]}>{group.label}</Text>
-          <View style={[styles.groupCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            {group.sectionIds.map((sectionId, index) => {
+      {SETTINGS_GROUPS.map(group => {
+        const isOpen = openGroupId === group.id;
+        const presentation = GROUP_PRESENTATION[group.id];
+        return (
+          <View key={group.id} style={styles.groupBlock}>
+            <View style={[styles.groupCard, { backgroundColor: colors.card, borderColor: isOpen ? colors.primary + "70" : colors.border }]}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={group.label}
+                accessibilityHint={isOpen ? "Collapses this settings group" : "Shows the settings in this group"}
+                accessibilityState={{ expanded: isOpen }}
+                onPress={() => setOpenGroupId(current => toggleSettingsGroup(current, group.id))}
+                style={({ pressed }) => [styles.groupHeader, { opacity: pressed ? 0.68 : 1 }]}
+              >
+                <View style={[styles.groupIcon, { backgroundColor: colors.primary + "16" }]}>
+                  <Feather name={presentation.icon} size={19} color={colors.primary} />
+                </View>
+                <View style={styles.groupCopy}>
+                  <Text style={[styles.groupTitle, { color: colors.foreground }]}>{group.label}</Text>
+                  <Text style={[styles.groupDescription, { color: colors.mutedForeground }]} numberOfLines={1}>
+                    {presentation.description}
+                  </Text>
+                </View>
+                <Text style={[styles.groupCount, { color: colors.mutedForeground }]}>{group.sectionIds.length}</Text>
+                <Feather name={isOpen ? "chevron-up" : "chevron-down"} size={20} color={colors.primary} />
+              </Pressable>
+
+              {isOpen ? group.sectionIds.map((sectionId, index) => {
               const section = settingsSectionById(sectionId);
               const status = statuses[sectionId];
               const isLast = index === group.sectionIds.length - 1;
@@ -66,7 +103,13 @@ export function MoreHub({
                   onPress={() => onOpenSection(section.id)}
                   style={({ pressed }) => [
                     styles.row,
-                    { borderBottomColor: colors.border, borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth, opacity: pressed ? 0.68 : 1 },
+                    {
+                      borderTopColor: colors.border,
+                      borderTopWidth: index === 0 ? StyleSheet.hairlineWidth : 0,
+                      borderBottomColor: colors.border,
+                      borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
+                      opacity: pressed ? 0.68 : 1,
+                    },
                   ]}
                 >
                   <View style={[styles.rowIcon, { backgroundColor: colors.primary + "12" }]}>
@@ -95,10 +138,11 @@ export function MoreHub({
                   <Feather name="chevron-right" size={17} color={colors.mutedForeground} />
                 </Pressable>
               );
-            })}
+              }) : null}
+            </View>
           </View>
-        </View>
-      ))}
+        );
+      })}
     </>
   );
 }
@@ -113,9 +157,14 @@ const styles = StyleSheet.create({
   identity: { fontSize: 11, fontFamily: "Inter_500Medium", lineHeight: 16, marginTop: 2 },
   membershipPill: { maxWidth: 92, borderWidth: 1, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 6 },
   membershipText: { fontSize: 10, fontFamily: "Inter_800ExtraBold" },
-  groupBlock: { marginBottom: 20 },
-  groupLabel: { fontSize: 11, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8, marginLeft: 2 },
+  groupBlock: { marginBottom: 12 },
   groupCard: { borderWidth: 1, borderRadius: 18, overflow: "hidden" },
+  groupHeader: { minHeight: 72, paddingHorizontal: 13, paddingVertical: 11, flexDirection: "row", alignItems: "center", gap: 11 },
+  groupIcon: { width: 40, height: 40, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  groupCopy: { flex: 1, minWidth: 0 },
+  groupTitle: { fontSize: 15, fontFamily: "Inter_800ExtraBold" },
+  groupDescription: { fontSize: 11, fontFamily: "Inter_500Medium", lineHeight: 16, marginTop: 2 },
+  groupCount: { minWidth: 18, fontSize: 11, fontFamily: "Inter_700Bold", textAlign: "center" },
   row: { minHeight: 68, paddingHorizontal: 12, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 10 },
   rowIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   rowCopy: { flex: 1, minWidth: 0 },

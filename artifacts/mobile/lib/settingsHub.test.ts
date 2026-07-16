@@ -7,6 +7,7 @@ import {
   attentionCountStatus,
   formatCountStatus,
   settingsSectionById,
+  toggleSettingsGroup,
 } from "./settingsHub";
 
 test("settings hub places every destination in exactly one group", () => {
@@ -37,4 +38,10 @@ test("attention statuses only highlight positive counts", () => {
   assert.deepEqual(attentionCountStatus(0, "Clear", "to review", "to review"), { label: "Clear" });
   assert.deepEqual(attentionCountStatus(1, "Clear", "to review", "to review"), { label: "1 to review", tone: "attention" });
   assert.deepEqual(attentionCountStatus(8, "Clear", "to review", "to review"), { label: "8 to review", tone: "attention" });
+});
+
+test("settings groups open one at a time and collapse when selected again", () => {
+  assert.equal(toggleSettingsGroup(null, "money"), "money");
+  assert.equal(toggleSettingsGroup("money", "insights"), "insights");
+  assert.equal(toggleSettingsGroup("insights", "insights"), null);
 });

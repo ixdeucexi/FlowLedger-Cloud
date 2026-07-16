@@ -10,7 +10,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert, Modal, Platform, Pressable, ScrollView, StyleSheet,
-  Text, TextInput, View,
+  Text, TextInput, useWindowDimensions, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -339,6 +339,8 @@ function activitySentence(action: string, entityType: string, entityLabel?: stri
 export default function MoreScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
+  const { width: viewportWidth } = useWindowDimensions();
+  const useStackedSettingsFields = viewportWidth < 480;
   const router = useRouter();
   const routeParams = useLocalSearchParams<{ section?: string }>();
   const {
@@ -2274,8 +2276,8 @@ export default function MoreScreen() {
         <View>
           <Text style={[styles.switchLabel, { color: c.foreground, marginBottom: 2 }]}>Forecast Safety</Text>
           <Text style={[styles.switchDesc, { color: c.mutedForeground, marginBottom: 10 }]}>Protect this minimum balance across your selected forecast window.</Text>
-          <View style={styles.safetyFields}>
-            <View style={styles.safetyField}>
+          <View style={[styles.safetyFields, useStackedSettingsFields && styles.formRowStacked]}>
+            <View style={[styles.safetyField, useStackedSettingsFields && styles.formFieldStacked]}>
               <Text style={[styles.balanceFieldLabel, { color: c.mutedForeground }]}>Safety floor ($)</Text>
               <TextInput
                 style={[styles.balanceFullInput, { backgroundColor: c.muted, color: c.foreground }]}
@@ -2286,7 +2288,7 @@ export default function MoreScreen() {
                 placeholderTextColor={c.mutedForeground}
               />
             </View>
-            <View style={styles.safetyField}>
+            <View style={[styles.safetyField, useStackedSettingsFields && styles.formFieldStacked]}>
               <Text style={[styles.balanceFieldLabel, { color: c.mutedForeground }]}>Months (1–24)</Text>
               <TextInput
                 style={[styles.balanceFullInput, { backgroundColor: c.muted, color: c.foreground }]}
@@ -2664,14 +2666,14 @@ export default function MoreScreen() {
             placeholderTextColor={c.mutedForeground}
             style={[styles.childInput, { color: c.foreground, borderColor: c.border, backgroundColor: c.card }]}
           />
-          <View style={styles.childFormRow}>
+          <View style={[styles.childFormRow, useStackedSettingsFields && styles.formRowStacked]}>
             <TextInput
               value={childAllowanceText}
               onChangeText={setChildAllowanceText}
               placeholder="Weekly allowance"
               placeholderTextColor={c.mutedForeground}
               keyboardType="decimal-pad"
-              style={[styles.childHalfInput, { color: c.foreground, borderColor: c.border, backgroundColor: c.card }]}
+              style={[styles.childHalfInput, useStackedSettingsFields && styles.formInputStacked, { color: c.foreground, borderColor: c.border, backgroundColor: c.card }]}
             />
             <TextInput
               value={childGoalText}
@@ -2679,7 +2681,7 @@ export default function MoreScreen() {
               placeholder="Savings goal"
               placeholderTextColor={c.mutedForeground}
               keyboardType="decimal-pad"
-              style={[styles.childHalfInput, { color: c.foreground, borderColor: c.border, backgroundColor: c.card }]}
+              style={[styles.childHalfInput, useStackedSettingsFields && styles.formInputStacked, { color: c.foreground, borderColor: c.border, backgroundColor: c.card }]}
             />
           </View>
           <Pressable
@@ -3254,14 +3256,14 @@ const styles = StyleSheet.create({
   activityIcon: { width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   activityInfo: { flex: 1, minWidth: 0 },
   activityText: { fontSize: 12, fontFamily: "Inter_700Bold", lineHeight: 17 },
-  roleRow: { flexDirection: "row", gap: 8, marginTop: 12 },
-  roleButton: { flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 10, alignItems: "center" },
+  roleRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
+  roleButton: { flex: 1, minWidth: 88, borderWidth: 1, borderRadius: 10, paddingVertical: 10, alignItems: "center" },
   roleButtonText: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   inviteCodeBox: { borderWidth: 1, borderRadius: 12, padding: 12, marginTop: 10 },
   inviteCodeLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 },
   inviteCodeText: { fontSize: 22, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.8 },
   joinRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 },
-  joinInput: { flex: 1, borderWidth: 1, height: 44 },
+  joinInput: { flex: 1, minWidth: 0, borderWidth: 1, height: 44 },
   joinButton: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   householdMessage: { fontSize: 12, fontFamily: "Inter_700Bold", lineHeight: 17, marginTop: 10 },
   confidenceBox: { flexDirection: "row", alignItems: "flex-start", gap: 9, padding: 11, borderRadius: 10, marginBottom: 8 },
@@ -3338,9 +3340,12 @@ const styles = StyleSheet.create({
   subscriptionActionRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
   growthInlineButton: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7, marginTop: 8 },
   childForm: { borderWidth: 1, borderRadius: 16, padding: 12, marginTop: 14, gap: 10 },
-  childFormRow: { flexDirection: "row", gap: 10 },
-  childInput: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 11, fontSize: 14, fontFamily: "Inter_500Medium" },
-  childHalfInput: { flex: 1, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 11, fontSize: 13, fontFamily: "Inter_500Medium" },
+  childFormRow: { width: "100%", flexDirection: "row", gap: 10 },
+  childInput: { width: "100%", minWidth: 0, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 11, fontSize: 14, fontFamily: "Inter_500Medium" },
+  childHalfInput: { flex: 1, minWidth: 0, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 11, fontSize: 13, fontFamily: "Inter_500Medium" },
+  formRowStacked: { flexDirection: "column" },
+  formFieldStacked: { flex: 0, width: "100%" },
+  formInputStacked: { flex: 0, width: "100%" },
 
   switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   switchInfo: { flex: 1, marginRight: 12 },
@@ -3373,8 +3378,8 @@ const styles = StyleSheet.create({
   balanceSaveFullBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 44, borderRadius: 10, marginTop: 12 },
   balanceSaveBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   balanceNote: { flexDirection: "row", alignItems: "flex-start", gap: 6, padding: 9, borderRadius: 8, marginTop: 10 },
-  safetyFields: { flexDirection: "row", gap: 10 },
-  safetyField: { flex: 1 },
+  safetyFields: { width: "100%", flexDirection: "row", gap: 10 },
+  safetyField: { flex: 1, minWidth: 0 },
 
   dataRow: { flexDirection: "row", alignItems: "center", paddingVertical: 13 },
   dataIcon: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center", marginRight: 12 },
