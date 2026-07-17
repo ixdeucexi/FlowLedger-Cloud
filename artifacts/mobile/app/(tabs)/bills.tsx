@@ -25,7 +25,6 @@ import { effectiveDebtMinimum, type SnowballProjectionResult } from "@/lib/snowb
 import { sortDebtsLeastToGreatest } from "@/lib/debtOrder";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { DEFAULT_DECISION_HUB_SETTINGS } from "@/lib/decisionHubSettings";
-import { isAlgorithmEnabled } from "@/lib/algorithmCatalog";
 import { loadCategoryBudgets } from "@/lib/categoryBudgetStore";
 
 const CAT_COLORS: Record<string, string> = {
@@ -296,7 +295,7 @@ export default function BillsScreen() {
     settings.safety_floor,
   ]);
   const debtPayoffEngine = debtAlgorithmSuite.debtPayoff;
-  const cashFlowSafeSnowballAmount = debtPayoffEngine.safeExtraAmount;
+  const cashFlowSafeSnowballAmount = baseSnowballPreview.safeMaximum;
 
   const debts = (() => {
     const debtBills = visibleBills.filter(b => b.is_debt);
@@ -374,16 +373,15 @@ export default function BillsScreen() {
     return buildPaycheckPlan(incomeEvents, billEvents, balanceEvents, settings.safety_floor, todayIso);
   }, [currentMonth, currentYear, getBillMonthlyTotal, getBillOccurrencesInMonth, getDailyBalances, getIncomeOccurrencesInMonth, getMonthlyBills, getPaidAmount, settings.forecast_horizon_months, settings.safety_floor, todayIso]);
   const billOptimizationPrompt = useMemo(() => {
-    if ((!isAlgorithmEnabled(decisionHubSettings, "billPriority") && !isAlgorithmEnabled(decisionHubSettings, "paydaySplit")) || !paycheckPlan.nextPaycheck || !paycheckPlan.billsDue.length) return null;
+    if (!paycheckPlan.nextPaycheck || !paycheckPlan.billsDue.length) return null;
     const bill = [...paycheckPlan.billsDue].sort((left, right) => right.amount - left.amount)[0];
     const saferDate = new Date(`${paycheckPlan.nextPaycheck.date}T12:00:00`);
     saferDate.setDate(saferDate.getDate() + 1);
     const key = `${bill.id ?? bill.name}-${bill.dueDate}-${paycheckPlan.nextPaycheck.date}`;
     if (dismissedBillPromptKey === key) return null;
     return { bill, saferDate, key };
-  }, [decisionHubSettings, dismissedBillPromptKey, paycheckPlan]);
+  }, [dismissedBillPromptKey, paycheckPlan]);
   const billPrioritySummary = useMemo(() => {
-    if (!isAlgorithmEnabled(decisionHubSettings, "billPriority")) return null;
     const currentNonDebtBills = currentMonthBills.filter(bill => !bill.is_debt);
     const unpaid = currentNonDebtBills
       .map(bill => {
@@ -409,7 +407,7 @@ export default function BillsScreen() {
       dueText,
       count: unpaid.length,
     };
-  }, [currentDay, currentMonth, currentYear, currentMonthBills, decisionHubSettings, firstOccurrenceDay, getBillMonthlyTotal, getPaidAmount]);
+  }, [currentDay, currentMonth, currentYear, currentMonthBills, firstOccurrenceDay, getBillMonthlyTotal, getPaidAmount]);
 
   // ── Handlers ────────────────────────────────────────────────────
   const handleSave = useCallback((data: Omit<Bill, "id" | "created_at"> | Bill) => {

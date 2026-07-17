@@ -32,13 +32,3 @@ export function normalizeAlgorithmToggles(value: unknown): Record<AlgorithmId, b
   void value;
   return defaultAlgorithmToggles();
 }
-
-export function isAlgorithmEnabled(settings: AlgorithmSettingsShape, algorithmId: AlgorithmId): boolean {
-  void settings;
-  void algorithmId;
-  return true;
-}
-
-export function enabledAlgorithmCount(settings: AlgorithmSettingsShape): number {
-  return ALGORITHM_CATALOG.filter(algorithm => isAlgorithmEnabled(settings, algorithm.id)).length;
-}

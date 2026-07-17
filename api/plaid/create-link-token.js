@@ -1,11 +1,14 @@
 const { plaid, plaidOptions, Products } = require("../_utils/plaid");
 const { authenticatedUser, safeError } = require("../_utils/supabase");
+const { authorizeProHousehold, requestedHouseholdId } = require("../_utils/plaidAccess");
 
 module.exports = async function createLinkToken(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "METHOD_NOT_ALLOWED" });
   const auth = await authenticatedUser(req);
   if (!auth.user) return res.status(401).json({ error: auth.error, message: "Please sign in again." });
   try {
+    const access = await authorizeProHousehold(auth.user.id, requestedHouseholdId(req));
+    if (!access.ok) return res.status(access.status).json({ error: access.error, message: access.message });
     const config = plaidOptions();
     const request = {
       user: { client_user_id: auth.user.id },

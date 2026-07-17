@@ -58,7 +58,9 @@ export function ReviewCenter() {
     return { ...defaults, category: categories.includes(defaults.category) ? defaults.category : "Other" };
   }, [categories, current]);
   const initialTotal = useRef(0);
-  if (queue.length + completedThisVisit > initialTotal.current) initialTotal.current = queue.length + completedThisVisit;
+  useEffect(() => {
+    initialTotal.current = Math.max(initialTotal.current, queue.length + completedThisVisit);
+  }, [completedThisVisit, queue.length]);
 
   const targets = useMemo(() => {
     if (!current) return [];
@@ -90,7 +92,7 @@ export function ReviewCenter() {
       decisions.filter(decision => decision.status === "planned" || decision.status === "calendar")
         .forEach(decision => {
           const occurrenceDate = decision.calendar_date || (typeof decision.scenario?.date === "string" ? decision.scenario.date : "");
-          const plannedAmount = Math.abs(Number(decision.scenario?.amount) || 0);
+          const plannedAmount = Math.max(0, Math.abs(Number(decision.scenario?.amount) || 0) - Math.abs(Number(decision.actual_amount) || 0));
           if (!occurrenceDate.startsWith(`${year}-${String(month + 1).padStart(2, "0")}`) || plannedAmount <= 0) return;
           candidates.push({ type: "decision", id: decision.id, name: decision.name, category: "Calendar plan", plannedAmount, occurrenceDate: occurrenceDate.slice(0, 10) });
         });

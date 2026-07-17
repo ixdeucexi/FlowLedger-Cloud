@@ -70,9 +70,9 @@ import { buildDecisionRiskAlerts } from "@/lib/decisionRisk";
 import { applyCategoryBudgetMove, buildCategoryPlan } from "@/lib/categoryPlanning";
 import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
 import { DEFAULT_DECISION_HUB_SETTINGS } from "@/lib/decisionHubSettings";
+import { localDateString } from "@/lib/dateLabels";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { buildAlgorithmSuite } from "@/lib/algorithmSuite";
-import { isAlgorithmEnabled } from "@/lib/algorithmCatalog";
 import { groupForecastEvents } from "@/lib/forecastDisplay";
 import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
@@ -143,7 +143,7 @@ export default function FloScreen() {
   const skipConversationLoadRef = useRef<string | null>(null);
   const retryRequestRef = useRef<{ text: string; userMessageId: string; assistantMessageId: string; conversationId: string | null } | null>(null);
   const now = useMemo(() => new Date(), []);
-  const today = now.toISOString().slice(0, 10);
+  const today = localDateString(now);
 
   useBackDismiss(Boolean(completePlan), () => setCompletePlan(null));
   useBackDismiss(Boolean(postponePlan), () => setPostponePlan(null));
@@ -541,15 +541,15 @@ export default function FloScreen() {
         topReason: algorithmSuite.safeCushion.topReason,
         topAction: algorithmSuite.safeCushion.topAction,
       },
-      purchaseDecision: isAlgorithmEnabled(decisionHubSettings, "purchaseDecision") ? {
+      purchaseDecision: {
         safeNowLimit: algorithmSuite.purchaseDecision.safeNowLimit,
         action: algorithmSuite.purchaseDecision.action,
         detail: algorithmSuite.purchaseDecision.detail,
         nextMove: algorithmSuite.purchaseDecision.nextMove,
         bestDay: algorithmSuite.purchaseDecision.bestDay,
         confidence: algorithmSuite.purchaseDecision.confidence,
-      } : undefined,
-      billPriority: isAlgorithmEnabled(decisionHubSettings, "billPriority") ? {
+      },
+      billPriority: {
         nextBill: algorithmSuite.billPriority.nextBill
           ? {
             name: algorithmSuite.billPriority.nextBill.name,
@@ -568,8 +568,8 @@ export default function FloScreen() {
           reason: bill.reason,
           urgency: bill.urgency,
         })),
-      } : undefined,
-      paydaySplitAlgo: isAlgorithmEnabled(decisionHubSettings, "paydaySplit") ? {
+      },
+      paydaySplitAlgo: {
         bills: algorithmSuite.paydaySplit.bills,
         spending: algorithmSuite.paydaySplit.spending,
         savings: algorithmSuite.paydaySplit.savings,
@@ -578,14 +578,14 @@ export default function FloScreen() {
         dollars: algorithmSuite.paydaySplit.dollars,
         summary: algorithmSuite.paydaySplit.summary,
         nextMove: algorithmSuite.paydaySplit.nextMove,
-      } : undefined,
-      cashFlowGap: isAlgorithmEnabled(decisionHubSettings, "cashFlowGap") ? {
+      },
+      cashFlowGap: {
         startDay: algorithmSuite.cashFlowGap.startDay,
         endDay: algorithmSuite.cashFlowGap.endDay,
         lowestBalance: algorithmSuite.cashFlowGap.lowestBalance,
         detail: algorithmSuite.cashFlowGap.detail,
-      } : undefined,
-      debtPayoff: settings.debtPayoffEnabled && isAlgorithmEnabled(decisionHubSettings, "debtPayoff") ? {
+      },
+      debtPayoff: settings.debtPayoffEnabled ? {
         nextDebtName: algorithmSuite.debtPayoff.nextDebtName,
         snowballBalance: algorithmSuite.debtPayoff.snowballBalance,
         avalancheName: algorithmSuite.debtPayoff.avalancheName,
@@ -595,21 +595,21 @@ export default function FloScreen() {
         status: algorithmSuite.debtPayoff.status,
         detail: algorithmSuite.debtPayoff.detail,
       } : undefined,
-      spendingLimit: isAlgorithmEnabled(decisionHubSettings, "spendingLimit") ? {
+      spendingLimit: {
         daily: algorithmSuite.spendingLimit.daily,
         weekly: algorithmSuite.spendingLimit.weekly,
         status: algorithmSuite.spendingLimit.status,
         paceLabel: algorithmSuite.spendingLimit.paceLabel,
         remainingDays: algorithmSuite.spendingLimit.remainingDays,
         detail: algorithmSuite.spendingLimit.detail,
-      } : undefined,
-      extraMoneyRouter: isAlgorithmEnabled(decisionHubSettings, "extraMoneyRouter") ? {
+      },
+      extraMoneyRouter: {
         amount: algorithmSuite.extraMoneyRouter.amount,
         recommendation: algorithmSuite.extraMoneyRouter.recommendation,
         targetLabel: algorithmSuite.extraMoneyRouter.targetLabel,
         detail: algorithmSuite.extraMoneyRouter.detail,
         nextMove: algorithmSuite.extraMoneyRouter.nextMove,
-      } : undefined,
+      },
       monthlyHealth: {
         score: algorithmSuite.monthlyHealth.score,
         grade: algorithmSuite.monthlyHealth.grade,
@@ -641,9 +641,9 @@ export default function FloScreen() {
   const hasSetupAnswers = onboardingPreferences.help.length > 0 || onboardingPreferences.goals.length > 0 || Boolean(onboardingPreferences.savingsGoal);
 
   const quickPrompts = useMemo(() => {
-    const categoryPrompts = decisionHubSettings.algorithmSuiteEnabled ? buildFloCategoryQuickPrompts(categoryPlan) : [];
-    const paycheckPrompts = isAlgorithmEnabled(decisionHubSettings, "paydaySplit") ? ["What can I spend until payday?", "Which bill should I move?"] : [];
-    const gapPrompts = isAlgorithmEnabled(decisionHubSettings, "cashFlowGap") ? ["Where is my tightest cash-flow stretch?"] : [];
+    const categoryPrompts = buildFloCategoryQuickPrompts(categoryPlan);
+    const paycheckPrompts = ["What can I spend until payday?", "Which bill should I move?"];
+    const gapPrompts = ["Where is my tightest cash-flow stretch?"];
     return Array.from(new Set([
       ...(hasSetupAnswers ? setupPersonalization.quickPrompts : []),
       ...(decisionHistory.due.length ? ["Which decisions need review?"] : []),
@@ -656,7 +656,7 @@ export default function FloScreen() {
       "Which bills are due next?",
       "Why is my balance getting low?",
     ])).slice(0, 2);
-  }, [categoryPlan, decisionHistory, decisionRiskAlerts, decisionHubSettings, hasSetupAnswers, setupPersonalization]);
+  }, [categoryPlan, decisionHistory, decisionRiskAlerts, hasSetupAnswers, setupPersonalization]);
 
   const buildCalendarDayReply = (prompt: string) => {
     const date = prompt.match(/\b(20\d{2}-\d{2}-\d{2})\b/)?.[1];
@@ -848,7 +848,7 @@ export default function FloScreen() {
         setDecisionSaveState(previous => ({ ...previous, [replyId]: "idle" as const }));
       }
     }
-    const categoryMove = decisionHubSettings.algorithmSuiteEnabled ? evaluateFloCategoryMove(clean, facts) : null;
+    const categoryMove = evaluateFloCategoryMove(clean, facts);
     if (categoryMove?.allowed) {
       setCategoryMoveByMessageId(previous => ({ ...previous, [replyId]: categoryMove }));
       setCategoryMoveState(previous => ({ ...previous, [replyId]: "idle" }));

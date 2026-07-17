@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { evaluateForecastConfidence, openingBalanceForReconciledDay, operatingAccountAnchor, parseStatementCsv, totalForecastBalance, type AccountSnapshot } from "./accounts";
+import { connectedCheckingAnchor, connectedCheckingBalance, evaluateForecastConfidence, openingBalanceForReconciledDay, operatingAccountAnchor, parseStatementCsv, totalForecastBalance, type AccountSnapshot } from "./accounts";
 
 const accounts: AccountSnapshot[] = [
   { id: "checking", name: "Checking", type: "checking", currentBalance: 1200, balanceAsOf: "2026-06-23", lastReconciledAt: "2026-06-23", active: true },
@@ -11,8 +11,21 @@ test("account total combines checking and savings", () => assert.equal(totalFore
 test("calendar anchor uses checking cash without pulling savings into spendable money", () => {
   assert.deepEqual(operatingAccountAnchor(accounts), { balance: 1200, date: "2026-06-23" });
 });
-test("calendar anchor falls back to active accounts when no checking account exists", () => {
-  assert.deepEqual(operatingAccountAnchor([accounts[1]]), { balance: 300, date: "2026-06-23" });
+test("calendar anchor never pulls a savings-only balance into spendable money", () => {
+  assert.equal(operatingAccountAnchor([accounts[1]]), null);
+});
+test("calendar anchor includes active cash without treating savings as cash", () => {
+  const cash: AccountSnapshot = { id: "cash", name: "Wallet", type: "cash", currentBalance: 45, balanceAsOf: "2026-06-24", active: true };
+  assert.deepEqual(operatingAccountAnchor([accounts[1], cash]), { balance: 45, date: "2026-06-24" });
+});
+test("connected checking uses the same balance for dashboard and calendar", () => {
+  const connected = [
+    { account_subtype: "checking", current_balance: 800, is_active: true },
+    { account_subtype: "checking", current_balance: 200, is_active: true },
+    { account_subtype: "savings", current_balance: 5000, is_active: true },
+  ];
+  assert.equal(connectedCheckingBalance(connected), 1000);
+  assert.deepEqual(connectedCheckingAnchor(connected, "2026-07-17"), { balance: 1000, date: "2026-07-17" });
 });
 test("account balance anchor is the selected day's closing balance", () => {
   const opening = openingBalanceForReconciledDay(1000, "2026-06-24", [

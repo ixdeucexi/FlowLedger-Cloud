@@ -5,11 +5,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
-
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
+import { MONTH_NAMES } from "@/lib/dateLabels";
 
 interface Props {
   visible: boolean;
@@ -78,7 +74,7 @@ export function SnowballPreviewModal({ visible, preview, amount, existingPayment
               <View style={[styles.card, { backgroundColor: c.card }]}>
                 {preview.months.slice(0, forecastHorizonMonths).map(item => (
                   <View key={`${item.year}-${item.month}`} style={styles.monthRow}>
-                    <Text style={[styles.month, { color: c.foreground }]}>{MONTHS[item.month]} {item.year}</Text>
+                    <Text style={[styles.month, { color: c.foreground }]}>{MONTH_NAMES[item.month]} {item.year}</Text>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.monthTarget, { color: c.mutedForeground }]}>{item.targetName ?? "Snowball complete"}</Text>
                       <Text style={[styles.monthBalance, { color: item.lowestAccountBalance >= safetyFloor ? c.success : c.destructive }]}>Lowest cash ${item.lowestAccountBalance.toFixed(0)}</Text>

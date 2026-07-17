@@ -8,16 +8,12 @@ import type { IncomeAmountEntry, IncomeItem } from "@/context/BudgetContext";
 import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
+import { MONTH_NAMES } from "@/lib/dateLabels";
 
 const FREQUENCIES: { key: IncomeItem["frequency"]; label: string; desc: string }[] = [
   { key: "monthly",  label: "Monthly",  desc: "×1/mo"   },
   { key: "biweekly", label: "Biweekly", desc: "×2/mo"   },
   { key: "weekly",   label: "Weekly",   desc: "×4–5/mo" },
-];
-
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
 ];
 
 function formatYYMM(ef: string) {

@@ -11,7 +11,7 @@ export function PlanPreviewBanner() {
   return (
     <View style={styles.banner} accessibilityRole="summary">
       <Feather name="eye" size={16} color="#bfdbfe" />
-      <Text style={styles.text}>Testing {previewTier === "pro" ? "Pro" : "Free"}</Text>
+      <Text style={styles.text}>Testing {previewTier === "pro" ? "Pro" : "Basic"}</Text>
       <Pressable accessibilityRole="button" accessibilityLabel="Reset plan preview" onPress={() => void resetPreview()} style={styles.reset}>
         <Text style={styles.resetText}>Reset to actual plan</Text>
       </Pressable>

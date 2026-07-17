@@ -36,6 +36,7 @@ import { type AppFontStyle, type ThemeMode, useThemeMode } from "@/context/Theme
 import { useColors } from "@/hooks/useColors";
 import { isCashFlowTransaction } from "@/lib/billMatching";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
+import { localDateString } from "@/lib/dateLabels";
 import { parseStatementCsv } from "@/lib/accounts";
 import { resetFloMemory } from "@/lib/flo";
 import { startLearningTour } from "@/lib/learningTour";
@@ -789,7 +790,7 @@ export default function MoreScreen() {
     });
     return deltas;
   }, [transactions, currentMonthPrefix]);
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = localDateString();
   const activeAccounts = useMemo(() => accounts.filter(account => account.is_active), [accounts]);
   const growthTransactions = useMemo(() => transactions.map(transaction => ({
     id: transaction.id,
@@ -912,7 +913,7 @@ export default function MoreScreen() {
   }), [forecastReadiness.missing, goalFundingPlans, growthBills, reviewTransactionCount, settings.safety_floor, subscriptions, todayIso]);
   const membershipStatusLabel = membershipLoading
     ? "Loading"
-    : `${effectiveTier === "pro" ? "Pro" : "Free"}${previewTier ? " preview" : ""}`;
+    : `${effectiveTier === "pro" ? "Pro" : "Basic"}${previewTier ? " preview" : ""}`;
   const hubStatuses = useMemo<Partial<Record<SettingsDestinationId, SettingsStatus>>>(() => ({
     accounts: { label: formatCountStatus(activeAccounts.length, "account") },
     goals: { label: formatCountStatus(goals.length, "goal") },
@@ -2182,7 +2183,7 @@ export default function MoreScreen() {
       {activeSettingsSection === "review" && <>
       <SLabel c={c} text="Transaction Reconciliation" />
       <PlanFeatureGate feature="transaction_matching" compact>
-        <ReviewCenter />
+        <ReviewCenter key={activeHousehold?.householdId ?? activeHousehold?.budgetId ?? "personal"} />
       </PlanFeatureGate>
       {/* Legacy rules-based Review Center removed. Data remains in Supabase for rollback.
       <SLabel c={c} text="Forecast Readiness" />

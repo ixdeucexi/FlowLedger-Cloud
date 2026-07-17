@@ -4,6 +4,7 @@ const { optional } = require("../_utils/env");
 const { plaid, plaidOptions } = require("../_utils/plaid");
 const { serviceSupabase, safeError } = require("../_utils/supabase");
 const { syncItem } = require("../_utils/sync");
+const { isActualProHousehold } = require("../_utils/plaidAccess");
 
 function isAuthorized(req, secret) {
   const supplied = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
@@ -26,7 +27,7 @@ module.exports = async function automaticPlaidSync(req, res) {
     const db = serviceSupabase();
     const { data: items, error } = await db
       .from("plaid_items")
-      .select("id,user_id,encrypted_access_token,access_token_ciphertext,transactions_cursor,cursor")
+      .select("id,user_id,household_id,encrypted_access_token,access_token_ciphertext,transactions_cursor,cursor")
       .in("status", ["active", "needs_repair"]);
     if (error) throw error;
 
@@ -41,6 +42,7 @@ module.exports = async function automaticPlaidSync(req, res) {
     };
     for (const item of items || []) {
       try {
+        if (!(await isActualProHousehold(item.household_id, db))) continue;
         const encrypted = item.encrypted_access_token || item.access_token_ciphertext;
         const accessToken = decryptAccessToken(encrypted);
         try {

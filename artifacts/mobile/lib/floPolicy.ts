@@ -1,4 +1,5 @@
 import { evaluateDecision, type DecisionBaselineDay, type DecisionScenario } from "./decisions";
+import { localDateString } from "./dateLabels";
 import type { PaycheckPlanResult } from "./paycheckPlanning";
 
 export interface FloBillMoveFact {
@@ -790,7 +791,7 @@ function localMovedBillAnswer(message: string, facts: FloFacts): string | null {
     : "I don't see any one-time moved bills right now.";
 }
 
-export function evaluateFloBillDateMove(message: string, facts: FloFacts, today = new Date().toISOString().slice(0, 10)): FloBillDateMoveResult | null {
+export function evaluateFloBillDateMove(message: string, facts: FloFacts, today = localDateString()): FloBillDateMoveResult | null {
   const lower = message.toLowerCase();
   const plan = facts.paycheckPlan ? sanitizePaycheckPlan(facts.paycheckPlan) : null;
   const hasMoveVerb = /\b(move|change|shift|push|reschedule)\b/.test(lower);
@@ -1387,7 +1388,7 @@ function floCategoryCards(message: string, facts: FloFacts): FloResponseCard[] {
   return [];
 }
 
-export function buildFloDecisionScenario(message: string, today = new Date().toISOString().slice(0, 10)): DecisionScenario | null {
+export function buildFloDecisionScenario(message: string, today = localDateString()): DecisionScenario | null {
   const lower = message.toLowerCase();
   const amount = parseFloDecisionAmount(message);
   const hasSavingsIntent = /\b(add|put|move|transfer|contribute|save)\b/.test(lower)
@@ -1417,7 +1418,7 @@ export function buildFloDecisionScenario(message: string, today = new Date().toI
   };
 }
 
-export function evaluateFloDebtPayment(message: string, facts: FloFacts, today = new Date().toISOString().slice(0, 10)): FloDebtPaymentResult | null {
+export function evaluateFloDebtPayment(message: string, facts: FloFacts, today = localDateString()): FloDebtPaymentResult | null {
   const lower = message.toLowerCase();
   const hasIntent = /\b(pay|payment|put|apply|send|add)\b/.test(lower)
     && /\b(debt|snowball|toward|towards|payoff|principal)\b/.test(lower);
@@ -1476,7 +1477,7 @@ export function evaluateFloDebtPayment(message: string, facts: FloFacts, today =
   };
 }
 
-export function evaluateFloRecurringBillChange(message: string, facts: FloFacts, today = new Date().toISOString().slice(0, 10)): FloRecurringBillChangeResult | null {
+export function evaluateFloRecurringBillChange(message: string, facts: FloFacts, today = localDateString()): FloRecurringBillChangeResult | null {
   const lower = message.toLowerCase();
   const hasIntent = /\b(change|update|set|make)\b/.test(lower)
     && /\b(bill|payment|monthly|starting|next month|due)\b/.test(lower)

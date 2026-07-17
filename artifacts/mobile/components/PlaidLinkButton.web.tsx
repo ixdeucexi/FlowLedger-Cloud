@@ -6,6 +6,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-nati
 import { usePlaidLink } from "react-plaid-link";
 
 import { supabase } from "@/lib/supabase";
+import { useBudget } from "@/context/BudgetContext";
 
 type Colors = {
   primary: string;
@@ -40,6 +41,8 @@ async function getFreshSession() {
 }
 
 export function PlaidLinkButton({ colors, onConnected }: Props) {
+  const { activeHousehold } = useBudget();
+  const householdId = activeHousehold?.householdId ?? "";
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>({});
   const [busy, setBusy] = useState(false);
@@ -52,13 +55,13 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
     try {
       const response = await fetch("/api/plaid/status", {
         credentials: "include",
-        headers: { Authorization: `Bearer ${session.access_token}` },
+        headers: { Authorization: `Bearer ${session.access_token}`, "X-FlowLedger-Household-Id": householdId },
       });
       if (response.ok) setStatus((await response.json()) as Status);
     } catch {
       // Status is informational; the connect action reports actionable errors.
     }
-  }, []);
+  }, [householdId]);
 
   useEffect(() => { void loadStatus(); }, [loadStatus]);
 
@@ -79,6 +82,7 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
+          "X-FlowLedger-Household-Id": householdId,
         },
         body: JSON.stringify({ public_token: publicToken }),
       });
@@ -93,7 +97,7 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
     } catch (error) {
       finish(error instanceof Error ? error.message : "Could not finish connecting this bank.");
     }
-  }, [finish, loadStatus, onConnected]);
+  }, [finish, householdId, loadStatus, onConnected]);
 
   const onExit = useCallback(() => finish("Bank connection canceled. You can try again whenever you are ready."), [finish]);
   const { ready, error, open } = usePlaidLink({ token: linkToken, onSuccess, onExit });
@@ -119,7 +123,7 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
       const response = await fetch("/api/plaid/create-link-token", {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}`, "X-FlowLedger-Household-Id": householdId },
         body: "{}",
       });
       const result = await response.json().catch(() => ({}));
@@ -129,7 +133,7 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
       setBusy(false);
       setMessage(error instanceof Error ? error.message : "Could not start secure bank linking.");
     }
-  }, [busy, linkToken]);
+  }, [busy, householdId, linkToken]);
 
   const sync = useCallback(async () => {
     setBusy(true);
@@ -137,7 +141,7 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
     try {
       const session = await getFreshSession();
       if (!session) throw new Error("Please sign in again before syncing your bank.");
-      const response = await fetch("/api/plaid/sync", { method: "POST", credentials: "include", headers: { Authorization: `Bearer ${session.access_token}` } });
+      const response = await fetch("/api/plaid/sync", { method: "POST", credentials: "include", headers: { Authorization: `Bearer ${session.access_token}`, "X-FlowLedger-Household-Id": householdId } });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.message || "Could not sync bank activity.");
       setMessage("Bank activity is up to date.");
@@ -146,7 +150,7 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not sync bank activity.");
     } finally { setBusy(false); }
-  }, [loadStatus, onConnected]);
+  }, [householdId, loadStatus, onConnected]);
 
   const item = status.items?.[0];
   const connected = Boolean(item);

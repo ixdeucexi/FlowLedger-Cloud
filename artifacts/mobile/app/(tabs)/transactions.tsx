@@ -553,7 +553,7 @@ export default function TransactionsScreen() {
       : null;
     setSavingMatch(true);
     try {
-      await matchTransactionToBill(transaction.id, billId);
+      await matchTransactionToBill(transaction.id, billId, option?.nearestOccurrenceDate ?? undefined, option?.plannedAmount);
       setQueuedFullPaymentPrompt(nextFullPaymentPrompt);
       setMatchTx(null);
     } catch (error) {
@@ -648,7 +648,7 @@ export default function TransactionsScreen() {
       if (item.rawTx.source === "plaid" && isFeatureLocked("transaction_matching")) {
         Alert.alert(
           "Bill matching is a Pro feature",
-          "Free plan preview keeps imported transaction matching locked. This test does not change your real household plan.",
+          "Basic plan preview keeps imported transaction matching locked. This test does not change your real household plan.",
           [
             { text: "Cancel", style: "cancel" },
             {

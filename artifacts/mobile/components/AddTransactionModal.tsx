@@ -21,6 +21,7 @@ import type { Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
+import { localDateString } from "@/lib/dateLabels";
 import { buildSafetyStop, type SafetyStopWarning } from "@/lib/safetyStop";
 import { confirmAction } from "@/lib/confirmAction";
 
@@ -41,7 +42,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Other");
   const [note, setNote] = useState("");
-  const [date, setDate] = useState(defaultDate ?? new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(defaultDate ?? localDateString());
   const [isExpense, setIsExpense] = useState(true);
   const [isTransfer, setIsTransfer] = useState(false);
   const [accountId, setAccountId] = useState<string | undefined>();
@@ -72,7 +73,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
       setTransferToAccountId(editTx.amount < 0 ? transferMate?.account_id : editTx.account_id);
       setLinkedBillId(editTx.linked_bill_id);
     } else {
-      const init = defaultDate ?? new Date().toISOString().split("T")[0];
+      const init = defaultDate ?? localDateString();
       setAmount("");
       setCategory("Other");
       setNote("");

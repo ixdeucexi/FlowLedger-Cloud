@@ -18,6 +18,7 @@ export interface RankedBillMatch extends BillMatchCandidate {
   confidence: "strong" | "likely" | "possible";
   amountDifference: number;
   daysApart: number | null;
+  nearestOccurrenceDate: string | null;
   reasons: string[];
 }
 
@@ -37,14 +38,14 @@ function tokens(value: string): string[] {
     .filter(token => token.length >= 3 && !["payment", "purchase", "debit", "online"].includes(token));
 }
 
-function nearestDateDistance(transactionDate: string, occurrenceDates: string[]): number | null {
+function nearestOccurrence(transactionDate: string, occurrenceDates: string[]): { date: string; distance: number } | null {
   const txDay = dateToUtcDay(transactionDate);
   if (txDay === null || occurrenceDates.length === 0) return null;
-  return occurrenceDates.reduce<number | null>((nearest, date) => {
+  return occurrenceDates.reduce<{ date: string; distance: number } | null>((nearest, date) => {
     const candidateDay = dateToUtcDay(date);
     if (candidateDay === null) return nearest;
     const distance = Math.abs(candidateDay - txDay);
-    return nearest === null ? distance : Math.min(nearest, distance);
+    return nearest === null || distance < nearest.distance ? { date, distance } : nearest;
   }, null);
 }
 
@@ -61,7 +62,8 @@ export function rankBillMatches(
       const plannedAmount = Math.abs(candidate.plannedAmount);
       const amountDifference = Math.abs(actualAmount - plannedAmount);
       const amountRatio = plannedAmount > 0 ? amountDifference / plannedAmount : 1;
-      const daysApart = nearestDateDistance(transaction.date, candidate.occurrenceDates);
+      const nearest = nearestOccurrence(transaction.date, candidate.occurrenceDates);
+      const daysApart = nearest?.distance ?? null;
       const nameTokens = tokens(candidate.name);
       const tokenMatches = nameTokens.filter(token => descriptionTokens.has(token)).length;
       const reasons: string[] = [];
@@ -108,6 +110,7 @@ export function rankBillMatches(
         confidence: boundedScore >= 70 ? "strong" as const : boundedScore >= 48 ? "likely" as const : "possible" as const,
         amountDifference,
         daysApart,
+        nearestOccurrenceDate: nearest?.date ?? null,
         reasons,
       };
     })

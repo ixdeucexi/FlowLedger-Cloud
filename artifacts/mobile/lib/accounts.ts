@@ -23,6 +23,22 @@ export interface ImportedTransactionRow {
   importHash: string;
 }
 
+export interface ConnectedCheckingSnapshot {
+  account_subtype?: string;
+  current_balance: number;
+  is_active: boolean;
+}
+
+export function connectedCheckingBalance(accounts: ConnectedCheckingSnapshot[]): number | null {
+  const checking = accounts.filter(account => account.is_active && account.account_subtype === "checking");
+  return checking.length ? checking.reduce((sum, account) => sum + account.current_balance, 0) : null;
+}
+
+export function connectedCheckingAnchor(accounts: ConnectedCheckingSnapshot[], date: string): { balance: number; date: string } | null {
+  const balance = connectedCheckingBalance(accounts);
+  return balance === null ? null : { balance, date };
+}
+
 export function accountForecastValue(account: Pick<AccountSnapshot, "type" | "currentBalance">): number {
   return account.currentBalance;
 }
@@ -34,8 +50,8 @@ export function totalForecastBalance(accounts: AccountSnapshot[]): number {
 export function operatingAccountAnchor(accounts: AccountSnapshot[]): { balance: number; date: string } | null {
   const active = accounts.filter(account => account.active);
   if (!active.length) return null;
-  const checking = active.filter(account => account.type === "checking");
-  const operating = checking.length ? checking : active;
+  const operating = active.filter(account => account.type === "checking" || account.type === "cash");
+  if (!operating.length) return null;
   const date = operating
     .map(account => account.balanceAsOf)
     .filter(Boolean)

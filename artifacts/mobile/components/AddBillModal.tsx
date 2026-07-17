@@ -14,6 +14,7 @@ import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { confirmAction } from "@/lib/confirmAction";
+import { MONTH_NAMES } from "@/lib/dateLabels";
 
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
@@ -74,11 +75,6 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
     () => new Date(pickerYear, pickerMonth + 1, 0).getDate(),
     [pickerYear, pickerMonth]
   );
-  const MONTH_NAMES = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
-  ];
-
   const shiftPickerMonth = (dir: number) => {
     setPickerMonth(m => {
       const next = m + dir;
@@ -159,7 +155,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       end_date: billEndDate.trim() || undefined,
       is_recurring: isDebt ? true : isRecurring,
       frequency,
-      smart_priority: null,
+      smart_priority: editBill?.smart_priority ?? null,
       include_in_snowball: isDebt ? includeInSnowball : false,
     };
     setSaving(true);

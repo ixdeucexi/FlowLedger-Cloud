@@ -34,8 +34,8 @@ export const PLAN_TIERS: readonly PlanTier[] = ["free", "pro"] as const;
 export const PLAN_CATALOG: Record<PlanTier, PlanDefinition> = {
   free: {
     tier: "free",
-    name: "Free",
-    promise: "Do it yourself",
+    name: "Basic",
+    promise: "Build it yourself",
     description: "The complete manual FlowLedger app for building and running your money plan.",
     monthlyPrice: 0,
     annualPrice: 0,

@@ -1,31 +1,20 @@
 import { Feather } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { useAuth } from "@/context/AuthContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
-import { flowmentumPreviewStorageKey } from "@/lib/flowmentumHandoff";
 import { PLAN_CATALOG, PLAN_TIERS, annualMonthlyEquivalent, annualSavings, type PlanTier } from "@/lib/membership";
 
 export function MembershipPanel() {
   const c = useColors();
-  const router = useRouter();
-  const { session, user } = useAuth();
+  const { session } = useAuth();
   const { actualPlan, previewTier, isAdmin, loading, setPreviewTier, resetPreview } = useMembership();
   const [billingCadence, setBillingCadence] = useState<"monthly" | "annual">("annual");
   const [testerEmail, setTesterEmail] = useState("");
   const [testerBusy, setTesterBusy] = useState(false);
   const [testerMessage, setTesterMessage] = useState("");
-
-  const previewFlowmentumAlert = async () => {
-    if (!user?.id) return;
-    const key = flowmentumPreviewStorageKey(user.id, actualPlan.householdId || "personal");
-    await AsyncStorage.setItem(key, "true").catch(() => undefined);
-    router.replace("/(tabs)" as any);
-  };
 
   const setTesterPlan = async (tier: PlanTier) => {
     if (!session?.access_token || !testerEmail.trim() || testerBusy) return;
@@ -67,7 +56,7 @@ export function MembershipPanel() {
 
       <View style={[styles.earlyAccess, { backgroundColor: c.success + "10", borderColor: c.success + "35" }]}>
         <Feather name="check-circle" size={17} color={c.success} />
-        <Text style={[styles.earlyAccessText, { color: c.foreground }]}>Basic Flo and manual planning are included with Free. Bank connections, reconciliation, and account-aware Flo require Pro.</Text>
+        <Text style={[styles.earlyAccessText, { color: c.foreground }]}>Basic Flo and manual planning are included with Basic. Bank connections, reconciliation, and account-aware Flo require Pro.</Text>
       </View>
 
       {isAdmin ? (<>
@@ -105,26 +94,6 @@ export function MembershipPanel() {
             </Pressable>
           </View>
         </View>
-        <View style={[styles.adminCard, { backgroundColor: c.card, borderColor: c.success + "55" }]}>
-          <View style={styles.adminHeader}>
-            <Feather name="trending-up" size={18} color={c.success} />
-            <View style={styles.currentCopy}>
-              <Text style={[styles.adminTitle, { color: c.foreground }]}>Flowmentum Alert Preview</Text>
-              <Text style={[styles.adminDescription, { color: c.mutedForeground }]}>Preview the one-time sister-app introduction without changing balances or protected days.</Text>
-            </View>
-          </View>
-          <View style={styles.adminActions}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Preview the Flowmentum milestone alert"
-              onPress={() => void previewFlowmentumAlert()}
-              disabled={loading || !user?.id}
-              style={({ pressed }) => [styles.testerButton, { backgroundColor: c.success, opacity: loading || !user?.id ? 0.48 : pressed ? 0.76 : 1 }]}
-            >
-              <Text style={[styles.previewButtonText, { color: "#052e16" }]}>Preview alert</Text>
-            </Pressable>
-          </View>
-        </View>
         <View style={[styles.adminCard, { backgroundColor: c.card, borderColor: c.primary + "55" }]}>
           <View style={styles.adminHeader}>
             <Feather name="user-check" size={18} color={c.primary} />
@@ -157,7 +126,7 @@ export function MembershipPanel() {
               onPress={() => void setTesterPlan("free")}
               style={({ pressed }) => [styles.testerButton, { backgroundColor: c.muted, borderColor: c.border, opacity: testerBusy || !testerEmail.trim() ? 0.45 : pressed ? 0.76 : 1 }]}
             >
-              <Text style={[styles.previewButtonText, { color: c.foreground }]}>Return to Free</Text>
+              <Text style={[styles.previewButtonText, { color: c.foreground }]}>Return to Basic</Text>
             </Pressable>
           </View>
           {testerMessage ? <Text style={[styles.testerMessage, { color: testerMessage.includes("now has") ? c.success : c.destructive }]}>{testerMessage}</Text> : null}

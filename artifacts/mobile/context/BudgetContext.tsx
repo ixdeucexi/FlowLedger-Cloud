@@ -18,7 +18,7 @@ import { decisionDbPayload } from "@/lib/decisionPersistence";
 import { recordDiagnostic } from "@/lib/diagnostics";
 import { isDevDemoMode } from "@/lib/demoMode";
 import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isIncomeActiveForMonth, moveSettledBillOverrideDate, resolveFinalizedBillOccurrenceDays } from "@/lib/schedule";
-import { evaluateForecastConfidence, openingBalanceForReconciledDay, operatingAccountAnchor, type AccountSnapshot, type AccountType, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
+import { connectedCheckingAnchor, evaluateForecastConfidence, openingBalanceForReconciledDay, operatingAccountAnchor, type AccountSnapshot, type AccountType, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
 import { scenarioDates, type DecisionResult, type DecisionScenario, type DecisionType } from "@/lib/decisions";
 import {
   acceptHouseholdInviteCode,
@@ -42,6 +42,7 @@ import { canEditHouseholdPlan, canManageHouseholdMembers } from "@/lib/household
 import { isActiveTransaction, isCashFlowTransaction, isConfirmedBillMatch } from "@/lib/billMatching";
 import { matchedOccurrenceAllocations, occurrenceKey, reviewedBillMonthSettlements } from "@/lib/reviewCenter";
 import { normalizePlanningTools } from "@/lib/planningMode";
+import { localDateString } from "@/lib/dateLabels";
 import { canonicalConnectedAccounts, visiblePendingPlaidActivity } from "@/lib/plaidActivity";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -376,7 +377,7 @@ interface BudgetContextType {
   updateTransaction: (tx: Transaction) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
   deleteTransfer: (transferGroupId: string) => Promise<void>;
-  matchTransactionToBill: (transactionId: string, billId: string) => Promise<void>;
+  matchTransactionToBill: (transactionId: string, billId: string, occurrenceDate?: string, plannedAmount?: number) => Promise<void>;
   unmatchTransactionFromBill: (transactionId: string) => Promise<void>;
   reconcileTransaction: (input: ReconcileTransactionInput) => Promise<void>;
   undoTransactionReconciliation: (transactionId: string) => Promise<void>;
@@ -535,10 +536,6 @@ function reorderDebtPriorities(bills: Bill[]): Bill[] {
   const debtsSorted = [...activeDebts, ...closedDebts];
   const priorityMap = new Map(debtsSorted.map((b, i) => [b.id, i + 1]));
   return bills.map(b => b.is_debt ? { ...b, priority: priorityMap.get(b.id) ?? 1 } : b);
-}
-
-function localDateString(date = new Date()): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 function monthKey(year: number, month: number) {
@@ -893,12 +890,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const overridesRef = useRef<MonthlyOverride[]>([]);
   const billDateMovesRef = useRef<BillDateMove[]>([]);
   const accountsRef = useRef<Account[]>([]);
+  const connectedBankAccountsRef = useRef<ConnectedBankAccount[]>([]);
   const retrySaveRef = useRef<null | (() => Promise<void>)>(null);
   const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const householdScopeRef = useRef<HouseholdMembership | null>(null);
+  const loadRequestRef = useRef(0);
+  const bankRefreshRequestRef = useRef(0);
   useEffect(() => { overridesRef.current = overrides; }, [overrides]);
   useEffect(() => { billDateMovesRef.current = billDateMoves; }, [billDateMoves]);
   useEffect(() => { accountsRef.current = accounts; }, [accounts]);
+  useEffect(() => { connectedBankAccountsRef.current = connectedBankAccounts; }, [connectedBankAccounts]);
 
   const activeHousehold = useMemo(
     () => households.find(household => household.householdId === activeHouseholdId) ?? null,
@@ -1100,6 +1101,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   // ── Load from Supabase when user changes ────────────────────────────────────
   useEffect(() => {
+    const requestId = ++loadRequestRef.current;
+    bankRefreshRequestRef.current += 1;
     if (demoMode) {
       setLoadError(null);
       const demo = createDemoBudgetData();
@@ -1140,6 +1143,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       try {
         const uid = user.id;
         const scope = await resolveHouseholds(uid);
+        if (requestId !== loadRequestRef.current) return;
         if (scope?.role !== "viewer") {
           try {
             const { error } = await withLoadTimeout(
@@ -1204,14 +1208,17 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           { data: dData },
         ] = results;
 
+        const storedBillDateMoves = await withLoadTimeout(loadBillDateMoves(uid, scope), 8000, "Load moved bill dates");
+        if (requestId !== loadRequestRef.current) return;
+
         setBills(reorderDebtPriorities((bData ?? []).map(normalizeBillRow)));
         setOverrides((oData ?? []).map(normalizeMonthlyOverrideRow));
-        const storedBillDateMoves = await withLoadTimeout(loadBillDateMoves(uid, scope), 8000, "Load moved bill dates");
         setBillDateMoves(storedBillDateMoves);
         billDateMovesRef.current = storedBillDateMoves;
         setTransactions((tData ?? []).map(normalizeTransactionRow).filter(isActiveTransaction));
         const rawConnectedAccounts = normalizeConnectedBankRows(connectedAccountData ?? []);
-        setConnectedBankAccounts(canonicalConnectedAccounts(rawConnectedAccounts));
+        const canonicalBankAccounts = canonicalConnectedAccounts(rawConnectedAccounts);
+        setConnectedBankAccounts(canonicalBankAccounts);
         setPendingBankTransactions(visiblePendingPlaidActivity(normalizePendingBankRows(pendingData ?? []), rawConnectedAccounts));
         setIncomes((iData ?? []).map((i: any) => ({
           ...i,
@@ -1240,7 +1247,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         setAccounts(loadedAccounts);
         setDecisions((dData ?? []).map((d: any) => ({ ...d, calendar_date: d.calendar_date ?? undefined, applied_change: d.applied_change ?? undefined })));
         if (sData) {
-          const accountAnchor = operatingAccountAnchor(loadedAccounts.map(toAccountSnapshot));
+          const accountAnchor = connectedCheckingAnchor(canonicalBankAccounts, localDateString())
+            ?? operatingAccountAnchor(loadedAccounts.map(toAccountSnapshot));
           const nextStartingBalance = accountAnchor ? accountAnchor.balance : Number(sData.starting_balance);
           const nextStartingBalanceDate = accountAnchor ? accountAnchor.date : (sData.starting_balance_date ?? undefined);
           setSettings({
@@ -1252,29 +1260,20 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
             forecast_horizon_months: Math.min(24, Math.max(1, Number(sData.forecast_horizon_months ?? 6))),
             onboarding_completed: Boolean(sData.onboarding_completed),
           });
-          if (accountAnchor && (Number(sData.starting_balance) !== accountAnchor.balance || sData.starting_balance_date !== accountAnchor.date)) {
-            void supabase.from("settings").upsert({
-              user_id: uid,
-              zero_based_budget_enabled: normalizePlanningTools(sData).zeroBasedBudgetEnabled,
-              debt_payoff_enabled: normalizePlanningTools(sData).debtPayoffEnabled,
-              payment_method: sData.payment_method,
-              starting_balance: accountAnchor.balance,
-              starting_balance_date: accountAnchor.date,
-              safety_floor: Number(sData.safety_floor ?? 200),
-              forecast_horizon_months: Math.min(24, Math.max(1, Number(sData.forecast_horizon_months ?? 6))),
-              onboarding_completed: Boolean(sData.onboarding_completed),
-            }).then(undefined, () => undefined);
-          }
         }
         const cats = (cData ?? []).map((c: any) => c.name as string);
         setCategories(cats.length > 0 ? fallbackCategoryList(cats) : DEFAULT_CATEGORIES);
         setLoadError(null);
       } catch (error) {
         console.warn("Budget load failed or timed out", error);
-        setLoadError(error instanceof Error ? error.message : "FlowLedger could not load your plan.");
+        if (requestId === loadRequestRef.current) {
+          setLoadError(error instanceof Error ? error.message : "FlowLedger could not load your plan.");
+        }
       } finally {
-        loaded.current = true;
-        setLoading(false);
+        if (requestId === loadRequestRef.current) {
+          loaded.current = true;
+          setLoading(false);
+        }
         void recordDiagnostic(user.id, {
           eventType: "performance", operation: "data_load", platform: diagnosticPlatform(),
           durationMs: Date.now() - loadStarted,
@@ -1285,6 +1284,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const refreshBankData = useCallback(async () => {
     if (!user || demoMode) return;
+    const requestId = ++bankRefreshRequestRef.current;
     const uid = user.id;
     let loadedAccounts: Account[] | null = null;
     const scope = householdScopeRef.current;
@@ -1309,6 +1309,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       ),
       loadScopedSettings(uid, scope),
     ]);
+    if (requestId !== bankRefreshRequestRef.current || scope?.householdId !== householdScopeRef.current?.householdId) return;
     if (!transactionResult.error) {
       setTransactions((transactionResult.data ?? []).map(normalizeTransactionRow).filter(isActiveTransaction));
     }
@@ -1325,14 +1326,19 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     if (!connectedAccountResult.error) {
       const rawConnectedAccounts = normalizeConnectedBankRows(connectedAccountResult.data ?? []);
-      setConnectedBankAccounts(canonicalConnectedAccounts(rawConnectedAccounts));
+      const canonicalBankAccounts = canonicalConnectedAccounts(rawConnectedAccounts);
+      setConnectedBankAccounts(canonicalBankAccounts);
       if (!pendingResult.error) {
         setPendingBankTransactions(visiblePendingPlaidActivity(normalizePendingBankRows(pendingResult.data ?? []), rawConnectedAccounts));
       }
     }
     if (!settingsResult.error && settingsResult.data) {
       const sData = settingsResult.data;
-      const accountAnchor = operatingAccountAnchor((loadedAccounts ?? accountsRef.current).map(toAccountSnapshot));
+      const refreshedConnectedAccounts = connectedAccountResult.error
+        ? connectedBankAccountsRef.current
+        : canonicalConnectedAccounts(normalizeConnectedBankRows(connectedAccountResult.data ?? []));
+      const accountAnchor = connectedCheckingAnchor(refreshedConnectedAccounts, localDateString())
+        ?? operatingAccountAnchor((loadedAccounts ?? accountsRef.current).map(toAccountSnapshot));
       const nextStartingBalance = accountAnchor ? accountAnchor.balance : Number(sData.starting_balance);
       const nextStartingBalanceDate = accountAnchor ? accountAnchor.date : (sData.starting_balance_date ?? undefined);
         setSettings(prev => ({
@@ -1345,19 +1351,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         forecast_horizon_months: Math.min(24, Math.max(1, Number(sData.forecast_horizon_months ?? 6))),
         onboarding_completed: Boolean(sData.onboarding_completed),
       }));
-      if (accountAnchor && (Number(sData.starting_balance) !== accountAnchor.balance || sData.starting_balance_date !== accountAnchor.date)) {
-        void supabase.from("settings").upsert({
-          user_id: uid,
-            zero_based_budget_enabled: normalizePlanningTools(sData).zeroBasedBudgetEnabled,
-            debt_payoff_enabled: normalizePlanningTools(sData).debtPayoffEnabled,
-          payment_method: sData.payment_method,
-          starting_balance: accountAnchor.balance,
-          starting_balance_date: accountAnchor.date,
-          safety_floor: Number(sData.safety_floor ?? 200),
-          forecast_horizon_months: Math.min(24, Math.max(1, Number(sData.forecast_horizon_months ?? 6))),
-          onboarding_completed: Boolean(sData.onboarding_completed),
-        }).then(undefined, () => undefined);
-      }
     }
   }, [user, demoMode, applyHouseholdSelect, loadScopedSettings]);
 
@@ -1609,9 +1602,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, bills, demoMode, assertCanEditHousehold, recalculateAndRefreshDebtMinimums]);
 
-  const deleteBillMistake = useCallback(async (id: string) => {
-    await stopFutureBill(id);
-  }, [stopFutureBill]);
+  const deleteBillMistake = deleteBill;
 
   const getBillById = useCallback((id: string) => bills.find(b => b.id === id), [bills]);
 
@@ -2619,7 +2610,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, assertCanEditHousehold, transactions, bills, demoMode, refreshBillMatchData, syncDebtTransactionsAndRefresh, markSaveStarted, markSaveCompleted, markSaveFailed]);
 
-  const matchTransactionToBill = useCallback(async (transactionId: string, billId: string) => {
+  const matchTransactionToBill = useCallback(async (transactionId: string, billId: string, occurrenceDate?: string, plannedAmount?: number) => {
     if (!user) throw new Error("Sign in to match a bill");
     assertCanEditHousehold("match a transaction to a bill");
     const transaction = transactions.find(item => item.id === transactionId);
@@ -2628,13 +2619,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (transaction.amount >= 0) throw new Error("Only money-out transactions can be matched to bills");
 
     const actual = Math.abs(transaction.amount);
+    const planned = plannedAmount ?? bill.amount;
     await reconcileTransaction({
       transactionId,
       resolution: "bill",
       targetId: billId,
-      occurrenceDate: transaction.date,
-      plannedAmount: bill.amount,
-      settlement: Math.abs(actual - bill.amount) < 0.005 ? "exact" : actual < bill.amount ? "partial" : "full",
+      occurrenceDate: occurrenceDate ?? transaction.date,
+      plannedAmount: planned,
+      settlement: Math.abs(actual - planned) < 0.005 ? "exact" : actual < planned ? "partial" : "full",
     });
   }, [user, transactions, bills, reconcileTransaction, assertCanEditHousehold]);
 
@@ -2923,8 +2915,20 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         const signedAmount = d.scenario.type === "income_change" ? Math.abs(d.scenario.amount) : -Math.abs(d.scenario.amount);
         return sum + occurrences * signedAmount;
       }, 0);
-    return { monthlyIncome, totalBillsDue, totalPaid, netTransactions, goalAllocations: 0, remaining: monthlyIncome - totalBillsDue - snowballExtra + netTransactions + plannedDecisionNet };
-  }, [incomes, transactions, extraPayments, decisions, getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills]);
+    const goalAllocations = goals.reduce((sum, goal) => {
+      if (goal.goal_type !== "planned_expense" || !goal.target_date) return sum;
+      const target = parseGoalTargetDate(goal.target_date);
+      return target?.year === year && target.month === month ? sum + getGoalRemainingAmount(goal) : sum;
+    }, 0);
+    return {
+      monthlyIncome,
+      totalBillsDue,
+      totalPaid,
+      netTransactions,
+      goalAllocations,
+      remaining: monthlyIncome - totalBillsDue - goalAllocations - snowballExtra + netTransactions + plannedDecisionNet,
+    };
+  }, [incomes, transactions, extraPayments, decisions, goals, getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills]);
 
   // ─── Daily Balances ───────────────────────────────────────────────────────────
 

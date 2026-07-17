@@ -363,10 +363,7 @@ async function upsertPlaidTransaction({ userId, householdId, accountRow, transac
       removed_at: removedAt || null,
       review_status: existing && existing.review_status ? existing.review_status : "needs_review",
     };
-    const { error } = existing
-      ? await db.from("transactions").update(canonicalRow).eq("id", existing.id).eq("user_id", userId)
-      : await db.from("transactions").insert(canonicalRow);
-    if (error) throw error;
+    await persistCanonicalPlaidTransaction({ db, existing, canonicalRow, userId });
     flowledgerId = canonicalRow.id;
   }
 
@@ -447,6 +444,27 @@ async function upsertPlaidTransaction({ userId, householdId, accountRow, transac
     isNewPosted,
     isNewPending: !shouldImport && (!existingPlaid || Boolean(existingPlaid.removed_at)),
   };
+}
+
+async function persistCanonicalPlaidTransaction({ db, existing, canonicalRow, userId }) {
+  if (existing) {
+    const { error } = await db
+      .from("transactions")
+      .update(canonicalRow)
+      .eq("id", existing.id)
+      .eq("user_id", userId);
+    if (error) throw error;
+    return;
+  }
+
+  // Webhooks can overlap and both observe a transaction before either insert
+  // commits. The deterministic primary key makes the first insert canonical;
+  // the other request must become a no-op instead of failing the whole sync.
+  const { error } = await db.from("transactions").upsert(canonicalRow, {
+    onConflict: "id",
+    ignoreDuplicates: true,
+  });
+  if (error) throw error;
 }
 
 async function syncTransactions({ client, userId, item, accessToken }) {
@@ -656,4 +674,5 @@ module.exports = {
   shouldQueuePendingNotification,
   shouldQueuePostedNotification,
   editablePlaidFields,
+  persistCanonicalPlaidTransaction,
 };

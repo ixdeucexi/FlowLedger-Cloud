@@ -13,6 +13,7 @@ import {
 
 test("defines the approved Free and Pro catalog", () => {
   assert.deepEqual(Object.keys(PLAN_CATALOG), ["free", "pro"]);
+  assert.equal(PLAN_CATALOG.free.name, "Basic");
   assert.equal(PLAN_CATALOG.free.monthlyPrice, 0);
   assert.equal(PLAN_CATALOG.pro.monthlyPrice, 9.99);
   assert.equal(PLAN_CATALOG.pro.annualPrice, 89);

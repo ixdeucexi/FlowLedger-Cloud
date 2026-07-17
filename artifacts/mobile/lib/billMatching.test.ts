@@ -14,6 +14,7 @@ test("ranks an exact nearby utility payment above unrelated bills", () => {
 
   assert.equal(ranked[0].billId, "electric");
   assert.equal(ranked[0].confidence, "strong");
+  assert.equal(ranked[0].nearestOccurrenceDate, "2026-07-14");
   assert.ok(ranked[0].reasons.includes("exact amount"));
 });
 
@@ -25,6 +26,7 @@ test("uses each occurrence amount for weekly bills", () => {
 
   assert.equal(ranked[0].amountDifference, 0);
   assert.equal(ranked[0].daysApart, 0);
+  assert.equal(ranked[0].nearestOccurrenceDate, "2026-07-15");
   assert.equal(ranked[0].confidence, "strong");
 });
 

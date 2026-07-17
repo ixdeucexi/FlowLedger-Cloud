@@ -1,4 +1,4 @@
-import { ALGORITHM_CATALOG, isAlgorithmEnabled, type AlgorithmId, type AlgorithmSettingsShape } from "./algorithmCatalog";
+import { ALGORITHM_CATALOG, type AlgorithmId, type AlgorithmSettingsShape } from "./algorithmCatalog";
 import { buildStabilityProgress, STABILITY_POLICY, type StabilityProgress } from "./stability";
 
 export interface AlgorithmDailyBalance {
@@ -398,11 +398,11 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
   });
 
   return {
-    activeCount: ALGORITHM_CATALOG.filter(algorithm => isAlgorithmEnabled(input.settings, algorithm.id)).length,
+    activeCount: ALGORITHM_CATALOG.length,
     algorithmDetails,
     stability,
     flowScore: {
-      score: isAlgorithmEnabled(input.settings, "flowScore") ? flowScore : 0,
+      score: flowScore,
       grade: flowGrade,
       label: flowLabel,
       topReason: flowScoreDetails.topReason,
@@ -419,7 +419,7 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     },
     safeCushion: {
       ...safeCushionDetails,
-      amount: isAlgorithmEnabled(input.settings, "safeCushion") ? safeCushionAmount : 0,
+      amount: safeCushionAmount,
     },
     purchaseDecision,
     billPriority,
@@ -439,7 +439,7 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     monthlyHealth: { score: flowScore, grade: flowGrade, summary: `${flowLabel} plan based on cushion, bills, forecast confidence, and risk days.` },
     spendingLimit: spendingLimits,
     planDelay: { day: planDelayDay, detail: planDelayDay ? `The next safer purchase window appears around ${formatMonthDay(input, planDelayDay)}.` : "No safer date appears inside this month yet." },
-    insights: insights.filter(insight => isAlgorithmEnabled(input.settings, insight.id as any) || insight.id === "flowScore").slice(0, 4),
+    insights: insights.slice(0, 4),
   };
 }
 

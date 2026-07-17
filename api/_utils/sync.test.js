@@ -5,11 +5,35 @@ const {
   duplicatePlaidAccountIds,
   editablePlaidFields,
   plaidAccountIdentity,
+  persistCanonicalPlaidTransaction,
   stablePlaidFingerprint,
   shouldImportPlaidTransaction,
   shouldQueuePendingNotification,
   shouldQueuePostedNotification,
 } = require("./sync");
+
+test("overlapping Plaid webhook inserts are idempotent", async () => {
+  const calls = [];
+  const db = {
+    from(table) {
+      assert.equal(table, "transactions");
+      return {
+        async upsert(row, options) {
+          calls.push({ row, options });
+          return { error: null };
+        },
+      };
+    },
+  };
+  const canonicalRow = { id: "plaid:user-1:transaction-1", user_id: "user-1" };
+
+  await persistCanonicalPlaidTransaction({ db, existing: null, canonicalRow, userId: "user-1" });
+
+  assert.deepEqual(calls, [{
+    row: canonicalRow,
+    options: { onConflict: "id", ignoreDuplicates: true },
+  }]);
+});
 
 test("Plaid account identity falls back to institution, mask, type, and name", () => {
   const account = { id: "account-1", mask: "1234", account_type: "depository", account_subtype: "checking", name: "Checking" };
