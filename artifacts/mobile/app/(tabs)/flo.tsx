@@ -424,6 +424,7 @@ export default function FloScreen() {
         due_day: bill.due_day,
         is_debt: bill.is_debt,
         is_recurring: bill.is_recurring,
+        includeInSnowball: bill.include_in_snowball !== false,
         balance: bill.balance,
         interest_rate: bill.interest_rate,
       })),

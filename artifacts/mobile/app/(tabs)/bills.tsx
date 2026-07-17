@@ -21,7 +21,7 @@ import { useColors } from "@/hooks/useColors";
 import { isCashFlowTransaction } from "@/lib/billMatching";
 import { confirmAction } from "@/lib/confirmAction";
 import { buildAlgorithmSuite } from "@/lib/algorithmSuite";
-import type { SnowballProjectionResult } from "@/lib/snowball";
+import { effectiveDebtMinimum, type SnowballProjectionResult } from "@/lib/snowball";
 import { sortDebtsLeastToGreatest } from "@/lib/debtOrder";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { DEFAULT_DECISION_HUB_SETTINGS } from "@/lib/decisionHubSettings";
@@ -44,6 +44,10 @@ const FILTER_LABELS: Record<Filter, string> = {
   "one-time": "One-Time",
   stopped: "Stopped",
 };
+
+function debtMonthlyMinimum(debt: Pick<Bill, "amount" | "snowball_minimum_boost">): number {
+  return effectiveDebtMinimum(debt.amount, Number(debt.snowball_minimum_boost ?? 0));
+}
 
 export default function BillsScreen() {
   const c = useColors();
@@ -245,9 +249,9 @@ export default function BillsScreen() {
         due_day: firstOccurrenceDay(bill),
         is_debt: bill.is_debt,
         is_recurring: bill.is_recurring,
+        includeInSnowball: bill.include_in_snowball !== false,
         balance: bill.balance,
         interest_rate: bill.interest_rate,
-        snowball_minimum_boost: bill.snowball_minimum_boost,
       })),
       transactions: getTransactionsForMonth(currentMonth, currentYear).filter(isCashFlowTransaction).map(transaction => ({
         id: transaction.id,
@@ -304,9 +308,10 @@ export default function BillsScreen() {
   })();
 
   const totalDebt        = debts.reduce((s, b) => s + b.balance, 0);
-  const totalMinPayments = debts
-    .filter(debt => debt.balance > 0.009)
-    .reduce((sum, debt) => sum + debt.amount + Number(debt.snowball_minimum_boost ?? 0), 0);
+  const currentDebtIds = new Set(getMonthlyBills(currentMonth, currentYear).filter(bill => bill.is_debt).map(bill => bill.id));
+  const currentDebts = debts.filter(debt => debt.balance > 0.009 && currentDebtIds.has(debt.id));
+  const activeDebts = currentDebts.filter(debt => debt.include_in_snowball !== false);
+  const totalMinPayments = currentDebts.reduce((sum, debt) => sum + debtMonthlyMinimum(debt), 0);
   const assignedDebtExtra = settings.zeroBasedBudgetEnabled
     ? Math.max(0, Number(categoryBudgets.Debt ?? totalMinPayments) - totalMinPayments)
     : cashFlowSafeSnowballAmount;
@@ -314,23 +319,22 @@ export default function BillsScreen() {
     ? Math.min(cashFlowSafeSnowballAmount, assignedDebtExtra)
     : cashFlowSafeSnowballAmount;
   const highestAPR       = debts.length ? Math.max(...debts.map(b => b.interest_rate)) : 0;
-  const activeDebts = debts.filter(debt => debt.balance > 0.009);
   const snowballTarget = sortDebtsLeastToGreatest(activeDebts)[0] ?? null;
   const avalancheTarget = activeDebts.slice().sort((a, b) => b.interest_rate - a.interest_rate || a.balance - b.balance || a.name.localeCompare(b.name))[0] ?? null;
   const cashFlowTarget = activeDebts.slice().sort((a, b) => {
-    const aMin = Math.max(0.01, a.amount + Number(a.snowball_minimum_boost ?? 0));
-    const bMin = Math.max(0.01, b.amount + Number(b.snowball_minimum_boost ?? 0));
+    const aMin = Math.max(0.01, debtMonthlyMinimum(a));
+    const bMin = Math.max(0.01, debtMonthlyMinimum(b));
     return (a.balance / aMin) - (b.balance / bMin) || bMin - aMin || a.balance - b.balance || a.name.localeCompare(b.name);
   })[0] ?? null;
   const activeDebtTarget = settings.paymentMethod === "avalanche" ? avalancheTarget ?? snowballTarget : snowballTarget;
-  const activeDebtMinimum = activeDebtTarget ? activeDebtTarget.amount + Number(activeDebtTarget.snowball_minimum_boost ?? 0) : 0;
+  const activeDebtMinimum = activeDebtTarget ? debtMonthlyMinimum(activeDebtTarget) : 0;
   const activeDebtMonths = activeDebtTarget && activeDebtMinimum > 0 ? Math.ceil(activeDebtTarget.balance / activeDebtMinimum) : 0;
   const snowballOrder = sortDebtsLeastToGreatest(activeDebts);
   const nextSnowballTarget = activeDebtTarget
     ? snowballOrder.find(debt => debt.id !== activeDebtTarget.id) ?? null
     : null;
   const nextTargetRolledMinimum = nextSnowballTarget && activeDebtTarget
-    ? nextSnowballTarget.amount + Number(nextSnowballTarget.snowball_minimum_boost ?? 0) + activeDebtMinimum
+    ? debtMonthlyMinimum(nextSnowballTarget) + activeDebtMinimum
     : 0;
   const debtPayoffDetail = debtAlgorithmSuite.algorithmDetails.debtPayoff;
   const debtRoomExplanation = safeSnowballAmount > 0
@@ -789,7 +793,7 @@ export default function BillsScreen() {
             />
           ) : debts.map(item => {
               const priorityColor = priorityColors[Math.min(item.priority - 1, priorityColors.length - 1)] ?? c.primary;
-              const effectiveMinimum = item.amount + Number(item.snowball_minimum_boost ?? 0);
+              const effectiveMinimum = debtMonthlyMinimum(item);
               const originalBalance = item.balance + item.amount * 12;
               const paidPct = originalBalance > 0 ? Math.min(((originalBalance - item.balance) / originalBalance) * 100, 100) : 0;
               const monthsToPayoff = item.balance > 0 && effectiveMinimum > 0

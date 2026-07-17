@@ -148,6 +148,19 @@ test("Debt Payoff exposes snowball rollover and next target metadata", () => {
   assert.match(suite.debtPayoff.whyItMatters, /rolls into Concert/i);
 });
 
+test("uses an effective rolled minimum once and skips debts excluded from payoff", () => {
+  const suite = buildAlgorithmSuite(baseInput({
+    bills: [
+      { id: "excluded", name: "Excluded", amount: 5, category: "Debt", due_day: 1, is_debt: true, is_recurring: true, includeInSnowball: false, balance: 1, interest_rate: 30, paidAmount: 0 },
+      { id: "camera", name: "Camera", amount: 67, category: "Debt", due_day: 15, is_debt: true, is_recurring: true, includeInSnowball: true, balance: 55, interest_rate: 0, paidAmount: 0 },
+    ],
+  }));
+
+  assert.equal(suite.debtPayoff.nextDebtName, "Camera");
+  assert.equal(suite.debtPayoff.rolloverAmount, 67);
+  assert.equal(suite.debtPayoff.totalMonthlyMinimum, 67);
+});
+
 test("cash-flow gap wording handles a one-day tight stretch", () => {
   const suite = buildAlgorithmSuite(baseInput({
     dailyBalances: [

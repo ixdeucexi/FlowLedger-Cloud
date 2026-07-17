@@ -35,7 +35,6 @@ import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { transactionCategoryParts } from "@/lib/reviewCenter";
 import { buildAlgorithmSuite, type AlgorithmInsight } from "@/lib/algorithmSuite";
 
-const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const MONTH_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 const CAT_COLORS: Record<string, string> = {
@@ -318,7 +317,7 @@ export default function DashboardScreen() {
   }, [bills, today]);
 
   const monthlyBarData = useMemo(() =>
-    MONTH_NAMES.map((label, i) => ({ label, value: bills.filter(b => b.is_recurring || b.is_debt).reduce((s, b) => s + getBillMonthlyTotal(b, i, selectedYear), 0) })),
+    MONTH_FULL.map((label, i) => ({ label, value: bills.filter(b => b.is_recurring || b.is_debt).reduce((s, b) => s + getBillMonthlyTotal(b, i, selectedYear), 0) })),
     [bills, getBillMonthlyTotal, selectedYear]);
 
   const categoryData = useMemo(() => {
@@ -573,7 +572,7 @@ export default function DashboardScreen() {
     const monthly = debts.reduce((s, b) => s + b.amount, 0);
     for (let i = 0; i < 12 && rem > 0; i++) {
       rem = Math.max(0, rem - monthly);
-      months.push({ label: MONTH_NAMES[(currentMonth + i) % 12], value: rem });
+      months.push({ label: MONTH_FULL[(currentMonth + i) % 12], value: rem });
     }
     return months;
   }, [bills, currentMonth]);
@@ -808,9 +807,9 @@ export default function DashboardScreen() {
       due_day: bill.due_day,
       is_debt: bill.is_debt,
       is_recurring: bill.is_recurring,
+      includeInSnowball: bill.include_in_snowball !== false,
       balance: bill.balance,
       interest_rate: bill.interest_rate,
-      snowball_minimum_boost: bill.snowball_minimum_boost,
     })),
     transactions: getTransactionsForMonth(currentMonth, selectedYear).filter(isCashFlowTransaction).flatMap(transaction => {
       const parts = transactionCategoryParts(transaction);
