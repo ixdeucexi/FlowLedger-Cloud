@@ -3497,7 +3497,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       ...settings,
       starting_balance: accountAnchor.balance,
       starting_balance_date: accountAnchor.date,
-      calendar_start_date: settings.calendar_start_date ?? accountAnchor.date,
+      calendar_start_date: settings.calendar_start_date ?? `${accountAnchor.date.slice(0, 7)}-01`,
     };
     setSettings(nextSettings);
     if (demoMode) return;
