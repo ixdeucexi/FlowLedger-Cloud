@@ -44,6 +44,7 @@ import { matchedOccurrenceAllocations, occurrenceKey, reviewedBillMonthSettlemen
 import { normalizePlanningTools } from "@/lib/planningMode";
 import { localDateString } from "@/lib/dateLabels";
 import { canonicalConnectedAccounts, visiblePendingPlaidActivity } from "@/lib/plaidActivity";
+import { normalizeBillImportance, type BillImportance } from "@/lib/billImportance";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -64,7 +65,7 @@ export interface Bill {
   is_recurring: boolean;
   frequency: "monthly" | "biweekly" | "weekly";
   created_at: string;
-  smart_priority?: "must" | "flexible" | "optional" | null;
+  smart_priority?: BillImportance;
   include_in_snowball?: boolean;
   snowball_minimum_boost?: number;
   last_reviewed_at?: string;
@@ -262,6 +263,7 @@ export interface Settings {
   paymentMethod: "snowball" | "avalanche";
   starting_balance: number;
   starting_balance_date?: string;
+  calendar_start_date?: string;
   safety_floor: number;
   forecast_horizon_months: number;
   onboarding_completed: boolean;
@@ -420,6 +422,7 @@ const DEFAULT_SETTINGS: Settings = {
   debtPayoffEnabled: true,
   paymentMethod: "snowball",
   starting_balance: 0,
+  calendar_start_date: undefined,
   safety_floor: 200,
   forecast_horizon_months: 6,
   onboarding_completed: false,
@@ -724,7 +727,7 @@ function normalizeBillRow(bill: any): Bill {
     amount: Number(bill.amount),
     balance: Number(bill.balance),
     interest_rate: Number(bill.interest_rate),
-    smart_priority: ["must", "flexible", "optional"].includes(bill.smart_priority) ? bill.smart_priority : null,
+    smart_priority: normalizeBillImportance(bill.smart_priority, Boolean(bill.is_debt)),
     include_in_snowball: bill.include_in_snowball !== false,
     snowball_minimum_boost: Number(bill.snowball_minimum_boost ?? 0),
   };
@@ -784,6 +787,7 @@ function createDemoBudgetData(today = new Date()) {
     ...DEFAULT_SETTINGS,
     starting_balance: 2496,
     starting_balance_date: localDateString(today),
+    calendar_start_date: startDate,
     onboarding_completed: true,
   };
   return { bills, overrides, billDateMoves: [] as BillDateMove[], transactions, incomes, goals, extraPayments: [] as ExtraPayment[], categories: DEFAULT_CATEGORIES, accounts, decisions, settings };
@@ -896,6 +900,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const householdScopeRef = useRef<HouseholdMembership | null>(null);
   const loadRequestRef = useRef(0);
   const bankRefreshRequestRef = useRef(0);
+  const plaidSyncPromiseRef = useRef<Promise<void> | null>(null);
+  const lastPlaidSyncAtRef = useRef(0);
   useEffect(() => { overridesRef.current = overrides; }, [overrides]);
   useEffect(() => { billDateMovesRef.current = billDateMoves; }, [billDateMoves]);
   useEffect(() => { accountsRef.current = accounts; }, [accounts]);
@@ -1256,6 +1262,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
             paymentMethod:        sData.payment_method as Settings["paymentMethod"],
             starting_balance:     nextStartingBalance,
             starting_balance_date: nextStartingBalanceDate,
+            calendar_start_date: sData.calendar_start_date ?? (nextStartingBalanceDate ? `${nextStartingBalanceDate.slice(0, 7)}-01` : undefined),
             safety_floor:         Number(sData.safety_floor ?? 200),
             forecast_horizon_months: Math.min(24, Math.max(1, Number(sData.forecast_horizon_months ?? 6))),
             onboarding_completed: Boolean(sData.onboarding_completed),
@@ -1282,7 +1289,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     })();
   }, [user, demoMode, loadRetryNonce, resolveHouseholds, applyHouseholdSelect, loadScopedSettings]);
 
-  const refreshBankData = useCallback(async () => {
+  const loadBankData = useCallback(async () => {
     if (!user || demoMode) return;
     const requestId = ++bankRefreshRequestRef.current;
     const uid = user.id;
@@ -1347,6 +1354,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         paymentMethod:        sData.payment_method as Settings["paymentMethod"],
         starting_balance:     nextStartingBalance,
         starting_balance_date: nextStartingBalanceDate,
+        calendar_start_date: sData.calendar_start_date ?? (nextStartingBalanceDate ? `${nextStartingBalanceDate.slice(0, 7)}-01` : undefined),
         safety_floor:         Number(sData.safety_floor ?? 200),
         forecast_horizon_months: Math.min(24, Math.max(1, Number(sData.forecast_horizon_months ?? 6))),
         onboarding_completed: Boolean(sData.onboarding_completed),
@@ -1354,13 +1362,59 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, demoMode, applyHouseholdSelect, loadScopedSettings]);
 
+  const refreshBankData = useCallback(async () => {
+    if (!user || demoMode || Platform.OS !== "web") return;
+    if (plaidSyncPromiseRef.current) return plaidSyncPromiseRef.current;
+
+    const now = Date.now();
+    const fiveMinutes = 5 * 60 * 1000;
+    if (now - lastPlaidSyncAtRef.current < fiveMinutes) {
+      await loadBankData();
+      return;
+    }
+    lastPlaidSyncAtRef.current = now;
+
+    const request = (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const accessToken = data.session?.access_token;
+        if (!accessToken) return;
+        const householdId = householdScopeRef.current?.householdId;
+        const response = await fetch("/api/plaid/sync", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            ...(householdId ? { "X-FlowLedger-Household-Id": householdId } : {}),
+          },
+        });
+        // Basic households and users without a connection have nothing to sync.
+        // Other failures are logged, while the last saved bank data still loads.
+        if (!response.ok && ![403, 404].includes(response.status)) {
+          console.warn("Automatic Plaid sync skipped", response.status);
+        }
+      } catch (error) {
+        console.warn("Automatic Plaid sync skipped", error);
+      } finally {
+        await loadBankData();
+      }
+    })();
+    plaidSyncPromiseRef.current = request;
+    try {
+      await request;
+    } finally {
+      plaidSyncPromiseRef.current = null;
+    }
+  }, [user, demoMode, loadBankData]);
+
   useEffect(() => {
     if (!user || demoMode) return;
+    void refreshBankData();
     const subscription = AppState.addEventListener("change", state => {
       if (state === "active") void refreshBankData();
     });
     return () => subscription.remove();
-  }, [user, demoMode, refreshBankData]);
+  }, [user, demoMode, activeHouseholdId, refreshBankData]);
 
   // ─── Bills ────────────────────────────────────────────────────────────────────
 
@@ -3379,6 +3433,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         payment_method: next.paymentMethod,
         starting_balance: next.starting_balance,
         starting_balance_date: next.starting_balance_date ?? null,
+        calendar_start_date: next.calendar_start_date ?? null,
         safety_floor: next.safety_floor,
         forecast_horizon_months: next.forecast_horizon_months,
         onboarding_completed: next.onboarding_completed,
@@ -3398,6 +3453,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       payment_method:        next.paymentMethod,
       starting_balance:      next.starting_balance,
       starting_balance_date: next.starting_balance_date ?? null,
+      calendar_start_date: next.calendar_start_date ?? null,
       safety_floor:          next.safety_floor,
       forecast_horizon_months: next.forecast_horizon_months,
       onboarding_completed:   next.onboarding_completed,
@@ -3437,7 +3493,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     const accountAnchor = operatingAccountAnchor(nextAccounts.map(toAccountSnapshot));
     if (!accountAnchor) return;
-    const nextSettings = { ...settings, starting_balance: accountAnchor.balance, starting_balance_date: accountAnchor.date };
+    const nextSettings = {
+      ...settings,
+      starting_balance: accountAnchor.balance,
+      starting_balance_date: accountAnchor.date,
+      calendar_start_date: settings.calendar_start_date ?? accountAnchor.date,
+    };
     setSettings(nextSettings);
     if (demoMode) return;
     await saveSettingsRecord(nextSettings);

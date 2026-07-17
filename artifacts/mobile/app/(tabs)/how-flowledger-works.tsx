@@ -33,6 +33,9 @@ export default function HowFlowLedgerWorksScreen() {
     protectedDays?: string;
     protectedAmount?: string;
     reserveTarget?: string;
+    backupTarget?: string;
+    safeUntilPayday?: string;
+    nextPaycheckLabel?: string;
     nextAction?: string;
     nextMilestone?: string;
     nextMilestoneAmount?: string;
@@ -46,6 +49,9 @@ export default function HowFlowLedgerWorksScreen() {
   const protectedDays = amount(params.protectedDays);
   const protectedAmount = amount(params.protectedAmount);
   const reserveTarget = amount(params.reserveTarget);
+  const backupTarget = amount(params.backupTarget);
+  const safeUntilPayday = param(params.safeUntilPayday, "unknown");
+  const nextPaycheckLabel = param(params.nextPaycheckLabel, "next payday");
   const nextMilestoneAmount = amount(params.nextMilestoneAmount);
   const nextMilestone = param(params.nextMilestone, "Build a complete required-expense plan");
   const milestoneText = nextMilestoneAmount > 0
@@ -78,9 +84,9 @@ export default function HowFlowLedgerWorksScreen() {
         <AppText tone="label" style={[styles.sectionEyebrow, { color: c.primary }]}>YOUR CURRENT POSITION</AppText>
         <AppText tone="title" style={[styles.currentTitle, { color: c.foreground }]}>{param(params.stageLabel, "Build the first plan")}</AppText>
         <View style={styles.metrics}>
-          <Metric label="Protected" value={`${protectedDays} days`} />
-          <Metric label="Breathing room" value={currency(protectedAmount)} />
-          <Metric label="30-day target" value={currency(reserveTarget)} />
+          <Metric label="Safe to payday" value={safeUntilPayday === "true" ? `Yes · ${nextPaycheckLabel}` : safeUntilPayday === "false" ? "Not yet" : "Needs pay date"} />
+          <Metric label="Backup" value={`${protectedDays} days`} />
+          <Metric label="90-day target" value={currency(backupTarget)} />
         </View>
         <View style={[styles.nextCard, { backgroundColor: c.primary + "12", borderColor: c.primary + "33" }]}>
           <AppText tone="label" style={[styles.nextLabel, { color: c.primary }]}>NEXT MILESTONE</AppText>
@@ -117,12 +123,25 @@ export default function HowFlowLedgerWorksScreen() {
         })}
       </View>
 
-      <SectionHeader title="How the numbers are calculated" description="FlowLedger recalculates when real or planned money changes." />
+      <SectionHeader title="What does one protected day mean?" description="Think of it like food in a pantry: more days means more time before you need the next paycheck." />
+      <View style={[styles.sectionCard, { backgroundColor: c.card, borderColor: c.border }]}>
+        <View style={styles.ruleRow}>
+          <Feather name="divide-circle" size={16} color={c.primary} />
+          <AppText style={[styles.ruleText, { color: c.foreground }]}>Flo adds one month of Must Pay bills, then divides that total by 30. That is the cost of one backup day.</AppText>
+        </View>
+        <View style={styles.ruleRow}>
+          <Feather name="shield" size={16} color={c.success} />
+          <AppText style={[styles.ruleText, { color: c.foreground }]}>If you spend backup money, the day count goes down. If you keep safe extra money, the day count grows.</AppText>
+        </View>
+      </View>
+
+      <SectionHeader title="How the numbers are calculated" description="FlowLedger recalculates when real money, planned money, or bill importance changes." />
       <View style={[styles.sectionCard, { backgroundColor: c.card, borderColor: c.border }]}>
         <CalculationRow label="Lowest upcoming checking balance" value={currency(amount(params.lowestBalance))} />
         <CalculationRow label="Protected safety floor" value={`-${currency(amount(params.safetyFloor))}`} />
-        <CalculationRow label="Breathing room" value={currency(protectedAmount)} emphasized />
-        <CalculationRow label="One month of required expenses" value={currency(reserveTarget)} />
+        <CalculationRow label="Backup money above the floor" value={currency(protectedAmount)} emphasized />
+        <CalculationRow label="30 days of Must Pay expenses" value={currency(reserveTarget)} />
+        <CalculationRow label="90-day backup target" value={currency(backupTarget)} />
         <CalculationRow label="Forecast confidence" value={param(params.confidence, "Building")} />
       </View>
 

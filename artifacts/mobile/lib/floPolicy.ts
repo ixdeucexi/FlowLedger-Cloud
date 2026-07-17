@@ -55,7 +55,11 @@ export interface FloFacts {
     protectedAmount: number;
     reserveTarget: number;
     reserveProgress: number;
+    backupTarget?: number;
+    backupProgress?: number;
     protectedDays: number;
+    safeUntilPayday?: boolean | null;
+    nextPaycheckLabel?: string | null;
     headline: string;
     explanation: string;
     nextAction: string;
@@ -419,7 +423,11 @@ export function sanitizeFloFacts(facts: FloFacts): FloFacts {
       protectedAmount: Math.max(0, num(facts.stability.protectedAmount)),
       reserveTarget: Math.max(0, num(facts.stability.reserveTarget)),
       reserveProgress: Math.max(0, Math.min(1, num(facts.stability.reserveProgress))),
+      backupTarget: Math.max(0, num(facts.stability.backupTarget)),
+      backupProgress: Math.max(0, Math.min(1, num(facts.stability.backupProgress))),
       protectedDays: Math.max(0, Math.round(num(facts.stability.protectedDays))),
+      safeUntilPayday: typeof facts.stability.safeUntilPayday === "boolean" ? facts.stability.safeUntilPayday : null,
+      nextPaycheckLabel: facts.stability.nextPaycheckLabel ? String(facts.stability.nextPaycheckLabel).slice(0, 40) : null,
       headline: String(facts.stability.headline ?? "").slice(0, 180),
       explanation: String(facts.stability.explanation ?? "").slice(0, 220),
       nextAction: String(facts.stability.nextAction ?? "").slice(0, 180),
@@ -527,6 +535,17 @@ export function sanitizeFloFacts(facts: FloFacts): FloFacts {
   };
 }
 
+const MONEY_RECOMMENDATION_REQUEST = /\b(can i afford|safe to spend|spend until|daily spending|weekly spending|purchase decision|buy this|extra money|leftover money|what should i do with|pay extra|extra payment|move money|move \$|split my paycheck|route money|put \$|add \$.*debt)\b/i;
+
+function recommendationConfidenceGuard(message: string, facts: FloFacts): string | null {
+  if (facts.forecastConfidence === "high" || !MONEY_RECOMMENDATION_REQUEST.test(message)) return null;
+  const estimate = facts.safeCushion ? ` The current unverified estimate shows $${Math.max(0, facts.safeCushion.amount).toFixed(0)} of breathing room.` : "";
+  if (facts.forecastConfidence === "low") {
+    return `I can show an estimate, but I can’t call a money move safe yet.${estimate} Reconcile checking, then confirm income and Must Pay bills first.`;
+  }
+  return `Based on the current plan, this may fit, but I won’t give it a full green light yet.${estimate} Reconcile checking before you act on the recommendation.`;
+}
+
 export function localFloAnswer(message: string, facts: FloFacts, days: DecisionBaselineDay[]): string | null {
   if (isUnsafeFloRequest(message)) return FLO_SECURITY_REFUSAL_MESSAGE;
   const lower = message.toLowerCase();
@@ -535,11 +554,18 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
     const calculation = facts.safeCushion
       ? `Your lowest upcoming balance is $${facts.safeCushion.lowestBalance.toFixed(0)}. After protecting the $${facts.safeCushion.safetyFloor.toFixed(0)} safety floor, that leaves $${facts.stability.protectedAmount.toFixed(0)} of breathing room.`
       : `You have $${facts.stability.protectedAmount.toFixed(0)} of breathing room.`;
+    const payday = facts.stability.safeUntilPayday === true
+      ? `The plan is safe through ${facts.stability.nextPaycheckLabel ?? "the next payday"}.`
+      : facts.stability.safeUntilPayday === false
+        ? `The plan is not safe through ${facts.stability.nextPaycheckLabel ?? "the next payday"} yet.`
+        : "I still need the next paycheck date before I can check payday safety.";
     const target = facts.stability.reserveTarget > 0
-      ? `That protects ${facts.stability.protectedDays} of 30 target days, with a one-month required-expense target of $${facts.stability.reserveTarget.toFixed(0)}.`
-      : "Add required bills before I measure progress toward a one-month reserve.";
-    return `${facts.stability.stageLabel}: ${facts.stability.headline} ${calculation} ${target} Your next action is: ${facts.stability.nextAction}`;
+      ? `One backup day is one-thirtieth of your $${facts.stability.reserveTarget.toFixed(0)} monthly Must Pay total. You have ${facts.stability.protectedDays} days now, on the way to 7, 30, 60, then 90.`
+      : "Mark your required bills as Must Pay before I measure backup days.";
+    return `${facts.stability.stageLabel}: ${facts.stability.headline} ${payday} ${calculation} ${target} Your next action is: ${facts.stability.nextAction}`;
   }
+  const confidenceGuard = recommendationConfidenceGuard(message, facts);
+  if (confidenceGuard) return confidenceGuard;
   if (/\b(money|financial) snapshot\b|\baccount overview\b/.test(lower)) {
     return `Your current projected balance is $${facts.balanceToday.toFixed(2)}. This month shows $${facts.monthlyIncome.toFixed(2)} income, $${facts.monthlyBills.toFixed(2)} in planned bills, and ${facts.monthlyRemaining >= 0 ? "$" + facts.monthlyRemaining.toFixed(2) + " remaining" : "$" + Math.abs(facts.monthlyRemaining).toFixed(2) + " short"}. The forecast low is $${facts.lowestBalance.toFixed(2)} on ${facts.lowestBalanceDate}.`;
   }
@@ -1263,6 +1289,16 @@ function replaceDayReferences(facts: FloFacts, text: string) {
 
 export function floResponseCards(message: string, facts: FloFacts, days: DecisionBaselineDay[]): FloResponseCard[] {
   const lower = message.toLowerCase();
+  if (facts.forecastConfidence !== "high" && MONEY_RECOMMENDATION_REQUEST.test(message)) {
+    return [
+      {
+        title: "Forecast Confidence",
+        value: "VERIFY FIRST",
+        detail: "Reconcile checking, then confirm income and Must Pay bills before acting on this estimate.",
+        tone: facts.forecastConfidence === "low" ? "risk" : "caution",
+      },
+    ];
+  }
   const debtPayment = evaluateFloDebtPayment(message, facts);
   if (debtPayment) {
     const result = debtPayment.allowed ? evaluateDecision(days, buildDebtPaymentScenario(debtPayment), facts.safetyFloor) : null;

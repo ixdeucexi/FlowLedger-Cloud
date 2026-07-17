@@ -96,7 +96,11 @@ const facts: FloFacts = {
     protectedAmount: 600,
     reserveTarget: 1200,
     reserveProgress: 0.5,
+    backupTarget: 3600,
+    backupProgress: 1 / 6,
     protectedDays: 15,
+    safeUntilPayday: true,
+    nextPaycheckLabel: "June 28, 2026",
     headline: "15 days of required expenses protected.",
     explanation: "Your next milestone is 30 protected days.",
     nextAction: "Keep the next $600 of safe extra money available.",
@@ -192,7 +196,8 @@ test("Flo affordability uses deterministic result", () => {
 
 test("Flo explains the stability path from verified facts", () => {
   const answer = localFloAnswer("Explain my stability path and protected days.", facts, days) ?? "";
-  assert.match(answer, /15 of 30 target days/);
+  assert.match(answer, /15 days now, on the way to 7, 30, 60, then 90/);
+  assert.match(answer, /safe through June 28, 2026/);
   assert.match(answer, /lowest upcoming balance is \$800/);
   assert.match(answer, /next action/i);
 });
@@ -202,6 +207,22 @@ test("all Flo quick prompts work without AI", () => {
   assert.match(localFloAnswer("Which bills are due next?", facts, days) ?? "", /Power/);
   assert.match(localFloAnswer("Why is my balance getting low?", facts, days) ?? "", /lowest point/);
   assert.match(localFloAnswer("How do I add income?", facts, days) ?? "", /Add Income/);
+});
+
+test("Flo never gives a strong money recommendation when confidence is low", () => {
+  const lowConfidenceFacts = { ...facts, forecastConfidence: "low" };
+  const affordability = localFloAnswer("Can I afford $50?", lowConfidenceFacts, days) ?? "";
+  const routing = localFloAnswer("What should I do with extra money?", lowConfidenceFacts, days) ?? "";
+  assert.doesNotMatch(affordability, /^Yes/);
+  assert.match(affordability, /can’t call.*safe|reconcile/i);
+  assert.match(routing, /reconcile checking/i);
+  assert.equal(floResponseCards("Can I afford $50?", lowConfidenceFacts, days)[0]?.value, "VERIFY FIRST");
+});
+
+test("Flo treats medium-confidence money guidance as an estimate", () => {
+  const answer = localFloAnswer("Can I afford $50?", { ...facts, forecastConfidence: "medium" }, days) ?? "";
+  assert.doesNotMatch(answer, /^Yes/);
+  assert.match(answer, /may fit|won’t give it a full green light/i);
 });
 
 test("Flo explains today's dashboard balance from verified forecast sources", () => {

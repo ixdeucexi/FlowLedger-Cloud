@@ -26,7 +26,18 @@ function statusColor(status: StabilityProgress["status"]) {
 
 function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps) {
   const color = statusColor(progress.status);
-  const progressWidth = `${Math.round(progress.reserveProgress * 100)}%` as const;
+  const progressWidth = `${Math.round(progress.backupProgress * 100)}%` as const;
+  const paydayColor = progress.safeUntilPayday === true ? "#34d399" : progress.safeUntilPayday === false ? "#fb7185" : "#fbbf24";
+  const paydayTitle = progress.safeUntilPayday === true
+    ? `Safe until ${progress.nextPaycheckLabel ?? "payday"}`
+    : progress.safeUntilPayday === false
+      ? `${currency(progress.paydayShortfall)} short before ${progress.nextPaycheckLabel ?? "payday"}`
+      : "Next payday not confirmed";
+  const paydayDetail = progress.safeUntilPayday === true
+    ? "Your forecast keeps Must Pay bills and the safety floor covered until income arrives."
+    : progress.safeUntilPayday === false
+      ? "Close this gap before treating any money as extra."
+      : "Add the next date in Income so Flo can check the plan through payday.";
 
   return (
     <View style={styles.card}>
@@ -47,26 +58,39 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
       <AppText tone="title" style={styles.headline}>{progress.headline}</AppText>
       <AppText style={styles.explanation}>{progress.explanation}</AppText>
 
-      <View style={styles.progressHeader}>
-        <AppText style={styles.progressLabel}>One-month stability reserve</AppText>
-        <AppText tone="number" style={styles.progressValue}>{Math.round(progress.reserveProgress * 100)}%</AppText>
+      <View style={[styles.paydayCard, { backgroundColor: `${paydayColor}10`, borderColor: `${paydayColor}35` }]}>
+        <Feather name={progress.safeUntilPayday === true ? "check-circle" : progress.safeUntilPayday === false ? "alert-circle" : "calendar"} size={17} color={paydayColor} />
+        <View style={styles.paydayCopy}>
+          <AppText tone="title" style={[styles.paydayTitle, { color: paydayColor }]}>{paydayTitle}</AppText>
+          <AppText style={styles.paydayDetail}>{paydayDetail}</AppText>
+        </View>
       </View>
-      <View style={styles.progressTrack} accessibilityLabel={`${Math.round(progress.reserveProgress * 100)} percent of stability reserve protected`}>
+
+      <View style={styles.progressHeader}>
+        <AppText style={styles.progressLabel}>90-day backup path</AppText>
+        <AppText tone="number" style={styles.progressValue}>{Math.round(progress.backupProgress * 100)}%</AppText>
+      </View>
+      <View style={styles.progressTrack} accessibilityLabel={`${progress.protectedDays} of 90 backup days protected`}>
         <View style={[styles.progressFill, { backgroundColor: color, width: progressWidth }]} />
+      </View>
+      <View style={styles.milestones}>
+        {[7, 30, 60, 90].map(days => (
+          <AppText key={days} style={[styles.milestone, progress.protectedDays >= days && { color }]}> {days}d </AppText>
+        ))}
       </View>
 
       <View style={styles.metrics}>
         <View style={styles.metric}>
           <AppText tone="number" style={styles.metricValue}>{progress.protectedDays}</AppText>
-          <AppText style={styles.metricLabel}>days protected</AppText>
+          <AppText style={styles.metricLabel}>days backed up</AppText>
         </View>
         <View style={styles.metric}>
           <AppText tone="number" style={styles.metricValue}>{currency(progress.protectedAmount)}</AppText>
-          <AppText style={styles.metricLabel}>breathing room</AppText>
+          <AppText style={styles.metricLabel}>backup money</AppText>
         </View>
         <View style={styles.metric}>
-          <AppText tone="number" style={styles.metricValue}>{currency(progress.reserveTarget)}</AppText>
-          <AppText style={styles.metricLabel}>30-day target</AppText>
+          <AppText tone="number" style={styles.metricValue}>{currency(progress.backupTarget)}</AppText>
+          <AppText style={styles.metricLabel}>90-day target</AppText>
         </View>
       </View>
 
@@ -121,11 +145,17 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 9, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.4 },
   headline: { color: "#f8fafc", fontSize: 20, lineHeight: 25, fontFamily: "Inter_800ExtraBold", marginTop: 14 },
   explanation: { color: "#94a3b8", fontSize: 12, lineHeight: 17, fontFamily: "Inter_500Medium", marginTop: 4 },
+  paydayCard: { flexDirection: "row", alignItems: "flex-start", gap: 9, borderWidth: 1, borderRadius: 15, padding: 11, marginTop: 13 },
+  paydayCopy: { flex: 1 },
+  paydayTitle: { fontSize: 13, lineHeight: 17, fontFamily: "Inter_800ExtraBold" },
+  paydayDetail: { color: "#94a3b8", fontSize: 10, lineHeight: 15, fontFamily: "Inter_500Medium", marginTop: 2 },
   progressHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 14, marginBottom: 6 },
   progressLabel: { color: "#cbd5e1", fontSize: 11, fontFamily: "Inter_700Bold" },
   progressValue: { color: "#f8fafc", fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   progressTrack: { height: 7, borderRadius: 999, overflow: "hidden", backgroundColor: "rgba(148,163,184,0.18)" },
   progressFill: { height: "100%", borderRadius: 999 },
+  milestones: { flexDirection: "row", justifyContent: "space-between", marginTop: 5 },
+  milestone: { color: "#64748b", fontSize: 8, fontFamily: "Inter_800ExtraBold" },
   metrics: { flexDirection: "row", alignItems: "stretch", flexWrap: "wrap", gap: 8, marginTop: 14 },
   metric: { flexGrow: 1, flexBasis: 90, minWidth: 82, borderRadius: 12, backgroundColor: "rgba(2,6,23,0.34)", padding: 9 },
   metricValue: { color: "#f8fafc", fontSize: 17, fontFamily: "Inter_800ExtraBold" },

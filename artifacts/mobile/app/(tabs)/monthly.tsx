@@ -1589,7 +1589,7 @@ export default function MonthlyScreen() {
                 goals={goals}
                 decisions={decisions}
                 safetyFloor={settings.safety_floor}
-                startDate={settings.starting_balance_date}
+                startDate={settings.calendar_start_date ?? settings.starting_balance_date}
               />
             </View>
 

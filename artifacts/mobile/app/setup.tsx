@@ -83,7 +83,7 @@ const STARTING_POINT_OPTIONS: {
   { id: "switching_apps", label: "I'm switching from another app", description: "Help me confirm what I already have without starting over.", icon: "refresh-cw" },
   { id: "catching_up", label: "I need to catch up", description: "Put urgent bills and low-balance days first.", icon: "alert-circle" },
   { id: "paycheck_to_paycheck", label: "I keep running out before payday", description: "Help me reach the next paycheck safely and build breathing room.", icon: "calendar" },
-  { id: "building_room", label: "I want to get further ahead", description: "Help me turn extra room into a stability reserve.", icon: "trending-up" },
+  { id: "building_room", label: "I want to get further ahead", description: "Help me build 7, 30, 60, then 90 days of backup.", icon: "trending-up" },
 ];
 
 function moneyKeyToStepKey(key: MoneySetupKey): SetupStepKey {
@@ -107,7 +107,7 @@ const TRUST_CARDS: { icon: React.ComponentProps<typeof Feather>["name"]; title: 
 const FINISH_CARDS: { icon: React.ComponentProps<typeof Feather>["name"]; title: string; text: string }[] = [
   { icon: "shield", title: "Know what is protected", text: "See what remains after required bills and your safety floor are covered." },
   { icon: "calendar", title: "Reach payday safely", text: "See tight dates early and get one clear next action." },
-  { icon: "trending-up", title: "Build protected days", text: "Track progress from the next paycheck toward a one-month stability reserve." },
+  { icon: "trending-up", title: "Build protected days", text: "First reach payday safely, then build 7, 30, 60, and 90 days of Must Pay backup." },
 ];
 
 function SetupWizard() {

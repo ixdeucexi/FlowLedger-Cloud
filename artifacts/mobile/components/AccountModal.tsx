@@ -48,7 +48,7 @@ export function AccountModal({
     setName(account?.name ?? "");
     setType(account?.account_type ?? "checking");
     setBalance(account ? Math.abs(account.current_balance).toString() : "");
-    setDate(mode === "reconcile" ? localToday() : account?.balance_as_of ?? localToday());
+    setDate(account?.balance_as_of ?? localToday());
     setError("");
   }, [account, mode, visible]);
 

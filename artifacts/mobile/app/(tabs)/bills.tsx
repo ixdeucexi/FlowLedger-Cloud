@@ -244,6 +244,7 @@ export default function BillsScreen() {
         amount: getBillMonthlyTotal(bill, currentMonth, currentYear),
         paidAmount: getPaidAmount(bill.id, currentMonth, currentYear),
         occurrenceDays: getBillOccurrencesInMonth(bill, currentMonth, currentYear),
+        importance: bill.smart_priority,
         category: bill.category || "Other",
         due_day: firstOccurrenceDay(bill),
         is_debt: bill.is_debt,

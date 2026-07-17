@@ -583,6 +583,7 @@ export default function DashboardScreen() {
       .filter(account => account.is_active && account.account_type === "checking")
       .reduce((sum, account) => sum + account.current_balance, 0);
   }, [accounts, connectedCheckingAccounts]);
+  const dashboardCheckingBalance = balanceMetrics?.currentBalance ?? checkingAccountBalance;
 
   // ── Savings summary for back of hero card ──────────────────────────────────
   const savingsData = useMemo(() => {
@@ -779,6 +780,7 @@ export default function DashboardScreen() {
       amount: getBillMonthlyTotal(bill, currentMonth, selectedYear),
       paidAmount: getPaidAmount(bill.id, currentMonth, selectedYear),
       occurrenceDays: getBillOccurrencesInMonth(bill, currentMonth, selectedYear),
+      importance: bill.smart_priority,
       category: bill.category || "Other",
       due_day: bill.due_day,
       is_debt: bill.is_debt,
@@ -871,6 +873,9 @@ export default function DashboardScreen() {
         protectedDays: String(algorithmSuite.stability.protectedDays),
         protectedAmount: String(algorithmSuite.stability.protectedAmount),
         reserveTarget: String(algorithmSuite.stability.reserveTarget),
+        backupTarget: String(algorithmSuite.stability.backupTarget),
+        safeUntilPayday: algorithmSuite.stability.safeUntilPayday === null ? "unknown" : String(algorithmSuite.stability.safeUntilPayday),
+        nextPaycheckLabel: algorithmSuite.stability.nextPaycheckLabel ?? "",
         nextAction: algorithmSuite.stability.nextAction,
         nextMilestone: algorithmSuite.stability.nextMilestone,
         nextMilestoneAmount: String(algorithmSuite.stability.nextMilestoneAmount),
@@ -1069,7 +1074,7 @@ export default function DashboardScreen() {
               </Pressable>
             </View>
             <AppText tone="label" style={styles.referenceHeroLabel}>Checking balance</AppText>
-            <AppText tone="number" style={styles.referenceHeroAmount}>{formatDashboardCurrency(checkingAccountBalance)}</AppText>
+            <AppText tone="number" style={styles.referenceHeroAmount}>{formatDashboardCurrency(dashboardCheckingBalance)}</AppText>
 
             <Pressable
               accessibilityRole="button"

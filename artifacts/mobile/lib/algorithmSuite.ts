@@ -1,5 +1,6 @@
 import { ALGORITHM_CATALOG, type AlgorithmId, type AlgorithmSettingsShape } from "./algorithmCatalog";
 import { buildStabilityProgress, STABILITY_POLICY, type StabilityProgress } from "./stability";
+import { isRequiredBill, normalizeBillImportance, type BillImportance } from "./billImportance";
 
 export interface AlgorithmDailyBalance {
   day: number;
@@ -23,6 +24,7 @@ export interface AlgorithmBill {
   interest_rate?: number;
   paidAmount?: number;
   occurrenceDays?: number[];
+  importance?: BillImportance;
 }
 
 export interface AlgorithmTransaction {
@@ -147,8 +149,8 @@ export interface AlgorithmSuiteResult {
     confidence: "high" | "medium" | "low";
   };
   billPriority: {
-    bills: { id: string; name: string; amount: number; dueDay: number; score: number; reason: string; urgency: "now" | "soon" | "planned" }[];
-    nextBill: { id: string; name: string; amount: number; dueDay: number; score: number; reason: string; urgency: "now" | "soon" | "planned" } | null;
+    bills: { id: string; name: string; amount: number; dueDay: number; score: number; reason: string; urgency: "now" | "soon" | "planned"; importance: BillImportance }[];
+    nextBill: { id: string; name: string; amount: number; dueDay: number; score: number; reason: string; urgency: "now" | "soon" | "planned"; importance: BillImportance } | null;
     summary: string;
     nextMove: string;
   };
@@ -218,9 +220,10 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
   const safeCushionAmount = roundCurrency(Math.max(0, lowestBalance - input.safetyFloor));
   const paidBills = input.bills.filter(bill => (bill.paidAmount ?? 0) >= Math.max(0.01, bill.amount)).length;
   const billSchedule = input.bills.map(bill => ({ bill, ...buildBillScheduleStatus(bill, input.todayDay) }));
-  const dueBills = billSchedule.filter(status => status.dueAmount > 0.005);
+  const requiredBillSchedule = billSchedule.filter(({ bill }) => isRequiredBill(bill.importance, bill.is_debt));
+  const dueBills = requiredBillSchedule.filter(status => status.dueAmount > 0.005);
   const paidDueBills = dueBills.filter(status => (status.bill.paidAmount ?? 0) + 0.005 >= status.dueAmount).length;
-  const overdueBills = billSchedule
+  const overdueBills = requiredBillSchedule
     .filter(status => status.overdueAmount > 0.005)
     .sort((left, right) => (left.firstOverdueDay ?? 99) - (right.firstOverdueDay ?? 99) || right.overdueAmount - left.overdueAmount);
   const billReadiness = dueBills.length ? paidDueBills / dueBills.length : 1;
@@ -238,6 +241,7 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     : monthlyDebtMinimums > 0 ? 18 : 0;
   const categoryPressure = (input.categoryPlan ?? []).filter(row => row.status !== "available");
   const monthlyRequiredOutflow = estimateMonthlyRequiredOutflow(input);
+  const nextPaycheck = balances.find(day => day.day > input.todayDay && day.income > 0.005) ?? null;
   const stability = buildStabilityProgress({
     balances,
     todayDay: input.todayDay,
@@ -252,6 +256,7 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
         }
       : null,
     forecastConfidence: input.forecastConfidence.level,
+    nextPaycheckLabel: nextPaycheck ? formatMonthDay(input, nextPaycheck.day) : null,
   });
   const riskDayCounts = remainingBalances.reduce(
     (counts, day) => {
@@ -266,7 +271,9 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
   const billStandingPoints = overdueBills.length > 0
     ? Math.max(0, 20 - overdueBills.length * 10)
     : Math.round(billReadiness * 20);
-  const reservePoints = stability.reserveTarget > 0 ? stability.reserveProgress * 20 : 0;
+  const reservePoints = stability.reserveTarget > 0
+    ? (stability.reserveProgress * 0.5 + stability.backupProgress * 0.5) * 20
+    : 0;
   const forecastCoveragePoints = remainingBalances.length
     ? Math.min(15, (stability.safeForecastDays / remainingBalances.length) * 15)
     : 0;
@@ -292,16 +299,18 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
   const remainingDays = Math.max(1, remainingBalances.length || 1);
   const monthlyFreeCash = roundCurrency(Math.max(0, input.cashFlow.remaining));
   const decisionRoom = roundCurrency(Math.min(safeCushionAmount, monthlyFreeCash));
-  const spendingLimits = buildSpendingLimitDetails(decisionRoom, remainingDays);
+  const spendingLimits = buildSpendingLimitDetails(decisionRoom, remainingDays, input.forecastConfidence.level);
   const planDelayDay = findPlanDelayDay(remainingBalances, input.safetyFloor);
   const subscriptionCreep = findSubscriptionCreep(input.bills);
   const billShock = findBillShock(input.bills, input.cashFlow.monthlyIncome);
   const spendingPattern = summarizeSpendingPattern(input.categoryPlan ?? [], input.transactions);
-  const goalAcceleration = buildGoalAcceleration(input.goals, safeCushionAmount);
+  const goalAcceleration = buildGoalAcceleration(input.goals, input.forecastConfidence.level === "low" ? 0 : safeCushionAmount);
   const rawExtraMoneyAmount = decisionRoom > STABILITY_POLICY.extraMoneyRoomMinimum
     ? Math.min(decisionRoom * 0.35, monthlyFreeCash * 0.25)
     : 0;
-  const extraMoneyAmount = roundCurrency(rawExtraMoneyAmount >= STABILITY_POLICY.extraMoneyMinimum ? rawExtraMoneyAmount : 0);
+  const extraMoneyAmount = input.forecastConfidence.level === "low"
+    ? 0
+    : roundCurrency(rawExtraMoneyAmount >= STABILITY_POLICY.extraMoneyMinimum ? rawExtraMoneyAmount : 0);
   const priorityBillNeedsProtection = Boolean(billPriority.nextBill && billPriority.nextBill.urgency === "now");
   const extraMoneyRecommendation = priorityBillNeedsProtection
       ? "bill" as const
@@ -367,6 +376,7 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     avalanche: topDebtAvalanche,
     cashFlow: topDebtCashFlow,
     safeCushionAmount,
+    forecastConfidence: input.forecastConfidence.level,
   });
   const extraMoneyRouter = buildExtraMoneyRouterDetails({
     amount: extraMoneyAmount,
@@ -374,6 +384,7 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     debtTargetName: topDebtSnowball?.name ?? null,
     savingsTargetName: input.goals.find(goal => goal.goal_type === "savings" && goal.current_amount < goal.target_amount)?.name ?? null,
     priorityBillName: billPriority.nextBill?.name ?? null,
+    forecastConfidence: input.forecastConfidence.level,
   });
   const algorithmDetails = buildAlgorithmDecisionDetails(input, {
     flowScore,
@@ -456,15 +467,18 @@ function prioritizeBills(bills: AlgorithmBill[], todayDay: number, safetyFloor: 
       const size = Math.min(28, unpaid / 45);
       const risk = lowestDay !== null && dueDay <= lowestDay ? 18 : 0;
       const debt = bill.is_debt ? 8 : 0;
-      const score = Math.round(urgencyScore + size + risk + debt);
-      const reason = daysUntilDue <= 0
+      const importance = normalizeBillImportance(bill.importance, bill.is_debt);
+      const importanceScore = importance === "must" ? 30 : importance === "flexible" ? 10 : 0;
+      const score = Math.round(urgencyScore + size + risk + debt + importanceScore);
+      const timingReason = daysUntilDue <= 0
         ? "due now"
         : daysUntilDue <= 7
           ? `due in ${daysUntilDue} day${daysUntilDue === 1 ? "" : "s"}`
           : unpaid > safetyFloor
             ? "large impact"
             : "planned";
-      return { id: bill.id, name: bill.name, amount: unpaid, dueDay, score, reason, urgency };
+      const importanceLabel = importance === "must" ? "Must Pay" : importance === "flexible" ? "Flexible" : "Optional";
+      return { id: bill.id, name: bill.name, amount: unpaid, dueDay, score, reason: `${importanceLabel} · ${timingReason}`, urgency, importance };
     })
     .sort((a, b) => b.score - a.score || a.dueDay - b.dueDay)
     .slice(0, 5);
@@ -602,6 +616,18 @@ function buildPurchaseDecisionDetails(
   safeCushionAmount: number,
   input: AlgorithmSuiteInput,
 ): AlgorithmSuiteResult["purchaseDecision"] {
+  if (confidence === "low") {
+    return {
+      safeNowLimit: 0,
+      action: "wait",
+      confidence,
+      bestDay: planDelayDay,
+      detail: decisionRoom > 0
+        ? `The current estimate shows about $${decisionRoom.toFixed(0)} of room, but the forecast needs verification before I call any of it safe.`
+        : "The forecast needs verification before I can approve new spending.",
+      nextMove: "Reconcile checking, then confirm income and Must Pay bills.",
+    };
+  }
   if (monthlyFreeCash <= 0) {
     return {
       safeNowLimit: 0,
@@ -652,7 +678,21 @@ function buildPurchaseDecisionDetails(
   };
 }
 
-function buildSpendingLimitDetails(safeCushionAmount: number, remainingDays: number): AlgorithmSuiteResult["spendingLimit"] {
+function buildSpendingLimitDetails(
+  safeCushionAmount: number,
+  remainingDays: number,
+  confidence: AlgorithmSuiteInput["forecastConfidence"]["level"],
+): AlgorithmSuiteResult["spendingLimit"] {
+  if (confidence === "low") {
+    return {
+      daily: 0,
+      weekly: 0,
+      status: "watch",
+      paceLabel: "verify first",
+      remainingDays,
+      detail: "I need a reconciled checking balance and confirmed income before setting a safe spending pace.",
+    };
+  }
   const daily = roundCurrency(safeCushionAmount / remainingDays);
   const weekly = roundCurrency(daily * 7);
   const status: AlgorithmSuiteResult["spendingLimit"]["status"] = safeCushionAmount <= 0 ? "risk" : daily < STABILITY_POLICY.spendingWatchPerDay ? "watch" : "safe";
@@ -669,8 +709,10 @@ function buildExtraMoneyRouterDetails(args: {
   debtTargetName: string | null;
   savingsTargetName: string | null;
   priorityBillName: string | null;
+  forecastConfidence: AlgorithmSuiteInput["forecastConfidence"]["level"];
 }): AlgorithmSuiteResult["extraMoneyRouter"] {
-  const amount = roundCurrency(Math.max(0, args.amount));
+  const needsVerification = args.forecastConfidence === "low";
+  const amount = needsVerification ? 0 : roundCurrency(Math.max(0, args.amount));
   const targetLabel = args.recommendation === "debt"
     ? args.debtTargetName ?? "next debt"
     : args.recommendation === "bill"
@@ -678,7 +720,9 @@ function buildExtraMoneyRouterDetails(args: {
       : args.recommendation === "savings"
         ? args.savingsTargetName ?? "savings"
         : "available cash";
-  const detail = amount > 0
+  const detail = needsVerification
+    ? "I can show the current estimate, but I will not route extra money until checking, income, and Must Pay bills are verified."
+    : amount > 0
     ? args.recommendation === "debt"
       ? `I can safely send up to $${amount.toFixed(0)} to ${targetLabel} without breaking your floor.`
       : args.recommendation === "bill"
@@ -689,7 +733,9 @@ function buildExtraMoneyRouterDetails(args: {
     : args.recommendation === "bill"
       ? `I do not see safe leftover money yet. I’m holding cash for ${targetLabel} because it is a required bill.`
       : "I do not see safe leftover money yet.";
-  const nextMove = amount > 0
+  const nextMove = needsVerification
+    ? "Reconcile checking before moving extra money."
+    : amount > 0
     ? args.recommendation === "debt"
       ? `Preview adding $${amount.toFixed(0)} to ${targetLabel}.`
       : args.recommendation === "bill"
@@ -715,6 +761,7 @@ function buildDebtPayoffDetails(targets: {
   avalanche: AlgorithmBill | null;
   cashFlow: AlgorithmBill | null;
   safeCushionAmount: number;
+  forecastConfidence: AlgorithmSuiteInput["forecastConfidence"]["level"];
 }): AlgorithmSuiteResult["debtPayoff"] {
   const orderedDebts = targets.debts
     .slice()
@@ -752,11 +799,13 @@ function buildDebtPayoffDetails(targets: {
   const cashFlowReliefAmount = roundCurrency(targets.cashFlow?.amount ?? 0);
   const snowballMinimum = roundCurrency(Math.max(0, targets.snowball.amount));
   const nextDebtNameAfterTarget = orderedDebts.find(debt => debt.id !== targets.snowball?.id)?.name ?? null;
-  const safeExtraAmount = roundCurrency(Math.max(0, targets.safeCushionAmount));
-  const status: AlgorithmSuiteResult["debtPayoff"]["status"] = targets.safeCushionAmount > 0 ? "ready" : "hold";
+  const safeExtraAmount = targets.forecastConfidence === "low" ? 0 : roundCurrency(Math.max(0, targets.safeCushionAmount));
+  const status: AlgorithmSuiteResult["debtPayoff"]["status"] = safeExtraAmount > 0 ? "ready" : "hold";
   const nextMove = status === "ready"
     ? `Attack ${targets.snowball.name} first with any safe extra money.`
-    : `Hold extra debt payments until your cushion is safe, then attack ${targets.snowball.name}.`;
+    : targets.forecastConfidence === "low"
+      ? `Reconcile checking before adding extra to ${targets.snowball.name}.`
+      : `Hold extra debt payments until your cushion is safe, then attack ${targets.snowball.name}.`;
   const detail = `I’d attack ${targets.snowball.name} first because it has the smallest balance. Avalanche would chase ${targets.avalanche?.name ?? targets.snowball.name} for interest, and cash-flow relief would close ${targets.cashFlow?.name ?? targets.snowball.name} to free monthly room.`;
   const whyItMatters = nextDebtNameAfterTarget
     ? `When ${targets.snowball.name} is paid off, its $${snowballMinimum.toFixed(0)}/mo minimum rolls into ${nextDebtNameAfterTarget} instead of disappearing.`
@@ -988,7 +1037,7 @@ function buildAlgorithmDecisionDetails(
 
 function estimateMonthlyRequiredOutflow(input: AlgorithmSuiteInput) {
   const billTotalsByCategory = new Map<string, number>();
-  const requiredBills = input.bills.reduce((sum, bill) => {
+  const requiredBills = input.bills.filter(bill => isRequiredBill(bill.importance, bill.is_debt)).reduce((sum, bill) => {
     const amount = Math.max(0, bill.amount);
     const category = (bill.category || "Other").toLowerCase();
     billTotalsByCategory.set(category, (billTotalsByCategory.get(category) ?? 0) + amount);
@@ -1293,10 +1342,12 @@ function buildFlowScoreDetails(
     positiveFactors.push(`${input.bills.length} upcoming bill${input.bills.length === 1 ? " is" : "s are"} planned in the forecast.`);
   }
 
-  if (facts.stability.reserveTarget > 0 && facts.stability.protectedDays >= STABILITY_POLICY.reserveGoalDays) {
-    positiveFactors.push("One month of required expenses is protected.");
+  if (facts.stability.reserveTarget > 0 && facts.stability.protectedDays >= STABILITY_POLICY.freedomGoalDays) {
+    positiveFactors.push("A 90-day Must Pay backup is protected.");
+  } else if (facts.stability.reserveTarget > 0 && facts.stability.protectedDays >= 30) {
+    positiveFactors.push(`${facts.stability.protectedDays} days of Must Pay expenses are protected.`);
   } else if (facts.stability.reserveTarget > 0) {
-    negativeFactors.push(`${facts.stability.protectedDays} of 30 stability days are protected.`);
+    negativeFactors.push(`${facts.stability.protectedDays} backup days are protected; the next milestone is ${facts.stability.nextMilestone}.`);
   }
 
   if (input.forecastConfidence.level === "high") positiveFactors.push("Forecast confidence is high.");
@@ -1326,9 +1377,9 @@ function buildFlowScoreDetails(
     tone: input.forecastConfidence.level === "high" ? "safe" : input.forecastConfidence.level === "medium" ? "watch" : "risk",
   });
   breakdownItems.push({
-    label: "Stability Reserve",
-    value: facts.stability.reserveTarget > 0 ? `${facts.stability.protectedDays}/30 days` : "Needs bills",
-    tone: facts.stability.protectedDays >= 30 ? "safe" : facts.stability.protectedDays > 0 ? "watch" : "risk",
+    label: "Backup Coverage",
+    value: facts.stability.reserveTarget > 0 ? `${facts.stability.protectedDays}/90 days` : "Needs Must Pay bills",
+    tone: facts.stability.protectedDays >= 90 ? "safe" : facts.stability.protectedDays > 0 ? "watch" : "risk",
   });
   if (facts.categoryPressure.length) {
     breakdownItems.push({

@@ -245,7 +245,7 @@ export function describeStartingPoint(startingPoint: SetupStartingPoint | null):
     case "paycheck_to_paycheck":
       return "I'll focus first on reaching the next paycheck safely, then building protected days.";
     case "building_room":
-      return "I'll focus on turning extra room into a one-month stability reserve.";
+      return "I'll help turn safe extra money into 7, 30, 60, then 90 days of Must Pay backup.";
     default:
       return "I'll meet you where your money plan is today.";
   }

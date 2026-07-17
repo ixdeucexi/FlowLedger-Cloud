@@ -15,6 +15,7 @@ import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { confirmAction } from "@/lib/confirmAction";
 import { MONTH_NAMES } from "@/lib/dateLabels";
+import { BILL_IMPORTANCE_OPTIONS, normalizeBillImportance, type BillImportance } from "@/lib/billImportance";
 
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
@@ -27,6 +28,7 @@ export interface AddBillInitialValues {
   startDate?: string;
   isRecurring?: boolean;
   frequency?: Bill["frequency"];
+  smartPriority?: BillImportance;
 }
 
 interface AddBillModalProps {
@@ -55,6 +57,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   const [balance,       setBalance]       = useState("");
   const [interestRate,  setInterestRate]  = useState("");
   const [includeInSnowball, setIncludeInSnowball] = useState(true);
+  const [smartPriority, setSmartPriority] = useState<BillImportance>("must");
   const [dueDay,        setDueDay]        = useState("1");
   const [dayOfWeek,     setDayOfWeek]     = useState(0);      // 0=Sun … 6=Sat
   const [isRecurring,   setIsRecurring]   = useState(true);
@@ -104,6 +107,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       setBalance(editBill.balance > 0 ? editBill.balance.toString() : "");
       setInterestRate(editBill.interest_rate > 0 ? editBill.interest_rate.toString() : "");
       setIncludeInSnowball(editBill.include_in_snowball !== false);
+      setSmartPriority(normalizeBillImportance(editBill.smart_priority, editBill.is_debt));
       setDueDay(editBill.due_day.toString());
       setDayOfWeek(editBill.day_of_week ?? 0);
       setIsRecurring(editBill.is_recurring);
@@ -119,6 +123,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       setAmount(initialValues?.amount ? initialValues.amount.toString() : "");
       setCategory(initialValues?.category ?? "Other");
       setIsDebt(forceDebt ?? false); setBalance(""); setInterestRate(""); setIncludeInSnowball(true);
+      setSmartPriority(normalizeBillImportance(initialValues?.smartPriority, forceDebt ?? false));
       setDueDay(String(initialValues?.dueDay ?? (hasValidPaymentDate ? day : 1)));
       setDayOfWeek(hasValidPaymentDate ? new Date(year, month - 1, day).getDay() : 0);
       setIsRecurring(initialValues?.isRecurring ?? true);
@@ -155,7 +160,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       end_date: billEndDate.trim() || undefined,
       is_recurring: isDebt ? true : isRecurring,
       frequency,
-      smart_priority: editBill?.smart_priority ?? null,
+      smart_priority: normalizeBillImportance(smartPriority, isDebt),
       include_in_snowball: isDebt ? includeInSnowball : false,
     };
     setSaving(true);
@@ -463,6 +468,47 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
               </>
             )}
 
+            {isDebt ? (
+              <View style={[styles.infoBox, { backgroundColor: c.primary + "12" }]}>
+                <Feather name="shield" size={13} color={c.primary} />
+                <Text style={[styles.infoText, { color: c.mutedForeground }]}>
+                  Debt minimums are always Must Pay, so Flo protects them before flexible or optional bills.
+                </Text>
+              </View>
+            ) : (
+              <>
+                <Text style={lbl}>How important is this bill?</Text>
+                <View style={styles.priorityGrid}>
+                  {BILL_IMPORTANCE_OPTIONS.map(option => {
+                    const selected = smartPriority === option.value;
+                    return (
+                      <Pressable
+                        key={option.value}
+                        accessibilityRole="radio"
+                        accessibilityState={{ checked: selected }}
+                        accessibilityLabel={`${option.label}. ${option.description}`}
+                        onPress={() => setSmartPriority(option.value)}
+                        style={({ pressed }) => [
+                          styles.priorityOption,
+                          {
+                            borderColor: selected ? c.primary : c.border,
+                            backgroundColor: selected ? c.primary + "14" : c.card,
+                            opacity: pressed ? 0.75 : 1,
+                          },
+                        ]}
+                      >
+                        <View style={styles.priorityOptionTop}>
+                          <Feather name={option.icon} size={14} color={selected ? c.primary : c.mutedForeground} />
+                          <Text style={[styles.priorityLabel, { color: selected ? c.primary : c.foreground }]}>{option.label}</Text>
+                        </View>
+                        <Text style={[styles.priorityDescription, { color: c.mutedForeground }]}>{option.description}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </>
+            )}
+
             {/* Recurring toggle — hidden for debt (debts are always recurring) */}
             {!isDebt && !forceDebt && (
               <View style={[styles.toggleCard, { backgroundColor: c.card, marginTop: 14 }]}>
@@ -542,7 +588,7 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: 12, paddingVertical: 8 },
   chipText: { fontSize: 13, fontFamily: "Inter_500Medium" },
   priorityGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
-  priorityOption: { width: "48%", borderRadius: 12, borderWidth: 1, padding: 10, minHeight: 72 },
+  priorityOption: { width: "100%", borderRadius: 12, borderWidth: 1, padding: 10, minHeight: 68 },
   priorityOptionTop: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 5 },
   priorityLabel: { fontSize: 13, fontFamily: "Inter_700Bold" },
   priorityDescription: { fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 15 },
