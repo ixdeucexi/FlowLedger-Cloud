@@ -216,6 +216,38 @@ export function matchedOccurrenceAllocations(
   return matches;
 }
 
+export type ReviewedBillMonthSettlement = {
+  status: "partial" | "settled";
+  actualAmount: number;
+};
+
+export function reviewedBillMonthSettlements(
+  transactions: ReviewTransactionLike[],
+): Map<string, ReviewedBillMonthSettlement> {
+  const settlements = new Map<string, ReviewedBillMonthSettlement>();
+
+  matchedOccurrenceAllocations(transactions, "bill").forEach(allocation => {
+    if (!allocation.targetId || !allocation.occurrenceDate) return;
+    const key = `${allocation.targetId}:${allocation.occurrenceDate.slice(0, 7)}`;
+    const existing = settlements.get(key);
+    settlements.set(key, {
+      status: existing?.status === "partial" || allocation.settlement === "partial" ? "partial" : "settled",
+      actualAmount: Math.round(((existing?.actualAmount ?? 0) + Math.max(0, Number(allocation.amount) || 0)) * 100) / 100,
+    });
+  });
+
+  return settlements;
+}
+
+export function reviewedBillMonthSettlement(
+  transactions: ReviewTransactionLike[],
+  billId: string,
+  monthPrefix: string,
+): { status: "none" | ReviewedBillMonthSettlement["status"]; actualAmount: number } {
+  return reviewedBillMonthSettlements(transactions).get(`${billId}:${monthPrefix}`)
+    ?? { status: "none", actualAmount: 0 };
+}
+
 export function allocationLabel(transaction: ReviewTransactionLike): string | null {
   if (transaction.user_edited_at && transaction.note.trim()) return transaction.note.trim();
   const allocations = transaction.review_allocations ?? [];

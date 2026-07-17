@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import {
   allocateSnowballExtra,
-  effectiveDebtMinimum,
+  monthlyDebtAmount,
   orderDebts,
   projectSnowballMonth,
   simulateSnowballPayoff,
@@ -40,7 +40,7 @@ import {
 } from "@/lib/households";
 import { canEditHouseholdPlan, canManageHouseholdMembers } from "@/lib/householdPermissions";
 import { isActiveTransaction, isCashFlowTransaction, isConfirmedBillMatch } from "@/lib/billMatching";
-import { matchedOccurrenceAllocations, occurrenceKey } from "@/lib/reviewCenter";
+import { matchedOccurrenceAllocations, occurrenceKey, reviewedBillMonthSettlements } from "@/lib/reviewCenter";
 import { normalizePlanningTools } from "@/lib/planningMode";
 import { canonicalConnectedAccounts, visiblePendingPlaidActivity } from "@/lib/plaidActivity";
 
@@ -1614,13 +1614,28 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     [overrides]
   );
 
+  const reviewedBillSettlements = useMemo(
+    () => reviewedBillMonthSettlements(transactions),
+    [transactions],
+  );
+
   const getAmount = useCallback(
     (bill: Bill, month: number, year: number): number => {
       const o = overrides.find(o => o.bill_id === bill.id && o.month === month && o.year === year);
       const base = billBaseAmountForMonth(bill, o);
-      return bill.is_debt ? effectiveDebtMinimum(base, Number(bill.snowball_minimum_boost ?? 0)) : base;
+      if (!bill.is_debt) return base;
+
+      let settledAmount: number | undefined;
+      if (bill.frequency === "monthly") {
+        const settlementKey = `${bill.id}:${year}-${String(month + 1).padStart(2, "0")}`;
+        const reviewedSettlement = reviewedBillSettlements.get(settlementKey);
+        if (reviewedSettlement?.status === "settled") settledAmount = reviewedSettlement.actualAmount;
+        else if (!reviewedSettlement && o?.actual_amount !== undefined && o.paid_date) settledAmount = o.actual_amount;
+      }
+
+      return monthlyDebtAmount(base, Number(bill.snowball_minimum_boost ?? 0), settledAmount);
     },
-    [overrides]
+    [overrides, reviewedBillSettlements]
   );
 
   const getPaidAmount = useCallback(

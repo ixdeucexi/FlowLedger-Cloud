@@ -82,6 +82,12 @@ export function effectiveDebtMinimum(baseMinimum: number, rolledMinimum: number)
   return cents(Math.max(0, baseMinimum) + Math.max(0, rolledMinimum));
 }
 
+export function monthlyDebtAmount(baseMinimum: number, rolledMinimum: number, settledAmount?: number): number {
+  return settledAmount !== undefined && Number.isFinite(settledAmount)
+    ? cents(Math.max(0, settledAmount))
+    : effectiveDebtMinimum(baseMinimum, rolledMinimum);
+}
+
 export function scheduledDebtPaymentAmount(amount: number, paymentDate: string, today: string, balance: number): number {
   if (amount >= 0 || paymentDate > today) return 0;
   return cents(Math.min(Math.abs(amount), Math.max(0, balance)));

@@ -913,6 +913,9 @@ export default function DashboardScreen() {
   const openFloWithPrompt = useCallback((prompt: string) => {
     router.push({ pathname: "/(tabs)/flo", params: { prompt } } as any);
   }, [router]);
+  const openFlo = useCallback(() => {
+    router.push("/(tabs)/flo" as any);
+  }, [router]);
   const openStabilityGuide = useCallback(() => {
     router.push({
       pathname: "/(tabs)/how-flowledger-works",
@@ -1131,8 +1134,8 @@ export default function DashboardScreen() {
 
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`View the full Stability Path from ${algorithmSuite.stability.stageLabel}`}
-              onPress={openStabilityGuide}
+              accessibilityLabel="Open Flo"
+              onPress={openFlo}
               style={({ pressed }) => [styles.referencePlanSnapshot, { opacity: pressed ? 0.84 : 1 }]}
             >
               <View style={styles.referencePlanFocusBlock}>
@@ -1148,8 +1151,8 @@ export default function DashboardScreen() {
                 </View>
               </View>
               <View style={styles.referencePlanFloPill}>
-                <Feather name="map" size={13} color="#f8fafc" />
-                <AppText style={styles.referencePlanFloText}>Path</AppText>
+                <Feather name="message-circle" size={13} color="#f8fafc" />
+                <AppText style={styles.referencePlanFloText}>Flo</AppText>
               </View>
             </Pressable>
           </Animated.View>

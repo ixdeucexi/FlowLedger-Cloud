@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { allocateSnowballExtra, effectiveDebtMinimum, monthlyInterestCharge, orderDebts, projectSnowballMonth, scheduledDebtPaymentAmount, simulateSnowballPayoff, type SnowballDebtInput } from "./snowball";
+import { allocateSnowballExtra, effectiveDebtMinimum, monthlyDebtAmount, monthlyInterestCharge, orderDebts, projectSnowballMonth, scheduledDebtPaymentAmount, simulateSnowballPayoff, type SnowballDebtInput } from "./snowball";
 
 const debts: SnowballDebtInput[] = [
   { id: "large", name: "Large", balance: 1_000, minimum: 100, apr: 12, dueDay: 15, included: true },
@@ -18,6 +18,10 @@ describe("debt ordering and allocation", () => {
 
   it("adds a closed debt minimum to the new number one debt", () => {
     assert.equal(effectiveDebtMinimum(75, 25), 100);
+  });
+  it("starts a new rollover on unpaid months without reopening a settled month", () => {
+    assert.equal(monthlyDebtAmount(20, 29), 49);
+    assert.equal(monthlyDebtAmount(20, 29, 20), 20);
   });
   it("does not reduce debt until a scheduled transaction date arrives", () => {
     assert.equal(scheduledDebtPaymentAmount(-100, "2026-06-25", "2026-06-24", 500), 0);

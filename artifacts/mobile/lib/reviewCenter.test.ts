@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { allocationLabel, allocationTotal, buildCurrentMonthReviewQueue, buildForgottenBillDefaults, forgottenBillSettlement, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewAllocationsAreBalanced, reviewQueueAfterSkips, reviewSettlementSummary, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
+import { allocationLabel, allocationTotal, buildCurrentMonthReviewQueue, buildForgottenBillDefaults, forgottenBillSettlement, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewAllocationsAreBalanced, reviewedBillMonthSettlement, reviewQueueAfterSkips, reviewSettlementSummary, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
 
 test("queues only active current-month posted Plaid transactions oldest first", () => {
   const queue = buildCurrentMonthReviewQueue([
@@ -118,6 +118,33 @@ test("partial payments accumulate on one occurrence without closing another", ()
   assert.equal(completed?.settlement, "exact");
   assert.equal(unrelated?.amount, 10);
   assert.equal(unrelated?.settlement, "partial");
+});
+
+test("settled bill months stay settled when a later debt rollover changes the recurring minimum", () => {
+  const transactions = [
+    { id: "camera", date: "2026-07-02", amount: -20, category: "Debt", note: "Camera", review_status: "matched", review_allocations: [
+      { type: "bill" as const, targetId: "camera", occurrenceDate: "2026-07-15", amount: 20, plannedAmount: 38.27, settlement: "full" as const },
+    ] },
+  ];
+
+  assert.deepEqual(reviewedBillMonthSettlement(transactions, "camera", "2026-07"), {
+    status: "settled",
+    actualAmount: 20,
+  });
+  assert.deepEqual(reviewedBillMonthSettlement(transactions, "camera", "2026-08"), {
+    status: "none",
+    actualAmount: 0,
+  });
+});
+
+test("partial bill months remain open for the rest of the planned payment", () => {
+  const transactions = [
+    { id: "partial", date: "2026-07-02", amount: -20, category: "Debt", note: "Partial", review_status: "matched", review_allocations: [
+      { type: "bill" as const, targetId: "camera", occurrenceDate: "2026-07-15", amount: 20, plannedAmount: 38.27, settlement: "partial" as const },
+    ] },
+  ];
+
+  assert.equal(reviewedBillMonthSettlement(transactions, "camera", "2026-07").status, "partial");
 });
 
 test("split reporting keeps one cash event but assigns both categories", () => {
