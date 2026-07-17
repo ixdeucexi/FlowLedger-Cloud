@@ -6,17 +6,20 @@ export interface PlaidAccountIdentityRow {
   mask?: string | null;
   account_type?: string | null;
   account_subtype?: string | null;
+  current_balance?: number | null;
+  available_balance?: number | null;
   is_active: boolean;
   updated_at?: string | null;
 }
 
 export interface PendingPlaidActivityRow {
   plaid_transaction_id: string;
-  plaid_account_id?: string | null;
+  plaid_account_id?: string;
   transaction_date: string;
   amount: number;
   name: string;
-  merchant_name?: string | null;
+  merchant_name?: string;
+  category?: string | null;
 }
 
 function normalizedText(value: string | null | undefined): string {
@@ -70,4 +73,56 @@ export function visiblePendingPlaidActivity<
     if (!identity) return false;
     return sourceAccountByIdentity.get(identity) === accountId;
   });
+}
+
+function roundCurrency(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function isCheckingAccount(account: PlaidAccountIdentityRow): boolean {
+  const type = normalizedText(account.account_type);
+  const subtype = normalizedText(account.account_subtype);
+  const name = normalizedText(`${account.name || ""} ${account.official_name || ""}`);
+  if (subtype === "savings" || name.includes("savings")) return false;
+  return type === "depository" && (subtype === "checking" || name.includes("checking") || name.includes("bill account"));
+}
+
+function hasMatchingPendingAmount(pendingRows: PendingPlaidActivityRow[], accountId: string, amount: number): boolean {
+  return pendingRows.some(row =>
+    row.plaid_account_id === accountId &&
+    Math.abs(roundCurrency(Number(row.amount || 0)) - amount) < 0.005
+  );
+}
+
+export function pendingPlaidActivityWithBalanceHolds<
+  T extends PendingPlaidActivityRow,
+  A extends PlaidAccountIdentityRow,
+>(pendingRows: T[], accounts: A[], today: string): Array<PendingPlaidActivityRow & { category: string }> {
+  const visibleRows = visiblePendingPlaidActivity(pendingRows, accounts)
+    .map(row => ({
+      ...row,
+      plaid_account_id: row.plaid_account_id || undefined,
+      category: String(row.category || "Pending"),
+    }));
+  const inferredRows = canonicalConnectedAccounts(accounts)
+    .filter(isCheckingAccount)
+    .flatMap(account => {
+      const current = Number(account.current_balance);
+      const available = Number(account.available_balance);
+      if (!Number.isFinite(current) || !Number.isFinite(available)) return [];
+      const hold = roundCurrency(current - available);
+      if (hold <= 0.005) return [];
+      const amount = -hold;
+      if (hasMatchingPendingAmount(visibleRows, account.id, amount)) return [];
+      return [{
+        plaid_transaction_id: `pending-hold:${account.id}:${hold.toFixed(2)}`,
+        plaid_account_id: account.id,
+        transaction_date: today,
+        amount,
+        name: "Pending bank hold",
+        merchant_name: undefined,
+        category: "Pending",
+      }];
+    });
+  return [...visibleRows, ...inferredRows];
 }

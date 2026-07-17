@@ -43,7 +43,7 @@ import { isActiveTransaction, isCashFlowTransaction, isConfirmedBillMatch } from
 import { matchedOccurrenceAllocations, occurrenceKey, reviewedBillMonthSettlements } from "@/lib/reviewCenter";
 import { normalizePlanningTools } from "@/lib/planningMode";
 import { localDateString } from "@/lib/dateLabels";
-import { canonicalConnectedAccounts, visiblePendingPlaidActivity } from "@/lib/plaidActivity";
+import { canonicalConnectedAccounts, pendingPlaidActivityWithBalanceHolds } from "@/lib/plaidActivity";
 import { normalizeBillImportance, type BillImportance } from "@/lib/billImportance";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -1225,7 +1225,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         const rawConnectedAccounts = normalizeConnectedBankRows(connectedAccountData ?? []);
         const canonicalBankAccounts = canonicalConnectedAccounts(rawConnectedAccounts);
         setConnectedBankAccounts(canonicalBankAccounts);
-        setPendingBankTransactions(visiblePendingPlaidActivity(normalizePendingBankRows(pendingData ?? []), rawConnectedAccounts));
+        setPendingBankTransactions(pendingPlaidActivityWithBalanceHolds(normalizePendingBankRows(pendingData ?? []), rawConnectedAccounts, localDateString()));
         setIncomes((iData ?? []).map((i: any) => ({
           ...i,
           amount:         Number(i.amount),
@@ -1336,7 +1336,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const canonicalBankAccounts = canonicalConnectedAccounts(rawConnectedAccounts);
       setConnectedBankAccounts(canonicalBankAccounts);
       if (!pendingResult.error) {
-        setPendingBankTransactions(visiblePendingPlaidActivity(normalizePendingBankRows(pendingResult.data ?? []), rawConnectedAccounts));
+        setPendingBankTransactions(pendingPlaidActivityWithBalanceHolds(normalizePendingBankRows(pendingResult.data ?? []), rawConnectedAccounts, localDateString()));
       }
     }
     if (!settingsResult.error && settingsResult.data) {
@@ -1379,7 +1379,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         const { data } = await supabase.auth.getSession();
         const accessToken = data.session?.access_token;
         if (!accessToken) return;
-        const householdId = householdScopeRef.current?.householdId;
+        const scope = householdScopeRef.current ?? await resolveHouseholds(user.id);
+        const householdId = scope?.householdId;
         const response = await fetch("/api/plaid/sync", {
           method: "POST",
           credentials: "include",
@@ -1405,7 +1406,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     } finally {
       plaidSyncPromiseRef.current = null;
     }
-  }, [user, demoMode, loadBankData]);
+  }, [user, demoMode, loadBankData, resolveHouseholds]);
 
   useEffect(() => {
     if (!user || demoMode) return;
@@ -1413,7 +1414,19 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const subscription = AppState.addEventListener("change", state => {
       if (state === "active") void refreshBankData();
     });
-    return () => subscription.remove();
+    if (Platform.OS !== "web" || typeof document === "undefined" || typeof window === "undefined") {
+      return () => subscription.remove();
+    }
+    const refreshVisibleBankData = () => {
+      if (document.visibilityState !== "hidden") void refreshBankData();
+    };
+    document.addEventListener("visibilitychange", refreshVisibleBankData);
+    window.addEventListener("focus", refreshVisibleBankData);
+    return () => {
+      subscription.remove();
+      document.removeEventListener("visibilitychange", refreshVisibleBankData);
+      window.removeEventListener("focus", refreshVisibleBankData);
+    };
   }, [user, demoMode, activeHouseholdId, refreshBankData]);
 
   // ─── Bills ────────────────────────────────────────────────────────────────────
