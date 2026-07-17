@@ -8,7 +8,6 @@ import type { StabilityProgress } from "@/lib/stability";
 interface StabilityPathCardProps {
   progress: StabilityProgress;
   onViewGuide: () => void;
-  onAskFlo: () => void;
 }
 
 function currency(value: number) {
@@ -25,7 +24,7 @@ function statusColor(status: StabilityProgress["status"]) {
   return "#34d399";
 }
 
-function StabilityPathCardView({ progress, onViewGuide, onAskFlo }: StabilityPathCardProps) {
+function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps) {
   const color = statusColor(progress.status);
   const progressWidth = `${Math.round(progress.reserveProgress * 100)}%` as const;
 
@@ -91,14 +90,6 @@ function StabilityPathCardView({ progress, onViewGuide, onAskFlo }: StabilityPat
           <Feather name="map" size={14} color="#93c5fd" />
           <AppText style={styles.secondaryButtonText}>See how this works</AppText>
         </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={onAskFlo}
-          style={({ pressed }) => [styles.primaryButton, { opacity: pressed ? 0.78 : 1 }]}
-        >
-          <Feather name="message-circle" size={14} color="#f8fafc" />
-          <AppText style={styles.primaryButtonText}>Ask Flo why</AppText>
-        </Pressable>
       </View>
     </View>
   );
@@ -147,6 +138,4 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
   secondaryButton: { flex: 1, minWidth: 140, minHeight: 42, borderRadius: 14, borderWidth: 1, borderColor: "rgba(96,165,250,0.22)", backgroundColor: "rgba(37,99,235,0.12)", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingHorizontal: 10 },
   secondaryButtonText: { color: "#bfdbfe", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
-  primaryButton: { flex: 1, minWidth: 120, minHeight: 42, borderRadius: 14, backgroundColor: "rgba(124,58,237,0.72)", borderWidth: 1, borderColor: "rgba(216,180,254,0.28)", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingHorizontal: 10 },
-  primaryButtonText: { color: "#f8fafc", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
 });

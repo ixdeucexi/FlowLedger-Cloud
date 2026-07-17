@@ -191,6 +191,43 @@ test("Flow Score only flags bills when due or overdue", () => {
   assert.ok(suite.flowScore.negativeFactors.some(factor => /overdue bill/i.test(factor)));
 });
 
+test("Stability Path names the exact overdue bill and remaining amount", () => {
+  const suite = buildAlgorithmSuite(baseInput({
+    todayDay: 12,
+    bills: [
+      { id: "past", name: "Past Bill", amount: 100, category: "Other", due_day: 9, occurrenceDays: [9], is_debt: false, is_recurring: true, paidAmount: 25 },
+    ],
+  }));
+
+  assert.match(suite.stability.headline, /Past Bill/);
+  assert.match(suite.stability.headline, /\$75\.00/);
+  assert.match(suite.stability.explanation, /July 9, 2026/);
+  assert.equal(suite.stability.nextAction, "Review Past Bill first.");
+});
+
+test("future recurring occurrences do not make a current bill overdue", () => {
+  const suite = buildAlgorithmSuite(baseInput({
+    todayDay: 12,
+    bills: [
+      {
+        id: "weekly",
+        name: "Weekly Care",
+        amount: 400,
+        category: "Other",
+        due_day: 1,
+        occurrenceDays: [1, 8, 15, 22],
+        is_debt: false,
+        is_recurring: true,
+        paidAmount: 200,
+      },
+    ],
+  }));
+
+  assert.ok(suite.flowScore.negativeFactors.every(factor => !/overdue bill/i.test(factor)));
+  assert.equal(suite.billPriority.nextBill?.dueDay, 15);
+  assert.doesNotMatch(suite.stability.headline, /needs attention|still needs/i);
+});
+
 test("spending and purchase algorithms require monthly room, not cushion alone", () => {
   const suite = buildAlgorithmSuite(baseInput({
     cashFlow: {

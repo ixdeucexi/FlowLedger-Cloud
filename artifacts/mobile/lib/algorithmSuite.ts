@@ -22,6 +22,7 @@ export interface AlgorithmBill {
   balance?: number;
   interest_rate?: number;
   paidAmount?: number;
+  occurrenceDays?: number[];
 }
 
 export interface AlgorithmTransaction {
@@ -216,9 +217,12 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
   const lowestDay = lowest?.day ?? null;
   const safeCushionAmount = roundCurrency(Math.max(0, lowestBalance - input.safetyFloor));
   const paidBills = input.bills.filter(bill => (bill.paidAmount ?? 0) >= Math.max(0.01, bill.amount)).length;
-  const dueBills = input.bills.filter(bill => bill.due_day <= input.todayDay);
-  const paidDueBills = dueBills.filter(bill => (bill.paidAmount ?? 0) >= Math.max(0.01, bill.amount)).length;
-  const overdueBills = input.bills.filter(bill => bill.due_day < input.todayDay && (bill.paidAmount ?? 0) < Math.max(0.01, bill.amount));
+  const billSchedule = input.bills.map(bill => ({ bill, ...buildBillScheduleStatus(bill, input.todayDay) }));
+  const dueBills = billSchedule.filter(status => status.dueAmount > 0.005);
+  const paidDueBills = dueBills.filter(status => (status.bill.paidAmount ?? 0) + 0.005 >= status.dueAmount).length;
+  const overdueBills = billSchedule
+    .filter(status => status.overdueAmount > 0.005)
+    .sort((left, right) => (left.firstOverdueDay ?? 99) - (right.firstOverdueDay ?? 99) || right.overdueAmount - left.overdueAmount);
   const billReadiness = dueBills.length ? paidDueBills / dueBills.length : 1;
   const incomeStability = scoreIncomeStability(input.incomes, input.transactions);
   const confidenceScore = input.forecastConfidence.level === "high" ? 92 : input.forecastConfidence.level === "medium" ? 68 : 42;
@@ -240,6 +244,13 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     safetyFloor: input.safetyFloor,
     monthlyRequiredOutflow,
     overdueBills: overdueBills.length,
+    attentionBill: overdueBills[0]
+      ? {
+          name: overdueBills[0].bill.name,
+          overdueAmount: overdueBills[0].overdueAmount,
+          dueLabel: formatMonthDay(input, overdueBills[0].firstOverdueDay ?? overdueBills[0].bill.due_day),
+        }
+      : null,
     forecastConfidence: input.forecastConfidence.level,
   });
   const riskDayCounts = remainingBalances.reduce(
@@ -434,14 +445,16 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
 
 function prioritizeBills(bills: AlgorithmBill[], todayDay: number, safetyFloor: number, lowestDay: number | null, input: AlgorithmSuiteInput) {
   const ranked = bills
-    .filter(bill => Math.max(0, bill.amount - (bill.paidAmount ?? 0)) > 0.005)
-    .map(bill => {
-      const daysUntilDue = Math.max(0, bill.due_day - todayDay);
-      const unpaid = Math.max(0, bill.amount - (bill.paidAmount ?? 0));
+    .map(bill => ({ bill, status: buildBillScheduleStatus(bill, todayDay) }))
+    .filter(({ status }) => status.remainingAmount > 0.005 && status.nextDueDay !== null)
+    .map(({ bill, status }) => {
+      const dueDay = status.nextDueDay ?? bill.due_day;
+      const daysUntilDue = Math.max(0, dueDay - todayDay);
+      const unpaid = status.remainingAmount;
       const urgencyScore = daysUntilDue <= 0 ? 45 : daysUntilDue <= 3 ? 34 : daysUntilDue <= 7 ? 22 : 8;
       const urgency: "now" | "soon" | "planned" = daysUntilDue <= 0 ? "now" : daysUntilDue <= 7 ? "soon" : "planned";
       const size = Math.min(28, unpaid / 45);
-      const risk = lowestDay && bill.due_day <= lowestDay ? 18 : 0;
+      const risk = lowestDay !== null && dueDay <= lowestDay ? 18 : 0;
       const debt = bill.is_debt ? 8 : 0;
       const score = Math.round(urgencyScore + size + risk + debt);
       const reason = daysUntilDue <= 0
@@ -451,7 +464,7 @@ function prioritizeBills(bills: AlgorithmBill[], todayDay: number, safetyFloor: 
           : unpaid > safetyFloor
             ? "large impact"
             : "planned";
-      return { id: bill.id, name: bill.name, amount: unpaid, dueDay: bill.due_day, score, reason, urgency };
+      return { id: bill.id, name: bill.name, amount: unpaid, dueDay, score, reason, urgency };
     })
     .sort((a, b) => b.score - a.score || a.dueDay - b.dueDay)
     .slice(0, 5);
@@ -468,6 +481,43 @@ function prioritizeBills(bills: AlgorithmBill[], todayDay: number, safetyFloor: 
       : `Keep ${nextBill.name} visible before ${formatMonthDay(input, nextBill.dueDay)}.`
     : "No bill action needed right now.";
   return { bills: ranked, nextBill, summary, nextMove };
+}
+
+interface BillScheduleStatus {
+  dueAmount: number;
+  overdueAmount: number;
+  remainingAmount: number;
+  nextDueDay: number | null;
+  firstOverdueDay: number | null;
+}
+
+function buildBillScheduleStatus(bill: AlgorithmBill, todayDay: number): BillScheduleStatus {
+  const configuredOccurrences = (bill.occurrenceDays ?? [])
+    .filter(day => Number.isInteger(day) && day > 0)
+    .sort((left, right) => left - right);
+  const occurrences = Array.from(new Set(configuredOccurrences.length ? configuredOccurrences : [bill.due_day]));
+  const totalAmount = Math.max(0, Number(bill.amount) || 0);
+  const paidAmount = Math.max(0, Number(bill.paidAmount) || 0);
+  const remainingAmount = roundCurrency(Math.max(0, totalAmount - paidAmount));
+  if (occurrences.length === 0 || totalAmount <= 0.005) {
+    return { dueAmount: 0, overdueAmount: 0, remainingAmount, nextDueDay: null, firstOverdueDay: null };
+  }
+
+  const occurrenceAmount = totalAmount / occurrences.length;
+  const dueCount = occurrences.filter(day => day <= todayDay).length;
+  const overdueCount = occurrences.filter(day => day < todayDay).length;
+  const dueAmount = roundCurrency(occurrenceAmount * dueCount);
+  const overdueAmount = roundCurrency(Math.max(0, occurrenceAmount * overdueCount - paidAmount));
+  const firstUnpaidIndex = occurrences.findIndex((_day, index) => paidAmount + 0.005 < occurrenceAmount * (index + 1));
+  const firstOverdueIndex = occurrences.findIndex((day, index) => day < todayDay && paidAmount + 0.005 < occurrenceAmount * (index + 1));
+
+  return {
+    dueAmount,
+    overdueAmount,
+    remainingAmount,
+    nextDueDay: firstUnpaidIndex >= 0 ? occurrences[firstUnpaidIndex] : null,
+    firstOverdueDay: firstOverdueIndex >= 0 ? occurrences[firstOverdueIndex] : null,
+  };
 }
 
 function buildLowBalanceWarning(lowestBalance: number, lowestDay: number | null, safetyFloor: number, input: AlgorithmSuiteInput): AlgorithmSuiteResult["lowBalanceWarning"] {

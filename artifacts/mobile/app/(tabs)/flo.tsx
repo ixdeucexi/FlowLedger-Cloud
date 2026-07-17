@@ -419,6 +419,7 @@ export default function FloScreen() {
         name: bill.name,
         amount: getBillMonthlyTotal(bill, month, year),
         paidAmount: getPaidAmount(bill.id, month, year),
+        occurrenceDays: getBillOccurrencesInMonth(bill, month, year),
         category: bill.category || "Other",
         due_day: bill.due_day,
         is_debt: bill.is_debt,
@@ -630,7 +631,7 @@ export default function FloScreen() {
         })),
       },
     };
-  }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getDailyBalances, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, getTransactionsForMonth, transactions, upcoming, decisions, forecastConfidence, categoryPlan, paycheckPlan, billDateMoves, bills, decisionHistory, decisionRiskAlerts, now, incomes, goals, decisionHubSettings]);
+  }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getDailyBalances, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getPaidAmount, getTransactionsForMonth, transactions, upcoming, decisions, forecastConfidence, categoryPlan, paycheckPlan, billDateMoves, bills, decisionHistory, decisionRiskAlerts, now, incomes, goals, decisionHubSettings]);
 
   const setupPersonalization = useMemo(
     () => buildSetupPersonalization(onboardingPreferences),

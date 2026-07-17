@@ -23,6 +23,11 @@ export interface StabilityProgressInput {
   safetyFloor: number;
   monthlyRequiredOutflow: number;
   overdueBills: number;
+  attentionBill?: {
+    name: string;
+    overdueAmount: number;
+    dueLabel: string;
+  } | null;
   forecastConfidence: "high" | "medium" | "low";
 }
 
@@ -64,6 +69,7 @@ export function buildStabilityProgress(input: StabilityProgressInput): Stability
   const safeForecastDays = firstRiskIndex >= 0 ? firstRiskIndex : future.length;
 
   if (input.overdueBills > 0 || riskDays > 0) {
+    const attentionBill = input.attentionBill;
     return {
       stage: "stabilize",
       stageLabel: "Protect the plan",
@@ -76,9 +82,15 @@ export function buildStabilityProgress(input: StabilityProgressInput): Stability
       riskDays,
       headline: riskDays > 0
         ? `${riskDays} upcoming day${riskDays === 1 ? " falls" : "s fall"} below your safety floor.`
-        : `${input.overdueBills} required bill${input.overdueBills === 1 ? " needs" : "s need"} attention.`,
-      explanation: "Start by protecting required bills and keeping the next low-balance day above your floor.",
-      nextAction: input.overdueBills > 0 ? "Handle the most urgent required bill first." : "Review what is pulling the forecast below your floor.",
+        : attentionBill
+          ? `${attentionBill.name} still needs ${formatCurrency(attentionBill.overdueAmount)}${input.overdueBills > 1 ? `, with ${input.overdueBills - 1} more bill${input.overdueBills === 2 ? "" : "s"} open` : ""}.`
+          : `${input.overdueBills} required bill${input.overdueBills === 1 ? " needs" : "s need"} attention.`,
+      explanation: attentionBill && riskDays === 0
+        ? `${attentionBill.dueLabel} has passed and this amount is still open. Clear it or correct the payment if it already posted.`
+        : "Start by protecting required bills and keeping the next low-balance day above your floor.",
+      nextAction: input.overdueBills > 0
+        ? attentionBill ? `Review ${attentionBill.name} first.` : "Handle the most urgent required bill first."
+        : "Review what is pulling the forecast below your floor.",
       nextMilestone: "Reach the next paycheck safely",
       nextMilestoneAmount: roundCurrency(Math.max(0, floor - lowestBalance)),
     };
@@ -166,4 +178,13 @@ function clamp(value: number, minimum: number, maximum: number) {
 
 function roundCurrency(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+function formatCurrency(value: number) {
+  return roundCurrency(Math.max(0, value)).toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }

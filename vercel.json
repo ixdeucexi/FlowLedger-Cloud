@@ -63,31 +63,7 @@
   ],
   "rewrites": [
     {
-      "source": "/login",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/setup",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/bills",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/monthly",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/flo",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/transactions",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/more",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]

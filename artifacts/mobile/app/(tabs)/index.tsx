@@ -124,7 +124,7 @@ export default function DashboardScreen() {
   const { user } = useAuth();
   const { isAdmin } = useMembership();
   const {
-    bills, getPaidAmount, getBillMonthlyTotal, getMonthlyBills, selectedYear, setDashboardFilter,
+    bills, getPaidAmount, getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, selectedYear, setDashboardFilter,
     getMonthlyIncome,
     goals, addGoal, updateGoal, deleteGoal, checkGoalAffordability,
     getCashFlow, addBill, addTransaction, getDailyBalances, getTransactionsForMonth, settings,
@@ -803,6 +803,7 @@ export default function DashboardScreen() {
       name: bill.name,
       amount: getBillMonthlyTotal(bill, currentMonth, selectedYear),
       paidAmount: getPaidAmount(bill.id, currentMonth, selectedYear),
+      occurrenceDays: getBillOccurrencesInMonth(bill, currentMonth, selectedYear),
       category: bill.category || "Other",
       due_day: bill.due_day,
       is_debt: bill.is_debt,
@@ -841,6 +842,7 @@ export default function DashboardScreen() {
     decisionHubSettings,
     forecastConfidence,
     getBillMonthlyTotal,
+    getBillOccurrencesInMonth,
     getMonthlyBills,
     getPaidAmount,
     getTransactionsForMonth,
@@ -911,10 +913,6 @@ export default function DashboardScreen() {
   const openFloWithPrompt = useCallback((prompt: string) => {
     router.push({ pathname: "/(tabs)/flo", params: { prompt } } as any);
   }, [router]);
-  const stabilityPrompt = `Explain my stability path. I have ${algorithmSuite.stability.protectedDays} protected days, $${algorithmSuite.stability.protectedAmount.toFixed(0)} of breathing room, and a $${algorithmSuite.stability.reserveTarget.toFixed(0)} one-month target. What is my single best next action?`;
-  const openStabilityExplanation = useCallback(() => {
-    openFloWithPrompt(stabilityPrompt);
-  }, [openFloWithPrompt, stabilityPrompt]);
   const openStabilityGuide = useCallback(() => {
     router.push({
       pathname: "/(tabs)/how-flowledger-works",
@@ -1217,7 +1215,6 @@ export default function DashboardScreen() {
       <StabilityPathCard
         progress={algorithmSuite.stability}
         onViewGuide={openStabilityGuide}
-        onAskFlo={openStabilityExplanation}
       />
 
       {settings.zeroBasedBudgetEnabled && (
