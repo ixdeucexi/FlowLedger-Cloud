@@ -60,9 +60,10 @@ export function formatEventAmount(amount: number): string {
 }
 
 export function formatCalendarBalance(amount: number): string {
-  const wholeDollars = Math.trunc(Number(amount) || 0);
-  const sign = wholeDollars < 0 ? "-" : "";
-  return `${sign}$${Math.abs(wholeDollars).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+  const value = Number(amount) || 0;
+  const wholeDollars = Math.round(Math.abs(value));
+  const sign = value < 0 && wholeDollars > 0 ? "-" : "";
+  return `${sign}$${wholeDollars.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
 
 export function formatEventStatus(status: FinancialEventStatus): string {

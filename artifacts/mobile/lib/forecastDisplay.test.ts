@@ -9,10 +9,12 @@ const event = (overrides: Partial<FinancialEvent> & Pick<FinancialEvent, "id" | 
   name: overrides.name,
 });
 
-test("calendar balances show whole dollars without changing the underlying amount", () => {
-  assert.equal(formatCalendarBalance(1689.99), "$1,689");
-  assert.equal(formatCalendarBalance(-12.99), "-$12");
-  assert.equal(formatCalendarBalance(0.99), "$0");
+test("calendar balances round cents to the nearest whole dollar", () => {
+  assert.equal(formatCalendarBalance(1689.49), "$1,689");
+  assert.equal(formatCalendarBalance(1689.50), "$1,690");
+  assert.equal(formatCalendarBalance(1689.99), "$1,690");
+  assert.equal(formatCalendarBalance(-12.75), "-$13");
+  assert.equal(formatCalendarBalance(0.49), "$0");
 });
 
 test("groups forecast events into plain-language sections", () => {
