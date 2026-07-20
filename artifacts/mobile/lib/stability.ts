@@ -161,10 +161,10 @@ export function buildStabilityProgress(input: StabilityProgressInput): Stability
     };
   }
 
-  if (protectedDays < 7) return stageResult("breathing_room", "Build a 7-day backup", "watch", 7);
-  if (protectedDays < 30) return stageResult("reserve", "Build a 30-day backup", "watch", 30);
-  if (protectedDays < 60) return stageResult("momentum", "Build a 60-day backup", "safe", 60);
-  if (protectedDays < 90) return stageResult("freedom", "Build a 90-day backup", "safe", 90);
+  if (protectedDays < 7) return stageResult("breathing_room", "watch", 7);
+  if (protectedDays < 30) return stageResult("reserve", "watch", 30);
+  if (protectedDays < 60) return stageResult("momentum", "safe", 60);
+  if (protectedDays < 90) return stageResult("freedom", "safe", 90);
 
   return {
     ...base,
@@ -182,7 +182,6 @@ export function buildStabilityProgress(input: StabilityProgressInput): Stability
 
   function stageResult(
     stage: StabilityStage,
-    stageLabel: string,
     status: StabilityProgress["status"],
     milestoneDays: number,
   ): StabilityProgress {
@@ -191,10 +190,10 @@ export function buildStabilityProgress(input: StabilityProgressInput): Stability
     return {
       ...base,
       stage,
-      stageLabel,
+      stageLabel: "Build your backup",
       status,
       headline: `Your backup could cover ${protectedDays} day${protectedDays === 1 ? "" : "s"} of Must Pay expenses.`,
-      explanation: `The next goal is ${milestoneDays} days, so one surprise does not have to wait for the next paycheck.`,
+      explanation: "Keep building this cushion so one surprise does not have to wait for the next paycheck.",
       nextAction: remaining > 0
         ? `Keep the next $${remaining.toFixed(0)} of safe extra money as backup.`
         : "Keep Must Pay bills protected through the next paycheck.",

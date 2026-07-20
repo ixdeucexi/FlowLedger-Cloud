@@ -32,6 +32,8 @@ test("turns breathing room into understandable protected days", () => {
   assert.equal(result.protectedAmount, 600);
   assert.equal(result.protectedDays, 15);
   assert.equal(result.stage, "reserve");
+  assert.equal(result.stageLabel, "Build your backup");
+  assert.doesNotMatch(result.explanation, /30 days/i);
   assert.equal(result.nextMilestoneAmount, 600);
   assert.equal(result.safeUntilPayday, true);
   assert.equal(result.backupTarget, 3600);
