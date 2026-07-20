@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { canMatchExpenseToBill, isActiveTransaction, isCashFlowTransaction, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "./billMatching";
+import { canMatchExpenseToBill, isActiveTransaction, isCashFlowTransaction, isConfirmedBillMatch, isDeletedTransaction, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "./billMatching";
 
 test("ranks an exact nearby utility payment above unrelated bills", () => {
   const ranked = rankBillMatches(
@@ -30,11 +30,14 @@ test("uses each occurrence amount for weekly bills", () => {
   assert.equal(ranked[0].confidence, "strong");
 });
 
-test("removed or pending Plaid rows are not active", () => {
+test("removed, deleted, or pending rows are not active", () => {
   assert.equal(isActiveTransaction({ removed_at: null }), true);
   assert.equal(isActiveTransaction({ removed_at: null, pending: false }), true);
   assert.equal(isActiveTransaction({ removed_at: null, pending: true }), false);
   assert.equal(isActiveTransaction({ removed_at: "2026-07-14T12:00:00Z" }), false);
+  assert.equal(isActiveTransaction({ deleted_at: "2026-07-20T04:00:00Z" }), false);
+  assert.equal(isDeletedTransaction({ deleted_at: "2026-07-20T04:00:00Z" }), true);
+  assert.equal(isDeletedTransaction({ deleted_at: "2026-07-20T04:00:00Z", removed_at: "2026-07-20T05:00:00Z" }), false);
 });
 
 test("cash flow waits for posted bank activity to be reviewed", () => {

@@ -14,6 +14,7 @@ export type SettingsSectionId =
   | "children"
   | "help"
   | "backup"
+  | "deleted"
   | "security"
   | "legal";
 
@@ -50,6 +51,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
   { id: "notifications", label: "Notifications", description: "Private alerts for posted bank transactions.", icon: "bell" },
   { id: "appearance", label: "Appearance", description: "Theme, text style, motion, and effects.", icon: "moon" },
   { id: "backup", label: "Backup & data", description: "Import, export, install, and Flo memory.", icon: "download" },
+  { id: "deleted", label: "Recently deleted", description: "Restore transactions removed by mistake.", icon: "trash-2" },
   { id: "membership", label: "Membership", description: "Your plan, pricing, and plan preview.", icon: "award" },
   { id: "security", label: "Security & profile", description: "Signed-in account and sign-out controls.", icon: "lock" },
   { id: "help", label: "Help & feedback", description: "Send feedback or review the support inbox.", icon: "message-square" },
@@ -59,7 +61,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
 export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
   { id: "money", label: "Manage your money", sectionIds: ["accounts", "plaid", "money", "goals", "children"] },
   { id: "insights", label: "Review & insights", sectionIds: ["review", "subscriptions", "reports"] },
-  { id: "preferences", label: "App preferences", sectionIds: ["setup", "notifications", "appearance", "backup"] },
+  { id: "preferences", label: "App preferences", sectionIds: ["setup", "notifications", "appearance", "backup", "deleted"] },
   { id: "account", label: "Account & support", sectionIds: ["membership", "security", "help", "legal"] },
 ] as const;
 

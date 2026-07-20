@@ -154,8 +154,19 @@ export function resolveMatchedBillBudget(plannedAmount: number, recurringBillAmo
   return Math.max(planned, recurring);
 }
 
-export function isActiveTransaction(transaction: { removed_at?: string | null; pending?: boolean | null }): boolean {
-  return !transaction.removed_at && transaction.pending !== true;
+export function isActiveTransaction(transaction: {
+  removed_at?: string | null;
+  deleted_at?: string | null;
+  pending?: boolean | null;
+}): boolean {
+  return !transaction.removed_at && !transaction.deleted_at && transaction.pending !== true;
+}
+
+export function isDeletedTransaction(transaction: {
+  removed_at?: string | null;
+  deleted_at?: string | null;
+}): boolean {
+  return Boolean(transaction.deleted_at) && !transaction.removed_at;
 }
 
 /**
@@ -164,6 +175,7 @@ export function isActiveTransaction(transaction: { removed_at?: string | null; p
  */
 export function isCashFlowTransaction(transaction: {
   removed_at?: string | null;
+  deleted_at?: string | null;
   pending?: boolean | null;
   review_status?: string | null;
 }): boolean {

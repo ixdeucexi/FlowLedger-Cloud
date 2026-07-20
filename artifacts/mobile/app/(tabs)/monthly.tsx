@@ -931,7 +931,9 @@ export default function MonthlyScreen() {
     const doDelete = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); deleteTransaction(id); };
     confirmAction({
       title: isTransfer ? "Delete Transfer" : "Delete Transaction",
-      message: isTransfer ? "Remove both sides of this transfer?" : "Remove this transaction?",
+      message: isTransfer
+        ? "Move both sides of this transfer to Recently Deleted?"
+        : "Move this transaction to Recently Deleted? You can restore it from Settings.",
       confirmText: "Delete",
       destructive: true,
       onConfirm: doDelete,

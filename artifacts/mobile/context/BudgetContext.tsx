@@ -39,7 +39,7 @@ import {
   type HouseholdRole,
 } from "@/lib/households";
 import { canEditHouseholdPlan, canManageHouseholdMembers } from "@/lib/householdPermissions";
-import { isActiveTransaction, isCashFlowTransaction, isConfirmedBillMatch } from "@/lib/billMatching";
+import { isActiveTransaction, isCashFlowTransaction, isConfirmedBillMatch, isDeletedTransaction } from "@/lib/billMatching";
 import { matchedOccurrenceAllocations, occurrenceKey, reviewedBillMonthSettlements } from "@/lib/reviewCenter";
 import { normalizePlanningTools } from "@/lib/planningMode";
 import { localDateString } from "@/lib/dateLabels";
@@ -119,6 +119,8 @@ export interface Transaction {
   merchant_name?: string;
   pending?: boolean;
   removed_at?: string;
+  deleted_at?: string;
+  deleted_by?: string;
   match_confidence?: number;
   match_reason?: string;
   review_status?: "needs_review" | "matched" | "categorized" | "transfer" | "legacy_reviewed";
@@ -306,6 +308,7 @@ interface BudgetContextType {
   overrides: MonthlyOverride[];
   billDateMoves: BillDateMove[];
   transactions: Transaction[];
+  deletedTransactions: Transaction[];
   pendingBankTransactions: PendingBankTransaction[];
   incomes: IncomeItem[];
   goals: Goal[];
@@ -378,6 +381,7 @@ interface BudgetContextType {
   addTransaction: (tx: Omit<Transaction, "id">) => Promise<string>;
   updateTransaction: (tx: Transaction) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
+  restoreDeletedTransaction: (id: string) => Promise<void>;
   deleteTransfer: (transferGroupId: string) => Promise<void>;
   matchTransactionToBill: (transactionId: string, billId: string, occurrenceDate?: string, plannedAmount?: number) => Promise<void>;
   unmatchTransactionFromBill: (transactionId: string) => Promise<void>;
@@ -813,6 +817,15 @@ function normalizeTransactionRow(transaction: any): Transaction {
   };
 }
 
+function splitTransactionRows(rows: any[]): { active: Transaction[]; deleted: Transaction[] } {
+  const normalized = rows.map(normalizeTransactionRow);
+  return {
+    active: normalized.filter(isActiveTransaction),
+    deleted: normalized.filter(isDeletedTransaction).sort((left, right) =>
+      String(right.deleted_at ?? "").localeCompare(String(left.deleted_at ?? ""))),
+  };
+}
+
 function normalizePendingBankRows(rows: any[]): PendingBankTransaction[] {
   return rows.map(row => ({
     plaid_transaction_id: String(row.plaid_transaction_id),
@@ -869,6 +882,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [overrides,     setOverrides]     = useState<MonthlyOverride[]>([]);
   const [billDateMoves, setBillDateMoves] = useState<BillDateMove[]>([]);
   const [transactions,  setTransactions]  = useState<Transaction[]>([]);
+  const [deletedTransactions, setDeletedTransactions] = useState<Transaction[]>([]);
   const [pendingBankTransactions, setPendingBankTransactions] = useState<PendingBankTransaction[]>([]);
   const [incomes,       setIncomes]       = useState<IncomeItem[]>([]);
   const [goals,         setGoals]         = useState<Goal[]>([]);
@@ -1118,6 +1132,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setBillDateMoves(demo.billDateMoves);
       billDateMovesRef.current = demo.billDateMoves;
       setTransactions(demo.transactions);
+      setDeletedTransactions([]);
       setPendingBankTransactions([]);
       setIncomes(demo.incomes);
       setGoals(demo.goals);
@@ -1133,7 +1148,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     if (!user) {
       setLoadError(null);
-      setBills([]); setOverrides([]); setBillDateMoves([]); setTransactions([]); setPendingBankTransactions([]); setIncomes([]);
+      setBills([]); setOverrides([]); setBillDateMoves([]); setTransactions([]); setDeletedTransactions([]); setPendingBankTransactions([]); setIncomes([]);
       setGoals([]); setExtraPayments([]); setCategories([]); setAccounts([]); setConnectedBankAccounts([]); setDecisions([]); setSettings(DEFAULT_SETTINGS);
       setHouseholds([]); setHouseholdMembers([]); setHouseholdActivity([]); setActiveHouseholdId(null); householdScopeRef.current = null;
       billDateMovesRef.current = [];
@@ -1221,7 +1236,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         setOverrides((oData ?? []).map(normalizeMonthlyOverrideRow));
         setBillDateMoves(storedBillDateMoves);
         billDateMovesRef.current = storedBillDateMoves;
-        setTransactions((tData ?? []).map(normalizeTransactionRow).filter(isActiveTransaction));
+        const transactionCollections = splitTransactionRows(tData ?? []);
+        setTransactions(transactionCollections.active);
+        setDeletedTransactions(transactionCollections.deleted);
         const rawConnectedAccounts = normalizeConnectedBankRows(connectedAccountData ?? []);
         const canonicalBankAccounts = canonicalConnectedAccounts(rawConnectedAccounts);
         setConnectedBankAccounts(canonicalBankAccounts);
@@ -1318,7 +1335,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     ]);
     if (requestId !== bankRefreshRequestRef.current || scope?.householdId !== householdScopeRef.current?.householdId) return;
     if (!transactionResult.error) {
-      setTransactions((transactionResult.data ?? []).map(normalizeTransactionRow).filter(isActiveTransaction));
+      const transactionCollections = splitTransactionRows(transactionResult.data ?? []);
+      setTransactions(transactionCollections.active);
+      setDeletedTransactions(transactionCollections.deleted);
     }
     if (!accountResult.error) {
       const nextAccounts = (accountResult.data ?? []).filter((a: any) => a.account_type !== "credit_card").map((a: any) => ({
@@ -2353,7 +2372,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (billRows.error) throw new Error(`Refresh debts: ${billRows.error.message}`);
     if (transactionRows.error) throw new Error(`Refresh transactions: ${transactionRows.error.message}`);
     setBills(reorderDebtPriorities((billRows.data ?? []).map(normalizeBillRow)));
-    setTransactions((transactionRows.data ?? []).map(normalizeTransactionRow).filter(isActiveTransaction));
+    const transactionCollections = splitTransactionRows(transactionRows.data ?? []);
+    setTransactions(transactionCollections.active);
+    setDeletedTransactions(transactionCollections.deleted);
   }, [user, applyHouseholdSelect]);
 
   const syncDebtTransactionsClientSide = useCallback(async () => {
@@ -2559,7 +2580,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (overrideRows.error) throw new Error(`Refresh matched bill: ${overrideRows.error.message}`);
     if (goalRows.error) throw new Error(`Refresh planned expense: ${goalRows.error.message}`);
     if (decisionRows.error) throw new Error(`Refresh calendar plan: ${decisionRows.error.message}`);
-    setTransactions((transactionRows.data ?? []).map(normalizeTransactionRow).filter(isActiveTransaction));
+    const transactionCollections = splitTransactionRows(transactionRows.data ?? []);
+    setTransactions(transactionCollections.active);
+    setDeletedTransactions(transactionCollections.deleted);
     const nextOverrides = (overrideRows.data ?? []).map(normalizeMonthlyOverrideRow);
     overridesRef.current = nextOverrides;
     setOverrides(nextOverrides);
@@ -2712,16 +2735,25 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       .filter(transaction => transaction.transfer_group_id === transferGroupId)
       .map(transaction => transaction.id);
     if (idsToDelete.length === 0) return;
+    const deletedAt = new Date().toISOString();
     if (demoMode) {
-      setTransactions(prev => prev.filter(t => !idsToDelete.includes(t.id)));
+      const archived = transactions
+        .filter(transaction => idsToDelete.includes(transaction.id))
+        .map(transaction => ({ ...transaction, deleted_at: deletedAt, deleted_by: user.id }));
+      setTransactions(prev => prev.filter(transaction => !idsToDelete.includes(transaction.id)));
+      setDeletedTransactions(prev => [...archived, ...prev.filter(transaction => !idsToDelete.includes(transaction.id))]);
       return;
     }
     await restoreDebtApplicationsForTransactions(transactions.filter(transaction => idsToDelete.includes(transaction.id)));
-    await ensureSaved(
-      supabase.from("transactions").delete().eq("transfer_group_id", transferGroupId),
-      "Delete transfer",
-    );
+    const { data, error } = await supabase
+      .from("transactions")
+      .update({ deleted_at: deletedAt, deleted_by: user.id })
+      .eq("transfer_group_id", transferGroupId)
+      .select("*");
+    if (error) throw new Error(`Delete transfer: ${error.message}`);
+    const archived = (data ?? []).map(normalizeTransactionRow);
     setTransactions(prev => prev.filter(t => !idsToDelete.includes(t.id)));
+    setDeletedTransactions(prev => [...archived, ...prev.filter(transaction => !idsToDelete.includes(transaction.id))]);
     if (idsToDelete.some(txId => transactions.find(transaction => transaction.id === txId)?.debt_applied_bill_id)) await syncDebtTransactionsAndRefresh();
   }, [user, transactions, restoreDebtApplicationsForTransactions, syncDebtTransactionsAndRefresh, demoMode, assertCanEditHousehold]);
 
@@ -2739,18 +2771,61 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     } else if (existing && isConfirmedBillMatch(existing)) {
       await unmatchTransactionFromBill(existing.id);
     }
-    const idsToDelete = groupId
-      ? transactions.filter(transaction => transaction.transfer_group_id === groupId).map(transaction => transaction.id)
-      : [id];
+    const idsToDelete = [id];
+    const deletedAt = new Date().toISOString();
     if (demoMode) {
-      setTransactions(prev => prev.filter(t => !idsToDelete.includes(t.id)));
+      if (existing) {
+        const archived = { ...existing, deleted_at: deletedAt, deleted_by: user.id };
+        setDeletedTransactions(prev => [archived, ...prev.filter(transaction => transaction.id !== id)]);
+      }
+      setTransactions(prev => prev.filter(t => t.id !== id));
       return;
     }
     await restoreDebtApplicationsForTransactions(transactions.filter(transaction => idsToDelete.includes(transaction.id)));
-    await ensureSaved(supabase.from("transactions").delete().eq("id", id), "Delete transaction");
-    setTransactions(prev => prev.filter(t => !idsToDelete.includes(t.id)));
+    const { data, error } = await supabase
+      .from("transactions")
+      .update({ deleted_at: deletedAt, deleted_by: user.id })
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) throw new Error(`Delete transaction: ${error.message}`);
+    const archived = normalizeTransactionRow(data);
+    setTransactions(prev => prev.filter(t => t.id !== id));
+    setDeletedTransactions(prev => [archived, ...prev.filter(transaction => transaction.id !== id)]);
     if (idsToDelete.some(txId => transactions.find(transaction => transaction.id === txId)?.debt_applied_bill_id)) await syncDebtTransactionsAndRefresh();
   }, [user, transactions, restoreDebtApplicationsForTransactions, syncDebtTransactionsAndRefresh, demoMode, deleteTransfer, unmatchTransactionFromBill, undoTransactionReconciliation, assertCanEditHousehold]);
+
+  const restoreDeletedTransaction = useCallback(async (id: string) => {
+    if (!user) throw new Error("Sign in to restore a transaction");
+    assertCanEditHousehold("restore a deleted transaction");
+    const archived = deletedTransactions.find(transaction => transaction.id === id);
+    if (!archived) throw new Error("Deleted transaction not found");
+    const idsToRestore = archived.transfer_group_id
+      ? deletedTransactions.filter(transaction => transaction.transfer_group_id === archived.transfer_group_id).map(transaction => transaction.id)
+      : [id];
+
+    if (demoMode) {
+      const restored = deletedTransactions
+        .filter(transaction => idsToRestore.includes(transaction.id))
+        .map(transaction => ({ ...transaction, deleted_at: undefined, deleted_by: undefined }));
+      setDeletedTransactions(prev => prev.filter(transaction => !idsToRestore.includes(transaction.id)));
+      setTransactions(prev => [...prev, ...restored.filter(isActiveTransaction)]);
+      return;
+    }
+
+    const query = supabase
+      .from("transactions")
+      .update({ deleted_at: null, deleted_by: null })
+      .in("id", idsToRestore);
+    const { data, error } = await query.select("*");
+    if (error) throw new Error(`Restore transaction: ${error.message}`);
+    const restored = (data ?? []).map(normalizeTransactionRow);
+    setDeletedTransactions(prev => prev.filter(transaction => !idsToRestore.includes(transaction.id)));
+    setTransactions(prev => [
+      ...prev.filter(transaction => !idsToRestore.includes(transaction.id)),
+      ...restored.filter(isActiveTransaction),
+    ]);
+  }, [user, deletedTransactions, demoMode, assertCanEditHousehold]);
 
   const getTransactionsForMonth = useCallback(
     (month: number, year: number) =>
@@ -3726,7 +3801,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <BudgetContext.Provider value={{
-      bills, overrides, billDateMoves, transactions, pendingBankTransactions, incomes, goals, extraPayments, categories, settings, accounts, connectedBankAccounts, decisions,
+      bills, overrides, billDateMoves, transactions, deletedTransactions, pendingBankTransactions, incomes, goals, extraPayments, categories, settings, accounts, connectedBankAccounts, decisions,
       households, householdMembers, householdActivity, activeHousehold, householdRole, canEditHousehold,
       refreshHouseholds, refreshHouseholdActivity, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
       updateHouseholdMemberRole, removeHouseholdMember,
@@ -3738,7 +3813,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence, getBillDateMovesForMonth,
       getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal,
       runSnowball, previewDebtSnowball, applyDebtSnowballPayment, saveExtraPayment, getExtraPayment, deleteExtraPayment, removeDebtSnowballPayment, finalizeBillPayment,
-      addTransaction, updateTransaction, deleteTransaction, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, reconcileTransaction, undoTransactionReconciliation, getTransactionsForMonth,
+      addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, reconcileTransaction, undoTransactionReconciliation, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome, getIncomeOccurrencesInMonth,
       addGoal, updateGoal, deleteGoal, checkGoalAffordability,
       getCashFlow, getDailyBalances,

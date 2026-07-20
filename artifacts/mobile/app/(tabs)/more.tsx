@@ -27,6 +27,7 @@ import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { ReviewCenter } from "@/components/ReviewCenter";
 import { PWA_INSTALL_EVENT } from "@/components/PwaInstallPrompt";
 import { PlaidLinkButton } from "@/components/PlaidLinkButton";
+import { RecentlyDeletedTransactions } from "@/components/RecentlyDeletedTransactions";
 import colors from "@/constants/colors";
 import type { Account, IncomeItem } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
@@ -353,7 +354,7 @@ export default function MoreScreen() {
     previewTier,
   } = useMembership();
   const {
-    bills, transactions, overrides, incomes, goals, importBills, settings, updateSettings, accounts, forecastConfidence,
+    bills, transactions, deletedTransactions, overrides, incomes, goals, importBills, settings, updateSettings, accounts, forecastConfidence,
     addBill, updateBill,
     addTransaction, updateTransaction, deleteTransaction,
     addGoal, updateGoal,
@@ -926,11 +927,13 @@ export default function MoreScreen() {
       : { label: `${setupComplete}/${setupSteps.length} complete`, tone: "attention" },
     appearance: { label: themeMode === "auto" ? "Auto" : themeMode === "dark" ? "Dark" : "Light" },
     backup: backupExported ? { label: "Backup saved" } : { label: "Not backed up", tone: "attention" },
+    deleted: { label: deletedTransactions.length ? formatCountStatus(deletedTransactions.length, "item") : "Empty" },
     membership: { label: membershipStatusLabel },
   }), [
     activeAccounts.length,
     backupExported,
     childProfiles.length,
+    deletedTransactions.length,
     goals.length,
     membershipStatusLabel,
     reviewTransactionCount,
@@ -2607,6 +2610,8 @@ export default function MoreScreen() {
 
       {/* ── Summary ── */}
       </>}
+
+      {activeSettingsSection === "deleted" && <RecentlyDeletedTransactions />}
 
       {activeSettingsSection === "help" && <>
       {!feedbackAdmin ? (

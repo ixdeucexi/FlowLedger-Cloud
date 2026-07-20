@@ -234,7 +234,9 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
     };
     confirmAction({
       title: isEditingTransfer ? "Delete Transfer" : "Delete Transaction",
-      message: isEditingTransfer ? "Remove both sides of this transfer?" : "Remove this transaction?",
+      message: isEditingTransfer
+        ? "Move both sides of this transfer to Recently Deleted?"
+        : "Move this transaction to Recently Deleted? You can restore it from Settings.",
       confirmText: "Delete",
       destructive: true,
       onConfirm: runDelete,
