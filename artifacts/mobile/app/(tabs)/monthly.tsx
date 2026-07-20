@@ -1596,7 +1596,7 @@ export default function MonthlyScreen() {
       ) : (
         <View style={[styles.calFixed, { paddingBottom: insets.bottom + 92 }]}>
           <View style={styles.calInner}>
-            <View {...calendarSwipeResponder.panHandlers}>
+            <View {...(Platform.OS === "web" ? {} : calendarSwipeResponder.panHandlers)}>
               <CalendarView
                 month={month}
                 year={selectedYear}
