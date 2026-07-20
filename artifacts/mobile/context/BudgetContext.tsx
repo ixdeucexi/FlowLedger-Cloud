@@ -12,7 +12,7 @@ import {
   type SnowballDebtInput,
   type SnowballProjectionResult,
 } from "@/lib/snowball";
-import { forecastBalances, type FinancialEvent } from "@/lib/forecast";
+import { anchorForecastToBankBalance, forecastBalances, type FinancialEvent } from "@/lib/forecast";
 import { diagnosticErrorCode } from "@/lib/diagnosticPolicy";
 import { decisionDbPayload } from "@/lib/decisionPersistence";
 import { recordDiagnostic } from "@/lib/diagnostics";
@@ -3138,8 +3138,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const cachedDaily = balanceComputationCache.daily.get(dailyKey);
     if (cachedDaily) return cachedDaily;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const bankAnchor = connectedCheckingAnchor(connectedBankAccounts, localDateString())
-      ?? operatingAccountAnchor(accounts.map(toAccountSnapshot));
+    const connectedBankAnchor = connectedCheckingAnchor(connectedBankAccounts, localDateString());
+    const bankAnchor = connectedBankAnchor ?? operatingAccountAnchor(accounts.map(toAccountSnapshot));
     const computeMonthNet = (m: number, y: number, startExclusive?: string): number => {
       const key = `${y}-${m}`;
       const cached = startExclusive ? undefined : balanceComputationCache.monthNet.get(key);
@@ -3373,8 +3373,21 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       });
     });
     const currentMonthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
-    const openingBalance = carryover;
-    if (bankAnchor?.date.startsWith(currentMonthPrefix)) {
+    let openingBalance = carryover;
+    let balanceEvents = financialEvents;
+    if (connectedBankAnchor?.date.startsWith(currentMonthPrefix)) {
+      const settledTransactionEventIds = new Set(monthTxs
+        .filter(transaction => transaction.source === "plaid" || transaction.source === "statement" || Boolean(transaction.import_hash))
+        .map(transaction => `transaction:${transaction.id}`));
+      const anchored = anchorForecastToBankBalance(
+        financialEvents,
+        connectedBankAnchor.balance,
+        connectedBankAnchor.date,
+        settledTransactionEventIds,
+      );
+      openingBalance = anchored.openingBalance;
+      balanceEvents = anchored.events;
+    } else if (bankAnchor?.date.startsWith(currentMonthPrefix)) {
       const adjustment = bankBalanceAdjustment(openingBalance, bankAnchor.balance, bankAnchor.date, financialEvents);
       if (Math.abs(adjustment) >= 0.005) {
         financialEvents.push({
@@ -3394,7 +3407,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       openingBalance,
       startDate: `${year}-${String(month + 1).padStart(2, "0")}-01`,
       endDate: `${year}-${String(month + 1).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`,
-      events: financialEvents,
+      events: balanceEvents,
     });
     const forecastDuration = Date.now() - forecastStarted;
     if (forecastDuration >= 50) {
@@ -3402,6 +3415,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         eventType: "performance", operation: "forecast", platform: diagnosticPlatform(), durationMs: forecastDuration,
       }).catch(() => undefined);
     }
+    const visibleEventsByDate = new Map<string, FinancialEvent[]>();
+    financialEvents.forEach(event => visibleEventsByDate.set(event.date, [...(visibleEventsByDate.get(event.date) ?? []), event]));
     const result: DailyBalance[] = [];
     for (let day = 1; day <= daysInMonth; day++) {
       const dayTxs = monthTxs.filter(t => { const [, , td] = t.date.split("-").map(Number); return td === day; });
@@ -3414,9 +3429,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const dayGoals     = goalsByDay[day] ?? [];
       const goalTotal    = dayGoals.reduce((s, ge) => s + ge.amount, 0);
       const forecastDay = forecast.days[day - 1];
+      const visibleEvents = visibleEventsByDate.get(forecastDay.date) ?? [];
       result.push({
         day, income: incomeToday, scheduledIncome, expense: expenseToday, bills: billsToday,
-        goalExpenses: dayGoals, net: forecastDay.net, balance: forecastDay.balance, events: forecastDay.events,
+        goalExpenses: dayGoals, net: forecastDay.net, balance: forecastDay.balance, events: visibleEvents,
       });
     }
     balanceComputationCache.daily.set(dailyKey, result);
@@ -3801,7 +3817,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const fresh = rows.filter(row => !existing.has(row.importHash) && !seen.has(row.importHash) && !!seen.add(row.importHash));
       const records = fresh.map(row => ({
         id: genId(), account_id: accountId, import_hash: row.importHash,
-        date: row.date, amount: row.amount, category: "Other", note: row.description,
+        date: row.date, amount: row.amount, category: "Other", note: row.description, source: "statement",
       }));
       setTransactions(previous => [...previous, ...records]);
       return { imported: fresh.length, duplicates: rows.length - fresh.length };
@@ -3815,7 +3831,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (fresh.length) {
       const records = fresh.map(row => ({
         ...scopedPayload({ id: genId(), user_id: user.id, account_id: accountId, import_hash: row.importHash }),
-        date: row.date, amount: row.amount, category: "Other", note: row.description,
+        date: row.date, amount: row.amount, category: "Other", note: row.description, source: "statement",
       }));
       await ensureSaved(supabase.from("transactions").insert(records), "Import statement");
       setTransactions(previous => [...previous, ...records.map(({ user_id: _userId, ...record }) => record)]);

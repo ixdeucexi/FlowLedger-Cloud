@@ -192,9 +192,10 @@ interface ConnectedTransactionAccount {
 }
 
 /**
- * Transfers are not spending, but the checking-side entry still changes the
- * balance that Monthly forecasts. The savings or credit side stays out of the
- * checking forecast so an account-to-account transfer is never doubled.
+ * Posted bank activity changes the checking ledger before it is reviewed.
+ * Review status controls categorization, never whether cash moved. Transfers
+ * still count only on the checking side so account-to-account moves are not
+ * doubled.
  */
 export function isCheckingBalanceTransaction(
   transaction: {
@@ -207,7 +208,7 @@ export function isCheckingBalanceTransaction(
   },
   connectedAccounts: ConnectedTransactionAccount[],
 ): boolean {
-  if (!isActiveTransaction(transaction) || transaction.review_status === "needs_review") return false;
+  if (!isActiveTransaction(transaction)) return false;
   if (transaction.review_status !== "transfer") return true;
   if (transaction.source !== "plaid" || !transaction.plaid_account_id) return false;
 

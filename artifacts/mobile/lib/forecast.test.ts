@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  anchorForecastToBankBalance,
   buildFinancialEvents,
   evaluateAffordability,
   forecastBalances,
@@ -72,6 +73,81 @@ describe("forecastBalances", () => {
     ]);
     assert.equal(built.events.length, 1);
     assert.deepEqual(built.diagnostics.map(item => item.code), ["duplicate_event", "invalid_event"]);
+  });
+});
+
+describe("anchorForecastToBankBalance", () => {
+  it("rebuilds the July statement chain and keeps the connected balance exact", () => {
+    const amountsByDay: Record<string, number> = {
+      "2026-07-01": 1_432.66,
+      "2026-07-02": -370,
+      "2026-07-03": -1_503.13,
+      "2026-07-04": -50,
+      "2026-07-06": -791.16,
+      "2026-07-08": -519.37,
+      "2026-07-09": 2_398.35,
+      "2026-07-10": -5.99,
+      "2026-07-11": -49.97,
+      "2026-07-12": -208.73,
+      "2026-07-13": -938.29,
+      "2026-07-14": -202,
+      "2026-07-15": -29,
+      "2026-07-16": -51.38,
+      "2026-07-17": -9.99,
+      "2026-07-18": -420.37,
+    };
+    const posted = Object.entries(amountsByDay).map(([date, amount], index) => event({
+      id: `transaction:${index}`,
+      sourceType: "transaction",
+      sourceId: String(index),
+      date,
+      amount,
+      kind: amount >= 0 ? "transaction_income" : "transaction_expense",
+      status: "actual",
+    }));
+    const anchored = anchorForecastToBankBalance(
+      posted,
+      1_689.39,
+      "2026-07-20",
+      new Set(posted.map(item => item.id)),
+    );
+    const result = forecastBalances({
+      ...anchored,
+      startDate: "2026-07-01",
+      endDate: "2026-07-20",
+    });
+
+    assert.equal(anchored.openingBalance, 3_007.76);
+    assert.equal(result.days[0].balance, 4_440.42);
+    assert.equal(result.days[8].balance, 3_605.11);
+    assert.ok(Math.abs(result.days[17].balance - 1_689.39) < 1e-8);
+    assert.ok(Math.abs(result.days[19].balance - 1_689.39) < 1e-8);
+  });
+
+  it("does not let past plans or review status rewrite cash history", () => {
+    const posted = event({
+      id: "transaction:bank",
+      sourceType: "transaction",
+      sourceId: "bank",
+      date: "2026-07-18",
+      amount: -84.02,
+      kind: "transaction_expense",
+      status: "actual",
+    });
+    const pastBucket = event({ id: "goal:weekend", sourceType: "goal", sourceId: "weekend", date: "2026-07-18", amount: -139.32, kind: "goal" });
+    const todayPlan = event({ id: "transaction:tires", sourceType: "transaction", sourceId: "tires", date: "2026-07-20", amount: -310, kind: "transaction_expense" });
+    const futureBill = event({ id: "bill:insurance", sourceType: "bill", sourceId: "insurance", date: "2026-07-21", amount: -287.52, kind: "bill" });
+    const anchored = anchorForecastToBankBalance(
+      [posted, pastBucket, todayPlan, futureBill],
+      1_689.39,
+      "2026-07-20",
+      new Set([posted.id]),
+    );
+    const result = forecastBalances({ ...anchored, startDate: "2026-07-18", endDate: "2026-07-21" });
+
+    assert.deepEqual(anchored.events.map(item => item.id), [posted.id, futureBill.id]);
+    assert.equal(result.days[2].balance, 1_689.39);
+    assert.ok(Math.abs(result.days[3].balance - 1_401.87) < 1e-8);
   });
 });
 

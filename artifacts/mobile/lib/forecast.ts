@@ -28,6 +28,35 @@ export interface ForecastSnapshot {
   events: FinancialEvent[];
 }
 
+export interface BankAnchoredForecast {
+  openingBalance: number;
+  events: FinancialEvent[];
+}
+
+/**
+ * Builds the balance side of a connected-bank forecast.
+ *
+ * On and before the bank's as-of date, only settled ledger events may move the
+ * balance. Plans remain visible in the calendar, but they cannot rewrite bank
+ * history. After the anchor date, every event is a forecast again.
+ */
+export function anchorForecastToBankBalance(
+  events: FinancialEvent[],
+  bankBalance: number,
+  anchorDate: string,
+  settledEventIds: ReadonlySet<string>,
+): BankAnchoredForecast {
+  const balanceEvents = events.filter(event => event.date > anchorDate || settledEventIds.has(event.id));
+  const settledNetThroughAnchor = balanceEvents
+    .filter(event => event.date <= anchorDate)
+    .reduce((sum, event) => sum + event.amount, 0);
+
+  return {
+    openingBalance: bankBalance - settledNetThroughAnchor,
+    events: balanceEvents,
+  };
+}
+
 export interface ForecastDiagnostic {
   code: "invalid_event" | "outside_range" | "duplicate_event";
   eventId: string;

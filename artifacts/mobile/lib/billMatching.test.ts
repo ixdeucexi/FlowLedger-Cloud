@@ -57,6 +57,8 @@ test("only the checking side of a reviewed transfer changes the checking forecas
   assert.equal(isCheckingBalanceTransaction({ source: "plaid", plaid_account_id: "savings-1", review_status: "transfer" }, accounts), false);
   assert.equal(isCheckingBalanceTransaction({ source: "manual", review_status: "transfer" }, accounts), false);
   assert.equal(isCheckingBalanceTransaction({ source: "plaid", plaid_account_id: "checking-1", review_status: "categorized" }, accounts), true);
+  assert.equal(isCheckingBalanceTransaction({ source: "plaid", plaid_account_id: "checking-1", review_status: "needs_review" }, accounts), true);
+  assert.equal(isCheckingBalanceTransaction({ source: "plaid", plaid_account_id: "checking-1", review_status: "needs_review", pending: true }, accounts), false);
 });
 
 test("only confirmed matches replace a planned bill event", () => {
