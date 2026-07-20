@@ -4,13 +4,14 @@ export type FinancialEventKind =
   | "transaction_expense"
   | "bill"
   | "goal"
-  | "debt_payment";
+  | "debt_payment"
+  | "bank_adjustment";
 
 export type FinancialEventStatus = "planned" | "scheduled" | "finalized" | "actual" | "applied";
 
 export interface FinancialEvent {
   id: string;
-  sourceType: "income" | "transaction" | "bill" | "goal" | "extra_payment" | "decision";
+  sourceType: "income" | "transaction" | "bill" | "goal" | "extra_payment" | "decision" | "reconciliation";
   sourceId: string;
   date: string;
   kind: FinancialEventKind;

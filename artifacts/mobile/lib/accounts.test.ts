@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { connectedCheckingAnchor, connectedCheckingBalance, evaluateForecastConfidence, openingBalanceForReconciledDay, operatingAccountAnchor, parseStatementCsv, totalForecastBalance, type AccountSnapshot } from "./accounts";
+import { bankBalanceAdjustment, connectedCheckingAnchor, connectedCheckingBalance, evaluateForecastConfidence, operatingAccountAnchor, parseStatementCsv, totalForecastBalance, type AccountSnapshot } from "./accounts";
 
 const accounts: AccountSnapshot[] = [
   { id: "checking", name: "Checking", type: "checking", currentBalance: 1200, balanceAsOf: "2026-06-23", lastReconciledAt: "2026-06-23", active: true },
@@ -27,14 +27,21 @@ test("connected checking uses the same balance for dashboard and calendar", () =
   assert.equal(connectedCheckingBalance(connected), 1000);
   assert.deepEqual(connectedCheckingAnchor(connected, "2026-07-17"), { balance: 1000, date: "2026-07-17" });
 });
-test("account balance anchor is the selected day's closing balance", () => {
-  const opening = openingBalanceForReconciledDay(1000, "2026-06-24", [
+test("bank reconciliation adds one explicit adjustment without rewriting the opening balance", () => {
+  const adjustment = bankBalanceAdjustment(600, 1000, "2026-06-24", [
     { date: "2026-06-20", amount: 500 },
     { date: "2026-06-24", amount: -100 },
     { date: "2026-06-25", amount: -50 },
   ]);
-  assert.equal(opening, 600);
-  assert.equal(opening + 500 - 100, 1000);
+  assert.equal(adjustment, 0);
+  assert.equal(600 + 500 - 100 + adjustment, 1000);
+});
+test("bank reconciliation exposes a ledger gap on the reconciliation day", () => {
+  const adjustment = bankBalanceAdjustment(600, 1200, "2026-06-24", [
+    { date: "2026-06-20", amount: 500 },
+    { date: "2026-06-24", amount: -100 },
+  ]);
+  assert.equal(adjustment, 200);
 });
 test("confidence is high when balances and recurring inputs are current", () => {
   assert.equal(evaluateForecastConfidence(accounts, true, true, new Date("2026-06-24T12:00:00Z")).level, "high");

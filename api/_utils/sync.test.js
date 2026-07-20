@@ -18,8 +18,8 @@ test("overlapping Plaid webhook inserts are idempotent", async () => {
     from(table) {
       assert.equal(table, "transactions");
       return {
-        async upsert(row, options) {
-          calls.push({ row, options });
+        async insert(row) {
+          calls.push({ row });
           return { error: null };
         },
       };
@@ -31,7 +31,42 @@ test("overlapping Plaid webhook inserts are idempotent", async () => {
 
   assert.deepEqual(calls, [{
     row: canonicalRow,
-    options: { onConflict: "id", ignoreDuplicates: true },
+  }]);
+});
+
+test("a Plaid unique-key race refreshes the row that won the insert", async () => {
+  const updates = [];
+  const selectBuilder = {
+    select() { return this; },
+    eq() { return this; },
+    async maybeSingle() { return { data: { id: "existing-row" }, error: null }; },
+  };
+  const updateBuilder = {
+    eq() { return this; },
+    then(resolve) { resolve({ error: null }); },
+  };
+  const db = {
+    from() {
+      return {
+        async insert() { return { error: { code: "23505" } }; },
+        select() { return selectBuilder; },
+        update(fields) { updates.push(fields); return updateBuilder; },
+      };
+    },
+  };
+  const canonicalRow = {
+    id: "plaid:user-1:transaction-1",
+    user_id: "user-1",
+    plaid_transaction_id: "transaction-1",
+    amount: -12,
+  };
+
+  await persistCanonicalPlaidTransaction({ db, existing: null, canonicalRow, userId: "user-1" });
+
+  assert.deepEqual(updates, [{
+    user_id: "user-1",
+    plaid_transaction_id: "transaction-1",
+    amount: -12,
   }]);
 });
 

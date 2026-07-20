@@ -101,7 +101,8 @@ describe("income scheduling", () => {
     assert.deepEqual(getIncomeOccurrenceDays({ amount: 1_000, frequency: "biweekly", next_payment_date: "2026-05-29" }, 5, 2026), [12, 26]);
   });
 
-  it("uses day one for monthly income with no date and none for undated repeating income", () => {
+  it("uses the start date for monthly income and day one only when no date exists", () => {
+    assert.deepEqual(getIncomeOccurrenceDays({ amount: 1_000, frequency: "monthly", start_date: "2026-06-09" }, 5, 2026), [9]);
     assert.deepEqual(getIncomeOccurrenceDays({ amount: 1_000, frequency: "monthly" }, 5, 2026), [1]);
     assert.deepEqual(getIncomeOccurrenceDays({ amount: 1_000, frequency: "weekly" }, 5, 2026), []);
   });

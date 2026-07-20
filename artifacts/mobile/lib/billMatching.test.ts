@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { canMatchExpenseToBill, isActiveTransaction, isCashFlowTransaction, isConfirmedBillMatch, isDeletedTransaction, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "./billMatching";
+import { canMatchExpenseToBill, isActiveTransaction, isCashFlowTransaction, isCheckingBalanceTransaction, isConfirmedBillMatch, isDeletedTransaction, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "./billMatching";
 
 test("ranks an exact nearby utility payment above unrelated bills", () => {
   const ranked = rankBillMatches(
@@ -46,6 +46,17 @@ test("cash flow waits for posted bank activity to be reviewed", () => {
   assert.equal(isCashFlowTransaction({ review_status: "matched" }), true);
   assert.equal(isCashFlowTransaction({ review_status: "categorized" }), true);
   assert.equal(isCashFlowTransaction({}), true);
+});
+
+test("only the checking side of a reviewed transfer changes the checking forecast", () => {
+  const accounts = [
+    { plaid_account_id: "checking-1", account_type: "depository", account_subtype: "checking", is_active: true },
+    { plaid_account_id: "savings-1", account_type: "depository", account_subtype: "savings", is_active: true },
+  ];
+  assert.equal(isCheckingBalanceTransaction({ source: "plaid", plaid_account_id: "checking-1", review_status: "transfer" }, accounts), true);
+  assert.equal(isCheckingBalanceTransaction({ source: "plaid", plaid_account_id: "savings-1", review_status: "transfer" }, accounts), false);
+  assert.equal(isCheckingBalanceTransaction({ source: "manual", review_status: "transfer" }, accounts), false);
+  assert.equal(isCheckingBalanceTransaction({ source: "plaid", plaid_account_id: "checking-1", review_status: "categorized" }, accounts), true);
 });
 
 test("only confirmed matches replace a planned bill event", () => {

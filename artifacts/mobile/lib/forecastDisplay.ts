@@ -41,9 +41,11 @@ const KIND_LABELS: Record<FinancialEventKind, string> = {
   bill: "Bill",
   goal: "Goal",
   debt_payment: "Debt payment",
+  bank_adjustment: "Bank balance update",
 };
 
 function groupKeyForEvent(event: FinancialEvent): ForecastEventGroupKey {
+  if (event.sourceType === "reconciliation") return "plans";
   if (event.sourceType === "decision") return "plans";
   if (event.kind === "debt_payment" || event.sourceType === "extra_payment") return "debt";
   if (event.sourceType === "income" || event.kind === "scheduled_income") return "income";

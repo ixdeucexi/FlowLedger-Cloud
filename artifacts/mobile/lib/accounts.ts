@@ -61,15 +61,16 @@ export function operatingAccountAnchor(accounts: AccountSnapshot[]): { balance: 
   return { balance: totalForecastBalance(operating), date };
 }
 
-export function openingBalanceForReconciledDay(
-  endOfDayBalance: number,
+export function bankBalanceAdjustment(
+  openingBalance: number,
+  bankBalance: number,
   reconciliationDate: string,
   events: Array<{ date: string; amount: number }>,
 ): number {
   const netThroughReconciliation = events
     .filter(event => event.date <= reconciliationDate)
     .reduce((sum, event) => sum + event.amount, 0);
-  return endOfDayBalance - netThroughReconciliation;
+  return bankBalance - (openingBalance + netThroughReconciliation);
 }
 
 export function evaluateForecastConfidence(

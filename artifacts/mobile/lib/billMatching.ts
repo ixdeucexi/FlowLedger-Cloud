@@ -183,3 +183,39 @@ export function isCashFlowTransaction(transaction: {
     && transaction.review_status !== "needs_review"
     && transaction.review_status !== "transfer";
 }
+
+interface ConnectedTransactionAccount {
+  plaid_account_id?: string | null;
+  account_type?: string | null;
+  account_subtype?: string | null;
+  is_active?: boolean | null;
+}
+
+/**
+ * Transfers are not spending, but the checking-side entry still changes the
+ * balance that Monthly forecasts. The savings or credit side stays out of the
+ * checking forecast so an account-to-account transfer is never doubled.
+ */
+export function isCheckingBalanceTransaction(
+  transaction: {
+    source?: string | null;
+    plaid_account_id?: string | null;
+    removed_at?: string | null;
+    deleted_at?: string | null;
+    pending?: boolean | null;
+    review_status?: string | null;
+  },
+  connectedAccounts: ConnectedTransactionAccount[],
+): boolean {
+  if (!isActiveTransaction(transaction) || transaction.review_status === "needs_review") return false;
+  if (transaction.review_status !== "transfer") return true;
+  if (transaction.source !== "plaid" || !transaction.plaid_account_id) return false;
+
+  const sourceAccount = connectedAccounts.find(account =>
+    account.is_active !== false && account.plaid_account_id === transaction.plaid_account_id
+  );
+  if (!sourceAccount) return false;
+  const type = String(sourceAccount.account_type || "").toLowerCase();
+  const subtype = String(sourceAccount.account_subtype || "").toLowerCase();
+  return type === "depository" && subtype === "checking";
+}

@@ -10,7 +10,7 @@
   },
   "private": true,
   "devDependencies": {
-    "@babel/generator": "7.29.0",
+    "@babel/generator": "7.29.1",
     "@babel/traverse": "^7.29.0",
     "@babel/types": "7.29.0",
     "eas-cli": "^20.0.0",

@@ -45,6 +45,11 @@ function fmt(n: number) {
   return abs.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
+function fmtBalance(n: number) {
+  const sign = n < 0 ? "-" : "";
+  return `${sign}$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 function chipPalette(kind: ChipKind, isDark: boolean) {
   if (!isDark) {
     if (kind === "income") return { bg: "#dcfce7", border: "#22c55e", text: "#166534" };
@@ -213,6 +218,8 @@ export function CalendarView({
           }));
           calendarGoals.slice(0, 2).forEach(goal => chips.push({ label: goal.name, kind: "goal" }));
           if (decisionAmount > 0) chips.push({ label: `Plan $${fmt(decisionAmount)}`, kind: "plan" });
+          const bankAdjustment = db?.events?.find(event => event.sourceType === "reconciliation");
+          if (bankAdjustment) chips.push({ label: "Bank balance synced", kind: "plan" });
           if (isLowRiskDay) chips.push({ label: db && db.balance < 0 ? "Negative" : "Low balance", kind: "risk" });
 
           const visibleChips = chips.slice(0, 3);
@@ -223,6 +230,9 @@ export function CalendarView({
               key={ds}
               disabled={isBeforeStart}
               onPress={() => onDayPress(ds)}
+              accessibilityRole="button"
+              accessibilityLabel={`${ds}. ${db ? `Projected closing balance ${fmtBalance(db.balance)}.` : "No forecast available."}`}
+              accessibilityState={{ disabled: isBeforeStart, selected: isSelected }}
               style={({ pressed }) => [
                 styles.cellOuter,
                 { borderColor: calendarTheme.line },
@@ -269,7 +279,7 @@ export function CalendarView({
                       ]}
                       numberOfLines={1}
                     >
-                      ${fmt(db.balance)}
+                      {fmtBalance(db.balance)}
                     </Text>
                   ) : null}
                 </View>
@@ -330,7 +340,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: CALENDAR.line,
   },
-  dayName: { flex: 1, textAlign: "center", fontSize: 11, fontFamily: "Inter_800ExtraBold", color: CALENDAR.muted, letterSpacing: 1.1 },
+  dayName: { flex: 1, textAlign: "center", fontSize: 12, fontFamily: "Inter_800ExtraBold", color: CALENDAR.muted, letterSpacing: 1.1 },
   gridScroll: { maxHeight: 530 },
   gridScrollContent: { paddingBottom: 6 },
   grid: { flexDirection: "row", flexWrap: "wrap", backgroundColor: CALENDAR.surface },
@@ -365,7 +375,7 @@ const styles = StyleSheet.create({
   dayTopRow: { alignItems: "center", gap: 1, minHeight: 27 },
   todayCircle: { minWidth: 22, height: 22, borderRadius: 7, alignItems: "center", justifyContent: "center", paddingHorizontal: 6, backgroundColor: CALENDAR.today },
   dayNum: { fontSize: 15 },
-  balanceText: { fontSize: 9, fontFamily: "Inter_800ExtraBold" },
+  balanceText: { flexShrink: 1, fontSize: 10, fontFamily: "Inter_800ExtraBold" },
   eventStack: { marginTop: 4, gap: 2 },
   eventChip: {
     minHeight: 16,
@@ -377,8 +387,8 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     overflow: "hidden",
   },
-  eventChipText: { flex: 1, fontSize: 8, fontFamily: "Inter_800ExtraBold", lineHeight: 11 },
-  moreText: { fontSize: 8, fontFamily: "Inter_600SemiBold", textAlign: "center", color: CALENDAR.faded },
+  eventChipText: { flex: 1, fontSize: 11, fontFamily: "Inter_800ExtraBold", lineHeight: 13 },
+  moreText: { fontSize: 11, fontFamily: "Inter_600SemiBold", textAlign: "center", color: CALENDAR.faded },
   legendRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -390,5 +400,5 @@ const styles = StyleSheet.create({
   },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 5, minHeight: 18 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { color: CALENDAR.muted, fontSize: 10, fontFamily: "Inter_700Bold" },
+  legendText: { color: CALENDAR.muted, fontSize: 12, fontFamily: "Inter_700Bold" },
 });

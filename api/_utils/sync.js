@@ -457,14 +457,29 @@ async function persistCanonicalPlaidTransaction({ db, existing, canonicalRow, us
     return;
   }
 
-  // Webhooks can overlap and both observe a transaction before either insert
-  // commits. The deterministic primary key makes the first insert canonical;
-  // the other request must become a no-op instead of failing the whole sync.
-  const { error } = await db.from("transactions").upsert(canonicalRow, {
-    onConflict: "id",
-    ignoreDuplicates: true,
-  });
-  if (error) throw error;
+  const { error } = await db.from("transactions").insert(canonicalRow);
+  if (!error) return;
+  if (error.code !== "23505") throw error;
+
+  // Two Plaid webhooks can overlap, and older imports can have a different
+  // FlowLedger id for the same Plaid transaction. Resolve either unique-key
+  // collision to the already-stored row, then refresh that canonical row.
+  const { data: conflicting, error: lookupError } = await db
+    .from("transactions")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("plaid_transaction_id", canonicalRow.plaid_transaction_id)
+    .maybeSingle();
+  if (lookupError) throw lookupError;
+  if (!conflicting?.id) return;
+
+  const { id: _incomingId, ...canonicalFields } = canonicalRow;
+  const { error: updateError } = await db
+    .from("transactions")
+    .update(canonicalFields)
+    .eq("id", conflicting.id)
+    .eq("user_id", userId);
+  if (updateError) throw updateError;
 }
 
 async function syncTransactions({ client, userId, item, accessToken }) {

@@ -144,9 +144,10 @@ export function getIncomeOccurrenceDays(income: ScheduledIncome, month: number, 
   if (!isIncomeActiveForMonth(income, month, year)) return [];
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   if (income.frequency === "monthly") {
-    if (!income.next_payment_date) return [1];
-    const [, , day] = income.next_payment_date.split("-").map(Number);
-    return [Math.min(day, daysInMonth)];
+    const anchorDate = income.next_payment_date || income.start_date;
+    if (!anchorDate) return [1];
+    const [, , day] = anchorDate.split("-").map(Number);
+    return [Math.min(Math.max(day || 1, 1), daysInMonth)];
   }
   const intervalDays = income.frequency === "biweekly" ? 14 : 7;
   if (!income.next_payment_date) return [];

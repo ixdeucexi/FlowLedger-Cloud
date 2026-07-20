@@ -52,7 +52,7 @@ catalog:
   '@vitejs/plugin-react': ^5.0.4
   class-variance-authority: ^0.7.1
   clsx: ^2.1.1
-  drizzle-orm: ^0.45.1
+  drizzle-orm: ^0.45.2
   framer-motion: ^12.23.24
   lucide-react: ^0.545.0
   # Must be this exact version because expo requires it
@@ -74,6 +74,24 @@ onlyBuiltDependencies:
   - unrs-resolver
 
 overrides:
+  "@xmldom/xmldom@<0.8.13": "0.8.13"
+  "brace-expansion@>=2.0.0 <2.0.3": "2.0.3"
+  "brace-expansion@>=5.0.0 <5.0.6": "5.0.6"
+  "form-data@>=4.0.0 <4.0.6": "4.0.6"
+  "js-yaml@<3.15.0": "3.15.0"
+  "js-yaml@>=4.0.0 <=4.1.1": "4.3.0"
+  "path-to-regexp@>=8.0.0 <8.4.0": "8.4.2"
+  "picomatch@<2.3.2": "2.3.2"
+  "postcss@<8.5.10": "8.5.19"
+  "qs@>=6.11.1 <=6.15.1": "6.15.3"
+  "shell-quote@>=1.1.0 <=1.8.3": "1.10.0"
+  "tar@<=7.5.15": "7.5.20"
+  "undici@<6.27.0": "6.27.0"
+  "uuid@<11.1.1": "11.1.1"
+  "ws@>=6.0.0 <6.2.4": "6.2.4"
+  "ws@>=7.0.0 <7.5.11": "7.5.11"
+  "ws@>=8.0.0 <8.21.0": "8.21.1"
+  "yaml@>=2.0.0 <2.8.3": "2.9.0"
   # @react-native/codegen 0.81.5 references a missing generated file during
   # production Metro builds; 0.81.6 is the compatible patch release.
   "@react-native/codegen": "0.81.6"

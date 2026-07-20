@@ -18,7 +18,7 @@ import { decisionDbPayload } from "@/lib/decisionPersistence";
 import { recordDiagnostic } from "@/lib/diagnostics";
 import { isDevDemoMode } from "@/lib/demoMode";
 import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isIncomeActiveForMonth, moveSettledBillOverrideDate, resolveFinalizedBillOccurrenceDays } from "@/lib/schedule";
-import { connectedCheckingAnchor, evaluateForecastConfidence, openingBalanceForReconciledDay, operatingAccountAnchor, type AccountSnapshot, type AccountType, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
+import { bankBalanceAdjustment, connectedCheckingAnchor, evaluateForecastConfidence, operatingAccountAnchor, type AccountSnapshot, type AccountType, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
 import { scenarioDates, type DecisionResult, type DecisionScenario, type DecisionType } from "@/lib/decisions";
 import {
   acceptHouseholdInviteCode,
@@ -40,7 +40,7 @@ import {
   type HouseholdRole,
 } from "@/lib/households";
 import { canEditHouseholdPlan, canManageHouseholdMembers } from "@/lib/householdPermissions";
-import { isActiveTransaction, isCashFlowTransaction, isConfirmedBillMatch, isDeletedTransaction } from "@/lib/billMatching";
+import { isActiveTransaction, isCashFlowTransaction, isCheckingBalanceTransaction, isConfirmedBillMatch, isDeletedTransaction } from "@/lib/billMatching";
 import { matchedOccurrenceAllocations, occurrenceKey, reviewedBillMonthSettlements } from "@/lib/reviewCenter";
 import { normalizePlanningTools } from "@/lib/planningMode";
 import { localDateString } from "@/lib/dateLabels";
@@ -182,6 +182,7 @@ export interface Account {
 
 export interface ConnectedBankAccount {
   id: string;
+  plaid_account_id?: string;
   name: string;
   official_name?: string;
   mask?: string;
@@ -1284,10 +1285,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         setAccounts(loadedAccounts);
         setDecisions((dData ?? []).map((d: any) => ({ ...d, calendar_date: d.calendar_date ?? undefined, applied_change: d.applied_change ?? undefined })));
         if (sData) {
-          const accountAnchor = connectedCheckingAnchor(canonicalBankAccounts, localDateString())
-            ?? operatingAccountAnchor(loadedAccounts.map(toAccountSnapshot));
-          const nextStartingBalance = accountAnchor ? accountAnchor.balance : Number(sData.starting_balance);
-          const nextStartingBalanceDate = accountAnchor ? accountAnchor.date : (sData.starting_balance_date ?? undefined);
+          const nextStartingBalance = Number(sData.starting_balance);
+          const nextStartingBalanceDate = sData.starting_balance_date ?? undefined;
           setSettings({
             ...normalizePlanningTools(sData),
             paymentMethod:        sData.payment_method as Settings["paymentMethod"],
@@ -1374,13 +1373,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     if (!settingsResult.error && settingsResult.data) {
       const sData = settingsResult.data;
-      const refreshedConnectedAccounts = connectedAccountResult.error
-        ? connectedBankAccountsRef.current
-        : canonicalConnectedAccounts(normalizeConnectedBankRows(connectedAccountResult.data ?? []));
-      const accountAnchor = connectedCheckingAnchor(refreshedConnectedAccounts, localDateString())
-        ?? operatingAccountAnchor((loadedAccounts ?? accountsRef.current).map(toAccountSnapshot));
-      const nextStartingBalance = accountAnchor ? accountAnchor.balance : Number(sData.starting_balance);
-      const nextStartingBalanceDate = accountAnchor ? accountAnchor.date : (sData.starting_balance_date ?? undefined);
+      const nextStartingBalance = Number(sData.starting_balance);
+      const nextStartingBalanceDate = sData.starting_balance_date ?? undefined;
         setSettings(prev => ({
           ...prev,
           ...normalizePlanningTools(sData),
@@ -3103,7 +3097,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       .reduce((allocationSum, allocation) => allocationSum + allocation.amount, 0), 0);
     const monthTxs = transactions.filter(t => {
       const [ty, tm] = t.date.split("-").map(Number);
-      return ty === year && tm === month + 1 && isCashFlowTransaction(t);
+      return ty === year && tm === month + 1 && isCheckingBalanceTransaction(t, connectedBankAccounts);
     });
     const netTransactions = monthTxs.reduce((s, t) => s + t.amount, 0);
     const snowballExtra = extraPayments.find(ep => ep.month === month && ep.year === year)?.amount ?? 0;
@@ -3129,7 +3123,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       goalAllocations,
       remaining: monthlyIncome - totalBillsDue - goalAllocations - snowballExtra + netTransactions + plannedDecisionNet,
     };
-  }, [incomes, transactions, extraPayments, decisions, goals, getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills]);
+  }, [incomes, transactions, connectedBankAccounts, extraPayments, decisions, goals, getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills]);
 
   // ─── Daily Balances ───────────────────────────────────────────────────────────
 
@@ -3137,20 +3131,24 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     monthNet: new Map<string, number>(),
     carryover: new Map<string, number>(),
     daily: new Map<string, DailyBalance[]>(),
-  }), [bills, transactions, incomes, goals, decisions, overrides, billDateMoves, extraPayments, getBillEffectiveMonthlyTotal, settings.starting_balance, settings.starting_balance_date]);
+  }), [bills, transactions, incomes, goals, decisions, overrides, billDateMoves, extraPayments, connectedBankAccounts, accounts, getBillEffectiveMonthlyTotal, settings.starting_balance, settings.starting_balance_date]);
 
   const getDailyBalances = useCallback((month: number, year: number): DailyBalance[] => {
     const dailyKey = `${year}-${month}`;
     const cachedDaily = balanceComputationCache.daily.get(dailyKey);
     if (cachedDaily) return cachedDaily;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const computeMonthNet = (m: number, y: number): number => {
+    const bankAnchor = connectedCheckingAnchor(connectedBankAccounts, localDateString())
+      ?? operatingAccountAnchor(accounts.map(toAccountSnapshot));
+    const computeMonthNet = (m: number, y: number, startExclusive?: string): number => {
       const key = `${y}-${m}`;
-      const cached = balanceComputationCache.monthNet.get(key);
+      const cached = startExclusive ? undefined : balanceComputationCache.monthNet.get(key);
       if (cached !== undefined) return cached;
       const monthPrefix = `${y}-${String(m + 1).padStart(2, "0")}`;
-      const reconciliationDate = settings.starting_balance_date;
-      const includeDate = (date: string) => !reconciliationDate || !date.startsWith(monthPrefix) || date >= reconciliationDate;
+      const planStartDate = settings.starting_balance_date;
+      const includeDate = (date: string) =>
+        (!planStartDate || !planStartDate.startsWith(monthPrefix) || date >= planStartDate)
+        && (!startExclusive || date > startExclusive);
       const billMatches = matchedOccurrenceAllocations(transactions, "bill");
       const incomeMatches = matchedOccurrenceAllocations(transactions, "income");
       const inc = incomes.reduce((sum, income) => {
@@ -3188,7 +3186,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }, 0);
       }, 0);
       const tx = transactions
-        .filter(t => t.date.startsWith(monthPrefix) && includeDate(t.date) && isCashFlowTransaction(t))
+        .filter(t => t.date.startsWith(monthPrefix) && includeDate(t.date) && isCheckingBalanceTransaction(t, connectedBankAccounts))
         .reduce((s, t) => s + t.amount, 0);
       const goalDeductions = goals.reduce((s, g) => {
         if (g.goal_type !== "planned_expense") return s;
@@ -3207,13 +3205,30 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         return sum + count * signed;
       }, 0);
       const net = inc + tx - bil - goalDeductions - snowball + decisionNet;
-      balanceComputationCache.monthNet.set(key, net);
+      if (!startExclusive) balanceComputationCache.monthNet.set(key, net);
       return net;
     };
     const computeCarryover = (toMonth: number, toYear: number): number => {
       const key = `${toYear}-${toMonth}`;
       const cached = balanceComputationCache.carryover.get(key);
       if (cached !== undefined) return cached;
+      if (bankAnchor) {
+        const [bankYear, bankMonth] = bankAnchor.date.split("-").map(Number);
+        const bankMonthIndex = bankMonth - 1;
+        if (toYear > bankYear || (toYear === bankYear && toMonth > bankMonthIndex)) {
+          let running = bankAnchor.balance + computeMonthNet(bankMonthIndex, bankYear, bankAnchor.date);
+          let m = bankMonthIndex + 1;
+          let y = bankYear;
+          if (m > 11) { m = 0; y += 1; }
+          while (!(y === toYear && m === toMonth)) {
+            running += computeMonthNet(m, y);
+            m += 1;
+            if (m > 11) { m = 0; y += 1; }
+          }
+          balanceComputationCache.carryover.set(key, running);
+          return running;
+        }
+      }
       let anchorM: number, anchorY: number;
       if (settings.starting_balance_date) {
         const [sbY, sbM] = settings.starting_balance_date.split("-").map(Number);
@@ -3258,7 +3273,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     });
     const monthTxs = transactions.filter(t => {
       const [ty, tm] = t.date.split("-").map(Number);
-      return ty === year && tm === month + 1 && isCashFlowTransaction(t);
+      return ty === year && tm === month + 1 && isCheckingBalanceTransaction(t, connectedBankAccounts);
     });
     monthTxs.forEach(t => financialEvents.push({
       id: `transaction:${t.id}`, sourceType: "transaction", sourceId: t.id, date: t.date,
@@ -3358,9 +3373,22 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       });
     });
     const currentMonthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
-    const openingBalance = settings.starting_balance_date?.startsWith(currentMonthPrefix)
-      ? openingBalanceForReconciledDay(settings.starting_balance, settings.starting_balance_date, financialEvents)
-      : carryover;
+    const openingBalance = carryover;
+    if (bankAnchor?.date.startsWith(currentMonthPrefix)) {
+      const adjustment = bankBalanceAdjustment(openingBalance, bankAnchor.balance, bankAnchor.date, financialEvents);
+      if (Math.abs(adjustment) >= 0.005) {
+        financialEvents.push({
+          id: `bank-adjustment:${bankAnchor.date}`,
+          sourceType: "reconciliation",
+          sourceId: bankAnchor.date,
+          date: bankAnchor.date,
+          kind: "bank_adjustment",
+          amount: adjustment,
+          status: "actual",
+          name: "Bank balance update",
+        });
+      }
+    }
     const forecastStarted = Date.now();
     const forecast = forecastBalances({
       openingBalance,
@@ -3393,7 +3421,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     balanceComputationCache.daily.set(dailyKey, result);
     return result;
-  }, [bills, transactions, incomes, goals, decisions, overrides, billDateMoves, extraPayments, getBillEffectiveMonthlyTotal, getBillMonthlyTotal, getBillOccurrencesInMonth, getProjectedDebtSnowballMonth, settings.starting_balance, settings.starting_balance_date, balanceComputationCache, user]);
+  }, [bills, transactions, incomes, goals, decisions, overrides, billDateMoves, extraPayments, connectedBankAccounts, accounts, getBillEffectiveMonthlyTotal, getBillMonthlyTotal, getBillOccurrencesInMonth, getProjectedDebtSnowballMonth, settings.starting_balance, settings.starting_balance_date, balanceComputationCache, user]);
 
   const previewDebtSnowball = useCallback((month: number, year: number, requestedExtra?: number, additionalSafeCredit = 0, paymentDateOverride?: string): SnowballProjectionResult => {
     const debtInputs: SnowballDebtInput[] = bills
