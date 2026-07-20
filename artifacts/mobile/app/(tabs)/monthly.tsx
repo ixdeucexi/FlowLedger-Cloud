@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -118,6 +118,22 @@ export default function MonthlyScreen() {
   const [editingPaid, setEditingPaid] = useState<Record<string, string>>({});
   const editingPaidRef = useRef<Record<string, string>>({});
   const paidSaveInFlightRef = useRef<Set<string>>(new Set());
+
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== "web" || typeof document === "undefined") return undefined;
+
+      const viewport = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
+      if (!viewport) return undefined;
+
+      const previousContent = viewport.content;
+      viewport.content = "width=device-width, initial-scale=1, maximum-scale=3, user-scalable=yes, viewport-fit=cover";
+
+      return () => {
+        viewport.content = previousContent;
+      };
+    }, []),
+  );
   const paidPromptPendingRef = useRef<Set<string>>(new Set());
   const paidSaveSnapshotRef = useRef<Record<string, { value: string; at: number }>>({});
   const [billFilter, setBillFilter] = useState<"all" | "paid" | "unpaid">("all");
