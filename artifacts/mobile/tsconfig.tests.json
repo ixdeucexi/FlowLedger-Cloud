@@ -37,6 +37,8 @@
     ,"lib/decisionRisk.ts"
     ,"lib/decisionRisk.test.ts"
     ,"lib/flo.test.ts"
+    ,"lib/floLanguage.ts"
+    ,"lib/floLanguage.test.ts"
     ,"lib/floPolicy.ts"
     ,"lib/floStream.ts"
     ,"lib/floStream.test.ts"

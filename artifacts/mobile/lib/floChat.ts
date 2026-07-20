@@ -1,6 +1,7 @@
 import { fetch as expoFetch } from "expo/fetch";
 
 import { supabase, supabaseAnonKey, supabaseUrl } from "@/lib/supabase";
+import { humanizeFloText } from "@/lib/floLanguage";
 import type { FloFacts } from "@/lib/floPolicy";
 import { parseFloSseChunk, type FloSource, type FloStreamEvent } from "@/lib/floStream";
 
@@ -107,7 +108,7 @@ export async function listFloMessages(
   const messages = rows.map(row => ({
     id: String(row.id),
     role: row.role === "assistant" ? "flo" as const : "user" as const,
-    text: String(row.content ?? ""),
+    text: row.role === "assistant" ? humanizeFloText(String(row.content ?? "")) : String(row.content ?? ""),
     status: String(row.status ?? "completed") as FloStoredMessage["status"],
     sources: Array.isArray(row.source_refs) ? row.source_refs as FloSource[] : [],
     createdAt: String(row.created_at),

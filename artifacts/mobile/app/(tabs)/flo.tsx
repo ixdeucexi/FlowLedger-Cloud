@@ -28,6 +28,7 @@ import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
 import { isCashFlowTransaction } from "@/lib/billMatching";
 import { loadFloMemory, updateFloMemory, type FloFacts } from "@/lib/flo";
+import { humanizeFloText } from "@/lib/floLanguage";
 import {
   createFloConversation,
   createFloId,
@@ -1160,7 +1161,7 @@ export default function FloScreen() {
         <FloLogo size={48} />
         <View style={styles.headerText}>
           <Text style={[styles.title, { color: colors.foreground }]}>Ask Flo</Text>
-          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Account-aware chat · private history · confirmed actions</Text>
+          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Your private place to plan with Flo</Text>
         </View>
         <Feather name="message-circle" size={24} color={colors.primaryForeground} />
       </LinearGradient>
@@ -1205,7 +1206,7 @@ export default function FloScreen() {
             <View style={message.thinking ? styles.thinkingRow : undefined}>
               {message.thinking ? <ActivityIndicator size="small" color={colors.primary} /> : null}
               <Text style={[styles.bubbleText, { color: message.role === "user" ? colors.primaryForeground : message.thinking ? colors.mutedForeground : colors.foreground }]}>
-                {message.text}
+                {message.role === "flo" ? humanizeFloText(message.text) : message.text}
               </Text>
             </View>
             {message.role === "flo" && cardsByMessageId[message.id]?.length ? (
@@ -1692,9 +1693,9 @@ const styles = StyleSheet.create({
   },
   headerText: { flex: 1 },
   title: { fontSize: 25, fontFamily: "Inter_700Bold" },
-  subtitle: { fontSize: 12, marginTop: 1 },
+  subtitle: { fontSize: 12, lineHeight: 17, marginTop: 3 },
   conversation: { flex: 1 },
-  conversationContent: { padding: 16, paddingBottom: 22, gap: 12 },
+  conversationContent: { paddingHorizontal: 18, paddingTop: 18, paddingBottom: 28, gap: 16 },
   loadOlderButton: { alignSelf: "center", minHeight: 36, borderRadius: 999, justifyContent: "center", paddingHorizontal: 14 },
   loadOlderText: { fontSize: 11, fontFamily: "Inter_700Bold" },
   historyCard: { borderWidth: 1, borderRadius: 20, padding: 14, gap: 12 },
@@ -1733,11 +1734,11 @@ const styles = StyleSheet.create({
   followButton: { flex: 1, minHeight: 46, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   followButtonText: { fontSize: 14, fontFamily: "Inter_700Bold" },
   followPrimaryText: { color: "#fff", fontSize: 14, fontFamily: "Inter_700Bold" },
-  bubble: { maxWidth: "88%", paddingHorizontal: 15, paddingVertical: 13, borderRadius: 18 },
+  bubble: { maxWidth: "90%", paddingHorizontal: 16, paddingVertical: 15, borderRadius: 18 },
   floBubble: { alignSelf: "flex-start", borderWidth: 1, borderTopLeftRadius: 6 },
   userBubble: { alignSelf: "flex-end", borderTopRightRadius: 6 },
   thinkingRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  bubbleText: { fontSize: 15, lineHeight: 21 },
+  bubbleText: { fontSize: 15, lineHeight: 23, fontFamily: "Inter_400Regular" },
   cardGrid: { marginTop: 10, gap: 8 },
   insightCard: { borderWidth: 1, borderRadius: 12, padding: 10 },
   insightTitle: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.5 },
@@ -1758,17 +1759,17 @@ const styles = StyleSheet.create({
   reductionActions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   reductionButton: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 8 },
   reductionButtonText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
-  composerArea: { borderTopWidth: 1, paddingHorizontal: 12, paddingTop: 10 },
+  composerArea: { borderTopWidth: 1, paddingHorizontal: 14, paddingTop: 12 },
   errorRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
   chatError: { flex: 1, fontSize: 11, lineHeight: 15, fontFamily: "Inter_500Medium" },
   retryButton: { minHeight: 34, borderRadius: 999, flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 11 },
   retryText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
-  quickPromptScroller: { marginBottom: 8, maxHeight: 38 },
+  quickPromptScroller: { marginBottom: 10, maxHeight: 42 },
   quickPromptContent: { gap: 8, paddingRight: 12 },
-  quickPromptChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
+  quickPromptChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 13, paddingVertical: 9 },
   quickPromptText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   composer: {
-    minHeight: 58,
+    minHeight: 62,
     maxHeight: 112,
     borderRadius: 20,
     borderWidth: 1,
