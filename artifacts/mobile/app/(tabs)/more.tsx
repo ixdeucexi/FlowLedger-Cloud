@@ -77,6 +77,7 @@ import {
   feedbackStatusLabel,
   sanitizeFeedbackMessage,
 } from "@/lib/feedback";
+import { submitFeedback } from "@/lib/feedbackApi";
 import {
   buildChildMoneySummary,
   buildGoalFundingPlans,
@@ -583,11 +584,7 @@ export default function MoreScreen() {
     setFeedbackSubmitting(true);
     setFeedbackNotice(null);
     try {
-      const userMeta = (user as any)?.user_metadata ?? {};
-      const { error } = await supabase.from("app_feedback").insert({
-        user_id: user.id,
-        user_email: user.email ?? null,
-        user_name: userMeta.full_name ?? userMeta.name ?? null,
+      await submitFeedback({
         feedback_type: feedbackType,
         screen: "Settings / Help & Feedback",
         message,
@@ -596,7 +593,6 @@ export default function MoreScreen() {
         app_version: process.env.EXPO_PUBLIC_APP_VERSION ?? null,
         platform: Platform.OS,
       });
-      if (error) throw error;
       setFeedbackMessage("");
       setFeedbackRating(null);
       setFeedbackType("bug");
