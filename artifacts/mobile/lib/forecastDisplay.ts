@@ -59,6 +59,12 @@ export function formatEventAmount(amount: number): string {
   return `${sign}$${Math.abs(amount).toFixed(2)}`;
 }
 
+export function formatCalendarBalance(amount: number): string {
+  const wholeDollars = Math.trunc(Number(amount) || 0);
+  const sign = wholeDollars < 0 ? "-" : "";
+  return `${sign}$${Math.abs(wholeDollars).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+}
+
 export function formatEventStatus(status: FinancialEventStatus): string {
   return STATUS_LABELS[status] ?? status;
 }

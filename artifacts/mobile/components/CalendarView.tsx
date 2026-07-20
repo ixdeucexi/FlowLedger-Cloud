@@ -6,6 +6,7 @@ import { useColors } from "@/hooks/useColors";
 import { isConfirmedBillMatch } from "@/lib/billMatching";
 import { allocationLabel, groupPlannedExpenseAllocations } from "@/lib/reviewCenter";
 import { scenarioDates } from "@/lib/decisions";
+import { formatCalendarBalance } from "@/lib/forecastDisplay";
 
 const DAY_NAMES = ["S", "M", "T", "W", "T", "F", "S"];
 
@@ -64,11 +65,6 @@ function fmt(n: number) {
   const abs = Math.abs(n);
   if (abs >= 1000) return abs.toLocaleString("en-US", { maximumFractionDigits: 0 });
   return abs.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-}
-
-function fmtBalance(n: number) {
-  const sign = n < 0 ? "-" : "";
-  return `${sign}$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function chipPalette(kind: ChipKind, isDark: boolean) {
@@ -252,7 +248,7 @@ export function CalendarView({
               disabled={isBeforeStart}
               onPress={() => onDayPress(ds)}
               accessibilityRole="button"
-              accessibilityLabel={`${ds}. ${db ? `Projected closing balance ${fmtBalance(db.balance)}.` : "No forecast available."}`}
+              accessibilityLabel={`${ds}. ${db ? `Projected closing balance ${formatCalendarBalance(db.balance)}.` : "No forecast available."}`}
               accessibilityState={{ disabled: isBeforeStart, selected: isSelected }}
               style={({ pressed }) => [
                 styles.cellOuter,
@@ -300,7 +296,7 @@ export function CalendarView({
                       ]}
                       numberOfLines={1}
                     >
-                      {fmtBalance(db.balance)}
+                      {formatCalendarBalance(db.balance)}
                     </Text>
                   ) : null}
                 </View>

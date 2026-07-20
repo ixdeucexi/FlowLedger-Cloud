@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildDayForecastFloPrompt, debtPaymentStatusLabel, groupForecastEvents } from "./forecastDisplay";
+import { buildDayForecastFloPrompt, debtPaymentStatusLabel, formatCalendarBalance, groupForecastEvents } from "./forecastDisplay";
 import type { FinancialEvent } from "./forecast";
 
 const event = (overrides: Partial<FinancialEvent> & Pick<FinancialEvent, "id" | "sourceType" | "sourceId" | "kind" | "date" | "amount" | "status">): FinancialEvent => ({
   ...overrides,
   name: overrides.name,
+});
+
+test("calendar balances show whole dollars without changing the underlying amount", () => {
+  assert.equal(formatCalendarBalance(1689.99), "$1,689");
+  assert.equal(formatCalendarBalance(-12.99), "-$12");
+  assert.equal(formatCalendarBalance(0.99), "$0");
 });
 
 test("groups forecast events into plain-language sections", () => {
