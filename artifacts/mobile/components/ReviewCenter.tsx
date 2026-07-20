@@ -169,7 +169,17 @@ export function ReviewCenter() {
     if (!current) return;
     const actual = Math.abs(current.amount);
     const difference = Math.abs(actual - target.plannedAmount);
-    const label = target.type === "income" ? `${target.name} received` : `${target.name} paid`;
+    const isBucket = target.type === "goal" || target.type === "decision";
+    const label = target.type === "income" ? `${target.name} received` : isBucket ? `${target.name} bucket updated` : `${target.name} paid`;
+    const notice = isBucket
+      ? settlement === "partial"
+        ? `${target.name} bucket updated · ${money(difference)} still set aside`
+        : difference > 0.005 && actual < target.plannedAmount
+          ? `${target.name} bucket closed · ${money(difference)} released`
+          : `${target.name} bucket closed`
+      : difference > 0.005
+        ? `${label} · ${money(difference)} ${actual > target.plannedAmount ? "over" : "left"}`
+        : label;
     await finish({
       transactionId: current.id,
       resolution: target.type,
@@ -178,7 +188,7 @@ export function ReviewCenter() {
       plannedAmount: target.plannedAmount,
       settlement,
       extraCategory,
-    }, difference > 0.005 ? `${label} · ${money(difference)} ${actual > target.plannedAmount ? "over" : "left"}` : label);
+    }, notice);
   };
 
   const chooseTarget = (target: RankedReviewTarget) => {
@@ -405,18 +415,26 @@ export function ReviewCenter() {
               <Text style={[styles.modalEyebrow, { color: c.primary }]}>FLO CAN HELP</Text>
               <Text style={[styles.modalTitle, { color: c.foreground }]}>
                 {variance.direction === "lower"
-                  ? `Was ${money(variance.transaction.amount)} the full ${variance.target.type === "income" ? "deposit" : "payment"} for ${variance.target.name}?`
+                  ? variance.target.type === "goal" || variance.target.type === "decision"
+                    ? `How should this purchase use ${variance.target.name}?`
+                    : `Was ${money(variance.transaction.amount)} the full ${variance.target.type === "income" ? "deposit" : "payment"} for ${variance.target.name}?`
                   : `${variance.target.name} was ${money(Math.abs(variance.transaction.amount) - variance.target.plannedAmount)} over plan`}
               </Text>
+              {variance.direction === "lower" && (variance.target.type === "goal" || variance.target.type === "decision") ? (
+                <Text style={[styles.modalDescription, { color: c.mutedForeground }]}>Add this purchase to the bucket and keep the rest set aside, or close the bucket and make the leftover available again.</Text>
+              ) : null}
               <View style={[styles.amountBox, { backgroundColor: c.muted }]}>
-                <View style={styles.amountLine}><Text style={[styles.amountLabel, { color: c.mutedForeground }]}>Plan amount</Text><Text style={[styles.amountValue, { color: c.foreground }]}>{money(variance.target.plannedAmount)}</Text></View>
-                <View style={styles.amountLine}><Text style={[styles.amountLabel, { color: c.mutedForeground }]}>Bank amount</Text><Text style={[styles.amountValue, { color: c.foreground }]}>{money(variance.transaction.amount)}</Text></View>
-                <View style={styles.amountLine}><Text style={[styles.amountLabel, { color: variance.direction === "higher" ? c.destructive : c.success }]}>{variance.direction === "higher" ? "Over plan" : "Money left"}</Text><Text style={[styles.amountValue, { color: variance.direction === "higher" ? c.destructive : c.success }]}>{money(Math.abs(Math.abs(variance.transaction.amount) - variance.target.plannedAmount))}</Text></View>
+                <View style={styles.amountLine}><Text style={[styles.amountLabel, { color: c.mutedForeground }]}>{variance.target.type === "goal" || variance.target.type === "decision" ? "Bucket remaining" : "Plan amount"}</Text><Text style={[styles.amountValue, { color: c.foreground }]}>{money(variance.target.plannedAmount)}</Text></View>
+                <View style={styles.amountLine}><Text style={[styles.amountLabel, { color: c.mutedForeground }]}>{variance.target.type === "goal" || variance.target.type === "decision" ? "This purchase" : "Bank amount"}</Text><Text style={[styles.amountValue, { color: c.foreground }]}>{money(variance.transaction.amount)}</Text></View>
+                <View style={styles.amountLine}><Text style={[styles.amountLabel, { color: variance.direction === "higher" ? c.destructive : c.success }]}>{variance.direction === "higher" ? "Over plan" : variance.target.type === "goal" || variance.target.type === "decision" ? "Left in bucket" : "Money left"}</Text><Text style={[styles.amountValue, { color: variance.direction === "higher" ? c.destructive : c.success }]}>{money(Math.abs(Math.abs(variance.transaction.amount) - variance.target.plannedAmount))}</Text></View>
               </View>
 
-              {variance.direction === "lower" ? <>
+              {variance.direction === "lower" ? variance.target.type === "goal" || variance.target.type === "decision" ? <>
+                <Pressable disabled={saving} onPress={() => void resolveTarget(variance.target, "partial")} style={[styles.primaryButton, { backgroundColor: c.primary }]}><Text style={[styles.primaryButtonText, { color: c.primaryForeground }]}>Add {money(variance.transaction.amount)} to bucket</Text></Pressable>
+                <Pressable disabled={saving} onPress={() => void resolveTarget(variance.target, "full")} style={[styles.secondaryButton, { borderColor: c.border }]}><Text style={[styles.secondaryButtonText, { color: c.foreground }]}>Close bucket · release {money(variance.target.plannedAmount - Math.abs(variance.transaction.amount))}</Text></Pressable>
+              </> : <>
                 <Pressable disabled={saving} onPress={() => void resolveTarget(variance.target, "full")} style={[styles.primaryButton, { backgroundColor: c.primary }]}><Text style={[styles.primaryButtonText, { color: c.primaryForeground }]}>Yes, this was the full amount</Text></Pressable>
-                <Pressable disabled={saving} onPress={() => void resolveTarget(variance.target, "partial")} style={[styles.secondaryButton, { borderColor: c.border }]}><Text style={[styles.secondaryButtonText, { color: c.foreground }]}>No, keep it partial</Text></Pressable>
+                <Pressable disabled={saving} onPress={() => void resolveTarget(variance.target, "partial")} style={[styles.secondaryButton, { borderColor: c.border }]}><Text style={[styles.secondaryButtonText, { color: c.foreground }]}>No, keep the rest open</Text></Pressable>
               </> : splitCategory ? <>
                 <Text style={[styles.splitPrompt, { color: c.foreground }]}>Categorize the extra {money(Math.abs(variance.transaction.amount) - variance.target.plannedAmount)}</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
@@ -430,7 +448,10 @@ export function ReviewCenter() {
                 {variance.target.type !== "income" ? <Pressable disabled={saving} onPress={() => setSplitCategory(categories.find(category => category !== "Income") ?? "Other")} style={[styles.secondaryButton, { borderColor: c.border }]}><Text style={[styles.secondaryButtonText, { color: c.foreground }]}>Split the extra into a category</Text></Pressable> : null}
                 {variance.target.isDebt ? <Pressable disabled={saving} onPress={() => void resolveTarget(variance.target, "extra_principal")} style={[styles.secondaryButton, { borderColor: c.warning + "66" }]}><Text style={[styles.secondaryButtonText, { color: c.warning }]}>Apply extra to principal</Text></Pressable> : null}
               </>}
-              <Pressable disabled={saving} onPress={() => { setVariance(null); setSplitCategory(null); }} style={styles.cancelButton}><Text style={[styles.cancelText, { color: c.mutedForeground }]}>Not this item</Text></Pressable>
+              <Pressable disabled={saving} onPress={() => {
+                if (variance.direction === "lower" && (variance.target.type === "goal" || variance.target.type === "decision")) skipCurrent();
+                else { setVariance(null); setSplitCategory(null); }
+              }} style={styles.cancelButton}><Text style={[styles.cancelText, { color: c.mutedForeground }]}>{variance.direction === "lower" && (variance.target.type === "goal" || variance.target.type === "decision") ? "Skip this transaction for now" : "Not this item"}</Text></Pressable>
             </> : null}
           </Pressable>
         </Pressable>
@@ -479,6 +500,7 @@ const styles = StyleSheet.create({
   modalIcon: { width: 50, height: 50, borderRadius: 25, alignItems: "center", justifyContent: "center", alignSelf: "center" },
   modalEyebrow: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1, textAlign: "center", marginTop: 9 },
   modalTitle: { fontSize: 22, lineHeight: 29, fontFamily: "Inter_700Bold", textAlign: "center", marginTop: 8 },
+  modalDescription: { fontSize: 13, lineHeight: 19, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: 8 },
   amountBox: { borderRadius: 16, padding: 14, marginTop: 16, marginBottom: 12, gap: 9 },
   amountLine: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }, amountLabel: { fontSize: 13, fontFamily: "Inter_500Medium" }, amountValue: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   primaryButton: { minHeight: 52, borderRadius: 15, alignItems: "center", justifyContent: "center", paddingHorizontal: 14, marginTop: 8 },
