@@ -3,12 +3,32 @@ import React, { memo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { AppText } from "@/components/AppText";
+import { useColors } from "@/hooks/useColors";
 import type { StabilityProgress } from "@/lib/stability";
 
 interface StabilityPathCardProps {
   progress: StabilityProgress;
   onViewGuide: () => void;
 }
+
+const STABILITY_THEMES = {
+  dark: {
+    card: "rgba(15,23,42,0.78)", border: "rgba(34,211,238,0.22)", shadow: "#22d3ee", shadowOpacity: 0.18,
+    eyebrow: "#67e8f9", text: "#f8fafc", mutedText: "#94a3b8", labelText: "#cbd5e1",
+    track: "rgba(148,163,184,0.18)", metric: "rgba(2,6,23,0.34)", purpleText: "#c4b5fd",
+    purpleStrongText: "#ede9fe", purpleSurface: "rgba(124,58,237,0.12)", purpleIconSurface: "rgba(124,58,237,0.24)",
+    purpleBorder: "rgba(192,132,252,0.22)", buttonText: "#bfdbfe", buttonIcon: "#93c5fd",
+    buttonSurface: "rgba(37,99,235,0.12)", buttonBorder: "rgba(96,165,250,0.22)",
+  },
+  light: {
+    card: "rgba(255,255,255,0.92)", border: "rgba(14,116,144,0.22)", shadow: "#64748b", shadowOpacity: 0.12,
+    eyebrow: "#0e7490", text: "#0f172a", mutedText: "#64748b", labelText: "#334155",
+    track: "rgba(100,116,139,0.20)", metric: "rgba(241,245,249,0.96)", purpleText: "#6d28d9",
+    purpleStrongText: "#4c1d95", purpleSurface: "rgba(124,58,237,0.09)", purpleIconSurface: "rgba(124,58,237,0.14)",
+    purpleBorder: "rgba(109,40,217,0.22)", buttonText: "#1d4ed8", buttonIcon: "#2563eb",
+    buttonSurface: "rgba(37,99,235,0.08)", buttonBorder: "rgba(37,99,235,0.20)",
+  },
+} as const;
 
 function currency(value: number) {
   return value.toLocaleString("en-US", {
@@ -18,16 +38,22 @@ function currency(value: number) {
   });
 }
 
-function statusColor(status: StabilityProgress["status"]) {
-  if (status === "risk") return "#fb7185";
-  if (status === "watch") return "#fbbf24";
-  return "#34d399";
+function statusColor(status: StabilityProgress["status"], isDark: boolean) {
+  if (status === "risk") return isDark ? "#fb7185" : "#e11d48";
+  if (status === "watch") return isDark ? "#fbbf24" : "#b45309";
+  return isDark ? "#34d399" : "#15803d";
 }
 
 function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps) {
-  const color = statusColor(progress.status);
+  const c = useColors();
+  const color = statusColor(progress.status, c.isDark);
+  const theme = STABILITY_THEMES[c.mode];
   const progressWidth = `${Math.round(progress.backupProgress * 100)}%` as const;
-  const paydayColor = progress.safeUntilPayday === true ? "#34d399" : progress.safeUntilPayday === false ? "#fb7185" : "#fbbf24";
+  const paydayColor = progress.safeUntilPayday === true
+    ? statusColor("safe", c.isDark)
+    : progress.safeUntilPayday === false
+      ? statusColor("risk", c.isDark)
+      : statusColor("watch", c.isDark);
   const paydayTitle = progress.safeUntilPayday === true
     ? `Safe until ${progress.nextPaycheckLabel ?? "payday"}`
     : progress.safeUntilPayday === false
@@ -40,14 +66,14 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
       : "Add the next date in Income so Flo can check the plan through payday.";
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border, shadowColor: theme.shadow, shadowOpacity: theme.shadowOpacity }]}>
       <View style={styles.header}>
         <View style={[styles.icon, { backgroundColor: `${color}18`, borderColor: `${color}38` }]}>
           <Feather name="shield" size={18} color={color} />
         </View>
         <View style={styles.headerCopy}>
-          <AppText tone="label" style={styles.eyebrow}>Your stability path</AppText>
-          <AppText tone="title" style={styles.stage}>{progress.stageLabel}</AppText>
+          <AppText tone="label" style={[styles.eyebrow, { color: theme.eyebrow }]}>Your stability path</AppText>
+          <AppText tone="title" style={[styles.stage, { color: theme.text }]}>{progress.stageLabel}</AppText>
         </View>
         <View style={[styles.statusPill, { backgroundColor: `${color}18`, borderColor: `${color}38` }]}>
           <View style={[styles.statusDot, { backgroundColor: color }]} />
@@ -55,52 +81,52 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
         </View>
       </View>
 
-      <AppText tone="title" style={styles.headline}>{progress.headline}</AppText>
-      <AppText style={styles.explanation}>{progress.explanation}</AppText>
+      <AppText tone="title" style={[styles.headline, { color: theme.text }]}>{progress.headline}</AppText>
+      <AppText style={[styles.explanation, { color: theme.mutedText }]}>{progress.explanation}</AppText>
 
       <View style={[styles.paydayCard, { backgroundColor: `${paydayColor}10`, borderColor: `${paydayColor}35` }]}>
         <Feather name={progress.safeUntilPayday === true ? "check-circle" : progress.safeUntilPayday === false ? "alert-circle" : "calendar"} size={17} color={paydayColor} />
         <View style={styles.paydayCopy}>
           <AppText tone="title" style={[styles.paydayTitle, { color: paydayColor }]}>{paydayTitle}</AppText>
-          <AppText style={styles.paydayDetail}>{paydayDetail}</AppText>
+          <AppText style={[styles.paydayDetail, { color: theme.mutedText }]}>{paydayDetail}</AppText>
         </View>
       </View>
 
       <View style={styles.progressHeader}>
-        <AppText style={styles.progressLabel}>90-day backup path</AppText>
-        <AppText tone="number" style={styles.progressValue}>{Math.round(progress.backupProgress * 100)}%</AppText>
+        <AppText style={[styles.progressLabel, { color: theme.labelText }]}>90-day backup path</AppText>
+        <AppText tone="number" style={[styles.progressValue, { color: theme.text }]}>{Math.round(progress.backupProgress * 100)}%</AppText>
       </View>
-      <View style={styles.progressTrack} accessibilityLabel={`${progress.protectedDays} of 90 backup days protected`}>
+      <View style={[styles.progressTrack, { backgroundColor: theme.track }]} accessibilityLabel={`${progress.protectedDays} of 90 backup days protected`}>
         <View style={[styles.progressFill, { backgroundColor: color, width: progressWidth }]} />
       </View>
       <View style={styles.milestones}>
         {[7, 30, 60, 90].map(days => (
-          <AppText key={days} style={[styles.milestone, progress.protectedDays >= days && { color }]}> {days}d </AppText>
+          <AppText key={days} style={[styles.milestone, { color: theme.mutedText }, progress.protectedDays >= days && { color }]}> {days}d </AppText>
         ))}
       </View>
 
       <View style={styles.metrics}>
-        <View style={styles.metric}>
-          <AppText tone="number" style={styles.metricValue}>{progress.protectedDays}</AppText>
-          <AppText style={styles.metricLabel}>days backed up</AppText>
+        <View style={[styles.metric, { backgroundColor: theme.metric }]}>
+          <AppText tone="number" style={[styles.metricValue, { color: theme.text }]}>{progress.protectedDays}</AppText>
+          <AppText style={[styles.metricLabel, { color: theme.mutedText }]}>days backed up</AppText>
         </View>
-        <View style={styles.metric}>
-          <AppText tone="number" style={styles.metricValue}>{currency(progress.protectedAmount)}</AppText>
-          <AppText style={styles.metricLabel}>backup money</AppText>
+        <View style={[styles.metric, { backgroundColor: theme.metric }]}>
+          <AppText tone="number" style={[styles.metricValue, { color: theme.text }]}>{currency(progress.protectedAmount)}</AppText>
+          <AppText style={[styles.metricLabel, { color: theme.mutedText }]}>backup money</AppText>
         </View>
-        <View style={styles.metric}>
-          <AppText tone="number" style={styles.metricValue}>{currency(progress.backupTarget)}</AppText>
-          <AppText style={styles.metricLabel}>90-day target</AppText>
+        <View style={[styles.metric, { backgroundColor: theme.metric }]}>
+          <AppText tone="number" style={[styles.metricValue, { color: theme.text }]}>{currency(progress.backupTarget)}</AppText>
+          <AppText style={[styles.metricLabel, { color: theme.mutedText }]}>90-day target</AppText>
         </View>
       </View>
 
-      <View style={styles.nextMove}>
-        <View style={styles.nextMoveIcon}>
-          <Feather name="arrow-up-right" size={15} color="#c4b5fd" />
+      <View style={[styles.nextMove, { backgroundColor: theme.purpleSurface, borderColor: theme.purpleBorder }]}>
+        <View style={[styles.nextMoveIcon, { backgroundColor: theme.purpleIconSurface }]}>
+          <Feather name="arrow-up-right" size={15} color={theme.purpleText} />
         </View>
         <View style={styles.nextMoveCopy}>
-          <AppText tone="label" style={styles.nextMoveLabel}>Next action</AppText>
-          <AppText style={styles.nextMoveText}>{progress.nextAction}</AppText>
+          <AppText tone="label" style={[styles.nextMoveLabel, { color: theme.purpleText }]}>Next action</AppText>
+          <AppText style={[styles.nextMoveText, { color: theme.purpleStrongText }]}>{progress.nextAction}</AppText>
         </View>
       </View>
 
@@ -109,10 +135,10 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
           accessibilityRole="button"
           accessibilityLabel="See how the Stability Path and algorithms work"
           onPress={onViewGuide}
-          style={({ pressed }) => [styles.secondaryButton, { opacity: pressed ? 0.72 : 1 }]}
+          style={({ pressed }) => [styles.secondaryButton, { backgroundColor: theme.buttonSurface, borderColor: theme.buttonBorder, opacity: pressed ? 0.72 : 1 }]}
         >
-          <Feather name="map" size={14} color="#93c5fd" />
-          <AppText style={styles.secondaryButtonText}>See how this works</AppText>
+          <Feather name="map" size={14} color={theme.buttonIcon} />
+          <AppText style={[styles.secondaryButtonText, { color: theme.buttonText }]}>See how this works</AppText>
         </Pressable>
       </View>
     </View>

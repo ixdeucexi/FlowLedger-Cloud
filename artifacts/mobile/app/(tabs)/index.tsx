@@ -42,6 +42,65 @@ const CAT_COLORS: Record<string, string> = {
 
 const FLOWLEDGER_LOGO = require("@/assets/brand/flowledger-dashboard-logo.jpg");
 
+const DASHBOARD_THEMES = {
+  dark: {
+    screen: "#030712",
+    heading: "#f8fafc",
+    subheading: "#a5b4fc",
+    hero: "rgba(2,6,23,0.42)",
+    heroBorder: "rgba(148,163,184,0.14)",
+    heroShadow: "#22d3ee",
+    heroShadowOpacity: 0.24,
+    text: "#f8fafc",
+    mutedText: "#cbd5e1",
+    subtleText: "#94a3b8",
+    amount: "#ffffff",
+    purpleText: "#c4b5fd",
+    purpleSurface: "rgba(124,58,237,0.18)",
+    purpleBorder: "rgba(196,181,253,0.28)",
+    planSurface: "rgba(15,23,42,0.62)",
+    planBorder: "rgba(192,132,252,0.26)",
+    milestoneSurface: "rgba(139,92,246,0.22)",
+    goalSurface: "rgba(15,23,42,0.56)",
+    goalBorder: "rgba(148,163,184,0.12)",
+    gaugeTrack: "rgba(148,163,184,0.18)",
+    gaugeFill: "rgba(2,6,23,0.22)",
+    score: "#ffffff",
+    scoreLabel: "#cbd5e1",
+    scoreStatus: "#4ade80",
+    savings: "#6ee7b7",
+  },
+  light: {
+    screen: "#f8fafc",
+    heading: "#0f172a",
+    subheading: "#64748b",
+    hero: "rgba(255,255,255,0.90)",
+    heroBorder: "rgba(148,163,184,0.34)",
+    heroShadow: "#64748b",
+    heroShadowOpacity: 0.14,
+    text: "#0f172a",
+    mutedText: "#334155",
+    subtleText: "#64748b",
+    amount: "#0f172a",
+    purpleText: "#6d28d9",
+    purpleSurface: "rgba(124,58,237,0.10)",
+    purpleBorder: "rgba(109,40,217,0.24)",
+    planSurface: "rgba(241,245,249,0.94)",
+    planBorder: "rgba(109,40,217,0.22)",
+    milestoneSurface: "rgba(124,58,237,0.10)",
+    goalSurface: "rgba(241,245,249,0.96)",
+    goalBorder: "rgba(148,163,184,0.28)",
+    gaugeTrack: "rgba(100,116,139,0.20)",
+    gaugeFill: "rgba(241,245,249,0.92)",
+    score: "#0f172a",
+    scoreLabel: "#475569",
+    scoreStatus: "#15803d",
+    savings: "#15803d",
+  },
+} as const;
+
+type DashboardTheme = (typeof DASHBOARD_THEMES)[keyof typeof DASHBOARD_THEMES];
+
 function algoToneColor(tone: AlgorithmInsight["tone"]) {
   if (tone === "safe") return "#22c55e";
   if (tone === "watch") return "#f59e0b";
@@ -59,7 +118,7 @@ function formatDashboardCurrency(value: number): string {
   });
 }
 
-function FlowScoreGauge({ score }: { score: number }) {
+function FlowScoreGauge({ score, theme }: { score: number; theme: DashboardTheme }) {
   const size = 112;
   const stroke = 8;
   const radius = (size - stroke) / 2;
@@ -81,9 +140,9 @@ function FlowScoreGauge({ score }: { score: number }) {
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke="rgba(148,163,184,0.18)"
+          stroke={theme.gaugeTrack}
           strokeWidth={stroke}
-          fill="rgba(2,6,23,0.22)"
+          fill={theme.gaugeFill}
         />
         <Circle
           cx={size / 2}
@@ -100,8 +159,8 @@ function FlowScoreGauge({ score }: { score: number }) {
         />
       </Svg>
       <View style={styles.referenceGaugeCenter}>
-        <AppText tone="number" style={styles.referenceGaugeScore}>{score}</AppText>
-        <AppText tone="label" style={styles.referenceGaugeLabel}>Flow Score</AppText>
+        <AppText tone="number" style={[styles.referenceGaugeScore, { color: theme.score }]}>{score}</AppText>
+        <AppText tone="label" style={[styles.referenceGaugeLabel, { color: theme.scoreLabel }]}>Flow Score</AppText>
       </View>
     </View>
   );
@@ -109,6 +168,7 @@ function FlowScoreGauge({ score }: { score: number }) {
 
 export default function DashboardScreen() {
   const c = useColors();
+  const dashboardTheme = DASHBOARD_THEMES[c.mode];
   const [isFocused, setIsFocused] = useState(true);
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -887,7 +947,7 @@ export default function DashboardScreen() {
   }, [algorithmSuite.safeCushion.lowestBalance, algorithmSuite.stability, forecastConfidence.label, router, settings.safety_floor]);
   return (
     <ScrollView
-      style={[styles.screen, styles.dashboardStage]}
+      style={[styles.screen, styles.dashboardStage, { backgroundColor: dashboardTheme.screen }]}
       contentContainerStyle={[styles.content, isCommandWide && styles.contentWide, { paddingTop: dashboardTopPadding, paddingBottom: dashboardBottomPadding }]}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
@@ -937,8 +997,8 @@ export default function DashboardScreen() {
           <View>
             <AppText tone="label" style={styles.brandEyebrow}>FLOWLEDGER</AppText>
             <AppText tone="label" style={styles.brandAlgo}>ALGO</AppText>
-            <AppText tone="title" style={styles.heading}>Command Center</AppText>
-            <AppText style={styles.subheading}>{MONTH_FULL[currentMonth]} {selectedYear}</AppText>
+            <AppText tone="title" style={[styles.heading, { color: dashboardTheme.heading, textShadowColor: c.isDark ? "rgba(56,189,248,0.35)" : "transparent" }]}>Command Center</AppText>
+            <AppText style={[styles.subheading, { color: dashboardTheme.subheading }]}>{MONTH_FULL[currentMonth]} {selectedYear}</AppText>
           </View>
         </View>
         <CommandPlusButton onPress={() => setActionModalVisible(true)} accessibilityLabel="Add to FlowLedger" />
@@ -1058,7 +1118,16 @@ export default function DashboardScreen() {
         </Pressable>
       ) : null}
 
-      <View style={[styles.referenceCommandHero, isCommandWide && styles.referenceCommandHeroWide]}>
+      <View style={[
+        styles.referenceCommandHero,
+        isCommandWide && styles.referenceCommandHeroWide,
+        {
+          backgroundColor: dashboardTheme.hero,
+          borderColor: dashboardTheme.heroBorder,
+          shadowColor: dashboardTheme.heroShadow,
+          shadowOpacity: dashboardTheme.heroShadowOpacity,
+        },
+      ]}>
         <View style={styles.referenceHeroFlipShell}>
           <Animated.View
             pointerEvents={flipped ? "none" : "auto"}
@@ -1066,28 +1135,28 @@ export default function DashboardScreen() {
           >
             <View style={styles.referenceMoneyHeader}>
               <View style={{ flex: 1 }}>
-                <AppText tone="title" style={styles.referenceGreeting}>{timeGreeting}</AppText>
+                <AppText tone="title" style={[styles.referenceGreeting, { color: dashboardTheme.text }]}>{timeGreeting}</AppText>
               </View>
-              <Pressable onPress={doFlip} accessibilityLabel="Show savings and goals" style={styles.referenceFlipButton}>
-                <Feather name="repeat" size={13} color="#c4b5fd" />
-                <AppText style={styles.referenceFlipButtonText}>Savings</AppText>
+              <Pressable onPress={doFlip} accessibilityLabel="Show savings and goals" style={[styles.referenceFlipButton, { backgroundColor: dashboardTheme.purpleSurface, borderColor: dashboardTheme.purpleBorder }]}>
+                <Feather name="repeat" size={13} color={dashboardTheme.purpleText} />
+                <AppText style={[styles.referenceFlipButtonText, { color: dashboardTheme.purpleText }]}>Savings</AppText>
               </Pressable>
             </View>
-            <AppText tone="label" style={styles.referenceHeroLabel}>Checking balance</AppText>
-            <AppText tone="number" style={styles.referenceHeroAmount}>{formatDashboardCurrency(dashboardCheckingBalance)}</AppText>
+            <AppText tone="label" style={[styles.referenceHeroLabel, { color: dashboardTheme.mutedText }]}>Checking balance</AppText>
+            <AppText tone="number" style={[styles.referenceHeroAmount, { color: dashboardTheme.amount, textShadowColor: c.isDark ? "rgba(34,211,238,0.25)" : "transparent" }]}>{formatDashboardCurrency(dashboardCheckingBalance)}</AppText>
 
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Open Flo"
               onPress={openFlo}
-              style={({ pressed }) => [styles.referencePlanSnapshot, { opacity: pressed ? 0.84 : 1 }]}
+              style={({ pressed }) => [styles.referencePlanSnapshot, { backgroundColor: dashboardTheme.planSurface, borderColor: dashboardTheme.planBorder, opacity: pressed ? 0.84 : 1 }]}
             >
               <View style={styles.referencePlanFocusBlock}>
-                <AppText tone="label" style={styles.referencePlanLabel}>Current stage</AppText>
-                <AppText tone="title" style={styles.referencePlanFocusTitle} numberOfLines={1}>{algorithmSuite.stability.stageLabel}</AppText>
-                <View style={styles.referencePlanNextRow}>
-                  <AppText tone="label" style={styles.referencePlanNextLabel}>Next milestone</AppText>
-                  <AppText style={styles.referencePlanNextText} numberOfLines={2}>
+                <AppText tone="label" style={[styles.referencePlanLabel, { color: dashboardTheme.subtleText }]}>Current stage</AppText>
+                <AppText tone="title" style={[styles.referencePlanFocusTitle, { color: dashboardTheme.text }]} numberOfLines={1}>{algorithmSuite.stability.stageLabel}</AppText>
+                <View style={[styles.referencePlanNextRow, { backgroundColor: dashboardTheme.milestoneSurface, borderColor: dashboardTheme.purpleBorder }]}>
+                  <AppText tone="label" style={[styles.referencePlanNextLabel, { color: dashboardTheme.purpleText }]}>Next milestone</AppText>
+                  <AppText style={[styles.referencePlanNextText, { color: dashboardTheme.text }]} numberOfLines={2}>
                     {algorithmSuite.stability.nextMilestoneAmount > 0
                       ? `${algorithmSuite.stability.nextMilestone} - ${formatDashboardCurrency(algorithmSuite.stability.nextMilestoneAmount)} to go`
                       : algorithmSuite.stability.nextMilestone}
@@ -1107,16 +1176,16 @@ export default function DashboardScreen() {
           >
             <View style={styles.referenceMoneyHeader}>
               <View style={{ flex: 1 }}>
-                <AppText tone="label" style={styles.referenceHeroLabel}>Savings accounts</AppText>
-                <AppText tone="number" style={[styles.referenceHeroAmount, styles.referenceSavingsAmount]}>{formatDashboardCurrency(savingsAccountBalance)}</AppText>
+                <AppText tone="label" style={[styles.referenceHeroLabel, { color: dashboardTheme.mutedText }]}>Savings accounts</AppText>
+                <AppText tone="number" style={[styles.referenceHeroAmount, styles.referenceSavingsAmount, { color: dashboardTheme.savings, textShadowColor: "transparent" }]}>{formatDashboardCurrency(savingsAccountBalance)}</AppText>
               </View>
-              <Pressable onPress={doFlip} accessibilityLabel="Show checking balance" style={styles.referenceFlipButton}>
-                <Feather name="repeat" size={13} color="#c4b5fd" />
-                <AppText style={styles.referenceFlipButtonText}>Checking</AppText>
+              <Pressable onPress={doFlip} accessibilityLabel="Show checking balance" style={[styles.referenceFlipButton, { backgroundColor: dashboardTheme.purpleSurface, borderColor: dashboardTheme.purpleBorder }]}>
+                <Feather name="repeat" size={13} color={dashboardTheme.purpleText} />
+                <AppText style={[styles.referenceFlipButtonText, { color: dashboardTheme.purpleText }]}>Checking</AppText>
               </Pressable>
             </View>
             <View style={styles.referenceGoalsHeader}>
-              <AppText tone="title" style={styles.referenceGoalsTitle}>Current goals</AppText>
+              <AppText tone="title" style={[styles.referenceGoalsTitle, { color: dashboardTheme.text }]}>Current goals</AppText>
               <Pressable onPress={() => { setEditGoal(null); setGoalModalVisible(true); }} accessibilityLabel="Add goal" style={styles.referenceGoalAddButton}>
                 <Feather name="plus" size={14} color="#f8fafc" />
               </Pressable>
@@ -1128,11 +1197,11 @@ export default function DashboardScreen() {
                   key={goal.id}
                   onPress={() => { setEditGoal(goal); setGoalModalVisible(true); }}
                   accessibilityLabel={`Edit ${goal.name} goal`}
-                  style={({ pressed }) => [styles.referenceGoalItem, { opacity: pressed ? 0.72 : 1 }]}
+                  style={({ pressed }) => [styles.referenceGoalItem, { backgroundColor: dashboardTheme.goalSurface, borderColor: dashboardTheme.goalBorder, opacity: pressed ? 0.72 : 1 }]}
                 >
                   <View style={styles.referenceGoalTopRow}>
-                    <AppText style={styles.referenceGoalName} numberOfLines={1}>{goal.name}</AppText>
-                    <AppText style={styles.referenceGoalAmounts}>{formatDashboardCurrency(goal.current_amount)} / {formatDashboardCurrency(goal.target_amount)}</AppText>
+                    <AppText style={[styles.referenceGoalName, { color: dashboardTheme.mutedText }]} numberOfLines={1}>{goal.name}</AppText>
+                    <AppText style={[styles.referenceGoalAmounts, { color: dashboardTheme.subtleText }]}>{formatDashboardCurrency(goal.current_amount)} / {formatDashboardCurrency(goal.target_amount)}</AppText>
                   </View>
                   <View style={styles.referenceGoalTrack}>
                     <View style={[styles.referenceGoalFill, { width: `${percent}%` as any }]} />
@@ -1140,9 +1209,9 @@ export default function DashboardScreen() {
                 </Pressable>
               );
             }) : (
-              <Pressable onPress={() => { setEditGoal(null); setGoalModalVisible(true); }} style={styles.referenceGoalsEmpty}>
+              <Pressable onPress={() => { setEditGoal(null); setGoalModalVisible(true); }} style={[styles.referenceGoalsEmpty, { backgroundColor: dashboardTheme.purpleSurface, borderColor: dashboardTheme.purpleBorder }]}>
                 <Feather name="target" size={17} color="#a78bfa" />
-                <AppText style={styles.referenceGoalsEmptyText}>No goals yet. Add one to start tracking progress.</AppText>
+                <AppText style={[styles.referenceGoalsEmptyText, { color: dashboardTheme.mutedText }]}>No goals yet. Add one to start tracking progress.</AppText>
               </Pressable>
             )}
             {currentGoals.length > 3 && <AppText style={styles.referenceGoalsMore}>+{currentGoals.length - 3} more goal{currentGoals.length - 3 === 1 ? "" : "s"}</AppText>}
@@ -1153,9 +1222,9 @@ export default function DashboardScreen() {
           onPress={() => setFlowScoreVisible(true)}
           style={({ pressed }) => [styles.referenceScorePanel, { opacity: pressed ? 0.86 : 1 }]}
         >
-          <FlowScoreGauge score={algorithmSuite.flowScore.score} />
-          <AppText tone="title" style={styles.referenceScoreStatus}>{algorithmSuite.flowScore.label}</AppText>
-          <View style={styles.referenceScoreUnderline} />
+          <FlowScoreGauge score={algorithmSuite.flowScore.score} theme={dashboardTheme} />
+          <AppText tone="title" style={[styles.referenceScoreStatus, { color: dashboardTheme.scoreStatus }]}>{algorithmSuite.flowScore.label}</AppText>
+          <View style={[styles.referenceScoreUnderline, { backgroundColor: dashboardTheme.scoreStatus }]} />
         </Pressable>
       </View>
 
