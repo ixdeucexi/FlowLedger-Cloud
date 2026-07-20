@@ -4,11 +4,12 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { AddBillModal, type AddBillInitialValues } from "@/components/AddBillModal";
+import { GoalModal } from "@/components/GoalModal";
 import { UnplannedChargeModal } from "@/components/UnplannedChargeModal";
-import type { Bill, ReconcileTransactionInput, Transaction } from "@/context/BudgetContext";
+import type { Bill, Goal, ReconcileTransactionInput, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
-import { buildCurrentMonthReviewQueue, buildForgottenBillDefaults, forgottenBillSettlement, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewQueueAfterSkips, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
+import { buildCurrentMonthReviewQueue, buildForgottenBillDefaults, forgottenBillSettlement, groupReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewQueueAfterSkips, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
 
 function todayIso() {
   const now = new Date();
@@ -36,7 +37,7 @@ export function ReviewCenter() {
   const {
     transactions, goals, decisions, categories, canEditHousehold,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getIncomeOccurrencesInMonth,
-    addBill, deleteBillMistake, reconcileTransaction, undoTransactionReconciliation, refreshBankData,
+    addBill, addGoal, deleteBillMistake, reconcileTransaction, undoTransactionReconciliation, refreshBankData,
   } = useBudget();
   useEffect(() => {
     void refreshBankData();
@@ -47,6 +48,7 @@ export function ReviewCenter() {
   const [splitCategory, setSplitCategory] = useState<string | null>(null);
   const [unplannedChargeVisible, setUnplannedChargeVisible] = useState(false);
   const [forgottenBillVisible, setForgottenBillVisible] = useState(false);
+  const [spendingBucketVisible, setSpendingBucketVisible] = useState(false);
   const [skippedIds, setSkippedIds] = useState<string[]>([]);
   const [lastCompleted, setLastCompleted] = useState<{ id: string; label: string } | null>(null);
   const [completedThisVisit, setCompletedThisVisit] = useState(0);
@@ -84,10 +86,10 @@ export function ReviewCenter() {
         });
       });
       goals.filter(goal => goal.goal_type === "planned_expense" && goal.target_date?.startsWith(`${year}-${String(month + 1).padStart(2, "0")}`))
-        .filter(goal => goal.current_amount + 0.005 < goal.target_amount)
+        .filter(goal => Math.max(0, goal.current_amount) + 0.005 < goal.target_amount)
         .forEach(goal => candidates.push({
           type: "goal", id: goal.id, name: goal.name, category: "Planned spending",
-          plannedAmount: Math.max(0, goal.target_amount - goal.current_amount), occurrenceDate: goal.target_date.slice(0, 10),
+          plannedAmount: Math.max(0, goal.target_amount - Math.max(0, goal.current_amount)), occurrenceDate: goal.target_date.slice(0, 10),
         }));
       decisions.filter(decision => decision.status === "planned" || decision.status === "calendar")
         .forEach(decision => {
@@ -107,8 +109,9 @@ export function ReviewCenter() {
         });
       });
     }
-    return rankReviewTargets(current, candidates).slice(0, 8);
+    return rankReviewTargets(current, candidates);
   }, [current, decisions, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getMonthlyBills, goals, transactions]);
+  const groupedTargets = useMemo(() => groupReviewTargets(targets), [targets]);
 
   const completeReview = async (input: ReconcileTransactionInput, notice?: string) => {
     if (!current || saving) throw new Error("This transaction is no longer available for review.");
@@ -122,6 +125,7 @@ export function ReviewCenter() {
       setSplitCategory(null);
       setUnplannedChargeVisible(false);
       setForgottenBillVisible(false);
+      setSpendingBucketVisible(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } finally {
       setSaving(false);
@@ -210,6 +214,7 @@ export function ReviewCenter() {
     setSplitCategory(null);
     setUnplannedChargeVisible(false);
     setForgottenBillVisible(false);
+    setSpendingBucketVisible(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
@@ -225,6 +230,21 @@ export function ReviewCenter() {
 
   const total = Math.max(initialTotal.current, completedThisVisit + queue.length);
   const position = Math.min(total, completedThisVisit + skippedIds.length + 1);
+  const renderTarget = (target: RankedReviewTarget, index: number) => current ? (
+    <Pressable accessibilityRole="button" accessibilityLabel={`Match ${transactionName(current)} to ${target.name}`} key={`${target.type}-${target.id}-${target.occurrenceDate}`} disabled={saving} onPress={() => chooseTarget(target)} style={({ pressed }) => [styles.targetRow, { backgroundColor: c.muted, borderColor: index === 0 && target.score >= 48 ? c.success + "66" : c.border, opacity: saving ? 0.55 : pressed ? 0.8 : 1 }]}>
+      <View style={[styles.targetIcon, { backgroundColor: (target.type === "income" ? c.success : target.isDebt ? c.warning : c.primary) + "18" }]}>
+        <Feather name={target.type === "income" ? "trending-up" : target.type === "bill" ? "file-text" : "shopping-bag"} size={17} color={target.type === "income" ? c.success : target.isDebt ? c.warning : c.primary} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <View style={styles.targetHeading}><Text style={[styles.targetName, { color: c.foreground }]} numberOfLines={2}>{target.name}</Text>{index === 0 && target.score >= 48 ? <Text style={[styles.suggested, { color: c.success }]}>SUGGESTED</Text> : null}</View>
+        <Text style={[styles.targetMeta, { color: c.mutedForeground }]}>
+          {target.type === "income" ? "Expected income" : target.type === "bill" ? "Bill" : "Set-aside bucket"}: {money(target.plannedAmount)} · {displayDate(target.occurrenceDate)}
+        </Text>
+        {target.reasons.length ? <Text style={[styles.targetReason, { color: c.success }]}>{target.reasons.slice(0, 2).join(" · ")}</Text> : null}
+      </View>
+      <Feather name="chevron-right" size={18} color={c.mutedForeground} />
+    </Pressable>
+  ) : null;
 
   return (
     <>
@@ -279,21 +299,29 @@ export function ReviewCenter() {
             <Text style={[styles.transactionAmount, { color: current.amount < 0 ? c.destructive : c.success }]}>{current.amount < 0 ? "−" : "+"}{money(current.amount)}</Text>
           </View>
 
-          <Text style={[styles.sectionTitle, { color: c.foreground }]}>{current.amount < 0 ? "Choose the planned item" : "Choose the expected income"}</Text>
-          <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>{targets.length ? "Matches compare the bank amount with your plan amount, date, and name." : "No planned item was found for this month. Categorize it below to finish."}</Text>
-          {targets.map((target, index) => (
-            <Pressable accessibilityRole="button" accessibilityLabel={`Match ${transactionName(current)} to ${target.name}`} key={`${target.type}-${target.id}-${target.occurrenceDate}`} disabled={saving} onPress={() => chooseTarget(target)} style={({ pressed }) => [styles.targetRow, { backgroundColor: c.muted, borderColor: index === 0 && target.score >= 48 ? c.success + "66" : c.border, opacity: saving ? 0.55 : pressed ? 0.8 : 1 }]}>
-              <View style={[styles.targetIcon, { backgroundColor: (target.type === "income" ? c.success : target.isDebt ? c.warning : c.primary) + "18" }]}>
-                <Feather name={target.type === "income" ? "trending-up" : target.type === "bill" ? "file-text" : "calendar"} size={17} color={target.type === "income" ? c.success : target.isDebt ? c.warning : c.primary} />
+          {current.amount > 0 ? <>
+            <Text style={[styles.sectionTitle, { color: c.foreground }]}>Expected income</Text>
+            <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>{groupedTargets.income.length ? "Choose the income this deposit belongs to." : "No expected income was found for this month."}</Text>
+            {groupedTargets.income.map(renderTarget)}
+          </> : <>
+            <Text style={[styles.sectionTitle, { color: c.foreground }]}>Money you set aside</Text>
+            <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>{groupedTargets.setAside.length ? "Use the bucket you planned for this purchase. The bank charge replaces that planned amount, so it is counted once." : "No spending bucket was found for this month. Create one from + → Set Aside Money before the purchase posts."}</Text>
+            {groupedTargets.setAside.map(renderTarget)}
+            <Pressable accessibilityRole="button" accessibilityLabel="Create a spending bucket for this transaction" disabled={saving} onPress={() => setSpendingBucketVisible(true)} style={({ pressed }) => [styles.bucketButton, { borderColor: c.primary + "66", backgroundColor: c.primary + "10", opacity: saving ? 0.55 : pressed ? 0.76 : 1 }]}>
+              <Feather name="plus-circle" size={18} color={c.primary} />
+              <View style={styles.optionCopy}>
+                <Text style={[styles.optionTitle, { color: c.foreground }]}>Create a spending bucket</Text>
+                <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Use this for a weekend, trip, emergency, or purchase you planned as one total amount.</Text>
               </View>
-              <View style={{ flex: 1 }}>
-                <View style={styles.targetHeading}><Text style={[styles.targetName, { color: c.foreground }]} numberOfLines={1}>{target.name}</Text>{index === 0 && target.score >= 48 ? <Text style={[styles.suggested, { color: c.success }]}>SUGGESTED</Text> : null}</View>
-                <Text style={[styles.targetMeta, { color: c.mutedForeground }]}>{target.type === "income" ? "Expected" : "Plan"}: {money(target.plannedAmount)} · {target.type === "income" ? "Expected" : "Due"} {displayDate(target.occurrenceDate)}</Text>
-                {target.reasons.length ? <Text style={[styles.targetReason, { color: c.success }]}>{target.reasons.slice(0, 2).join(" · ")}</Text> : null}
-              </View>
-              <Feather name="chevron-right" size={18} color={c.mutedForeground} />
+              <Feather name="chevron-right" size={17} color={c.primary} />
             </Pressable>
-          ))}
+
+            {groupedTargets.bills.length ? <>
+              <Text style={[styles.subsectionTitle, { color: c.foreground }]}>Bills and debt</Text>
+              <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Use these only when the bank charge paid a bill or debt payment.</Text>
+              {groupedTargets.bills.map(renderTarget)}
+            </> : null}
+          </>}
 
           <View style={[styles.divider, { borderTopColor: c.border }]} />
           <Text style={[styles.sectionTitle, { color: c.foreground }]}>Other options</Text>
@@ -356,6 +384,19 @@ export function ReviewCenter() {
         saveLabel="Save bill and match payment"
       />
 
+      <GoalModal
+        visible={spendingBucketVisible && !!current}
+        onClose={() => setSpendingBucketVisible(false)}
+        onSave={async data => {
+          await addGoal(data as Omit<Goal, "id" | "created_at">);
+          setSpendingBucketVisible(false);
+        }}
+        initialMode="budget"
+        initialName={current ? `${transactionName(current)} spending` : ""}
+        initialTargetAmount={current ? Math.abs(current.amount) : undefined}
+        initialTargetDate={current?.date}
+      />
+
       <Modal visible={!!variance} transparent animationType="fade" onRequestClose={() => { setVariance(null); setSplitCategory(null); }}>
         <Pressable style={styles.overlay} onPress={() => { setVariance(null); setSplitCategory(null); }}>
           <Pressable style={[styles.modalCard, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => {}}>
@@ -401,32 +442,34 @@ export function ReviewCenter() {
 const styles = StyleSheet.create({
   hero: { borderWidth: 1, borderRadius: 20, padding: 16, flexDirection: "row", gap: 12, alignItems: "flex-start" },
   heroIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  eyebrow: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1 },
+  eyebrow: { fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1 },
   heroTitle: { fontSize: 20, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
-  heroCopy: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular", marginTop: 5 },
+  heroCopy: { fontSize: 14, lineHeight: 21, fontFamily: "Inter_400Regular", marginTop: 5 },
   undoCard: { marginTop: 10, borderWidth: 1, borderRadius: 14, padding: 12, flexDirection: "row", alignItems: "center", gap: 9 },
-  undoText: { flex: 1, fontSize: 12, fontFamily: "Inter_600SemiBold" }, undoButton: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
+  undoText: { flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold" }, undoButton: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   emptyCard: { marginTop: 12, borderWidth: 1, borderRadius: 20, padding: 24, alignItems: "center", gap: 8 },
   emptyTitle: { fontSize: 19, fontFamily: "Inter_800ExtraBold", textAlign: "center" },
-  emptyText: { fontSize: 13, lineHeight: 19, fontFamily: "Inter_400Regular", textAlign: "center" },
+  emptyText: { fontSize: 14, lineHeight: 21, fontFamily: "Inter_400Regular", textAlign: "center" },
   reviewCard: { marginTop: 12, borderWidth: 1, borderRadius: 20, padding: 16 },
   progressRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  progressText: { fontSize: 11, fontFamily: "Inter_700Bold" },
+  progressText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   progressTrack: { height: 5, borderRadius: 3, overflow: "hidden", marginTop: 7 }, progressFill: { height: 5, borderRadius: 3 },
   transactionRow: { flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 18 },
   transactionIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  transactionName: { fontSize: 17, fontFamily: "Inter_800ExtraBold" }, transactionMeta: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 4 },
+  transactionName: { fontSize: 17, fontFamily: "Inter_800ExtraBold" }, transactionMeta: { fontSize: 12, fontFamily: "Inter_500Medium", marginTop: 4 },
   transactionAmount: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
-  sectionTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold", marginTop: 4 },
-  sectionCopy: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_400Regular", marginTop: 3, marginBottom: 10 },
+  sectionTitle: { fontSize: 16, fontFamily: "Inter_800ExtraBold", marginTop: 4 },
+  subsectionTitle: { fontSize: 15, fontFamily: "Inter_800ExtraBold", marginTop: 14 },
+  sectionCopy: { fontSize: 13, lineHeight: 19, fontFamily: "Inter_400Regular", marginTop: 4, marginBottom: 10 },
   targetRow: { borderWidth: 1, borderRadius: 14, padding: 11, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 },
   targetIcon: { width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center" },
-  targetHeading: { flexDirection: "row", alignItems: "center", gap: 7 }, targetName: { flex: 1, fontSize: 13, fontFamily: "Inter_700Bold" },
-  suggested: { fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7 },
-  targetMeta: { fontSize: 10, fontFamily: "Inter_500Medium", marginTop: 3 }, targetReason: { fontSize: 9, fontFamily: "Inter_700Bold", marginTop: 3 },
+  targetHeading: { flexDirection: "row", alignItems: "center", gap: 7 }, targetName: { flex: 1, fontSize: 14, lineHeight: 19, fontFamily: "Inter_700Bold" },
+  suggested: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7 },
+  targetMeta: { fontSize: 12, lineHeight: 17, fontFamily: "Inter_500Medium", marginTop: 3 }, targetReason: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_700Bold", marginTop: 3 },
   divider: { borderTopWidth: 1, marginVertical: 12 }, categoryRow: { gap: 8, paddingVertical: 4 },
   optionButton: { minHeight: 58, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 9, flexDirection: "row", alignItems: "center", gap: 10 },
-  optionCopy: { flex: 1 }, optionTitle: { fontSize: 12, fontFamily: "Inter_800ExtraBold" }, optionDescription: { fontSize: 10, lineHeight: 14, fontFamily: "Inter_400Regular", marginTop: 2 },
+  bucketButton: { minHeight: 64, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 },
+  optionCopy: { flex: 1 }, optionTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" }, optionDescription: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular", marginTop: 2 },
   categoryPill: { minHeight: 36, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   categoryText: { fontSize: 11, fontFamily: "Inter_700Bold" },
   skipButton: { minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, marginTop: 4 },

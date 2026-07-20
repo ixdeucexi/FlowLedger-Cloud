@@ -391,7 +391,7 @@ interface BudgetContextType {
   getMonthlyIncome: (month?: number, year?: number) => number;
   getIncomeOccurrencesInMonth: (month: number, year: number) => { income: IncomeItem; days: number[]; effectiveAmount: number }[];
 
-  addGoal: (goal: Omit<Goal, "id" | "created_at">) => Promise<void>;
+  addGoal: (goal: Omit<Goal, "id" | "created_at">) => Promise<string>;
   updateGoal: (goal: Goal) => Promise<void>;
   deleteGoal: (id: string) => Promise<void>;
   checkGoalAffordability: (goal: Goal, month: number, year: number) => GoalAffordability;
@@ -2835,15 +2835,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   // ─── Goals ────────────────────────────────────────────────────────────────────
 
   const addGoal = useCallback(async (goal: Omit<Goal, "id" | "created_at">) => {
-    if (!user) return;
+    if (!user) throw new Error("Sign in to add a goal");
     assertCanEditHousehold("add a goal");
     const ng: Goal = { ...goal, id: genId(), created_at: new Date().toISOString() };
     if (demoMode) {
       setGoals(prev => [...prev, ng]);
-      return;
+      return ng.id;
     }
     await ensureSaved(supabase.from("goals").insert(scopedPayload({ ...ng, user_id: user.id })), "Add goal");
     setGoals(prev => [...prev, ng]);
+    return ng.id;
   }, [user, demoMode, scopedPayload, assertCanEditHousehold]);
 
   const updateGoal = useCallback(async (goal: Goal) => {

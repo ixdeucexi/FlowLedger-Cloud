@@ -216,6 +216,14 @@ export function matchedOccurrenceAllocations(
   return matches;
 }
 
+export function groupReviewTargets(targets: RankedReviewTarget[]) {
+  return {
+    setAside: targets.filter(target => target.type === "goal" || target.type === "decision"),
+    bills: targets.filter(target => target.type === "bill"),
+    income: targets.filter(target => target.type === "income"),
+  };
+}
+
 export type ReviewedBillMonthSettlement = {
   status: "partial" | "settled";
   actualAmount: number;

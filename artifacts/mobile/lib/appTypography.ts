@@ -5,11 +5,11 @@ export function fontFamilyForStyle(style: AppFontStyle): string {
     case "elegant":
       return "Georgia, 'Times New Roman', serif";
     case "bold":
-      return "'Arial Black', Impact, 'Inter_700Bold', sans-serif";
+      return "'Inter_700Bold', Arial, sans-serif";
     case "playful":
-      return "'Comic Sans MS', 'Comic Neue', 'Chalkboard SE', cursive";
+      return "'Trebuchet MS', 'Avenir Next', 'Segoe UI', sans-serif";
     case "soft":
-      return "'Trebuchet MS', 'Avenir Next', 'Segoe UI Rounded', sans-serif";
+      return "'Avenir Next', 'Segoe UI', 'Inter_400Regular', sans-serif";
     case "default":
     default:
       return "'Inter_400Regular', Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
@@ -21,11 +21,11 @@ export function nativeFontFamilyForStyle(style: AppFontStyle): string | undefine
     case "elegant":
       return "serif";
     case "bold":
-      return "sans-serif-condensed";
+      return "sans-serif-medium";
     case "playful":
-      return "casual";
+      return "sans-serif";
     case "soft":
-      return "sans-serif-light";
+      return "sans-serif";
     case "default":
     default:
       return undefined;

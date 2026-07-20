@@ -1379,7 +1379,7 @@ export default function DashboardScreen() {
               { id: "bill",    icon: "file-text"   as const, label: "Add a Bill",       sub: "Track a new recurring expense",       col: c.primary     },
               { id: "income",  icon: "trending-up" as const, label: "Add Income",        sub: "Log a salary, freelance, or other",    col: c.success     },
               { id: "expense", icon: "shopping-bag"as const, label: "Add a Transaction", sub: "Record a one-time expense or income",  col: c.warning     },
-              { id: "goal",    icon: "target"      as const, label: "Add Goal",          sub: "Plan savings or a future purchase",   col: "#8b5cf6"     },
+              { id: "goal",    icon: "target"      as const, label: "Set Aside Money",   sub: "Create a savings goal or spending bucket", col: "#8b5cf6" },
               { id: "debt",    icon: "credit-card" as const, label: "Pay Down Debt",     sub: "Go to snowball / avalanche planner",   col: c.destructive },
             ].map(item => (
               <Pressable

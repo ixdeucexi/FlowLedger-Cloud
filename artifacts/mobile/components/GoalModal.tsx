@@ -25,9 +25,13 @@ interface Props {
   onSave: (goal: Omit<Goal, "id" | "created_at"> | Goal) => void | Promise<unknown>;
   onDelete?: (id: string) => void | Promise<unknown>;
   editGoal?: Goal | null;
+  initialMode?: "savings" | "budget";
+  initialName?: string;
+  initialTargetAmount?: number;
+  initialTargetDate?: string;
 }
 
-export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Props) {
+export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initialMode = "savings", initialName = "", initialTargetAmount, initialTargetDate }: Props) {
   const c = useColors();
   useBackDismiss(visible, onClose);
 
@@ -49,12 +53,15 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Prop
       setGoalMode(editGoal.goal_type === "planned_expense" ? "budget" : "savings");
       setTargetDate(editGoal.target_date.split("T")[0]);
     } else {
-      setName(""); setTarget(""); setCurrent(""); setGoalMode("savings");
+      setName(initialName);
+      setTarget(initialTargetAmount ? initialTargetAmount.toFixed(2) : "");
+      setCurrent("");
+      setGoalMode(initialMode);
       const d = new Date();
       d.setFullYear(d.getFullYear() + 1);
-      setTargetDate(dateToYMD(d));
+      setTargetDate(initialTargetDate || dateToYMD(d));
     }
-  }, [editGoal, visible]);
+  }, [editGoal, initialMode, initialName, initialTargetAmount, initialTargetDate, visible]);
 
   const handleSave = async () => {
     if (saving) return;
@@ -64,7 +71,7 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Prop
     const data: Omit<Goal, "id" | "created_at"> = {
       name: name.trim(),
       target_amount: t,
-      current_amount: goalMode === "budget" ? -1 : (parseFloat(current) || 0),
+      current_amount: goalMode === "budget" ? 0 : (parseFloat(current) || 0),
       target_date: targetDate, // stored as YYYY-MM-DD
       goal_type: goalMode === "budget" ? "planned_expense" : "savings",
     };
@@ -106,7 +113,7 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Prop
           <View style={styles.handle} />
           <View style={styles.header}>
             <Text style={[styles.title, { color: c.foreground }]}>
-              {editGoal ? "Edit Goal" : "New Financial Goal"}
+              {editGoal ? "Edit Goal or Bucket" : "Set Aside Money"}
             </Text>
             <Pressable onPress={onClose} hitSlop={8}>
               <Feather name="x" size={22} color={c.mutedForeground} />
@@ -120,7 +127,7 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Prop
             <View style={styles.modeRow}>
               {([
                 { id: "savings" as const, label: "Savings Goal", icon: "trending-up" as const },
-                { id: "budget" as const, label: "Can I Afford It?", icon: "calendar" as const },
+                { id: "budget" as const, label: "Spending Bucket", icon: "calendar" as const },
               ]).map(option => {
                 const selected = goalMode === option.id;
                 return (
@@ -137,7 +144,7 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Prop
             </View>
             <Text style={[styles.modeHint, { color: c.mutedForeground }]}>
               {goalMode === "budget"
-                ? "See whether your projected account balance can cover the full amount on that date."
+                ? "Set aside money for something you expect to buy. Match the bank charge to this bucket when it posts."
                 : "Track money you are actively setting aside toward a target."}
             </Text>
 
@@ -191,7 +198,7 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal }: Prop
               <Feather name="info" size={13} color={c.primary} />
               <Text style={[styles.hintText, { color: c.mutedForeground }]}>
                 {goalMode === "budget"
-                  ? "This checks your projected account balance on the selected date. Nothing is treated as already saved."
+                  ? "This amount is protected in your calendar until you match the real bank transaction. It will only count once."
                   : "Add contributions over time and compare your saved amount with the target."}
               </Text>
             </View>

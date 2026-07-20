@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { allocationLabel, allocationTotal, buildCurrentMonthReviewQueue, buildForgottenBillDefaults, forgottenBillSettlement, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewAllocationsAreBalanced, reviewedBillMonthSettlement, reviewQueueAfterSkips, reviewSettlementSummary, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
+import { allocationLabel, allocationTotal, buildCurrentMonthReviewQueue, buildForgottenBillDefaults, forgottenBillSettlement, groupReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewAllocationsAreBalanced, reviewedBillMonthSettlement, reviewQueueAfterSkips, reviewSettlementSummary, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
 
 test("queues only active current-month posted Plaid transactions oldest first", () => {
   const queue = buildCurrentMonthReviewQueue([
@@ -118,6 +118,21 @@ test("partial payments accumulate on one occurrence without closing another", ()
   assert.equal(completed?.settlement, "exact");
   assert.equal(unrelated?.amount, 10);
   assert.equal(unrelated?.settlement, "partial");
+});
+
+test("set-aside money stays separate from bills in Review Center", () => {
+  const grouped = groupReviewTargets(rankReviewTargets(
+    { amount: -200, date: "2026-07-18", note: "Weekend", category: "Entertainment" },
+    [
+      { type: "bill", id: "phone", name: "Phone", category: "Utilities", plannedAmount: 200, occurrenceDate: "2026-07-18" },
+      { type: "goal", id: "weekend", name: "Weekend money", category: "Planned spending", plannedAmount: 200, occurrenceDate: "2026-07-18" },
+      { type: "decision", id: "trip", name: "Day trip", category: "Calendar plan", plannedAmount: 75, occurrenceDate: "2026-07-19" },
+    ],
+  ));
+
+  assert.deepEqual(grouped.setAside.map(target => target.id), ["weekend", "trip"]);
+  assert.deepEqual(grouped.bills.map(target => target.id), ["phone"]);
+  assert.deepEqual(grouped.income, []);
 });
 
 test("settled bill months stay settled when a later debt rollover changes the recurring minimum", () => {

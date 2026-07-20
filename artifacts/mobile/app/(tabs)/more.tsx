@@ -92,11 +92,11 @@ const THEME_OPTIONS: { label: string; value: ThemeMode; icon: string }[] = [
 ];
 
 const FONT_OPTIONS: { label: string; value: AppFontStyle; icon: string; desc: string }[] = [
-  { label: "Flow", value: "default", icon: "type", desc: "Clean and balanced for everyday planning." },
-  { label: "Elegant", value: "elegant", icon: "feather", desc: "A softer, polished feel." },
-  { label: "Bold", value: "bold", icon: "bold", desc: "Blocky and high-contrast." },
-  { label: "Playful", value: "playful", icon: "smile", desc: "Friendly and fun." },
-  { label: "Soft", value: "soft", icon: "heart", desc: "Gentle and rounded." },
+  { label: "Flow", value: "default", icon: "type", desc: "Clear and balanced for everyday planning." },
+  { label: "Classic", value: "elegant", icon: "feather", desc: "A highly readable serif style." },
+  { label: "Strong", value: "bold", icon: "bold", desc: "Heavier text with clear contrast." },
+  { label: "Friendly", value: "playful", icon: "smile", desc: "Open, relaxed, and easy to scan." },
+  { label: "Comfort", value: "soft", icon: "heart", desc: "A calm, familiar reading style." },
 ];
 
 const BACKUP_COMPLETE_KEY = "flowledger_backup_exported";
