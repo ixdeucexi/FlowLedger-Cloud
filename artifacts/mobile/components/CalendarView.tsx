@@ -1,5 +1,5 @@
 import React from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import type { DailyBalance, DecisionRecord, Goal, GoalExpense, Transaction } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
@@ -23,6 +23,27 @@ const CALENDAR = {
   amber: "#fbbf24",
   red: "#fb7185",
 };
+
+function CalendarGridViewport({
+  children,
+  scrollable,
+}: {
+  children: React.ReactNode;
+  scrollable: boolean;
+}) {
+  if (!scrollable) return <>{children}</>;
+
+  return (
+    <ScrollView
+      nestedScrollEnabled
+      showsVerticalScrollIndicator
+      style={styles.gridScroll}
+      contentContainerStyle={styles.gridScrollContent}
+    >
+      {children}
+    </ScrollView>
+  );
+}
 
 type ChipKind = "income" | "bill" | "expense" | "goal" | "plan" | "risk";
 
@@ -180,15 +201,9 @@ export function CalendarView({
         ))}
       </View>
 
-      <ScrollView
-        scrollEnabled={hasSixRows}
-        showsVerticalScrollIndicator={hasSixRows}
-        nestedScrollEnabled
-        style={hasSixRows ? styles.gridScroll : undefined}
-        contentContainerStyle={hasSixRows ? styles.gridScrollContent : undefined}
-      >
-      <View style={[styles.grid, { backgroundColor: calendarTheme.surface }]}>
-        {cells.map((day, i) => {
+      <CalendarGridViewport scrollable={hasSixRows && Platform.OS !== "web"}>
+        <View style={[styles.grid, { backgroundColor: calendarTheme.surface }]}>
+          {cells.map((day, i) => {
           if (!day) return <View key={`empty-${i}`} style={[styles.cellOuter, styles.emptyCell, { borderColor: calendarTheme.line }]} />;
           const ds = dateStr(day);
           const isBeforeStart = Boolean(startDate && ds < startDate);
@@ -304,9 +319,9 @@ export function CalendarView({
               </View>
             </Pressable>
           );
-        })}
-      </View>
-      </ScrollView>
+          })}
+        </View>
+      </CalendarGridViewport>
       <View style={styles.legendRow}>
         {[
           { label: "Income", color: CALENDAR.green },
