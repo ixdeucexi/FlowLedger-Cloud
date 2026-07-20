@@ -124,7 +124,7 @@ describe("anchorForecastToBankBalance", () => {
     assert.ok(Math.abs(result.days[19].balance - 1_689.39) < 1e-8);
   });
 
-  it("does not let past plans or review status rewrite cash history", () => {
+  it("keeps past plans out of history but applies today's planned outflows", () => {
     const posted = event({
       id: "transaction:bank",
       sourceType: "transaction",
@@ -135,19 +135,20 @@ describe("anchorForecastToBankBalance", () => {
       status: "actual",
     });
     const pastBucket = event({ id: "goal:weekend", sourceType: "goal", sourceId: "weekend", date: "2026-07-18", amount: -139.32, kind: "goal" });
-    const todayPlan = event({ id: "transaction:tires", sourceType: "transaction", sourceId: "tires", date: "2026-07-20", amount: -310, kind: "transaction_expense" });
+    const todayPlan = event({ id: "bill:insurance-today", sourceType: "bill", sourceId: "insurance-today", date: "2026-07-20", amount: -310, kind: "bill" });
+    const todayUnpostedIncome = event({ id: "income:today", sourceType: "income", sourceId: "income-today", date: "2026-07-20", amount: 500, kind: "scheduled_income" });
     const futureBill = event({ id: "bill:insurance", sourceType: "bill", sourceId: "insurance", date: "2026-07-21", amount: -287.52, kind: "bill" });
     const anchored = anchorForecastToBankBalance(
-      [posted, pastBucket, todayPlan, futureBill],
+      [posted, pastBucket, todayPlan, todayUnpostedIncome, futureBill],
       1_689.39,
       "2026-07-20",
       new Set([posted.id]),
     );
     const result = forecastBalances({ ...anchored, startDate: "2026-07-18", endDate: "2026-07-21" });
 
-    assert.deepEqual(anchored.events.map(item => item.id), [posted.id, futureBill.id]);
-    assert.equal(result.days[2].balance, 1_689.39);
-    assert.ok(Math.abs(result.days[3].balance - 1_401.87) < 1e-8);
+    assert.deepEqual(anchored.events.map(item => item.id), [posted.id, todayPlan.id, futureBill.id]);
+    assert.equal(result.days[2].balance, 1_379.39);
+    assert.ok(Math.abs(result.days[3].balance - 1_091.87) < 1e-8);
   });
 });
 

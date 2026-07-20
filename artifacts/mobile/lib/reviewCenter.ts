@@ -26,6 +26,18 @@ export interface ReviewTransactionLike {
   removed_at?: string;
 }
 
+export interface PlannedExpenseAllocationGroup {
+  key: string;
+  targetId: string;
+  source: "goal" | "decision";
+  name: string;
+  occurrenceDate: string;
+  plannedAmount: number;
+  spentAmount: number;
+  settlement: ReviewAllocationLike["settlement"];
+  transactionIds: string[];
+}
+
 export interface ForgottenBillDefaults {
   name: string;
   amount: number;
@@ -171,6 +183,51 @@ export function reviewSettlementSummary(transaction: Pick<ReviewTransactionLike,
 
 export function occurrenceKey(targetId: string, occurrenceDate: string): string {
   return `${targetId}:${occurrenceDate.slice(0, 10)}`;
+}
+
+export function groupPlannedExpenseAllocations(
+  transactions: ReviewTransactionLike[],
+): PlannedExpenseAllocationGroup[] {
+  const groups = new Map<string, PlannedExpenseAllocationGroup>();
+
+  transactions.forEach(transaction => {
+    if (transaction.review_status !== "matched") return;
+    (transaction.review_allocations ?? []).forEach(allocation => {
+      const source = allocation.source
+        ?? (transaction.review_resolution === "goal" || transaction.review_resolution === "decision"
+          ? transaction.review_resolution
+          : undefined);
+      if (allocation.type !== "planned_expense" || !allocation.targetId || !source) return;
+      const occurrenceDate = allocation.occurrenceDate?.slice(0, 10) || transaction.date.slice(0, 10);
+      const key = `${source}:${allocation.targetId}:${occurrenceDate}`;
+      const existing = groups.get(key);
+      const spentAmount = Math.max(0, Number(allocation.amount) || 0);
+      const plannedAmount = Math.max(0, Number(allocation.plannedAmount ?? allocation.amount) || 0);
+
+      if (!existing) {
+        groups.set(key, {
+          key,
+          targetId: allocation.targetId,
+          source,
+          name: allocation.name || transaction.note || "Planned spending",
+          occurrenceDate,
+          plannedAmount,
+          spentAmount,
+          settlement: allocation.settlement,
+          transactionIds: [transaction.id],
+        });
+        return;
+      }
+
+      existing.plannedAmount = Math.max(existing.plannedAmount, plannedAmount);
+      existing.spentAmount = Math.round((existing.spentAmount + spentAmount) * 100) / 100;
+      if (allocation.settlement && allocation.settlement !== "partial") existing.settlement = allocation.settlement;
+      if (!existing.transactionIds.includes(transaction.id)) existing.transactionIds.push(transaction.id);
+    });
+  });
+
+  return Array.from(groups.values()).sort((left, right) =>
+    left.occurrenceDate.localeCompare(right.occurrenceDate) || left.name.localeCompare(right.name));
 }
 
 export function matchedOccurrenceKeys(

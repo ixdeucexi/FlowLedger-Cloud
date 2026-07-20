@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { DailyBalance, DecisionRecord, Goal, GoalExpense, Transaction } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { isConfirmedBillMatch } from "@/lib/billMatching";
-import { allocationLabel } from "@/lib/reviewCenter";
+import { allocationLabel, groupPlannedExpenseAllocations } from "@/lib/reviewCenter";
 import { scenarioDates } from "@/lib/decisions";
 
 const DAY_NAMES = ["S", "M", "T", "W", "T", "F", "S"];
@@ -196,6 +196,9 @@ export function CalendarView({
           const isSelected = ds === selectedDate;
           const db = isBeforeStart ? undefined : balanceByDay[day];
           const dayTxs = isBeforeStart ? [] : (txByDay[day] ?? []);
+          const plannedExpenseGroups = groupPlannedExpenseAllocations(dayTxs);
+          const groupedPlannedExpenseTransactionIds = new Set(plannedExpenseGroups.flatMap(group => group.transactionIds));
+          const ungroupedDayTxs = dayTxs.filter(transaction => !groupedPlannedExpenseTransactionIds.has(transaction.id));
           const billEvents = (db?.events ?? [])
             .filter(event => event.amount < 0 && (event.sourceType === "bill" || event.kind === "bill"))
             .slice(0, 3);
@@ -203,20 +206,23 @@ export function CalendarView({
           (isBeforeStart ? [] : (goalsByDay[day] ?? [])).forEach(goal => {
             if (!calendarGoals.some(existing => existing.id === goal.id)) calendarGoals.push(goal);
           });
+          const groupedPlannedExpenseIds = new Set(plannedExpenseGroups.map(group => group.targetId));
+          const ungroupedCalendarGoals = calendarGoals.filter(goal => !groupedPlannedExpenseIds.has(goal.id));
 
           const decisionAmount = isBeforeStart ? 0 : (decisionsByDay[day] ?? 0);
           const isLowRiskDay = Boolean(db && db.balance < safetyFloor);
           const chips: { label: string; kind: ChipKind }[] = [];
 
           if (db && db.scheduledIncome > 0) chips.push({ label: "Payday", kind: "income" });
-          dayTxs.filter(tx => tx.amount > 0 && tx.review_status !== "transfer").slice(0, 1).forEach(tx => chips.push({ label: `${allocationLabel(tx) || tx.note || tx.category} +$${fmt(tx.amount)}`, kind: "income" }));
+          ungroupedDayTxs.filter(tx => tx.amount > 0 && tx.review_status !== "transfer").slice(0, 1).forEach(tx => chips.push({ label: `${allocationLabel(tx) || tx.note || tx.category} +$${fmt(tx.amount)}`, kind: "income" }));
           if (billEvents.length > 0) billEvents.forEach(event => chips.push({ label: event.name || `Bill $${fmt(Math.abs(event.amount))}`, kind: "bill" }));
           else if (db && db.bills > 0) chips.push({ label: `Bills $${fmt(db.bills)}`, kind: "bill" });
-          dayTxs.filter(tx => tx.amount < 0 && tx.review_status !== "transfer").slice(0, 2).forEach(tx => chips.push({
+          plannedExpenseGroups.slice(0, 2).forEach(group => chips.push({ label: group.name, kind: "expense" }));
+          ungroupedDayTxs.filter(tx => tx.amount < 0 && tx.review_status !== "transfer").slice(0, 2).forEach(tx => chips.push({
             label: `${allocationLabel(tx) || tx.note || tx.category} -$${fmt(tx.amount)}`,
             kind: isConfirmedBillMatch(tx) ? "bill" : "expense",
           }));
-          calendarGoals.slice(0, 2).forEach(goal => chips.push({ label: goal.name, kind: "goal" }));
+          ungroupedCalendarGoals.slice(0, 2).forEach(goal => chips.push({ label: goal.name, kind: "goal" }));
           if (decisionAmount > 0) chips.push({ label: `Plan $${fmt(decisionAmount)}`, kind: "plan" });
           const bankAdjustment = db?.events?.find(event => event.sourceType === "reconciliation");
           if (bankAdjustment) chips.push({ label: "Bank balance synced", kind: "plan" });

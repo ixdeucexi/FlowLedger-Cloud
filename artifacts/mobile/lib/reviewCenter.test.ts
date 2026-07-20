@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { allocationLabel, allocationTotal, buildCurrentMonthReviewQueue, buildForgottenBillDefaults, forgottenBillSettlement, groupReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewAllocationsAreBalanced, reviewedBillMonthSettlement, reviewQueueAfterSkips, reviewSettlementSummary, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
+import { allocationLabel, allocationTotal, buildCurrentMonthReviewQueue, buildForgottenBillDefaults, forgottenBillSettlement, groupPlannedExpenseAllocations, groupReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewAllocationsAreBalanced, reviewedBillMonthSettlement, reviewQueueAfterSkips, reviewSettlementSummary, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
 
 test("queues only active current-month posted Plaid transactions oldest first", () => {
   const queue = buildCurrentMonthReviewQueue([
@@ -133,6 +133,35 @@ test("set-aside money stays separate from bills in Review Center", () => {
   assert.deepEqual(grouped.setAside.map(target => target.id), ["weekend", "trip"]);
   assert.deepEqual(grouped.bills.map(target => target.id), ["phone"]);
   assert.deepEqual(grouped.income, []);
+});
+
+test("multiple charges matched to one bucket become one calendar summary", () => {
+  const transactions = [
+    { id: "walmart-1", date: "2026-07-18", amount: -101.08, category: "Shopping", note: "Walmart", review_status: "matched", review_allocations: [
+      { type: "planned_expense" as const, source: "goal" as const, targetId: "reunion", name: "Family Reunion", amount: 101.08, plannedAmount: 450, occurrenceDate: "2026-07-18", settlement: "partial" as const },
+    ] },
+    { id: "walmart-2", date: "2026-07-18", amount: -125.58, category: "Shopping", note: "Walmart", review_status: "matched", review_allocations: [
+      { type: "planned_expense" as const, source: "goal" as const, targetId: "reunion", name: "Family Reunion", amount: 125.58, plannedAmount: 348.92, occurrenceDate: "2026-07-18", settlement: "partial" as const },
+    ] },
+    { id: "walmart-3", date: "2026-07-18", amount: -84.02, category: "Shopping", note: "Walmart", review_status: "matched", review_allocations: [
+      { type: "planned_expense" as const, source: "goal" as const, targetId: "reunion", name: "Family Reunion", amount: 84.02, plannedAmount: 223.34, occurrenceDate: "2026-07-18", settlement: "partial" as const },
+    ] },
+    { id: "walmart-4", date: "2026-07-18", amount: -109.69, category: "Shopping", note: "Walmart", review_status: "matched", review_allocations: [
+      { type: "planned_expense" as const, source: "goal" as const, targetId: "reunion", name: "Family Reunion", amount: 109.69, plannedAmount: 139.32, occurrenceDate: "2026-07-18", settlement: "partial" as const },
+    ] },
+  ];
+
+  assert.deepEqual(groupPlannedExpenseAllocations(transactions), [{
+    key: "goal:reunion:2026-07-18",
+    targetId: "reunion",
+    source: "goal",
+    name: "Family Reunion",
+    occurrenceDate: "2026-07-18",
+    plannedAmount: 450,
+    spentAmount: 420.37,
+    settlement: "partial",
+    transactionIds: ["walmart-1", "walmart-2", "walmart-3", "walmart-4"],
+  }]);
 });
 
 test("settled bill months stay settled when a later debt rollover changes the recurring minimum", () => {

@@ -24,7 +24,7 @@ import { useBudget } from "@/context/BudgetContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
 import { isCashFlowTransaction, isConfirmedBillMatch } from "@/lib/billMatching";
-import { allocationLabel, matchedOccurrenceAllocations, occurrenceKey, reviewSettlementSummary, transactionDisplayName } from "@/lib/reviewCenter";
+import { allocationLabel, groupPlannedExpenseAllocations, matchedOccurrenceAllocations, occurrenceKey, reviewSettlementSummary, transactionDisplayName } from "@/lib/reviewCenter";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
 import { buildDayForecastFloPrompt, groupForecastEvents } from "@/lib/forecastDisplay";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
@@ -480,6 +480,46 @@ export default function MonthlyScreen() {
       .filter(decision => scenarioDates(decision.scenario, monthEnd).includes(selectedDate))
       .sort((left, right) => left.name.localeCompare(right.name));
   }, [decisions, selectedDate, month, selectedYear]);
+
+  const plannedExpenseGroupsForSelectedDay = useMemo(() => {
+    if (!selectedDate) return [];
+    return groupPlannedExpenseAllocations(txList)
+      .filter(group => group.occurrenceDate === selectedDate)
+      .map(group => {
+        const goal = group.source === "goal" ? goals.find(item => item.id === group.targetId) : undefined;
+        const decision = group.source === "decision" ? decisions.find(item => item.id === group.targetId) : undefined;
+        const plannedAmount = goal
+          ? Math.max(0, Number(goal.target_amount) || 0)
+          : decision
+            ? Math.abs(Number(decision.scenario.amount) || 0)
+            : group.plannedAmount;
+        const spentAmount = goal
+          ? Math.max(0, Number(goal.current_amount) || 0)
+          : decision?.actual_amount !== undefined && decision.actual_amount !== null
+            ? Math.max(0, Number(decision.actual_amount) || 0)
+            : group.spentAmount;
+        const closed = Boolean(goal?.closed_at)
+          || decision?.status === "completed"
+          || Boolean(group.settlement && group.settlement !== "partial");
+        const unusedAmount = Math.max(0, plannedAmount - spentAmount);
+        return {
+          ...group,
+          name: goal?.name || decision?.name || group.name,
+          plannedAmount,
+          spentAmount,
+          closed,
+          remainingAmount: closed ? 0 : unusedAmount,
+          releasedAmount: closed ? unusedAmount : 0,
+        };
+      });
+  }, [decisions, goals, selectedDate, txList]);
+
+  const displayedGoalsForSelectedDay = useMemo(() => {
+    const matchedBucketIds = new Set(plannedExpenseGroupsForSelectedDay
+      .filter(group => group.source === "goal")
+      .map(group => group.targetId));
+    return goalsForSelectedDay.filter(goal => !matchedBucketIds.has(goal.id));
+  }, [goalsForSelectedDay, plannedExpenseGroupsForSelectedDay]);
 
   const isFuture = useMemo(() => {
     const now = new Date();
@@ -1120,15 +1160,21 @@ export default function MonthlyScreen() {
   }, [transactions, addBill]);
 
   const displayedTxs = selectedDate
-    ? calendarTransactions.filter(t => t.date === selectedDate).filter(transaction => !(transaction.review_allocations ?? []).some(allocation =>
-      allocation.type === "bill"
-      && allocation.settlement === "partial"
-      && allocation.occurrenceDate === selectedDate
-      && scheduledBillsForDay.some(bill => bill.id === allocation.targetId)
-    ))
+    ? calendarTransactions.filter(t => t.date === selectedDate).filter(transaction => {
+      const allocations = transaction.review_allocations ?? [];
+      if (allocations.some(allocation => allocation.type === "planned_expense")) return false;
+      return !allocations.some(allocation =>
+        allocation.type === "bill"
+        && allocation.settlement === "partial"
+        && allocation.occurrenceDate === selectedDate
+        && scheduledBillsForDay.some(bill => bill.id === allocation.targetId));
+    })
     : [];
-  const selectedForecastEventCount = selectedForecastGroups.reduce((sum, group) => sum + group.events.length, 0);
-  const selectedVisibleItemCount = scheduledBillsForDay.length + displayedTxs.length + goalsForSelectedDay.length + plansForSelectedDay.length;
+  const rawSelectedForecastEventCount = selectedForecastGroups.reduce((sum, group) => sum + group.events.length, 0);
+  const groupedBucketEventReduction = plannedExpenseGroupsForSelectedDay.reduce((sum, group) =>
+    sum + Math.max(0, group.transactionIds.length - 1) + (group.remainingAmount > 0.005 ? 1 : 0), 0);
+  const selectedForecastEventCount = Math.max(0, rawSelectedForecastEventCount - groupedBucketEventReduction);
+  const selectedVisibleItemCount = scheduledBillsForDay.length + displayedTxs.length + plannedExpenseGroupsForSelectedDay.length + displayedGoalsForSelectedDay.length + plansForSelectedDay.length;
   const selectedDayItemCount = Math.max(selectedForecastEventCount, selectedVisibleItemCount);
 
   const changeMonth = useCallback((delta: number) => {
@@ -1833,10 +1879,10 @@ export default function MonthlyScreen() {
                       </View>
                     ) : null}
 
-                    {goalsForSelectedDay.length > 0 || plansForSelectedDay.length > 0 ? (
+                    {displayedGoalsForSelectedDay.length > 0 || plansForSelectedDay.length > 0 ? (
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
                         <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Plans & goals</Text>
-                        {goalsForSelectedDay.map(goal => (
+                        {displayedGoalsForSelectedDay.map(goal => (
                           <View key={`overlay-goal-${goal.id}`} style={styles.dayOverlayRow}>
                             <Text numberOfLines={1} style={[styles.dayOverlayRowName, { color: c.foreground }]}>★ {goal.name}</Text>
                             <Text style={[styles.dayOverlayAmount, { color: "#8b5cf6" }]}>-${goal.amount.toFixed(2)}</Text>
@@ -1870,9 +1916,47 @@ export default function MonthlyScreen() {
                       </View>
                     ) : null}
 
-                    {displayedTxs.length > 0 ? (
+                    {plannedExpenseGroupsForSelectedDay.length > 0 || displayedTxs.length > 0 ? (
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
                         <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Activity</Text>
+                        {plannedExpenseGroupsForSelectedDay.map(group => {
+                          const statusColor = group.closed ? c.success : c.warning;
+                          const finalLabel = group.closed ? "Released" : "Left";
+                          const finalAmount = group.closed ? group.releasedAmount : group.remainingAmount;
+                          return (
+                            <View
+                              key={`overlay-bucket-${group.key}`}
+                              style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: statusColor + "40" }]}
+                            >
+                              <View style={styles.dayBillTop}>
+                                <View style={{ flex: 1 }}>
+                                  <Text numberOfLines={1} style={[styles.dayBillName, { color: c.foreground }]}>{group.name}</Text>
+                                  <Text numberOfLines={1} style={[styles.dayBillMeta, { color: c.mutedForeground }]}>
+                                    Spending bucket · {group.transactionIds.length} matched charge{group.transactionIds.length === 1 ? "" : "s"}
+                                  </Text>
+                                </View>
+                                <View style={[styles.dayTransactionBadge, { backgroundColor: statusColor + "20" }]}>
+                                  <Text style={[styles.dayTransactionBadgeText, { color: statusColor }]}>{group.closed ? "CLOSED" : "PARTIAL"}</Text>
+                                </View>
+                              </View>
+
+                              <View style={styles.dayBillNumbers}>
+                                <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
+                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Planned</Text>
+                                  <Text numberOfLines={1} style={[styles.dayBillNumberValue, { color: c.foreground }]}>${group.plannedAmount.toFixed(2)}</Text>
+                                </View>
+                                <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
+                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Spent</Text>
+                                  <Text numberOfLines={1} style={[styles.dayBillNumberValue, { color: c.success }]}>${group.spentAmount.toFixed(2)}</Text>
+                                </View>
+                                <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
+                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>{finalLabel}</Text>
+                                  <Text numberOfLines={1} style={[styles.dayBillNumberValue, { color: statusColor }]}>${finalAmount.toFixed(2)}</Text>
+                                </View>
+                              </View>
+                            </View>
+                          );
+                        })}
                         {displayedTxs.map(tx => {
                           const sourceLabel = isConfirmedBillMatch(tx)
                             ? "Bill payment"
