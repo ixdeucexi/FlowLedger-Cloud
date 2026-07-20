@@ -285,8 +285,6 @@ export default function DashboardScreen() {
 
   const balanceMetrics = useMemo(() => {
     if (!currentMonthBalances.length) return null;
-    const todayEntry = currentMonthBalances.find(db => db.day === today);
-    const currentBalance = todayEntry?.balance ?? currentMonthBalances[0]?.balance ?? 0;
     const endOfMonthBalance = currentMonthBalances[currentMonthBalances.length - 1]?.balance ?? 0;
     let lowestBalance = Infinity;
     let lowestDay = today;
@@ -294,7 +292,7 @@ export default function DashboardScreen() {
       if (db.balance < lowestBalance) { lowestBalance = db.balance; lowestDay = db.day; }
     });
     const firstNegEntry = currentMonthBalances.find(db => db.balance < 0);
-    return { currentBalance, endOfMonthBalance, lowestBalance, lowestDay, firstNegDay: firstNegEntry?.day ?? null };
+    return { endOfMonthBalance, lowestBalance, lowestDay, firstNegDay: firstNegEntry?.day ?? null };
   }, [currentMonthBalances, today]);
   // ── 12-month negative schedule ─────────────────────────────────────────────
   type OutlookMonth = { month: number; year: number; label: string; firstNegDay: number | null; lowestBalance: number };
@@ -643,7 +641,8 @@ export default function DashboardScreen() {
       .filter(account => account.is_active && account.account_type === "checking")
       .reduce((sum, account) => sum + account.current_balance, 0);
   }, [accounts, connectedCheckingAccounts]);
-  const dashboardCheckingBalance = balanceMetrics?.currentBalance ?? checkingAccountBalance;
+  // The hero is a bank snapshot. Forecasted balances belong on Monthly only.
+  const dashboardCheckingBalance = checkingAccountBalance;
 
   // ── Savings summary for back of hero card ──────────────────────────────────
   const savingsData = useMemo(() => {
