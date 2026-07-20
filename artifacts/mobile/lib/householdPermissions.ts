@@ -43,6 +43,10 @@ export function canRemoveHouseholdMember(
   return actorRole === "manager" && (targetRole === "editor" || targetRole === "viewer");
 }
 
+export function canLeaveHousehold(role?: HouseholdRole | null): boolean {
+  return Boolean(role) && role !== "owner";
+}
+
 export function householdInviteRolesFor(actorRole?: HouseholdRole | null): HouseholdInviteRole[] {
   if (actorRole === "owner") return ["manager", "editor", "viewer"];
   if (actorRole === "manager") return ["editor", "viewer"];

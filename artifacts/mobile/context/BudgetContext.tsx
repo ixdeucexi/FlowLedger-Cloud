@@ -24,6 +24,7 @@ import {
   acceptHouseholdInviteCode,
   createHouseholdInviteCode,
   loadHouseholdActivity,
+  leaveHousehold as leaveHouseholdRecord,
   loadHouseholdMemberships,
   loadHouseholdMembers,
   loadRemoteActiveHouseholdId,
@@ -348,6 +349,7 @@ interface BudgetContextType {
   acceptHouseholdInvite: (code: string) => Promise<void>;
   updateHouseholdMemberRole: (memberUserId: string, role: HouseholdInviteRole) => Promise<void>;
   removeHouseholdMember: (memberUserId: string) => Promise<void>;
+  leaveActiveHousehold: () => Promise<void>;
 
   addBill: (bill: Omit<Bill, "id" | "created_at">) => Promise<string>;
   updateBill: (bill: Bill) => Promise<void>;
@@ -1121,6 +1123,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     await removeHouseholdMemberRecord(activeHousehold.householdId, memberUserId);
     await refreshHouseholdDetails(activeHousehold);
   }, [activeHousehold, refreshHouseholdDetails]);
+
+  const leaveActiveHousehold = useCallback(async () => {
+    if (!user || !activeHousehold) throw new Error("Choose a household first.");
+    if (activeHousehold.role === "owner") throw new Error("Transfer household ownership before leaving.");
+    await leaveHouseholdRecord(activeHousehold.householdId);
+    const next = await resolveHouseholds(user.id);
+    if (next) await saveActiveHouseholdId(user.id, next.householdId);
+    setLoadRetryNonce(value => value + 1);
+  }, [user, activeHousehold, resolveHouseholds]);
 
   // ── Load from Supabase when user changes ────────────────────────────────────
   useEffect(() => {
@@ -3851,7 +3862,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       bills, overrides, billDateMoves, transactions, deletedTransactions, pendingBankTransactions, incomes, goals, extraPayments, categories, settings, accounts, connectedBankAccounts, decisions,
       households, householdMembers, householdActivity, activeHousehold, householdRole, canEditHousehold,
       refreshHouseholds, refreshHouseholdActivity, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
-      updateHouseholdMemberRole, removeHouseholdMember,
+      updateHouseholdMemberRole, removeHouseholdMember, leaveActiveHousehold,
       forecastConfidence, loading, loadError, retryBudgetLoad, refreshBankData, demoMode,
       saveStatus, saveError, retryLastSave, clearSaveError,
       dashboardFilter, setDashboardFilter,

@@ -18,6 +18,7 @@ import { AccountModal } from "@/components/AccountModal";
 import { AppText } from "@/components/AppText";
 import { FloLogo } from "@/components/FloLogo";
 import { IncomeModal } from "@/components/IncomeModal";
+import { HouseholdMemberActionsModal } from "@/components/HouseholdMemberActionsModal";
 import { MembershipPanel } from "@/components/MembershipPanel";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { MoreHub } from "@/components/settings/MoreHub";
@@ -44,6 +45,8 @@ import { startLearningTour } from "@/lib/learningTour";
 import { confirmAction } from "@/lib/confirmAction";
 import {
   type HouseholdInviteRole,
+  type HouseholdRole,
+  canLeaveHousehold,
   canRemoveHouseholdMember,
   householdAssignableRolesFor,
   householdInviteRolesFor,
@@ -364,7 +367,7 @@ export default function MoreScreen() {
     addAccount, updateAccount, reconcileAccount, archiveAccount, importStatementTransactions,
     households, householdMembers, householdActivity, activeHousehold, householdRole, canEditHousehold,
     refreshHouseholds, refreshHouseholdActivity, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
-    updateHouseholdMemberRole, removeHouseholdMember,
+    updateHouseholdMemberRole, removeHouseholdMember, leaveActiveHousehold,
     refreshBankData,
   } = useBudget();
 
@@ -402,6 +405,7 @@ export default function MoreScreen() {
   const [householdJoinCode, setHouseholdJoinCode] = useState("");
   const [householdBusy, setHouseholdBusy] = useState(false);
   const [householdMessage, setHouseholdMessage] = useState<string | null>(null);
+  const [managedHouseholdMember, setManagedHouseholdMember] = useState<{ userId: string; label: string; role: HouseholdRole } | null>(null);
   const [feedbackType, setFeedbackType] = useState<FeedbackType>("bug");
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [feedbackRating, setFeedbackRating] = useState<number | null>(null);
@@ -732,40 +736,74 @@ export default function MoreScreen() {
       await updateHouseholdMemberRole(memberUserId, role);
       setHouseholdMessage(`${householdRoleLabel(role)} access saved.`);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not update member access.";
       setHouseholdMessage(message);
       Alert.alert("Household member", message);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return false;
     } finally {
       setHouseholdBusy(false);
     }
   };
 
   const handleRemoveHouseholdMember = (memberUserId: string, label: string) => {
-    Alert.alert("Remove household member?", `${label} will no longer see this household plan.`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          setHouseholdBusy(true);
-          setHouseholdMessage(null);
-          try {
-            await removeHouseholdMember(memberUserId);
-            setHouseholdMessage(`${label} was removed from this household.`);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          } catch (error) {
-            const message = error instanceof Error ? error.message : "Could not remove that member.";
-            setHouseholdMessage(message);
-            Alert.alert("Household member", message);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-          } finally {
-            setHouseholdBusy(false);
-          }
-        },
+    confirmAction({
+      title: "Remove household member?",
+      message: `${label} will no longer see this household plan.`,
+      confirmText: "Remove",
+      destructive: true,
+      onConfirm: async () => {
+        setHouseholdBusy(true);
+        setHouseholdMessage(null);
+        try {
+          await removeHouseholdMember(memberUserId);
+          setHouseholdMessage(`${label} was removed from this household.`);
+          setManagedHouseholdMember(null);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Could not remove that member.";
+          setHouseholdMessage(message);
+          Alert.alert("Household member", message);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        } finally {
+          setHouseholdBusy(false);
+        }
       },
-    ]);
+    });
+  };
+
+  const handleLeaveHousehold = () => {
+    if (!activeHousehold) return;
+    if (!canLeaveHousehold(activeHousehold.role)) {
+      Alert.alert("Transfer ownership first", "The household owner must make someone else the owner before leaving.");
+      return;
+    }
+    const householdName = activeHousehold.name;
+    confirmAction({
+      title: `Leave ${householdName}?`,
+      message: "You will lose access to this shared plan. Other household members will keep their access.",
+      confirmText: "Leave household",
+      destructive: true,
+      onConfirm: async () => {
+        setHouseholdBusy(true);
+        setHouseholdMessage(null);
+        try {
+          await leaveActiveHousehold();
+          setManagedHouseholdMember(null);
+          setHouseholdMessage(`You left ${householdName}.`);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Could not leave that household.";
+          setHouseholdMessage(message);
+          Alert.alert("Leave household", message);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        } finally {
+          setHouseholdBusy(false);
+        }
+      },
+    });
   };
 
   const totalMonthlyIncome = getMonthlyIncome();
@@ -1775,34 +1813,57 @@ export default function MoreScreen() {
                 </View>
                 {(assignableRoles.length > 0 || canRemove) && (
                   <View style={styles.memberActions}>
-                    {assignableRoles.map(role => (
-                      <Pressable
-                        key={role}
-                        onPress={() => handleUpdateHouseholdRole(member.userId, role)}
-                        disabled={householdBusy}
-                        style={[styles.memberActionPill, { backgroundColor: c.primary + "16" }]}
-                      >
-                        <Text style={[styles.memberActionText, { color: c.primary }]}>{householdRoleLabel(role)}</Text>
-                      </Pressable>
-                    ))}
-                    {canRemove ? (
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`Remove ${label} from household`}
-                        onPress={() => handleRemoveHouseholdMember(member.userId, label)}
-                        disabled={householdBusy}
-                        style={[styles.memberRemoveButton, { borderColor: c.destructive + "66" }]}
-                      >
-                        <Feather name="user-minus" size={13} color={c.destructive} />
-                        <Text style={[styles.memberActionText, { color: c.destructive }]}>Remove</Text>
-                      </Pressable>
-                    ) : null}
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Manage ${label}`}
+                      onPress={() => setManagedHouseholdMember({ userId: member.userId, label, role: member.role })}
+                      disabled={householdBusy}
+                      style={[styles.memberActionPill, { backgroundColor: c.primary + "16" }]}
+                    >
+                      <Feather name="settings" size={13} color={c.primary} />
+                      <Text style={[styles.memberActionText, { color: c.primary }]}>Manage</Text>
+                    </Pressable>
                   </View>
                 )}
               </View>
             );
           })}
         </View>
+
+        {activeHousehold ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Leave ${activeHousehold.name} household`}
+            disabled={householdBusy}
+            onPress={handleLeaveHousehold}
+            style={({ pressed }) => [styles.leaveHouseholdButton, { borderColor: c.destructive + "55", opacity: householdBusy ? 0.55 : pressed ? 0.72 : 1 }]}
+          >
+            <Feather name="log-out" size={16} color={c.destructive} />
+            <View style={styles.memberInfo}>
+              <Text style={[styles.leaveHouseholdTitle, { color: c.destructive }]}>Leave household</Text>
+              <Text style={[styles.memberMeta, { color: c.mutedForeground }]}>{activeHousehold.role === "owner" ? "Transfer ownership before leaving." : "Remove your access to this shared plan."}</Text>
+            </View>
+          </Pressable>
+        ) : null}
+
+        <HouseholdMemberActionsModal
+          visible={Boolean(managedHouseholdMember)}
+          memberName={managedHouseholdMember?.label ?? "Household member"}
+          currentRole={managedHouseholdMember?.role ?? "viewer"}
+          roleOptions={householdInviteRolesFor(activeHousehold?.role)}
+          canRemove={managedHouseholdMember ? canRemoveHouseholdMember(activeHousehold?.role, managedHouseholdMember.role, false) : false}
+          busy={householdBusy}
+          onClose={() => setManagedHouseholdMember(null)}
+          onChangeRole={role => {
+            if (!managedHouseholdMember) return;
+            void handleUpdateHouseholdRole(managedHouseholdMember.userId, role).then(saved => {
+              if (saved) setManagedHouseholdMember(current => current ? { ...current, role } : current);
+            });
+          }}
+          onRemove={() => {
+            if (managedHouseholdMember) handleRemoveHouseholdMember(managedHouseholdMember.userId, managedHouseholdMember.label);
+          }}
+        />
 
         <View style={[styles.householdPanel, { backgroundColor: c.muted, borderColor: c.border }]}>
           <Text style={[styles.householdPanelTitle, { color: c.foreground }]}>Share this household</Text>
@@ -3093,9 +3154,10 @@ const styles = StyleSheet.create({
   memberName: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   memberMeta: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
   memberActions: { flexDirection: "row", alignItems: "center", gap: 8 },
-  memberActionPill: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 6 },
+  memberActionPill: { minHeight: 32, borderRadius: 999, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 5 },
   memberActionText: { fontSize: 10, fontFamily: "Inter_800ExtraBold" },
-  memberRemoveButton: { minHeight: 30, borderWidth: 1, borderRadius: 999, paddingHorizontal: 9, flexDirection: "row", alignItems: "center", gap: 5 },
+  leaveHouseholdButton: { minHeight: 62, borderWidth: 1, borderRadius: 16, padding: 12, marginTop: 12, flexDirection: "row", alignItems: "center", gap: 10 },
+  leaveHouseholdTitle: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   activityRow: { flexDirection: "row", alignItems: "flex-start", gap: 9, borderTopWidth: 1, paddingTop: 10, marginTop: 10 },
   activityIcon: { width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   activityInfo: { flex: 1, minWidth: 0 },

@@ -282,3 +282,10 @@ export async function removeHouseholdMember(householdId: string, memberUserId: s
   });
   if (error) throw new Error(friendlyHouseholdError(error.message, "Couldn't remove that member. Try again."));
 }
+
+export async function leaveHousehold(householdId: string): Promise<void> {
+  const { error } = await supabase.rpc("leave_household", {
+    p_household_id: householdId,
+  });
+  if (error) throw new Error(friendlyHouseholdError(error.message, "Couldn't leave that household. Try again."));
+}
