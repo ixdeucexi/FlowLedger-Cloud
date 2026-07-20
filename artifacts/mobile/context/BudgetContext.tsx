@@ -43,6 +43,7 @@ import { isActiveTransaction, isCashFlowTransaction, isConfirmedBillMatch, isDel
 import { matchedOccurrenceAllocations, occurrenceKey, reviewedBillMonthSettlements } from "@/lib/reviewCenter";
 import { normalizePlanningTools } from "@/lib/planningMode";
 import { localDateString } from "@/lib/dateLabels";
+import { spendingBucketSummary } from "@/lib/spendingBuckets";
 import { canonicalConnectedAccounts, pendingPlaidActivityWithBalanceHolds } from "@/lib/plaidActivity";
 import { normalizeBillImportance, type BillImportance } from "@/lib/billImportance";
 
@@ -217,6 +218,8 @@ export interface Goal {
   created_at: string;
   goal_type: "savings" | "planned_expense";
   calendar_marker_only?: boolean;
+  closed_at?: string;
+  closed_by?: string;
 }
 
 export interface DecisionRecord {
@@ -397,6 +400,8 @@ interface BudgetContextType {
 
   addGoal: (goal: Omit<Goal, "id" | "created_at">) => Promise<string>;
   updateGoal: (goal: Goal) => Promise<void>;
+  closeSpendingBucket: (id: string) => Promise<{ spent: number; released: number }>;
+  reopenSpendingBucket: (id: string) => Promise<void>;
   deleteGoal: (id: string) => Promise<void>;
   checkGoalAffordability: (goal: Goal, month: number, year: number) => GoalAffordability;
 
@@ -486,10 +491,8 @@ function parseGoalTargetDate(targetDate: string): { year: number; month: number;
   return { year, month: month - 1, day };
 }
 
-function getGoalRemainingAmount(goal: Pick<Goal, "target_amount" | "current_amount">): number {
-  const target = Number(goal.target_amount) || 0;
-  const saved = Math.max(0, Number(goal.current_amount) || 0);
-  return Math.max(0, target - saved);
+function getGoalRemainingAmount(goal: Pick<Goal, "target_amount" | "current_amount" | "closed_at">): number {
+  return spendingBucketSummary(goal).remaining;
 }
 
 async function ensureSaved(
@@ -2939,6 +2942,50 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, goals, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, assertCanEditHousehold]);
 
+  const closeSpendingBucket = useCallback(async (id: string) => {
+    if (!user) throw new Error("Sign in to close a spending bucket");
+    assertCanEditHousehold("close a spending bucket");
+    const goal = goals.find(item => item.id === id);
+    if (!goal || goal.goal_type !== "planned_expense") throw new Error("Spending bucket not found");
+    const summary = spendingBucketSummary(goal);
+    const spent = summary.spent;
+    const released = summary.closed ? summary.released : Math.max(0, summary.planned - summary.spent);
+    if (goal.closed_at) return { spent, released };
+    const closedAt = new Date().toISOString();
+    const closedGoal = { ...goal, closed_at: closedAt, closed_by: user.id };
+    setGoals(prev => prev.map(item => item.id === id ? closedGoal : item));
+    if (demoMode) return { spent, released };
+    try {
+      await ensureSaved(
+        supabase.from("goals").update({ closed_at: closedAt, closed_by: user.id }).eq("id", id),
+        "Close spending bucket",
+      );
+      return { spent, released };
+    } catch (error) {
+      setGoals(prev => prev.map(item => item.id === id ? goal : item));
+      throw error;
+    }
+  }, [user, goals, demoMode, assertCanEditHousehold]);
+
+  const reopenSpendingBucket = useCallback(async (id: string) => {
+    if (!user) throw new Error("Sign in to reopen a spending bucket");
+    assertCanEditHousehold("reopen a spending bucket");
+    const goal = goals.find(item => item.id === id);
+    if (!goal || goal.goal_type !== "planned_expense") throw new Error("Spending bucket not found");
+    const reopenedGoal = { ...goal, closed_at: undefined, closed_by: undefined };
+    setGoals(prev => prev.map(item => item.id === id ? reopenedGoal : item));
+    if (demoMode) return;
+    try {
+      await ensureSaved(
+        supabase.from("goals").update({ closed_at: null, closed_by: null }).eq("id", id),
+        "Reopen spending bucket",
+      );
+    } catch (error) {
+      setGoals(prev => prev.map(item => item.id === id ? goal : item));
+      throw error;
+    }
+  }, [user, goals, demoMode, assertCanEditHousehold]);
+
   const deleteGoal = useCallback(async (id: string) => {
     if (!user) return;
     assertCanEditHousehold("delete a goal");
@@ -3815,7 +3862,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       runSnowball, previewDebtSnowball, applyDebtSnowballPayment, saveExtraPayment, getExtraPayment, deleteExtraPayment, removeDebtSnowballPayment, finalizeBillPayment,
       addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, reconcileTransaction, undoTransactionReconciliation, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome, getIncomeOccurrencesInMonth,
-      addGoal, updateGoal, deleteGoal, checkGoalAffordability,
+      addGoal, updateGoal, closeSpendingBucket, reopenSpendingBucket, deleteGoal, checkGoalAffordability,
       getCashFlow, getDailyBalances,
       addCategory, updateCategory, deleteCategory,
       updateSettings, importBills,

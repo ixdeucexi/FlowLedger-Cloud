@@ -5,6 +5,7 @@ import {
   type HouseholdRole,
   canEditHouseholdPlan,
   canManageHouseholdMembers,
+  canRemoveHouseholdMember,
   householdAssignableRolesFor,
   householdInviteRolesFor,
   householdRoleLabel,
@@ -46,6 +47,17 @@ test("only owners and managers can manage household members", () => {
   assert.equal(canManageHouseholdMembers("manager"), true);
   assert.equal(canManageHouseholdMembers("editor"), false);
   assert.equal(canManageHouseholdMembers("viewer"), false);
+});
+
+test("member removal protects owners, managers, and the current user", () => {
+  assert.equal(canRemoveHouseholdMember("owner", "manager"), true);
+  assert.equal(canRemoveHouseholdMember("owner", "editor"), true);
+  assert.equal(canRemoveHouseholdMember("manager", "editor"), true);
+  assert.equal(canRemoveHouseholdMember("manager", "viewer"), true);
+  assert.equal(canRemoveHouseholdMember("manager", "manager"), false);
+  assert.equal(canRemoveHouseholdMember("owner", "owner"), false);
+  assert.equal(canRemoveHouseholdMember("owner", "editor", true), false);
+  assert.equal(canRemoveHouseholdMember("editor", "viewer"), false);
 });
 
 test("assignable member roles respect manager limits", () => {

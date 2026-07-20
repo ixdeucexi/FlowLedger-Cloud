@@ -9,7 +9,9 @@ import { UnplannedChargeModal } from "@/components/UnplannedChargeModal";
 import type { Bill, Goal, ReconcileTransactionInput, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
+import { confirmAction } from "@/lib/confirmAction";
 import { buildCurrentMonthReviewQueue, buildForgottenBillDefaults, forgottenBillSettlement, groupReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewQueueAfterSkips, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
+import { isOpenSpendingBucket, spendingBucketSummary } from "@/lib/spendingBuckets";
 
 function todayIso() {
   const now = new Date();
@@ -37,7 +39,8 @@ export function ReviewCenter() {
   const {
     transactions, goals, decisions, categories, canEditHousehold,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getIncomeOccurrencesInMonth,
-    addBill, addGoal, deleteBillMistake, reconcileTransaction, undoTransactionReconciliation, refreshBankData,
+    addBill, addGoal, updateGoal, deleteGoal, closeSpendingBucket, reopenSpendingBucket,
+    deleteBillMistake, reconcileTransaction, undoTransactionReconciliation, refreshBankData,
   } = useBudget();
   useEffect(() => {
     void refreshBankData();
@@ -49,6 +52,8 @@ export function ReviewCenter() {
   const [unplannedChargeVisible, setUnplannedChargeVisible] = useState(false);
   const [forgottenBillVisible, setForgottenBillVisible] = useState(false);
   const [spendingBucketVisible, setSpendingBucketVisible] = useState(false);
+  const [editingBucket, setEditingBucket] = useState<Goal | null>(null);
+  const [bucketMessage, setBucketMessage] = useState<string | null>(null);
   const [skippedIds, setSkippedIds] = useState<string[]>([]);
   const [lastCompleted, setLastCompleted] = useState<{ id: string; label: string } | null>(null);
   const [completedThisVisit, setCompletedThisVisit] = useState(0);
@@ -85,8 +90,7 @@ export function ReviewCenter() {
             plannedAmount: remaining, occurrenceDate, isDebt: bill.is_debt });
         });
       });
-      goals.filter(goal => goal.goal_type === "planned_expense" && goal.target_date?.startsWith(`${year}-${String(month + 1).padStart(2, "0")}`))
-        .filter(goal => Math.max(0, goal.current_amount) + 0.005 < goal.target_amount)
+      goals.filter(goal => goal.goal_type === "planned_expense" && isOpenSpendingBucket(goal) && goal.target_date?.startsWith(`${year}-${String(month + 1).padStart(2, "0")}`))
         .forEach(goal => candidates.push({
           type: "goal", id: goal.id, name: goal.name, category: "Planned spending",
           plannedAmount: Math.max(0, goal.target_amount - Math.max(0, goal.current_amount)), occurrenceDate: goal.target_date.slice(0, 10),
@@ -112,6 +116,49 @@ export function ReviewCenter() {
     return rankReviewTargets(current, candidates);
   }, [current, decisions, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getMonthlyBills, goals, transactions]);
   const groupedTargets = useMemo(() => groupReviewTargets(targets), [targets]);
+  const spendingBuckets = useMemo(() => goals
+    .filter(goal => goal.goal_type === "planned_expense")
+    .sort((left, right) => Number(Boolean(left.closed_at)) - Number(Boolean(right.closed_at))
+      || left.target_date.localeCompare(right.target_date)
+      || left.name.localeCompare(right.name)), [goals]);
+
+  const closeBucket = (goal: Goal) => {
+    const { spent } = spendingBucketSummary(goal);
+    const released = Math.max(0, Number(goal.target_amount) - spent);
+    confirmAction({
+      title: `Close ${goal.name}?`,
+      message: `${money(spent)} was matched from ${money(goal.target_amount)} planned. ${released > 0.005 ? `${money(released)} will become available again.` : "There is no money left to release."}`,
+      confirmText: "Close bucket",
+      onConfirm: async () => {
+        setSaving(true);
+        setBucketMessage(null);
+        try {
+          const result = await closeSpendingBucket(goal.id);
+          setBucketMessage(`${goal.name} closed · ${money(result.released)} released`);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (error) {
+          Alert.alert("Couldn’t close bucket", error instanceof Error ? error.message : "Please try again.");
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
+  };
+
+  const reopenBucket = async (goal: Goal) => {
+    if (saving) return;
+    setSaving(true);
+    setBucketMessage(null);
+    try {
+      await reopenSpendingBucket(goal.id);
+      setBucketMessage(`${goal.name} reopened`);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (error) {
+      Alert.alert("Couldn’t reopen bucket", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const completeReview = async (input: ReconcileTransactionInput, notice?: string) => {
     if (!current || saving) throw new Error("This transaction is no longer available for review.");
@@ -267,6 +314,55 @@ export function ReviewCenter() {
         </View>
       </View>
 
+      {spendingBuckets.length ? (
+        <View style={[styles.bucketManager, { backgroundColor: c.card, borderColor: c.border }]}>
+          <View style={styles.bucketManagerHeader}>
+            <View style={[styles.heroIcon, { backgroundColor: c.primary + "18" }]}><Feather name="shopping-bag" size={19} color={c.primary} /></View>
+            <View style={styles.optionCopy}>
+              <Text style={[styles.sectionTitle, styles.bucketManagerTitle, { color: c.foreground }]}>Spending buckets</Text>
+              <Text style={[styles.sectionCopy, styles.bucketManagerCopy, { color: c.mutedForeground }]}>Edit a plan or close it without waiting for another transaction.</Text>
+            </View>
+          </View>
+          {bucketMessage ? <Text style={[styles.bucketMessage, { color: c.success, backgroundColor: c.success + "12" }]}>{bucketMessage}</Text> : null}
+          {spendingBuckets.map((goal, index) => {
+            const summary = spendingBucketSummary(goal);
+            return (
+              <View key={goal.id} style={[styles.bucketRow, index > 0 && { borderTopWidth: 1, borderTopColor: c.border }]}>
+                <View style={styles.optionCopy}>
+                  <View style={styles.bucketNameRow}>
+                    <Text numberOfLines={1} style={[styles.optionTitle, { color: c.foreground }]}>{goal.name}</Text>
+                    {goal.closed_at ? <Text style={[styles.closedBadge, { color: c.success, backgroundColor: c.success + "18" }]}>CLOSED</Text> : null}
+                  </View>
+                  <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Planned {money(summary.planned)} · Spent {money(summary.spent)} · {summary.closed ? `Released ${money(summary.released)}` : `${money(summary.remaining)} left`}</Text>
+                </View>
+                <View style={styles.bucketActions}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Edit ${goal.name} bucket`}
+                    disabled={saving}
+                    onPress={() => setEditingBucket(goal)}
+                    style={({ pressed }) => [styles.bucketActionButton, { borderColor: c.border, opacity: saving ? 0.5 : pressed ? 0.72 : 1 }]}
+                  >
+                    <Feather name="edit-3" size={13} color={c.primary} />
+                    <Text style={[styles.bucketActionText, { color: c.primary }]}>Edit</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${goal.closed_at ? "Reopen" : "Close"} ${goal.name} bucket`}
+                    disabled={saving}
+                    onPress={() => goal.closed_at ? void reopenBucket(goal) : closeBucket(goal)}
+                    style={({ pressed }) => [styles.bucketActionButton, { borderColor: goal.closed_at ? c.success + "66" : c.warning + "66", opacity: saving ? 0.5 : pressed ? 0.72 : 1 }]}
+                  >
+                    <Feather name={goal.closed_at ? "rotate-ccw" : "check-circle"} size={13} color={goal.closed_at ? c.success : c.warning} />
+                    <Text style={[styles.bucketActionText, { color: goal.closed_at ? c.success : c.warning }]}>{goal.closed_at ? "Reopen" : "Close"}</Text>
+                  </Pressable>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
+
       {lastCompleted ? (
         <View style={[styles.undoCard, { backgroundColor: c.success + "12", borderColor: c.success + "44" }]}>
           <Feather name="check-circle" size={18} color={c.success} />
@@ -395,12 +491,16 @@ export function ReviewCenter() {
       />
 
       <GoalModal
-        visible={spendingBucketVisible && !!current}
-        onClose={() => setSpendingBucketVisible(false)}
+        visible={(spendingBucketVisible && !!current) || Boolean(editingBucket)}
+        onClose={() => { setSpendingBucketVisible(false); setEditingBucket(null); }}
         onSave={async data => {
-          await addGoal(data as Omit<Goal, "id" | "created_at">);
+          if ("id" in data) await updateGoal(data as Goal);
+          else await addGoal(data as Omit<Goal, "id" | "created_at">);
           setSpendingBucketVisible(false);
+          setEditingBucket(null);
         }}
+        onDelete={deleteGoal}
+        editGoal={editingBucket}
         initialMode="budget"
         initialName={current ? `${transactionName(current)} spending` : ""}
         initialTargetAmount={current ? Math.abs(current.amount) : undefined}
@@ -466,6 +566,17 @@ const styles = StyleSheet.create({
   eyebrow: { fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1 },
   heroTitle: { fontSize: 20, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
   heroCopy: { fontSize: 14, lineHeight: 21, fontFamily: "Inter_400Regular", marginTop: 5 },
+  bucketManager: { marginTop: 12, borderWidth: 1, borderRadius: 20, padding: 14 },
+  bucketManagerHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  bucketManagerTitle: { marginTop: 0 },
+  bucketManagerCopy: { marginBottom: 0 },
+  bucketMessage: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, marginTop: 10, fontSize: 12, fontFamily: "Inter_700Bold" },
+  bucketRow: { paddingVertical: 12, gap: 10 },
+  bucketNameRow: { flexDirection: "row", alignItems: "center", gap: 7 },
+  closedBadge: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.6, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3 },
+  bucketActions: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  bucketActionButton: { minHeight: 36, borderWidth: 1, borderRadius: 12, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  bucketActionText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   undoCard: { marginTop: 10, borderWidth: 1, borderRadius: 14, padding: 12, flexDirection: "row", alignItems: "center", gap: 9 },
   undoText: { flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold" }, undoButton: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   emptyCard: { marginTop: 12, borderWidth: 1, borderRadius: 20, padding: 24, alignItems: "center", gap: 8 },

@@ -71,9 +71,13 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
     const data: Omit<Goal, "id" | "created_at"> = {
       name: name.trim(),
       target_amount: t,
-      current_amount: goalMode === "budget" ? 0 : (parseFloat(current) || 0),
+      current_amount: goalMode === "budget"
+        ? editGoal?.goal_type === "planned_expense" ? editGoal.current_amount : 0
+        : (parseFloat(current) || 0),
       target_date: targetDate, // stored as YYYY-MM-DD
       goal_type: goalMode === "budget" ? "planned_expense" : "savings",
+      closed_at: goalMode === "budget" ? editGoal?.closed_at : undefined,
+      closed_by: goalMode === "budget" ? editGoal?.closed_by : undefined,
     };
     setSaving(true);
     try {
@@ -105,6 +109,7 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
 
   const input = [styles.input, { backgroundColor: c.muted, color: c.foreground }];
   const lbl   = [styles.label, { color: c.mutedForeground }];
+  const itemLabel = goalMode === "budget" ? "Bucket" : "Goal";
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -213,7 +218,7 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
               ]}
             >
               <Text style={[styles.saveBtnText, { color: c.primaryForeground }]}>
-                {saving ? "Saving…" : editGoal ? "Update Goal" : "Create Goal"}
+                {saving ? "Saving…" : `${editGoal ? "Update" : "Create"} ${itemLabel}`}
               </Text>
             </Pressable>
 
@@ -223,7 +228,7 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
                 style={({ pressed }) => [styles.deleteBtn, { borderColor: c.destructive, opacity: pressed ? 0.7 : 1 }]}
               >
                 <Feather name="trash-2" size={16} color={c.destructive} />
-                <Text style={[styles.deleteBtnText, { color: c.destructive }]}>Delete Goal</Text>
+                <Text style={[styles.deleteBtnText, { color: c.destructive }]}>Delete {itemLabel}</Text>
               </Pressable>
             )}
           </ScrollView>

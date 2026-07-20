@@ -44,6 +44,7 @@ import { startLearningTour } from "@/lib/learningTour";
 import { confirmAction } from "@/lib/confirmAction";
 import {
   type HouseholdInviteRole,
+  canRemoveHouseholdMember,
   householdAssignableRolesFor,
   householdInviteRolesFor,
   householdRoleLabel,
@@ -1757,6 +1758,7 @@ export default function MoreScreen() {
           ) : householdMembers.map(member => {
             const label = member.displayName || member.email || `Member ${member.userId.slice(0, 6)}`;
             const assignableRoles = householdAssignableRolesFor(activeHousehold?.role, member.role, member.isCurrentUser);
+            const canRemove = canRemoveHouseholdMember(activeHousehold?.role, member.role, member.isCurrentUser);
             return (
               <View key={member.userId} style={[styles.memberRow, { borderTopColor: c.border }]}>
                 <View style={[styles.memberAvatar, { backgroundColor: member.role === "owner" ? c.primary + "24" : c.card }]}>
@@ -1771,7 +1773,7 @@ export default function MoreScreen() {
                     {member.joinedAt ? ` • joined ${formatMemberDate(member.joinedAt)}` : ""}
                   </Text>
                 </View>
-                {assignableRoles.length > 0 && (
+                {(assignableRoles.length > 0 || canRemove) && (
                   <View style={styles.memberActions}>
                     {assignableRoles.map(role => (
                       <Pressable
@@ -1783,9 +1785,18 @@ export default function MoreScreen() {
                         <Text style={[styles.memberActionText, { color: c.primary }]}>{householdRoleLabel(role)}</Text>
                       </Pressable>
                     ))}
-                    <Pressable onPress={() => handleRemoveHouseholdMember(member.userId, label)} disabled={householdBusy} hitSlop={8}>
-                      <Feather name="x" size={17} color={c.destructive} />
-                    </Pressable>
+                    {canRemove ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove ${label} from household`}
+                        onPress={() => handleRemoveHouseholdMember(member.userId, label)}
+                        disabled={householdBusy}
+                        style={[styles.memberRemoveButton, { borderColor: c.destructive + "66" }]}
+                      >
+                        <Feather name="user-minus" size={13} color={c.destructive} />
+                        <Text style={[styles.memberActionText, { color: c.destructive }]}>Remove</Text>
+                      </Pressable>
+                    ) : null}
                   </View>
                 )}
               </View>
@@ -3084,6 +3095,7 @@ const styles = StyleSheet.create({
   memberActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   memberActionPill: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 6 },
   memberActionText: { fontSize: 10, fontFamily: "Inter_800ExtraBold" },
+  memberRemoveButton: { minHeight: 30, borderWidth: 1, borderRadius: 999, paddingHorizontal: 9, flexDirection: "row", alignItems: "center", gap: 5 },
   activityRow: { flexDirection: "row", alignItems: "flex-start", gap: 9, borderTopWidth: 1, paddingTop: 10, marginTop: 10 },
   activityIcon: { width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   activityInfo: { flex: 1, minWidth: 0 },

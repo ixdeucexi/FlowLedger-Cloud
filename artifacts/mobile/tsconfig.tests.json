@@ -57,6 +57,8 @@
     ,"lib/learningTour.test.ts"
     ,"lib/householdPermissions.ts"
     ,"lib/householdPermissions.test.ts"
+    ,"lib/spendingBuckets.ts"
+    ,"lib/spendingBuckets.test.ts"
     ,"lib/feedback.ts"
     ,"lib/feedback.test.ts"
     ,"lib/billMatching.ts"

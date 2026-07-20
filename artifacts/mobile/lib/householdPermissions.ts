@@ -33,6 +33,16 @@ export function canManageHouseholdMembers(role?: HouseholdRole | null): boolean 
   return role === "owner" || role === "manager";
 }
 
+export function canRemoveHouseholdMember(
+  actorRole: HouseholdRole | null | undefined,
+  targetRole: HouseholdRole,
+  isCurrentUser = false,
+): boolean {
+  if (isCurrentUser || targetRole === "owner") return false;
+  if (actorRole === "owner") return true;
+  return actorRole === "manager" && (targetRole === "editor" || targetRole === "viewer");
+}
+
 export function householdInviteRolesFor(actorRole?: HouseholdRole | null): HouseholdInviteRole[] {
   if (actorRole === "owner") return ["manager", "editor", "viewer"];
   if (actorRole === "manager") return ["editor", "viewer"];

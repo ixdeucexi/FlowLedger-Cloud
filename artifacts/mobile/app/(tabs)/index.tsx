@@ -556,7 +556,7 @@ export default function DashboardScreen() {
 
   // Budget goals use a negative current amount as a backwards-compatible type marker.
   const savingsGoals = useMemo(() => goals.filter(goal => goal.goal_type === "savings"), [goals]);
-  const currentGoals = useMemo(() => [...goals].sort((left, right) => {
+  const currentGoals = useMemo(() => goals.filter(goal => !goal.closed_at).sort((left, right) => {
     const leftComplete = left.target_amount > 0 && left.current_amount >= left.target_amount;
     const rightComplete = right.target_amount > 0 && right.current_amount >= right.target_amount;
     if (leftComplete !== rightComplete) return leftComplete ? 1 : -1;
