@@ -438,7 +438,19 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
                   placeholder="0.0" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
                 {settings.debtPayoffEnabled && <View style={[styles.toggleCard, { backgroundColor: c.card }]}>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.toggleLabel, { color: c.foreground }]}>Include in payoff plan</Text>
+                    <View style={styles.payoffLabelRow}>
+                      <Text style={[styles.toggleLabel, { color: c.foreground }]}>Include in payoff plan</Text>
+                      <Pressable
+                        hitSlop={10}
+                        accessibilityLabel="Explain Snowball and Avalanche payoff plans"
+                        onPress={() => Alert.alert(
+                          "How payoff plans work",
+                          "Snowball sends extra money to the smallest balance first for quicker wins. Avalanche sends it to the highest APR first to reduce interest. Minimum payments stay protected either way.",
+                        )}
+                      >
+                        <Feather name="info" size={16} color={c.primary} />
+                      </Pressable>
+                    </View>
                     <Text style={[styles.toggleSub, { color: c.mutedForeground }]}>Send extra payments to this debt</Text>
                   </View>
                   <Switch value={includeInSnowball} onValueChange={setIncludeInSnowball}
@@ -584,6 +596,7 @@ const styles = StyleSheet.create({
   infoBox: { flexDirection: "row", alignItems: "flex-start", gap: 7, padding: 10, borderRadius: 8, marginTop: 8 },
   infoText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
   toggleCard: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 14, borderRadius: 12, marginTop: 14 },
+  payoffLabelRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   toggleLabel: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
   toggleSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
   categoryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },

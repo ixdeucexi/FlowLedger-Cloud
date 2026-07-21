@@ -514,7 +514,7 @@ export default function DashboardScreen() {
     if (!watch) return null;
     return {
       tone: "watch" as const,
-      title: `${watch.category} is getting tight`,
+      title: `${watch.category} is running low`,
       detail: `$${Math.max(0, watch.remaining).toFixed(0)} left this month. Ask Flo before spending more.`,
       prompt: `How much do I have left for ${watch.category}?`,
     };
@@ -907,7 +907,7 @@ export default function DashboardScreen() {
     const prompt = `Why is my balance low next week? My lowest projected balance is $${lowest.balance.toFixed(0)} on ${lowest.date}.`;
     return {
       tone,
-      title: tone === "risk" ? "Next week has a low balance risk" : "Next week is tight",
+      title: tone === "risk" ? "Next week has a low balance risk" : "Next week has a low balance",
       detail: `Lowest projected balance: $${lowest.balance.toFixed(0)} on ${formatShortDate(lowest.date)}. Review the reason before changing the plan.`,
       prompt,
       saferBillPrompt: "Which bill should I move?",

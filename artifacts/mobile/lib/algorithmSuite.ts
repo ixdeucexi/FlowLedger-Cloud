@@ -676,7 +676,7 @@ function buildPurchaseDecisionDetails(
       action: "wait",
       confidence,
       bestDay: planDelayDay,
-      detail: `This month is tight. I only see about $${decisionRoom.toFixed(0)} that is not already needed by the plan.`,
+      detail: `This month has little room. I only see about $${decisionRoom.toFixed(0)} that is not already needed by the plan.`,
       nextMove: planDelayDay ? `Check again around ${formatMonthDay(input, planDelayDay)}.` : "Hold the purchase until the forecast improves.",
     };
   }
@@ -708,7 +708,7 @@ function buildSpendingLimitDetails(
   const daily = roundCurrency(safeCushionAmount / remainingDays);
   const weekly = roundCurrency(daily * 7);
   const status: AlgorithmSuiteResult["spendingLimit"]["status"] = safeCushionAmount <= 0 ? "risk" : daily < STABILITY_POLICY.spendingWatchPerDay ? "watch" : "safe";
-  const paceLabel = status === "safe" ? "safe pace" : status === "watch" ? "tight pace" : "pause spending";
+  const paceLabel = status === "safe" ? "safe pace" : status === "watch" ? "low-balance pace" : "pause spending";
   const detail = status === "risk"
     ? "I would pause extra spending until the cushion improves."
     : `To stay safe, keep extra spending near $${daily.toFixed(0)}/day or $${weekly.toFixed(0)}/week.`;
@@ -754,7 +754,7 @@ function buildExtraMoneyRouterDetails(args: {
         ? `Hold it for ${targetLabel} before spending it.`
         : args.recommendation === "savings"
           ? `Preview moving $${amount.toFixed(0)} toward ${targetLabel}.`
-          : "Keep it available until the tightest forecast day passes."
+          : "Keep it available until the lowest-balance forecast day passes."
     : args.recommendation === "bill"
       ? `Keep extra cash available for ${targetLabel} until I see safe room.`
       : "Keep extra cash available until I see safe room.";
@@ -996,9 +996,9 @@ function buildAlgorithmDecisionDetails(
         ? `Cash Flow Gap: ${formatMonthDay(input, facts.cashFlowGap.startDay)}`
         : "Cash Flow Gap",
       whatIFound: facts.cashFlowGap.detail,
-      whyItMatters: "Paycheck-to-paycheck stress usually comes from a few tight days. I find those days so you can fix timing instead of guessing.",
-      nextAction: gapStatus === "safe" ? "Keep this schedule and review again after new bills or plans are added." : "Review the bills, plans, or debt moves around the tight stretch.",
-      floPrompt: "Why is my cash flow tight?",
+      whyItMatters: "Paycheck-to-paycheck stress usually comes from a few low-balance days. I find those days so you can improve the timing.",
+      nextAction: gapStatus === "safe" ? "Keep this schedule and review again after new bills or plans are added." : "Review the bills, plans, or debt moves around the low-balance stretch.",
+      floPrompt: "Why is my balance running low?",
       sourceNumbers: [
         { label: "Low point", value: money(facts.cashFlowGap.lowestBalance), tone: gapStatus },
         { label: "Safety floor", value: money(input.safetyFloor), tone: "info" },
@@ -1024,8 +1024,8 @@ function buildAlgorithmDecisionDetails(
       status: facts.spendingLimits.status,
       headline: `Spending Pace: ${money(facts.spendingLimits.daily)}/day`,
       whatIFound: facts.spendingLimits.detail,
-      whyItMatters: "This gives everyday spending a safe line so groceries, gas, and small purchases do not eat the cushion before the tight day passes.",
-      nextAction: facts.spendingLimits.status === "risk" ? "Pause extra spending until the forecast has room again." : "Use this as the flexible spending pace until the next paycheck or tight day.",
+      whyItMatters: "This gives everyday spending a safe line so groceries, gas, and small purchases do not use the cushion before the lowest-balance day passes.",
+      nextAction: facts.spendingLimits.status === "risk" ? "Pause extra spending until the forecast has room again." : "Use this as the flexible spending pace until the next paycheck or lowest-balance day.",
       floPrompt: "What can I spend until payday?",
       sourceNumbers: [
         { label: "Daily limit", value: money(facts.spendingLimits.daily), tone: facts.spendingLimits.status },
@@ -1197,9 +1197,9 @@ function findCashFlowGap(balances: AlgorithmDailyBalance[], safetyFloor: number,
     lowestBalance: lowest?.balance ?? 0,
     detail: stretchLabel
       ? startDay === endDay
-        ? `Tightest stretch is ${stretchLabel}.${causeLabel}`
-        : `Tightest stretch runs ${stretchLabel}.${causeLabel}`
-      : "No tight cash-flow stretch detected.",
+        ? `Lowest-balance stretch is ${stretchLabel}.${causeLabel}`
+        : `Lowest-balance stretch runs ${stretchLabel}.${causeLabel}`
+      : "No low-balance cash-flow stretch detected.",
     causes,
   };
 }
@@ -1273,10 +1273,10 @@ function buildSafeCushionDetails(
   const compactReason = status === "safe"
     ? `${lowestLabel} stays protected`
     : status === "watch"
-      ? `Tightest on ${lowestLabel}`
+      ? `Lowest on ${lowestLabel}`
       : `Below floor on ${lowestLabel}`;
   const calendarHint = facts.lowestDay
-    ? `Monthly will point you to ${formatMonthDay(input, facts.lowestDay)}, where the cushion is tightest.`
+    ? `Monthly will point you to ${formatMonthDay(input, facts.lowestDay)}, where the balance is lowest.`
     : "Monthly will show the first date that starts to pressure your cushion.";
   const topReason = status === "safe"
     ? `Your lowest forecast stays $${facts.safeCushionAmount.toFixed(0)} above the $${input.safetyFloor.toFixed(0)} floor.`
@@ -1286,7 +1286,7 @@ function buildSafeCushionDetails(
   const topAction = status === "safe"
     ? "Use this as the limit before adding new spending, extra debt payments, or savings moves."
     : status === "watch"
-      ? "Keep extra money available until the tight day passes, or find a safer date."
+      ? "Keep extra money available until the lowest-balance day passes, or find a safer date."
       : "Pause new spending and protect the floor from the bill, plan, or debt move creating pressure.";
   return {
     label,
@@ -1423,7 +1423,7 @@ function flowScoreAction(
   },
   input: AlgorithmSuiteInput,
 ) {
-  if (facts.lowBalanceWarning.status !== "safe" && facts.lowBalanceWarning.day) return `Review why ${formatMonthDay(input, facts.lowBalanceWarning.day)} is tight.`;
+  if (facts.lowBalanceWarning.status !== "safe" && facts.lowBalanceWarning.day) return `Review why ${formatMonthDay(input, facts.lowBalanceWarning.day)} has a low balance.`;
   if (facts.safeCushionAmount <= 0) return "Protect your safety floor before adding new spending.";
   const priorityBill = prioritizeBills(input.bills, input.todayDay, input.safetyFloor, facts.lowBalanceWarning.day, input).bills[0];
   if (priorityBill && facts.overdueBillsCount > 0) return `Review ${priorityBill.name} first.`;
@@ -1540,7 +1540,7 @@ function scoreLabel(score: number) {
   if (score >= 90) return "Excellent";
   if (score >= 80) return "Strong";
   if (score >= 65) return "Stable";
-  if (score >= 45) return "Tight";
+  if (score >= 45) return "Low balance";
   return "Needs attention";
 }
 

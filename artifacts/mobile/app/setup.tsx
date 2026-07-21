@@ -1,8 +1,9 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Speech from "expo-speech";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AccountModal } from "@/components/AccountModal";
@@ -25,7 +26,6 @@ import {
   buildSetupCompletionMessage,
   buildPersonalizedSetupKeys,
   DEFAULT_ONBOARDING_PREFERENCES,
-  describeSetupPlan,
   getSetupPathItem,
   shouldAskSavingsGoal,
   type MoneySetupKey,
@@ -37,7 +37,7 @@ import {
 } from "@/lib/onboarding";
 import { loadOnboardingPreferences, saveOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { LEARNING_TOUR_STEPS, writeLearningTourState } from "@/lib/learningTour";
-import { readStoredSetupStep, writeStoredSetupStep, type SetupStepKey } from "@/lib/setupProgress";
+import { readStoredSetupStepAsync, writeStoredSetupStep, type SetupStepKey } from "@/lib/setupProgress";
 
 interface SetupStep {
   key: SetupStepKey;
@@ -99,15 +99,15 @@ function toggleArrayValue<T extends string>(values: T[], value: T): T[] {
 }
 
 const TRUST_CARDS: { icon: React.ComponentProps<typeof Feather>["name"]; title: string; text: string }[] = [
-  { icon: "shield", title: "Your real data stays safe", text: "Setup questions personalize the path. They do not create or overwrite money records." },
-  { icon: "compass", title: "Your path follows your goals", text: "Debt, savings, bills, and spending goals can each move to the front of setup." },
-  { icon: "zap", title: "Built for decisions", text: "The goal is a forecast you can trust before purchases, bill moves, and debt payments." },
+  { icon: "shield", title: "Your data stays yours", text: "Setup only changes records when you tap Save." },
+  { icon: "compass", title: "Built around your goals", text: "Flo puts the most helpful steps first." },
+  { icon: "zap", title: "Plan before you act", text: "See what a choice could do before making decisions." },
 ];
 
 const FINISH_CARDS: { icon: React.ComponentProps<typeof Feather>["name"]; title: string; text: string }[] = [
-  { icon: "shield", title: "Know what is protected", text: "See what remains after required bills and your safety floor are covered." },
-  { icon: "calendar", title: "Reach payday safely", text: "See tight dates early and get one clear next action." },
-  { icon: "trending-up", title: "Build protected days", text: "First reach payday safely, then build 7, 30, 60, and 90 days of Must Pay backup." },
+  { icon: "shield", title: "Protect your floor", text: "Your safety floor is money you want left untouched after bills." },
+  { icon: "calendar", title: "Spot low-balance dates", text: "Calendar shows when planned money may run low." },
+  { icon: "trending-up", title: "Build breathing room", text: "Work from the next payday toward 7, 30, 60, and 90 protected days." },
 ];
 
 function SetupWizard() {
@@ -148,6 +148,8 @@ function SetupWizard() {
   const [householdBusy, setHouseholdBusy] = useState(false);
   const stepOpacity = useRef(new Animated.Value(1)).current;
   const stepTranslate = useRef(new Animated.Value(0)).current;
+  const scrollRef = useRef<ScrollView>(null);
+  const [speaking, setSpeaking] = useState(false);
 
   const activeAccount = accounts.find(account => account.is_active) ?? null;
   const householdForInvite = useMemo(
@@ -175,62 +177,62 @@ function SetupWizard() {
         done: accountDone,
         title: "First, what account should I track?",
         ask: "Where does your everyday money live?",
-        body: "Most people start with their main checking account. Once I know that account, I can anchor your plan to real money instead of guesses.",
+        body: "Start with the checking account you use for everyday money.",
         button: accountDone ? "Review Account" : "Add Account",
       },
       money: {
         done: moneyDone,
         title: "How much money is in it today?",
-        ask: "Let's anchor your forecast.",
-        body: "Tell me what your account shows today. I'll use that number as the starting point for balances, bills, and decisions.",
+        ask: "What balance does your bank show today?",
+        body: "This becomes the starting point for your calendar.",
         button: moneyDone ? "Review Balance" : "Add Starting Money",
       },
       income: {
         done: incomeDone,
         title: "When does money come in?",
-        ask: "Now tell me when money shows up.",
-        body: "Add paychecks, side income, or recurring deposits so I can see what is safe before payday and what might get tight.",
+        ask: "When does your money arrive?",
+        body: "Add paychecks, side income, or recurring deposits.",
         button: incomeDone ? "Add Another Income" : "Add Income",
       },
       bills: {
         done: billsDone,
         title: "Which bills need to be paid?",
-        ask: "Next, tell me what bills usually hit your account.",
-        body: "Rent, utilities, subscriptions, insurance, and transfers all shape your forecast. I'll use those dates to spot tight weeks before they happen.",
+        ask: "Which bills usually come out?",
+        body: "Add the amount and date so Calendar can spot low-balance dates.",
         button: billsDone ? "Add Another Bill" : "Add Bill",
       },
       debts: {
         done: debtsDone,
         title: "What debts should I know about?",
-        ask: "If you're paying down debt, add it here.",
-        body: "Balances, minimums, due dates, and APRs help me show what is safe to send extra toward without hurting the rest of your month.",
+        ask: "Which debts are you paying down?",
+        body: "Add the balance, minimum, due date, and APR. Snowball pays the smallest balance first; Avalanche targets the highest APR first.",
         button: debtsDone ? "Add Another Debt" : "Add Debt",
       },
       goals: {
         done: goalsDone,
         title: "What are you saving toward?",
-        ask: "Let's give your extra money a purpose.",
-        body: "Add a savings goal so I can protect it in your forecast and help you decide when money can safely move there.",
+        ask: "What are you saving for?",
+        body: "Add a goal so extra money has a clear job.",
         button: goalsDone ? "Add Another Goal" : "Add Goal",
       },
       safety: {
         done: true,
         title: "What safety floor should I protect?",
-        ask: "Let's choose your comfort zone.",
-        body: "This is the minimum balance your forecast should protect. The default is $200, but you can choose the amount that helps you feel secure.",
+        ask: "How much should stay untouched?",
+        body: "Your safety floor is the minimum balance you want Calendar to protect.",
         button: "Save Safety Settings",
       },
       reconcile: {
         done: reconcileDone,
         title: "Can we confirm your bank balance?",
-        ask: "One quick check makes the plan more trustworthy.",
-        body: "Enter the balance your bank shows now. That keeps FlowLedger and reality lined up before you ask me if something is affordable.",
+        ask: "Does FlowLedger match your bank now?",
+        body: "Confirm the bank balance before making decisions.",
         button: reconcileDone ? "Review Reconciliation" : "Reconcile Account",
       },
       finish: {
         done: false,
         title: "Your first stability plan is ready.",
-        ask: "Start with what is protected and one clear next action.",
+        ask: "Ready to see your first plan?",
         body: buildSetupCompletionMessage(preferences),
         button: "Open My Stability Plan",
       },
@@ -241,8 +243,8 @@ function SetupWizard() {
         key: "welcome",
         done: false,
         title: "Welcome to FlowLedger Algo",
-        ask: "Let's build your money command center.",
-        body: "I'm Flo. I'll learn what you want help with, keep your real data safe, and walk you through the setup steps that match your goals.",
+        ask: "Can I help build your money command center?",
+        body: "I'm Flo. I'll guide you one short step at a time.",
         button: "Get Started",
         kind: "intro",
       },
@@ -250,8 +252,8 @@ function SetupWizard() {
         key: "starting_point",
         done: Boolean(preferences.startingPoint),
         title: "Where are you starting from?",
-        ask: "Choose the answer that feels closest.",
-        body: "I'll adjust the guidance and setup pace without taking away useful details or control.",
+        ask: "Which answer feels closest?",
+        body: "Pick the closest answer. You can change things later.",
         button: "Continue",
         kind: "single",
       },
@@ -259,8 +261,8 @@ function SetupWizard() {
         key: "household",
         done: true,
         title: "Will anyone share this plan?",
-        ask: "Invite or join a household before we talk finances.",
-        body: "If your money is shared with a spouse or partner, I can help connect the household first. This does not create, reset, or change any money records.",
+        ask: "Do you want to share this plan with someone?",
+        body: "Invite someone, join their household, or skip for now.",
         button: "Continue",
         kind: "household",
       },
@@ -268,8 +270,8 @@ function SetupWizard() {
         key: "help",
         done: preferences.help.length > 0,
         title: "How can I help?",
-        ask: "Choose as many options as you'd like.",
-        body: "Your answers help me decide which setup steps should come first.",
+        ask: "What would you like help with?",
+        body: "Choose every option that fits.",
         button: "Continue",
         kind: "multi",
       },
@@ -277,8 +279,8 @@ function SetupWizard() {
         key: "goals",
         done: preferences.goals.length > 0,
         title: "What are your top financial goals?",
-        ask: "Pick the goals that matter most right now.",
-        body: "Your goals tell me what to protect first, so I can guide you toward the next move that matters most to you.",
+        ask: "Which goals matter most right now?",
+        body: "Choose every goal that fits. This gets easier as you use the app.",
         button: "Continue",
         kind: "multi",
       },
@@ -289,8 +291,8 @@ function SetupWizard() {
         key: "savings_goal",
         done: Boolean(preferences.savingsGoal),
         title: "Are you saving for something specific?",
-        ask: "Choose your top savings goal.",
-        body: "This helps me name the first goal you may want to create later.",
+        ask: "What is your top savings goal?",
+        body: "Choose one for now. You can add more later.",
         button: "Continue",
         kind: "single",
       });
@@ -300,8 +302,8 @@ function SetupWizard() {
       key: "plan",
       done: true,
       title: "Here's the setup path I'll use.",
-      ask: "I've got the plan.",
-      body: describeSetupPlan(preferences),
+      ask: "Does this setup path look right?",
+      body: "I’ll use these steps to build your first forecast. It gets easier as you use FlowLedger.",
       button: "Build My Forecast",
       kind: "plan",
     });
@@ -356,13 +358,17 @@ function SetupWizard() {
 
   useEffect(() => {
     if (restoredProgress) return;
-    const storedKey = readStoredSetupStep();
-    const storedIndex = storedKey ? steps.findIndex(step => step.key === storedKey) : -1;
-    setIndex(Math.max(0, storedIndex));
-    if (storedIndex > 0 && steps[storedIndex]?.key !== "finish") {
-      setFloConfirmation("Welcome back — we can pick up where we left off.");
-    }
-    setRestoredProgress(true);
+    let active = true;
+    void readStoredSetupStepAsync().then(storedKey => {
+      if (!active) return;
+      const storedIndex = storedKey ? steps.findIndex(step => step.key === storedKey) : -1;
+      setIndex(Math.max(0, storedIndex));
+      if (storedIndex > 0 && steps[storedIndex]?.key !== "finish") {
+        setFloConfirmation("Welcome back — we can pick up where you stopped.");
+      }
+      setRestoredProgress(true);
+    });
+    return () => { active = false; };
   }, [restoredProgress, steps]);
 
   useEffect(() => {
@@ -389,17 +395,42 @@ function SetupWizard() {
     ]).start();
   }, [current.key, stepOpacity, stepTranslate]);
 
-  const goNext = () => setIndex(value => {
-    for (let i = value + 1; i < steps.length; i += 1) {
-      const step = steps[i];
-      if (isPreferenceStep(step.key) || step.key === "finish" || !step.done) return i;
-    }
-    return steps.length - 1;
-  });
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+    void Speech.stop();
+    setSpeaking(false);
+  }, [current.key]);
+
+  useEffect(() => () => { void Speech.stop(); }, []);
+
+  const goNext = () => setIndex(value => Math.min(value + 1, steps.length - 1));
   const goBack = () => setIndex(value => Math.max(0, value - 1));
   const confirmAndNext = (message: string) => {
     setFloConfirmation(message);
     goNext();
+  };
+
+  const toggleFloVoice = async () => {
+    if (speaking) {
+      await Speech.stop();
+      setSpeaking(false);
+      return;
+    }
+    setSpeaking(true);
+    Speech.speak(`${current.title}. ${current.ask} ${current.body}`, {
+      rate: 0.94,
+      pitch: 1.03,
+      onDone: () => setSpeaking(false),
+      onStopped: () => setSpeaking(false),
+      onError: () => setSpeaking(false),
+    });
+  };
+
+  const leaveSetup = () => {
+    Alert.alert("Leave setup?", "Your place is saved. You can continue from the Dashboard.", [
+      { text: "Keep setting up", style: "cancel" },
+      { text: "Save and leave", onPress: () => router.replace("/(tabs)" as any) },
+    ]);
   };
 
   const canContinue = useMemo(() => {
@@ -819,6 +850,7 @@ function SetupWizard() {
         </View>
       </View>
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={[
           styles.content,
           { paddingTop: insets.top + 70, paddingBottom: insets.bottom + 134 },
@@ -843,6 +875,9 @@ function SetupWizard() {
                     <Feather name="help-circle" size={17} color="#38bdf8" />
                   </Pressable>
                 )}
+                <Pressable onPress={() => void toggleFloVoice()} hitSlop={10} accessibilityLabel={speaking ? "Stop Flo speaking" : "Hear Flo explain this step"}>
+                  <Feather name={speaking ? "volume-x" : "volume-2"} size={18} color="#c084fc" />
+                </Pressable>
               </View>
               <Text style={styles.ask}>{current.ask}</Text>
               <Text style={styles.body}>{current.body}</Text>
@@ -924,6 +959,9 @@ function SetupWizard() {
               <Text style={[styles.navText, styles.navNextText]}>Next</Text>
             </Pressable>
           ) : <View />}
+          <Pressable onPress={leaveSetup}>
+            <Text style={styles.leaveText}>Save &amp; leave</Text>
+          </Pressable>
         </View>
       </View>
 
@@ -1172,6 +1210,7 @@ const styles = StyleSheet.create({
   navRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 12 },
   navText: { color: "#94a3b8", fontSize: 14, fontFamily: "Inter_700Bold" },
   navNextText: { color: "#c4b5fd" },
+  leaveText: { color: "#38bdf8", fontSize: 14, fontFamily: "Inter_700Bold" },
   coachOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.72)", alignItems: "center", justifyContent: "center", padding: 24 },
   coachSheet: { width: "100%", maxWidth: 420, borderRadius: 28, borderWidth: 1, borderColor: "rgba(139,92,246,0.45)", backgroundColor: "#0f172a", padding: 22, alignItems: "center" },
   coachSpotlight: { width: 108, height: 108, borderRadius: 54, backgroundColor: "rgba(139,92,246,0.16)", alignItems: "center", justifyContent: "center", marginBottom: 14 },

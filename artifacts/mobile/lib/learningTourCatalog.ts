@@ -24,14 +24,14 @@ export const LEARNING_TOUR_STEPS: LearningTourStep[] = [
     title: "Monthly",
     focus: "Calendar forecast",
     floSays: "This is where I show your money by date. Tap any day to see the bills, income, plans, transactions, and projected balance behind that day.",
-    tryThis: "I want you to tap a day here. I will show the money behind it so you can see why it is safe or tight.",
+    tryThis: "Tap a day here. I will show the money behind it and explain any low-balance date.",
   },
   {
     route: "bills",
     path: "/(tabs)/bills",
     title: "Bills and Debt",
     focus: "Obligations and payoff",
-    floSays: "This is where your recurring bills and debt snowball live. I use these dates and minimums to protect the forecast before you make new decisions.",
+    floSays: "I keep bills and debt payoff here. Snowball targets the smallest balance first. Avalanche targets the highest APR first.",
     tryThis: "I want you to touch Debt here to see which balance I would make the current snowball target.",
   },
   {
@@ -39,7 +39,7 @@ export const LEARNING_TOUR_STEPS: LearningTourStep[] = [
     path: "/(tabs)/transactions",
     title: "Activity",
     focus: "What actually happened",
-    floSays: "This page is your money trail. I compare actual activity against the plan so FlowLedger can stay honest instead of guessing.",
+    floSays: "This page is your money trail. I compare what happened with what you planned so your calendar stays current.",
     tryThis: "I want you to use these filters when you need to review bills, manual spending, income, or debt payments.",
   },
   {
@@ -48,7 +48,7 @@ export const LEARNING_TOUR_STEPS: LearningTourStep[] = [
     title: "Flo",
     focus: "Ask before changing the plan",
     floSays: "This is where you ask me money questions. I can explain, preview, and help create plans, but I should confirm before changing real data.",
-    tryThis: "I want you to ask me: “Can I afford $100 on July 15?” or “Why is next week tight?”",
+    tryThis: "Ask me: “Can I afford $100 on July 15?” or “Why is next week a low-balance week?”",
   },
   {
     route: "more",

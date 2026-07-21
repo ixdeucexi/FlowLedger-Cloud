@@ -55,7 +55,8 @@ import {
   householdInviteRolesFor,
   householdRoleLabel,
 } from "@/lib/householdPermissions";
-import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
+import { DEFAULT_ONBOARDING_PREFERENCES } from "@/lib/onboarding";
+import { loadOnboardingPreferences, readOnboardingPreferences, saveOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 import { getForecastSafetyLayout } from "@/lib/settingsLayout";
 import {
@@ -1628,13 +1629,16 @@ export default function MoreScreen() {
         <View style={[styles.priorityNote, { backgroundColor: c.primary + "12", borderRadius: 8, marginTop: 10 }]}>
           <Feather name="message-circle" size={12} color={c.primary} />
           <Text style={[styles.priorityNoteText, { color: c.mutedForeground }]}>
-            Once these are done, ask Flo things like “Can I afford $500?” or “Why is next week tight?” and she&apos;ll use your real setup.
+            Once these are done, ask Flo things like “Can I afford $500?” or “Why is next week a low-balance week?” and she&apos;ll use your real setup.
           </Text>
         </View>
         <Pressable
-          onPress={() => {
+          onPress={async () => {
             clearStoredSetupStep();
-            void updateSettings({ onboarding_completed: false });
+            await Promise.all([
+              updateSettings({ onboarding_completed: false }),
+              saveOnboardingPreferences(user?.id, DEFAULT_ONBOARDING_PREFERENCES),
+            ]);
             router.push("/setup" as any);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           }}
@@ -1658,9 +1662,12 @@ export default function MoreScreen() {
             </View>
           </View>
           <Pressable
-            onPress={() => {
+            onPress={async () => {
               clearStoredSetupStep();
-              void updateSettings({ onboarding_completed: false });
+              await Promise.all([
+                updateSettings({ onboarding_completed: false }),
+                saveOnboardingPreferences(user?.id, DEFAULT_ONBOARDING_PREFERENCES),
+              ]);
               router.push("/setup" as any);
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             }}

@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 
 export type SetupStepKey =
@@ -32,8 +33,21 @@ export function readStoredSetupStep(): SetupStepKey | null {
   }
 }
 
+export async function readStoredSetupStepAsync(): Promise<SetupStepKey | null> {
+  if (Platform.OS === "web") return readStoredSetupStep();
+  try {
+    return await AsyncStorage.getItem(SETUP_PROGRESS_KEY) as SetupStepKey | null;
+  } catch {
+    return null;
+  }
+}
+
 export function writeStoredSetupStep(step: SetupStepKey | null) {
-  if (Platform.OS !== "web" || typeof window === "undefined") return;
+  if (Platform.OS !== "web") {
+    void (step ? AsyncStorage.setItem(SETUP_PROGRESS_KEY, step) : AsyncStorage.removeItem(SETUP_PROGRESS_KEY));
+    return;
+  }
+  if (typeof window === "undefined") return;
   try {
     if (step) window.localStorage.setItem(SETUP_PROGRESS_KEY, step);
     else window.localStorage.removeItem(SETUP_PROGRESS_KEY);

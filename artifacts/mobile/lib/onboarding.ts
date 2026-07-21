@@ -134,7 +134,8 @@ export function buildPersonalizedSetupKeys(preferences: OnboardingPreferences): 
 
   add("income");
   if (wantsBudget || wantsBills || preferences.help.length === 0) add("bills");
-  if (wantsDebt) add("debts");
+  // Everyone sees debt setup. They can simply continue when they have no debts.
+  add("debts");
   if (wantsSavings) add("goals");
 
   // If the user did not reveal a strong preference, keep the original full setup.
@@ -174,7 +175,7 @@ export function getSetupPathItem(key: MoneySetupKey): SetupPathItem {
       key,
       title: "Map monthly obligations",
       shortLabel: "Bills",
-      detail: "Add recurring bills so tight weeks show early.",
+      detail: "Add recurring bills so low-balance dates show early.",
     },
     debts: {
       key,
@@ -198,13 +199,13 @@ export function getSetupPathItem(key: MoneySetupKey): SetupPathItem {
       key,
       title: "Confirm the real balance",
       shortLabel: "Confirm",
-      detail: "Match FlowLedger to the bank before decisions.",
+      detail: "Match FlowLedger to the bank before making decisions.",
     },
     finish: {
       key,
-      title: "Ask the first decision",
-      shortLabel: "Ask Flo",
-      detail: "Use the setup to answer a real money question.",
+      title: "Open your first plan",
+      shortLabel: "Finish",
+      detail: "See your balance, calendar, and next helpful action.",
     },
   };
   return items[key];

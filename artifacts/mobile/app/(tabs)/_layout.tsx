@@ -312,9 +312,9 @@ function FloDemo() {
     : activeStep.route === "monthly"
       ? { top: "40%", left: "44%" }
       : activeStep.route === "bills"
-        ? { top: "34%", left: "44%" }
+        ? { top: "34%", left: "66%" }
         : activeStep.route === "transactions"
-          ? { top: 126, right: 24 }
+          ? { top: 286, right: 28 }
           : activeStep.route === "flo"
             ? { bottom: 116, left: 32 }
             : { top: 176, left: "42%" };

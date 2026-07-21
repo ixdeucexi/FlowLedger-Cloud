@@ -649,7 +649,7 @@ export default function FloScreen() {
   const quickPrompts = useMemo(() => {
     const categoryPrompts = buildFloCategoryQuickPrompts(categoryPlan);
     const paycheckPrompts = ["What can I spend until payday?", "Which bill should I move?"];
-    const gapPrompts = ["Where is my tightest cash-flow stretch?"];
+    const gapPrompts = ["When is my lowest-balance stretch?"];
     return Array.from(new Set([
       ...(hasSetupAnswers ? setupPersonalization.quickPrompts : []),
       ...(decisionHistory.due.length ? ["Which decisions need review?"] : []),

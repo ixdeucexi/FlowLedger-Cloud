@@ -5,7 +5,7 @@ export const ALGORITHM_CATALOG = [
   { id: "billPriority", name: "Next Bill", icon: "file-text", desc: "Shows which required bill needs attention first and why." },
 
   { id: "paydaySplit", name: "Paycheck Plan", icon: "git-branch", desc: "Protects bills and minimum payments before assigning flexible spending." },
-  { id: "cashFlowGap", name: "Tightest Stretch", icon: "clock", desc: "Finds the upcoming days where timing puts the most pressure on your plan." },
+  { id: "cashFlowGap", name: "Lowest-Balance Stretch", icon: "clock", desc: "Finds the upcoming days where timing puts the most pressure on your plan." },
   { id: "debtPayoff", name: "Debt Payoff", icon: "trending-down", desc: "Compares payoff methods and protects cash flow before extra payments." },
   { id: "spendingLimit", name: "Spending Pace", icon: "sliders", desc: "Gives a daily and weekly pace that protects required money." },
 

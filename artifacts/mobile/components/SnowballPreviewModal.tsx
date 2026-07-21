@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { DatePickerField } from "@/components/DatePickerField";
@@ -32,6 +32,11 @@ export function SnowballPreviewModal({ visible, method, preview, amount, existin
   const requested = Number.parseFloat(amount) || 0;
   const valid = !!preview && requested > 0 && requested <= preview.safeMaximum + 0.005 && preview.allocations.length > 0;
   const methodName = method === "avalanche" ? "Avalanche" : "Snowball";
+  const [monthOffset, setMonthOffset] = useState(0);
+  useEffect(() => { if (visible) setMonthOffset(0); }, [visible]);
+  const visibleMonths = preview?.months.slice(monthOffset, monthOffset + forecastHorizonMonths) ?? [];
+  const canMoveBack = monthOffset > 0;
+  const canMoveForward = Boolean(preview && monthOffset + forecastHorizonMonths < preview.months.length);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -49,7 +54,7 @@ export function SnowballPreviewModal({ visible, method, preview, amount, existin
           </View>
 
           {preview && (
-            <ScrollView showsVerticalScrollIndicator={false} style={styles.scroll}>
+            <ScrollView showsVerticalScrollIndicator contentContainerStyle={styles.scrollContent} style={styles.scroll}>
               <View style={[styles.safeCard, { backgroundColor: c.success + "15", borderColor: c.success + "40" }]}>
                 <Feather name="shield" size={18} color={c.success} />
                 <View style={{ flex: 1 }}>
@@ -89,9 +94,20 @@ export function SnowballPreviewModal({ visible, method, preview, amount, existin
                 ))}
               </View>
 
-              <Text style={[styles.label, { color: c.mutedForeground }]}>NEXT {forecastHorizonMonths} MONTHS</Text>
+              <View style={styles.monthHeader}>
+                <Text style={[styles.label, styles.monthHeaderLabel, { color: c.mutedForeground }]}>PAYOFF FORECAST</Text>
+                <View style={styles.monthNav}>
+                  <Pressable disabled={!canMoveBack} onPress={() => setMonthOffset(value => Math.max(0, value - forecastHorizonMonths))} style={{ opacity: canMoveBack ? 1 : 0.35 }} accessibilityLabel="Show earlier payoff months">
+                    <Feather name="chevron-left" size={20} color={c.primary} />
+                  </Pressable>
+                  <Text style={[styles.monthRange, { color: c.foreground }]}>{monthOffset + 1}–{monthOffset + visibleMonths.length}</Text>
+                  <Pressable disabled={!canMoveForward} onPress={() => setMonthOffset(value => value + forecastHorizonMonths)} style={{ opacity: canMoveForward ? 1 : 0.35 }} accessibilityLabel="Show later payoff months">
+                    <Feather name="chevron-right" size={20} color={c.primary} />
+                  </Pressable>
+                </View>
+              </View>
               <View style={[styles.card, { backgroundColor: c.card }]}>
-                {preview.months.slice(0, forecastHorizonMonths).map(item => (
+                {visibleMonths.map(item => (
                   <View key={`${item.year}-${item.month}`} style={styles.monthRow}>
                     <Text style={[styles.month, { color: c.foreground }]}>{MONTH_NAMES[item.month]} {item.year}</Text>
                     <View style={{ flex: 1 }}>
@@ -133,13 +149,17 @@ export function SnowballPreviewModal({ visible, method, preview, amount, existin
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.58)" },
-  sheet: { maxHeight: "92%", borderTopLeftRadius: 26, borderTopRightRadius: 26, padding: 20, paddingTop: 12 },
+  sheet: { height: "92%", borderTopLeftRadius: 26, borderTopRightRadius: 26, padding: 20, paddingTop: 12 },
   handle: { width: 38, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 16 },
   header: { flexDirection: "row", alignItems: "flex-start", marginBottom: 12 },
   title: { fontSize: 21, fontFamily: "Inter_700Bold" }, sub: { fontSize: 12, marginTop: 3 },
-  scroll: { flexGrow: 0 }, safeCard: { flexDirection: "row", gap: 12, padding: 14, borderWidth: 1, borderRadius: 14 },
+  scroll: { flex: 1, minHeight: 0 }, scrollContent: { paddingBottom: 18 }, safeCard: { flexDirection: "row", gap: 12, padding: 14, borderWidth: 1, borderRadius: 14 },
   safeLabel: { fontSize: 10, fontFamily: "Inter_700Bold", letterSpacing: 0.6 }, safeValue: { fontSize: 28, fontFamily: "Inter_700Bold" }, safeNote: { fontSize: 11 },
   label: { fontSize: 10, fontFamily: "Inter_700Bold", letterSpacing: 0.7, marginTop: 16, marginBottom: 7 },
+  monthHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 16, marginBottom: 7 },
+  monthHeaderLabel: { marginTop: 0, marginBottom: 0 },
+  monthNav: { flexDirection: "row", alignItems: "center", gap: 8 },
+  monthRange: { minWidth: 34, textAlign: "center", fontSize: 11, fontFamily: "Inter_700Bold" },
   inputWrap: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderRadius: 12 }, dollar: { fontSize: 20, paddingLeft: 14 }, input: { flex: 1, height: 50, paddingHorizontal: 8, fontSize: 20, fontFamily: "Inter_700Bold" },
   error: { fontSize: 11, marginTop: 5 }, card: { borderRadius: 12, padding: 12, gap: 10 }, row: { flexDirection: "row", alignItems: "center", gap: 8 }, rowName: { flex: 1, fontSize: 13, fontFamily: "Inter_600SemiBold" }, rowValue: { fontSize: 13, fontFamily: "Inter_700Bold" },
   monthRow: { flexDirection: "row", alignItems: "center", gap: 10 }, month: { width: 70, fontSize: 12, fontFamily: "Inter_700Bold" }, monthTarget: { fontSize: 11 }, monthBalance: { fontSize: 10, marginTop: 1 }, monthExtra: { fontSize: 13, fontFamily: "Inter_700Bold" },

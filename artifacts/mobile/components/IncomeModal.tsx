@@ -43,6 +43,22 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
   const [raiseDate,       setRaiseDate]       = useState("");
   const [saving,          setSaving]          = useState(false);
 
+  const setMonthlyEdge = (edge: "first" | "last") => {
+    const now = new Date();
+    if (edge === "first") {
+      const target = now.getDate() === 1 ? now : new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      setFirstPayDate(`${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-01`);
+      return;
+    }
+    let target = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    if (target < new Date(now.getFullYear(), now.getMonth(), now.getDate())) {
+      target = new Date(now.getFullYear(), now.getMonth() + 2, 0);
+    }
+    // Day 31 is the recurring "last day" anchor; the calendar safely clamps it for shorter months.
+    const anchorMonth = target.getMonth() === 1 ? new Date(target.getFullYear(), 2, 31) : new Date(target.getFullYear(), target.getMonth(), 31);
+    setFirstPayDate(`${anchorMonth.getFullYear()}-${String(anchorMonth.getMonth() + 1).padStart(2, "0")}-31`);
+  };
+
   const handleDelete = () => {
     if (!editItem || !onDelete || saving) return;
     Alert.alert(
@@ -208,6 +224,18 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
               onChange={setFirstPayDate}
               placeholder={isRecurring ? "Pick any known pay date" : "Choose the monthly payday"}
             />
+            {frequency === "monthly" ? (
+              <View style={styles.monthEdgeRow}>
+                <Pressable onPress={() => setMonthlyEdge("first")} style={[styles.monthEdgeButton, { borderColor: c.border, backgroundColor: c.card }]}>
+                  <Feather name="skip-back" size={13} color={c.primary} />
+                  <Text style={[styles.monthEdgeText, { color: c.foreground }]}>First day</Text>
+                </Pressable>
+                <Pressable onPress={() => setMonthlyEdge("last")} style={[styles.monthEdgeButton, { borderColor: c.border, backgroundColor: c.card }]}>
+                  <Text style={[styles.monthEdgeText, { color: c.foreground }]}>Last day</Text>
+                  <Feather name="skip-forward" size={13} color={c.primary} />
+                </Pressable>
+              </View>
+            ) : null}
             <View style={[styles.infoBox, { backgroundColor: c.primary + "12" }]}>
               <Feather name="calendar" size={12} color={c.primary} />
               <Text style={[styles.infoText, { color: c.mutedForeground }]}>
@@ -344,6 +372,9 @@ const styles = StyleSheet.create({
   freqBtn: { flex: 1, alignItems: "center", paddingVertical: 10 },
   freqLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   freqDesc: { fontSize: 10, fontFamily: "Inter_400Regular", marginTop: 2 },
+  monthEdgeRow: { flexDirection: "row", gap: 8, marginTop: 8 },
+  monthEdgeButton: { flex: 1, minHeight: 42, borderWidth: 1, borderRadius: 10, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
+  monthEdgeText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   infoBox: { flexDirection: "row", alignItems: "flex-start", gap: 7, padding: 9, borderRadius: 8, marginTop: 6 },
   infoText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
 

@@ -46,7 +46,7 @@ test("routes savings users into goal setup", () => {
     help: ["grow_savings"],
     goals: ["grow_savings"],
   }));
-  assert.deepEqual(keys, ["account", "money", "income", "goals", "safety", "reconcile", "finish"]);
+  assert.deepEqual(keys, ["account", "money", "income", "debts", "goals", "safety", "reconcile", "finish"]);
 });
 
 test("keeps a full setup path when preferences are empty", () => {

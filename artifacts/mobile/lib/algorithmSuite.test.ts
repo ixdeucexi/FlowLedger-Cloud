@@ -173,7 +173,7 @@ test("uses the scheduled debt minimum for rollover even when this month's settle
   assert.equal(suite.debtPayoff.totalMonthlyMinimum, 102.68);
 });
 
-test("cash-flow gap wording handles a one-day tight stretch", () => {
+test("cash-flow gap wording handles a one-day low-balance stretch", () => {
   const suite = buildAlgorithmSuite(baseInput({
     dailyBalances: [
       { day: 1, income: 3000, bills: 0, expense: 0, net: 3000, balance: 3000 },
@@ -184,7 +184,7 @@ test("cash-flow gap wording handles a one-day tight stretch", () => {
 
   assert.equal(suite.cashFlowGap.startDay, 8);
   assert.equal(suite.cashFlowGap.endDay, 8);
-  assert.equal(suite.cashFlowGap.detail, "Tightest stretch is July 8, 2026. Main pressure: Phone $100.");
+  assert.equal(suite.cashFlowGap.detail, "Lowest-balance stretch is July 8, 2026. Main pressure: Phone $100.");
   assert.deepEqual(suite.cashFlowGap.causes.map(cause => cause.label), ["Phone"]);
   assert.equal(suite.algorithmDetails.cashFlowGap.sourceNumbers.find(item => item.label === "Main pressure")?.value, "Phone");
 });

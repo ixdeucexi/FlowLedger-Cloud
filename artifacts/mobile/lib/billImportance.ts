@@ -15,7 +15,7 @@ export const BILL_IMPORTANCE_OPTIONS: readonly {
   {
     value: "flexible",
     label: "Flexible",
-    description: "You need it, but the date or amount can change when money is tight.",
+    description: "You need it, but the date or amount can change when the balance is low.",
     icon: "sliders",
   },
   {
