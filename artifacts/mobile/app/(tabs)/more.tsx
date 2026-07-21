@@ -56,6 +56,7 @@ import {
 } from "@/lib/householdPermissions";
 import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
+import { getForecastSafetyLayout } from "@/lib/settingsLayout";
 import {
   SETTINGS_SECTIONS,
   attentionCountStatus,
@@ -347,6 +348,7 @@ export default function MoreScreen() {
   const insets = useSafeAreaInsets();
   const { width: viewportWidth } = useWindowDimensions();
   const useStackedSettingsFields = viewportWidth < 480;
+  const forecastSafetyLayout = useMemo(() => getForecastSafetyLayout(viewportWidth), [viewportWidth]);
   const router = useRouter();
   const routeParams = useLocalSearchParams<{ section?: string; feedback?: string }>();
   const {
@@ -2251,11 +2253,11 @@ export default function MoreScreen() {
         <View>
           <Text style={[styles.switchLabel, { color: c.foreground, marginBottom: 2 }]}>Forecast Safety</Text>
           <Text style={[styles.switchDesc, { color: c.mutedForeground, marginBottom: 10 }]}>Protect this minimum balance across your selected forecast window.</Text>
-          <View style={[styles.safetyFields, useStackedSettingsFields && styles.formRowStacked]}>
-            <View style={[styles.safetyField, useStackedSettingsFields && styles.formFieldStacked]}>
+          <View style={forecastSafetyLayout.fields}>
+            <View style={forecastSafetyLayout.field}>
               <Text style={[styles.balanceFieldLabel, { color: c.mutedForeground }]}>Safety floor ($)</Text>
               <TextInput
-                style={[styles.balanceFullInput, { backgroundColor: c.muted, color: c.foreground }]}
+                style={[styles.balanceFullInput, forecastSafetyLayout.input, { backgroundColor: c.muted, color: c.foreground }]}
                 value={safetyFloorText}
                 onChangeText={setSafetyFloorText}
                 keyboardType="decimal-pad"
@@ -2263,10 +2265,10 @@ export default function MoreScreen() {
                 placeholderTextColor={c.mutedForeground}
               />
             </View>
-            <View style={[styles.safetyField, useStackedSettingsFields && styles.formFieldStacked]}>
+            <View style={forecastSafetyLayout.field}>
               <Text style={[styles.balanceFieldLabel, { color: c.mutedForeground }]}>Months (1–24)</Text>
               <TextInput
-                style={[styles.balanceFullInput, { backgroundColor: c.muted, color: c.foreground }]}
+                style={[styles.balanceFullInput, forecastSafetyLayout.input, { backgroundColor: c.muted, color: c.foreground }]}
                 value={forecastHorizonText}
                 onChangeText={setForecastHorizonText}
                 keyboardType="number-pad"
@@ -3337,7 +3339,6 @@ const styles = StyleSheet.create({
   childInput: { width: "100%", minWidth: 0, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 11, fontSize: 14, fontFamily: "Inter_500Medium" },
   childHalfInput: { flex: 1, minWidth: 0, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 11, fontSize: 13, fontFamily: "Inter_500Medium" },
   formRowStacked: { flexDirection: "column" },
-  formFieldStacked: { flex: 0, width: "100%" },
   formInputStacked: { flex: 0, width: "100%" },
 
   switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
@@ -3358,13 +3359,10 @@ const styles = StyleSheet.create({
   balanceDivider: { borderTopWidth: 1, marginTop: 14, paddingTop: 14 },
   balanceHeader: { marginBottom: 10 },
   balanceFieldLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 6 },
-  balanceFullInput: { height: 44, borderRadius: 10, paddingHorizontal: 14, fontSize: 16, fontFamily: "Inter_400Regular" },
+  balanceFullInput: { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 16, fontFamily: "Inter_400Regular" },
   balanceSaveFullBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 44, borderRadius: 10, marginTop: 12 },
   balanceSaveBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   balanceNote: { flexDirection: "row", alignItems: "flex-start", gap: 6, padding: 9, borderRadius: 8, marginTop: 10 },
-  safetyFields: { width: "100%", flexDirection: "row", gap: 10 },
-  safetyField: { flex: 1, minWidth: 0 },
-
   dataRow: { flexDirection: "row", alignItems: "center", paddingVertical: 13 },
   dataIcon: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center", marginRight: 12 },
   dataBody: { flex: 1 },

@@ -83,5 +83,7 @@
     ,"lib/flowledgerGuide.test.ts"
     ,"lib/tabBadge.ts"
     ,"lib/tabBadge.test.ts"
+    ,"lib/settingsLayout.ts"
+    ,"lib/settingsLayout.test.ts"
   ]
 }
