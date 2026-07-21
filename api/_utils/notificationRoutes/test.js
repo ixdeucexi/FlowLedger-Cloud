@@ -1,5 +1,5 @@
-const { sendPushToUser } = require("../_utils/push");
-const { authenticatedUser, safeError } = require("../_utils/supabase");
+const { sendPushToUser } = require("../push");
+const { authenticatedUser, safeError } = require("../supabase");
 
 module.exports = async function testNotification(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "METHOD_NOT_ALLOWED" });

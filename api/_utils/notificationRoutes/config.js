@@ -1,4 +1,4 @@
-const { optional } = require("../_utils/env");
+const { optional } = require("../env");
 
 module.exports = async function notificationConfig(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "METHOD_NOT_ALLOWED" });

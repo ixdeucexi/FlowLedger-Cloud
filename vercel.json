@@ -67,6 +67,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/notifications/:notificationAction(config|overdue-bills|preferences|subscription|test)",
+      "destination": "/api/notifications?notificationAction=:notificationAction"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

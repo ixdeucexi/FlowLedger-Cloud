@@ -2,8 +2,8 @@ const {
   DEFAULT_NOTIFICATION_PREFERENCES,
   normalizeNotificationPreferencePatch,
   normalizeNotificationPreferences,
-} = require("../_utils/notificationPreferences");
-const { authenticatedUser, safeError, serviceSupabase } = require("../_utils/supabase");
+} = require("../notificationPreferences");
+const { authenticatedUser, safeError, serviceSupabase } = require("../supabase");
 
 function body(req) {
   if (!req.body) return {};

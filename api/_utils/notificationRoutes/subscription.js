@@ -1,5 +1,5 @@
-const { authenticatedUser, safeError, serviceSupabase } = require("../_utils/supabase");
-const { validPushEndpoint, validPushKey } = require("../_utils/pushValidation");
+const { authenticatedUser, safeError, serviceSupabase } = require("../supabase");
+const { validPushEndpoint, validPushKey } = require("../pushValidation");
 
 function body(req) {
   if (!req.body) return {};
