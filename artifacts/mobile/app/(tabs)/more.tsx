@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AccountModal } from "@/components/AccountModal";
 import { AppText } from "@/components/AppText";
 import { FloLogo } from "@/components/FloLogo";
+import { FeedbackManageModal } from "@/components/FeedbackManageModal";
 import { IncomeModal } from "@/components/IncomeModal";
 import { HouseholdMemberActionsModal } from "@/components/HouseholdMemberActionsModal";
 import { MembershipPanel } from "@/components/MembershipPanel";
@@ -70,15 +71,17 @@ import { supabase } from "@/lib/supabase";
 import { transactionCategoryParts } from "@/lib/reviewCenter";
 import {
   type AppFeedbackRow,
-  type FeedbackStatus,
+  type FeedbackAdminFilter,
+  type FeedbackManagementAction,
   type FeedbackType,
   FEEDBACK_STATUSES,
   FEEDBACK_TYPES,
   canSubmitFeedback,
   feedbackStatusLabel,
+  feedbackStatusMessage,
   sanitizeFeedbackMessage,
 } from "@/lib/feedback";
-import { submitFeedback } from "@/lib/feedbackApi";
+import { manageFeedback, submitFeedback } from "@/lib/feedbackApi";
 import {
   buildChildMoneySummary,
   buildGoalFundingPlans,
@@ -345,7 +348,7 @@ export default function MoreScreen() {
   const { width: viewportWidth } = useWindowDimensions();
   const useStackedSettingsFields = viewportWidth < 480;
   const router = useRouter();
-  const routeParams = useLocalSearchParams<{ section?: string }>();
+  const routeParams = useLocalSearchParams<{ section?: string; feedback?: string }>();
   const {
     themeMode,
     setThemeMode,
@@ -417,7 +420,11 @@ export default function MoreScreen() {
   const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
   const [feedbackInbox, setFeedbackInbox] = useState<AppFeedbackRow[]>([]);
   const [feedbackInboxLoading, setFeedbackInboxLoading] = useState(false);
-  const [feedbackStatusFilter, setFeedbackStatusFilter] = useState<FeedbackStatus | "all">("all");
+  const [feedbackStatusFilter, setFeedbackStatusFilter] = useState<FeedbackAdminFilter>("active");
+  const [myFeedback, setMyFeedback] = useState<AppFeedbackRow[]>([]);
+  const [myFeedbackLoading, setMyFeedbackLoading] = useState(false);
+  const [managedFeedback, setManagedFeedback] = useState<AppFeedbackRow | null>(null);
+  const [feedbackManageBusy, setFeedbackManageBusy] = useState(false);
   const [subscriptionDecisions, setSubscriptionDecisions] = useState<Record<string, SubscriptionDecision>>({});
   const [growthNotice, setGrowthNotice] = useState<string | null>(null);
   const [childProfiles, setChildProfiles] = useState<ChildProfile[]>([]);
@@ -544,7 +551,11 @@ export default function MoreScreen() {
         .select("*")
         .order("created_at", { ascending: false })
         .limit(75);
-      if (feedbackStatusFilter !== "all") {
+      if (feedbackStatusFilter === "active") {
+        query = query.is("archived_at", null);
+      } else if (feedbackStatusFilter === "archived") {
+        query = query.not("archived_at", "is", null);
+      } else if (feedbackStatusFilter !== "all") {
         query = query.eq("status", feedbackStatusFilter);
       }
       const { data, error } = await query;
@@ -558,11 +569,36 @@ export default function MoreScreen() {
     }
   };
 
-  useEffect(() => {
-    if (activeSettingsSection === "help" && feedbackAdmin) {
-      void loadFeedbackInbox();
+  const loadMyFeedback = async () => {
+    if (!user?.id) return;
+    setMyFeedbackLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("app_feedback")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(25);
+      if (error) throw error;
+      const requestedFeedbackId = Array.isArray(routeParams.feedback) ? routeParams.feedback[0] : routeParams.feedback;
+      const rows = (data ?? []) as AppFeedbackRow[];
+      setMyFeedback(requestedFeedbackId
+        ? [...rows].sort((a, b) => Number(b.id === requestedFeedbackId) - Number(a.id === requestedFeedbackId))
+        : rows);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not load your feedback.";
+      setFeedbackNotice(message);
+    } finally {
+      setMyFeedbackLoading(false);
     }
-  }, [activeSettingsSection, feedbackAdmin, feedbackStatusFilter]);
+  };
+
+  useEffect(() => {
+    if (activeSettingsSection === "help") {
+      if (feedbackAdmin) void loadFeedbackInbox();
+      else void loadMyFeedback();
+    }
+  }, [activeSettingsSection, feedbackAdmin, feedbackStatusFilter, routeParams.feedback, user?.id]);
 
   const saveSafetySettings = () => {
     const floor = Math.max(0, parseFloat(safetyFloorText) || 0);
@@ -601,29 +637,13 @@ export default function MoreScreen() {
       setFeedbackNotice("Thank you for your feedback. It’s appreciated and will be reviewed.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       if (feedbackAdmin) void loadFeedbackInbox();
+      else void loadMyFeedback();
     } catch (error) {
       const messageText = error instanceof Error ? error.message : "Could not send feedback.";
       setFeedbackNotice(messageText);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setFeedbackSubmitting(false);
-    }
-  };
-
-  const handleFeedbackStatusChange = async (feedbackId: string, status: FeedbackStatus) => {
-    setFeedbackNotice(null);
-    try {
-      const { error } = await supabase
-        .from("app_feedback")
-        .update({ status, updated_at: new Date().toISOString() })
-        .eq("id", feedbackId);
-      if (error) throw error;
-      setFeedbackInbox(items => items.map(item => item.id === feedbackId ? { ...item, status } : item));
-      await refreshFeedbackCount();
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } catch (error) {
-      const messageText = error instanceof Error ? error.message : "Could not update feedback.";
-      setFeedbackNotice(messageText);
     }
   };
 
@@ -660,31 +680,48 @@ export default function MoreScreen() {
     }
   };
 
-  const handleDeleteFeedback = (item: AppFeedbackRow) => {
-    confirmAction({
-      title: "Delete feedback?",
-      message: "This removes the tester feedback from the admin inbox. This cannot be undone.",
-      confirmText: "Delete",
-      destructive: true,
-      onConfirm: async () => {
-        setFeedbackNotice(null);
-        try {
-          const { error } = await supabase
-            .from("app_feedback")
-            .delete()
-            .eq("id", item.id);
-          if (error) throw error;
-          setFeedbackInbox(items => items.filter(feedback => feedback.id !== item.id));
-          await refreshFeedbackCount();
-          setFeedbackNotice("Feedback deleted.");
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        } catch (error) {
-          const messageText = error instanceof Error ? error.message : "Could not delete feedback.";
-          setFeedbackNotice(messageText);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        }
-      },
-    });
+  const handleManageFeedbackAction = (action: FeedbackManagementAction, note: string) => {
+    const item = managedFeedback;
+    if (!item || feedbackManageBusy) return;
+
+    const runAction = async () => {
+      setFeedbackManageBusy(true);
+      setFeedbackNotice(null);
+      try {
+        const result = await manageFeedback(item.id, action, note);
+        await Promise.all([loadFeedbackInbox(), refreshFeedbackCount()]);
+        setManagedFeedback(null);
+        const notifiedText = result.notified ? " The tester was notified." : "";
+        const messages: Record<FeedbackManagementAction, string> = {
+          reviewing: `Feedback is still under review.${notifiedText}`,
+          updated: `Marked Updated and archived.${notifiedText}`,
+          not_planned: `Marked Not planned and archived.${notifiedText}`,
+          archive: "Feedback archived without notifying the tester.",
+          restore: "Feedback restored to the active inbox.",
+          delete: "Feedback permanently deleted without notifying the tester.",
+        };
+        setFeedbackNotice(messages[action]);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch (error) {
+        const messageText = error instanceof Error ? error.message : "Could not update feedback.";
+        setFeedbackNotice(messageText);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      } finally {
+        setFeedbackManageBusy(false);
+      }
+    };
+
+    if (action === "delete") {
+      confirmAction({
+        title: "Delete feedback permanently?",
+        message: "Use this only for spam, test entries, mistakes, or sensitive information. It will disappear from the tester’s history and they will not be notified.",
+        confirmText: "Delete permanently",
+        destructive: true,
+        onConfirm: runAction,
+      });
+      return;
+    }
+    void runAction();
   };
 
   const handleCreateHouseholdInvite = async () => {
@@ -2760,7 +2797,7 @@ export default function MoreScreen() {
           </View>
           <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>It’s okay to contact me about this feedback.</Text>
         </Pressable>
-        {feedbackNotice ? <Text style={[styles.feedbackNotice, { color: /thank|copied|deleted/i.test(feedbackNotice) ? c.success : c.destructive }]}>{feedbackNotice}</Text> : null}
+        {feedbackNotice ? <Text style={[styles.feedbackNotice, { color: /thank|copied|deleted|review|updated|archived|restored|not planned/i.test(feedbackNotice) ? c.success : c.destructive }]}>{feedbackNotice}</Text> : null}
         <Pressable
           onPress={handleSubmitFeedback}
           disabled={feedbackSubmitting || !canSubmitFeedback(feedbackMessage)}
@@ -2778,6 +2815,50 @@ export default function MoreScreen() {
           </Text>
         </Pressable>
       </View>
+      <SLabel c={c} text="My Feedback" />
+      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+        <View style={styles.feedbackInboxHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.switchLabel, { color: c.foreground }]}>Updates from FlowLedger</Text>
+            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Your feedback and replies stay here even when phone alerts are off.</Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Refresh my feedback"
+            onPress={() => void loadMyFeedback()}
+            style={({ pressed }) => [styles.feedbackRefreshButton, { backgroundColor: c.muted, opacity: pressed ? 0.75 : 1 }]}
+          >
+            <Feather name="refresh-cw" size={15} color={c.primary} />
+          </Pressable>
+        </View>
+        {myFeedbackLoading ? (
+          <Text style={[styles.switchDesc, { color: c.mutedForeground, marginTop: 12 }]}>Loading your feedback...</Text>
+        ) : myFeedback.length ? (
+          myFeedback.map(item => (
+            <View key={item.id} style={[styles.feedbackInboxItem, { borderColor: c.border, backgroundColor: c.muted }]}>
+              <View style={styles.feedbackInboxTop}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.feedbackInboxTitle, { color: c.foreground }]}>{FEEDBACK_TYPES.find(type => type.id === item.feedback_type)?.label ?? "Feedback"}</Text>
+                  <Text style={[styles.feedbackInboxMeta, { color: c.mutedForeground }]}>{formatMemberDate(item.created_at)}</Text>
+                </View>
+                <View style={[styles.feedbackStatusPill, { backgroundColor: c.primary + "18" }]}>
+                  <Text style={[styles.feedbackStatusText, { color: c.primary }]}>{feedbackStatusLabel(item.status)}</Text>
+                </View>
+              </View>
+              <Text style={[styles.feedbackInboxMessage, { color: c.foreground }]}>{item.message}</Text>
+              <Text style={[styles.feedbackHistoryStatus, { color: c.mutedForeground }]}>{feedbackStatusMessage(item.status)}</Text>
+              {item.admin_note ? (
+                <View style={[styles.feedbackReply, { backgroundColor: c.card, borderColor: c.primary + "45" }]}>
+                  <Text style={[styles.feedbackSmallLabel, { color: c.primary }]}>FLOWLEDGER REPLY</Text>
+                  <Text style={[styles.feedbackReplyText, { color: c.foreground }]}>{item.admin_note}</Text>
+                </View>
+              ) : null}
+            </View>
+          ))
+        ) : (
+          <Text style={[styles.switchDesc, { color: c.mutedForeground, marginTop: 12 }]}>You have not sent any feedback yet.</Text>
+        )}
+      </View>
       </>
       ) : null}
 
@@ -2788,7 +2869,7 @@ export default function MoreScreen() {
             <View style={styles.feedbackInboxHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.switchLabel, { color: c.foreground }]}>App admin inbox</Text>
-                <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Tester notes across FlowLedger. This is separate from household permissions.</Text>
+                <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Work from Active, then archive completed decisions. Tester history stays available unless you permanently delete it.</Text>
               </View>
               <Pressable
                 onPress={() => void loadFeedbackInbox()}
@@ -2798,7 +2879,7 @@ export default function MoreScreen() {
               </Pressable>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.feedbackFilterRow}>
-              {(["all", ...FEEDBACK_STATUSES.map(status => status.id)] as const).map(status => {
+              {(["active", "new", "reviewing", "fixed", "wont_fix", "archived", "all"] as FeedbackAdminFilter[]).map(status => {
                 const active = feedbackStatusFilter === status;
                 return (
                   <Pressable
@@ -2810,13 +2891,13 @@ export default function MoreScreen() {
                     ]}
                   >
                     <Text style={[styles.feedbackChipText, { color: active ? c.primaryForeground : c.mutedForeground }]}>
-                      {status === "all" ? "All" : feedbackStatusLabel(status)}
+                      {status === "active" ? "Active" : status === "archived" ? "Archived" : status === "all" ? "All" : feedbackStatusLabel(status)}
                     </Text>
                   </Pressable>
                 );
               })}
             </ScrollView>
-            {feedbackNotice ? <Text style={[styles.feedbackNotice, { color: /thank|copied|deleted/i.test(feedbackNotice) ? c.success : c.destructive }]}>{feedbackNotice}</Text> : null}
+            {feedbackNotice ? <Text style={[styles.feedbackNotice, { color: /thank|copied|deleted|review|updated|archived|restored|not planned/i.test(feedbackNotice) ? c.success : c.destructive }]}>{feedbackNotice}</Text> : null}
             {feedbackInboxLoading ? (
               <Text style={[styles.switchDesc, { color: c.mutedForeground, marginTop: 10 }]}>Loading feedback...</Text>
             ) : feedbackInbox.length ? (
@@ -2834,10 +2915,20 @@ export default function MoreScreen() {
                     </View>
                   </View>
                   <Text style={[styles.feedbackInboxMessage, { color: c.foreground }]}>{item.message}</Text>
+                  {item.admin_note ? (
+                    <View style={[styles.feedbackReply, { backgroundColor: c.card, borderColor: c.primary + "45" }]}>
+                      <Text style={[styles.feedbackSmallLabel, { color: c.primary }]}>SAVED REPLY</Text>
+                      <Text style={[styles.feedbackReplyText, { color: c.foreground }]}>{item.admin_note}</Text>
+                    </View>
+                  ) : null}
                   <View style={styles.feedbackInboxFooter}>
-                    {item.rating ? <Text style={[styles.feedbackInboxMeta, { color: c.mutedForeground }]}>Rating: {item.rating}/5</Text> : <View />}
+                    <Text style={[styles.feedbackInboxMeta, { color: c.mutedForeground }]}>
+                      {item.rating ? `Rating: ${item.rating}/5 · ` : ""}{item.can_contact ? "Contact allowed" : "No contact requested"}{item.archived_at ? " · Archived" : ""}
+                    </Text>
                     <View style={styles.feedbackAdminActions}>
                       <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Copy feedback for Codex"
                         onPress={() => void handleCopyFeedbackForCodex(item)}
                         style={({ pressed }) => [
                           styles.feedbackAdminActionButton,
@@ -2848,30 +2939,18 @@ export default function MoreScreen() {
                         <Text style={[styles.feedbackAdminActionText, { color: c.primary }]}>Copy Codex Plan</Text>
                       </Pressable>
                       <Pressable
-                        onPress={() => handleDeleteFeedback(item)}
+                        accessibilityRole="button"
+                        accessibilityLabel="Manage feedback"
+                        onPress={() => setManagedFeedback(item)}
                         style={({ pressed }) => [
                           styles.feedbackAdminActionButton,
-                          { backgroundColor: c.destructive + "14", borderColor: c.destructive + "45", opacity: pressed ? 0.75 : 1 },
+                          { backgroundColor: c.primary, borderColor: c.primary, opacity: pressed ? 0.75 : 1 },
                         ]}
                       >
-                        <Feather name="trash-2" size={13} color={c.destructive} />
-                        <Text style={[styles.feedbackAdminActionText, { color: c.destructive }]}>Delete</Text>
+                        <Feather name="sliders" size={13} color={c.primaryForeground} />
+                        <Text style={[styles.feedbackAdminActionText, { color: c.primaryForeground }]}>Manage feedback</Text>
                       </Pressable>
                     </View>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.feedbackStatusActions}>
-                      {FEEDBACK_STATUSES.map(status => (
-                        <Pressable
-                          key={`${item.id}-${status.id}`}
-                          onPress={() => void handleFeedbackStatusChange(item.id, status.id)}
-                          style={({ pressed }) => [
-                            styles.feedbackStatusAction,
-                            { backgroundColor: item.status === status.id ? c.primary : c.card, borderColor: c.border, opacity: pressed ? 0.75 : 1 },
-                          ]}
-                        >
-                          <Text style={[styles.feedbackStatusText, { color: item.status === status.id ? c.primaryForeground : c.mutedForeground }]}>{status.label}</Text>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
                   </View>
                 </View>
               ))
@@ -2879,6 +2958,14 @@ export default function MoreScreen() {
               <Text style={[styles.switchDesc, { color: c.mutedForeground, marginTop: 10 }]}>No feedback in this filter yet.</Text>
             )}
           </View>
+          <FeedbackManageModal
+            feedback={managedFeedback}
+            busy={feedbackManageBusy}
+            onClose={() => {
+              if (!feedbackManageBusy) setManagedFeedback(null);
+            }}
+            onAction={handleManageFeedbackAction}
+          />
         </>
       ) : null}
       </>}
@@ -3311,8 +3398,9 @@ const styles = StyleSheet.create({
   feedbackAdminActions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   feedbackAdminActionButton: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 8 },
   feedbackAdminActionText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
-  feedbackStatusActions: { gap: 8, paddingRight: 4 },
-  feedbackStatusAction: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
+  feedbackHistoryStatus: { fontSize: 12, lineHeight: 17, fontFamily: "Inter_600SemiBold", marginTop: 8 },
+  feedbackReply: { borderWidth: 1, borderRadius: 13, padding: 11, marginTop: 10 },
+  feedbackReplyText: { fontSize: 13, lineHeight: 19, fontFamily: "Inter_600SemiBold", marginTop: 5 },
 
   summaryCard: { flexDirection: "row", justifyContent: "space-around", padding: 16, marginBottom: 8 },
   summaryItem: { alignItems: "center" },

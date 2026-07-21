@@ -10,12 +10,14 @@ export const FEEDBACK_TYPES = [
 export const FEEDBACK_STATUSES = [
   { id: "new", label: "New" },
   { id: "reviewing", label: "Reviewing" },
-  { id: "fixed", label: "Fixed" },
+  { id: "fixed", label: "Updated" },
   { id: "wont_fix", label: "Not planned" },
 ] as const;
 
 export type FeedbackType = typeof FEEDBACK_TYPES[number]["id"];
 export type FeedbackStatus = typeof FEEDBACK_STATUSES[number]["id"];
+export type FeedbackAdminFilter = "active" | "archived" | "all" | FeedbackStatus;
+export type FeedbackManagementAction = "reviewing" | "updated" | "not_planned" | "archive" | "restore" | "delete";
 
 export type AppFeedbackRow = {
   id: string;
@@ -30,6 +32,11 @@ export type AppFeedbackRow = {
   status: FeedbackStatus;
   app_version: string | null;
   platform: string | null;
+  admin_note: string | null;
+  archived_at: string | null;
+  resolved_at: string | null;
+  updated_by: string | null;
+  submitter_notified_at: string | null;
   created_at: string;
   updated_at: string | null;
 };
@@ -55,4 +62,11 @@ export function normalizeFeedbackStatus(value: string | null | undefined): Feedb
 
 export function feedbackStatusLabel(status: FeedbackStatus) {
   return FEEDBACK_STATUSES.find(item => item.id === status)?.label ?? "New";
+}
+
+export function feedbackStatusMessage(status: FeedbackStatus) {
+  if (status === "reviewing") return "The FlowLedger team is reviewing this.";
+  if (status === "fixed") return "An update based on this feedback is now live.";
+  if (status === "wont_fix") return "This change is not planned right now.";
+  return "Your feedback was received.";
 }

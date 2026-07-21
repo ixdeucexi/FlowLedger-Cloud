@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import type { FeedbackType } from "@/lib/feedback";
+import type { AppFeedbackRow, FeedbackManagementAction, FeedbackType } from "@/lib/feedback";
 
 export interface FeedbackSubmission {
   feedback_type: FeedbackType;
@@ -30,4 +30,27 @@ export async function submitFeedback(submission: FeedbackSubmission) {
     body: JSON.stringify(submission),
   });
   if (!response.ok) throw new Error(await responseMessage(response));
+}
+
+export async function manageFeedback(feedbackId: string, action: FeedbackManagementAction, adminNote?: string | null) {
+  const { data } = await supabase.auth.getSession();
+  const accessToken = data.session?.access_token;
+  if (!accessToken) throw new Error("Sign in before managing feedback.");
+
+  const response = await fetch("/api/feedback/manage", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ feedback_id: feedbackId, action, admin_note: adminNote }),
+  });
+  if (!response.ok) throw new Error(await responseMessage(response));
+  return await response.json() as {
+    ok: true;
+    deleted?: boolean;
+    id?: string;
+    feedback?: AppFeedbackRow;
+    notified?: boolean;
+  };
 }

@@ -26,7 +26,8 @@ export function FeedbackBadgeProvider({ children }: { children: React.ReactNode 
     const { count, error } = await supabase
       .from("app_feedback")
       .select("id", { count: "exact", head: true })
-      .eq("status", "new");
+      .eq("status", "new")
+      .is("archived_at", null);
     if (!error) setNewFeedbackCount(Math.max(0, count ?? 0));
   }, [isAdmin, user?.id]);
 

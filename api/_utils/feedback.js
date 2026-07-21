@@ -7,6 +7,7 @@ const FEEDBACK_TYPE_LABELS = {
   setup: "Setup feedback",
   other: "General feedback",
 };
+const FEEDBACK_MANAGEMENT_ACTIONS = new Set(["reviewing", "updated", "not_planned", "archive", "restore", "delete"]);
 
 function boundedText(value, maximum, fallback = null) {
   const text = String(value || "").trim();
@@ -49,4 +50,51 @@ function feedbackNotificationPayload(feedbackId, feedbackType, sender) {
   };
 }
 
-module.exports = { feedbackNotificationPayload, normalizeFeedbackInput };
+function normalizeFeedbackManagementInput(body) {
+  const feedbackId = boundedText(body?.feedback_id, 80, "");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(feedbackId)) {
+    const error = new Error("Choose valid feedback before continuing.");
+    error.code = "FEEDBACK_ID_INVALID";
+    throw error;
+  }
+  const action = boundedText(body?.action, 24, "");
+  if (!FEEDBACK_MANAGEMENT_ACTIONS.has(action)) {
+    const error = new Error("Choose a valid feedback action.");
+    error.code = "FEEDBACK_ACTION_INVALID";
+    throw error;
+  }
+  return {
+    feedback_id: feedbackId,
+    action,
+    admin_note: boundedText(body?.admin_note, 1000),
+  };
+}
+
+function feedbackStatusNotificationPayload(feedbackId, outcome) {
+  const content = outcome === "updated"
+    ? {
+        title: "Your feedback helped improve FlowLedger",
+        body: "The update is now live. Thank you for helping us improve it.",
+      }
+    : outcome === "not_planned"
+      ? {
+          title: "An update on your FlowLedger feedback",
+          body: "Thank you for sharing it. This change is not planned right now.",
+        }
+      : {
+          title: "FlowLedger replied to your feedback",
+          body: "There is a new response waiting in My Feedback.",
+        };
+  return {
+    ...content,
+    url: `/more?section=help&feedback=${encodeURIComponent(feedbackId)}`,
+    tag: `feedback-${outcome}-${feedbackId}`,
+  };
+}
+
+module.exports = {
+  feedbackNotificationPayload,
+  feedbackStatusNotificationPayload,
+  normalizeFeedbackInput,
+  normalizeFeedbackManagementInput,
+};
