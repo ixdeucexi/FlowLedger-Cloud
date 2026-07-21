@@ -22,7 +22,7 @@ import { isCashFlowTransaction } from "@/lib/billMatching";
 import { confirmAction } from "@/lib/confirmAction";
 import { buildAlgorithmSuite } from "@/lib/algorithmSuite";
 import { effectiveDebtMinimum, type SnowballProjectionResult } from "@/lib/snowball";
-import { sortDebtsLeastToGreatest } from "@/lib/debtOrder";
+import { orderActiveDebtsForStrategy, sortDebtsWithPaidLast } from "@/lib/debtOrder";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { DEFAULT_DECISION_HUB_SETTINGS } from "@/lib/decisionHubSettings";
 import { loadCategoryBudgets } from "@/lib/categoryBudgetStore";
@@ -242,6 +242,8 @@ export default function BillsScreen() {
         id: bill.id,
         name: bill.name,
         amount: getBillMonthlyTotal(bill, currentMonth, currentYear),
+        monthlyMinimum: bill.is_debt ? debtMonthlyMinimum(bill) : undefined,
+        frequency: bill.frequency,
         paidAmount: getPaidAmount(bill.id, currentMonth, currentYear),
         occurrenceDays: getBillOccurrencesInMonth(bill, currentMonth, currentYear),
         importance: bill.smart_priority,
@@ -298,19 +300,30 @@ export default function BillsScreen() {
   const debtPayoffEngine = debtAlgorithmSuite.debtPayoff;
   const cashFlowSafeSnowballAmount = baseSnowballPreview.safeMaximum;
 
+  const debtBills = visibleBills.filter(bill => bill.is_debt);
+  const currentDebtIds = new Set(getMonthlyBills(currentMonth, currentYear).filter(bill => bill.is_debt).map(bill => bill.id));
+  const currentDebts = debtBills.filter(debt => debt.balance > 0.009 && currentDebtIds.has(debt.id));
+  const activeDebts = currentDebts.filter(debt => debt.include_in_snowball !== false);
+  const snowballOrder = orderActiveDebtsForStrategy(activeDebts, "snowball");
+  const avalancheOrder = orderActiveDebtsForStrategy(activeDebts, "avalanche");
+  const strategyOrder = settings.paymentMethod === "avalanche" ? avalancheOrder : snowballOrder;
+  const strategyRankById = new Map(strategyOrder.map((debt, index) => [debt.id, index + 1]));
   const debts = (() => {
-    const debtBills = visibleBills.filter(b => b.is_debt);
-    if (sortMode === "balance") return sortDebtsLeastToGreatest(debtBills);
-    return debtBills.slice().sort((a, b) => {
-      if (sortMode === "priority") return a.priority - b.priority;
-      return b.interest_rate - a.interest_rate;
+    if (sortMode === "balance") return sortDebtsWithPaidLast(debtBills);
+    return debtBills.slice().sort((left, right) => {
+      const leftPaid = left.balance <= 0.009;
+      const rightPaid = right.balance <= 0.009;
+      if (leftPaid !== rightPaid) return leftPaid ? 1 : -1;
+      if (sortMode === "priority") {
+        const leftRank = strategyRankById.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+        const rightRank = strategyRankById.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+        return leftRank - rightRank || left.name.localeCompare(right.name);
+      }
+      return right.interest_rate - left.interest_rate || left.balance - right.balance || left.name.localeCompare(right.name);
     });
   })();
 
-  const totalDebt        = debts.reduce((s, b) => s + b.balance, 0);
-  const currentDebtIds = new Set(getMonthlyBills(currentMonth, currentYear).filter(bill => bill.is_debt).map(bill => bill.id));
-  const currentDebts = debts.filter(debt => debt.balance > 0.009 && currentDebtIds.has(debt.id));
-  const activeDebts = currentDebts.filter(debt => debt.include_in_snowball !== false);
+  const totalDebt = debtBills.reduce((sum, debt) => sum + debt.balance, 0);
   const totalMinPayments = currentDebts.reduce((sum, debt) => sum + debtMonthlyMinimum(debt), 0);
   const assignedDebtExtra = settings.zeroBasedBudgetEnabled
     ? Math.max(0, Number(categoryBudgets.Debt ?? totalMinPayments) - totalMinPayments)
@@ -319,8 +332,8 @@ export default function BillsScreen() {
     ? Math.min(cashFlowSafeSnowballAmount, assignedDebtExtra)
     : cashFlowSafeSnowballAmount;
   const highestAPR       = debts.length ? Math.max(...debts.map(b => b.interest_rate)) : 0;
-  const snowballTarget = sortDebtsLeastToGreatest(activeDebts)[0] ?? null;
-  const avalancheTarget = activeDebts.slice().sort((a, b) => b.interest_rate - a.interest_rate || a.balance - b.balance || a.name.localeCompare(b.name))[0] ?? null;
+  const snowballTarget = snowballOrder[0] ?? null;
+  const avalancheTarget = avalancheOrder[0] ?? null;
   const cashFlowTarget = activeDebts.slice().sort((a, b) => {
     const aMin = Math.max(0.01, debtMonthlyMinimum(a));
     const bMin = Math.max(0.01, debtMonthlyMinimum(b));
@@ -329,13 +342,7 @@ export default function BillsScreen() {
   const activeDebtTarget = settings.paymentMethod === "avalanche" ? avalancheTarget ?? snowballTarget : snowballTarget;
   const activeDebtMinimum = activeDebtTarget ? debtMonthlyMinimum(activeDebtTarget) : 0;
   const activeDebtMonths = activeDebtTarget && activeDebtMinimum > 0 ? Math.ceil(activeDebtTarget.balance / activeDebtMinimum) : 0;
-  const snowballOrder = sortDebtsLeastToGreatest(activeDebts);
-  const nextSnowballTarget = activeDebtTarget
-    ? snowballOrder.find(debt => debt.id !== activeDebtTarget.id) ?? null
-    : null;
-  const nextTargetRolledMinimum = nextSnowballTarget && activeDebtTarget
-    ? debtMonthlyMinimum(nextSnowballTarget) + activeDebtMinimum
-    : 0;
+  const nextStrategyTarget = strategyOrder[1] ?? null;
   const debtPayoffDetail = debtAlgorithmSuite.algorithmDetails.debtPayoff;
   const debtRoomExplanation = safeSnowballAmount > 0
     ? debtPayoffDetail.nextAction
@@ -709,9 +716,9 @@ export default function BillsScreen() {
                   <Feather name="trending-down" size={17} color={c.primary} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.debtAlgoEyebrow, { color: c.primary }]}>Snowball Plan</Text>
+                  <Text style={[styles.debtAlgoEyebrow, { color: c.primary }]}>{settings.paymentMethod === "avalanche" ? "Avalanche Plan" : "Snowball Plan"}</Text>
                   <Text style={[styles.debtAlgoTitle, { color: c.foreground }]}>
-                    {debtPayoffEngine.nextDebtName ? `Focus on ${debtPayoffEngine.nextDebtName}` : "No active target"}
+                    {activeDebtTarget ? `Focus on ${activeDebtTarget.name}` : "No active target"}
                   </Text>
                 </View>
                 <Pressable
@@ -730,20 +737,24 @@ export default function BillsScreen() {
               </View>
               <View style={styles.debtPlanValueRow}>
                 <View style={[styles.debtPlanMetric, { backgroundColor: c.success + "10", borderColor: c.success + "24" }]}>
-                  <Text style={[styles.debtPlanLabel, { color: c.mutedForeground }]}>Safe extra</Text>
+                  <Text style={[styles.debtPlanLabel, { color: c.mutedForeground }]}>Above safety floor</Text>
                   <Text style={[styles.debtPlanValue, { color: safeSnowballAmount > 0 ? c.success : c.mutedForeground }]}>${safeSnowballAmount.toFixed(2)}</Text>
                 </View>
                 <View style={[styles.debtPlanMetric, { backgroundColor: c.primary + "10", borderColor: c.primary + "24" }]}>
                   <Text style={[styles.debtPlanLabel, { color: c.mutedForeground }]}>Method</Text>
-                  <Text style={[styles.debtPlanValue, { color: c.primary }]}>Snowball</Text>
+                  <Text style={[styles.debtPlanValue, { color: c.primary }]}>{settings.paymentMethod === "avalanche" ? "Avalanche" : "Snowball"}</Text>
                 </View>
               </View>
-              <Text style={[styles.debtAlgoCopy, { color: c.mutedForeground }]} numberOfLines={2}>{debtRoomExplanation}</Text>
-              {debtPayoffEngine.nextDebtName && debtPayoffEngine.nextDebtNameAfterTarget ? (
+              <Text style={[styles.debtAlgoCopy, { color: c.mutedForeground }]} numberOfLines={3}>
+                {safeSnowballAmount > 0
+                  ? `${debtRoomExplanation} Using it will reduce your backup days.`
+                  : debtRoomExplanation}
+              </Text>
+              {activeDebtTarget && nextStrategyTarget ? (
                 <View style={[styles.rolloverCard, { backgroundColor: c.success + "10", borderColor: c.success + "24" }]}>
                   <Feather name="repeat" size={13} color={c.success} />
                   <Text style={[styles.rolloverText, { color: c.foreground }]}>
-                    After {debtPayoffEngine.nextDebtName} is paid off, its ${debtPayoffEngine.rolloverAmount.toFixed(0)}/mo rolls into {debtPayoffEngine.nextDebtNameAfterTarget}.
+                    After {activeDebtTarget.name} is paid off, its ${activeDebtMinimum.toFixed(2)}/mo rolls into {nextStrategyTarget.name}.
                   </Text>
                 </View>
               ) : null}
@@ -791,10 +802,16 @@ export default function BillsScreen() {
               onAction={() => { setEditBill(null); setModalVisible(true); }}
             />
           ) : debts.map(item => {
-              const priorityColor = priorityColors[Math.min(item.priority - 1, priorityColors.length - 1)] ?? c.primary;
+              const isPaidOff = item.balance <= 0.009;
+              const strategyRank = strategyRankById.get(item.id);
+              const isExcluded = !isPaidOff && item.include_in_snowball === false;
+              const isUnranked = !isPaidOff && strategyRank === undefined;
+              const priorityColor = isPaidOff
+                ? c.success
+                : isUnranked
+                  ? c.mutedForeground
+                  : priorityColors[Math.min((strategyRank ?? 1) - 1, priorityColors.length - 1)] ?? c.primary;
               const effectiveMinimum = debtMonthlyMinimum(item);
-              const originalBalance = item.balance + item.amount * 12;
-              const paidPct = originalBalance > 0 ? Math.min(((originalBalance - item.balance) / originalBalance) * 100, 100) : 0;
               const monthsToPayoff = item.balance > 0 && effectiveMinimum > 0
                 ? Math.ceil(item.balance / effectiveMinimum)
                 : 0;
@@ -806,7 +823,7 @@ export default function BillsScreen() {
                   style={({ pressed }) => [styles.card, { backgroundColor: c.card, borderRadius: colors.radius, opacity: pressed ? 0.88 : 1 }]}
                 >
                   <View style={[styles.priorityStrip, { backgroundColor: priorityColor }]}>
-                    <Text style={styles.priorityNum}>#{item.priority}</Text>
+                    <Text style={styles.priorityNum}>{isPaidOff ? "PAID" : isExcluded ? "OFF" : isUnranked ? "WAIT" : `#${strategyRank}`}</Text>
                   </View>
 
                   <View style={styles.cardBody}>
@@ -819,36 +836,44 @@ export default function BillsScreen() {
                               <Text style={[styles.aprText, { color: c.destructive }]}>{item.interest_rate}% APR</Text>
                             </View>
                           )}
-                          <Text style={[styles.metaText, { color: c.mutedForeground }]}>{formatBillDueText(item)}</Text>
+                          <Text style={[styles.metaText, { color: isPaidOff ? c.success : c.mutedForeground }]}>{isPaidOff ? "Paid off" : formatBillDueText(item)}</Text>
                           {monthsToPayoff > 0 && (
                             <Text style={[styles.metaText, { color: c.mutedForeground }]}>~{monthsToPayoff} mo left</Text>
                           )}
                         </View>
                       </View>
                       <View style={styles.cardRight}>
-                        <Text style={[styles.balance, { color: c.destructive }]}>${item.balance.toLocaleString(undefined, { maximumFractionDigits: 0 })}</Text>
-                        <Text style={[styles.minPay, { color: c.mutedForeground }]}>${effectiveMinimum.toFixed(2)}/mo min</Text>
-                        {(item.snowball_minimum_boost ?? 0) > 0 && <Text style={[styles.metaText, { color: c.success }]}>Includes ${Number(item.snowball_minimum_boost).toFixed(2)} rolled over</Text>}
+                        <Text style={[styles.balance, { color: isPaidOff ? c.success : c.destructive }]}>{isPaidOff ? "Paid" : `$${item.balance.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}</Text>
+                        {!isPaidOff && <Text style={[styles.minPay, { color: c.mutedForeground }]}>${effectiveMinimum.toFixed(2)}/mo min</Text>}
+                        {!isPaidOff && (item.snowball_minimum_boost ?? 0) > 0 && <Text style={[styles.metaText, { color: c.success }]}>Includes ${Number(item.snowball_minimum_boost).toFixed(2)} rolled over</Text>}
                       </View>
                     </View>
 
-                    <View style={styles.progressSection}>
-                      <View style={styles.progressHeader}>
-                        <Text style={[styles.progressLabel, { color: c.mutedForeground }]}>Payoff progress</Text>
-                        <Text style={[styles.progressPct, { color: paidPct > 0 ? c.success : c.mutedForeground }]}>{paidPct.toFixed(0)}%</Text>
+                    {isPaidOff ? (
+                      <View style={styles.progressSection}>
+                        <View style={styles.progressHeader}>
+                          <Text style={[styles.progressLabel, { color: c.mutedForeground }]}>Payoff status</Text>
+                          <Text style={[styles.progressPct, { color: c.success }]}>Complete</Text>
+                        </View>
+                        <View style={[styles.progressBg, { backgroundColor: c.muted }]}>
+                          <View style={[styles.progressFill, { width: "100%" as any, backgroundColor: c.success }]} />
+                        </View>
                       </View>
-                      <View style={[styles.progressBg, { backgroundColor: c.muted }]}>
-                        <View style={[styles.progressFill, { width: `${paidPct}%` as any, backgroundColor: priorityColor }]} />
-                      </View>
-                    </View>
+                    ) : null}
 
                     {settings.paymentMethod === "snowball" && (
                       <View style={[styles.strategyNote, { backgroundColor: priorityColor + "12" }]}>
                         <Feather name="zap" size={11} color={priorityColor} />
                         <Text style={[styles.strategyText, { color: c.mutedForeground }]}>
-                          {item.priority === 1
-                            ? "Target first — put all extra here"
-                            : `Pay off #${item.priority - 1} first, then cascade here`}
+                          {isPaidOff
+                            ? "Paid off — no longer in the active order"
+                            : isExcluded
+                              ? "Not included in your payoff plan"
+                              : isUnranked
+                                ? "Not active in this month's payoff order"
+                              : strategyRank === 1
+                                ? "Target first — put all extra here"
+                                : `Pay off #${(strategyRank ?? 1) - 1} first, then cascade here`}
                         </Text>
                       </View>
                     )}
@@ -856,9 +881,15 @@ export default function BillsScreen() {
                       <View style={[styles.strategyNote, { backgroundColor: c.primary + "12" }]}>
                         <Feather name="trending-up" size={11} color={c.primary} />
                         <Text style={[styles.strategyText, { color: c.mutedForeground }]}>
-                          {item.priority === 1
-                            ? "Highest interest — target this first"
-                            : `Lower APR than priority #${item.priority - 1}`}
+                          {isPaidOff
+                            ? "Paid off — no longer in the active order"
+                            : isExcluded
+                              ? "Not included in your payoff plan"
+                              : isUnranked
+                                ? "Not active in this month's payoff order"
+                              : strategyRank === 1
+                                ? "Highest interest — target this first"
+                                : `Pay off #${(strategyRank ?? 1) - 1} first, then cascade here`}
                         </Text>
                       </View>
                     )}

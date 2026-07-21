@@ -15,6 +15,8 @@ export interface AlgorithmBill {
   id: string;
   name: string;
   amount: number;
+  monthlyMinimum?: number;
+  frequency?: "monthly" | "biweekly" | "weekly";
   includeInSnowball?: boolean;
   category: string;
   due_day: number;
@@ -253,6 +255,8 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
           name: overdueBills[0].bill.name,
           overdueAmount: overdueBills[0].overdueAmount,
           dueLabel: formatMonthDay(input, overdueBills[0].firstOverdueDay ?? overdueBills[0].bill.due_day),
+          frequency: overdueBills[0].bill.frequency,
+          overdueOccurrenceCount: overdueBills[0].overdueOccurrenceCount,
         }
       : null,
     forecastConfidence: input.forecastConfidence.level,
@@ -503,6 +507,7 @@ interface BillScheduleStatus {
   remainingAmount: number;
   nextDueDay: number | null;
   firstOverdueDay: number | null;
+  overdueOccurrenceCount: number;
 }
 
 function buildBillScheduleStatus(bill: AlgorithmBill, todayDay: number): BillScheduleStatus {
@@ -514,7 +519,7 @@ function buildBillScheduleStatus(bill: AlgorithmBill, todayDay: number): BillSch
   const paidAmount = Math.max(0, Number(bill.paidAmount) || 0);
   const remainingAmount = roundCurrency(Math.max(0, totalAmount - paidAmount));
   if (occurrences.length === 0 || totalAmount <= 0.005) {
-    return { dueAmount: 0, overdueAmount: 0, remainingAmount, nextDueDay: null, firstOverdueDay: null };
+    return { dueAmount: 0, overdueAmount: 0, remainingAmount, nextDueDay: null, firstOverdueDay: null, overdueOccurrenceCount: 0 };
   }
 
   const occurrenceAmount = totalAmount / occurrences.length;
@@ -524,6 +529,12 @@ function buildBillScheduleStatus(bill: AlgorithmBill, todayDay: number): BillSch
   const overdueAmount = roundCurrency(Math.max(0, occurrenceAmount * overdueCount - paidAmount));
   const firstUnpaidIndex = occurrences.findIndex((_day, index) => paidAmount + 0.005 < occurrenceAmount * (index + 1));
   const firstOverdueIndex = occurrences.findIndex((day, index) => day < todayDay && paidAmount + 0.005 < occurrenceAmount * (index + 1));
+  let paidRemaining = paidAmount;
+  const overdueOccurrenceCount = occurrences.reduce((count, day) => {
+    const paidForOccurrence = Math.min(occurrenceAmount, paidRemaining);
+    paidRemaining = Math.max(0, paidRemaining - paidForOccurrence);
+    return day < todayDay && occurrenceAmount - paidForOccurrence > 0.005 ? count + 1 : count;
+  }, 0);
 
   return {
     dueAmount,
@@ -531,6 +542,7 @@ function buildBillScheduleStatus(bill: AlgorithmBill, todayDay: number): BillSch
     remainingAmount,
     nextDueDay: firstUnpaidIndex >= 0 ? occurrences[firstUnpaidIndex] : null,
     firstOverdueDay: firstOverdueIndex >= 0 ? occurrences[firstOverdueIndex] : null,
+    overdueOccurrenceCount,
   };
 }
 
@@ -767,7 +779,7 @@ function buildDebtPayoffDetails(targets: {
     .slice()
     .filter(debt => (debt.balance ?? 0) > 0.009)
     .sort((a, b) => (a.balance ?? 0) - (b.balance ?? 0) || a.name.localeCompare(b.name));
-  const totalMonthlyMinimum = roundCurrency(orderedDebts.reduce((sum, debt) => sum + Math.max(0, debt.amount), 0));
+  const totalMonthlyMinimum = roundCurrency(orderedDebts.reduce((sum, debt) => sum + Math.max(0, debt.monthlyMinimum ?? debt.amount), 0));
 
   if (!targets.snowball) {
     return {
@@ -797,7 +809,7 @@ function buildDebtPayoffDetails(targets: {
   }
 
   const cashFlowReliefAmount = roundCurrency(targets.cashFlow?.amount ?? 0);
-  const snowballMinimum = roundCurrency(Math.max(0, targets.snowball.amount));
+  const snowballMinimum = roundCurrency(Math.max(0, targets.snowball.monthlyMinimum ?? targets.snowball.amount));
   const nextDebtNameAfterTarget = orderedDebts.find(debt => debt.id !== targets.snowball?.id)?.name ?? null;
   const safeExtraAmount = targets.forecastConfidence === "low" ? 0 : roundCurrency(Math.max(0, targets.safeCushionAmount));
   const status: AlgorithmSuiteResult["debtPayoff"]["status"] = safeExtraAmount > 0 ? "ready" : "hold";

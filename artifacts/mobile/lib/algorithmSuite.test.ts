@@ -161,6 +161,18 @@ test("uses an effective rolled minimum once and skips debts excluded from payoff
   assert.equal(suite.debtPayoff.totalMonthlyMinimum, 67);
 });
 
+test("uses the scheduled debt minimum for rollover even when this month's settled amount was lower", () => {
+  const suite = buildAlgorithmSuite(baseInput({
+    bills: [
+      { id: "camera", name: "Camera", amount: 20, monthlyMinimum: 67.27, category: "Debt", due_day: 15, is_debt: true, is_recurring: true, balance: 88, paidAmount: 20 },
+      { id: "concert", name: "Concert", amount: 35.41, monthlyMinimum: 35.41, category: "Debt", due_day: 29, is_debt: true, is_recurring: true, balance: 350, paidAmount: 0 },
+    ],
+  }));
+
+  assert.equal(suite.debtPayoff.rolloverAmount, 67.27);
+  assert.equal(suite.debtPayoff.totalMonthlyMinimum, 102.68);
+});
+
 test("cash-flow gap wording handles a one-day tight stretch", () => {
   const suite = buildAlgorithmSuite(baseInput({
     dailyBalances: [
@@ -239,6 +251,30 @@ test("future recurring occurrences do not make a current bill overdue", () => {
   assert.ok(suite.flowScore.negativeFactors.every(factor => !/overdue bill/i.test(factor)));
   assert.equal(suite.billPriority.nextBill?.dueDay, 15);
   assert.doesNotMatch(suite.stability.headline, /needs attention|still needs/i);
+});
+
+test("Stability Path explains one overdue weekly occurrence without calling it the full month", () => {
+  const suite = buildAlgorithmSuite(baseInput({
+    todayDay: 20,
+    bills: [
+      {
+        id: "weekly",
+        name: "Weekly Care",
+        amount: 300,
+        frequency: "weekly",
+        category: "Other",
+        due_day: 5,
+        occurrenceDays: [5, 12, 26],
+        is_debt: false,
+        is_recurring: true,
+        paidAmount: 150,
+      },
+    ],
+  }));
+
+  assert.equal(suite.stability.headline, "Weekly Care's July 12, 2026 payment still needs $50.00.");
+  assert.match(suite.stability.explanation, /weekly payment/);
+  assert.match(suite.stability.explanation, /Future payments stay on their own dates/);
 });
 
 test("spending and purchase algorithms require monthly room, not cushion alone", () => {

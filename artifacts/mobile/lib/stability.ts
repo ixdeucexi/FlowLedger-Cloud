@@ -36,6 +36,8 @@ export interface StabilityProgressInput {
     name: string;
     overdueAmount: number;
     dueLabel: string;
+    frequency?: "monthly" | "biweekly" | "weekly";
+    overdueOccurrenceCount?: number;
   } | null;
   forecastConfidence: "high" | "medium" | "low";
   nextPaycheckLabel?: string | null;
@@ -112,6 +114,8 @@ export function buildStabilityProgress(input: StabilityProgressInput): Stability
 
   if (input.overdueBills > 0 || riskDays > 0) {
     const attentionBill = input.attentionBill;
+    const recurringAttention = attentionBill && attentionBill.frequency !== "monthly" && (attentionBill.overdueOccurrenceCount ?? 0) > 0;
+    const recurringLabel = attentionBill?.frequency === "biweekly" ? "biweekly" : "weekly";
     return {
       ...base,
       stage: "stabilize",
@@ -120,10 +124,18 @@ export function buildStabilityProgress(input: StabilityProgressInput): Stability
       headline: riskDays > 0
         ? `${riskDays} upcoming day${riskDays === 1 ? " falls" : "s fall"} below your safety floor.`
         : attentionBill
-          ? `${attentionBill.name} still needs ${formatCurrency(attentionBill.overdueAmount)}${input.overdueBills > 1 ? `, with ${input.overdueBills - 1} more Must Pay bill${input.overdueBills === 2 ? "" : "s"} open` : ""}.`
+          ? recurringAttention
+            ? (attentionBill.overdueOccurrenceCount ?? 0) === 1
+              ? `${attentionBill.name}'s ${attentionBill.dueLabel} payment still needs ${formatCurrency(attentionBill.overdueAmount)}.`
+              : `${attentionBill.name} has ${attentionBill.overdueOccurrenceCount} ${recurringLabel} payments open (${formatCurrency(attentionBill.overdueAmount)} total).`
+            : `${attentionBill.name} still needs ${formatCurrency(attentionBill.overdueAmount)}${input.overdueBills > 1 ? `, with ${input.overdueBills - 1} more Must Pay bill${input.overdueBills === 2 ? "" : "s"} open` : ""}.`
           : `${input.overdueBills} Must Pay bill${input.overdueBills === 1 ? " needs" : "s need"} attention.`,
       explanation: attentionBill && riskDays === 0
-        ? `${attentionBill.dueLabel} has passed and this amount is still open. Clear it or correct the payment if it already posted.`
+        ? recurringAttention
+          ? (attentionBill.overdueOccurrenceCount ?? 0) === 1
+            ? `This only counts the ${recurringLabel} payment due ${attentionBill.dueLabel}. Future payments stay on their own dates.`
+            : `This only counts ${attentionBill.overdueOccurrenceCount} ${recurringLabel} payments whose dates have passed. Future payments stay on their own dates.`
+          : `${attentionBill.dueLabel} has passed and this amount is still open. Clear it or correct the payment if it already posted.`
         : "Fix the shortfall before building backup days.",
       nextAction: input.overdueBills > 0
         ? attentionBill ? `Review ${attentionBill.name} first.` : "Handle the most urgent Must Pay bill first."

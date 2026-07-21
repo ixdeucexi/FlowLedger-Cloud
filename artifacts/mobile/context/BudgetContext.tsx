@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import {
   allocateSnowballExtra,
+  effectiveDebtMinimum,
   monthlyDebtAmount,
   orderDebts,
   projectSnowballMonth,
@@ -3446,7 +3447,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         id: b.id,
         name: b.name,
         balance: Number(b.balance),
-        minimum: getBillMonthlyTotal(b, month, year),
+        minimum: effectiveDebtMinimum(b.amount, Number(b.snowball_minimum_boost ?? 0))
+          * Math.max(1, getBillOccurrencesInMonth(b, month, year).length),
         apr: Number(b.interest_rate),
         dueDay: b.due_day,
         included: b.include_in_snowball !== false,
@@ -3538,7 +3540,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       debtFreeDate: endingDebt <= 0.009 ? `${year}-${String(month + 1).padStart(2, "0")}` : simulated.debtFreeDate,
       lowestSixMonthBalance: Math.min(currentLowest, ...simulated.months.slice(0, 5).map(item => item.lowestAccountBalance)),
     };
-  }, [bills, settings.paymentMethod, settings.debtPayoffEnabled, settings.safety_floor, settings.forecast_horizon_months, extraPayments, getBillMonthlyTotal, getDailyBalances]);
+  }, [bills, settings.paymentMethod, settings.debtPayoffEnabled, settings.safety_floor, settings.forecast_horizon_months, extraPayments, getBillOccurrencesInMonth, getDailyBalances]);
 
   // ─── Categories ───────────────────────────────────────────────────────────────
 

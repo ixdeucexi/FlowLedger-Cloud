@@ -90,19 +90,25 @@ export function isBillActiveForMonth(bill: ScheduledBill, month: number, year: n
 export function getBillOccurrenceDays(bill: ScheduledBill, month: number, year: number): number[] {
   if (!isBillActiveForMonth(bill, month, year)) return [];
   const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const withinActiveDates = (day: number) => {
+    const occurrence = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return (!bill.start_date || occurrence >= bill.start_date.slice(0, 10))
+      && (!bill.end_date || occurrence <= bill.end_date.slice(0, 10));
+  };
   if (bill.frequency === "weekly") {
     const days: number[] = [];
-    const dayOfWeek = bill.day_of_week ?? dateDayOfWeek(bill.next_payment_date) ?? 0;
+    const dayOfWeek = bill.day_of_week ?? dateDayOfWeek(bill.next_payment_date ?? bill.start_date) ?? 0;
     for (let day = 1; day <= daysInMonth; day++) {
-      if (new Date(year, month, day).getDay() === dayOfWeek) days.push(day);
+      if (new Date(year, month, day).getDay() === dayOfWeek && withinActiveDates(day)) days.push(day);
     }
     return days;
   }
   if (bill.frequency === "biweekly") {
-    return occurrenceDaysFromAnchor(bill.next_payment_date ?? bill.start_date, bill.due_day, month, year, 14);
+    return occurrenceDaysFromAnchor(bill.next_payment_date ?? bill.start_date, bill.due_day, month, year, 14)
+      .filter(withinActiveDates);
   }
   const day = Math.min(bill.due_day, daysInMonth);
-  return day > 0 ? [day] : [];
+  return day > 0 && withinActiveDates(day) ? [day] : [];
 }
 
 export function applyBillDateMovesToOccurrenceDays(

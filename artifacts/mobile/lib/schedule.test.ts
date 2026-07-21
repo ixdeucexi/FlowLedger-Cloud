@@ -27,6 +27,24 @@ describe("bill scheduling", () => {
     assert.deepEqual(getBillOccurrenceDays(bill, 5, 2026), [1, 8, 15, 22, 29]);
   });
 
+  it("does not create weekly payments before the exact start date or after the exact end date", () => {
+    const bill = {
+      frequency: "weekly" as const,
+      due_day: 1,
+      day_of_week: 3,
+      start_date: "2026-07-29",
+      end_date: "2026-08-12",
+    };
+
+    assert.deepEqual(getBillOccurrenceDays(bill, 6, 2026), [29]);
+    assert.deepEqual(getBillOccurrenceDays(bill, 7, 2026), [5, 12]);
+  });
+
+  it("does not backfill a biweekly payment before its first pay date", () => {
+    const bill = { frequency: "biweekly" as const, due_day: 1, start_date: "2026-07-29" };
+    assert.deepEqual(getBillOccurrenceDays(bill, 6, 2026), [29]);
+  });
+
   it("projects biweekly bills from the remembered first pay date", () => {
     const bill = { frequency: "biweekly" as const, due_day: 1, next_payment_date: "2026-06-05" };
     assert.deepEqual(getBillOccurrenceDays(bill, 5, 2026), [5, 19]);

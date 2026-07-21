@@ -31,6 +31,7 @@ import { buildDecisionHistory } from "@/lib/decisionHistory";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { transactionCategoryParts } from "@/lib/reviewCenter";
 import { buildAlgorithmSuite, type AlgorithmInsight } from "@/lib/algorithmSuite";
+import { effectiveDebtMinimum } from "@/lib/snowball";
 
 const MONTH_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
@@ -837,6 +838,8 @@ export default function DashboardScreen() {
       id: bill.id,
       name: bill.name,
       amount: getBillMonthlyTotal(bill, currentMonth, selectedYear),
+      monthlyMinimum: bill.is_debt ? effectiveDebtMinimum(bill.amount, Number(bill.snowball_minimum_boost ?? 0)) : undefined,
+      frequency: bill.frequency,
       paidAmount: getPaidAmount(bill.id, currentMonth, selectedYear),
       occurrenceDays: getBillOccurrencesInMonth(bill, currentMonth, selectedYear),
       importance: bill.smart_priority,
