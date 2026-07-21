@@ -23,7 +23,7 @@ import type { Bill, BillDateMove, DecisionRecord, IncomeItem, Transaction } from
 import { useBudget } from "@/context/BudgetContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
-import { isCashFlowTransaction, isConfirmedBillMatch } from "@/lib/billMatching";
+import { confirmedBillMatchId, isCashFlowTransaction, isConfirmedBillMatch } from "@/lib/billMatching";
 import { allocationLabel, groupPlannedExpenseAllocations, matchedOccurrenceAllocations, occurrenceKey, reviewSettlementSummary, transactionDisplayName } from "@/lib/reviewCenter";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
 import { buildDayForecastFloPrompt, groupForecastEvents } from "@/lib/forecastDisplay";
@@ -1975,7 +1975,9 @@ export default function MonthlyScreen() {
                                 : "Manual";
                           const isMoneyIn = tx.amount > 0;
                           const isTransfer = tx.review_status === "transfer";
-                          const displayName = transactionDisplayName(tx);
+                          const matchedBillId = confirmedBillMatchId(tx);
+                          const matchedBillName = matchedBillId ? bills.find(bill => bill.id === matchedBillId)?.name : undefined;
+                          const displayName = transactionDisplayName(tx, matchedBillName);
                           const settlement = reviewSettlementSummary(tx);
                           const partialAllocations = (tx.review_allocations ?? []).filter(allocation => allocation.settlement === "partial");
                           const aggregatedRemaining = partialAllocations.reduce((sum, allocation) => {
