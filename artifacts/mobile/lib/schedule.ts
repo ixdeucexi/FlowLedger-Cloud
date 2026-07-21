@@ -149,11 +149,17 @@ export function isIncomeActiveForMonth(income: ScheduledIncome, month: number, y
 export function getIncomeOccurrenceDays(income: ScheduledIncome, month: number, year: number): number[] {
   if (!isIncomeActiveForMonth(income, month, year)) return [];
   const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const onOrAfterStart = (day: number) => {
+    if (!income.start_date) return true;
+    const occurrence = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return occurrence >= income.start_date.slice(0, 10);
+  };
   if (income.frequency === "monthly") {
     const anchorDate = income.next_payment_date || income.start_date;
     if (!anchorDate) return [1];
     const [, , day] = anchorDate.split("-").map(Number);
-    return [Math.min(Math.max(day || 1, 1), daysInMonth)];
+    const occurrenceDay = Math.min(Math.max(day || 1, 1), daysInMonth);
+    return onOrAfterStart(occurrenceDay) ? [occurrenceDay] : [];
   }
   const intervalDays = income.frequency === "biweekly" ? 14 : 7;
   if (!income.next_payment_date) return [];
@@ -167,7 +173,7 @@ export function getIncomeOccurrenceDays(income: ScheduledIncome, month: number, 
     days.push(cursor.getDate());
     cursor = new Date(cursor.getTime() + intervalDays * 86_400_000);
   }
-  return days;
+  return days.filter(onOrAfterStart);
 }
 
 function dateDayOfWeek(date?: string): number | null {

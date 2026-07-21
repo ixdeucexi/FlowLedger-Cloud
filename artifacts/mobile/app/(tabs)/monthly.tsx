@@ -1194,7 +1194,7 @@ export default function MonthlyScreen() {
   const groupedBucketEventReduction = plannedExpenseGroupsForSelectedDay.reduce((sum, group) =>
     sum + Math.max(0, group.transactionIds.length - 1) + (group.remainingAmount > 0.005 ? 1 : 0), 0);
   const selectedForecastEventCount = Math.max(0, rawSelectedForecastEventCount - groupedBucketEventReduction);
-  const selectedVisibleItemCount = scheduledBillsForDay.length + selectedDebtPayments.length + displayedTxs.length + plannedExpenseGroupsForSelectedDay.length + displayedGoalsForSelectedDay.length + plansForSelectedDay.length;
+  const selectedVisibleItemCount = scheduledBillsForDay.length + selectedDebtPayments.length + incomeForSelectedDay.length + displayedTxs.length + plannedExpenseGroupsForSelectedDay.length + displayedGoalsForSelectedDay.length + plansForSelectedDay.length;
   const selectedDayItemCount = Math.max(selectedForecastEventCount, selectedVisibleItemCount);
 
   const changeMonth = useCallback((delta: number) => {

@@ -745,7 +745,7 @@ export default function DashboardScreen() {
     setActionModalVisible(false);
     setTimeout(() => {
       if (action === "bill")          setAddBillVisible(true);
-      else if (action === "income")   router.push("/(tabs)/more" as any);
+      else if (action === "income")   router.push({ pathname: "/(tabs)/more", params: { section: "money", add: "income" } } as any);
       else if (action === "expense")  router.push("/(tabs)/monthly" as any);
       else if (action === "debt")     navigate("debt", "bills");
       else if (action === "goal")     { setEditGoal(null); setGoalModalVisible(true); }

@@ -223,18 +223,27 @@ export default function BillsScreen() {
   }, [updateBill]);
 
   // ── Debt data ───────────────────────────────────────────────────
+  const debtBills = visibleBills.filter(bill => bill.is_debt);
+  const { month: debtPlanMonth, year: debtPlanYear } = useMemo(() => {
+    for (let offset = 0; offset < 72; offset += 1) {
+      const absoluteMonth = currentMonth + offset;
+      const month = absoluteMonth % 12;
+      const year = currentYear + Math.floor(absoluteMonth / 12);
+      if (getMonthlyBills(month, year).some(bill => bill.is_debt && bill.balance > 0.009)) return { month, year };
+    }
+    return { month: currentMonth, year: currentYear };
+  }, [bills, currentMonth, currentYear, getMonthlyBills]);
+  const debtPlanIsFuture = debtPlanMonth !== currentMonth || debtPlanYear !== currentYear;
   const baseSnowballPreview = useMemo(
-    () => previewDebtSnowball(currentMonth, currentYear),
-    [previewDebtSnowball, currentMonth, currentYear, bills],
+    () => previewDebtSnowball(debtPlanMonth, debtPlanYear),
+    [bills, debtPlanMonth, debtPlanYear, previewDebtSnowball],
   );
-  const existingSnowball = getExtraPayment(currentMonth, currentYear);
-
+  const existingSnowball = getExtraPayment(debtPlanMonth, debtPlanYear);
   const cashFlowSafeSnowballAmount = baseSnowballPreview.safeMaximum;
 
-  const debtBills = visibleBills.filter(bill => bill.is_debt);
-  const currentDebtIds = new Set(getMonthlyBills(currentMonth, currentYear).filter(bill => bill.is_debt).map(bill => bill.id));
-  const currentDebts = debtBills.filter(debt => debt.balance > 0.009 && currentDebtIds.has(debt.id));
-  const activeDebts = currentDebts.filter(debt => debt.include_in_snowball !== false);
+  const debtPlanIds = new Set(getMonthlyBills(debtPlanMonth, debtPlanYear).filter(bill => bill.is_debt).map(bill => bill.id));
+  const planDebts = debtBills.filter(debt => debt.balance > 0.009 && debtPlanIds.has(debt.id));
+  const activeDebts = planDebts.filter(debt => debt.include_in_snowball !== false);
   const snowballOrder = orderActiveDebtsForStrategy(activeDebts, "snowball");
   const avalancheOrder = orderActiveDebtsForStrategy(activeDebts, "avalanche");
   const strategyOrder = settings.paymentMethod === "avalanche" ? avalancheOrder : snowballOrder;
@@ -255,7 +264,7 @@ export default function BillsScreen() {
   })();
 
   const totalDebt = debtBills.reduce((sum, debt) => sum + debt.balance, 0);
-  const totalMinPayments = currentDebts.reduce((sum, debt) => sum + debtMonthlyMinimum(debt), 0);
+  const totalMinPayments = planDebts.reduce((sum, debt) => sum + debtMonthlyMinimum(debt), 0);
   const assignedDebtExtra = settings.zeroBasedBudgetEnabled
     ? Math.max(0, Number(categoryBudgets.Debt ?? totalMinPayments) - totalMinPayments)
     : cashFlowSafeSnowballAmount;
@@ -376,14 +385,14 @@ export default function BillsScreen() {
     }
     const starting = existingSnowball?.amount ?? safeSnowballAmount;
     setSnowballAmount(starting.toFixed(2));
-    setSnowballPreview(previewDebtSnowball(currentMonth, currentYear, starting));
+    setSnowballPreview(previewDebtSnowball(debtPlanMonth, debtPlanYear, starting));
     setSnowballModalVisible(true);
   };
 
   const handleSnowballAmountChange = (value: string) => {
     setSnowballAmount(value);
     const amount = Number.parseFloat(value);
-    setSnowballPreview(previewDebtSnowball(currentMonth, currentYear, Number.isFinite(amount) ? amount : 0));
+    setSnowballPreview(previewDebtSnowball(debtPlanMonth, debtPlanYear, Number.isFinite(amount) ? amount : 0));
   };
 
   const handleConfirmSnowball = async () => {
@@ -396,7 +405,7 @@ export default function BillsScreen() {
   };
 
   const handleRemoveSnowball = async () => {
-    await removeDebtSnowballPayment(currentMonth, currentYear);
+    await removeDebtSnowballPayment(debtPlanMonth, debtPlanYear);
     setSnowballModalVisible(false);
     setSnowballApplied(false);
   };
@@ -670,7 +679,7 @@ export default function BillsScreen() {
             <View style={[styles.statsRow, { marginHorizontal: 0, gap: 10 }]}>
               {[
                 { label: "Total Debt", value: `$${totalDebt.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, color: c.destructive, icon: "trending-down" as const },
-                { label: "Min/Month",  value: `$${totalMinPayments.toFixed(0)}`,                                        color: c.warning,     icon: "calendar"     as const },
+                { label: debtPlanIsFuture ? `${MONTH_FULL[debtPlanMonth].slice(0, 3)} Minimum` : "Min/Month", value: `$${totalMinPayments.toFixed(0)}`, color: c.warning, icon: "calendar" as const },
                 { label: "Highest APR",value: `${highestAPR}%`,                                                         color: c.primary,     icon: "percent"      as const },
               ].map(s => (
                 <View key={s.label} style={[styles.statCard, { backgroundColor: c.card, borderRadius: colors.radius }]}>
@@ -708,6 +717,11 @@ export default function BillsScreen() {
                   </Text>
                 </Pressable>
               </View>
+              {debtPlanIsFuture ? (
+                <Text style={[styles.debtAlgoCopy, { color: c.mutedForeground }]}>
+                  Your next payoff order begins {MONTH_FULL[debtPlanMonth]} {debtPlanYear}.
+                </Text>
+              ) : null}
               <View style={styles.debtPlanValueRow}>
                 <View style={[styles.debtPlanMetric, { backgroundColor: c.success + "10", borderColor: c.success + "24" }]}>
                   <Text style={[styles.debtPlanLabel, { color: c.mutedForeground }]}>Above safety floor</Text>
@@ -847,7 +861,7 @@ export default function BillsScreen() {
                             : isExcluded
                               ? "Not included in your payoff plan"
                               : isUnranked
-                                ? "Not active in this month's payoff order"
+                                ? `Not active in the ${MONTH_FULL[debtPlanMonth]} payoff order`
                               : strategyRank === 1
                                 ? "Target first — put all extra here"
                                 : `Pay off #${(strategyRank ?? 1) - 1} first, then cascade here`}
@@ -863,7 +877,7 @@ export default function BillsScreen() {
                             : isExcluded
                               ? "Not included in your payoff plan"
                               : isUnranked
-                                ? "Not active in this month's payoff order"
+                                ? `Not active in the ${MONTH_FULL[debtPlanMonth]} payoff order`
                               : strategyRank === 1
                                 ? "Highest interest — target this first"
                                 : `Pay off #${(strategyRank ?? 1) - 1} first, then cascade here`}

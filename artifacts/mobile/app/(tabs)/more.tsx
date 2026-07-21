@@ -348,7 +348,7 @@ export default function MoreScreen() {
   const useStackedSettingsFields = viewportWidth < 480;
   const forecastSafetyLayout = useMemo(() => getForecastSafetyLayout(viewportWidth), [viewportWidth]);
   const router = useRouter();
-  const routeParams = useLocalSearchParams<{ section?: string; feedback?: string }>();
+  const routeParams = useLocalSearchParams<{ section?: string; feedback?: string; add?: string }>();
   const {
     themeMode,
     setThemeMode,
@@ -455,6 +455,15 @@ export default function MoreScreen() {
       setActiveSettingsSection(storedSection);
     }
   }, [routeParams.section]);
+
+  useEffect(() => {
+    const requestedAdd = Array.isArray(routeParams.add) ? routeParams.add[0] : routeParams.add;
+    if (requestedAdd !== "income") return;
+    openSettingsSection("money");
+    setEditIncome(null);
+    setIncomeModalVisible(true);
+    router.setParams({ add: "" });
+  }, [openSettingsSection, routeParams.add, router]);
 
   useEffect(() => {
     setSafetyFloorText(settings.safety_floor.toString());

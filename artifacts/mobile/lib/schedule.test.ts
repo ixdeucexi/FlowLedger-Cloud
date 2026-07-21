@@ -125,6 +125,12 @@ describe("income scheduling", () => {
     assert.deepEqual(getIncomeOccurrenceDays({ amount: 1_000, frequency: "weekly" }, 5, 2026), []);
   });
 
+  it("does not add income before the exact first payday", () => {
+    const income = { amount: 500, frequency: "weekly" as const, start_date: "2026-07-29", next_payment_date: "2026-07-29" };
+    assert.deepEqual(getIncomeOccurrenceDays(income, 6, 2026), [29]);
+    assert.deepEqual(getIncomeOccurrenceDays(income, 7, 2026), [5, 12, 19, 26]);
+  });
+
   it("uses the latest effective income amount without changing prior months", () => {
     const income = { amount: 800, frequency: "biweekly" as const, amount_history: [
       { effective_from: "2026-07-01", amount: 900 }, { effective_from: "2026-04-01", amount: 850 },

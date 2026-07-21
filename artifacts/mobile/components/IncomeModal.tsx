@@ -35,8 +35,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
   const [name,            setName]            = useState("");
   const [amount,          setAmount]          = useState("");
   const [frequency,       setFrequency]       = useState<IncomeItem["frequency"]>("monthly");
-  const [firstPayDate,    setFirstPayDate]    = useState("");   // next_payment_date anchor
-  const [monthlyStartDate, setMonthlyStartDate] = useState(""); // start_date for monthly only
+  const [firstPayDate,    setFirstPayDate]    = useState("");
 
   const [history,         setHistory]         = useState<IncomeAmountEntry[]>([]);
   const [showUpdateForm,  setShowUpdateForm]  = useState(false);
@@ -74,11 +73,10 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
       setAmount(editItem.amount.toString());
       setFrequency(editItem.frequency);
       setFirstPayDate(editItem.next_payment_date ?? editItem.start_date ?? "");
-      setMonthlyStartDate(editItem.frequency === "monthly" ? (editItem.start_date ?? "") : "");
       setHistory(editItem.amount_history ?? []);
     } else {
       setName(""); setAmount(""); setFrequency("monthly");
-      setFirstPayDate(""); setMonthlyStartDate(""); setHistory([]);
+      setFirstPayDate(""); setHistory([]);
     }
     setShowUpdateForm(false);
     setRaiseAmount("");
@@ -90,23 +88,19 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
     if (saving) return;
     const a = parseFloat(amount);
     if (!name.trim() || isNaN(a) || a <= 0) return;
+    const payday = firstPayDate.trim();
+    if (!payday) {
+      Alert.alert("Payday needed", "Choose the date this income should appear on your calendar.");
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    const isRecurring = frequency === "biweekly" || frequency === "weekly";
-
-    // For biweekly/weekly: first pay date is both the anchor AND the month-activation gate
-    const next_payment_date = isRecurring ? (firstPayDate.trim() || undefined) : undefined;
-    // start_date: for biweekly/weekly derive from firstPayDate (YYYY-MM only), for monthly use separate field
-    const start_date = isRecurring
-      ? (firstPayDate.trim() ? firstPayDate.trim().slice(0, 7) + "-01" : undefined)
-      : (monthlyStartDate.trim() || undefined);
 
     const data: Omit<IncomeItem, "id"> = {
       name: name.trim(),
       amount: a,
       frequency,
-      start_date,
-      next_payment_date,
+      start_date: payday,
+      next_payment_date: payday,
       amount_history: history.length > 0 ? history : undefined,
     };
     setSaving(true);
@@ -208,57 +202,32 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
               ))}
             </View>
 
-            {/* ── Biweekly / Weekly: first pay date anchor ── */}
-            {isRecurring && (
-              <>
-                <DatePickerField
-                  label={`First pay date (sets the ${frequency === "biweekly" ? "every-14-day" : "weekly"} schedule)`}
-                  value={firstPayDate}
-                  onChange={setFirstPayDate}
-                  placeholder="Pick any known pay date"
-                />
-                <View style={[styles.infoBox, { backgroundColor: c.primary + "12" }]}>
-                  <Feather name="info" size={12} color={c.primary} />
-                  <Text style={[styles.infoText, { color: c.mutedForeground }]}>
-                    All pay dates are calculated {frequency === "biweekly" ? "every 14 days" : "every 7 days"} from this anchor.
-                    Income is also only counted from this month onward.
-                  </Text>
-                </View>
+            <DatePickerField
+              label={isRecurring ? `First pay date (sets the ${frequency === "biweekly" ? "every-14-day" : "weekly"} schedule)` : "Payday"}
+              value={firstPayDate}
+              onChange={setFirstPayDate}
+              placeholder={isRecurring ? "Pick any known pay date" : "Choose the monthly payday"}
+            />
+            <View style={[styles.infoBox, { backgroundColor: c.primary + "12" }]}>
+              <Feather name="calendar" size={12} color={c.primary} />
+              <Text style={[styles.infoText, { color: c.mutedForeground }]}>
+                {isRecurring
+                  ? `FlowLedger will place this income every ${frequency === "biweekly" ? "14" : "7"} days from the date you choose.`
+                  : "FlowLedger will place this income on this day each month."}
+              </Text>
+            </View>
 
-                {payDatePreview && (
-                  <View style={[styles.previewBox, { backgroundColor: c.card, borderColor: c.border }]}>
-                    <Text style={[styles.previewLabel, { color: c.mutedForeground }]}>Upcoming pay dates</Text>
-                    <View style={styles.previewDates}>
-                      {payDatePreview.map((d, i) => (
-                        <View key={i} style={[styles.previewChip, { backgroundColor: c.primary + "18" }]}>
-                          <Text style={[styles.previewChipText, { color: c.primary }]}>{d}</Text>
-                        </View>
-                      ))}
+            {payDatePreview && (
+              <View style={[styles.previewBox, { backgroundColor: c.card, borderColor: c.border }]}>
+                <Text style={[styles.previewLabel, { color: c.mutedForeground }]}>Upcoming pay dates</Text>
+                <View style={styles.previewDates}>
+                  {payDatePreview.map((d, i) => (
+                    <View key={i} style={[styles.previewChip, { backgroundColor: c.primary + "18" }]}>
+                      <Text style={[styles.previewChipText, { color: c.primary }]}>{d}</Text>
                     </View>
-                  </View>
-                )}
-              </>
-            )}
-
-            {/* ── Monthly: optional start date ── */}
-            {!isRecurring && (
-              <>
-                <DatePickerField
-                  label="Start Date — optional"
-                  value={monthlyStartDate}
-                  onChange={setMonthlyStartDate}
-                  placeholder="Active immediately"
-                  optional
-                />
-                {monthlyStartDate.trim() !== "" && (
-                  <View style={[styles.infoBox, { backgroundColor: c.primary + "12" }]}>
-                    <Feather name="calendar" size={12} color={c.primary} />
-                    <Text style={[styles.infoText, { color: c.mutedForeground }]}>
-                      Income only applies for months on or after this date.
-                    </Text>
-                  </View>
-                )}
-              </>
+                  ))}
+                </View>
+              </View>
             )}
 
             {/* Rate History */}
