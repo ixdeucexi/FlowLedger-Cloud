@@ -71,7 +71,7 @@ function chipPalette(kind: ChipKind, isDark: boolean) {
   if (!isDark) {
     if (kind === "income") return { bg: "#dcfce7", border: "#22c55e", text: "#166534" };
     if (kind === "bill") return { bg: "#fef3c7", border: "#f59e0b", text: "#92400e" };
-    if (kind === "debt") return { bg: "#ffe4e6", border: "#e11d48", text: "#9f1239" };
+    if (kind === "debt") return { bg: "#dbeafe", border: "#3b82f6", text: "#1d4ed8" };
     if (kind === "goal") return { bg: "#f3e8ff", border: "#a855f7", text: "#6b21a8" };
     if (kind === "plan") return { bg: "#dbeafe", border: "#3b82f6", text: "#1d4ed8" };
     if (kind === "risk") return { bg: "#ffe4e6", border: "#fb7185", text: "#be123c" };
@@ -79,7 +79,7 @@ function chipPalette(kind: ChipKind, isDark: boolean) {
   }
   if (kind === "income") return { bg: "rgba(34,197,94,0.18)", border: "rgba(34,197,94,0.78)", text: "#bbf7d0" };
   if (kind === "bill") return { bg: "rgba(245,158,11,0.18)", border: "rgba(245,158,11,0.82)", text: "#fde68a" };
-  if (kind === "debt") return { bg: "rgba(225,29,72,0.20)", border: "rgba(244,63,94,0.88)", text: "#fecdd3" };
+  if (kind === "debt") return { bg: "rgba(59,130,246,0.20)", border: "rgba(96,165,250,0.86)", text: "#bfdbfe" };
   if (kind === "goal") return { bg: "rgba(168,85,247,0.20)", border: "rgba(168,85,247,0.82)", text: "#e9d5ff" };
   if (kind === "plan") return { bg: "rgba(59,130,246,0.20)", border: "rgba(96,165,250,0.86)", text: "#bfdbfe" };
   if (kind === "risk") return { bg: "rgba(244,63,94,0.20)", border: "rgba(251,113,133,0.90)", text: "#fecdd3" };
@@ -331,7 +331,7 @@ export function CalendarView({
         {[
           { label: "Income", color: CALENDAR.green },
           { label: "Bills", color: "#f59e0b" },
-          { label: "Debt", color: "#e11d48" },
+          { label: "Debt", color: "#3b82f6" },
           { label: "Spending", color: "#8b5cf6" },
           { label: "Plans", color: "#3b82f6" },
           { label: "Risk", color: calendarTheme.red },

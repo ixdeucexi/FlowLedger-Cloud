@@ -1889,7 +1889,7 @@ export default function MonthlyScreen() {
                         {selectedDebtPayments.map(payment => (
                           <View
                             key={`overlay-debt-${payment.event.id}`}
-                            style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: c.destructive + "40" }]}
+                            style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: "#3b82f640" }]}
                           >
                             <View style={styles.dayBillTop}>
                               <View style={{ flex: 1, minWidth: 0 }}>
@@ -1898,11 +1898,11 @@ export default function MonthlyScreen() {
                                 </Text>
                                 <Text style={[styles.dayBillMeta, { color: c.mutedForeground }]}>Snowball payment</Text>
                               </View>
-                              <View style={[styles.dayTransactionBadge, { backgroundColor: c.destructive + "20" }]}>
-                                <Text style={[styles.dayTransactionBadgeText, { color: c.destructive }]}>{payment.statusLabel.toUpperCase()}</Text>
+                              <View style={[styles.dayTransactionBadge, { backgroundColor: "#3b82f620" }]}>
+                                <Text style={[styles.dayTransactionBadgeText, { color: "#3b82f6" }]}>{payment.statusLabel.toUpperCase()}</Text>
                               </View>
                             </View>
-                            <Text style={[styles.dayOverlayAmount, { color: c.destructive }]}>{payment.amountLabel}</Text>
+                            <Text style={[styles.dayOverlayAmount, { color: "#3b82f6" }]}>{payment.amountLabel}</Text>
                           </View>
                         ))}
                       </View>
