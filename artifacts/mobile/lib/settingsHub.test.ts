@@ -21,12 +21,12 @@ test("settings hub places every destination in exactly one group", () => {
 
 test("settings hub preserves the intended group order", () => {
   assert.deepEqual(SETTINGS_GROUPS.map(group => group.sectionIds), [
-    ["accounts", "plaid", "money", "goals", "children"],
+    ["money", "accounts", "plaid", "goals", "children"],
     ["review", "subscriptions", "reports"],
-    ["setup", "notifications", "appearance", "backup", "deleted"],
+    ["appearance", "notifications", "setup", "backup", "deleted"],
     ["membership", "security", "help", "legal"],
   ]);
-  assert.equal(settingsSectionById("setup").label, "Flo setup");
+  assert.equal(settingsSectionById("setup").label, "Flo setup & demo");
 });
 
 test("count statuses handle zero, singular, and larger values", () => {
@@ -42,7 +42,7 @@ test("attention statuses only highlight positive counts", () => {
 });
 
 test("settings group lookups preserve the destination hierarchy", () => {
-  assert.equal(settingsGroupById("money").label, "Manage your money");
+  assert.equal(settingsGroupById("money").label, "Plan");
   assert.equal(settingsGroupForSection("accounts").id, "money");
   assert.equal(settingsGroupForSection("appearance").id, "preferences");
   assert.equal(settingsGroupForSection("deleted").id, "preferences");

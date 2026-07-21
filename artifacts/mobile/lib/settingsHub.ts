@@ -39,29 +39,29 @@ export interface SettingsStatus {
 }
 
 export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
-  { id: "accounts", label: "Accounts & household", description: "Balances, reconciliation, and household sharing.", icon: "credit-card" },
-  { id: "plaid", label: "Bank sync", description: "Connect a bank or import activity safely.", icon: "link" },
+  { id: "accounts", label: "Accounts & household", description: "Balances, reconciliation, and household sharing.", icon: "users" },
+  { id: "plaid", label: "Bank connections", description: "Connect a bank or import activity safely.", icon: "credit-card" },
   { id: "money", label: "Money plan", description: "Income, categories, safety, and payoff.", icon: "sliders" },
-  { id: "goals", label: "Goal funding", description: "Build safe monthly plans for your goals.", icon: "target" },
+  { id: "goals", label: "Goals", description: "Build safe monthly plans for your goals.", icon: "target" },
   { id: "children", label: "Child money", description: "Profiles, allowances, and savings goals.", icon: "smile" },
   { id: "review", label: "Review Center", description: "Resolve activity that needs your attention.", icon: "check-square" },
   { id: "subscriptions", label: "Subscriptions", description: "Review recurring charges and price changes.", icon: "repeat" },
   { id: "reports", label: "Reports & insights", description: "See spending, debt, goals, and recent changes.", icon: "bar-chart-2" },
-  { id: "setup", label: "Flo setup", description: "Review setup progress and replay the Demo.", icon: "message-circle" },
+  { id: "setup", label: "Flo setup & demo", description: "Review setup progress and replay the Demo.", icon: "message-circle" },
   { id: "notifications", label: "Notifications", description: "Private alerts for posted bank transactions.", icon: "bell" },
-  { id: "appearance", label: "Appearance", description: "Theme, text style, motion, and effects.", icon: "moon" },
+  { id: "appearance", label: "Display options", description: "Theme, text style, motion, and effects.", icon: "sliders" },
   { id: "backup", label: "Backup & data", description: "Import, export, install, and Flo memory.", icon: "download" },
   { id: "deleted", label: "Recently deleted", description: "Restore transactions removed by mistake.", icon: "trash-2" },
   { id: "membership", label: "Membership", description: "Your plan, pricing, and plan preview.", icon: "award" },
-  { id: "security", label: "Security & profile", description: "Signed-in account and sign-out controls.", icon: "lock" },
+  { id: "security", label: "Account & security", description: "Signed-in account and sign-out controls.", icon: "user" },
   { id: "help", label: "Help & feedback", description: "Send feedback or review the support inbox.", icon: "message-square" },
-  { id: "legal", label: "Legal", description: "Terms, privacy, and data use.", icon: "file-text" },
+  { id: "legal", label: "Legal & privacy", description: "Terms, privacy, and data use.", icon: "file-text" },
 ] as const;
 
 export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
-  { id: "money", label: "Manage your money", sectionIds: ["accounts", "plaid", "money", "goals", "children"] },
+  { id: "money", label: "Plan", sectionIds: ["money", "accounts", "plaid", "goals", "children"] },
   { id: "insights", label: "Review & insights", sectionIds: ["review", "subscriptions", "reports"] },
-  { id: "preferences", label: "App preferences", sectionIds: ["setup", "notifications", "appearance", "backup", "deleted"] },
+  { id: "preferences", label: "App", sectionIds: ["appearance", "notifications", "setup", "backup", "deleted"] },
   { id: "account", label: "Account & support", sectionIds: ["membership", "security", "help", "legal"] },
 ] as const;
 
