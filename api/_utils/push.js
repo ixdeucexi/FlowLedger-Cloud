@@ -1,5 +1,6 @@
 const webpush = require("web-push");
 const { optional, required } = require("./env");
+const { notificationPreferenceEnabled } = require("./notificationPreferences");
 const { serviceSupabase, safeError } = require("./supabase");
 
 function vapidDetails() {
@@ -10,8 +11,11 @@ function vapidDetails() {
   };
 }
 
-async function sendPushToUser(userId, payload) {
+async function sendPushToUser(userId, payload, preferenceKey) {
   const db = serviceSupabase();
+  if (preferenceKey && !(await notificationPreferenceEnabled(db, userId, preferenceKey))) {
+    return { delivered: 0, activeSubscriptions: 0, errors: [], skipped: true };
+  }
   const { data: subscriptions, error } = await db
     .from("push_subscriptions")
     .select("id,endpoint,p256dh,auth")
@@ -58,12 +62,12 @@ async function sendPushToUser(userId, payload) {
 async function recordDeliveryResult(db, events, result) {
   const eventIds = events.map(event => event.id);
   const now = new Date().toISOString();
-  if (result.delivered > 0 || result.activeSubscriptions === 0) {
+  if (result.skipped || result.delivered > 0 || result.activeSubscriptions === 0) {
     const { error } = await db
       .from("push_notification_events")
       .update({
         delivered_at: now,
-        last_error: result.delivered > 0 ? null : "No active push subscription.",
+        last_error: result.skipped || result.delivered > 0 ? null : "No active push subscription.",
       })
       .in("id", eventIds);
     if (error) throw error;
@@ -97,7 +101,7 @@ async function deliverPendingNotifications(userId) {
       : matching.length;
     const isPending = eventType === "pending";
     const isOverdueBill = eventType === "overdue_bill";
-    const result = await sendPushToUser(userId, isOverdueBill ? {
+    const payload = isOverdueBill ? {
       title: count === 1 ? "Bill past due" : `${count} bills need attention`,
       body: count === 1
         ? "A planned bill is past due and still has money left. Open FlowLedger to review it."
@@ -118,7 +122,13 @@ async function deliverPendingNotifications(userId) {
         : "Posted bank transactions are waiting in Review Center.",
       url: "/more?section=review",
       tag: "flowledger-review",
-    });
+    };
+    const preferenceKey = isOverdueBill
+      ? "overdue_bills"
+      : isPending
+        ? "pending_transactions"
+        : "posted_transactions";
+    const result = await sendPushToUser(userId, payload, preferenceKey);
     delivered += result.delivered;
     await recordDeliveryResult(db, matching, result);
   }

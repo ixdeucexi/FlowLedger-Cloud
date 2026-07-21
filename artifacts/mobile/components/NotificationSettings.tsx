@@ -5,18 +5,69 @@ import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
   disablePushNotifications,
   enablePushNotifications,
+  getNotificationPreferences,
   getPushNotificationStatus,
   sendTestPushNotification,
+  updateNotificationPreference,
+  type NotificationPreferenceKey,
+  type NotificationPreferences,
   type PushNotificationStatus,
 } from "@/lib/pushNotifications";
+
+type AlertOption = {
+  key: NotificationPreferenceKey;
+  icon: React.ComponentProps<typeof Feather>["name"];
+  title: string;
+  description: string;
+  adminOnly?: boolean;
+};
+
+const ALERT_OPTIONS: AlertOption[] = [
+  {
+    key: "pending_transactions",
+    icon: "clock",
+    title: "Pending bank activity",
+    description: "When a bank charge is pending. It stays out of your totals until it posts.",
+  },
+  {
+    key: "posted_transactions",
+    icon: "check-circle",
+    title: "Posted transactions",
+    description: "When a posted transaction is ready to match in Review Center.",
+  },
+  {
+    key: "overdue_bills",
+    icon: "alert-circle",
+    title: "Past-due bills",
+    description: "When a planned bill passes its due date with money still left to pay.",
+  },
+  {
+    key: "feedback_updates",
+    icon: "message-square",
+    title: "Feedback updates",
+    description: "When FlowLedger replies to or completes feedback you sent.",
+  },
+  {
+    key: "admin_feedback",
+    icon: "inbox",
+    title: "New tester feedback",
+    description: "When a tester sends feedback to the admin inbox.",
+    adminOnly: true,
+  },
+];
 
 export function NotificationSettings() {
   const c = useColors();
   const { session, user } = useAuth();
   const [status, setStatus] = useState<PushNotificationStatus>("checking");
-  const [busy, setBusy] = useState(false);
+  const [preferences, setPreferences] = useState<NotificationPreferences>(DEFAULT_NOTIFICATION_PREFERENCES);
+  const [isFeedbackAdmin, setIsFeedbackAdmin] = useState(false);
+  const [preferencesLoading, setPreferencesLoading] = useState(true);
+  const [deviceBusy, setDeviceBusy] = useState(false);
+  const [savingKey, setSavingKey] = useState<NotificationPreferenceKey | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const refreshStatus = useCallback(async () => {
@@ -28,8 +79,26 @@ export function NotificationSettings() {
     catch { setStatus("unsupported"); }
   }, [user?.id]);
 
+  const refreshPreferences = useCallback(async () => {
+    if (!session?.access_token) {
+      setPreferencesLoading(false);
+      return;
+    }
+    setPreferencesLoading(true);
+    try {
+      const result = await getNotificationPreferences(session.access_token);
+      setPreferences(result.preferences);
+      setIsFeedbackAdmin(result.isFeedbackAdmin);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not load notification choices.");
+    } finally {
+      setPreferencesLoading(false);
+    }
+  }, [session?.access_token]);
+
   useEffect(() => {
     void refreshStatus();
+    void refreshPreferences();
     if (typeof window === "undefined") return;
     const refresh = () => { void refreshStatus(); };
     window.addEventListener("focus", refresh);
@@ -38,32 +107,47 @@ export function NotificationSettings() {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [refreshStatus]);
+  }, [refreshPreferences, refreshStatus]);
 
-  const toggle = async (enabled: boolean) => {
-    if (!session?.access_token || !user?.id || busy) return;
-    setBusy(true);
+  const toggleDevice = async (enabled: boolean) => {
+    if (!session?.access_token || !user?.id || deviceBusy) return;
+    setDeviceBusy(true);
     setMessage(null);
     try {
       if (enabled) {
         await enablePushNotifications(session.access_token, user.id);
-        setMessage("Notifications are on for this device.");
+        setMessage("Phone notifications are on for this device.");
       } else {
         await disablePushNotifications(session.access_token, user.id);
-        setMessage("Notifications are off for this device.");
+        setMessage("Phone notifications are off for this device.");
       }
       await refreshStatus();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not update notifications.");
       await refreshStatus();
     } finally {
-      setBusy(false);
+      setDeviceBusy(false);
+    }
+  };
+
+  const togglePreference = async (key: NotificationPreferenceKey, enabled: boolean) => {
+    if (!session?.access_token || savingKey) return;
+    setSavingKey(key);
+    setMessage(null);
+    try {
+      const saved = await updateNotificationPreference(session.access_token, key, enabled);
+      setPreferences(saved);
+      setMessage("Notification choices saved.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not save that notification choice.");
+    } finally {
+      setSavingKey(null);
     }
   };
 
   const sendTest = async () => {
-    if (!session?.access_token || busy) return;
-    setBusy(true);
+    if (!session?.access_token || deviceBusy) return;
+    setDeviceBusy(true);
     setMessage(null);
     try {
       await sendTestPushNotification(session.access_token);
@@ -71,7 +155,7 @@ export function NotificationSettings() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not send the test notification.");
     } finally {
-      setBusy(false);
+      setDeviceBusy(false);
     }
   };
 
@@ -81,43 +165,80 @@ export function NotificationSettings() {
     ? "Notifications are blocked. Allow them for FlowLedger in your phone or browser settings."
     : status === "unsupported"
       ? "This browser or app does not support FlowLedger phone notifications."
-      : "Get private alerts for past-due bills and new bank activity.";
+      : "Allow this device to receive the alerts you choose below.";
+
+  const options = ALERT_OPTIONS.filter(option => !option.adminOnly || isFeedbackAdmin);
 
   return (
-    <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
-      <View style={styles.row}>
-        <View style={[styles.icon, { backgroundColor: c.primary + "18" }]}>
-          <Feather name="bell" size={20} color={c.primary} />
+    <View style={styles.container}>
+      <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
+        <View style={styles.row}>
+          <View style={[styles.icon, { backgroundColor: c.primary + "18" }]}>
+            <Feather name="bell" size={20} color={c.primary} />
+          </View>
+          <View style={styles.copy}>
+            <Text style={[styles.title, { color: c.foreground }]}>Phone notifications</Text>
+            <Text style={[styles.description, { color: c.mutedForeground }]}>{detail}</Text>
+          </View>
+          <Switch
+            accessibilityLabel="Phone notifications on this device"
+            disabled={deviceBusy || status === "checking" || unavailable}
+            value={enabled}
+            onValueChange={value => void toggleDevice(value)}
+            trackColor={{ false: c.border, true: c.primary + "88" }}
+            thumbColor={enabled ? c.primary : c.mutedForeground}
+          />
         </View>
-        <View style={styles.copy}>
-          <Text style={[styles.title, { color: c.foreground }]}>FlowLedger alerts</Text>
-          <Text style={[styles.description, { color: c.mutedForeground }]}>{detail}</Text>
-        </View>
-        <Switch
-          accessibilityLabel="Past-due bill and bank activity notifications"
-          disabled={busy || status === "checking" || unavailable}
-          value={enabled}
-          onValueChange={value => void toggle(value)}
-          trackColor={{ false: c.border, true: c.primary + "88" }}
-          thumbColor={enabled ? c.primary : c.mutedForeground}
-        />
+      </View>
+
+      <View style={styles.sectionHeading}>
+        <Text style={[styles.sectionTitle, { color: c.foreground }]}>Choose your alerts</Text>
+        <Text style={[styles.sectionDescription, { color: c.mutedForeground }]}>These choices follow your account on every device.</Text>
+      </View>
+
+      <View style={[styles.optionsCard, { backgroundColor: c.card, borderColor: c.border }]}>
+        {options.map((option, index) => (
+          <View
+            key={option.key}
+            style={[
+              styles.optionRow,
+              index < options.length - 1 ? { borderBottomWidth: 1, borderBottomColor: c.border } : null,
+            ]}
+          >
+            <View style={[styles.smallIcon, { backgroundColor: c.primary + "14" }]}>
+              <Feather name={option.icon} size={17} color={c.primary} />
+            </View>
+            <View style={styles.copy}>
+              <Text style={[styles.optionTitle, { color: c.foreground }]}>{option.title}</Text>
+              <Text style={[styles.description, { color: c.mutedForeground }]}>{option.description}</Text>
+            </View>
+            <Switch
+              accessibilityLabel={`${option.title} notifications`}
+              disabled={preferencesLoading || savingKey !== null}
+              value={preferences[option.key]}
+              onValueChange={value => void togglePreference(option.key, value)}
+              trackColor={{ false: c.border, true: c.primary + "88" }}
+              thumbColor={preferences[option.key] ? c.primary : c.mutedForeground}
+            />
+          </View>
+        ))}
       </View>
 
       <View style={[styles.privacy, { backgroundColor: c.muted, borderColor: c.border }]}>
         <Feather name="lock" size={14} color={c.success} />
         <Text style={[styles.privacyText, { color: c.mutedForeground }]}>
-          Lock-screen alerts hide bill, merchant, and amount details. Past-due alerts open Bills; bank alerts open Activity or Review Center.
+          Lock-screen alerts hide bill, merchant, and amount details. Opening an alert takes you to the right place in FlowLedger.
         </Text>
       </View>
 
       {enabled ? (
         <Pressable
           accessibilityRole="button"
-          disabled={busy}
+          disabled={deviceBusy}
           onPress={() => void sendTest()}
           style={({ pressed }) => [
             styles.testButton,
-            { backgroundColor: c.primary, opacity: busy ? 0.5 : pressed ? 0.78 : 1 },
+            { backgroundColor: c.primary, opacity: deviceBusy ? 0.5 : pressed ? 0.78 : 1 },
           ]}
         >
           <Feather name="send" size={15} color={c.primaryForeground} />
@@ -125,18 +246,30 @@ export function NotificationSettings() {
         </Pressable>
       ) : null}
 
-      {message ? <Text style={[styles.message, { color: message.includes("Could not") || message.includes("blocked") ? c.destructive : c.primary }]}>{message}</Text> : null}
+      {message ? (
+        <Text style={[styles.message, { color: message.includes("Could not") || message.includes("blocked") ? c.destructive : c.primary }]}>
+          {message}
+        </Text>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderRadius: 16, padding: 16, gap: 14 },
+  container: { gap: 14 },
+  card: { borderWidth: 1, borderRadius: 16, padding: 16 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   icon: { width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  smallIcon: { width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center" },
   copy: { flex: 1, gap: 3 },
   title: { fontFamily: "Inter_700Bold", fontSize: 15 },
   description: { fontFamily: "Inter_400Regular", fontSize: 12, lineHeight: 18 },
+  sectionHeading: { gap: 3, paddingHorizontal: 2 },
+  sectionTitle: { fontFamily: "Inter_700Bold", fontSize: 15 },
+  sectionDescription: { fontFamily: "Inter_400Regular", fontSize: 12, lineHeight: 17 },
+  optionsCard: { borderWidth: 1, borderRadius: 16, overflow: "hidden" },
+  optionRow: { minHeight: 82, paddingHorizontal: 14, paddingVertical: 13, flexDirection: "row", alignItems: "center", gap: 11 },
+  optionTitle: { fontFamily: "Inter_700Bold", fontSize: 14 },
   privacy: { borderWidth: 1, borderRadius: 12, padding: 12, flexDirection: "row", alignItems: "flex-start", gap: 9 },
   privacyText: { flex: 1, fontFamily: "Inter_400Regular", fontSize: 12, lineHeight: 18 },
   testButton: { minHeight: 46, borderRadius: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },

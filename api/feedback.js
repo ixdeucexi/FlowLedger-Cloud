@@ -36,7 +36,7 @@ async function submitFeedback(db, auth, body, res) {
     const payload = feedbackNotificationPayload(feedback.id, feedback.feedback_type, senderName);
     const deliveries = await Promise.allSettled(
       [...new Set((admins || []).map(admin => admin.user_id).filter(Boolean))]
-        .map(adminUserId => sendPushToUser(adminUserId, payload)),
+        .map(adminUserId => sendPushToUser(adminUserId, payload, "admin_feedback")),
     );
     for (const delivery of deliveries) {
       if (delivery.status === "rejected") console.error("Feedback saved, but an admin push failed:", safeError(delivery.reason));
@@ -107,7 +107,11 @@ async function manageFeedback(db, auth, body, res) {
   let notified = false;
   if (notificationOutcome && feedback.can_contact) {
     try {
-      const delivery = await sendPushToUser(feedback.user_id, feedbackStatusNotificationPayload(feedback.id, notificationOutcome));
+      const delivery = await sendPushToUser(
+        feedback.user_id,
+        feedbackStatusNotificationPayload(feedback.id, notificationOutcome),
+        "feedback_updates",
+      );
       notified = delivery.delivered > 0;
       if (notified) {
         await db.from("app_feedback").update({ submitter_notified_at: now }).eq("id", feedback.id);

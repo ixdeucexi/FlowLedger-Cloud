@@ -8,6 +8,29 @@ import {
 
 export type PushNotificationStatus = "checking" | "unsupported" | "blocked" | "disabled" | "enabled";
 
+export type NotificationPreferenceKey =
+  | "pending_transactions"
+  | "posted_transactions"
+  | "overdue_bills"
+  | "feedback_updates"
+  | "admin_feedback";
+
+export interface NotificationPreferences {
+  pending_transactions: boolean;
+  posted_transactions: boolean;
+  overdue_bills: boolean;
+  feedback_updates: boolean;
+  admin_feedback: boolean;
+}
+
+export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
+  pending_transactions: true,
+  posted_transactions: true,
+  overdue_bills: true,
+  feedback_updates: true,
+  admin_feedback: true,
+};
+
 type ApiError = { message?: string };
 
 function supported() {
@@ -156,4 +179,30 @@ export async function sendTestPushNotification(accessToken: string) {
     headers: authorization(accessToken),
   });
   if (!response.ok) throw new Error(await apiMessage(response, "Could not send the test notification."));
+}
+
+export async function getNotificationPreferences(accessToken: string) {
+  const response = await fetch("/api/notifications/preferences", {
+    headers: authorization(accessToken),
+  });
+  if (!response.ok) throw new Error(await apiMessage(response, "Could not load notification choices."));
+  return response.json() as Promise<{
+    preferences: NotificationPreferences;
+    isFeedbackAdmin: boolean;
+  }>;
+}
+
+export async function updateNotificationPreference(
+  accessToken: string,
+  key: NotificationPreferenceKey,
+  enabled: boolean,
+) {
+  const response = await fetch("/api/notifications/preferences", {
+    method: "PATCH",
+    headers: authorization(accessToken),
+    body: JSON.stringify({ [key]: enabled }),
+  });
+  if (!response.ok) throw new Error(await apiMessage(response, "Could not update that notification choice."));
+  const payload = await response.json() as { preferences: NotificationPreferences };
+  return payload.preferences;
 }

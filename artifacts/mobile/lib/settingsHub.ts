@@ -48,7 +48,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
   { id: "subscriptions", label: "Subscriptions", description: "Review recurring charges and price changes.", icon: "repeat" },
   { id: "reports", label: "Reports & insights", description: "See spending, debt, goals, and recent changes.", icon: "bar-chart-2" },
   { id: "setup", label: "Flo setup & demo", description: "Review setup progress and replay the Demo.", icon: "message-circle" },
-  { id: "notifications", label: "Notifications", description: "Private alerts for bills and bank activity.", icon: "bell" },
+  { id: "notifications", label: "Notifications", description: "Choose alerts for bills, bank activity, and feedback.", icon: "bell" },
   { id: "appearance", label: "Display options", description: "Theme, text style, motion, and effects.", icon: "sliders" },
   { id: "backup", label: "Backup & data", description: "Import, export, install, and Flo memory.", icon: "download" },
   { id: "deleted", label: "Recently deleted", description: "Restore transactions removed by mistake.", icon: "trash-2" },
