@@ -2076,6 +2076,28 @@ export default function MoreScreen() {
                 ? "Debt view: keep cash-flow tracking with payoff recommendations."
                 : "Tracking view: focus on balances, bills, transactions, and forecasts."}
         </Text>
+        {feedbackAdmin ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open isolated Zero Budget Lab"
+            onPress={() => router.push("/(tabs)/zero-budget-lab" as any)}
+            style={[styles.zeroBudgetLabCard, { backgroundColor: c.primary + "12", borderColor: c.primary + "3D" }]}
+          >
+            <View style={[styles.zeroBudgetLabIcon, { backgroundColor: c.primary + "1F" }]}>
+              <Feather name="shield" size={19} color={c.primary} />
+            </View>
+            <View style={styles.zeroBudgetLabCopy}>
+              <View style={styles.zeroBudgetLabTitleRow}>
+                <Text style={[styles.zeroBudgetLabTitle, { color: c.foreground }]}>Admin Zero Budget Lab</Text>
+                <View style={[styles.zeroBudgetLabBadge, { backgroundColor: c.success + "1F" }]}>
+                  <Text style={[styles.zeroBudgetLabBadgeText, { color: c.success }]}>ISOLATED</Text>
+                </View>
+              </View>
+              <Text style={[styles.zeroBudgetLabDescription, { color: c.mutedForeground }]}>Test the new assign-every-dollar experience with sample money. Your real household stays unchanged.</Text>
+            </View>
+            <Feather name="chevron-right" size={19} color={c.primary} />
+          </Pressable>
+        ) : null}
       </View>
 
       <SLabel c={c} text="Income" />
@@ -3207,6 +3229,14 @@ const styles = StyleSheet.create({
   planningModeTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   planningModeShort: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
   planningModeDescription: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 18, marginTop: 12 },
+  zeroBudgetLabCard: { borderWidth: 1, borderRadius: 16, padding: 12, marginTop: 13, flexDirection: "row", alignItems: "center", gap: 11 },
+  zeroBudgetLabIcon: { width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  zeroBudgetLabCopy: { flex: 1, minWidth: 0 },
+  zeroBudgetLabTitleRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 7 },
+  zeroBudgetLabTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
+  zeroBudgetLabBadge: { borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3 },
+  zeroBudgetLabBadgeText: { fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7 },
+  zeroBudgetLabDescription: { fontSize: 11, fontFamily: "Inter_500Medium", lineHeight: 16, marginTop: 3 },
   planningToolSwitch: { width: 44, height: 26, borderRadius: 13, padding: 3, justifyContent: "center" },
   planningToolThumb: { width: 20, height: 20, borderRadius: 10 },
   zeroBudgetIntroSteps: { gap: 10, marginTop: 16, marginBottom: 4 },

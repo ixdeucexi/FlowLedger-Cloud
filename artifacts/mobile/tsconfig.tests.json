@@ -85,5 +85,7 @@
     ,"lib/tabBadge.test.ts"
     ,"lib/settingsLayout.ts"
     ,"lib/settingsLayout.test.ts"
+    ,"lib/zeroBudgetLab.ts"
+    ,"lib/zeroBudgetLab.test.ts"
   ]
 }
