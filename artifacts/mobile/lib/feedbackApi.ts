@@ -21,7 +21,7 @@ export async function submitFeedback(submission: FeedbackSubmission) {
   const accessToken = data.session?.access_token;
   if (!accessToken) throw new Error("Sign in before sending feedback.");
 
-  const response = await fetch("/api/feedback/submit", {
+  const response = await fetch("/api/feedback", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -37,7 +37,7 @@ export async function manageFeedback(feedbackId: string, action: FeedbackManagem
   const accessToken = data.session?.access_token;
   if (!accessToken) throw new Error("Sign in before managing feedback.");
 
-  const response = await fetch("/api/feedback/manage", {
+  const response = await fetch("/api/feedback", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,

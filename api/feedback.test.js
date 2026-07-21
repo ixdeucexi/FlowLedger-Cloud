@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const manageFeedback = require("./manage");
+const feedback = require("./feedback");
 
 function invoke(request) {
   return new Promise((resolve, reject) => {
@@ -15,7 +15,7 @@ function invoke(request) {
         resolve({ status: this.statusCode, payload });
       },
     };
-    Promise.resolve(manageFeedback(request, response)).catch(reject);
+    Promise.resolve(feedback(request, response)).catch(reject);
   });
 }
 
