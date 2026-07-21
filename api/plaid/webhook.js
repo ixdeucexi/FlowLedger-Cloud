@@ -2,7 +2,11 @@ const { serviceSupabase, safeError } = require("../_utils/supabase");
 const { syncItem } = require("../_utils/sync");
 const { isActualProHousehold } = require("../_utils/plaidAccess");
 
-module.exports = async function plaidWebhook(req, res) {
+function shouldSyncTransactionWebhook(type, code) {
+  return type === "TRANSACTIONS" && code === "SYNC_UPDATES_AVAILABLE";
+}
+
+async function plaidWebhook(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "METHOD_NOT_ALLOWED" });
   const payload = typeof req.body === "string" ? (() => { try { return JSON.parse(req.body); } catch { return {}; } })() : (req.body || {});
   const itemId = String(payload.item_id || "").trim();
@@ -21,7 +25,10 @@ module.exports = async function plaidWebhook(req, res) {
     if (!(await isActualProHousehold(item.household_id, client))) {
       return res.status(200).json({ ok: true, ignored: true, reason: "pro_required" });
     }
-    if (type === "TRANSACTIONS" || code === "SYNC_UPDATES_AVAILABLE" || code === "INITIAL_UPDATE") {
+    // Transactions Sync emits SYNC_UPDATES_AVAILABLE alongside legacy
+    // DEFAULT_UPDATE / TRANSACTIONS_REMOVED webhooks. Sync once for the
+    // cursor-based event so the same update cannot start overlapping imports.
+    if (shouldSyncTransactionWebhook(type, code)) {
       const result = await syncItem({ userId: item.user_id, item });
       console.log("[plaid:webhook] sync completed", {
         type,
@@ -40,4 +47,7 @@ module.exports = async function plaidWebhook(req, res) {
     console.error("[plaid:webhook] sync failed", { type, code, error: message });
     return res.status(500).json({ error: "PLAID_WEBHOOK_SYNC_FAILED", message });
   }
-};
+}
+
+module.exports = plaidWebhook;
+module.exports.shouldSyncTransactionWebhook = shouldSyncTransactionWebhook;
