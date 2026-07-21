@@ -3,6 +3,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { AppState, Platform } from "react-native";
 
 import { DEV_DEMO_USER_ID, disableDevDemoMode, enableDevDemoMode, isDevDemoMode } from "@/lib/demoMode";
+import { LEGAL_VERSION, legalAcceptanceMetadata } from "@/lib/legalDocuments";
 import { clearLastAppRoute } from "@/lib/navigationMemory";
 import { detachPushNotifications, restorePushNotifications } from "@/lib/pushNotifications";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
@@ -28,8 +29,8 @@ interface AuthContextType {
   user:     User | null;
   loading:  boolean;
   signIn:   (email: string, password: string) => Promise<string | null>;
-  signUp:   (email: string, password: string) => Promise<string | null>;
-  signInWithGoogle: () => Promise<string | null>;
+  signUp:   (email: string, password: string, legalAccepted: boolean) => Promise<string | null>;
+  signInWithGoogle: (legalAccepted?: boolean) => Promise<string | null>;
   signOut:  () => Promise<void>;
   demoMode: boolean;
   startDemoMode: () => void;
@@ -38,6 +39,40 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const PENDING_LEGAL_ACCEPTANCE_KEY = "flowledger_pending_legal_acceptance";
+
+function queueOAuthLegalAcceptance() {
+  if (Platform.OS !== "web" || typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(PENDING_LEGAL_ACCEPTANCE_KEY, JSON.stringify({
+      version: LEGAL_VERSION,
+      acceptedAt: new Date().toISOString(),
+    }));
+  } catch {
+    // The in-app acceptance gate remains the fallback when browser storage is unavailable.
+  }
+}
+
+async function applyPendingOAuthLegalAcceptance() {
+  if (Platform.OS !== "web" || typeof window === "undefined") return;
+  const raw = window.localStorage.getItem(PENDING_LEGAL_ACCEPTANCE_KEY);
+  if (!raw) return;
+  try {
+    const pending = JSON.parse(raw) as { version?: string; acceptedAt?: string };
+    const acceptedAt = pending.acceptedAt ? new Date(pending.acceptedAt) : null;
+    const isRecent = acceptedAt && Number.isFinite(acceptedAt.getTime()) && Date.now() - acceptedAt.getTime() < 60 * 60 * 1000;
+    if (pending.version === LEGAL_VERSION && isRecent) {
+      const { error } = await supabase.auth.updateUser({ data: legalAcceptanceMetadata(acceptedAt.toISOString()) });
+      if (error) throw error;
+    }
+  } catch (error) {
+    console.warn("Could not restore pending legal acceptance", error);
+  } finally {
+    try {
+      window.localStorage.removeItem(PENDING_LEGAL_ACCEPTANCE_KEY);
+    } catch {}
+  }
+}
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -128,7 +163,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      const { data } = await withTimeout(supabase.auth.getSession(), 8000, "Session check");
+      let { data } = await withTimeout(supabase.auth.getSession(), 8000, "Session check");
+      if (data.session) {
+        await applyPendingOAuthLegalAcceptance();
+        data = (await withTimeout(supabase.auth.getSession(), 8000, "Session refresh after legal acceptance")).data;
+      }
       if (!mounted) return;
       setSession(data.session);
       setLoading(false);
@@ -198,14 +237,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return friendlyAuthError(error?.message);
   };
 
-  const signUp = async (email: string, password: string): Promise<string | null> => {
+  const signUp = async (email: string, password: string, legalAccepted: boolean): Promise<string | null> => {
+    if (!legalAccepted) return "Please agree to the Terms of Service and acknowledge the Privacy Policy.";
     if (demoMode) {
       disableDevDemoMode();
       setDemoMode(false);
       setSession(null);
       setLoading(true);
     }
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: legalAcceptanceMetadata() },
+    });
     if (!error && data.session) {
       setSession(data.session);
       setLoading(false);
@@ -228,7 +272,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return friendlyAuthError(error?.message);
   };
 
-  const signInWithGoogle = async (): Promise<string | null> => {
+  const signInWithGoogle = async (legalAccepted = false): Promise<string | null> => {
+    if (legalAccepted) queueOAuthLegalAcceptance();
     if (demoMode) {
       disableDevDemoMode();
       setDemoMode(false);
@@ -248,6 +293,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       provider: "google",
       options: redirectTo ? { redirectTo } : undefined,
     });
+    if (error && Platform.OS === "web" && typeof window !== "undefined") {
+      window.localStorage.removeItem(PENDING_LEGAL_ACCEPTANCE_KEY);
+    }
     return friendlyAuthError(error?.message);
   };
 

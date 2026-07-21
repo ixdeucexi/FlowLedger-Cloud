@@ -14,6 +14,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { LegalAcceptanceGate } from "@/components/LegalAcceptanceGate";
 import { PwaInstallPrompt } from "@/components/PwaInstallPrompt";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider, useThemeMode } from "@/context/ThemeContext";
@@ -35,13 +36,14 @@ function AuthObserver() {
     if (loading) return;
     const firstSegment = segments[0] as string | undefined;
     const inAuth = firstSegment === "login";
+    const isPublicLegal = firstSegment === "legal";
     const atRoot = !firstSegment || firstSegment === "index";
 
     const replaceRoute = (destination: string) => {
       router.replace(destination as any);
     };
 
-    if (!session && !inAuth) {
+    if (!session && !inAuth && !isPublicLegal) {
       replaceRoute("/login");
     } else if (session && (inAuth || atRoot)) {
       let requestedSetup = false;
@@ -72,7 +74,7 @@ function AuthObserver() {
       };
     }
 
-    if (session && !inAuth && !atRoot) {
+    if (session && !inAuth && !atRoot && !isPublicLegal) {
       rememberCurrentAppRoute();
     }
   }, [session, loading, segments, router]);
@@ -186,11 +188,13 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="index" />
             <Stack.Screen name="login" />
+            <Stack.Screen name="legal" />
             <Stack.Screen name="setup" />
             <Stack.Screen name="(tabs)" />
           </Stack>
           <PwaInstallPrompt />
         </GestureHandlerRootView>
+        <LegalAcceptanceGate />
       </Animated.View>
       {showStartupOverlay ? (
         <StartupScreen style={[styles.startupOverlay, { opacity: startupOpacity }]} />

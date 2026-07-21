@@ -52,7 +52,7 @@
       ]
     },
     {
-      "source": "/:page(login|setup|bills|monthly|flo|transactions|more)",
+      "source": "/:page(login|legal|setup|bills|monthly|flo|transactions|more)",
       "headers": [
         {
           "key": "Cache-Control",

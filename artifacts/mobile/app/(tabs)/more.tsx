@@ -20,6 +20,7 @@ import { FloLogo } from "@/components/FloLogo";
 import { FeedbackManageModal } from "@/components/FeedbackManageModal";
 import { IncomeModal } from "@/components/IncomeModal";
 import { HouseholdMemberActionsModal } from "@/components/HouseholdMemberActionsModal";
+import { LegalDocumentModal } from "@/components/LegalDocumentModal";
 import { MembershipPanel } from "@/components/MembershipPanel";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { MoreHub } from "@/components/settings/MoreHub";
@@ -2976,8 +2977,8 @@ export default function MoreScreen() {
       {activeSettingsSection === "legal" && <>
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         {[
-          { id: "terms" as const, title: "Terms & Conditions", desc: "How FlowLedger Algo should be used and what users are responsible for.", icon: "file-text" },
-          { id: "privacy" as const, title: "Privacy Policy", desc: "What data FlowLedger uses to run forecasts, households, and Flo guidance.", icon: "shield" },
+          { id: "terms" as const, title: "Terms of Service", desc: "Financial disclaimers, user responsibilities, liability limits, and dispute terms.", icon: "file-text" },
+          { id: "privacy" as const, title: "Privacy Policy", desc: "Financial data, Plaid, Flo, household sharing, retention, and your choices.", icon: "shield" },
         ].map((item, index) => (
           <Pressable
             key={item.id}
@@ -3076,44 +3077,7 @@ export default function MoreScreen() {
         </Pressable>
       </Modal>
 
-      <Modal
-        visible={Boolean(legalDoc)}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setLegalDoc(null)}
-      >
-        <Pressable style={styles.infoOverlay} onPress={() => setLegalDoc(null)}>
-          <Pressable style={[styles.infoSheet, { backgroundColor: c.card, borderColor: c.border, maxHeight: "78%" }]} onPress={() => undefined}>
-            <View style={styles.infoSheetHeader}>
-              <View style={[styles.infoSheetIcon, { backgroundColor: c.primary + "18" }]}>
-                <Feather name={legalDoc === "privacy" ? "shield" : "file-text"} size={20} color={c.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.infoSheetEyebrow, { color: c.primary }]}>FlowLedger Algo</Text>
-                <Text style={[styles.infoSheetTitle, { color: c.foreground }]}>
-                  {legalDoc === "privacy" ? "Privacy Policy" : "Terms & Conditions"}
-                </Text>
-              </View>
-              <Pressable onPress={() => setLegalDoc(null)} style={[styles.infoCloseButton, { backgroundColor: c.muted }]}>
-                <Feather name="x" size={18} color={c.mutedForeground} />
-              </Pressable>
-            </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={[styles.legalText, { color: c.mutedForeground }]}>
-                {legalDoc === "privacy"
-                  ? "FlowLedger uses your accounts, bills, income, transactions, goals, household roles, and setup preferences to calculate forecasts, display alerts, and help Flo explain your plan. Household sharing only exposes the active household plan to invited members based on their role. FlowLedger should never ask users for admin keys, code access, or private service credentials. Diagnostic and setup information should stay limited to what is needed to operate the app and improve reliability."
-                  : "FlowLedger Algo is a budgeting, planning, and forecasting tool. Its algorithms are designed to help you understand cash flow, bills, debt payoff, savings, and spending decisions, but they are not financial, tax, legal, or investment advice. You are responsible for confirming amounts, dates, balances, and real-world payments before making money decisions. Forecasts can change when income, bills, transactions, debt balances, or account balances change."}
-              </Text>
-            </ScrollView>
-            <Pressable
-              onPress={() => setLegalDoc(null)}
-              style={({ pressed }) => [styles.infoDoneButton, { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 }]}
-            >
-              <Text style={[styles.infoDoneText, { color: c.primaryForeground }]}>Got it</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <LegalDocumentModal documentId={legalDoc} onClose={() => setLegalDoc(null)} />
 
       <IncomeModal
         visible={incomeModalVisible}
@@ -3360,9 +3324,7 @@ const styles = StyleSheet.create({
   infoSheetIcon: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   infoSheetEyebrow: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.9, marginBottom: 2 },
   infoSheetTitle: { fontSize: 21, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.3 },
-  infoCloseButton: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   infoSheetDesc: { fontSize: 14, fontFamily: "Inter_500Medium", lineHeight: 20 },
-  legalText: { fontSize: 14, fontFamily: "Inter_500Medium", lineHeight: 22 },
   infoDoneButton: { alignItems: "center", justifyContent: "center", minHeight: 46, borderRadius: 14, marginTop: 16 },
   infoDoneText: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   balanceDivider: { borderTopWidth: 1, marginTop: 14, paddingTop: 14 },

@@ -87,5 +87,7 @@
     ,"lib/settingsLayout.test.ts"
     ,"lib/zeroBudgetLab.ts"
     ,"lib/zeroBudgetLab.test.ts"
+    ,"lib/legalDocuments.ts"
+    ,"lib/legalDocuments.test.ts"
   ]
 }

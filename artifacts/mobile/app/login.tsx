@@ -10,9 +10,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
+import { LegalDocumentModal } from "@/components/LegalDocumentModal";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
+import type { LegalDocumentId } from "@/lib/legalDocuments";
 
 function GoogleMark() {
   return (
@@ -40,6 +42,8 @@ export default function LoginScreen() {
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState<string | null>(null);
   const [showPass, setShowPass] = useState(false);
+  const [legalAccepted, setLegalAccepted] = useState(false);
+  const [legalDoc, setLegalDoc] = useState<LegalDocumentId | null>(null);
 
   useEffect(() => {
     if (Platform.OS !== "web" || typeof window === "undefined") return;
@@ -61,6 +65,10 @@ export default function LoginScreen() {
       setError("Passwords don't match.");
       return;
     }
+    if (mode === "signup" && !legalAccepted) {
+      setError("Please agree to the Terms of Service and acknowledge the Privacy Policy.");
+      return;
+    }
     if (password.length < 6) {
       setError("Password must be at least 6 characters.");
       return;
@@ -68,7 +76,7 @@ export default function LoginScreen() {
     setLoading(true);
     const err = mode === "signin"
       ? await signIn(email.trim(), password)
-      : await signUp(email.trim(), password);
+      : await signUp(email.trim(), password, legalAccepted);
     setLoading(false);
     if (err) {
       setError(err);
@@ -87,8 +95,12 @@ export default function LoginScreen() {
 
   const handleGoogle = async () => {
     setError(null);
+    if (mode === "signup" && !legalAccepted) {
+      setError("Please agree to the Terms of Service and acknowledge the Privacy Policy.");
+      return;
+    }
     setLoading(true);
-    const err = await signInWithGoogle();
+    const err = await signInWithGoogle(true);
     setLoading(false);
     if (err) setError(err);
   };
@@ -125,7 +137,7 @@ export default function LoginScreen() {
                 <Pressable
                   key={m}
                   style={[styles.tab, mode === m && { backgroundColor: colors.isDark ? "#1e293b" : "#ffffff" }]}
-                  onPress={() => { setMode(m); setError(null); }}
+                  onPress={() => { setMode(m); setError(null); setLegalAccepted(false); }}
                 >
                   <Text style={[styles.tabText, { color: colors.mutedForeground }, mode === m && { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}>
                     {m === "signin" ? "Sign In" : "Create Account"}
@@ -191,6 +203,32 @@ export default function LoginScreen() {
               </View>
             )}
 
+            {mode === "signup" && (
+              <>
+                <Pressable
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: legalAccepted }}
+                  accessibilityLabel="Agree to the Terms of Service and acknowledge the Privacy Policy"
+                  onPress={() => setLegalAccepted(value => !value)}
+                  style={styles.legalAgreement}
+                >
+                  <View style={[styles.checkbox, { borderColor: legalAccepted ? colors.primary : colors.border, backgroundColor: legalAccepted ? colors.primary : "transparent" }]}>
+                    {legalAccepted ? <Feather name="check" size={14} color={colors.primaryForeground} /> : null}
+                  </View>
+                  <Text style={[styles.legalAgreementText, { color: colors.mutedForeground }]}>I am at least 18 and agree to the Terms of Service and acknowledge the Privacy Policy.</Text>
+                </Pressable>
+                <View style={styles.legalLinks}>
+                  <Pressable accessibilityRole="link" onPress={() => setLegalDoc("terms")}>
+                    <Text style={[styles.legalLink, { color: colors.primary }]}>Read Terms of Service</Text>
+                  </Pressable>
+                  <Text style={[styles.legalSeparator, { color: colors.mutedForeground }]}>and</Text>
+                  <Pressable accessibilityRole="link" onPress={() => setLegalDoc("privacy")}>
+                    <Text style={[styles.legalLink, { color: colors.primary }]}>Privacy Policy</Text>
+                  </Pressable>
+                </View>
+              </>
+            )}
+
             {/* Error */}
             {error && (
               <View style={styles.errorBox}>
@@ -220,14 +258,20 @@ export default function LoginScreen() {
               <Text style={[styles.googleBtnText, { color: colors.foreground }]}>Continue with Google</Text>
             </Pressable>
 
-            {mode === "signup" && (
-              <Text style={styles.hint}>
-                Your data is stored securely and synced across all your devices.
-              </Text>
-            )}
+            {mode === "signin" ? (
+              <View style={styles.googleLegalNotice}>
+                <Text style={[styles.googleLegalText, { color: colors.mutedForeground }]}>By continuing with Google, you agree to the </Text>
+                <Pressable accessibilityRole="link" onPress={() => setLegalDoc("terms")}><Text style={[styles.legalLink, { color: colors.primary }]}>Terms</Text></Pressable>
+                <Text style={[styles.googleLegalText, { color: colors.mutedForeground }]}> and acknowledge the </Text>
+                <Pressable accessibilityRole="link" onPress={() => setLegalDoc("privacy")}><Text style={[styles.legalLink, { color: colors.primary }]}>Privacy Policy</Text></Pressable>
+                <Text style={[styles.googleLegalText, { color: colors.mutedForeground }]}>.</Text>
+              </View>
+            ) : null}
+
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <LegalDocumentModal documentId={legalDoc} onClose={() => setLegalDoc(null)} />
     </LinearGradient>
   );
 }
@@ -259,4 +303,12 @@ const styles = StyleSheet.create({
   googleMark:    { width: 22, height: 22, borderRadius: 11, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
   googleBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#f8fafc" },
   hint:          { fontSize: 12, fontFamily: "Inter_400Regular", color: "#475569", textAlign: "center", marginTop: 14, lineHeight: 18 },
+  legalAgreement: { flexDirection: "row", alignItems: "center", gap: 9, marginTop: 16 },
+  checkbox: { width: 22, height: 22, borderWidth: 1.5, borderRadius: 7, alignItems: "center", justifyContent: "center" },
+  legalAgreementText: { flex: 1, fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 17 },
+  legalLinks: { flexDirection: "row", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: 5, marginTop: 9 },
+  legalLink: { fontSize: 12, fontFamily: "Inter_800ExtraBold", textDecorationLine: "underline" },
+  legalSeparator: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  googleLegalNotice: { flexDirection: "row", justifyContent: "center", flexWrap: "wrap", marginTop: 11 },
+  googleLegalText: { fontSize: 10, fontFamily: "Inter_400Regular", lineHeight: 15 },
 });
