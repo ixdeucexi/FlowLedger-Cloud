@@ -188,7 +188,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
     }
     const data: Omit<Transaction, "id"> = {
       amount: isExpense ? -parsed : parsed,
-      category,
+      category: isExpense ? category : "Income",
       note: note.trim(),
       date,
       account_id: accountId,
@@ -264,7 +264,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
                 <Text style={[styles.typeBtnText, { color: !isTransfer && isExpense ? "#fff" : c.mutedForeground }]}>Expense</Text>
               </Pressable>
               <Pressable
-                onPress={() => { setIsTransfer(false); setIsExpense(false); }}
+                onPress={() => { setIsTransfer(false); setIsExpense(false); setLinkedBillId(undefined); setCategory("Income"); }}
                 style={[styles.typeBtn, { backgroundColor: !isTransfer && !isExpense ? c.success : "transparent", borderRadius: 8 }]}
               >
                 <Text style={[styles.typeBtnText, { color: !isTransfer && !isExpense ? "#fff" : c.mutedForeground }]}>Income</Text>
@@ -284,10 +284,16 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
 
             <DatePickerField label="Date" value={date} onChange={setDate} placeholder="Choose transaction date" />
 
-            <Text style={labelStyle}>Note</Text>
-            <TextInput style={inputStyle} value={note} onChangeText={setNote} placeholder="What was it for?" placeholderTextColor={c.mutedForeground} />
+            <Text style={labelStyle}>{!isTransfer && !isExpense ? "Income name" : "Note"}</Text>
+            <TextInput
+              style={inputStyle}
+              value={note}
+              onChangeText={setNote}
+              placeholder={!isTransfer && !isExpense ? "e.g. Bonus, refund, or side job" : "What was it for?"}
+              placeholderTextColor={c.mutedForeground}
+            />
 
-            {!isTransfer && <>
+            {!isTransfer && isExpense && <>
               <Text style={labelStyle}>Category</Text>
               <View style={styles.categoryGrid}>
                 {categories.map(cat => (

@@ -37,8 +37,8 @@ export interface BankAnchoredForecast {
  * Builds the balance side of a connected-bank forecast.
  *
  * Before the bank's as-of date, only settled ledger events may move the balance.
- * On the as-of date, planned outflows remain in the calendar so today's number
- * shows what will be left if those payments post. Future events remain forecasts.
+ * On the as-of date, planned money in and out remains in the calendar so today's
+ * number shows what will be left if those plans happen. Future events remain forecasts.
  */
 export function anchorForecastToBankBalance(
   events: FinancialEvent[],
@@ -49,7 +49,11 @@ export function anchorForecastToBankBalance(
   const balanceEvents = events.filter(event =>
     event.date > anchorDate
     || settledEventIds.has(event.id)
-    || (event.date === anchorDate && event.amount < 0));
+    || (event.date === anchorDate && (
+      event.amount < 0
+      || event.status === "planned"
+      || event.status === "scheduled"
+    )));
   const settledNetThroughAnchor = balanceEvents
     .filter(event => event.date <= anchorDate && settledEventIds.has(event.id))
     .reduce((sum, event) => sum + event.amount, 0);

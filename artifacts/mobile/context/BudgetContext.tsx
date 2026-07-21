@@ -3322,11 +3322,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const [ty, tm] = t.date.split("-").map(Number);
       return ty === year && tm === month + 1 && isCheckingBalanceTransaction(t, connectedBankAccounts);
     });
-    monthTxs.forEach(t => financialEvents.push({
-      id: `transaction:${t.id}`, sourceType: "transaction", sourceId: t.id, date: t.date,
-      kind: t.amount >= 0 ? "transaction_income" : "transaction_expense",
-      amount: t.amount, status: "actual", name: t.note || t.category,
-    }));
+    monthTxs.forEach(t => {
+      const isBankActivity = t.source === "plaid" || t.source === "statement" || Boolean(t.import_hash);
+      financialEvents.push({
+        id: `transaction:${t.id}`, sourceType: "transaction", sourceId: t.id, date: t.date,
+        kind: t.amount >= 0 ? "transaction_income" : "transaction_expense",
+        amount: t.amount,
+        status: !isBankActivity && t.amount > 0 && t.date >= localDateString() ? "scheduled" : "actual",
+        name: t.note || t.category,
+      });
+    });
     const billsByDay: Record<number, number> = {};
     const debtPlan = getProjectedDebtSnowballMonth(month, year);
     const projectedDebtScheduledPayments = new Map(

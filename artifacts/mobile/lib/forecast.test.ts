@@ -124,7 +124,7 @@ describe("anchorForecastToBankBalance", () => {
     assert.ok(Math.abs(result.days[19].balance - 1_689.39) < 1e-8);
   });
 
-  it("keeps past plans out of history but applies today's planned outflows", () => {
+  it("keeps past plans out of history but applies today's planned money in and out", () => {
     const posted = event({
       id: "transaction:bank",
       sourceType: "transaction",
@@ -146,9 +146,9 @@ describe("anchorForecastToBankBalance", () => {
     );
     const result = forecastBalances({ ...anchored, startDate: "2026-07-18", endDate: "2026-07-21" });
 
-    assert.deepEqual(anchored.events.map(item => item.id), [posted.id, todayPlan.id, futureBill.id]);
-    assert.equal(result.days[2].balance, 1_379.39);
-    assert.ok(Math.abs(result.days[3].balance - 1_091.87) < 1e-8);
+    assert.deepEqual(anchored.events.map(item => item.id), [posted.id, todayPlan.id, todayUnpostedIncome.id, futureBill.id]);
+    assert.equal(result.days[2].balance, 1_879.39);
+    assert.ok(Math.abs(result.days[3].balance - 1_591.87) < 1e-8);
   });
 });
 
