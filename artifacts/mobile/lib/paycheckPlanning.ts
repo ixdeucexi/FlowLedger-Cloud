@@ -1,3 +1,5 @@
+import { addDateOnlyDays } from "./dateLabels";
+
 export interface PaycheckPlanIncome {
   id?: string;
   name: string;
@@ -33,12 +35,6 @@ function dateOnly(value: string) {
   return value.slice(0, 10);
 }
 
-function addDays(isoDate: string, days: number) {
-  const date = new Date(`${isoDate}T12:00:00`);
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
 function formatDateKey(year: number, month: number, day: number) {
   return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
@@ -63,7 +59,7 @@ export function buildPaycheckPlan(
     .sort((a, b) => a.date.localeCompare(b.date) || b.amount - a.amount);
 
   const nextPaycheck = upcomingIncome[0] ?? null;
-  const windowEnd = nextPaycheck ? addDays(nextPaycheck.date, -1) : today;
+  const windowEnd = nextPaycheck ? addDateOnlyDays(nextPaycheck.date, -1) : today;
   const windowBalances = balances
     .map(day => ({ ...day, date: dateOnly(day.date) }))
     .filter(day => day.date >= today && day.date <= windowEnd)

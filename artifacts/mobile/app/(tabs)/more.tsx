@@ -858,7 +858,7 @@ export default function MoreScreen() {
   const currentSetupStep = setupSteps.find(step => !step.done) ?? setupSteps[setupSteps.length - 1];
   const setupIsComplete = settings.onboarding_completed || setupComplete >= setupSteps.length;
   const shouldShowFloSetup = !setupIsComplete;
-  const currentMonthPrefix = new Date().toISOString().slice(0, 7);
+  const currentMonthPrefix = localDateString().slice(0, 7);
   const accountMonthDeltas = useMemo(() => {
     const deltas = new Map<string, number>();
     transactions.forEach(transaction => {

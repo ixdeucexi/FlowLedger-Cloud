@@ -5,11 +5,12 @@ import { Alert, Modal, Pressable, StyleSheet, Text, TextInput, View } from "reac
 import { useBudget } from "@/context/BudgetContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
+import { addDateOnlyDays, addDateOnlyMonths, localDateString } from "@/lib/dateLabels";
 
 export function DecisionDueModal(){
   const c=useColors(),router=useRouter();
   const {decisions,goals,incomes,settings,updateDecision,addTransaction,addBill,addIncome,updateIncome,updateGoal,previewDebtSnowball,applyDebtSnowballPayment}=useBudget();
-  const now=new Date(),today=now.toISOString().slice(0,10);
+  const now=new Date(),today=localDateString(now);
   const [dismissedDueId,setDismissedDueId]=useState<string|null>(null);
   const due=useMemo(()=>decisions.find(d=>d.id!==dismissedDueId&&(d.status==="planned"||d.status==="calendar")&&(d.next_due_date??d.scenario.date)<=today&&(!d.remind_at||new Date(d.remind_at)<=now)),[decisions,dismissedDueId,today]);
   const [actual,setActual]=useState("");
@@ -19,11 +20,11 @@ export function DecisionDueModal(){
   if(!due)return null;
   const save=(patch:Partial<typeof due>)=>updateDecision({...due,...patch});
   const remind=()=>{const d=new Date();d.setDate(d.getDate()+1);void save({remind_at:d.toISOString()})};
-  const postpone=()=>{const d=new Date(`${due.scenario.date}T00:00:00`);d.setDate(d.getDate()+7);const date=d.toISOString().slice(0,10);void save({scenario:{...due.scenario,date},next_due_date:date,calendar_date:date,remind_at:undefined})};
+  const postpone=()=>{const date=addDateOnlyDays(due.scenario.date,7);void save({scenario:{...due.scenario,date},next_due_date:date,calendar_date:date,remind_at:undefined})};
   const complete=async()=>{const amount=Math.max(0,Number(actual)||0),s=due.scenario;let applied:Record<string,unknown>={};
     if(s.type==="one_time_purchase"){applied={kind:"transaction",id:await addTransaction({date:today,amount:-amount,category:"Other",note:s.name})}}
     else if(s.type==="savings_contribution"){const goal=goals.find(g=>g.id===s.sourceId);if(goal)await updateGoal({...goal,current_amount:goal.current_amount+amount});applied={kind:"transaction",id:await addTransaction({date:today,amount:-amount,category:"Savings",note:s.name})}}
-    else if(s.type==="recurring_bill"){const txId=await addTransaction({date:today,amount:-amount,category:"Other",note:s.name});const next=new Date(`${today}T12:00:00`);if(s.frequency==="weekly")next.setDate(next.getDate()+7);else if(s.frequency==="biweekly")next.setDate(next.getDate()+14);else{const targetDay=next.getDate();next.setDate(1);next.setMonth(next.getMonth()+1);next.setDate(Math.min(targetDay,new Date(next.getFullYear(),next.getMonth()+1,0).getDate()));}const billFrequency=s.frequency==="weekly"?"weekly":s.frequency==="biweekly"?"biweekly":"monthly";const billId=await addBill({name:s.name,amount,category:"Other",priority:1,is_debt:false,balance:0,interest_rate:0,due_day:next.getDate(),start_date:next.toISOString().slice(0,10),next_payment_date:next.toISOString().slice(0,10),is_recurring:true,frequency:billFrequency});applied={kind:"recurring",transactionId:txId,billId}}
+    else if(s.type==="recurring_bill"){const txId=await addTransaction({date:today,amount:-amount,category:"Other",note:s.name});const nextDate=s.frequency==="weekly"?addDateOnlyDays(today,7):s.frequency==="biweekly"?addDateOnlyDays(today,14):addDateOnlyMonths(today,1);const billFrequency=s.frequency==="weekly"?"weekly":s.frequency==="biweekly"?"biweekly":"monthly";const billId=await addBill({name:s.name,amount,category:"Other",priority:1,is_debt:false,balance:0,interest_rate:0,due_day:Number(nextDate.slice(8,10)),start_date:nextDate,next_payment_date:nextDate,is_recurring:true,frequency:billFrequency});applied={kind:"recurring",transactionId:txId,billId}}
     else if(s.type==="income_change"){const income=incomes.find(i=>i.id===s.sourceId);if(income){await updateIncome({...income,amount,amount_history:[...(income.amount_history??[]).filter(h=>h.effective_from!==today.slice(0,7)),{effective_from:today.slice(0,7),amount}]});applied={kind:"income_update",incomeId:income.id}}else applied={kind:"income",id:await addIncome({name:s.name,amount,frequency:s.frequency==="weekly"?"weekly":s.frequency==="biweekly"?"biweekly":"monthly",start_date:today,next_payment_date:s.frequency!=="monthly"?today:undefined})}}
     else if(s.type==="extra_debt_payment"){if(settings.debtPayoffEnabled){const p=previewDebtSnowball(now.getMonth(),now.getFullYear(),amount);await applyDebtSnowballPayment(p);applied={kind:"debt",month:now.getMonth(),year:now.getFullYear()}}else{applied={kind:"transaction",id:await addTransaction({date:today,amount:-amount,category:"Debt",note:s.name})}}}
     await save({status:"completed",actual_amount:amount,completed_at:new Date().toISOString(),applied_change:applied,remind_at:undefined});

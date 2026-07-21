@@ -28,6 +28,7 @@ import { applyCategoryBudgetMove, buildCategoryPlan, buildZeroBudgetSummary } fr
 import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets as saveCategoryBudgetsRemote, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
 import { DEFAULT_DECISION_HUB_SETTINGS } from "@/lib/decisionHubSettings";
 import { buildDecisionHistory } from "@/lib/decisionHistory";
+import { dateOnlyToLocalDate } from "@/lib/dateLabels";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { transactionCategoryParts } from "@/lib/reviewCenter";
 import { buildAlgorithmSuite, type AlgorithmInsight } from "@/lib/algorithmSuite";
@@ -1985,8 +1986,8 @@ export default function DashboardScreen() {
 }
 
 function formatShortDate(date: string): string {
-  const parsed = new Date(`${date}T00:00:00Z`);
-  if (Number.isNaN(parsed.getTime())) return date;
+  const parsed = dateOnlyToLocalDate(date);
+  if (!parsed) return date;
   return parsed.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
 }
 

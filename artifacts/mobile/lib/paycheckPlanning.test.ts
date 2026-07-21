@@ -59,3 +59,16 @@ test("returns an empty plan when there is no upcoming paycheck", () => {
   assert.equal(plan.nextPaycheck, null);
   assert.equal(plan.billsDue.length, 0);
 });
+
+test("keeps the paycheck window on date-only month boundaries", () => {
+  const plan = buildPaycheckPlan(
+    [{ name: "Main Paycheck", amount: 800, date: "2026-08-01" }],
+    [{ name: "Rent", amount: 300, dueDate: "2026-07-31" }],
+    [{ date: "2026-07-31", balance: 500 }],
+    200,
+    "2026-07-31",
+  );
+
+  assert.equal(plan.windowEnd, "2026-07-31");
+  assert.deepEqual(plan.billsDue.map(bill => bill.name), ["Rent"]);
+});

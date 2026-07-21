@@ -71,7 +71,7 @@ import { buildDecisionRiskAlerts } from "@/lib/decisionRisk";
 import { applyCategoryBudgetMove, buildCategoryPlan } from "@/lib/categoryPlanning";
 import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
 import { DEFAULT_DECISION_HUB_SETTINGS } from "@/lib/decisionHubSettings";
-import { localDateString } from "@/lib/dateLabels";
+import { dateOnlyToLocalDate, localDateString } from "@/lib/dateLabels";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { buildAlgorithmSuite } from "@/lib/algorithmSuite";
 import { groupForecastEvents } from "@/lib/forecastDisplay";
@@ -1641,8 +1641,8 @@ export default function FloScreen() {
 }
 
 function formatDisplayDate(date: string): string {
-  const parsed = new Date(`${date}T00:00:00Z`);
-  if (Number.isNaN(parsed.getTime())) return date;
+  const parsed = dateOnlyToLocalDate(date);
+  if (!parsed) return date;
   return parsed.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
 }
 

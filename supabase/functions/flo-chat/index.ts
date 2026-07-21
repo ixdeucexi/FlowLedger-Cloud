@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2.108.0";
+import { canUseFloAccountChat, isFloProEnforcementEnabled } from "./entitlement.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -198,15 +199,14 @@ async function handleV2(client: UserClient, userId: string, body: Record<string,
     return new Response(JSON.stringify({ error: "conversation_access_denied" }), { status: 403, headers: jsonHeaders });
   }
 
-  const enforcementEnabled = String(Deno.env.get("FLO_PRO_ENFORCEMENT_ENABLED") ?? "false").toLowerCase() === "true";
+  const enforcementEnabled = isFloProEnforcementEnabled(Deno.env.get("FLO_PRO_ENFORCEMENT_ENABLED"));
   const { data: plan } = await client.from("household_plans").select("tier").eq("household_id", householdId).maybeSingle();
   let verifiedPreviewTier: "free" | "pro" | null = null;
   if (body.previewTier === "free" || body.previewTier === "pro") {
     const { data: admin } = await client.from("feedback_admins").select("user_id").eq("user_id", userId).maybeSingle();
     if (admin) verifiedPreviewTier = body.previewTier;
   }
-  const entitled = (verifiedPreviewTier ?? plan?.tier) === "pro";
-  if (enforcementEnabled && !entitled) {
+  if (!canUseFloAccountChat(enforcementEnabled, plan?.tier, verifiedPreviewTier)) {
     return new Response(JSON.stringify({ error: "pro_required" }), { status: 402, headers: jsonHeaders });
   }
 
