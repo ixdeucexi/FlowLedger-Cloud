@@ -27,6 +27,7 @@ import { FeedbackBadgeProvider, useFeedbackBadge } from "@/context/FeedbackBadge
 import { buildCurrentMonthReviewQueue } from "@/lib/reviewCenter";
 import { tabBadgeValue } from "@/lib/tabBadge";
 import { buildOverdueBillOccurrences, groupOverdueBills } from "@/lib/overdueBills";
+import { planningTabPresentation } from "@/lib/planningMode";
 
 const MIN_BUDGET_LOADING_MS = 220;
 
@@ -371,7 +372,7 @@ function FloDemo() {
 function TabContent() {
   const colors = useColors();
   const {
-    loading, loadError, retryBudgetLoad, demoMode, transactions, pendingBankTransactions,
+    loading, loadError, retryBudgetLoad, demoMode, transactions, pendingBankTransactions, settings,
     getMonthlyBills, getBillOccurrencesInMonth, getBillEffectiveMonthlyTotal, getPaidAmount,
   } = useBudget();
   const { newFeedbackCount } = useFeedbackBadge();
@@ -520,6 +521,9 @@ function TabContent() {
         >
           {TABS.map(tab => {
             const isActivity = tab.name === "transactions";
+            const activityPresentation = planningTabPresentation(settings.zeroBasedBudgetEnabled);
+            const tabTitle = isActivity ? activityPresentation.title : tab.title;
+            const tabIcon = isActivity ? activityPresentation.icon : tab.icon;
             const isBills = tab.name === "bills";
             const isMore = tab.name === "more";
             const reviewBadge = isActivity ? tabBadgeValue(activityAlertCount) : undefined;
@@ -531,17 +535,17 @@ function TabContent() {
                 key={tab.name}
                 name={tab.name}
                 options={{
-                  title: tab.title,
-                  tabBarIcon: ({ color }) => <Feather name={tab.icon} size={22} color={color} />,
+                  title: tabTitle,
+                  tabBarIcon: ({ color }) => <Feather name={tabIcon} size={22} color={color} />,
                   tabBarBadge: badge,
                   tabBarBadgeStyle: badge ? styles.alertTabBadge : undefined,
                   tabBarAccessibilityLabel: reviewBadge
-                    ? `Activity, ${activityReviewCount} item${activityReviewCount === 1 ? "" : "s"} need review and ${pendingBankTransactions.length} transaction${pendingBankTransactions.length === 1 ? "" : "s"} pending`
+                    ? `${tabTitle}, ${activityReviewCount} item${activityReviewCount === 1 ? "" : "s"} need review and ${pendingBankTransactions.length} transaction${pendingBankTransactions.length === 1 ? "" : "s"} pending`
                     : billBadge
                       ? `Bills, ${overdueBillCount} past-due bill${overdueBillCount === 1 ? "" : "s"} need action`
                     : feedbackBadge
                       ? `More, ${newFeedbackCount} new feedback item${newFeedbackCount === 1 ? "" : "s"}`
-                    : tab.title,
+                    : tabTitle,
                 }}
               />
             );

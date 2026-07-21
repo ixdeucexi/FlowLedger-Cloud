@@ -28,6 +28,7 @@ import { isValidDateInMonth } from "@/lib/schedule";
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { resizeSnowballFundingSources } from "@/lib/snowballFunding";
 import { buildCurrentMonthReviewQueue, matchedOccurrenceAllocations, occurrenceKey, transactionDisplayName } from "@/lib/reviewCenter";
+import { CategoryBudgetScreen } from "./category-budget";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -127,6 +128,11 @@ function groupByMonth(items: ActivityItem[]): { title: string; data: ActivityIte
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function TransactionsScreen() {
+  const { settings } = useBudget();
+  return settings.zeroBasedBudgetEnabled ? <CategoryBudgetScreen embedded /> : <ActivityScreen />;
+}
+
+export function ActivityScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();

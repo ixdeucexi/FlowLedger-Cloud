@@ -2132,15 +2132,15 @@ export default function MoreScreen() {
       <SLabel c={c} text={settings.zeroBasedBudgetEnabled ? "Budget Categories" : "Spending Categories"} />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         {settings.zeroBasedBudgetEnabled && <Pressable
-          onPress={() => router.push("/(tabs)/category-budget" as any)}
+          onPress={() => router.push("/(tabs)/transactions" as any)}
           style={({ pressed }) => [styles.categoryBudgetLink, { backgroundColor: c.primary + "18", borderColor: c.primary + "30", opacity: pressed ? 0.75 : 1 }]}
         >
           <View style={[styles.dataIcon, { backgroundColor: c.primary + "18" }]}>
             <Feather name="grid" size={16} color={c.primary} />
           </View>
           <View style={styles.switchInfo}>
-            <Text style={[styles.switchLabel, { color: c.foreground }]}>Open Category Budget</Text>
-            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Edit budgets, move money, and ask Flo by category.</Text>
+            <Text style={[styles.switchLabel, { color: c.foreground }]}>Open Zero Budget</Text>
+            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Open the Budget tab to assign money, move it, and ask Flo by category.</Text>
           </View>
           <Feather name="chevron-right" size={18} color={c.primary} />
         </Pressable>}
@@ -3064,7 +3064,7 @@ export default function MoreScreen() {
               onPress={async () => {
                 await updateSettings({ zeroBasedBudgetEnabled: true });
                 setZeroBudgetIntroVisible(false);
-                router.push("/(tabs)/category-budget" as any);
+                router.push("/(tabs)/transactions" as any);
               }}
               style={({ pressed }) => [styles.infoDoneButton, { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 }]}
             >

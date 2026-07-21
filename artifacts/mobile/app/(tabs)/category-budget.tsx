@@ -13,6 +13,7 @@ import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { isCashFlowTransaction } from "@/lib/billMatching";
 import { applyCategoryBudgetMove, buildCategoryPlan, buildZeroBudgetSummary, type CategoryPlanRow } from "@/lib/categoryPlanning";
 import { loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets } from "@/lib/categoryBudgetStore";
+import { buildCurrentMonthReviewQueue } from "@/lib/reviewCenter";
 
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const CAT_COLORS: Record<string, string> = {
@@ -23,7 +24,11 @@ const CAT_COLORS: Record<string, string> = {
 
 type Filter = "all" | "over" | "watch" | "available";
 
-export default function CategoryBudgetScreen() {
+interface CategoryBudgetScreenProps {
+  embedded?: boolean;
+}
+
+export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenProps) {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -34,6 +39,8 @@ export default function CategoryBudgetScreen() {
     getBillMonthlyTotal,
     getMonthlyIncome,
     getTransactionsForMonth,
+    transactions,
+    pendingBankTransactions,
     selectedYear,
     settings,
     updateSettings,
@@ -85,6 +92,11 @@ export default function CategoryBudgetScreen() {
   const monthlyIncome = getMonthlyIncome(month, year);
   const zeroBudgetSummary = buildZeroBudgetSummary(monthlyIncome, categoryPlan);
   const unassigned = zeroBudgetSummary.leftToAssign;
+  const reviewCount = useMemo(() => {
+    const today = new Date();
+    const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    return buildCurrentMonthReviewQueue(transactions, todayIso).length;
+  }, [transactions]);
 
   const persistBudgets = async (next: Record<string, number>) => {
     if (!canEditHousehold) return;
@@ -178,11 +190,11 @@ export default function CategoryBudgetScreen() {
     <View style={[styles.screen, { backgroundColor: c.background, paddingTop: insets.top + 10 }]}>
       <PremiumBackdrop variant="green" />
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: c.card }]}>
+        {!embedded && <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: c.card }]}>
           <Feather name="chevron-left" size={20} color={c.foreground} />
-        </Pressable>
+        </Pressable>}
         <View style={{ flex: 1 }}>
-          <Text style={[styles.title, { color: c.foreground }]}>Category Budget</Text>
+          <Text style={[styles.title, { color: c.foreground }]}>{embedded ? "Zero Budget" : "Category Budget"}</Text>
           <Text style={[styles.subtitle, { color: c.mutedForeground }]}>Give every dollar a job</Text>
         </View>
         <Pressable disabled={!canEditHousehold} onPress={saveDrafts} style={[styles.saveBtn, { backgroundColor: c.primary, opacity: canEditHousehold ? 1 : 0.5 }]}>
@@ -205,6 +217,22 @@ export default function CategoryBudgetScreen() {
         <SummaryBox label="Assigned" value={`$${zeroBudgetSummary.assigned.toFixed(0)}`} color={c.primary} />
         <SummaryBox label={Math.abs(unassigned) < 0.005 ? "Ready" : unassigned > 0 ? "To assign" : "Over"} value={`${unassigned < -0.005 ? "-" : ""}$${Math.abs(unassigned).toFixed(0)}`} color={Math.abs(unassigned) < 0.005 ? c.success : unassigned > 0 ? c.warning : c.destructive} />
       </View>
+
+      {embedded && <Pressable
+        onPress={() => router.push({ pathname: "/(tabs)/more", params: { section: "review" } } as any)}
+        style={({ pressed }) => [styles.reviewLink, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.78 : 1 }]}
+      >
+        <View style={[styles.reviewLinkIcon, { backgroundColor: c.primary + "18" }]}>
+          <Feather name="check-square" size={17} color={c.primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.reviewLinkTitle, { color: c.foreground }]}>Review bank activity</Text>
+          <Text style={[styles.reviewLinkText, { color: c.mutedForeground }]}>Categorize posted transactions here, then this budget updates automatically.</Text>
+        </View>
+        <View style={[styles.reviewCount, { backgroundColor: reviewCount + pendingBankTransactions.length > 0 ? c.destructive : c.success }]}>
+          <Text style={styles.reviewCountText}>{reviewCount + pendingBankTransactions.length}</Text>
+        </View>
+      </Pressable>}
 
       <View style={styles.filterRow}>
         {(["all", "over", "watch", "available"] as Filter[]).map(item => (
@@ -288,6 +316,10 @@ export default function CategoryBudgetScreen() {
   );
 }
 
+export default function CategoryBudgetRoute() {
+  return <CategoryBudgetScreen />;
+}
+
 function SummaryBox({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <View style={styles.summaryBox}>
@@ -320,6 +352,12 @@ const styles = StyleSheet.create({
   summaryBox: { flex: 1, borderRadius: 14, paddingVertical: 12, alignItems: "center", backgroundColor: "rgba(148,163,184,0.10)" },
   summaryValue: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
   summaryLabel: { fontSize: 10, fontFamily: "Inter_700Bold", color: "#94a3b8", marginTop: 2, textTransform: "uppercase" },
+  reviewLink: { marginHorizontal: 16, marginBottom: 10, borderWidth: 1, borderRadius: 18, padding: 12, flexDirection: "row", alignItems: "center", gap: 10 },
+  reviewLinkIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  reviewLinkTitle: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  reviewLinkText: { fontSize: 11, fontFamily: "Inter_500Medium", lineHeight: 15, marginTop: 2 },
+  reviewCount: { minWidth: 24, height: 24, borderRadius: 12, paddingHorizontal: 6, alignItems: "center", justifyContent: "center" },
+  reviewCountText: { color: "#ffffff", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   modeGate: { margin: 20, marginTop: 48, borderWidth: 1, borderRadius: 24, padding: 22, alignItems: "center" },
   modeGateIcon: { width: 52, height: 52, borderRadius: 17, alignItems: "center", justifyContent: "center", marginBottom: 14 },
   modeGateTitle: { fontSize: 20, fontFamily: "Inter_800ExtraBold", marginBottom: 7 },

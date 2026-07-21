@@ -8,6 +8,17 @@ export const DEFAULT_PLANNING_TOOLS: PlanningTools = {
   debtPayoffEnabled: true,
 };
 
+export interface PlanningTabPresentation {
+  title: "Activity" | "Budget";
+  icon: "repeat" | "pie-chart";
+}
+
+export function planningTabPresentation(zeroBasedBudgetEnabled: boolean): PlanningTabPresentation {
+  return zeroBasedBudgetEnabled
+    ? { title: "Budget", icon: "pie-chart" }
+    : { title: "Activity", icon: "repeat" };
+}
+
 export function normalizePlanningTools(value: {
   zero_based_budget_enabled?: unknown;
   debt_payoff_enabled?: unknown;

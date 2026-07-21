@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizePlanningTools } from "./planningMode";
+import { normalizePlanningTools, planningTabPresentation } from "./planningMode";
 
 test("preserves the existing debt-plan experience by default", () => {
   assert.deepEqual(normalizePlanningTools(undefined), {
@@ -29,4 +29,9 @@ test("supports zero-based budgeting and debt payoff at the same time", () => {
     zeroBasedBudgetEnabled: true,
     debtPayoffEnabled: true,
   });
+});
+
+test("uses the budget tab only while zero-based budgeting is enabled", () => {
+  assert.deepEqual(planningTabPresentation(false), { title: "Activity", icon: "repeat" });
+  assert.deepEqual(planningTabPresentation(true), { title: "Budget", icon: "pie-chart" });
 });
