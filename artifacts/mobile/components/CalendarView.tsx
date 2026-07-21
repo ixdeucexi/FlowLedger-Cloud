@@ -331,7 +331,7 @@ export function CalendarView({
         {[
           { label: "Income", color: CALENDAR.green },
           { label: "Bills", color: "#f59e0b" },
-          { label: "Debt", color: "#3b82f6" },
+          { label: "Plan", color: "#3b82f6" },
           { label: "Spending", color: "#8b5cf6" },
           { label: "Risk", color: calendarTheme.red },
         ].map(item => (
