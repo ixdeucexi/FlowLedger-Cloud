@@ -39,6 +39,7 @@ type MatchedPaymentPrompt = {
   bill: Bill;
   budgeted: number;
   actual: number;
+  occurrenceDate: string;
   month: number;
   year: number;
 };
@@ -130,7 +131,7 @@ export default function TransactionsScreen() {
     transactions, pendingBankTransactions, addTransaction, updateTransaction, deleteTransaction, deleteTransfer,
     bills, incomes, overrides, extraPayments, settings,
     getIncomeOccurrencesInMonth, getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal,
-    matchTransactionToBill, unmatchTransactionFromBill, undoTransactionReconciliation, removeReviewSurplusFunding, setCustomAmount,
+    matchTransactionToBill, unmatchTransactionFromBill, reconcileTransaction, undoTransactionReconciliation, removeReviewSurplusFunding,
     getExtraPayment, previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment,
   } = useBudget();
 
@@ -551,12 +552,13 @@ export default function TransactionsScreen() {
     const option = billMatchOptions.find(item => item.billId === billId);
     const [year, monthNumber] = transaction.date.split("-").map(Number);
     const actual = Math.abs(transaction.amount);
+    const occurrenceDate = option?.nearestOccurrenceDate ?? transaction.date;
     const nextFullPaymentPrompt = bill && option && isMatchedPaymentLowerThanPlanned(transaction.amount, option.plannedAmount)
-      ? { transaction, bill, budgeted: option.plannedAmount, actual, month: monthNumber - 1, year }
+      ? { transaction, bill, budgeted: option.plannedAmount, actual, occurrenceDate, month: monthNumber - 1, year }
       : null;
     setSavingMatch(true);
     try {
-      await matchTransactionToBill(transaction.id, billId, option?.nearestOccurrenceDate ?? undefined, option?.plannedAmount);
+      await matchTransactionToBill(transaction.id, billId, occurrenceDate, option?.plannedAmount);
       setQueuedFullPaymentPrompt(nextFullPaymentPrompt);
       setMatchTx(null);
     } catch (error) {
@@ -566,26 +568,32 @@ export default function TransactionsScreen() {
     }
   };
 
-  const confirmMatchedFullPayment = () => {
-    if (!fullPaymentPrompt) return;
-    setSurplusPaymentDate(fullPaymentPrompt.transaction.date);
-    setQueuedSurplusPrompt(fullPaymentPrompt);
-    setFullPaymentPrompt(null);
-  };
-
-  const saveMatchedBillAtActual = async (prompt: MatchedPaymentPrompt) => {
-    await setCustomAmount(
-      prompt.bill.id,
-      prompt.month,
-      prompt.year,
-      Math.abs(prompt.actual - prompt.bill.amount) < 0.005 ? undefined : prompt.actual,
-    );
+  const confirmMatchedFullPayment = async () => {
+    if (!fullPaymentPrompt || savingMatch) return;
+    const prompt = fullPaymentPrompt;
+    setSavingMatch(true);
+    try {
+      await reconcileTransaction({
+        transactionId: prompt.transaction.id,
+        resolution: "bill",
+        targetId: prompt.bill.id,
+        occurrenceDate: prompt.occurrenceDate,
+        plannedAmount: prompt.budgeted,
+        settlement: "full",
+      });
+      setSurplusPaymentDate(prompt.transaction.date);
+      setQueuedSurplusPrompt(prompt);
+      setFullPaymentPrompt(null);
+    } catch (error) {
+      Alert.alert("Could not close bill", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSavingMatch(false);
+    }
   };
 
   const keepMatchedSurplusAvailable = async () => {
     if (!surplusPrompt) return;
     try {
-      await saveMatchedBillAtActual(surplusPrompt);
       if (!settings.debtPayoffEnabled) {
         setSurplusPrompt(null);
         return;
@@ -622,10 +630,10 @@ export default function TransactionsScreen() {
         amount: surplus,
         billId: surplusPrompt.bill.id,
         billName: surplusPrompt.bill.name,
+        reviewTransactionId: surplusPrompt.transaction.id,
       },
     ].filter(source => source.amount > 0.005);
     try {
-      await saveMatchedBillAtActual(surplusPrompt);
       await applyDebtSnowballPayment(surplusSnowballOffer.preview, sources);
       setSurplusPrompt(null);
     } catch (error) {
@@ -1189,7 +1197,7 @@ export default function TransactionsScreen() {
         } : null}
         onClose={() => setFullPaymentPrompt(null)}
         onKeepPartial={() => setFullPaymentPrompt(null)}
-        onFullPayment={confirmMatchedFullPayment}
+        onFullPayment={() => void confirmMatchedFullPayment()}
       />
 
       <BillSurplusModal
