@@ -223,6 +223,8 @@ export interface Goal {
   calendar_marker_only?: boolean;
   closed_at?: string;
   closed_by?: string;
+  archived_at?: string;
+  archived_by?: string;
 }
 
 export interface DecisionRecord {
@@ -252,6 +254,7 @@ export interface SnowballFundingSource {
   amount: number;
   billId?: string;
   billName?: string;
+  reviewTransactionId?: string;
   pendingBalanceApply?: boolean;
 }
 
@@ -406,6 +409,8 @@ interface BudgetContextType {
   updateGoal: (goal: Goal) => Promise<void>;
   closeSpendingBucket: (id: string) => Promise<{ spent: number; released: number }>;
   reopenSpendingBucket: (id: string) => Promise<void>;
+  archiveSpendingBucket: (id: string) => Promise<void>;
+  restoreArchivedSpendingBucket: (id: string) => Promise<void>;
   deleteGoal: (id: string) => Promise<void>;
   checkGoalAffordability: (goal: Goal, month: number, year: number) => GoalAffordability;
 
@@ -2992,6 +2997,46 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, goals, demoMode, assertCanEditHousehold]);
 
+  const archiveSpendingBucket = useCallback(async (id: string) => {
+    if (!user) throw new Error("Sign in to archive a spending bucket");
+    assertCanEditHousehold("archive a spending bucket");
+    const goal = goals.find(item => item.id === id);
+    if (!goal || goal.goal_type !== "planned_expense") throw new Error("Spending bucket not found");
+    if (!goal.closed_at) throw new Error("Close this spending bucket before archiving it");
+    const archivedAt = new Date().toISOString();
+    const archivedGoal = { ...goal, archived_at: archivedAt, archived_by: user.id };
+    setGoals(previous => previous.map(item => item.id === id ? archivedGoal : item));
+    if (demoMode) return;
+    try {
+      await ensureSaved(
+        supabase.from("goals").update({ archived_at: archivedAt, archived_by: user.id }).eq("id", id),
+        "Archive spending bucket",
+      );
+    } catch (error) {
+      setGoals(previous => previous.map(item => item.id === id ? goal : item));
+      throw error;
+    }
+  }, [user, goals, demoMode, assertCanEditHousehold]);
+
+  const restoreArchivedSpendingBucket = useCallback(async (id: string) => {
+    if (!user) throw new Error("Sign in to restore a spending bucket");
+    assertCanEditHousehold("restore a spending bucket");
+    const goal = goals.find(item => item.id === id);
+    if (!goal || goal.goal_type !== "planned_expense") throw new Error("Spending bucket not found");
+    const restoredGoal = { ...goal, archived_at: undefined, archived_by: undefined };
+    setGoals(previous => previous.map(item => item.id === id ? restoredGoal : item));
+    if (demoMode) return;
+    try {
+      await ensureSaved(
+        supabase.from("goals").update({ archived_at: null, archived_by: null }).eq("id", id),
+        "Restore spending bucket",
+      );
+    } catch (error) {
+      setGoals(previous => previous.map(item => item.id === id ? goal : item));
+      throw error;
+    }
+  }, [user, goals, demoMode, assertCanEditHousehold]);
+
   const deleteGoal = useCallback(async (id: string) => {
     if (!user) return;
     assertCanEditHousehold("delete a goal");
@@ -3919,7 +3964,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       runSnowball, previewDebtSnowball, applyDebtSnowballPayment, saveExtraPayment, getExtraPayment, deleteExtraPayment, removeDebtSnowballPayment, finalizeBillPayment,
       addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, reconcileTransaction, undoTransactionReconciliation, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome, getIncomeOccurrencesInMonth,
-      addGoal, updateGoal, closeSpendingBucket, reopenSpendingBucket, deleteGoal, checkGoalAffordability,
+      addGoal, updateGoal, closeSpendingBucket, reopenSpendingBucket, archiveSpendingBucket, restoreArchivedSpendingBucket, deleteGoal, checkGoalAffordability,
       getCashFlow, getDailyBalances,
       addCategory, updateCategory, deleteCategory,
       updateSettings, importBills,

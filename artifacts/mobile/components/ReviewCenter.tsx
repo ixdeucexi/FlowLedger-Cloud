@@ -4,6 +4,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { AddBillModal, type AddBillInitialValues } from "@/components/AddBillModal";
+import { BillSurplusModal } from "@/components/BillSurplusModal";
+import { FloLogo } from "@/components/FloLogo";
 import { GoalModal } from "@/components/GoalModal";
 import { UnplannedChargeModal } from "@/components/UnplannedChargeModal";
 import type { Bill, Goal, ReconcileTransactionInput, Transaction } from "@/context/BudgetContext";
@@ -34,13 +36,42 @@ function transactionName(transaction: Transaction) {
 
 type VarianceChoice = { transaction: Transaction; target: RankedReviewTarget; direction: "lower" | "higher" };
 
+type RoutedSurplus = {
+  transactionId: string;
+  billId: string;
+  billName: string;
+  amount: number;
+  month: number;
+  year: number;
+  paymentDate: string;
+};
+
+type CompletedReviewAction = {
+  input: ReconcileTransactionInput;
+  label: string;
+  routedSurplus?: RoutedSurplus;
+};
+
+type ReviewSurplusPrompt = {
+  transaction: Transaction;
+  target: RankedReviewTarget;
+};
+
+function isValidDateInMonth(value: string, month: number, year: number) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [dateYear, dateMonth, dateDay] = value.split("-").map(Number);
+  return dateYear === year && dateMonth === month + 1 && dateDay >= 1 && dateDay <= new Date(year, month + 1, 0).getDate();
+}
+
 export function ReviewCenter() {
   const c = useColors();
   const {
-    transactions, goals, decisions, categories, canEditHousehold,
+    transactions, goals, decisions, categories, canEditHousehold, settings,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getIncomeOccurrencesInMonth,
     addBill, addGoal, updateGoal, deleteGoal, closeSpendingBucket, reopenSpendingBucket,
+    archiveSpendingBucket, restoreArchivedSpendingBucket,
     deleteBillMistake, reconcileTransaction, undoTransactionReconciliation, refreshBankData,
+    getExtraPayment, previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment,
   } = useBudget();
   useEffect(() => {
     void refreshBankData();
@@ -54,8 +85,12 @@ export function ReviewCenter() {
   const [spendingBucketVisible, setSpendingBucketVisible] = useState(false);
   const [editingBucket, setEditingBucket] = useState<Goal | null>(null);
   const [bucketMessage, setBucketMessage] = useState<string | null>(null);
+  const [showArchivedBuckets, setShowArchivedBuckets] = useState(false);
   const [skippedIds, setSkippedIds] = useState<string[]>([]);
-  const [lastCompleted, setLastCompleted] = useState<{ id: string; label: string } | null>(null);
+  const [lastCompleted, setLastCompleted] = useState<CompletedReviewAction | null>(null);
+  const [redoAction, setRedoAction] = useState<CompletedReviewAction | null>(null);
+  const [surplusPrompt, setSurplusPrompt] = useState<ReviewSurplusPrompt | null>(null);
+  const [surplusPaymentDate, setSurplusPaymentDate] = useState(todayIso());
   const [completedThisVisit, setCompletedThisVisit] = useState(0);
   const availableQueue = useMemo(() => reviewQueueAfterSkips(queue, skippedIds), [queue, skippedIds]);
   const current = availableQueue[0] ?? null;
@@ -117,10 +152,34 @@ export function ReviewCenter() {
   }, [current, decisions, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getMonthlyBills, goals, transactions]);
   const groupedTargets = useMemo(() => groupReviewTargets(targets), [targets]);
   const spendingBuckets = useMemo(() => goals
-    .filter(goal => goal.goal_type === "planned_expense")
+    .filter(goal => goal.goal_type === "planned_expense" && !goal.archived_at)
     .sort((left, right) => Number(Boolean(left.closed_at)) - Number(Boolean(right.closed_at))
       || left.target_date.localeCompare(right.target_date)
       || left.name.localeCompare(right.name)), [goals]);
+  const archivedBuckets = useMemo(() => goals
+    .filter(goal => goal.goal_type === "planned_expense" && Boolean(goal.archived_at))
+    .sort((left, right) => (right.archived_at ?? "").localeCompare(left.archived_at ?? "")), [goals]);
+
+  const surplusSnowballOffer = useMemo(() => {
+    if (!surplusPrompt || !settings.debtPayoffEnabled) return null;
+    const [year, monthNumber] = surplusPrompt.transaction.date.split("-").map(Number);
+    const month = monthNumber - 1;
+    const surplus = Math.max(0, surplusPrompt.target.plannedAmount - Math.abs(surplusPrompt.transaction.amount));
+    const existing = getExtraPayment(month, year);
+    const previousSource = existing?.sources?.find(source => source.type === "bill_surplus" && source.reviewTransactionId === surplusPrompt.transaction.id)?.amount ?? 0;
+    const total = Math.max(0, (existing?.amount ?? 0) - previousSource + surplus);
+    const dateValid = isValidDateInMonth(surplusPaymentDate, month, year);
+    const preview = previewDebtSnowball(month, year, total, surplus - previousSource, dateValid ? surplusPaymentDate : undefined);
+    return {
+      month,
+      year,
+      surplus,
+      preview,
+      targetDebt: preview.months[0]?.targetName ?? preview.allocations[0]?.billName,
+      dateValid,
+      safe: dateValid && preview.selectedExtra + 0.005 >= total,
+    };
+  }, [getExtraPayment, previewDebtSnowball, settings.debtPayoffEnabled, surplusPaymentDate, surplusPrompt]);
 
   const closeBucket = (goal: Goal) => {
     const { spent } = spendingBucketSummary(goal);
@@ -160,13 +219,52 @@ export function ReviewCenter() {
     }
   };
 
+  const archiveBucket = (goal: Goal) => {
+    if (!goal.closed_at || saving) return;
+    confirmAction({
+      title: `Archive ${goal.name}?`,
+      message: "This removes the completed bucket from your active list. Its matched transactions and history stay saved.",
+      confirmText: "Archive bucket",
+      onConfirm: async () => {
+        setSaving(true);
+        setBucketMessage(null);
+        try {
+          await archiveSpendingBucket(goal.id);
+          setBucketMessage(`${goal.name} archived`);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (error) {
+          Alert.alert("Couldn’t archive bucket", error instanceof Error ? error.message : "Please try again.");
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
+  };
+
+  const restoreBucket = async (goal: Goal) => {
+    if (saving) return;
+    setSaving(true);
+    setBucketMessage(null);
+    try {
+      await restoreArchivedSpendingBucket(goal.id);
+      setBucketMessage(`${goal.name} restored to completed buckets`);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (error) {
+      Alert.alert("Couldn’t restore bucket", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const completeReview = async (input: ReconcileTransactionInput, notice?: string) => {
     if (!current || saving) throw new Error("This transaction is no longer available for review.");
     const reviewed = current;
     setSaving(true);
     try {
       await reconcileTransaction(input);
-      setLastCompleted({ id: reviewed.id, label: notice || transactionName(reviewed) });
+      const action = { input, label: notice || transactionName(reviewed) };
+      setLastCompleted(action);
+      setRedoAction(null);
       setCompletedThisVisit(value => value + 1);
       setVariance(null);
       setSplitCategory(null);
@@ -174,6 +272,7 @@ export function ReviewCenter() {
       setForgottenBillVisible(false);
       setSpendingBucketVisible(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      return action;
     } finally {
       setSaving(false);
     }
@@ -182,9 +281,11 @@ export function ReviewCenter() {
   const finish = async (input: ReconcileTransactionInput, notice?: string) => {
     try {
       await completeReview(input, notice);
+      return true;
     } catch (error) {
       Alert.alert("Couldn’t finish this review", error instanceof Error ? error.message : "Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return false;
     }
   };
 
@@ -227,7 +328,7 @@ export function ReviewCenter() {
       : difference > 0.005
         ? `${label} · ${money(difference)} ${actual > target.plannedAmount ? "over" : "left"}`
         : label;
-    await finish({
+    return finish({
       transactionId: current.id,
       resolution: target.type,
       targetId: target.id,
@@ -249,16 +350,114 @@ export function ReviewCenter() {
     setSplitCategory(null);
   };
 
+  const removeRoutedSurplus = async (routed: RoutedSurplus) => {
+    const existing = getExtraPayment(routed.month, routed.year);
+    if (!existing) return;
+    const sources = (existing.sources ?? []).filter(source => source.reviewTransactionId !== routed.transactionId);
+    const total = sources.reduce((sum, source) => sum + source.amount, 0);
+    if (total > 0.005) {
+      await applyDebtSnowballPayment(
+        previewDebtSnowball(routed.month, routed.year, total, 0, existing.payment_date),
+        sources,
+      );
+    } else {
+      await removeDebtSnowballPayment(routed.month, routed.year);
+    }
+  };
+
+  const applyRoutedSurplus = async (routed: RoutedSurplus) => {
+    const existing = getExtraPayment(routed.month, routed.year);
+    const previousSource = existing?.sources?.find(source => source.reviewTransactionId === routed.transactionId)?.amount ?? 0;
+    const otherSources = (existing?.sources ?? (existing ? [{ type: "manual" as const, amount: existing.amount }] : []))
+      .filter(source => source.reviewTransactionId !== routed.transactionId);
+    const sources = [...otherSources, {
+      type: "bill_surplus" as const,
+      amount: routed.amount,
+      billId: routed.billId,
+      billName: routed.billName,
+      reviewTransactionId: routed.transactionId,
+    }].filter(source => source.amount > 0.005);
+    const total = Math.max(0, (existing?.amount ?? 0) - previousSource + routed.amount);
+    const preview = previewDebtSnowball(routed.month, routed.year, total, routed.amount - previousSource, routed.paymentDate);
+    if (!preview.allocations.length || preview.selectedExtra + 0.005 < total) {
+      throw new Error("That leftover is no longer safe to add to the payoff plan.");
+    }
+    await applyDebtSnowballPayment(preview, sources);
+  };
+
   const undoLast = async () => {
     if (!lastCompleted || saving) return;
+    const action = lastCompleted;
     setSaving(true);
     try {
-      await undoTransactionReconciliation(lastCompleted.id);
+      if (action.routedSurplus) await removeRoutedSurplus(action.routedSurplus);
+      await undoTransactionReconciliation(action.input.transactionId);
       setLastCompleted(null);
+      setRedoAction(action);
       setCompletedThisVisit(value => Math.max(0, value - 1));
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (error) {
       Alert.alert("Couldn’t undo review", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const redoLast = async () => {
+    if (!redoAction || saving) return;
+    const action = redoAction;
+    setSaving(true);
+    try {
+      await reconcileTransaction(action.input);
+      try {
+        if (action.routedSurplus) await applyRoutedSurplus(action.routedSurplus);
+      } catch (error) {
+        await undoTransactionReconciliation(action.input.transactionId);
+        throw error;
+      }
+      setLastCompleted(action);
+      setRedoAction(null);
+      setCompletedThisVisit(value => value + 1);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      Alert.alert("Couldn’t redo review", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmLowerFullPayment = async () => {
+    if (!variance || variance.direction !== "lower" || saving) return;
+    const choice = variance;
+    const completed = await resolveTarget(choice.target, "full");
+    if (!completed || choice.target.type !== "bill") return;
+    setSurplusPaymentDate(choice.transaction.date);
+    setSurplusPrompt({ transaction: choice.transaction, target: choice.target });
+  };
+
+  const keepSurplusAvailable = () => {
+    setSurplusPrompt(null);
+  };
+
+  const routeSurplusToPayoff = async () => {
+    if (!surplusPrompt || !surplusSnowballOffer?.safe || !surplusSnowballOffer.preview.allocations.length || saving) return;
+    const routed: RoutedSurplus = {
+      transactionId: surplusPrompt.transaction.id,
+      billId: surplusPrompt.target.id,
+      billName: surplusPrompt.target.name,
+      amount: surplusSnowballOffer.surplus,
+      month: surplusSnowballOffer.month,
+      year: surplusSnowballOffer.year,
+      paymentDate: surplusPaymentDate,
+    };
+    setSaving(true);
+    try {
+      await applyRoutedSurplus(routed);
+      setLastCompleted(previous => previous?.input.transactionId === routed.transactionId ? { ...previous, routedSurplus: routed, label: `${previous.label} · ${money(routed.amount)} sent to ${surplusSnowballOffer.targetDebt}` } : previous);
+      setSurplusPrompt(null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      Alert.alert("Couldn’t route leftover", error instanceof Error ? error.message : "The bill is still matched. You can keep the leftover available or try again.");
     } finally {
       setSaving(false);
     }
@@ -302,6 +501,10 @@ export function ReviewCenter() {
       <Feather name="chevron-right" size={18} color={c.mutedForeground} />
     </Pressable>
   ) : null;
+  const surplusMonth = surplusSnowballOffer?.month ?? new Date().getMonth();
+  const surplusYear = surplusSnowballOffer?.year ?? new Date().getFullYear();
+  const surplusMonthText = String(surplusMonth + 1).padStart(2, "0");
+  const surplusMonthLastDay = String(new Date(surplusYear, surplusMonth + 1, 0).getDate()).padStart(2, "0");
 
   return (
     <>
@@ -314,7 +517,7 @@ export function ReviewCenter() {
         </View>
       </View>
 
-      {spendingBuckets.length ? (
+      {spendingBuckets.length || archivedBuckets.length ? (
         <View style={[styles.bucketManager, { backgroundColor: c.card, borderColor: c.border }]}>
           <View style={styles.bucketManagerHeader}>
             <View style={[styles.heroIcon, { backgroundColor: c.primary + "18" }]}><Feather name="shopping-bag" size={19} color={c.primary} /></View>
@@ -356,10 +559,54 @@ export function ReviewCenter() {
                     <Feather name={goal.closed_at ? "rotate-ccw" : "check-circle"} size={13} color={goal.closed_at ? c.success : c.warning} />
                     <Text style={[styles.bucketActionText, { color: goal.closed_at ? c.success : c.warning }]}>{goal.closed_at ? "Reopen" : "Close"}</Text>
                   </Pressable>
+                  {goal.closed_at ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Archive ${goal.name} bucket`}
+                      disabled={saving}
+                      onPress={() => archiveBucket(goal)}
+                      style={({ pressed }) => [styles.bucketActionButton, { borderColor: c.border, opacity: saving ? 0.5 : pressed ? 0.72 : 1 }]}
+                    >
+                      <Feather name="archive" size={13} color={c.mutedForeground} />
+                      <Text style={[styles.bucketActionText, { color: c.mutedForeground }]}>Archive</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               </View>
             );
           })}
+          {archivedBuckets.length ? (
+            <View style={[styles.archivedSection, { borderTopColor: c.border }]}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${showArchivedBuckets ? "Hide" : "Show"} archived spending buckets`}
+                onPress={() => setShowArchivedBuckets(previous => !previous)}
+                style={styles.archivedToggle}
+              >
+                <Feather name="archive" size={14} color={c.mutedForeground} />
+                <Text style={[styles.archivedToggleText, { color: c.mutedForeground }]}>Archived buckets ({archivedBuckets.length})</Text>
+                <Feather name={showArchivedBuckets ? "chevron-up" : "chevron-down"} size={16} color={c.mutedForeground} />
+              </Pressable>
+              {showArchivedBuckets ? archivedBuckets.map(goal => (
+                <View key={goal.id} style={[styles.archivedRow, { borderTopColor: c.border }]}>
+                  <View style={styles.optionCopy}>
+                    <Text numberOfLines={1} style={[styles.optionTitle, { color: c.foreground }]}>{goal.name}</Text>
+                    <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Completed bucket · history preserved</Text>
+                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Restore ${goal.name} bucket`}
+                    disabled={saving}
+                    onPress={() => void restoreBucket(goal)}
+                    style={({ pressed }) => [styles.bucketActionButton, { borderColor: c.primary + "66", opacity: saving ? 0.5 : pressed ? 0.72 : 1 }]}
+                  >
+                    <Feather name="rotate-ccw" size={13} color={c.primary} />
+                    <Text style={[styles.bucketActionText, { color: c.primary }]}>Restore</Text>
+                  </Pressable>
+                </View>
+              )) : null}
+            </View>
+          ) : null}
         </View>
       ) : null}
 
@@ -368,6 +615,14 @@ export function ReviewCenter() {
           <Feather name="check-circle" size={18} color={c.success} />
           <Text style={[styles.undoText, { color: c.foreground }]} numberOfLines={1}>{lastCompleted.label}</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Undo last transaction review" disabled={saving} onPress={() => void undoLast()} hitSlop={8}><Text style={[styles.undoButton, { color: c.primary }]}>Undo</Text></Pressable>
+        </View>
+      ) : null}
+
+      {redoAction ? (
+        <View style={[styles.undoCard, { backgroundColor: c.primary + "12", borderColor: c.primary + "44" }]}>
+          <Feather name="rotate-ccw" size={18} color={c.primary} />
+          <Text style={[styles.undoText, { color: c.foreground }]} numberOfLines={1}>{redoAction.label} undone</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Redo last transaction review" disabled={saving} onPress={() => void redoLast()} hitSlop={8}><Text style={[styles.undoButton, { color: c.primary }]}>Redo</Text></Pressable>
         </View>
       ) : null}
 
@@ -507,11 +762,33 @@ export function ReviewCenter() {
         initialTargetDate={current?.date}
       />
 
+      <BillSurplusModal
+        visible={Boolean(surplusPrompt)}
+        billName={surplusPrompt?.target.name ?? "this bill"}
+        itemType={surplusPrompt?.target.isDebt ? "debt" : "bill"}
+        budgeted={surplusPrompt?.target.plannedAmount ?? 0}
+        actual={Math.abs(surplusPrompt?.transaction.amount ?? 0)}
+        targetDebt={surplusSnowballOffer?.targetDebt}
+        snowballSafe={Boolean(surplusSnowballOffer?.safe)}
+        snowballEnabled={settings.debtPayoffEnabled}
+        safetyFloor={settings.safety_floor}
+        forecastHorizonMonths={settings.forecast_horizon_months}
+        paymentDate={surplusPaymentDate}
+        paymentDateValid={Boolean(surplusSnowballOffer?.dateValid)}
+        paymentDateMin={`${surplusYear}-${surplusMonthText}-01`}
+        paymentDateMax={`${surplusYear}-${surplusMonthText}-${surplusMonthLastDay}`}
+        saving={saving}
+        onPaymentDateChange={setSurplusPaymentDate}
+        onKeep={keepSurplusAvailable}
+        onSnowball={() => void routeSurplusToPayoff()}
+        onClose={keepSurplusAvailable}
+      />
+
       <Modal visible={!!variance} transparent animationType="fade" onRequestClose={() => { setVariance(null); setSplitCategory(null); }}>
         <Pressable style={styles.overlay} onPress={() => { setVariance(null); setSplitCategory(null); }}>
           <Pressable style={[styles.modalCard, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => {}}>
             {variance ? <>
-              <View style={[styles.modalIcon, { backgroundColor: c.primary + "18" }]}><Feather name="message-circle" size={24} color={c.primary} /></View>
+              <View style={styles.floModalLogo}><FloLogo size={74} /></View>
               <Text style={[styles.modalEyebrow, { color: c.primary }]}>FLO CAN HELP</Text>
               <Text style={[styles.modalTitle, { color: c.foreground }]}>
                 {variance.direction === "lower"
@@ -533,7 +810,7 @@ export function ReviewCenter() {
                 <Pressable disabled={saving} onPress={() => void resolveTarget(variance.target, "partial")} style={[styles.primaryButton, { backgroundColor: c.primary }]}><Text style={[styles.primaryButtonText, { color: c.primaryForeground }]}>Add {money(variance.transaction.amount)} to bucket</Text></Pressable>
                 <Pressable disabled={saving} onPress={() => void resolveTarget(variance.target, "full")} style={[styles.secondaryButton, { borderColor: c.border }]}><Text style={[styles.secondaryButtonText, { color: c.foreground }]}>Close bucket · release {money(variance.target.plannedAmount - Math.abs(variance.transaction.amount))}</Text></Pressable>
               </> : <>
-                <Pressable disabled={saving} onPress={() => void resolveTarget(variance.target, "full")} style={[styles.primaryButton, { backgroundColor: c.primary }]}><Text style={[styles.primaryButtonText, { color: c.primaryForeground }]}>Yes, this was the full amount</Text></Pressable>
+                <Pressable disabled={saving} onPress={() => variance.target.type === "bill" ? void confirmLowerFullPayment() : void resolveTarget(variance.target, "full")} style={[styles.primaryButton, { backgroundColor: c.primary }]}><Text style={[styles.primaryButtonText, { color: c.primaryForeground }]}>Yes, this was the full amount</Text></Pressable>
                 <Pressable disabled={saving} onPress={() => void resolveTarget(variance.target, "partial")} style={[styles.secondaryButton, { borderColor: c.border }]}><Text style={[styles.secondaryButtonText, { color: c.foreground }]}>No, keep the rest open</Text></Pressable>
               </> : splitCategory ? <>
                 <Text style={[styles.splitPrompt, { color: c.foreground }]}>Categorize the extra {money(Math.abs(variance.transaction.amount) - variance.target.plannedAmount)}</Text>
@@ -577,6 +854,10 @@ const styles = StyleSheet.create({
   bucketActions: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   bucketActionButton: { minHeight: 36, borderWidth: 1, borderRadius: 12, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
   bucketActionText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
+  archivedSection: { borderTopWidth: 1, marginTop: 4, paddingTop: 6 },
+  archivedToggle: { minHeight: 42, flexDirection: "row", alignItems: "center", gap: 8 },
+  archivedToggleText: { flex: 1, fontSize: 12, fontFamily: "Inter_700Bold" },
+  archivedRow: { minHeight: 58, borderTopWidth: 1, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 10 },
   undoCard: { marginTop: 10, borderWidth: 1, borderRadius: 14, padding: 12, flexDirection: "row", alignItems: "center", gap: 9 },
   undoText: { flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold" }, undoButton: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   emptyCard: { marginTop: 12, borderWidth: 1, borderRadius: 20, padding: 24, alignItems: "center", gap: 8 },
@@ -608,7 +889,7 @@ const styles = StyleSheet.create({
   skipText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.72)", alignItems: "center", justifyContent: "center", padding: 20 },
   modalCard: { width: "100%", maxWidth: 500, maxHeight: "88%", borderWidth: 1, borderRadius: 24, padding: 20, alignItems: "stretch" },
-  modalIcon: { width: 50, height: 50, borderRadius: 25, alignItems: "center", justifyContent: "center", alignSelf: "center" },
+  floModalLogo: { alignItems: "center" },
   modalEyebrow: { fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1, textAlign: "center", marginTop: 9 },
   modalTitle: { fontSize: 22, lineHeight: 29, fontFamily: "Inter_700Bold", textAlign: "center", marginTop: 8 },
   modalDescription: { fontSize: 13, lineHeight: 19, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: 8 },

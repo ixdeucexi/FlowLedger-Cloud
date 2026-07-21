@@ -22,13 +22,14 @@ interface Props {
   paymentDateValid: boolean;
   paymentDateMin: string;
   paymentDateMax: string;
+  saving?: boolean;
   onPaymentDateChange: (date: string) => void;
   onKeep: () => void;
   onSnowball: () => void;
   onClose: () => void;
 }
 
-export function BillSurplusModal({ visible, billName, itemType = "bill", budgeted, actual, targetDebt, snowballSafe, snowballEnabled = true, safetyFloor = 200, forecastHorizonMonths = 6, paymentDate, paymentDateValid, paymentDateMin, paymentDateMax, onPaymentDateChange, onKeep, onSnowball, onClose }: Props) {
+export function BillSurplusModal({ visible, billName, itemType = "bill", budgeted, actual, targetDebt, snowballSafe, snowballEnabled = true, safetyFloor = 200, forecastHorizonMonths = 6, paymentDate, paymentDateValid, paymentDateMin, paymentDateMax, saving = false, onPaymentDateChange, onKeep, onSnowball, onClose }: Props) {
   const c = useColors();
   useBackDismiss(visible, onClose);
   const difference = Math.max(0, budgeted - actual);
@@ -64,11 +65,11 @@ export function BillSurplusModal({ visible, billName, itemType = "bill", budgete
           {snowballEnabled && !targetDebt && <Text style={[styles.note, { color: c.mutedForeground }]}>No debt is currently included in your snowball.</Text>}
           {snowballEnabled && targetDebt && !paymentDateValid && <Text style={[styles.note, { color: c.warning }]}>Choose a valid date in this bill&apos;s month.</Text>}
           {snowballEnabled && targetDebt && paymentDateValid && !snowballSafe && <Text style={[styles.note, { color: c.warning }]}>Keep this money available to preserve your ${safetyFloor.toFixed(0)} floor across {forecastHorizonMonths} months.</Text>}
-          {snowballEnabled && <Pressable disabled={!targetDebt || !snowballSafe} onPress={onSnowball} style={[styles.primary, { backgroundColor: targetDebt && snowballSafe ? c.primary : c.muted }]}>
+          {snowballEnabled && <Pressable disabled={saving || !targetDebt || !snowballSafe} onPress={onSnowball} style={[styles.primary, { backgroundColor: targetDebt && snowballSafe ? c.primary : c.muted, opacity: saving ? 0.55 : 1 }]}>
             <Feather name="zap" size={16} color={targetDebt && snowballSafe ? c.primaryForeground : c.mutedForeground} />
             <Text style={[styles.primaryText, { color: targetDebt && snowballSafe ? c.primaryForeground : c.mutedForeground }]}>Add ${difference.toFixed(2)} to {targetDebt ?? "Snowball"}</Text>
           </Pressable>}
-          <Pressable onPress={onKeep} style={[styles.secondary, { borderColor: c.border }]}><Text style={[styles.secondaryText, { color: c.foreground }]}>No, keep ${difference.toFixed(2)} available</Text></Pressable>
+          <Pressable disabled={saving} onPress={onKeep} style={[styles.secondary, { borderColor: c.border, opacity: saving ? 0.55 : 1 }]}><Text style={[styles.secondaryText, { color: c.foreground }]}>No, keep ${difference.toFixed(2)} available</Text></Pressable>
         </Pressable>
       </Pressable>
     </Modal>
