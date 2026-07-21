@@ -35,6 +35,7 @@ import { useBudget } from "@/context/BudgetContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useAuth } from "@/context/AuthContext";
 import { type AppFontStyle, type ThemeMode, useThemeMode } from "@/context/ThemeContext";
+import { useFeedbackBadge } from "@/context/FeedbackBadgeContext";
 import { useColors } from "@/hooks/useColors";
 import { isCashFlowTransaction } from "@/lib/billMatching";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
@@ -352,6 +353,7 @@ export default function MoreScreen() {
     setFontStyle,
   } = useThemeMode();
   const { signOut, user, session, loading: authLoading } = useAuth();
+  const { refreshFeedbackCount } = useFeedbackBadge();
   const {
     effectiveTier,
     isAdmin: feedbackAdmin,
@@ -617,6 +619,7 @@ export default function MoreScreen() {
         .eq("id", feedbackId);
       if (error) throw error;
       setFeedbackInbox(items => items.map(item => item.id === feedbackId ? { ...item, status } : item));
+      await refreshFeedbackCount();
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (error) {
       const messageText = error instanceof Error ? error.message : "Could not update feedback.";
@@ -672,6 +675,7 @@ export default function MoreScreen() {
             .eq("id", item.id);
           if (error) throw error;
           setFeedbackInbox(items => items.filter(feedback => feedback.id !== item.id));
+          await refreshFeedbackCount();
           setFeedbackNotice("Feedback deleted.");
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (error) {

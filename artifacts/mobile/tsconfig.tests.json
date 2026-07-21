@@ -79,5 +79,7 @@
     ,"lib/pushNotificationPreference.test.ts"
     ,"lib/flowledgerGuide.ts"
     ,"lib/flowledgerGuide.test.ts"
+    ,"lib/tabBadge.ts"
+    ,"lib/tabBadge.test.ts"
   ]
 }

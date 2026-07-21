@@ -23,7 +23,9 @@ import {
 } from "@/lib/learningTour";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 import { MembershipProvider } from "@/context/MembershipContext";
+import { FeedbackBadgeProvider, useFeedbackBadge } from "@/context/FeedbackBadgeContext";
 import { buildCurrentMonthReviewQueue } from "@/lib/reviewCenter";
+import { tabBadgeValue } from "@/lib/tabBadge";
 
 const MIN_BUDGET_LOADING_MS = 220;
 
@@ -368,6 +370,7 @@ function FloDemo() {
 function TabContent() {
   const colors = useColors();
   const { loading, loadError, retryBudgetLoad, demoMode, transactions, pendingBankTransactions } = useBudget();
+  const { newFeedbackCount } = useFeedbackBadge();
   const [minimumBudgetLoadingReady, setMinimumBudgetLoadingReady] = React.useState(false);
   const [showLoadingOverlay, setShowLoadingOverlay] = React.useState(true);
   const loadingOpacity = React.useRef(new Animated.Value(1)).current;
@@ -495,9 +498,10 @@ function TabContent() {
         >
           {TABS.map(tab => {
             const isActivity = tab.name === "transactions";
-            const reviewBadge = isActivity && activityAlertCount > 0
-              ? activityAlertCount > 99 ? "99+" : activityAlertCount
-              : undefined;
+            const isMore = tab.name === "more";
+            const reviewBadge = isActivity ? tabBadgeValue(activityAlertCount) : undefined;
+            const feedbackBadge = isMore ? tabBadgeValue(newFeedbackCount) : undefined;
+            const badge = reviewBadge ?? feedbackBadge;
             return (
               <Tabs.Screen
                 key={tab.name}
@@ -505,10 +509,12 @@ function TabContent() {
                 options={{
                   title: tab.title,
                   tabBarIcon: ({ color }) => <Feather name={tab.icon} size={22} color={color} />,
-                  tabBarBadge: reviewBadge,
-                  tabBarBadgeStyle: reviewBadge ? styles.activityTabBadge : undefined,
+                  tabBarBadge: badge,
+                  tabBarBadgeStyle: badge ? styles.alertTabBadge : undefined,
                   tabBarAccessibilityLabel: reviewBadge
                     ? `Activity, ${activityReviewCount} item${activityReviewCount === 1 ? "" : "s"} need review and ${pendingBankTransactions.length} transaction${pendingBankTransactions.length === 1 ? "" : "s"} pending`
+                    : feedbackBadge
+                      ? `More, ${newFeedbackCount} new feedback item${newFeedbackCount === 1 ? "" : "s"}`
                     : tab.title,
                 }}
               />
@@ -535,7 +541,9 @@ export default function TabLayout() {
   return (
     <BudgetProvider>
       <MembershipProvider>
-        <TabContent />
+        <FeedbackBadgeProvider>
+          <TabContent />
+        </FeedbackBadgeProvider>
       </MembershipProvider>
     </BudgetProvider>
   );
@@ -549,7 +557,7 @@ const styles = StyleSheet.create({
   tabTransitionContent: {
     flex: 1,
   },
-  activityTabBadge: {
+  alertTabBadge: {
     minWidth: 18,
     height: 18,
     borderRadius: 9,
