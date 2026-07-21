@@ -21,7 +21,7 @@ import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { debtPaymentStatusLabel } from "@/lib/forecastDisplay";
-import { canMatchExpenseToBill, isCashFlowTransaction, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "@/lib/billMatching";
+import { canMatchExpenseToBill, confirmedBillMatchId, confirmedBillMatchOccurrenceDate, isCashFlowTransaction, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "@/lib/billMatching";
 import { summarizeActivityMonth } from "@/lib/monthlySummary";
 import { isValidDateInMonth } from "@/lib/schedule";
 import { buildCurrentMonthReviewQueue, matchedOccurrenceAllocations, occurrenceKey, transactionDisplayName } from "@/lib/reviewCenter";
@@ -130,7 +130,7 @@ export default function TransactionsScreen() {
     transactions, pendingBankTransactions, addTransaction, updateTransaction, deleteTransaction, deleteTransfer,
     bills, incomes, overrides, extraPayments, settings,
     getIncomeOccurrencesInMonth, getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal,
-    matchTransactionToBill, unmatchTransactionFromBill, setCustomAmount,
+    matchTransactionToBill, unmatchTransactionFromBill, undoTransactionReconciliation, removeReviewSurplusFunding, setCustomAmount,
     getExtraPayment, previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment,
   } = useBudget();
 
@@ -188,9 +188,10 @@ export default function TransactionsScreen() {
     const confirmedBillMatchKeys = new Set(transactions
       .filter(isConfirmedBillMatch)
       .flatMap(transaction => {
-        if (!transaction.linked_bill_id) return [];
-        const [year, month] = transaction.date.split("-").map(Number);
-        return [`${transaction.linked_bill_id}:${year}:${month - 1}`];
+        const billId = confirmedBillMatchId(transaction);
+        if (!billId) return [];
+        const [year, month] = (confirmedBillMatchOccurrenceDate(transaction) ?? transaction.date).split("-").map(Number);
+        return [`${billId}:${year}:${month - 1}`];
       }));
 
     // Pending Plaid rows are previews only. They stay outside the authoritative
@@ -212,7 +213,8 @@ export default function TransactionsScreen() {
     // 1. Manual and bank transactions. Confirmed matches are presented as
     // the actual bill payment instead of a second, separate expense.
     for (const tx of transactions) {
-      const matchedBill = tx.linked_bill_id ? bills.find(bill => bill.id === tx.linked_bill_id) : undefined;
+      const matchedBillId = confirmedBillMatchId(tx);
+      const matchedBill = matchedBillId ? bills.find(bill => bill.id === matchedBillId) : undefined;
       const confirmedMatch = Boolean(matchedBill && isConfirmedBillMatch(tx));
       const matchedIncome = tx.linked_income_id ? incomes.find(income => income.id === tx.linked_income_id) : undefined;
       const allocationDetail = (tx.review_allocations ?? []).map(allocation => {
@@ -510,8 +512,9 @@ export default function TransactionsScreen() {
       category: matchTx.category,
     }, candidates);
   }, [matchTx, getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal]);
-  const matchedBillForModal = matchTx?.linked_bill_id && isConfirmedBillMatch(matchTx)
-    ? bills.find(bill => bill.id === matchTx.linked_bill_id)
+  const matchedBillIdForModal = matchTx ? confirmedBillMatchId(matchTx) : null;
+  const matchedBillForModal = matchedBillIdForModal
+    ? bills.find(bill => bill.id === matchedBillIdForModal)
     : undefined;
   const matchingBankActivity = matchTx?.source === "plaid";
 
@@ -634,7 +637,12 @@ export default function TransactionsScreen() {
     if (!matchTx || savingMatch) return;
     setSavingMatch(true);
     try {
-      await unmatchTransactionFromBill(matchTx.id);
+      if (matchTx.review_status === "matched" && matchTx.review_resolution === "bill") {
+        await removeReviewSurplusFunding(matchTx.id);
+        await undoTransactionReconciliation(matchTx.id);
+      } else {
+        await unmatchTransactionFromBill(matchTx.id);
+      }
       setMatchTx(null);
     } catch (error) {
       Alert.alert("Could not undo match", error instanceof Error ? error.message : "Please try again.");

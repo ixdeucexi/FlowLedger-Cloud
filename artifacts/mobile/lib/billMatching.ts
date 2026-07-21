@@ -122,8 +122,35 @@ export function rankBillMatches(
     );
 }
 
-export function isConfirmedBillMatch(transaction: { match_reason?: string | null }): boolean {
-  return transaction.match_reason === "confirmed_bill_match";
+interface ConfirmedBillMatchLike {
+  linked_bill_id?: string | null;
+  match_reason?: string | null;
+  review_status?: string | null;
+  review_resolution?: string | null;
+  matched_occurrence_date?: string | null;
+  review_allocations?: Array<{
+    type?: string | null;
+    targetId?: string | null;
+    occurrenceDate?: string | null;
+  }>;
+}
+
+export function confirmedBillMatchId(transaction: ConfirmedBillMatchLike): string | null {
+  if (transaction.match_reason !== "confirmed_bill_match") return null;
+  if (transaction.linked_bill_id) return transaction.linked_bill_id;
+  if (transaction.review_status !== "matched" || transaction.review_resolution !== "bill") return null;
+  return transaction.review_allocations?.find(allocation => allocation.type === "bill" && allocation.targetId)?.targetId ?? null;
+}
+
+export function confirmedBillMatchOccurrenceDate(transaction: ConfirmedBillMatchLike): string | null {
+  if (!confirmedBillMatchId(transaction)) return null;
+  return transaction.matched_occurrence_date
+    ?? transaction.review_allocations?.find(allocation => allocation.type === "bill")?.occurrenceDate
+    ?? null;
+}
+
+export function isConfirmedBillMatch(transaction: ConfirmedBillMatchLike): boolean {
+  return confirmedBillMatchId(transaction) !== null;
 }
 
 export function canMatchExpenseToBill(transaction: {

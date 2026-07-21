@@ -71,7 +71,7 @@ export function ReviewCenter() {
     addBill, addGoal, updateGoal, deleteGoal, closeSpendingBucket, reopenSpendingBucket,
     archiveSpendingBucket, restoreArchivedSpendingBucket,
     deleteBillMistake, reconcileTransaction, undoTransactionReconciliation, refreshBankData,
-    getExtraPayment, previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment,
+    getExtraPayment, previewDebtSnowball, applyDebtSnowballPayment, removeReviewSurplusFunding,
   } = useBudget();
   useEffect(() => {
     void refreshBankData();
@@ -350,21 +350,6 @@ export function ReviewCenter() {
     setSplitCategory(null);
   };
 
-  const removeRoutedSurplus = async (routed: RoutedSurplus) => {
-    const existing = getExtraPayment(routed.month, routed.year);
-    if (!existing) return;
-    const sources = (existing.sources ?? []).filter(source => source.reviewTransactionId !== routed.transactionId);
-    const total = sources.reduce((sum, source) => sum + source.amount, 0);
-    if (total > 0.005) {
-      await applyDebtSnowballPayment(
-        previewDebtSnowball(routed.month, routed.year, total, 0, existing.payment_date),
-        sources,
-      );
-    } else {
-      await removeDebtSnowballPayment(routed.month, routed.year);
-    }
-  };
-
   const applyRoutedSurplus = async (routed: RoutedSurplus) => {
     const existing = getExtraPayment(routed.month, routed.year);
     const previousSource = existing?.sources?.find(source => source.reviewTransactionId === routed.transactionId)?.amount ?? 0;
@@ -390,7 +375,7 @@ export function ReviewCenter() {
     const action = lastCompleted;
     setSaving(true);
     try {
-      if (action.routedSurplus) await removeRoutedSurplus(action.routedSurplus);
+      if (action.routedSurplus) await removeReviewSurplusFunding(action.input.transactionId);
       await undoTransactionReconciliation(action.input.transactionId);
       setLastCompleted(null);
       setRedoAction(action);

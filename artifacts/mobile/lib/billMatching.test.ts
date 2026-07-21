@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { canMatchExpenseToBill, isActiveTransaction, isCashFlowTransaction, isCheckingBalanceTransaction, isConfirmedBillMatch, isDeletedTransaction, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "./billMatching";
+import { canMatchExpenseToBill, confirmedBillMatchId, confirmedBillMatchOccurrenceDate, isActiveTransaction, isCashFlowTransaction, isCheckingBalanceTransaction, isConfirmedBillMatch, isDeletedTransaction, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "./billMatching";
 
 test("ranks an exact nearby utility payment above unrelated bills", () => {
   const ranked = rankBillMatches(
@@ -62,8 +62,30 @@ test("only the checking side of a reviewed transfer changes the checking forecas
 });
 
 test("only confirmed matches replace a planned bill event", () => {
-  assert.equal(isConfirmedBillMatch({ match_reason: "confirmed_bill_match" }), true);
+  assert.equal(isConfirmedBillMatch({ linked_bill_id: "utility", match_reason: "confirmed_bill_match" }), true);
   assert.equal(isConfirmedBillMatch({ match_reason: "rule suggestion" }), false);
+});
+
+test("review allocations recover a confirmed bill link so Activity shows one row", () => {
+  const reviewed = {
+    match_reason: "confirmed_bill_match",
+    review_status: "matched",
+    review_resolution: "bill",
+    matched_occurrence_date: "2026-07-21",
+    review_allocations: [{ type: "bill", targetId: "car-insurance", occurrenceDate: "2026-07-21" }],
+  };
+  assert.equal(confirmedBillMatchId(reviewed), "car-insurance");
+  assert.equal(confirmedBillMatchOccurrenceDate(reviewed), "2026-07-21");
+  assert.equal(isConfirmedBillMatch(reviewed), true);
+});
+
+test("a review allocation without confirmed match state does not hide bank activity", () => {
+  assert.equal(confirmedBillMatchId({
+    match_reason: "rule suggestion",
+    review_status: "needs_review",
+    review_resolution: "bill",
+    review_allocations: [{ type: "bill", targetId: "car-insurance" }],
+  }), null);
 });
 
 test("manual expenses can use bill matching without exposing generated transactions", () => {

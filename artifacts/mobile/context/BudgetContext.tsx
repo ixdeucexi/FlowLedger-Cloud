@@ -397,6 +397,7 @@ interface BudgetContextType {
   unmatchTransactionFromBill: (transactionId: string) => Promise<void>;
   reconcileTransaction: (input: ReconcileTransactionInput) => Promise<void>;
   undoTransactionReconciliation: (transactionId: string) => Promise<void>;
+  removeReviewSurplusFunding: (transactionId: string) => Promise<void>;
   getTransactionsForMonth: (month: number, year: number) => Transaction[];
 
   addIncome: (item: Omit<IncomeItem, "id">) => Promise<string>;
@@ -3587,6 +3588,32 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     };
   }, [bills, settings.paymentMethod, settings.debtPayoffEnabled, settings.safety_floor, settings.forecast_horizon_months, extraPayments, getBillOccurrencesInMonth, getDailyBalances]);
 
+  const removeReviewSurplusFunding = useCallback(async (transactionId: string) => {
+    const affectedPayments = extraPayments.filter(payment =>
+      payment.sources?.some(source => source.reviewTransactionId === transactionId),
+    );
+    for (const payment of affectedPayments) {
+      const sources = (payment.sources ?? [{ type: "manual" as const, amount: payment.amount }])
+        .filter(source => source.reviewTransactionId !== transactionId);
+      const remainingAmount = sources.reduce((sum, source) => sum + source.amount, 0);
+      if (remainingAmount <= 0.005) {
+        await removeDebtSnowballPayment(payment.month, payment.year);
+        continue;
+      }
+      const preview = previewDebtSnowball(
+        payment.month,
+        payment.year,
+        remainingAmount,
+        0,
+        payment.payment_date,
+      );
+      if (!preview.allocations.length || preview.selectedExtra + 0.005 < remainingAmount) {
+        throw new Error("The linked payoff payment could not be safely recalculated.");
+      }
+      await applyDebtSnowballPayment(preview, sources);
+    }
+  }, [extraPayments, previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment]);
+
   // ─── Categories ───────────────────────────────────────────────────────────────
 
   const addCategory = useCallback(async (name: string) => {
@@ -3962,7 +3989,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence, getBillDateMovesForMonth,
       getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal,
       runSnowball, previewDebtSnowball, applyDebtSnowballPayment, saveExtraPayment, getExtraPayment, deleteExtraPayment, removeDebtSnowballPayment, finalizeBillPayment,
-      addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, reconcileTransaction, undoTransactionReconciliation, getTransactionsForMonth,
+      addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, reconcileTransaction, undoTransactionReconciliation, removeReviewSurplusFunding, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome, getIncomeOccurrencesInMonth,
       addGoal, updateGoal, closeSpendingBucket, reopenSpendingBucket, archiveSpendingBucket, restoreArchivedSpendingBucket, deleteGoal, checkGoalAffordability,
       getCashFlow, getDailyBalances,
