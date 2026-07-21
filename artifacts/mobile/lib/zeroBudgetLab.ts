@@ -50,7 +50,7 @@ export interface ZeroBudgetLabCategory {
 }
 
 export interface ZeroBudgetLabState {
-  version: 1;
+  version: 2;
   selectedMonth: string;
   defaultMonthlyIncome: number;
   incomeByMonth: Record<string, number>;
@@ -422,7 +422,7 @@ export function createZeroBudgetLabState(now = new Date()): ZeroBudgetLabState {
   const assigned = (amount: number) => ({ [selectedMonth]: amount });
   const spent = (amount: number) => ({ [selectedMonth]: amount });
   return {
-    version: 1,
+    version: 2,
     selectedMonth,
     defaultMonthlyIncome: 3028.42,
     incomeByMonth: { [selectedMonth]: 3028.42 },
@@ -583,7 +583,7 @@ export function normalizeZeroBudgetLabState(
   if (!value || typeof value !== "object") return createZeroBudgetLabState(now);
   const candidate = value as Partial<ZeroBudgetLabState>;
   if (
-    candidate.version !== 1 ||
+    candidate.version !== 2 ||
     !Array.isArray(candidate.groups) ||
     !Array.isArray(candidate.categories)
   ) {
@@ -593,7 +593,7 @@ export function normalizeZeroBudgetLabState(
   return {
     ...defaults,
     ...candidate,
-    version: 1,
+    version: 2,
     selectedMonth: /^\d{4}-\d{2}$/.test(candidate.selectedMonth ?? "")
       ? candidate.selectedMonth!
       : monthKey(now),
@@ -615,7 +615,7 @@ export function normalizeZeroBudgetLabState(
 }
 
 function storageKey(userId: string) {
-  return `flowledger-admin-zero-budget-lab-v1-${userId}`;
+  return `flowledger-admin-zero-budget-lab-v2-${userId}`;
 }
 
 export async function loadZeroBudgetLabState(
