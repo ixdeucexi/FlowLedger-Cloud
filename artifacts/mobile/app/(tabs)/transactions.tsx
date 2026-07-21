@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert, Modal, Platform, Pressable, ScrollView, SectionList,
   StyleSheet, Text, TextInput, View,
@@ -14,8 +14,9 @@ import { DebtPaymentAppliedModal, type DebtPaymentAppliedDetail } from "@/compon
 import { EmptyState } from "@/components/EmptyState";
 import { FullPaymentPromptModal } from "@/components/FullPaymentPromptModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
+import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
 import colors from "@/constants/colors";
-import type { Bill, Transaction } from "@/context/BudgetContext";
+import type { Bill, ExtraPayment, SnowballFundingSource, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
@@ -24,6 +25,8 @@ import { debtPaymentStatusLabel } from "@/lib/forecastDisplay";
 import { canMatchExpenseToBill, confirmedBillMatchId, confirmedBillMatchOccurrenceDate, isCashFlowTransaction, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "@/lib/billMatching";
 import { summarizeActivityMonth } from "@/lib/monthlySummary";
 import { isValidDateInMonth } from "@/lib/schedule";
+import type { SnowballProjectionResult } from "@/lib/snowball";
+import { resizeSnowballFundingSources } from "@/lib/snowballFunding";
 import { buildCurrentMonthReviewQueue, matchedOccurrenceAllocations, occurrenceKey, transactionDisplayName } from "@/lib/reviewCenter";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -53,6 +56,7 @@ interface ActivityItem {
   source: ActivitySource;
   editable: boolean;
   rawTx?: Transaction;
+  extraPayment?: ExtraPayment;
   detail?: string;          // human-readable explanation shown in detail sheet
   pending?: boolean;
 }
@@ -81,7 +85,7 @@ const SOURCE_META: Record<ActivitySource, {
   bank_transaction: { label: "Bank", icon: "credit-card", color: "#0f9b8e", description: "Imported securely from your connected bank" },
   bill_payment:  { label: "Bill",     icon: "file-text",   color: "#f0b429", description: "Bill marked as paid in Monthly view" },
   income:        { label: "Income",   icon: "trending-up", color: "#22c55e", description: "Scheduled income occurrence" },
-  extra_payment: { label: "Debt Pay", icon: "zap",         color: "#e11d48", description: "Extra debt payment (Snowball / Avalanche)" },
+  extra_payment: { label: "Debt plan", icon: "zap",        color: "#3b82f6", description: "Planned extra payment toward debt" },
   transfer:      { label: "Transfer", icon: "repeat",      color: "#64748b", description: "Reviewed movement between your accounts" },
 };
 
@@ -126,6 +130,7 @@ export default function TransactionsScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const params = useLocalSearchParams<{ editDebtPaymentId?: string; editDebtPaymentAt?: string }>();
   const { isFeatureLocked, bypassFeature } = useMembership();
   const {
     transactions, pendingBankTransactions, addTransaction, updateTransaction, deleteTransaction, deleteTransfer,
@@ -154,6 +159,12 @@ export default function TransactionsScreen() {
   const [surplusPrompt, setSurplusPrompt] = useState<MatchedPaymentPrompt | null>(null);
   const [queuedSurplusPrompt, setQueuedSurplusPrompt] = useState<MatchedPaymentPrompt | null>(null);
   const [surplusPaymentDate, setSurplusPaymentDate] = useState(todayIsoDate());
+  const [editExtraPayment, setEditExtraPayment] = useState<ExtraPayment | null>(null);
+  const [editExtraAmount, setEditExtraAmount] = useState("");
+  const [editExtraDate, setEditExtraDate] = useState("");
+  const [editExtraPreview, setEditExtraPreview] = useState<SnowballProjectionResult | null>(null);
+  const [savingExtraPayment, setSavingExtraPayment] = useState(false);
+  const handledExtraPaymentRouteRef = useRef("");
   useBackDismiss(!!detailItem, () => setDetailItem(null));
   useBackDismiss(filterModalVisible, () => setFilterModalVisible(false));
   useBackDismiss(weeklySummaryVisible, () => setWeeklySummaryVisible(false));
@@ -306,15 +317,15 @@ export default function TransactionsScreen() {
       const names = ep.allocations.map(a => a.billName).join(", ");
       const funding = (ep.sources ?? []).map(source => source.type === "bill_surplus" ? `${source.billName ?? "bill"} surplus` : "manual safe extra").join(", ");
       const status = debtPaymentStatusLabel(date, (ep.sources ?? []).some(source => source.pendingBalanceApply));
-      const statusLabel = status === "scheduled" ? "Scheduled" : "Applied";
       items.push({
         id:       `extra-${ep.id}`,
         date,
         amount:   -ep.amount,
-        label:    `${statusLabel}: ${names || "Extra Debt Payment"}`,
+        label:    names || "Extra debt payment",
         category: "Debt",
         source:   "extra_payment",
-        editable: false,
+        editable: true,
+        extraPayment: ep,
         detail:   `$${ep.amount.toFixed(2)} ${status} ${status === "scheduled" ? "for" : "to"} ${names || "debt accounts"} on ${formatDateLong(date)}${funding ? ` · Funded by ${funding}` : ""}`,
       });
     }
@@ -659,7 +670,118 @@ export default function TransactionsScreen() {
     }
   };
 
+  const openExtraPaymentEditor = useCallback((payment: ExtraPayment) => {
+    const paymentDate = payment.payment_date ?? `${payment.year}-${String(payment.month + 1).padStart(2, "0")}-01`;
+    setEditExtraPayment(payment);
+    setEditExtraAmount(payment.amount.toFixed(2));
+    setEditExtraDate(paymentDate);
+    setEditExtraPreview(previewDebtSnowball(payment.month, payment.year, payment.amount, 0, paymentDate, payment.id));
+  }, [previewDebtSnowball]);
+
+  const editExtraDateLimits = useMemo(() => {
+    if (!editExtraPayment) return { min: undefined, max: undefined, scheduled: false };
+    const monthStart = `${editExtraPayment.year}-${String(editExtraPayment.month + 1).padStart(2, "0")}-01`;
+    const monthEnd = `${editExtraPayment.year}-${String(editExtraPayment.month + 1).padStart(2, "0")}-${String(new Date(editExtraPayment.year, editExtraPayment.month + 1, 0).getDate()).padStart(2, "0")}`;
+    const today = todayIsoDate();
+    const tomorrowDate = new Date(`${today}T12:00:00`);
+    tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+    const tomorrow = `${tomorrowDate.getFullYear()}-${String(tomorrowDate.getMonth() + 1).padStart(2, "0")}-${String(tomorrowDate.getDate()).padStart(2, "0")}`;
+    const scheduled = (editExtraPayment.sources ?? []).some(source => source.pendingBalanceApply) || (editExtraPayment.payment_date ?? "") > today;
+    return scheduled
+      ? { min: monthStart > tomorrow ? monthStart : tomorrow, max: monthEnd, scheduled }
+      : { min: monthStart, max: monthEnd < today ? monthEnd : today, scheduled };
+  }, [editExtraPayment]);
+
+  const updateExtraPaymentAmount = useCallback((value: string) => {
+    setEditExtraAmount(value);
+    if (!editExtraPayment) return;
+    const amount = Number.parseFloat(value);
+    setEditExtraPreview(Number.isFinite(amount) && amount > 0
+      ? previewDebtSnowball(editExtraPayment.month, editExtraPayment.year, amount, 0, editExtraDate, editExtraPayment.id)
+      : null);
+  }, [editExtraDate, editExtraPayment, previewDebtSnowball]);
+
+  const updateExtraPaymentDate = useCallback((value: string) => {
+    setEditExtraDate(value);
+    if (!editExtraPayment) return;
+    const amount = Number.parseFloat(editExtraAmount);
+    setEditExtraPreview(Number.isFinite(amount) && amount > 0
+      ? previewDebtSnowball(editExtraPayment.month, editExtraPayment.year, amount, 0, value, editExtraPayment.id)
+      : null);
+  }, [editExtraAmount, editExtraPayment, previewDebtSnowball]);
+
+  const saveEditedExtraPayment = useCallback(async () => {
+    if (!editExtraPayment || !editExtraPreview || savingExtraPayment) return;
+    if ((editExtraDateLimits.min && editExtraDate < editExtraDateLimits.min) || (editExtraDateLimits.max && editExtraDate > editExtraDateLimits.max)) {
+      Alert.alert(
+        "Choose a valid payment date",
+        editExtraDateLimits.scheduled
+          ? "A scheduled payment must stay on a future date. Delete it and create a new payment if it should be applied today."
+          : "An applied payment must stay on today or an earlier date. Delete it and create a scheduled payment if it belongs in the future.",
+      );
+      return;
+    }
+    const amount = Number.parseFloat(editExtraAmount);
+    if (!Number.isFinite(amount) || amount <= 0 || Math.abs(editExtraPreview.selectedExtra - amount) > 0.005) {
+      Alert.alert("Check the payment amount", "Use an amount that stays within the safe maximum shown above.");
+      return;
+    }
+    setSavingExtraPayment(true);
+    try {
+      const resizedSources = resizeSnowballFundingSources(editExtraPayment.sources, amount) as SnowballFundingSource[];
+      await applyDebtSnowballPayment(editExtraPreview, resizedSources);
+      setEditExtraPayment(null);
+      setEditExtraPreview(null);
+    } catch (error) {
+      Alert.alert("Could not update payment", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSavingExtraPayment(false);
+    }
+  }, [applyDebtSnowballPayment, editExtraAmount, editExtraDate, editExtraDateLimits, editExtraPayment, editExtraPreview, savingExtraPayment]);
+
+  const removeEditedExtraPayment = useCallback(() => {
+    if (!editExtraPayment || savingExtraPayment) return;
+    Alert.alert(
+      "Remove this debt payment?",
+      "This undoes the snowball payment and restores the debt balances it changed.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove payment",
+          style: "destructive",
+          onPress: async () => {
+            setSavingExtraPayment(true);
+            try {
+              await removeDebtSnowballPayment(editExtraPayment.month, editExtraPayment.year);
+              setEditExtraPayment(null);
+              setEditExtraPreview(null);
+            } catch (error) {
+              Alert.alert("Could not remove payment", error instanceof Error ? error.message : "Please try again.");
+            } finally {
+              setSavingExtraPayment(false);
+            }
+          },
+        },
+      ],
+    );
+  }, [editExtraPayment, removeDebtSnowballPayment, savingExtraPayment]);
+
+  useEffect(() => {
+    const routeId = Array.isArray(params.editDebtPaymentId) ? params.editDebtPaymentId[0] : params.editDebtPaymentId;
+    if (!routeId) return;
+    const routeToken = `${routeId}:${Array.isArray(params.editDebtPaymentAt) ? params.editDebtPaymentAt[0] : params.editDebtPaymentAt ?? ""}`;
+    if (handledExtraPaymentRouteRef.current === routeToken) return;
+    const payment = extraPayments.find(item => item.id === routeId);
+    if (!payment) return;
+    handledExtraPaymentRouteRef.current = routeToken;
+    openExtraPaymentEditor(payment);
+  }, [extraPayments, openExtraPaymentEditor, params.editDebtPaymentAt, params.editDebtPaymentId]);
+
   const openItem = (item: ActivityItem) => {
+    if (item.extraPayment) {
+      openExtraPaymentEditor(item.extraPayment);
+      return;
+    }
     if (item.rawTx && canMatchExpenseToBill(item.rawTx)) {
       if (item.rawTx.source === "plaid" && isFeatureLocked("transaction_matching")) {
         Alert.alert(
@@ -1376,6 +1498,23 @@ export default function TransactionsScreen() {
         visible={!!debtPaymentNotice}
         detail={debtPaymentNotice}
         onClose={() => setDebtPaymentNotice(null)}
+      />
+      <SnowballPreviewModal
+        visible={!!editExtraPayment}
+        method={settings.paymentMethod}
+        preview={editExtraPreview}
+        amount={editExtraAmount}
+        existingPayment
+        paymentDate={editExtraDate}
+        paymentDateMin={editExtraDateLimits.min}
+        paymentDateMax={editExtraDateLimits.max}
+        safetyFloor={settings.safety_floor}
+        forecastHorizonMonths={settings.forecast_horizon_months}
+        onAmountChange={updateExtraPaymentAmount}
+        onPaymentDateChange={updateExtraPaymentDate}
+        onClose={() => { setEditExtraPayment(null); setEditExtraPreview(null); }}
+        onConfirm={() => { void saveEditedExtraPayment(); }}
+        onRemove={removeEditedExtraPayment}
       />
 
       {/* ── Detail sheet (auto-generated entries) ── */}

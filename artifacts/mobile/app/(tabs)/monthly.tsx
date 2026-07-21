@@ -97,7 +97,7 @@ export default function MonthlyScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const {
-    bills, overrides, billDateMoves, transactions, goals, decisions, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
+    bills, overrides, billDateMoves, transactions, extraPayments, goals, decisions, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
     getCustomDueDay, setCustomDueDay,
     moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, settings,
@@ -1885,26 +1885,77 @@ export default function MonthlyScreen() {
 
                     {selectedDebtPayments.length > 0 ? (
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
-                        <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Debt payments</Text>
-                        {selectedDebtPayments.map(payment => (
-                          <View
-                            key={`overlay-debt-${payment.event.id}`}
-                            style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: "#3b82f640" }]}
-                          >
-                            <View style={styles.dayBillTop}>
-                              <View style={{ flex: 1, minWidth: 0 }}>
-                                <Text numberOfLines={1} style={[styles.dayBillName, { color: c.foreground }]}>
-                                  {payment.label.replace(/ debt payment$/i, "")}
-                                </Text>
-                                <Text style={[styles.dayBillMeta, { color: c.mutedForeground }]}>Snowball payment</Text>
+                        <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Planned debt payments</Text>
+                        {selectedDebtPayments.map(payment => {
+                          const savedPayment = extraPayments.find(item => item.id === payment.event.sourceId);
+                          const amount = Math.abs(payment.event.amount);
+                          const applied = payment.statusLabel.toLowerCase() === "applied";
+                          return (
+                            <View
+                              key={`overlay-debt-${payment.event.id}`}
+                              style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: "#3b82f640" }]}
+                            >
+                              <View style={styles.dayBillTop}>
+                                <View style={{ flex: 1, minWidth: 0 }}>
+                                  <Text numberOfLines={1} style={[styles.dayBillName, { color: c.foreground }]}>
+                                    {payment.label.replace(/ debt payment$/i, "")}
+                                  </Text>
+                                  <Text style={[styles.dayBillMeta, { color: c.mutedForeground }]}>Snowball payment</Text>
+                                </View>
+                                <View style={[styles.dayTransactionBadge, { backgroundColor: "#3b82f620" }]}>
+                                  <Text style={[styles.dayTransactionBadgeText, { color: "#3b82f6" }]}>{payment.statusLabel.toUpperCase()}</Text>
+                                </View>
                               </View>
-                              <View style={[styles.dayTransactionBadge, { backgroundColor: "#3b82f620" }]}>
-                                <Text style={[styles.dayTransactionBadgeText, { color: "#3b82f6" }]}>{payment.statusLabel.toUpperCase()}</Text>
+                              <View style={styles.dayBillNumbers}>
+                                <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
+                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Amount</Text>
+                                  <Text style={[styles.dayBillNumberValue, { color: c.foreground }]}>${amount.toFixed(2)}</Text>
+                                </View>
+                                <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
+                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Paid</Text>
+                                  <Text style={[styles.dayBillNumberValue, { color: applied ? c.success : c.mutedForeground }]}>${(applied ? amount : 0).toFixed(2)}</Text>
+                                </View>
+                                <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
+                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Left</Text>
+                                  <Text style={[styles.dayBillNumberValue, { color: applied ? c.success : c.warning }]}>${(applied ? 0 : amount).toFixed(2)}</Text>
+                                </View>
                               </View>
+                              {savedPayment ? (
+                                <View style={styles.dayBillActions}>
+                                  <Pressable
+                                    onPress={() => {
+                                      setSelectedDate(null);
+                                      router.push({
+                                        pathname: "/(tabs)/transactions",
+                                        params: { editDebtPaymentId: savedPayment.id, editDebtPaymentAt: String(Date.now()) },
+                                      } as never);
+                                    }}
+                                    style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.primary + "16", borderColor: c.primary + "35", opacity: pressed ? 0.74 : 1 }]}
+                                  >
+                                    <Feather name="edit-2" size={13} color={c.primary} />
+                                    <Text style={[styles.dayBillActionText, { color: c.primary }]}>Edit</Text>
+                                  </Pressable>
+                                  <Pressable
+                                    onPress={() => confirmAction({
+                                      title: "Remove this debt payment?",
+                                      message: "This undoes the snowball payment and restores the debt balances it changed.",
+                                      confirmText: "Remove payment",
+                                      destructive: true,
+                                      onConfirm: async () => {
+                                        await removeDebtSnowballPayment(savedPayment.month, savedPayment.year);
+                                        setSelectedDate(null);
+                                      },
+                                    })}
+                                    style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.destructive + "12", borderColor: c.destructive + "35", opacity: pressed ? 0.74 : 1 }]}
+                                  >
+                                    <Feather name="rotate-ccw" size={13} color={c.destructive} />
+                                    <Text style={[styles.dayBillActionText, { color: c.destructive }]}>Remove</Text>
+                                  </Pressable>
+                                </View>
+                              ) : null}
                             </View>
-                            <Text style={[styles.dayOverlayAmount, { color: "#3b82f6" }]}>{payment.amountLabel}</Text>
-                          </View>
-                        ))}
+                          );
+                        })}
                       </View>
                     ) : null}
 

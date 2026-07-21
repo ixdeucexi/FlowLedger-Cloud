@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import React from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
+import { DatePickerField } from "@/components/DatePickerField";
 import type { DebtMethod, SnowballProjectionResult } from "@/lib/snowball";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
@@ -13,15 +14,19 @@ interface Props {
   preview: SnowballProjectionResult | null;
   amount: string;
   existingPayment?: boolean;
+  paymentDate?: string;
+  paymentDateMin?: string;
+  paymentDateMax?: string;
   safetyFloor?: number;
   forecastHorizonMonths?: number;
   onAmountChange: (value: string) => void;
+  onPaymentDateChange?: (value: string) => void;
   onClose: () => void;
   onConfirm: () => void;
   onRemove?: () => void;
 }
 
-export function SnowballPreviewModal({ visible, method, preview, amount, existingPayment, safetyFloor = 200, forecastHorizonMonths = 6, onAmountChange, onClose, onConfirm, onRemove }: Props) {
+export function SnowballPreviewModal({ visible, method, preview, amount, existingPayment, paymentDate, paymentDateMin, paymentDateMax, safetyFloor = 200, forecastHorizonMonths = 6, onAmountChange, onPaymentDateChange, onClose, onConfirm, onRemove }: Props) {
   const c = useColors();
   useBackDismiss(visible, onClose);
   const requested = Number.parseFloat(amount) || 0;
@@ -35,8 +40,10 @@ export function SnowballPreviewModal({ visible, method, preview, amount, existin
           <View style={[styles.handle, { backgroundColor: c.border }]} />
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.title, { color: c.foreground }]}>{methodName} Preview</Text>
-              <Text style={[styles.sub, { color: c.mutedForeground }]}>Nothing changes until you confirm.</Text>
+              <Text style={[styles.title, { color: c.foreground }]}>{existingPayment ? `Edit ${methodName} Payment` : `${methodName} Preview`}</Text>
+              <Text style={[styles.sub, { color: c.mutedForeground }]}>
+                {existingPayment ? "Update the payment shown in Activity and Calendar." : "Nothing changes until you confirm."}
+              </Text>
             </View>
             <Pressable onPress={onClose} hitSlop={8}><Feather name="x" size={21} color={c.mutedForeground} /></Pressable>
           </View>
@@ -61,7 +68,17 @@ export function SnowballPreviewModal({ visible, method, preview, amount, existin
                 <Text style={[styles.error, { color: c.destructive }]}>That amount would move the projected balance below your ${safetyFloor.toFixed(0)} safety floor.</Text>
               )}
 
-              <Text style={[styles.label, { color: c.mutedForeground }]}>THIS PAYMENT · {preview.paymentDate}</Text>
+              {paymentDate && onPaymentDateChange ? (
+                <DatePickerField
+                  label="PAYMENT DATE"
+                  value={paymentDate}
+                  onChange={onPaymentDateChange}
+                  minDate={paymentDateMin}
+                  maxDate={paymentDateMax}
+                />
+              ) : null}
+
+              <Text style={[styles.label, { color: c.mutedForeground }]}>THIS PAYMENT</Text>
               <View style={[styles.card, { backgroundColor: c.card }]}>
                 {preview.allocations.map(item => (
                   <View key={item.billId} style={styles.row}>
@@ -100,7 +117,8 @@ export function SnowballPreviewModal({ visible, method, preview, amount, existin
           <View style={styles.actions}>
             {existingPayment && onRemove && (
               <Pressable onPress={onRemove} style={[styles.remove, { borderColor: c.destructive }]}>
-                <Feather name="trash-2" size={15} color={c.destructive} />
+                <Feather name="rotate-ccw" size={15} color={c.destructive} />
+                <Text style={[styles.removeText, { color: c.destructive }]}>Remove</Text>
               </Pressable>
             )}
             <Pressable disabled={!valid} onPress={onConfirm} style={[styles.confirm, { backgroundColor: valid ? c.primary : c.muted }]}>
@@ -126,6 +144,6 @@ const styles = StyleSheet.create({
   error: { fontSize: 11, marginTop: 5 }, card: { borderRadius: 12, padding: 12, gap: 10 }, row: { flexDirection: "row", alignItems: "center", gap: 8 }, rowName: { flex: 1, fontSize: 13, fontFamily: "Inter_600SemiBold" }, rowValue: { fontSize: 13, fontFamily: "Inter_700Bold" },
   monthRow: { flexDirection: "row", alignItems: "center", gap: 10 }, month: { width: 70, fontSize: 12, fontFamily: "Inter_700Bold" }, monthTarget: { fontSize: 11 }, monthBalance: { fontSize: 10, marginTop: 1 }, monthExtra: { fontSize: 13, fontFamily: "Inter_700Bold" },
   payoffCard: { flexDirection: "row", gap: 10, padding: 14, borderRadius: 12, marginTop: 16 }, payoffTitle: { fontSize: 12, fontFamily: "Inter_600SemiBold" }, payoffValue: { fontSize: 20, fontFamily: "Inter_700Bold", marginTop: 2 }, payoffOrder: { fontSize: 10, marginTop: 3 },
-  actions: { flexDirection: "row", gap: 10, marginTop: 16 }, remove: { width: 50, height: 50, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" }, confirm: { flex: 1, height: 50, borderRadius: 12, alignItems: "center", justifyContent: "center" }, confirmText: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  actions: { flexDirection: "row", gap: 10, marginTop: 16 }, remove: { minWidth: 92, height: 50, paddingHorizontal: 13, gap: 6, flexDirection: "row", borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" }, removeText: { fontSize: 13, fontFamily: "Inter_700Bold" }, confirm: { flex: 1, height: 50, borderRadius: 12, alignItems: "center", justifyContent: "center" }, confirmText: { fontSize: 15, fontFamily: "Inter_700Bold" },
 });
 

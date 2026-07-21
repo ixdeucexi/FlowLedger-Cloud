@@ -112,13 +112,13 @@ export default function BillsScreen() {
       const absoluteMonth = currentMonth + offset;
       const month = absoluteMonth % 12;
       const year = currentYear + Math.floor(absoluteMonth / 12);
-      const days = getBillOccurrencesInMonth(bill, month, year);
+      const days = getBillOccurrencesInMonth(bill, month, year)
+        .filter(day => offset > 0 || day >= currentDay);
       if (days.length > 0) {
         return {
           month,
           year,
           days,
-          startsThisMonth: offset === 0,
           sortTime: new Date(year, month, days[0], 12).getTime(),
         };
       }
@@ -128,10 +128,9 @@ export default function BillsScreen() {
       month: currentMonth,
       year: currentYear,
       days: [] as number[],
-      startsThisMonth: false,
       sortTime: Number.MAX_SAFE_INTEGER,
     };
-  }, [currentMonth, currentYear, getBillOccurrencesInMonth]);
+  }, [currentDay, currentMonth, currentYear, getBillOccurrencesInMonth]);
   const firstOccurrenceDay = useCallback(
     (bill: Bill) => billOccurrenceDays(bill)[0] ?? bill.due_day,
     [billOccurrenceDays],
@@ -172,15 +171,10 @@ export default function BillsScreen() {
     return planned > 0 && getPaidAmount(bill.id, currentMonth, currentYear) >= planned - 0.005;
   }).length;
   const formatBillDueText = useCallback((bill: Bill) => {
-    const days = billOccurrenceDays(bill);
-    if (days.length === 1) return `Due ${MONTH_FULL[currentMonth]} ${days[0]}, ${currentYear}`;
-    if (days.length > 1) return `${days.length} payments in ${MONTH_FULL[currentMonth]}`;
-
     const next = nextBillOccurrence(bill);
-    if (next.days.length === 1) return `Next due ${MONTH_FULL[next.month]} ${next.days[0]}, ${next.year}`;
-    if (next.days.length > 1) return `${next.days.length} payments in ${MONTH_FULL[next.month]} ${next.year}`;
-    return "No scheduled date";
-  }, [billOccurrenceDays, currentMonth, currentYear, nextBillOccurrence]);
+    if (next.days.length > 0) return `Next occurrence: ${MONTH_FULL[next.month]} ${next.days[0]}, ${next.year}`;
+    return "No upcoming occurrence";
+  }, [nextBillOccurrence]);
   const frequencyText = useCallback((bill: Bill) => {
     if (!bill.is_recurring) return "one-time";
     if (bill.frequency === "weekly") return "/week";

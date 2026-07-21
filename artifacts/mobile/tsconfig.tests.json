@@ -16,6 +16,8 @@
     "lib/forecastDisplay.test.ts",
     "lib/snowball.ts",
     "lib/snowball.test.ts",
+    "lib/snowballFunding.ts",
+    "lib/snowballFunding.test.ts",
     "lib/diagnostics.test.ts",
     "lib/demoMode.ts",
     "lib/demoMode.test.ts",
