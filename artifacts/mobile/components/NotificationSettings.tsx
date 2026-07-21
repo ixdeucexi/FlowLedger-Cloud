@@ -68,6 +68,7 @@ export function NotificationSettings() {
   const [preferencesLoading, setPreferencesLoading] = useState(true);
   const [deviceBusy, setDeviceBusy] = useState(false);
   const [savingKey, setSavingKey] = useState<NotificationPreferenceKey | null>(null);
+  const [testingKey, setTestingKey] = useState<NotificationPreferenceKey | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const refreshStatus = useCallback(async () => {
@@ -145,17 +146,17 @@ export function NotificationSettings() {
     }
   };
 
-  const sendTest = async () => {
-    if (!session?.access_token || deviceBusy) return;
-    setDeviceBusy(true);
+  const sendTest = async (option: AlertOption) => {
+    if (!session?.access_token || deviceBusy || testingKey) return;
+    setTestingKey(option.key);
     setMessage(null);
     try {
-      await sendTestPushNotification(session.access_token);
-      setMessage("Test sent. Check your phone notifications.");
+      await sendTestPushNotification(session.access_token, option.key);
+      setMessage(`${option.title} test sent. Check your phone notifications.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not send the test notification.");
     } finally {
-      setDeviceBusy(false);
+      setTestingKey(null);
     }
   };
 
@@ -182,7 +183,7 @@ export function NotificationSettings() {
           </View>
           <Switch
             accessibilityLabel="Phone notifications on this device"
-            disabled={deviceBusy || status === "checking" || unavailable}
+            disabled={deviceBusy || testingKey !== null || status === "checking" || unavailable}
             value={enabled}
             onValueChange={value => void toggleDevice(value)}
             trackColor={{ false: c.border, true: c.primary + "88" }}
@@ -211,10 +212,31 @@ export function NotificationSettings() {
             <View style={styles.copy}>
               <Text style={[styles.optionTitle, { color: c.foreground }]}>{option.title}</Text>
               <Text style={[styles.description, { color: c.mutedForeground }]}>{option.description}</Text>
+              {enabled ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Test ${option.title} notification`}
+                  disabled={!preferences[option.key] || testingKey !== null || savingKey !== null}
+                  onPress={() => void sendTest(option)}
+                  style={({ pressed }) => [
+                    styles.inlineTest,
+                    {
+                      borderColor: c.primary + "66",
+                      backgroundColor: c.primary + "12",
+                      opacity: !preferences[option.key] || testingKey !== null || savingKey !== null ? 0.45 : pressed ? 0.7 : 1,
+                    },
+                  ]}
+                >
+                  <Feather name="send" size={12} color={c.primary} />
+                  <Text style={[styles.inlineTestText, { color: c.primary }]}>
+                    {testingKey === option.key ? "Sending…" : "Test alert"}
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
             <Switch
               accessibilityLabel={`${option.title} notifications`}
-              disabled={preferencesLoading || savingKey !== null}
+              disabled={preferencesLoading || savingKey !== null || testingKey !== null}
               value={preferences[option.key]}
               onValueChange={value => void togglePreference(option.key, value)}
               trackColor={{ false: c.border, true: c.primary + "88" }}
@@ -230,21 +252,6 @@ export function NotificationSettings() {
           Lock-screen alerts hide bill, merchant, and amount details. Opening an alert takes you to the right place in FlowLedger.
         </Text>
       </View>
-
-      {enabled ? (
-        <Pressable
-          accessibilityRole="button"
-          disabled={deviceBusy}
-          onPress={() => void sendTest()}
-          style={({ pressed }) => [
-            styles.testButton,
-            { backgroundColor: c.primary, opacity: deviceBusy ? 0.5 : pressed ? 0.78 : 1 },
-          ]}
-        >
-          <Feather name="send" size={15} color={c.primaryForeground} />
-          <Text style={[styles.testText, { color: c.primaryForeground }]}>Send test notification</Text>
-        </Pressable>
-      ) : null}
 
       {message ? (
         <Text style={[styles.message, { color: message.includes("Could not") || message.includes("blocked") ? c.destructive : c.primary }]}>
@@ -270,9 +277,9 @@ const styles = StyleSheet.create({
   optionsCard: { borderWidth: 1, borderRadius: 16, overflow: "hidden" },
   optionRow: { minHeight: 82, paddingHorizontal: 14, paddingVertical: 13, flexDirection: "row", alignItems: "center", gap: 11 },
   optionTitle: { fontFamily: "Inter_700Bold", fontSize: 14 },
+  inlineTest: { alignSelf: "flex-start", minHeight: 30, borderWidth: 1, borderRadius: 9, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 6, marginTop: 5 },
+  inlineTestText: { fontFamily: "Inter_700Bold", fontSize: 11 },
   privacy: { borderWidth: 1, borderRadius: 12, padding: 12, flexDirection: "row", alignItems: "flex-start", gap: 9 },
   privacyText: { flex: 1, fontFamily: "Inter_400Regular", fontSize: 12, lineHeight: 18 },
-  testButton: { minHeight: 46, borderRadius: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
-  testText: { fontFamily: "Inter_700Bold", fontSize: 13 },
   message: { fontFamily: "Inter_600SemiBold", fontSize: 12, lineHeight: 17 },
 });

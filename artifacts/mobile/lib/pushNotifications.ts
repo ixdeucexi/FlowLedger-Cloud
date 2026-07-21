@@ -173,10 +173,11 @@ export async function restorePushNotifications(accessToken: string, userId: stri
   await enablePushNotifications(accessToken, userId);
 }
 
-export async function sendTestPushNotification(accessToken: string) {
+export async function sendTestPushNotification(accessToken: string, type: NotificationPreferenceKey) {
   const response = await fetch("/api/notifications/test", {
     method: "POST",
     headers: authorization(accessToken),
+    body: JSON.stringify({ type }),
   });
   if (!response.ok) throw new Error(await apiMessage(response, "Could not send the test notification."));
 }
