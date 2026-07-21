@@ -1,24 +1,17 @@
-const crypto = require("crypto");
 const { decryptAccessToken } = require("../_utils/crypto");
+const { isAuthorizedCron } = require("../_utils/cronAuth");
 const { optional } = require("../_utils/env");
 const { plaid, plaidOptions } = require("../_utils/plaid");
 const { serviceSupabase, safeError } = require("../_utils/supabase");
 const { syncItem } = require("../_utils/sync");
 const { isActualProHousehold } = require("../_utils/plaidAccess");
 
-function isAuthorized(req, secret) {
-  const supplied = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-  const expected = Buffer.from(secret);
-  const actual = Buffer.from(supplied);
-  return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
-}
-
 module.exports = async function automaticPlaidSync(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "METHOD_NOT_ALLOWED" });
 
   const secret = optional("CRON_SECRET");
   if (!secret) return res.status(500).json({ error: "CRON_NOT_CONFIGURED" });
-  if (!isAuthorized(req, secret)) return res.status(401).json({ error: "UNAUTHORIZED" });
+  if (!isAuthorizedCron(req, secret)) return res.status(401).json({ error: "UNAUTHORIZED" });
 
   try {
     const webhook = plaidOptions().webhookUrl;

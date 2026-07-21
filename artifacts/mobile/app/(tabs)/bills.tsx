@@ -23,6 +23,7 @@ import { effectiveDebtMinimum, type SnowballProjectionResult } from "@/lib/snowb
 import { orderActiveDebtsForStrategy, sortDebtsWithPaidLast } from "@/lib/debtOrder";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { loadCategoryBudgets } from "@/lib/categoryBudgetStore";
+import { buildOverdueBillOccurrences, groupOverdueBills } from "@/lib/overdueBills";
 
 const CAT_COLORS: Record<string, string> = {
   Housing: "#0f9b8e", Utilities: "#f0b429", Insurance: "#6366f1",
@@ -55,7 +56,7 @@ export default function BillsScreen() {
     dashboardFilter, setDashboardFilter,
     settings, updateSettings,
     previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, getExtraPayment,
-    getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getPaidAmount,
+    getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal, getPaidAmount,
     getDailyBalances, getIncomeOccurrencesInMonth, activeHousehold,
   } = useBudget();
 
@@ -170,6 +171,23 @@ export default function BillsScreen() {
     const planned = getBillMonthlyTotal(bill, currentMonth, currentYear);
     return planned > 0 && getPaidAmount(bill.id, currentMonth, currentYear) >= planned - 0.005;
   }).length;
+  const overdueBills = useMemo(() => groupOverdueBills(buildOverdueBillOccurrences(
+    getMonthlyBills(currentMonth, currentYear).map(bill => ({
+      billId: bill.id,
+      name: bill.name,
+      occurrenceDays: getBillOccurrencesInMonth(bill, currentMonth, currentYear),
+      plannedTotal: getBillEffectiveMonthlyTotal(bill, currentMonth, currentYear),
+      paidTotal: getPaidAmount(bill.id, currentMonth, currentYear),
+    })),
+    currentMonth,
+    currentYear,
+    currentDay,
+  )), [currentDay, currentMonth, currentYear, getBillEffectiveMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, getPaidAmount]);
+  const overdueByBill = useMemo(
+    () => new Map(overdueBills.map(alert => [alert.billId, alert])),
+    [overdueBills],
+  );
+  const firstOverdueBill = overdueBills[0] ?? null;
   const formatBillDueText = useCallback((bill: Bill) => {
     const next = nextBillOccurrence(bill);
     if (next.days.length > 0) return `Next occurrence: ${MONTH_FULL[next.month]} ${next.days[0]}, ${next.year}`;
@@ -409,6 +427,34 @@ export default function BillsScreen() {
         />
       </View>
 
+      {activeTab === "bills" && firstOverdueBill ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${firstOverdueBill.name} is past due. Review it on the calendar.`}
+          onPress={() => router.push({
+            pathname: "/(tabs)/monthly",
+            params: { openDate: firstOverdueBill.firstOccurrenceDate, openDateAt: String(Date.now()) },
+          } as any)}
+          style={({ pressed }) => [
+            styles.overdueCard,
+            { backgroundColor: c.destructive + "12", borderColor: c.destructive + "70", opacity: pressed ? 0.82 : 1 },
+          ]}
+        >
+          <View style={[styles.overdueIcon, { backgroundColor: c.destructive + "20" }]}>
+            <Feather name="alert-triangle" size={19} color={c.destructive} />
+          </View>
+          <View style={styles.overdueCopy}>
+            <Text style={[styles.overdueEyebrow, { color: c.destructive }]}>Past due · action needed</Text>
+            <Text style={[styles.overdueTitle, { color: c.foreground }]}>{firstOverdueBill.name} still needs ${firstOverdueBill.remainingAmount.toFixed(2)}</Text>
+            <Text style={[styles.overdueText, { color: c.mutedForeground }]}>
+              {new Date(`${firstOverdueBill.firstOccurrenceDate}T12:00:00`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })} has passed. Tap to review or mark it paid.
+              {overdueBills.length > 1 ? ` ${overdueBills.length - 1} more ${overdueBills.length - 1 === 1 ? "bill needs" : "bills need"} action.` : ""}
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={18} color={c.destructive} />
+        </Pressable>
+      ) : null}
+
       {activeTab === "bills" ? (
         <View style={[styles.billSnapshotCard, { backgroundColor: c.card, borderColor: c.border }]}>
           <View style={styles.billSnapshotHeader}>
@@ -541,6 +587,7 @@ export default function BillsScreen() {
               const catColor = CAT_COLORS[item.category] ?? c.primary;
               const beforePayday = paycheckPlan.billsDue.some(bill => bill.id === item.id);
               const stopped = isStoppedFutureBill(item);
+              const overdue = overdueByBill.get(item.id);
               return (
                 <Pressable
                   key={item.id}
@@ -562,6 +609,11 @@ export default function BillsScreen() {
                           {stopped ? (
                             <View style={[styles.tag, { backgroundColor: c.muted }]}>
                               <Text style={[styles.tagText, { color: c.mutedForeground }]}>Stopped</Text>
+                            </View>
+                          ) : null}
+                          {overdue ? (
+                            <View style={[styles.tag, { backgroundColor: c.destructive + "18" }]}>
+                              <Text style={[styles.tagText, { color: c.destructive }]}>Past due · ${overdue.remainingAmount.toFixed(2)}</Text>
                             </View>
                           ) : null}
                           {!stopped && beforePayday ? (
@@ -870,6 +922,12 @@ const styles = StyleSheet.create({
   billPromptActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
   billPromptAction: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999 },
   billPromptActionText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
+  overdueCard: { flexDirection: "row", alignItems: "center", gap: 11, borderWidth: 1, borderRadius: 22, padding: 14, marginHorizontal: 16, marginBottom: 12 },
+  overdueIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  overdueCopy: { flex: 1 },
+  overdueEyebrow: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.7 },
+  overdueTitle: { fontSize: 15, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
+  overdueText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 3 },
   billSnapshotCard: { borderWidth: 1, borderRadius: 22, padding: 14, marginHorizontal: 16, marginBottom: 12, shadowColor: "#2563eb", shadowOpacity: 0.10, shadowRadius: 18, shadowOffset: { width: 0, height: 10 } },
   billSnapshotHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10 },
   billSnapshotLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8 },

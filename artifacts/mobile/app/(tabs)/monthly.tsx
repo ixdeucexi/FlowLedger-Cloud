@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -96,6 +96,7 @@ export default function MonthlyScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const routeParams = useLocalSearchParams<{ openDate?: string | string[]; openDateAt?: string | string[] }>();
   const {
     bills, overrides, billDateMoves, transactions, extraPayments, goals, decisions, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
     getCustomDueDay, setCustomDueDay,
@@ -114,10 +115,25 @@ export default function MonthlyScreen() {
   const [editTx, setEditTx] = useState<Transaction | null>(null);
   const [transactionDefaultDate, setTransactionDefaultDate] = useState<string | undefined>();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const handledOpenDateRef = useRef<string | null>(null);
   const [editingAmounts, setEditingAmounts] = useState<Record<string, string>>({});
   const [editingPaid, setEditingPaid] = useState<Record<string, string>>({});
   const editingPaidRef = useRef<Record<string, string>>({});
   const paidSaveInFlightRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const openDate = Array.isArray(routeParams.openDate) ? routeParams.openDate[0] : routeParams.openDate;
+    const openDateAt = Array.isArray(routeParams.openDateAt) ? routeParams.openDateAt[0] : routeParams.openDateAt;
+    const token = `${openDate ?? ""}:${openDateAt ?? ""}`;
+    if (!openDate || handledOpenDateRef.current === token || !/^\d{4}-\d{2}-\d{2}$/.test(openDate)) return;
+    const [year, monthNumber, day] = openDate.split("-").map(Number);
+    const parsed = new Date(year, monthNumber - 1, day, 12);
+    if (parsed.getFullYear() !== year || parsed.getMonth() !== monthNumber - 1 || parsed.getDate() !== day) return;
+    handledOpenDateRef.current = token;
+    setSelectedYear(year);
+    setMonth(monthNumber - 1);
+    setSelectedDate(openDate);
+  }, [routeParams.openDate, routeParams.openDateAt, setSelectedYear]);
 
   useFocusEffect(
     useCallback(() => {

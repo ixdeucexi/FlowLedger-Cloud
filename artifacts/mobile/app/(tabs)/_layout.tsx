@@ -26,6 +26,7 @@ import { MembershipProvider } from "@/context/MembershipContext";
 import { FeedbackBadgeProvider, useFeedbackBadge } from "@/context/FeedbackBadgeContext";
 import { buildCurrentMonthReviewQueue } from "@/lib/reviewCenter";
 import { tabBadgeValue } from "@/lib/tabBadge";
+import { buildOverdueBillOccurrences, groupOverdueBills } from "@/lib/overdueBills";
 
 const MIN_BUDGET_LOADING_MS = 220;
 
@@ -369,7 +370,10 @@ function FloDemo() {
 
 function TabContent() {
   const colors = useColors();
-  const { loading, loadError, retryBudgetLoad, demoMode, transactions, pendingBankTransactions } = useBudget();
+  const {
+    loading, loadError, retryBudgetLoad, demoMode, transactions, pendingBankTransactions,
+    getMonthlyBills, getBillOccurrencesInMonth, getBillEffectiveMonthlyTotal, getPaidAmount,
+  } = useBudget();
   const { newFeedbackCount } = useFeedbackBadge();
   const [minimumBudgetLoadingReady, setMinimumBudgetLoadingReady] = React.useState(false);
   const [showLoadingOverlay, setShowLoadingOverlay] = React.useState(true);
@@ -385,6 +389,24 @@ function TabContent() {
     [transactions],
   );
   const activityAlertCount = activityReviewCount + pendingBankTransactions.length;
+  const overdueBillCount = React.useMemo(() => {
+    const now = new Date();
+    const month = now.getMonth();
+    const year = now.getFullYear();
+    const occurrences = buildOverdueBillOccurrences(
+      getMonthlyBills(month, year).map(bill => ({
+        billId: bill.id,
+        name: bill.name,
+        occurrenceDays: getBillOccurrencesInMonth(bill, month, year),
+        plannedTotal: getBillEffectiveMonthlyTotal(bill, month, year),
+        paidTotal: getPaidAmount(bill.id, month, year),
+      })),
+      month,
+      year,
+      now.getDate(),
+    );
+    return groupOverdueBills(occurrences).length;
+  }, [getBillEffectiveMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, getPaidAmount]);
 
   React.useEffect(() => {
     const t = setTimeout(() => setMinimumBudgetLoadingReady(true), MIN_BUDGET_LOADING_MS);
@@ -498,10 +520,12 @@ function TabContent() {
         >
           {TABS.map(tab => {
             const isActivity = tab.name === "transactions";
+            const isBills = tab.name === "bills";
             const isMore = tab.name === "more";
             const reviewBadge = isActivity ? tabBadgeValue(activityAlertCount) : undefined;
+            const billBadge = isBills ? tabBadgeValue(overdueBillCount) : undefined;
             const feedbackBadge = isMore ? tabBadgeValue(newFeedbackCount) : undefined;
-            const badge = reviewBadge ?? feedbackBadge;
+            const badge = reviewBadge ?? billBadge ?? feedbackBadge;
             return (
               <Tabs.Screen
                 key={tab.name}
@@ -513,6 +537,8 @@ function TabContent() {
                   tabBarBadgeStyle: badge ? styles.alertTabBadge : undefined,
                   tabBarAccessibilityLabel: reviewBadge
                     ? `Activity, ${activityReviewCount} item${activityReviewCount === 1 ? "" : "s"} need review and ${pendingBankTransactions.length} transaction${pendingBankTransactions.length === 1 ? "" : "s"} pending`
+                    : billBadge
+                      ? `Bills, ${overdueBillCount} past-due bill${overdueBillCount === 1 ? "" : "s"} need action`
                     : feedbackBadge
                       ? `More, ${newFeedbackCount} new feedback item${newFeedbackCount === 1 ? "" : "s"}`
                     : tab.title,

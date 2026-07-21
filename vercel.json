@@ -3,6 +3,10 @@
     {
       "path": "/api/plaid/automatic-sync",
       "schedule": "24 22 * * *"
+    },
+    {
+      "path": "/api/notifications/overdue-bills",
+      "schedule": "15 14 * * *"
     }
   ],
   "headers": [

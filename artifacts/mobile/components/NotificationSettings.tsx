@@ -81,7 +81,7 @@ export function NotificationSettings() {
     ? "Notifications are blocked. Allow them for FlowLedger in your phone or browser settings."
     : status === "unsupported"
       ? "This browser or app does not support FlowLedger phone notifications."
-      : "Get a private alert when bank activity is pending and again when it posts for review.";
+      : "Get private alerts for past-due bills and new bank activity.";
 
   return (
     <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
@@ -90,11 +90,11 @@ export function NotificationSettings() {
           <Feather name="bell" size={20} color={c.primary} />
         </View>
         <View style={styles.copy}>
-          <Text style={[styles.title, { color: c.foreground }]}>Bank activity alerts</Text>
+          <Text style={[styles.title, { color: c.foreground }]}>FlowLedger alerts</Text>
           <Text style={[styles.description, { color: c.mutedForeground }]}>{detail}</Text>
         </View>
         <Switch
-          accessibilityLabel="Pending and posted bank transaction notifications"
+          accessibilityLabel="Past-due bill and bank activity notifications"
           disabled={busy || status === "checking" || unavailable}
           value={enabled}
           onValueChange={value => void toggle(value)}
@@ -106,7 +106,7 @@ export function NotificationSettings() {
       <View style={[styles.privacy, { backgroundColor: c.muted, borderColor: c.border }]}>
         <Feather name="lock" size={14} color={c.success} />
         <Text style={[styles.privacyText, { color: c.mutedForeground }]}>
-          Lock-screen alerts hide the merchant and amount. Pending alerts open Activity; posted alerts open Review Center.
+          Lock-screen alerts hide bill, merchant, and amount details. Past-due alerts open Bills; bank alerts open Activity or Review Center.
         </Text>
       </View>
 

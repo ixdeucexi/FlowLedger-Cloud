@@ -76,11 +76,11 @@ async function recordDeliveryResult(db, events, result) {
   if (error) throw error;
 }
 
-async function deliverPendingPostedTransactionNotifications(userId) {
+async function deliverPendingNotifications(userId) {
   const db = serviceSupabase();
   const { data: events, error } = await db
     .from("push_notification_events")
-    .select("id,event_type")
+    .select("id,event_type,bill_id,occurrence_date")
     .eq("user_id", userId)
     .is("delivered_at", null)
     .order("created_at", { ascending: true })
@@ -89,12 +89,22 @@ async function deliverPendingPostedTransactionNotifications(userId) {
   if (!events?.length) return { delivered: 0, events: 0 };
 
   let delivered = 0;
-  for (const eventType of ["pending", "posted"]) {
+  for (const eventType of ["pending", "posted", "overdue_bill"]) {
     const matching = events.filter(event => (event.event_type || "posted") === eventType);
     if (!matching.length) continue;
-    const count = matching.length;
+    const count = eventType === "overdue_bill"
+      ? new Set(matching.map(event => event.bill_id).filter(Boolean)).size
+      : matching.length;
     const isPending = eventType === "pending";
-    const result = await sendPushToUser(userId, isPending ? {
+    const isOverdueBill = eventType === "overdue_bill";
+    const result = await sendPushToUser(userId, isOverdueBill ? {
+      title: count === 1 ? "Bill past due" : `${count} bills need attention`,
+      body: count === 1
+        ? "A planned bill is past due and still has money left. Open FlowLedger to review it."
+        : "Past-due bills still need action. Open FlowLedger to review them.",
+      url: "/bills?attention=overdue",
+      tag: "flowledger-overdue",
+    } : isPending ? {
       title: count === 1 ? "New pending transaction" : `${count} pending transactions`,
       body: count === 1
         ? "A bank transaction is pending. It is visible in Activity but is not counted yet."
@@ -118,7 +128,7 @@ async function deliverPendingPostedTransactionNotifications(userId) {
 
 async function queuePostedTransactionNotifications(userId, transactionIds) {
   const uniqueIds = [...new Set((transactionIds || []).filter(Boolean))];
-  if (!uniqueIds.length) return deliverPendingPostedTransactionNotifications(userId);
+  if (!uniqueIds.length) return deliverPendingNotifications(userId);
 
   const db = serviceSupabase();
   const { data: subscription, error: subscriptionError } = await db
@@ -140,12 +150,12 @@ async function queuePostedTransactionNotifications(userId, transactionIds) {
     { onConflict: "user_id,event_key", ignoreDuplicates: true },
   );
   if (error) throw error;
-  return deliverPendingPostedTransactionNotifications(userId);
+  return deliverPendingNotifications(userId);
 }
 
 async function queuePendingTransactionNotifications(userId, plaidTransactionIds) {
   const uniqueIds = [...new Set((plaidTransactionIds || []).filter(Boolean))];
-  if (!uniqueIds.length) return deliverPendingPostedTransactionNotifications(userId);
+  if (!uniqueIds.length) return deliverPendingNotifications(userId);
 
   const db = serviceSupabase();
   const { data: subscription, error: subscriptionError } = await db
@@ -168,11 +178,54 @@ async function queuePendingTransactionNotifications(userId, plaidTransactionIds)
     { onConflict: "user_id,event_key", ignoreDuplicates: true },
   );
   if (error) throw error;
-  return deliverPendingPostedTransactionNotifications(userId);
+  return deliverPendingNotifications(userId);
 }
 
+function overdueReminderStage(daysPastDue) {
+  const days = Math.max(1, Math.trunc(Number(daysPastDue) || 1));
+  if (days <= 2) return "first";
+  if (days <= 6) return "three-day";
+  return `week-${Math.floor(days / 7)}`;
+}
+
+async function queueOverdueBillNotifications(userId, overdueOccurrences) {
+  const alerts = (overdueOccurrences || []).filter(alert =>
+    alert?.billId && alert?.occurrenceDate && Number(alert?.remainingAmount) > 0.005
+  );
+  if (!alerts.length) return deliverPendingNotifications(userId);
+
+  const db = serviceSupabase();
+  const { data: subscription, error: subscriptionError } = await db
+    .from("push_subscriptions")
+    .select("id")
+    .eq("user_id", userId)
+    .limit(1)
+    .maybeSingle();
+  if (subscriptionError) throw subscriptionError;
+  if (!subscription) return { delivered: 0, events: 0 };
+
+  const { error } = await db.from("push_notification_events").upsert(
+    alerts.map(alert => ({
+      user_id: userId,
+      transaction_id: null,
+      plaid_transaction_id: null,
+      bill_id: alert.billId,
+      occurrence_date: alert.occurrenceDate,
+      event_type: "overdue_bill",
+      event_key: `overdue:${alert.billId}:${alert.occurrenceDate}:${overdueReminderStage(alert.daysPastDue)}`,
+    })),
+    { onConflict: "user_id,event_key", ignoreDuplicates: true },
+  );
+  if (error) throw error;
+  return deliverPendingNotifications(userId);
+}
+
+const deliverPendingPostedTransactionNotifications = deliverPendingNotifications;
+
 module.exports = {
+  deliverPendingNotifications,
   deliverPendingPostedTransactionNotifications,
+  queueOverdueBillNotifications,
   queuePendingTransactionNotifications,
   queuePostedTransactionNotifications,
   sendPushToUser,
