@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const { shouldSyncTransactionWebhook } = require("./webhook");
+const { shouldSyncTransactionWebhook } = require("../../api/plaid/webhook");
 
 test("only the Transactions Sync webhook starts an import", () => {
   assert.equal(shouldSyncTransactionWebhook("TRANSACTIONS", "SYNC_UPDATES_AVAILABLE"), true);
