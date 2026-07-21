@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const feedback = require("./feedback");
+const feedback = require("../../api/feedback");
 
 function invoke(request) {
   return new Promise((resolve, reject) => {
