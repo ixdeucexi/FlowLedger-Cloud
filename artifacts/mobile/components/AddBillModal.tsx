@@ -438,7 +438,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
                   placeholder="0.0" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
                 {settings.debtPayoffEnabled && <View style={[styles.toggleCard, { backgroundColor: c.card }]}>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.toggleLabel, { color: c.foreground }]}>Include in Snowball</Text>
+                    <Text style={[styles.toggleLabel, { color: c.foreground }]}>Include in payoff plan</Text>
                     <Text style={[styles.toggleSub, { color: c.mutedForeground }]}>Send extra payments to this debt</Text>
                   </View>
                   <Switch value={includeInSnowball} onValueChange={setIncludeInSnowball}
@@ -447,7 +447,9 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
                 {settings.debtPayoffEnabled && <View style={[styles.infoBox, { backgroundColor: c.primary + "15" }]}>
                   <Feather name="info" size={13} color={c.primary} />
                   <Text style={[styles.infoText, { color: c.primary }]}>
-                    Payoff priority auto-assigned: lowest balance = #1.
+                    {settings.paymentMethod === "avalanche"
+                      ? "Avalanche priority: highest APR = #1."
+                      : "Snowball priority: lowest balance = #1."}
                   </Text>
                 </View>}
               </>

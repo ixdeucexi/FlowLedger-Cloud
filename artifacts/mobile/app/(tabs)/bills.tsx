@@ -18,13 +18,10 @@ import type { Bill } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
-import { isCashFlowTransaction } from "@/lib/billMatching";
 import { confirmAction } from "@/lib/confirmAction";
-import { buildAlgorithmSuite } from "@/lib/algorithmSuite";
 import { effectiveDebtMinimum, type SnowballProjectionResult } from "@/lib/snowball";
 import { orderActiveDebtsForStrategy, sortDebtsWithPaidLast } from "@/lib/debtOrder";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
-import { DEFAULT_DECISION_HUB_SETTINGS } from "@/lib/decisionHubSettings";
 import { loadCategoryBudgets } from "@/lib/categoryBudgetStore";
 
 const CAT_COLORS: Record<string, string> = {
@@ -55,24 +52,22 @@ export default function BillsScreen() {
   const { user } = useAuth();
   const {
     bills, addBill, updateBill, stopFutureBill, deleteBill, deleteBillMistake,
-    incomes, goals, forecastConfidence,
     dashboardFilter, setDashboardFilter,
     settings, updateSettings,
     previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, getExtraPayment,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getPaidAmount,
-    getDailyBalances, getIncomeOccurrencesInMonth, getTransactionsForMonth, getCashFlow, activeHousehold,
+    getDailyBalances, getIncomeOccurrencesInMonth, activeHousehold,
   } = useBudget();
 
   const [activeTab, setActiveTab]       = useState<Tab>("bills");
   const [modalVisible, setModalVisible] = useState(false);
   const [editBill, setEditBill]         = useState<Bill | null>(null);
   const [filter, setFilter]             = useState<Filter>("all");
-  const [sortMode, setSortMode]         = useState<SortMode>("balance");
+  const [sortMode, setSortMode]         = useState<SortMode>("priority");
   const [snowballApplied, setSnowballApplied] = useState(false);
   const [snowballModalVisible, setSnowballModalVisible] = useState(false);
   const [snowballAmount, setSnowballAmount] = useState("");
   const [snowballPreview, setSnowballPreview] = useState<SnowballProjectionResult | null>(null);
-  const decisionHubSettings = DEFAULT_DECISION_HUB_SETTINGS;
   const [dismissedBillPromptKey, setDismissedBillPromptKey] = useState<string | null>(null);
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
 
@@ -222,82 +217,6 @@ export default function BillsScreen() {
   );
   const existingSnowball = getExtraPayment(currentMonth, currentYear);
 
-  const debtAlgorithmSuite = useMemo(() => {
-    const monthBills = getMonthlyBills(currentMonth, currentYear);
-    return buildAlgorithmSuite({
-      month: currentMonth,
-      year: currentYear,
-      todayDay: currentDay,
-      safetyFloor: settings.safety_floor,
-      cashFlow: getCashFlow(currentMonth, currentYear),
-      dailyBalances: getDailyBalances(currentMonth, currentYear).map(day => ({
-        day: day.day,
-        income: day.income,
-        bills: day.bills,
-        expense: day.expense,
-        net: day.net,
-        balance: day.balance,
-      })),
-      bills: monthBills.map(bill => ({
-        id: bill.id,
-        name: bill.name,
-        amount: getBillMonthlyTotal(bill, currentMonth, currentYear),
-        monthlyMinimum: bill.is_debt ? debtMonthlyMinimum(bill) : undefined,
-        frequency: bill.frequency,
-        paidAmount: getPaidAmount(bill.id, currentMonth, currentYear),
-        occurrenceDays: getBillOccurrencesInMonth(bill, currentMonth, currentYear),
-        importance: bill.smart_priority,
-        category: bill.category || "Other",
-        due_day: firstOccurrenceDay(bill),
-        is_debt: bill.is_debt,
-        is_recurring: bill.is_recurring,
-        includeInSnowball: bill.include_in_snowball !== false,
-        balance: bill.balance,
-        interest_rate: bill.interest_rate,
-      })),
-      transactions: getTransactionsForMonth(currentMonth, currentYear).filter(isCashFlowTransaction).map(transaction => ({
-        id: transaction.id,
-        date: transaction.date,
-        amount: transaction.amount,
-        category: transaction.category || "Other",
-        note: transaction.note,
-      })),
-      incomes: incomes.map(income => ({
-        id: income.id,
-        name: income.name,
-        amount: income.amount,
-        frequency: income.frequency,
-      })),
-      goals: goals.map(goal => ({
-        id: goal.id,
-        name: goal.name,
-        target_amount: goal.target_amount,
-        current_amount: goal.current_amount,
-        target_date: goal.target_date,
-        goal_type: goal.goal_type,
-      })),
-      categoryPlan: [],
-      forecastConfidence,
-      settings: decisionHubSettings,
-    });
-  }, [
-    currentDay,
-    currentMonth,
-    currentYear,
-    decisionHubSettings,
-    firstOccurrenceDay,
-    forecastConfidence,
-    getBillMonthlyTotal,
-    getCashFlow,
-    getDailyBalances,
-    getMonthlyBills,
-    getPaidAmount,
-    getTransactionsForMonth,
-    goals,
-    incomes,
-    settings.safety_floor,
-  ]);
-  const debtPayoffEngine = debtAlgorithmSuite.debtPayoff;
   const cashFlowSafeSnowballAmount = baseSnowballPreview.safeMaximum;
 
   const debtBills = visibleBills.filter(bill => bill.is_debt);
@@ -343,12 +262,20 @@ export default function BillsScreen() {
   const activeDebtMinimum = activeDebtTarget ? debtMonthlyMinimum(activeDebtTarget) : 0;
   const activeDebtMonths = activeDebtTarget && activeDebtMinimum > 0 ? Math.ceil(activeDebtTarget.balance / activeDebtMinimum) : 0;
   const nextStrategyTarget = strategyOrder[1] ?? null;
-  const debtPayoffDetail = debtAlgorithmSuite.algorithmDetails.debtPayoff;
-  const debtRoomExplanation = safeSnowballAmount > 0
-    ? debtPayoffDetail.nextAction
-    : settings.zeroBasedBudgetEnabled && cashFlowSafeSnowballAmount > 0
-      ? `Your cash flow can support extra debt payoff, but that money needs a Debt assignment first.`
-      : `Keep extra cash available for now. ${debtPayoffDetail.nextAction}`;
+  const targetReason = activeDebtTarget
+    ? settings.paymentMethod === "avalanche"
+      ? activeDebtTarget.interest_rate > 0
+        ? `It has your highest APR at ${activeDebtTarget.interest_rate}%.`
+        : "It is first in your Avalanche order."
+      : "It has your smallest active balance."
+    : "";
+  const debtRoomExplanation = settings.zeroBasedBudgetEnabled && cashFlowSafeSnowballAmount > 0 && assignedDebtExtra <= 0
+    ? "Your cash flow can support an extra debt payment, but assign that money to Debt first."
+    : activeDebtTarget && safeSnowballAmount > 0
+      ? `Put safe extra money toward ${activeDebtTarget.name} first. ${targetReason}`
+      : activeDebtTarget
+        ? `Keep extra cash available for now. When there is room, ${activeDebtTarget.name} is first. ${targetReason}`
+        : "Add an active debt to build a payoff order.";
 
   const priorityColors = ["#22c55e", "#f0b429", "#ef4444", "#8b5cf6", "#ec4899"];
   const todayIso = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -766,7 +693,11 @@ export default function BillsScreen() {
               {(["snowball", "avalanche"] as const).map(m => (
                 <Pressable
                   key={m}
-                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); updateSettings({ paymentMethod: m }); }}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setSortMode("priority");
+                    updateSettings({ paymentMethod: m });
+                  }}
                   style={[styles.methodBtn, { backgroundColor: settings.paymentMethod === m ? c.primary : "transparent", borderRadius: 8 }]}
                 >
                   <Feather name={m === "snowball" ? "trending-down" : "percent"} size={12} color={settings.paymentMethod === m ? c.primaryForeground : c.mutedForeground} />
@@ -918,6 +849,7 @@ export default function BillsScreen() {
       />
       <SnowballPreviewModal
         visible={settings.debtPayoffEnabled && snowballModalVisible}
+        method={settings.paymentMethod}
         preview={snowballPreview}
         amount={snowballAmount}
         existingPayment={!!existingSnowball}

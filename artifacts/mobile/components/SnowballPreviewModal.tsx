@@ -2,13 +2,14 @@ import { Feather } from "@expo/vector-icons";
 import React from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
-import type { SnowballProjectionResult } from "@/lib/snowball";
+import type { DebtMethod, SnowballProjectionResult } from "@/lib/snowball";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { MONTH_NAMES } from "@/lib/dateLabels";
 
 interface Props {
   visible: boolean;
+  method: DebtMethod;
   preview: SnowballProjectionResult | null;
   amount: string;
   existingPayment?: boolean;
@@ -20,11 +21,12 @@ interface Props {
   onRemove?: () => void;
 }
 
-export function SnowballPreviewModal({ visible, preview, amount, existingPayment, safetyFloor = 200, forecastHorizonMonths = 6, onAmountChange, onClose, onConfirm, onRemove }: Props) {
+export function SnowballPreviewModal({ visible, method, preview, amount, existingPayment, safetyFloor = 200, forecastHorizonMonths = 6, onAmountChange, onClose, onConfirm, onRemove }: Props) {
   const c = useColors();
   useBackDismiss(visible, onClose);
   const requested = Number.parseFloat(amount) || 0;
   const valid = !!preview && requested > 0 && requested <= preview.safeMaximum + 0.005 && preview.allocations.length > 0;
+  const methodName = method === "avalanche" ? "Avalanche" : "Snowball";
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -33,7 +35,7 @@ export function SnowballPreviewModal({ visible, preview, amount, existingPayment
           <View style={[styles.handle, { backgroundColor: c.border }]} />
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.title, { color: c.foreground }]}>Snowball Preview</Text>
+              <Text style={[styles.title, { color: c.foreground }]}>{methodName} Preview</Text>
               <Text style={[styles.sub, { color: c.mutedForeground }]}>Nothing changes until you confirm.</Text>
             </View>
             <Pressable onPress={onClose} hitSlop={8}><Feather name="x" size={21} color={c.mutedForeground} /></Pressable>
@@ -76,7 +78,7 @@ export function SnowballPreviewModal({ visible, preview, amount, existingPayment
                   <View key={`${item.year}-${item.month}`} style={styles.monthRow}>
                     <Text style={[styles.month, { color: c.foreground }]}>{MONTH_NAMES[item.month]} {item.year}</Text>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.monthTarget, { color: c.mutedForeground }]}>{item.targetName ?? "Snowball complete"}</Text>
+                      <Text style={[styles.monthTarget, { color: c.mutedForeground }]}>{item.targetName ?? `${methodName} complete`}</Text>
                       <Text style={[styles.monthBalance, { color: item.lowestAccountBalance >= safetyFloor ? c.success : c.destructive }]}>Lowest cash ${item.lowestAccountBalance.toFixed(0)}</Text>
                     </View>
                     <Text style={[styles.monthExtra, { color: c.primary }]}>+${item.extraPayment.toFixed(0)}</Text>

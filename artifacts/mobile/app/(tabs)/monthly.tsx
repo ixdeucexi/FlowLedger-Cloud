@@ -2507,6 +2507,7 @@ export default function MonthlyScreen() {
       </Modal>
       <SnowballPreviewModal
         visible={settings.debtPayoffEnabled && snowballModalVisible}
+        method={settings.paymentMethod}
         preview={snowballPreview}
         amount={extraPayment}
         existingPayment={!!getExtraPayment(month, selectedYear)}
