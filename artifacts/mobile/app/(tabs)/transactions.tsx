@@ -14,6 +14,7 @@ import { DebtPaymentAppliedModal, type DebtPaymentAppliedDetail } from "@/compon
 import { EmptyState } from "@/components/EmptyState";
 import { FullPaymentPromptModal } from "@/components/FullPaymentPromptModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
+import { PlanViewSelector } from "@/components/PlanViewSelector";
 import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
 import colors from "@/constants/colors";
 import type { Bill, ExtraPayment, SnowballFundingSource, Transaction } from "@/context/BudgetContext";
@@ -968,7 +969,7 @@ export function ActivityScreen() {
     <>
       <View style={[styles.header, { paddingTop: insets.top + 12 + webTopPad }]}>
         <View>
-          <Text style={[styles.title, { color: c.foreground }]}>Activity</Text>
+          <PlanViewSelector textStyle={styles.title} />
           <Text style={[styles.subtitle, { color: c.mutedForeground }]}>
             {feedOrderLabel}
           </Text>
