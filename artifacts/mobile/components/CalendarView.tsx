@@ -333,7 +333,6 @@ export function CalendarView({
           { label: "Bills", color: "#f59e0b" },
           { label: "Debt", color: "#3b82f6" },
           { label: "Spending", color: "#8b5cf6" },
-          { label: "Plans", color: "#3b82f6" },
           { label: "Risk", color: calendarTheme.red },
         ].map(item => (
           <View key={item.label} style={styles.legendItem}>
