@@ -442,6 +442,10 @@ export default function MonthlyScreen() {
     () => groupForecastEvents(selectedForecastDay?.events ?? []),
     [selectedForecastDay]
   );
+  const selectedDebtPayments = useMemo(
+    () => selectedForecastGroups.find(group => group.key === "debt")?.events ?? [],
+    [selectedForecastGroups],
+  );
   const incomeForSelectedDay = useMemo(
     () => selectedDay === null ? [] : incomeOccurrences.filter(item => item.day === selectedDay),
     [incomeOccurrences, selectedDay],
@@ -1174,7 +1178,7 @@ export default function MonthlyScreen() {
   const groupedBucketEventReduction = plannedExpenseGroupsForSelectedDay.reduce((sum, group) =>
     sum + Math.max(0, group.transactionIds.length - 1) + (group.remainingAmount > 0.005 ? 1 : 0), 0);
   const selectedForecastEventCount = Math.max(0, rawSelectedForecastEventCount - groupedBucketEventReduction);
-  const selectedVisibleItemCount = scheduledBillsForDay.length + displayedTxs.length + plannedExpenseGroupsForSelectedDay.length + displayedGoalsForSelectedDay.length + plansForSelectedDay.length;
+  const selectedVisibleItemCount = scheduledBillsForDay.length + selectedDebtPayments.length + displayedTxs.length + plannedExpenseGroupsForSelectedDay.length + displayedGoalsForSelectedDay.length + plansForSelectedDay.length;
   const selectedDayItemCount = Math.max(selectedForecastEventCount, selectedVisibleItemCount);
 
   const changeMonth = useCallback((delta: number) => {
@@ -1876,6 +1880,31 @@ export default function MonthlyScreen() {
                             </View>
                           );
                         })}
+                      </View>
+                    ) : null}
+
+                    {selectedDebtPayments.length > 0 ? (
+                      <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
+                        <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Debt payments</Text>
+                        {selectedDebtPayments.map(payment => (
+                          <View
+                            key={`overlay-debt-${payment.event.id}`}
+                            style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: c.destructive + "40" }]}
+                          >
+                            <View style={styles.dayBillTop}>
+                              <View style={{ flex: 1, minWidth: 0 }}>
+                                <Text numberOfLines={1} style={[styles.dayBillName, { color: c.foreground }]}>
+                                  {payment.label.replace(/ debt payment$/i, "")}
+                                </Text>
+                                <Text style={[styles.dayBillMeta, { color: c.mutedForeground }]}>Snowball payment</Text>
+                              </View>
+                              <View style={[styles.dayTransactionBadge, { backgroundColor: c.destructive + "20" }]}>
+                                <Text style={[styles.dayTransactionBadgeText, { color: c.destructive }]}>{payment.statusLabel.toUpperCase()}</Text>
+                              </View>
+                            </View>
+                            <Text style={[styles.dayOverlayAmount, { color: c.destructive }]}>{payment.amountLabel}</Text>
+                          </View>
+                        ))}
                       </View>
                     ) : null}
 

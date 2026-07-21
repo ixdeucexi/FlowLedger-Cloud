@@ -46,7 +46,7 @@ function CalendarGridViewport({
   );
 }
 
-type ChipKind = "income" | "bill" | "expense" | "goal" | "plan" | "risk";
+type ChipKind = "income" | "bill" | "debt" | "expense" | "goal" | "plan" | "risk";
 
 interface CalendarViewProps {
   month: number;
@@ -71,6 +71,7 @@ function chipPalette(kind: ChipKind, isDark: boolean) {
   if (!isDark) {
     if (kind === "income") return { bg: "#dcfce7", border: "#22c55e", text: "#166534" };
     if (kind === "bill") return { bg: "#fef3c7", border: "#f59e0b", text: "#92400e" };
+    if (kind === "debt") return { bg: "#ffe4e6", border: "#e11d48", text: "#9f1239" };
     if (kind === "goal") return { bg: "#f3e8ff", border: "#a855f7", text: "#6b21a8" };
     if (kind === "plan") return { bg: "#dbeafe", border: "#3b82f6", text: "#1d4ed8" };
     if (kind === "risk") return { bg: "#ffe4e6", border: "#fb7185", text: "#be123c" };
@@ -78,6 +79,7 @@ function chipPalette(kind: ChipKind, isDark: boolean) {
   }
   if (kind === "income") return { bg: "rgba(34,197,94,0.18)", border: "rgba(34,197,94,0.78)", text: "#bbf7d0" };
   if (kind === "bill") return { bg: "rgba(245,158,11,0.18)", border: "rgba(245,158,11,0.82)", text: "#fde68a" };
+  if (kind === "debt") return { bg: "rgba(225,29,72,0.20)", border: "rgba(244,63,94,0.88)", text: "#fecdd3" };
   if (kind === "goal") return { bg: "rgba(168,85,247,0.20)", border: "rgba(168,85,247,0.82)", text: "#e9d5ff" };
   if (kind === "plan") return { bg: "rgba(59,130,246,0.20)", border: "rgba(96,165,250,0.86)", text: "#bfdbfe" };
   if (kind === "risk") return { bg: "rgba(244,63,94,0.20)", border: "rgba(251,113,133,0.90)", text: "#fecdd3" };
@@ -213,6 +215,9 @@ export function CalendarView({
           const billEvents = (db?.events ?? [])
             .filter(event => event.amount < 0 && (event.sourceType === "bill" || event.kind === "bill"))
             .slice(0, 3);
+          const debtEvents = (db?.events ?? [])
+            .filter(event => event.amount < 0 && (event.sourceType === "extra_payment" || event.kind === "debt_payment"))
+            .slice(0, 2);
           const calendarGoals = [...(db?.goalExpenses ?? [])];
           (isBeforeStart ? [] : (goalsByDay[day] ?? [])).forEach(goal => {
             if (!calendarGoals.some(existing => existing.id === goal.id)) calendarGoals.push(goal);
@@ -228,6 +233,10 @@ export function CalendarView({
           ungroupedDayTxs.filter(tx => tx.amount > 0 && tx.review_status !== "transfer").slice(0, 1).forEach(tx => chips.push({ label: `${allocationLabel(tx) || tx.note || tx.category} +$${fmt(tx.amount)}`, kind: "income" }));
           if (billEvents.length > 0) billEvents.forEach(event => chips.push({ label: event.name || `Bill $${fmt(Math.abs(event.amount))}`, kind: "bill" }));
           else if (db && db.bills > 0) chips.push({ label: `Bills $${fmt(db.bills)}`, kind: "bill" });
+          debtEvents.forEach(event => {
+            const target = (event.name || "Snowball").replace(/ debt payment$/i, "");
+            chips.push({ label: `${target} -$${fmt(event.amount)}`, kind: "debt" });
+          });
           plannedExpenseGroups.slice(0, 2).forEach(group => chips.push({ label: group.name, kind: "expense" }));
           ungroupedDayTxs.filter(tx => tx.amount < 0 && tx.review_status !== "transfer").slice(0, 2).forEach(tx => chips.push({
             label: `${allocationLabel(tx) || tx.note || tx.category} -$${fmt(tx.amount)}`,
@@ -322,6 +331,7 @@ export function CalendarView({
         {[
           { label: "Income", color: CALENDAR.green },
           { label: "Bills", color: "#f59e0b" },
+          { label: "Debt", color: "#e11d48" },
           { label: "Spending", color: "#8b5cf6" },
           { label: "Plans", color: "#3b82f6" },
           { label: "Risk", color: calendarTheme.red },
