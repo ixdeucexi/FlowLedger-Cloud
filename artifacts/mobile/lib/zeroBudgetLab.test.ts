@@ -9,6 +9,10 @@ import {
   postZeroBudgetTransaction,
   shiftZeroBudgetMonth,
   summarizeZeroBudget,
+  zeroBudgetLabBillPaid,
+  zeroBudgetLabDailyBalances,
+  zeroBudgetLabFlowScore,
+  ZERO_BUDGET_LAB_BILLS,
 } from "./zeroBudgetLab";
 
 describe("admin zero budget lab", () => {
@@ -24,25 +28,43 @@ describe("admin zero budget lab", () => {
     const state = createZeroBudgetLabState(new Date(2026, 6, 21));
     const next = applyZeroBudgetMoney(state, "vacation", 200, "assign");
     assert.equal(summarizeZeroBudget(next).readyToAssign, 395.21);
-    assert.equal(summarizeZeroBudget(next).categories.find(row => row.category.id === "vacation")?.spent, 0);
+    assert.equal(
+      summarizeZeroBudget(next).categories.find(
+        (row) => row.category.id === "vacation",
+      )?.spent,
+      0,
+    );
   });
 
   it("sample spending changes category availability but not ready to assign", () => {
     const state = createZeroBudgetLabState(new Date(2026, 6, 21));
     const next = applyZeroBudgetMoney(state, "groceries", 50, "spend");
-    assert.equal(summarizeZeroBudget(next).readyToAssign, summarizeZeroBudget(state).readyToAssign);
-    assert.equal(summarizeZeroBudget(next).categories.find(row => row.category.id === "groceries")?.status, "overspent");
+    assert.equal(
+      summarizeZeroBudget(next).readyToAssign,
+      summarizeZeroBudget(state).readyToAssign,
+    );
+    assert.equal(
+      summarizeZeroBudget(next).categories.find(
+        (row) => row.category.id === "groceries",
+      )?.status,
+      "overspent",
+    );
   });
 
   it("weekly targets become four weekly assignments for the monthly plan", () => {
     const state = createZeroBudgetLabState(new Date(2026, 6, 21));
-    const groceries = state.categories.find(category => category.id === "groceries")!;
+    const groceries = state.categories.find(
+      (category) => category.id === "groceries",
+    )!;
     assert.equal(monthlyTarget(groceries), 40);
   });
 
   it("month switching preserves targets while starting with fresh assignments", () => {
     const state = createZeroBudgetLabState(new Date(2026, 6, 21));
-    const august = { ...state, selectedMonth: shiftZeroBudgetMonth(state.selectedMonth, 1) };
+    const august = {
+      ...state,
+      selectedMonth: shiftZeroBudgetMonth(state.selectedMonth, 1),
+    };
     const summary = summarizeZeroBudget(august);
     assert.equal(august.selectedMonth, "2026-08");
     assert.equal(summary.assigned, 0);
@@ -52,36 +74,110 @@ describe("admin zero budget lab", () => {
   it("reorders categories only within their current group", () => {
     const state = createZeroBudgetLabState(new Date(2026, 6, 21));
     const next = moveZeroBudgetCategory(state, "phone", -1);
-    assert.deepEqual(next.categories.filter(item => item.groupId === "bills").map(item => item.id), ["phone", "rent", "utilities"]);
+    assert.deepEqual(
+      next.categories
+        .filter((item) => item.groupId === "bills")
+        .map((item) => item.id),
+      ["phone", "rent", "utilities"],
+    );
   });
 
   it("includes isolated posted and pending transactions for review testing", () => {
     const state = createZeroBudgetLabState(new Date(2026, 6, 21));
-    assert.equal(state.transactions.filter(transaction => transaction.status === "needs_review").length, 4);
-    assert.equal(state.transactions.filter(transaction => transaction.status === "pending").length, 1);
+    assert.equal(
+      state.transactions.filter(
+        (transaction) => transaction.status === "needs_review",
+      ).length,
+      4,
+    );
+    assert.equal(
+      state.transactions.filter(
+        (transaction) => transaction.status === "pending",
+      ).length,
+      1,
+    );
   });
 
   it("applies a posted transaction to a category exactly once and supports reassignment", () => {
     const state = createZeroBudgetLabState(new Date(2026, 6, 21));
-    const groceryBefore = summarizeZeroBudget(state).categories.find(row => row.category.id === "groceries")!.spent;
-    const categorized = categorizeZeroBudgetTransaction(state, "sample-walmart", "groceries");
-    assert.equal(summarizeZeroBudget(categorized).categories.find(row => row.category.id === "groceries")?.spent, groceryBefore + 84.02);
-    assert.equal(categorized.transactions.find(transaction => transaction.id === "sample-walmart")?.status, "categorized");
+    const groceryBefore = summarizeZeroBudget(state).categories.find(
+      (row) => row.category.id === "groceries",
+    )!.spent;
+    const categorized = categorizeZeroBudgetTransaction(
+      state,
+      "sample-walmart",
+      "groceries",
+    );
+    assert.equal(
+      summarizeZeroBudget(categorized).categories.find(
+        (row) => row.category.id === "groceries",
+      )?.spent,
+      groceryBefore + 84.02,
+    );
+    assert.equal(
+      categorized.transactions.find(
+        (transaction) => transaction.id === "sample-walmart",
+      )?.status,
+      "categorized",
+    );
 
-    const reassigned = categorizeZeroBudgetTransaction(categorized, "sample-walmart", "dining");
-    assert.equal(summarizeZeroBudget(reassigned).categories.find(row => row.category.id === "groceries")?.spent, groceryBefore);
-    assert.equal(summarizeZeroBudget(reassigned).categories.find(row => row.category.id === "dining")?.spent, 168.04);
+    const reassigned = categorizeZeroBudgetTransaction(
+      categorized,
+      "sample-walmart",
+      "dining",
+    );
+    assert.equal(
+      summarizeZeroBudget(reassigned).categories.find(
+        (row) => row.category.id === "groceries",
+      )?.spent,
+      groceryBefore,
+    );
+    assert.equal(
+      summarizeZeroBudget(reassigned).categories.find(
+        (row) => row.category.id === "dining",
+      )?.spent,
+      84.02,
+    );
   });
 
   it("keeps pending activity out of spending until it posts and is categorized", () => {
     const state = createZeroBudgetLabState(new Date(2026, 6, 21));
     const before = summarizeZeroBudget(state).spent;
-    const ignored = categorizeZeroBudgetTransaction(state, "sample-apple-pending", "entertainment");
+    const ignored = categorizeZeroBudgetTransaction(
+      state,
+      "sample-apple-pending",
+      "entertainment",
+    );
     assert.equal(summarizeZeroBudget(ignored).spent, before);
 
     const posted = postZeroBudgetTransaction(state, "sample-apple-pending");
     assert.equal(summarizeZeroBudget(posted).spent, before);
-    const categorized = categorizeZeroBudgetTransaction(posted, "sample-apple-pending", "entertainment");
+    const categorized = categorizeZeroBudgetTransaction(
+      posted,
+      "sample-apple-pending",
+      "entertainment",
+    );
     assert.equal(summarizeZeroBudget(categorized).spent, before + 9.99);
+  });
+
+  it("uses one shared sample plan for bills, algorithms, and monthly balances", () => {
+    const state = createZeroBudgetLabState(new Date(2026, 6, 21));
+    const utilities = ZERO_BUDGET_LAB_BILLS.find(
+      (bill) => bill.id === "lab-utilities",
+    )!;
+    assert.equal(zeroBudgetLabBillPaid(state, utilities), 0);
+    assert.equal(zeroBudgetLabFlowScore(state), 71);
+    const days = zeroBudgetLabDailyBalances(state, new Date(2026, 6, 21));
+    assert.equal(days[19].balance, undefined);
+    assert.equal(days[20].balance, 1209.39);
+    assert.equal(days[22].balance, 2723.6);
+    assert.ok(days[22].labels.includes("Payday"));
+
+    const utilitiesReviewed = categorizeZeroBudgetTransaction(
+      state,
+      "sample-utilities",
+      "utilities",
+    );
+    assert.equal(zeroBudgetLabBillPaid(utilitiesReviewed, utilities), 350);
   });
 });
