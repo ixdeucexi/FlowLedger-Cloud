@@ -2,6 +2,16 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export type ZeroBudgetTargetCadence = "monthly" | "weekly" | "by_date" | "none";
 export type ZeroBudgetMoneyAction = "assign" | "spend";
+export type ZeroBudgetLabTransactionStatus = "pending" | "needs_review" | "categorized";
+
+export interface ZeroBudgetLabTransaction {
+  id: string;
+  name: string;
+  amount: number;
+  date: string;
+  status: ZeroBudgetLabTransactionStatus;
+  categoryId?: string;
+}
 
 export interface ZeroBudgetLabGroup {
   id: string;
@@ -29,6 +39,7 @@ export interface ZeroBudgetLabState {
   hideAmounts: boolean;
   groups: ZeroBudgetLabGroup[];
   categories: ZeroBudgetLabCategory[];
+  transactions: ZeroBudgetLabTransaction[];
 }
 
 export interface ZeroBudgetCategorySummary {
@@ -137,6 +148,44 @@ export function applyZeroBudgetMoney(
   };
 }
 
+export function categorizeZeroBudgetTransaction(
+  state: ZeroBudgetLabState,
+  transactionId: string,
+  categoryId: string,
+): ZeroBudgetLabState {
+  const transaction = state.transactions.find(item => item.id === transactionId);
+  if (!transaction || transaction.status === "pending" || !state.categories.some(item => item.id === categoryId)) return state;
+  const transactionMonth = transaction.date.slice(0, 7);
+  const amount = roundMoney(Math.max(0, Number(transaction.amount) || 0));
+  if (!amount) return state;
+
+  return {
+    ...state,
+    transactions: state.transactions.map(item => item.id === transactionId
+      ? { ...item, status: "categorized", categoryId }
+      : item),
+    categories: state.categories.map(category => {
+      let nextSpent = category.spentByMonth[transactionMonth] ?? 0;
+      if (transaction.status === "categorized" && transaction.categoryId === category.id) nextSpent -= amount;
+      if (category.id === categoryId) nextSpent += amount;
+      return nextSpent === (category.spentByMonth[transactionMonth] ?? 0)
+        ? category
+        : { ...category, spentByMonth: { ...category.spentByMonth, [transactionMonth]: roundMoney(Math.max(0, nextSpent)) } };
+    }),
+  };
+}
+
+export function postZeroBudgetTransaction(state: ZeroBudgetLabState, transactionId: string): ZeroBudgetLabState {
+  const transaction = state.transactions.find(item => item.id === transactionId);
+  if (!transaction || transaction.status !== "pending") return state;
+  return {
+    ...state,
+    transactions: state.transactions.map(item => item.id === transactionId
+      ? { ...item, status: "needs_review" }
+      : item),
+  };
+}
+
 export function moveZeroBudgetCategory(state: ZeroBudgetLabState, categoryId: string, direction: -1 | 1): ZeroBudgetLabState {
   const category = state.categories.find(item => item.id === categoryId);
   if (!category) return state;
@@ -178,6 +227,13 @@ export function createZeroBudgetLabState(now = new Date()): ZeroBudgetLabState {
       { id: "entertainment", groupId: "wants", name: "Entertainment", emoji: "🍿", targetAmount: 60, targetCadence: "monthly", assignedByMonth: assigned(60), spentByMonth: spent(54.66) },
       { id: "vacation", groupId: "wants", name: "Vacation", emoji: "🏝️", targetAmount: 300, targetCadence: "monthly", assignedByMonth: assigned(0), spentByMonth: spent(0) },
     ],
+    transactions: [
+      { id: "sample-walmart", name: "Walmart", amount: 84.02, date: `${selectedMonth}-18`, status: "needs_review" },
+      { id: "sample-shell", name: "Shell", amount: 47.36, date: `${selectedMonth}-19`, status: "needs_review" },
+      { id: "sample-cinemark", name: "Cinemark Theatres", amount: 54.66, date: `${selectedMonth}-20`, status: "needs_review" },
+      { id: "sample-utilities", name: "Huntsville Utilities", amount: 350, date: `${selectedMonth}-20`, status: "needs_review" },
+      { id: "sample-apple-pending", name: "Apple.com/bill", amount: 9.99, date: `${selectedMonth}-21`, status: "pending" },
+    ],
   };
 }
 
@@ -187,8 +243,9 @@ export function normalizeZeroBudgetLabState(value: unknown, now = new Date()): Z
   if (candidate.version !== 1 || !Array.isArray(candidate.groups) || !Array.isArray(candidate.categories)) {
     return createZeroBudgetLabState(now);
   }
+  const defaults = createZeroBudgetLabState(now);
   return {
-    ...createZeroBudgetLabState(now),
+    ...defaults,
     ...candidate,
     version: 1,
     selectedMonth: /^\d{4}-\d{2}$/.test(candidate.selectedMonth ?? "") ? candidate.selectedMonth! : monthKey(now),
@@ -197,6 +254,7 @@ export function normalizeZeroBudgetLabState(value: unknown, now = new Date()): Z
     hideAmounts: Boolean(candidate.hideAmounts),
     groups: candidate.groups,
     categories: candidate.categories,
+    transactions: Array.isArray(candidate.transactions) ? candidate.transactions : defaults.transactions,
   };
 }
 

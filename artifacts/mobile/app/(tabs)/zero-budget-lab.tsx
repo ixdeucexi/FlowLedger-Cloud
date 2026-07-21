@@ -13,10 +13,12 @@ import { useColors } from "@/hooks/useColors";
 import { confirmAction } from "@/lib/confirmAction";
 import {
   applyZeroBudgetMoney,
+  categorizeZeroBudgetTransaction,
   createZeroBudgetLabState,
   formatZeroBudgetMonth,
   loadZeroBudgetLabState,
   moveZeroBudgetCategory,
+  postZeroBudgetTransaction,
   resetZeroBudgetLabState,
   saveZeroBudgetLabState,
   shiftZeroBudgetMonth,
@@ -47,6 +49,8 @@ interface PlanViewProps {
   onToggleGroup: (groupId: string) => void;
   onAssign: (categoryId: string) => void;
   onTestSpending: () => void;
+  onReviewTransaction: (transactionId: string) => void;
+  onPostTransaction: (transactionId: string) => void;
 }
 
 interface EditPlanViewProps {
@@ -88,6 +92,7 @@ export default function ZeroBudgetLabScreen() {
   const [groupForm, setGroupForm] = useState<ZeroBudgetLabGroup | null>(null);
   const [groupFormNew, setGroupFormNew] = useState(false);
   const [incomeText, setIncomeText] = useState("");
+  const [transactionPickerId, setTransactionPickerId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,6 +122,7 @@ export default function ZeroBudgetLabScreen() {
   const summary = useMemo(() => summarizeZeroBudget(state), [state]);
   const selectedMoneyCategory = state.categories.find(category => category.id === moneyCategoryId) ?? null;
   const selectedMoneySummary = summary.categories.find(row => row.category.id === moneyCategoryId) ?? null;
+  const selectedTransaction = state.transactions.find(transaction => transaction.id === transactionPickerId) ?? null;
 
   const money = (value: number, digits = 2) => state.hideAmounts
     ? "••••"
@@ -309,6 +315,8 @@ export default function ZeroBudgetLabScreen() {
           onToggleGroup={toggleGroup}
           onAssign={(categoryId: string) => openMoney(categoryId, "assign")}
           onTestSpending={() => setPickerAction("spend")}
+          onReviewTransaction={setTransactionPickerId}
+          onPostTransaction={(transactionId: string) => setState(previous => postZeroBudgetTransaction(previous, transactionId))}
         />
       ) : view === "edit" ? (
         <EditPlanView
@@ -340,6 +348,19 @@ export default function ZeroBudgetLabScreen() {
 
       <CategoryPicker visible={Boolean(pickerAction)} action={pickerAction ?? "spend"} categories={state.categories} c={c} onClose={() => setPickerAction(null)} onPick={(categoryId: string) => openMoney(categoryId, pickerAction ?? "spend")} />
 
+      <CategoryPicker
+        visible={Boolean(transactionPickerId)}
+        action="spend"
+        title={selectedTransaction ? `Apply ${selectedTransaction.name} to a category` : "Choose a category"}
+        categories={state.categories}
+        c={c}
+        onClose={() => setTransactionPickerId(null)}
+        onPick={(categoryId: string) => {
+          if (transactionPickerId) setState(previous => categorizeZeroBudgetTransaction(previous, transactionPickerId, categoryId));
+          setTransactionPickerId(null);
+        }}
+      />
+
       <MoneySheet
         visible={Boolean(selectedMoneyCategory)}
         c={c}
@@ -361,8 +382,13 @@ export default function ZeroBudgetLabScreen() {
   );
 }
 
-function PlanView({ c, state, summary, money, bottomInset, onMonth, onShiftMonth, onToggleGroup, onAssign, onTestSpending }: PlanViewProps) {
+function PlanView({ c, state, summary, money, bottomInset, onMonth, onShiftMonth, onToggleGroup, onAssign, onTestSpending, onReviewTransaction, onPostTransaction }: PlanViewProps) {
   const readyColor = summary.readyToAssign < -0.005 ? c.destructive : summary.readyToAssign <= 0.005 ? c.success : c.primary;
+  const transactions = state.transactions
+    .filter(transaction => transaction.date.startsWith(state.selectedMonth))
+    .sort((left, right) => right.date.localeCompare(left.date));
+  const reviewCount = transactions.filter(transaction => transaction.status === "needs_review").length;
+  const pendingCount = transactions.filter(transaction => transaction.status === "pending").length;
   return (
     <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomInset + 116 }]}>
       <View style={[styles.monthBar, { backgroundColor: c.card, borderColor: c.border }]}>
@@ -376,6 +402,28 @@ function PlanView({ c, state, summary, money, bottomInset, onMonth, onShiftMonth
         <Text style={[styles.readyTitle, { color: c.foreground }]}>{summary.readyToAssign < -0.005 ? "Overassigned" : "Ready to Assign"}</Text>
         <Text style={[styles.readyText, { color: c.mutedForeground }]}>{summary.readyToAssign > 0.005 ? "Keep giving your income a job until this reaches zero." : summary.readyToAssign < -0.005 ? "Move money out of a category until your plan reaches zero." : "Every dollar has a job."}</Text>
         <View style={styles.readyStats}><SmallStat label="Income" value={money(summary.income)} color={c.success} /><SmallStat label="Assigned" value={money(summary.assigned)} color={c.primary} /><SmallStat label="Spent" value={money(summary.spent)} color={c.warning} /></View>
+      </View>
+
+      <View style={[styles.transactionCard, { backgroundColor: c.card, borderColor: c.border }]}>
+        <View style={styles.transactionHeader}>
+          <View style={[styles.transactionHeaderIcon, { backgroundColor: c.primary + "18" }]}><Feather name="credit-card" size={18} color={c.primary} /></View>
+          <View style={{ flex: 1 }}><Text style={[styles.transactionTitle, { color: c.foreground }]}>Fake bank activity</Text><Text style={[styles.transactionSubtitle, { color: c.mutedForeground }]}>{reviewCount} to review{pendingCount ? ` · ${pendingCount} pending` : ""}</Text></View>
+        </View>
+        {transactions.map((transaction, index) => {
+          const category = state.categories.find(item => item.id === transaction.categoryId);
+          const isPending = transaction.status === "pending";
+          const isReviewed = transaction.status === "categorized";
+          const tone = isPending ? c.warning : isReviewed ? c.success : c.primary;
+          return <Pressable
+            key={transaction.id}
+            onPress={() => { if (!isPending) onReviewTransaction(transaction.id); }}
+            style={[styles.transactionRow, index > 0 && { borderTopColor: c.border, borderTopWidth: StyleSheet.hairlineWidth }]}
+          >
+            <View style={[styles.transactionIcon, { backgroundColor: tone + "18" }]}><Feather name={isPending ? "clock" : isReviewed ? "check" : "tag"} size={15} color={tone} /></View>
+            <View style={{ flex: 1, minWidth: 0 }}><Text style={[styles.transactionName, { color: c.foreground }]} numberOfLines={1}>{transaction.name}</Text><Text style={[styles.transactionMeta, { color: c.mutedForeground }]}>{isPending ? "Pending · not counted" : isReviewed ? `Applied to ${category?.name ?? "category"} · tap to change` : "Posted · tap to choose a category"}</Text></View>
+            <View style={styles.transactionAmountWrap}><Text style={[styles.transactionAmount, { color: c.destructive }]}>−{money(transaction.amount)}</Text>{isPending ? <Pressable onPress={() => onPostTransaction(transaction.id)} style={[styles.postButton, { backgroundColor: c.warning + "18" }]}><Text style={[styles.postButtonText, { color: c.warning }]}>Post for test</Text></Pressable> : <Text style={[styles.transactionStatus, { color: tone }]}>{isReviewed ? "APPLIED" : "REVIEW"}</Text>}</View>
+          </Pressable>;
+        })}
       </View>
 
       {state.groups.map((group: ZeroBudgetLabGroup) => {
@@ -469,7 +517,7 @@ function MonthPicker({ visible, value, c, onClose, onChange }: { visible: boolea
   return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}><Pressable style={styles.overlayCenter} onPress={onClose}><Pressable style={[styles.monthPicker, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => undefined}><View style={styles.yearRow}><Pressable onPress={() => setYear((value: number) => value - 1)}><Feather name="chevron-left" size={22} color={c.primary} /></Pressable><Text style={[styles.yearText, { color: c.foreground }]}>{year}</Text><Pressable onPress={() => setYear((value: number) => value + 1)}><Feather name="chevron-right" size={22} color={c.primary} /></Pressable></View><View style={styles.monthGrid}>{MONTHS.map((month, index) => { const active = year === selectedYear && index + 1 === selectedMonth; return <Pressable key={month} onPress={() => onChange(`${year}-${String(index + 1).padStart(2, "0")}`)} style={[styles.monthCell, active && { backgroundColor: c.primary }]}><Text style={[styles.monthCellText, { color: active ? c.primaryForeground : c.foreground }]}>{month}</Text></Pressable>; })}</View></Pressable></Pressable></Modal>;
 }
 
-function CategoryPicker({ visible, action, categories, c, onClose, onPick }: { visible: boolean; action: ZeroBudgetMoneyAction; categories: ZeroBudgetLabCategory[]; c: LabColors; onClose: () => void; onPick: (categoryId: string) => void }) { return <ActionSheet visible={visible} title={action === "spend" ? "Choose a category for test spending" : "Choose a category"} onClose={onClose} c={c}><ScrollView style={{ maxHeight: 410 }}>{categories.map(category => <Pressable key={category.id} onPress={() => onPick(category.id)} style={[styles.pickerRow, { borderTopColor: c.border }]}><Text style={styles.emoji}>{category.emoji}</Text><Text style={[styles.pickerText, { color: c.foreground }]}>{category.name}</Text><Feather name="chevron-right" size={17} color={c.mutedForeground} /></Pressable>)}</ScrollView></ActionSheet>; }
+function CategoryPicker({ visible, action, title, categories, c, onClose, onPick }: { visible: boolean; action: ZeroBudgetMoneyAction; title?: string; categories: ZeroBudgetLabCategory[]; c: LabColors; onClose: () => void; onPick: (categoryId: string) => void }) { return <ActionSheet visible={visible} title={title ?? (action === "spend" ? "Choose a category for test spending" : "Choose a category")} onClose={onClose} c={c}><ScrollView style={{ maxHeight: 410 }}>{categories.map(category => <Pressable key={category.id} onPress={() => onPick(category.id)} style={[styles.pickerRow, { borderTopColor: c.border }]}><Text style={styles.emoji}>{category.emoji}</Text><Text style={[styles.pickerText, { color: c.foreground }]}>{category.name}</Text><Feather name="chevron-right" size={17} color={c.mutedForeground} /></Pressable>)}</ScrollView></ActionSheet>; }
 
 function MoneySheet({ visible, c, category, categorySummary, action, assignmentMode, value, readyToAssign, onClose, onMode, onKey, onApply }: { visible: boolean; c: LabColors; category: ZeroBudgetLabCategory | null; categorySummary: ZeroBudgetCategorySummary | null; action: ZeroBudgetMoneyAction; assignmentMode: AssignmentMode; value: string; readyToAssign: number; onClose: () => void; onMode: (mode: AssignmentMode) => void; onKey: (key: string) => void; onApply: () => void }) {
   return <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}><View style={styles.overlay}><View style={[styles.moneySheet, { backgroundColor: c.card, borderColor: c.border }]}><View style={styles.moneyHeader}><Text style={styles.moneyEmoji}>{category?.emoji}</Text><View style={{ flex: 1 }}><Text style={[styles.sheetTitle, { color: c.foreground, textAlign: "left" }]}>{action === "spend" ? "Test spending for" : "Assign money to"} {category?.name}</Text><Text style={[styles.categoryHelper, { color: c.mutedForeground }]}>{action === "assign" ? `${moneyPlain(readyToAssign)} ready to assign` : `${moneyPlain(categorySummary?.available ?? 0)} currently available`}</Text></View><Pressable onPress={onClose} style={styles.closeButton}><Feather name="x" size={20} color={c.mutedForeground} /></Pressable></View>{action === "assign" && <View style={styles.modeRow}>{(["add", "subtract", "set"] as AssignmentMode[]).map(mode => <Pressable key={mode} onPress={() => onMode(mode)} style={[styles.modeButton, { backgroundColor: assignmentMode === mode ? c.primary : c.muted }]}><Text style={[styles.modeText, { color: assignmentMode === mode ? c.primaryForeground : c.mutedForeground }]}>{mode === "add" ? "+ Add" : mode === "subtract" ? "− Remove" : "= Set"}</Text></Pressable>)}</View>}<View style={[styles.amountDisplay, { backgroundColor: c.muted }]}><Text style={[styles.amountText, { color: c.foreground }]}>${value || "0"}</Text></View><View style={styles.keypad}>{KEY_PAD.map(key => <Pressable key={key} onPress={() => onKey(key)} style={[styles.key, { backgroundColor: c.muted }]}>{key === "backspace" ? <Feather name="delete" size={20} color={c.foreground} /> : <Text style={[styles.keyText, { color: c.foreground }]}>{key}</Text>}</Pressable>)}</View><Pressable onPress={onApply} style={[styles.primaryButton, { backgroundColor: c.primary, opacity: Number(value) > 0 ? 1 : 0.45 }]}><Text style={[styles.primaryButtonText, { color: c.primaryForeground }]}>{action === "spend" ? `Add ${value ? `$${value}` : "spending"}` : `${assignmentMode === "subtract" ? "Remove" : assignmentMode === "set" ? "Set" : "Assign"} ${value ? `$${value}` : "money"}`}</Text></Pressable></View></View></Modal>;
@@ -499,6 +547,7 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 16, paddingTop: 12 },
   monthBar: { minHeight: 56, borderWidth: 1, borderRadius: 18, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }, monthArrow: { width: 48, height: 48, alignItems: "center", justifyContent: "center" }, monthCenter: { flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 12, paddingVertical: 10 }, monthTitle: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
   readyCard: { borderWidth: 1, borderRadius: 24, padding: 18, alignItems: "center", marginBottom: 16 }, readyValue: { fontSize: 36, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.2 }, readyTitle: { fontSize: 16, fontFamily: "Inter_800ExtraBold", marginTop: 2 }, readyText: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 17, textAlign: "center", marginTop: 5 }, readyStats: { width: "100%", flexDirection: "row", gap: 8, marginTop: 16 }, smallStat: { flex: 1, minWidth: 0, alignItems: "center" }, smallStatValue: { fontSize: 13, fontFamily: "Inter_800ExtraBold" }, smallStatLabel: { color: "#94a3b8", fontSize: 9, fontFamily: "Inter_700Bold", textTransform: "uppercase", marginTop: 2 },
+  transactionCard: { borderWidth: 1, borderRadius: 22, overflow: "hidden", marginBottom: 16 }, transactionHeader: { minHeight: 66, flexDirection: "row", alignItems: "center", gap: 11, paddingHorizontal: 14, paddingVertical: 11 }, transactionHeaderIcon: { width: 40, height: 40, borderRadius: 13, alignItems: "center", justifyContent: "center" }, transactionTitle: { fontSize: 16, fontFamily: "Inter_800ExtraBold" }, transactionSubtitle: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginTop: 2 }, transactionRow: { minHeight: 75, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 13, paddingVertical: 10 }, transactionIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" }, transactionName: { fontSize: 13, fontFamily: "Inter_800ExtraBold" }, transactionMeta: { fontSize: 9, fontFamily: "Inter_600SemiBold", lineHeight: 13, marginTop: 3 }, transactionAmountWrap: { alignItems: "flex-end", gap: 4 }, transactionAmount: { fontSize: 13, fontFamily: "Inter_800ExtraBold" }, transactionStatus: { fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7 }, postButton: { minHeight: 25, borderRadius: 8, paddingHorizontal: 8, alignItems: "center", justifyContent: "center" }, postButtonText: { fontSize: 8, fontFamily: "Inter_800ExtraBold" },
   groupSection: { marginBottom: 14 }, groupHeader: { minHeight: 58, borderWidth: 1, borderRadius: 17, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", gap: 9 }, groupName: { flex: 1, fontSize: 17, fontFamily: "Inter_800ExtraBold" }, groupAmount: { textAlign: "right", fontSize: 15, fontFamily: "Inter_800ExtraBold" }, groupCaption: { textAlign: "right", fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7 },
   categoryList: { borderWidth: 1, borderRadius: 20, marginTop: 7, overflow: "hidden" }, categoryRow: { flexDirection: "row", gap: 11, paddingHorizontal: 13, paddingVertical: 14 }, emoji: { fontSize: 20, width: 29, textAlign: "center" }, categoryTop: { flexDirection: "row", alignItems: "center", gap: 8 }, categoryName: { flex: 1, fontSize: 15, fontFamily: "Inter_700Bold" }, availablePill: { overflow: "hidden", borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4, fontSize: 13, fontFamily: "Inter_800ExtraBold" }, progressTrack: { height: 6, borderRadius: 99, overflow: "hidden", marginTop: 9 }, progressFill: { height: 6, borderRadius: 99 }, categoryHelper: { fontSize: 11, fontFamily: "Inter_500Medium", lineHeight: 15, marginTop: 6 },
   floatingAction: { position: "absolute", right: 18, bottom: 28, minHeight: 52, borderRadius: 17, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", gap: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.28, shadowRadius: 14, elevation: 8 }, floatingText: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },

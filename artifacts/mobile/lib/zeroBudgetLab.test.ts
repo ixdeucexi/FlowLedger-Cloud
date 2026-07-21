@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   applyZeroBudgetMoney,
+  categorizeZeroBudgetTransaction,
   createZeroBudgetLabState,
   monthlyTarget,
   moveZeroBudgetCategory,
+  postZeroBudgetTransaction,
   shiftZeroBudgetMonth,
   summarizeZeroBudget,
 } from "./zeroBudgetLab";
@@ -51,5 +53,35 @@ describe("admin zero budget lab", () => {
     const state = createZeroBudgetLabState(new Date(2026, 6, 21));
     const next = moveZeroBudgetCategory(state, "phone", -1);
     assert.deepEqual(next.categories.filter(item => item.groupId === "bills").map(item => item.id), ["phone", "rent", "utilities"]);
+  });
+
+  it("includes isolated posted and pending transactions for review testing", () => {
+    const state = createZeroBudgetLabState(new Date(2026, 6, 21));
+    assert.equal(state.transactions.filter(transaction => transaction.status === "needs_review").length, 4);
+    assert.equal(state.transactions.filter(transaction => transaction.status === "pending").length, 1);
+  });
+
+  it("applies a posted transaction to a category exactly once and supports reassignment", () => {
+    const state = createZeroBudgetLabState(new Date(2026, 6, 21));
+    const groceryBefore = summarizeZeroBudget(state).categories.find(row => row.category.id === "groceries")!.spent;
+    const categorized = categorizeZeroBudgetTransaction(state, "sample-walmart", "groceries");
+    assert.equal(summarizeZeroBudget(categorized).categories.find(row => row.category.id === "groceries")?.spent, groceryBefore + 84.02);
+    assert.equal(categorized.transactions.find(transaction => transaction.id === "sample-walmart")?.status, "categorized");
+
+    const reassigned = categorizeZeroBudgetTransaction(categorized, "sample-walmart", "dining");
+    assert.equal(summarizeZeroBudget(reassigned).categories.find(row => row.category.id === "groceries")?.spent, groceryBefore);
+    assert.equal(summarizeZeroBudget(reassigned).categories.find(row => row.category.id === "dining")?.spent, 168.04);
+  });
+
+  it("keeps pending activity out of spending until it posts and is categorized", () => {
+    const state = createZeroBudgetLabState(new Date(2026, 6, 21));
+    const before = summarizeZeroBudget(state).spent;
+    const ignored = categorizeZeroBudgetTransaction(state, "sample-apple-pending", "entertainment");
+    assert.equal(summarizeZeroBudget(ignored).spent, before);
+
+    const posted = postZeroBudgetTransaction(state, "sample-apple-pending");
+    assert.equal(summarizeZeroBudget(posted).spent, before);
+    const categorized = categorizeZeroBudgetTransaction(posted, "sample-apple-pending", "entertainment");
+    assert.equal(summarizeZeroBudget(categorized).spent, before + 9.99);
   });
 });
