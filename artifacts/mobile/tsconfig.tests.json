@@ -48,6 +48,8 @@
     ,"lib/floStream.test.ts"
     ,"lib/debtOrder.ts"
     ,"lib/debtOrder.test.ts"
+    ,"lib/debtPaymentPlan.ts"
+    ,"lib/debtPaymentPlan.test.ts"
     ,"lib/paycheckPlanning.ts"
     ,"lib/paycheckPlanning.test.ts"
     ,"lib/planningMode.ts"

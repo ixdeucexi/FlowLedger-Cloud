@@ -31,6 +31,7 @@ import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { isValidDateInMonth } from "@/lib/schedule";
 import { confirmAction } from "@/lib/confirmAction";
+import { buildDebtPaymentPlanSummary } from "@/lib/debtPaymentPlan";
 
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
@@ -1906,6 +1907,13 @@ export default function MonthlyScreen() {
                           const savedPayment = extraPayments.find(item => item.id === payment.event.sourceId);
                           const amount = Math.abs(payment.event.amount);
                           const applied = payment.statusLabel.toLowerCase() === "applied";
+                          const allocatedDebtIds = new Set(savedPayment?.allocations.map(allocation => allocation.billId) ?? []);
+                          const requiredMinimum = savedPayment
+                            ? bills
+                              .filter(bill => bill.is_debt && allocatedDebtIds.has(bill.id))
+                              .reduce((total, bill) => total + getBillMonthlyTotal(bill, savedPayment.month, savedPayment.year), 0)
+                            : 0;
+                          const paymentPlan = buildDebtPaymentPlanSummary(requiredMinimum, amount);
                           return (
                             <View
                               key={`overlay-debt-${payment.event.id}`}
@@ -1937,14 +1945,18 @@ export default function MonthlyScreen() {
                                 </View>
                               </View>
                               {savedPayment ? (
+                                <View style={[styles.dayDebtPlanSummary, { backgroundColor: c.background + "66", borderColor: c.border }]}>
+                                  <Text style={[styles.dayDebtPlanText, { color: c.mutedForeground }]}>Minimum {`$${paymentPlan.requiredMinimum.toFixed(2)}`} + extra {`$${paymentPlan.extraPayment.toFixed(2)}`}</Text>
+                                  <Text style={[styles.dayDebtPlanTotal, { color: c.success }]}>{`$${paymentPlan.totalPlanned.toFixed(2)}`} planned this month</Text>
+                                  <Text style={[styles.dayDebtPlanNote, { color: c.mutedForeground }]}>The required minimum stays the same.</Text>
+                                </View>
+                              ) : null}
+                              {savedPayment ? (
                                 <View style={styles.dayBillActions}>
                                   <Pressable
                                     onPress={() => {
                                       setSelectedDate(null);
-                                      router.push({
-                                        pathname: "/(tabs)/transactions",
-                                        params: { editDebtPaymentId: savedPayment.id, editDebtPaymentAt: String(Date.now()) },
-                                      } as never);
+                                      router.push("/snowball-plan" as never);
                                     }}
                                     style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.primary + "16", borderColor: c.primary + "35", opacity: pressed ? 0.74 : 1 }]}
                                   >
@@ -2817,6 +2829,10 @@ const styles = StyleSheet.create({
   dayBillNumberTile: { flex: 1, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 8 },
   dayBillNumberLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.5 },
   dayBillNumberValue: { fontSize: 13, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
+  dayDebtPlanSummary: { borderWidth: 1, borderRadius: 12, padding: 10, gap: 3 },
+  dayDebtPlanText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  dayDebtPlanTotal: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  dayDebtPlanNote: { fontSize: 10, fontFamily: "Inter_500Medium" },
   dayTransactionBadge: { paddingHorizontal: 7, paddingVertical: 4, borderRadius: 6 },
   dayTransactionBadgeText: { fontSize: 9, fontFamily: "Inter_700Bold", letterSpacing: 0.45 },
   dayBillPaidTile: { borderWidth: 1 },

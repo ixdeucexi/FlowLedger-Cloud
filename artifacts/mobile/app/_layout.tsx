@@ -191,6 +191,7 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
             <Stack.Screen name="login" />
             <Stack.Screen name="legal" />
             <Stack.Screen name="setup" />
+            <Stack.Screen name="snowball-plan" />
             <Stack.Screen name="(tabs)" />
           </Stack>
           <PwaInstallPrompt />

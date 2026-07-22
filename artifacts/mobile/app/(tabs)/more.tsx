@@ -3163,7 +3163,10 @@ export default function MoreScreen() {
         onClose={dismissPayRaiseNotice}
         onViewDebt={() => {
           dismissPayRaiseNotice();
-          router.push("/(tabs)/bills" as any);
+          router.push({
+            pathname: "/snowball-plan",
+            params: { suggested: (latestRaise?.change.difference ?? 0).toFixed(2) },
+          } as never);
         }}
       />
 

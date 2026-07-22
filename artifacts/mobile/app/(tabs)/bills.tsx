@@ -12,14 +12,14 @@ import { CommandPlusButton } from "@/components/CommandPlusButton";
 import { EmptyState } from "@/components/EmptyState";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { PlanFeatureGate } from "@/components/PlanFeatureGate";
-import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
 import colors from "@/constants/colors";
 import type { Bill } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { confirmAction } from "@/lib/confirmAction";
-import { effectiveDebtMinimum, type SnowballProjectionResult } from "@/lib/snowball";
+import { effectiveDebtMinimum } from "@/lib/snowball";
+import { buildDebtPaymentPlanSummary } from "@/lib/debtPaymentPlan";
 import { orderActiveDebtsForStrategy, sortDebtsWithPaidLast } from "@/lib/debtOrder";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { loadCategoryBudgets } from "@/lib/categoryBudgetStore";
@@ -55,7 +55,7 @@ export default function BillsScreen() {
     bills, addBill, updateBill, stopFutureBill, deleteBill, deleteBillMistake,
     dashboardFilter, setDashboardFilter,
     settings, updateSettings,
-    previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, getExtraPayment,
+    previewDebtSnowball, getExtraPayment,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal, getPaidAmount,
     getDailyBalances, getIncomeOccurrencesInMonth, activeHousehold,
   } = useBudget();
@@ -65,10 +65,6 @@ export default function BillsScreen() {
   const [editBill, setEditBill]         = useState<Bill | null>(null);
   const [filter, setFilter]             = useState<Filter>("all");
   const [sortMode, setSortMode]         = useState<SortMode>("priority");
-  const [snowballApplied, setSnowballApplied] = useState(false);
-  const [snowballModalVisible, setSnowballModalVisible] = useState(false);
-  const [snowballAmount, setSnowballAmount] = useState("");
-  const [snowballPreview, setSnowballPreview] = useState<SnowballProjectionResult | null>(null);
   const [dismissedBillPromptKey, setDismissedBillPromptKey] = useState<string | null>(null);
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
 
@@ -265,6 +261,7 @@ export default function BillsScreen() {
 
   const totalDebt = debtBills.reduce((sum, debt) => sum + debt.balance, 0);
   const totalMinPayments = planDebts.reduce((sum, debt) => sum + debtMonthlyMinimum(debt), 0);
+  const debtPaymentPlan = buildDebtPaymentPlanSummary(totalMinPayments, existingSnowball?.amount ?? 0);
   const assignedDebtExtra = settings.zeroBasedBudgetEnabled
     ? Math.max(0, Number(categoryBudgets.Debt ?? totalMinPayments) - totalMinPayments)
     : cashFlowSafeSnowballAmount;
@@ -371,7 +368,7 @@ export default function BillsScreen() {
     return addBill(data);
   }, [addBill, updateBill]);
 
-  const handleApplySnowball = () => {
+  const openSnowballPlanner = () => {
     if (settings.zeroBasedBudgetEnabled && cashFlowSafeSnowballAmount > 0 && assignedDebtExtra <= 0) {
       Alert.alert("Assign money to Debt", "Zero-Based Budget is protecting your category plan. Assign money above your debt minimums before scheduling an extra payment.", [
         { text: "Cancel", style: "cancel" },
@@ -379,35 +376,7 @@ export default function BillsScreen() {
       ]);
       return;
     }
-    if (safeSnowballAmount <= 0) {
-      Alert.alert("Safety Floor Protected", `There is no extra amount available without moving the ${settings.forecast_horizon_months}-month forecast below $${settings.safety_floor.toFixed(0)}.`);
-      return;
-    }
-    const starting = existingSnowball?.amount ?? safeSnowballAmount;
-    setSnowballAmount(starting.toFixed(2));
-    setSnowballPreview(previewDebtSnowball(debtPlanMonth, debtPlanYear, starting));
-    setSnowballModalVisible(true);
-  };
-
-  const handleSnowballAmountChange = (value: string) => {
-    setSnowballAmount(value);
-    const amount = Number.parseFloat(value);
-    setSnowballPreview(previewDebtSnowball(debtPlanMonth, debtPlanYear, Number.isFinite(amount) ? amount : 0));
-  };
-
-  const handleConfirmSnowball = async () => {
-    if (!snowballPreview) return;
-    await applyDebtSnowballPayment(snowballPreview);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setSnowballApplied(true);
-    setSnowballModalVisible(false);
-    Alert.alert("Payment Recorded", `$${snowballPreview.selectedExtra.toFixed(2)} was applied to your snowball.`);
-  };
-
-  const handleRemoveSnowball = async () => {
-    await removeDebtSnowballPayment(debtPlanMonth, debtPlanYear);
-    setSnowballModalVisible(false);
-    setSnowballApplied(false);
+    router.push("/snowball-plan" as never);
   };
 
   // ── Subtitle ─────────────────────────────────────────────────────
@@ -704,19 +673,37 @@ export default function BillsScreen() {
                   </Text>
                 </View>
                 <Pressable
-                  onPress={handleApplySnowball}
-                  disabled={cashFlowSafeSnowballAmount <= 0}
+                  accessibilityRole="button"
+                  accessibilityLabel={existingSnowball ? "Edit extra debt payment plan" : "Plan an extra debt payment"}
+                  onPress={openSnowballPlanner}
                   style={({ pressed }) => [
                     styles.debtPlanApplyButton,
-                    { backgroundColor: cashFlowSafeSnowballAmount > 0 ? c.primary : c.muted, opacity: pressed ? 0.8 : cashFlowSafeSnowballAmount > 0 ? 1 : 0.65 },
+                    { backgroundColor: c.primary, opacity: pressed ? 0.8 : 1 },
                   ]}
                 >
-                  <Feather name="zap" size={13} color={cashFlowSafeSnowballAmount > 0 ? c.primaryForeground : c.mutedForeground} />
-                  <Text style={[styles.debtPlanApplyText, { color: safeSnowballAmount > 0 ? c.primaryForeground : c.mutedForeground }]}>
-                    {settings.zeroBasedBudgetEnabled && assignedDebtExtra <= 0 && cashFlowSafeSnowballAmount > 0 ? "Assign first" : "Apply"}
+                  <Feather name="calendar" size={13} color={c.primaryForeground} />
+                  <Text style={[styles.debtPlanApplyText, { color: c.primaryForeground }]}>
+                    {existingSnowball ? "Edit extra" : "Plan extra"}
                   </Text>
                 </Pressable>
               </View>
+              {existingSnowball ? (
+                <View style={[styles.debtPaymentSummary, { backgroundColor: c.background + "88", borderColor: c.border }]}>
+                  <View style={styles.debtPaymentEquation}>
+                    <Text style={[styles.debtPaymentEquationLabel, { color: c.mutedForeground }]}>Required minimums</Text>
+                    <Text style={[styles.debtPaymentEquationValue, { color: c.foreground }]}>${debtPaymentPlan.requiredMinimum.toFixed(2)}</Text>
+                  </View>
+                  <View style={styles.debtPaymentEquation}>
+                    <Text style={[styles.debtPaymentEquationLabel, { color: c.mutedForeground }]}>Planned extra</Text>
+                    <Text style={[styles.debtPaymentEquationValue, { color: c.primary }]}>+${debtPaymentPlan.extraPayment.toFixed(2)}</Text>
+                  </View>
+                  <View style={[styles.debtPaymentTotal, { borderTopColor: c.border }]}>
+                    <Text style={[styles.debtPaymentTotalLabel, { color: c.foreground }]}>Total debt planned</Text>
+                    <Text style={[styles.debtPaymentTotalValue, { color: c.success }]}>${debtPaymentPlan.totalPlanned.toFixed(2)}</Text>
+                  </View>
+                  <Text style={[styles.debtPaymentNote, { color: c.mutedForeground }]}>Your required minimums do not change.</Text>
+                </View>
+              ) : null}
               {debtPlanIsFuture ? (
                 <Text style={[styles.debtAlgoCopy, { color: c.mutedForeground }]}>
                   Your next payoff order begins {MONTH_FULL[debtPlanMonth]} {debtPlanYear}.
@@ -907,19 +894,6 @@ export default function BillsScreen() {
         editBill={editBill}
         forceDebt={activeTab === "debt"}
       />
-      <SnowballPreviewModal
-        visible={settings.debtPayoffEnabled && snowballModalVisible}
-        method={settings.paymentMethod}
-        preview={snowballPreview}
-        amount={snowballAmount}
-        existingPayment={!!existingSnowball}
-        safetyFloor={settings.safety_floor}
-        forecastHorizonMonths={settings.forecast_horizon_months}
-        onAmountChange={handleSnowballAmountChange}
-        onClose={() => setSnowballModalVisible(false)}
-        onConfirm={handleConfirmSnowball}
-        onRemove={handleRemoveSnowball}
-      />
     </View>
   );
 }
@@ -999,6 +973,14 @@ const styles = StyleSheet.create({
   debtPlanApplyButton: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999 },
   debtPlanApplyText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   debtPlanValueRow: { flexDirection: "row", gap: 8 },
+  debtPaymentSummary: { borderWidth: 1, borderRadius: 15, padding: 12, gap: 8 },
+  debtPaymentEquation: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  debtPaymentEquationLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  debtPaymentEquationValue: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  debtPaymentTotal: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, borderTopWidth: 1, paddingTop: 8 },
+  debtPaymentTotalLabel: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  debtPaymentTotalValue: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
+  debtPaymentNote: { fontSize: 11, fontFamily: "Inter_500Medium" },
   debtPlanMetric: { flex: 1, borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 9 },
   debtPlanLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 3 },
   debtPlanValue: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
