@@ -190,6 +190,12 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
   return (
     <View style={[styles.screen, { backgroundColor: c.background, paddingTop: insets.top + 10 }]}>
       <PremiumBackdrop variant="green" />
+      <ScrollView
+        style={styles.pageScroll}
+        contentContainerStyle={[styles.pageContent, { paddingBottom: insets.bottom + 96 }]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
       <View style={styles.header}>
         {!embedded && <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: c.card }]}>
           <Feather name="chevron-left" size={20} color={c.foreground} />
@@ -243,7 +249,7 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
         ))}
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 96 }} keyboardShouldPersistTaps="handled">
+      <View style={styles.rows}>
         {visibleRows.map(row => {
           const color = row.status === "over" ? c.destructive : row.status === "watch" ? c.warning : CAT_COLORS[row.category] ?? c.primary;
           return (
@@ -287,6 +293,7 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
             </View>
           );
         })}
+      </View>
       </ScrollView>
 
       <Modal visible={!!moveTarget} transparent animationType="slide" onRequestClose={() => setMoveTarget(null)}>
@@ -338,6 +345,9 @@ function statusRank(status: CategoryPlanRow["status"]) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  pageScroll: { flex: 1 },
+  pageContent: { flexGrow: 1 },
+  rows: { padding: 16 },
   header: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 20, paddingBottom: 14 },
   backBtn: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
   title: { fontSize: 28, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.8 },

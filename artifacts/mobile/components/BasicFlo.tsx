@@ -7,6 +7,7 @@ import { FloLogo } from "@/components/FloLogo";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import type { DecisionBaselineDay } from "@/lib/decisions";
+import { humanizeFloText } from "@/lib/floLanguage";
 import { localFloAnswer, type FloFacts } from "@/lib/floPolicy";
 import { PLAN_CATALOG, annualMonthlyEquivalent } from "@/lib/membership";
 
@@ -35,11 +36,11 @@ const BASIC_PROMPTS: readonly BasicPrompt[] = [
 ] as const;
 
 const HELP_ANSWERS: Record<string, string> = {
-  "add-bill": "Open Bills and choose Add bill. Enter the amount, due date, frequency, and category, then save it to your calendar.",
-  "add-income": "Open More, choose Income, then add the amount, schedule, and next payday.",
-  "add-transaction": "Open Activity and choose Add transaction. Pick income or expense, enter the date and category, then save.",
-  "add-account": "Open More, choose Accounts, then add a manual account. Pro also supports connected bank accounts.",
-  "add-goal": "Open More, choose Goals, then add the target amount, current amount, and target date.",
+  "add-bill": "Open Bills, tap Add bill, enter the details, and save.",
+  "add-income": "Open More, choose Income, and add the pay details.",
+  "add-transaction": "Open Activity, tap Add transaction, and enter the details.",
+  "add-account": "Open More, choose Accounts, and add an account.",
+  "add-goal": "Open More, choose Goals, and add the target.",
 };
 
 export function BasicFlo({ facts, baseline, asOf }: { facts: FloFacts; baseline: DecisionBaselineDay[]; asOf: string }) {
@@ -56,13 +57,13 @@ export function BasicFlo({ facts, baseline, asOf }: { facts: FloFacts; baseline:
     if (prompt.requiresAmount) {
       const parsed = Number(amount.replace(/[$,]/g, ""));
       if (!Number.isFinite(parsed) || parsed <= 0) {
-        setAnswer("Enter the purchase amount first, then Basic Flo can check it against your deterministic forecast.");
+        setAnswer("Enter the amount first.");
         return;
       }
-      setAnswer(localFloAnswer(`Can I afford $${parsed.toFixed(2)}?`, facts, baseline) ?? "There is not enough forecast data to check that amount yet.");
+      setAnswer(humanizeFloText(localFloAnswer(`Can I afford $${parsed.toFixed(2)}?`, facts, baseline) ?? "Add your balance, income, and bills so I can check it."));
       return;
     }
-    setAnswer(HELP_ANSWERS[prompt.id] ?? localFloAnswer(prompt.prompt, facts, baseline) ?? "Open the related FlowLedger screen to review the current details.");
+    setAnswer(humanizeFloText(HELP_ANSWERS[prompt.id] ?? localFloAnswer(prompt.prompt, facts, baseline) ?? "Open the related screen to review it."));
   };
 
   return (

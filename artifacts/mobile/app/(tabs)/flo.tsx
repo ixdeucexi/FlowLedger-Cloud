@@ -28,7 +28,7 @@ import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
 import { isCashFlowTransaction } from "@/lib/billMatching";
 import { loadFloMemory, updateFloMemory, type FloFacts } from "@/lib/flo";
-import { humanizeFloText } from "@/lib/floLanguage";
+import { humanizeFloText, isWeakFloReply } from "@/lib/floLanguage";
 import {
   createFloConversation,
   createFloId,
@@ -42,7 +42,6 @@ import {
   type FloSource,
 } from "@/lib/floChat";
 import {
-  FLO_CONNECTION_ERROR_MESSAGE,
   buildDebtPaymentScenario,
   buildFloCategoryQuickPrompts,
   buildFloDecisionScenario,
@@ -53,6 +52,7 @@ import {
   evaluateFloCategoryMove,
   floResponseCards,
   isFloPlanCreateCommand,
+  fallbackFloAnswer,
   localFloAnswer,
   reduceFloChat,
   sanitizeFloSummary,
@@ -806,9 +806,11 @@ export default function FloScreen() {
             setSourcesByMessageId(previous => ({ ...previous, [assistantMessageId]: event.sources }));
           } else if (event.type === "error") {
             streamError = event.message;
-          } else if (event.type === "done" && !reply && event.text) {
-            reply = event.text;
-            dispatch({ type: "stream-delta", id: assistantMessageId, delta: event.text });
+          } else if (event.type === "done" && event.text) {
+            reply = isWeakFloReply(event.text)
+              ? buildCalendarDayReply(clean) ?? localFloAnswer(clean, facts, baseline) ?? fallbackFloAnswer(clean, facts)
+              : event.text;
+            dispatch({ type: "replace", id: assistantMessageId, text: reply });
           }
         },
       });
@@ -821,13 +823,13 @@ export default function FloScreen() {
         dispatch({ type: "stop" });
         setChatError(error instanceof Error && error.name === "AbortError" ? "Response stopped. You can retry the last question." : "Flo's response was interrupted. Retry to continue.");
       } else {
-        reply = buildCalendarDayReply(clean) ?? localFloAnswer(clean, facts, baseline) ?? FLO_CONNECTION_ERROR_MESSAGE;
+        reply = buildCalendarDayReply(clean) ?? localFloAnswer(clean, facts, baseline) ?? fallbackFloAnswer(clean, facts);
         dispatch({ type: "reply", id: assistantMessageId, text: reply });
         setSourcesByMessageId(previous => ({ ...previous, [assistantMessageId]: [{ type: "deterministic", label: "FlowLedger calculation", asOf: new Date().toISOString() }] }));
-        if (conversationId && reply !== FLO_CONNECTION_ERROR_MESSAGE) {
+        if (conversationId) {
           void persistFloFallback({ id: assistantMessageId, conversationId, householdId: activeHousehold.householdId, userId: user.id, text: reply });
         }
-        setChatError(reply === FLO_CONNECTION_ERROR_MESSAGE ? "Flo is offline. Basic deterministic answers remain available when the question matches your current snapshot." : "Flo was offline, so this answer used your deterministic FlowLedger calculation.");
+        setChatError("Flo was offline, so this answer used your FlowLedger calculation.");
       }
     }
     const replyId = assistantMessageId;

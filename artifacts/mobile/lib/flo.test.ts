@@ -10,6 +10,7 @@ import {
   evaluateFloCategoryMove,
   evaluateFloDebtPayment,
   evaluateFloRecurringBillChange,
+  fallbackFloAnswer,
   floResponseCards,
   isFloPlanCreateCommand,
   isUnsafeFloRequest,
@@ -510,6 +511,41 @@ test("chat input ignores blank and duplicate submissions while sending", () => {
   assert.equal(reduceFloChat(start, { type: "submit", id: "blank", text: "  " }), start);
   const sending = reduceFloChat(start, { type: "submit", id: "user-1", text: "Hello" });
   assert.equal(reduceFloChat(sending, { type: "submit", id: "user-2", text: "Again" }), sending);
+});
+
+test("streamed Flo replies can be replaced with a concise final answer", () => {
+  const start: FloChatState = { messages: [], sending: false };
+  const sending = reduceFloChat(start, { type: "submit", id: "user-1", assistantId: "flo-1", text: "Which bills are next?" });
+  const streamed = reduceFloChat(sending, { type: "stream-delta", id: "flo-1", delta: "A long partial answer" });
+  const replaced = reduceFloChat(streamed, { type: "replace", id: "flo-1", text: "Two bills are next." });
+  assert.equal(replaced.messages.find(message => message.id === "flo-1")?.text, "Two bills are next.");
+  assert.equal(replaced.sending, false);
+});
+
+test("every unmatched Flo question gets a useful account fallback", () => {
+  const answer = fallbackFloAnswer("Tell me what matters", facts);
+  assert.match(answer, /projected balance/i);
+  assert.doesNotMatch(answer, /reliable answer/i);
+});
+
+test("Ask Flo button prompts always have a local response", () => {
+  const prompts = [
+    "Review my month and tell me what needs attention.",
+    "Why is my balance low next week? My lowest projected balance is $180 on 2026-07-08.",
+    "Which bill should I move?",
+    "Which planned decisions should I reduce or postpone?",
+    "Why is my Flow Score 72?",
+    "What is my breathing room, how was it calculated, and what can I safely do with it?",
+    "July drops below my safety floor. What should I fix first? Preview safer options.",
+    "Move Power to after payday",
+    "Which bill should I pay first?",
+    "Why is Food over?",
+  ];
+  prompts.forEach(prompt => {
+    const answer = localFloAnswer(prompt, facts, days) ?? fallbackFloAnswer(prompt, facts);
+    assert.ok(answer.length > 0, prompt);
+    assert.doesNotMatch(answer, /reliable answer/i, prompt);
+  });
 });
 
 test("AI quota and billing failures use the friendly fallback", () => {

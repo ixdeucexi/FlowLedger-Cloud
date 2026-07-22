@@ -1,5 +1,6 @@
 import { evaluateDecision, type DecisionBaselineDay, type DecisionScenario } from "./decisions";
 import { localDateString } from "./dateLabels";
+import { compactFloText } from "./floLanguage";
 import type { PaycheckPlanResult } from "./paycheckPlanning";
 
 export interface FloBillMoveFact {
@@ -265,6 +266,7 @@ export type FloChatAction =
   | { type: "hydrate"; messages: FloChatMessage[] }
   | { type: "prepend"; messages: FloChatMessage[] }
   | { type: "stream-delta"; id: string; delta: string }
+  | { type: "replace"; id: string; text: string }
   | { type: "stop" };
 
 export const AI_USAGE_UNAVAILABLE_MESSAGE =
@@ -316,6 +318,12 @@ export function reduceFloChat(state: FloChatState, action: FloChatAction): FloCh
         ? { ...message, text: message.thinking ? action.delta : `${message.text}${action.delta}`, thinking: false }
         : message),
       sending: true,
+    };
+  }
+  if (action.type === "replace") {
+    return {
+      messages: state.messages.map(message => message.id === action.id ? { ...message, text: action.text, thinking: false } : message),
+      sending: false,
     };
   }
   if (action.type === "stop") {
@@ -546,7 +554,7 @@ function recommendationConfidenceGuard(message: string, facts: FloFacts): string
   return `Based on the current plan, this may fit, but I won’t give it a full green light yet.${estimate} Reconcile checking before you act on the recommendation.`;
 }
 
-export function localFloAnswer(message: string, facts: FloFacts, days: DecisionBaselineDay[]): string | null {
+function buildLocalFloAnswer(message: string, facts: FloFacts, days: DecisionBaselineDay[]): string | null {
   if (isUnsafeFloRequest(message)) return FLO_SECURITY_REFUSAL_MESSAGE;
   const lower = message.toLowerCase();
   const asksStability = /stability path|stability reserve|protected days|days protected|breathing room|further ahead/.test(lower);
@@ -747,6 +755,37 @@ export function localFloAnswer(message: string, facts: FloFacts, days: DecisionB
       : "You have $0.00 in unallocated spending this month. Every recorded expense is linked to a bill, or there are no expense transactions yet.";
   }
   return null;
+}
+
+export function localFloAnswer(message: string, facts: FloFacts, days: DecisionBaselineDay[]): string | null {
+  const answer = buildLocalFloAnswer(message, facts, days);
+  return answer ? compactFloText(answer) : null;
+}
+
+export function fallbackFloAnswer(message: string, facts: FloFacts): string {
+  const lower = message.toLowerCase();
+  if (/\b(bill|due|payment)\b/.test(lower)) {
+    return facts.billsLeftCount > 0
+      ? `You have ${facts.billsLeftCount} bill${facts.billsLeftCount === 1 ? "" : "s"} left this month, totaling $${facts.billsLeftAmount.toFixed(2)}.`
+      : "You have no bills left this month.";
+  }
+  if (/\b(debt|snowball|avalanche)\b/.test(lower)) {
+    const debts = sanitizeDebtFacts(facts.debts);
+    const total = debts.reduce((sum, debt) => sum + debt.balance, 0);
+    return debts.length
+      ? `You have $${total.toFixed(2)} across ${debts.length} active debt${debts.length === 1 ? "" : "s"}. ${facts.debtPayoff?.nextDebtName ? `${facts.debtPayoff.nextDebtName} is next in your payoff plan.` : "Open Debt to choose a payoff order."}`
+      : "I don't see an active debt balance.";
+  }
+  if (/\b(category|budget|spend|spending)\b/.test(lower)) {
+    const attention = (facts.categoryPlan ?? []).filter(category => category.status !== "available");
+    return attention.length
+      ? `${attention[0].category} needs attention with ${attention[0].remaining < 0 ? `$${Math.abs(attention[0].remaining).toFixed(2)} over plan` : `$${attention[0].remaining.toFixed(2)} left`}.`
+      : `Your category plan looks steady. You have ${facts.monthlyRemaining >= 0 ? `$${facts.monthlyRemaining.toFixed(2)} left` : `$${Math.abs(facts.monthlyRemaining).toFixed(2)} to cover`} this month.`;
+  }
+  if (/\b(income|paycheck|payday)\b/.test(lower)) {
+    return `Your planned monthly income is $${facts.monthlyIncome.toFixed(2)}. ${facts.paycheckPlan?.nextPaycheck ? `Your next paycheck is ${facts.paycheckPlan.nextPaycheck.name} on ${facts.paycheckPlan.nextPaycheck.date}.` : "Add a next pay date to plan the payday window."}`;
+  }
+  return `Your projected balance is $${facts.balanceToday.toFixed(2)}. You have ${facts.billsLeftCount} bill${facts.billsLeftCount === 1 ? "" : "s"} left, and this month is ${facts.monthlyRemaining >= 0 ? `$${facts.monthlyRemaining.toFixed(2)} ahead` : `$${Math.abs(facts.monthlyRemaining).toFixed(2)} short`}.`;
 }
 
 function localDebtRolloverAnswer(message: string, facts: FloFacts): string | null {
@@ -966,7 +1005,7 @@ function localPaycheckAnswer(message: string, facts: FloFacts): string | null {
 
 function localMonthlyReviewAnswer(message: string, facts: FloFacts): string | null {
   const lower = message.toLowerCase();
-  if (!/(monthly review|review.*month|improve next month|next month|what should i improve|biggest leak|best win)/i.test(lower)) return null;
+  if (!/(monthly review|review.*month|improve next month|next month|what should i improve|what should i fix first|safer options|biggest leak|best win)/i.test(lower)) return null;
   const categories = facts.categoryPlan ?? [];
   const over = [...categories].filter(item => item.remaining < 0).sort((left, right) => left.remaining - right.remaining)[0];
   const best = [...categories].filter(item => item.remaining > 0).sort((left, right) => right.remaining - left.remaining)[0];

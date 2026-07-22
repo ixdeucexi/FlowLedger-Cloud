@@ -16,6 +16,17 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
+export function compactFloText(text: string, maxWords = 65): string {
+  const clean = String(text || "").trim();
+  const words = clean.split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return clean;
+  return `${words.slice(0, maxWords).join(" ").replace(/[,:;\-]+$/, "")}…`;
+}
+
+export function isWeakFloReply(text: string): boolean {
+  return /(?:could(?:n't| not) form|no|without) (?:a )?reliable (?:account )?answer|unable to (?:answer|help)|not enough (?:reliable )?(?:data|information) to answer/i.test(String(text || ""));
+}
+
 function friendlyDate(_: string, yearText: string, monthText: string, dayText: string): string {
   const month = Number(monthText);
   const day = Number(dayText);
@@ -28,10 +39,10 @@ export function humanizeFloText(text: string): string {
   FRIENDLY_TERMS.forEach(([pattern, replacement]) => {
     friendly = friendly.replace(pattern, replacement);
   });
-  return friendly
+  return compactFloText(friendly
     .replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, friendlyDate)
     .replace(/(^|\n)[ \t]*-[ \t]+/g, "$1• ")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
-    .trim();
+    .trim());
 }
