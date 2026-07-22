@@ -37,29 +37,64 @@ export interface BankAnchoredForecast {
  * Builds the balance side of a connected-bank forecast.
  *
  * Before the bank's as-of date, only settled ledger events may move the balance.
- * On the as-of date, planned money in and out remains in the calendar so today's
- * number shows what will be left if those plans happen. Future events remain forecasts.
+ * When a stable opening balance is available, a newly observed bank change lands
+ * on the as-of date instead of rewriting prior days. A matching same-day plan is
+ * absorbed once the bank has already included it. Future events remain forecasts.
  */
 export function anchorForecastToBankBalance(
   events: FinancialEvent[],
   bankBalance: number,
   anchorDate: string,
   settledEventIds: ReadonlySet<string>,
+  historicalOpeningBalance?: number,
 ): BankAnchoredForecast {
+  const settledEvents = events.filter(event => event.date <= anchorDate && settledEventIds.has(event.id));
+  const settledNetThroughAnchor = settledEvents.reduce((sum, event) => sum + event.amount, 0);
+  const settledToday = settledEvents.filter(event => event.date === anchorDate);
+  const absorbedPlanIds = new Set<string>();
+  const sameAmount = (left: number, right: number) => Math.abs(left - right) < 0.005;
+  const absorbMatchingPlan = (amount: number) => {
+    const match = events.find(event =>
+      event.date === anchorDate
+      && !absorbedPlanIds.has(event.id)
+      && (event.status === "planned" || event.status === "scheduled")
+      && sameAmount(event.amount, amount));
+    if (match) absorbedPlanIds.add(match.id);
+  };
+  settledToday.forEach(event => absorbMatchingPlan(event.amount));
+
+  const hasStableOpeningBalance = Number.isFinite(historicalOpeningBalance);
+  const openingBalance = hasStableOpeningBalance ? Number(historicalOpeningBalance) : bankBalance - settledNetThroughAnchor;
+  const bankGap = hasStableOpeningBalance ? bankBalance - (openingBalance + settledNetThroughAnchor) : 0;
+  if (Math.abs(bankGap) >= 0.005) absorbMatchingPlan(bankGap);
+
   const balanceEvents = events.filter(event =>
-    event.date > anchorDate
-    || settledEventIds.has(event.id)
-    || (event.date === anchorDate && (
-      event.amount < 0
-      || event.status === "planned"
-      || event.status === "scheduled"
-    )));
-  const settledNetThroughAnchor = balanceEvents
-    .filter(event => event.date <= anchorDate && settledEventIds.has(event.id))
-    .reduce((sum, event) => sum + event.amount, 0);
+    !absorbedPlanIds.has(event.id)
+    && (
+      event.date > anchorDate
+      || settledEventIds.has(event.id)
+      || (event.date === anchorDate && (
+        event.amount < 0
+        || event.status === "planned"
+        || event.status === "scheduled"
+      ))
+    )
+  );
+  if (Math.abs(bankGap) >= 0.005) {
+    balanceEvents.push({
+      id: `bank-anchor:${anchorDate}`,
+      sourceType: "reconciliation",
+      sourceId: anchorDate,
+      date: anchorDate,
+      kind: "bank_adjustment",
+      amount: bankGap,
+      status: "actual",
+      name: "Bank balance update",
+    });
+  }
 
   return {
-    openingBalance: bankBalance - settledNetThroughAnchor,
+    openingBalance,
     events: balanceEvents,
   };
 }

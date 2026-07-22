@@ -41,6 +41,7 @@ export interface StabilityProgressInput {
   } | null;
   forecastConfidence: "high" | "medium" | "low";
   nextPaycheckLabel?: string | null;
+  nextPaycheckForecast?: { label: string; lowestBalance: number } | null;
 }
 
 export interface StabilityProgress {
@@ -92,10 +93,12 @@ export function buildStabilityProgress(input: StabilityProgressInput): Stability
   const paydayDays = nextPaycheckDay === null ? [] : future.filter(day => day.day <= nextPaycheckDay);
   const paydayLowestBalance = paydayDays.length
     ? paydayDays.reduce((lowest, day) => Math.min(lowest, day.balance), paydayDays[0].balance)
-    : null;
+    : input.nextPaycheckForecast?.lowestBalance ?? null;
   const safeUntilPayday = paydayLowestBalance === null ? null : paydayLowestBalance >= floor;
   const paydayShortfall = roundCurrency(paydayLowestBalance === null ? 0 : Math.max(0, floor - paydayLowestBalance));
-  const nextPaycheckLabel = nextPaycheckDay === null ? null : input.nextPaycheckLabel ?? `day ${nextPaycheckDay}`;
+  const nextPaycheckLabel = nextPaycheckDay === null
+    ? input.nextPaycheckForecast?.label ?? null
+    : input.nextPaycheckLabel ?? `day ${nextPaycheckDay}`;
   const base = {
     protectedAmount,
     reserveTarget,

@@ -3444,6 +3444,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         connectedBankAnchor.balance,
         connectedBankAnchor.date,
         settledTransactionEventIds,
+        openingBalance,
       );
       openingBalance = anchored.openingBalance;
       balanceEvents = anchored.events;

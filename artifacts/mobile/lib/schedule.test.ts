@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isValidDateInMonth, moveSettledBillOverrideDate, resolveFinalizedBillOccurrenceDays } from "./schedule";
+import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, getLatestRecordedIncomeAmount, isBillActiveForMonth, isValidDateInMonth, moveSettledBillOverrideDate, resolveFinalizedBillOccurrenceDays } from "./schedule";
 
 describe("bill scheduling", () => {
   it("validates a selected calendar date inside the intended month", () => {
@@ -138,5 +138,14 @@ describe("income scheduling", () => {
     assert.equal(getEffectiveIncomeAmount(income, 2, 2026), 800);
     assert.equal(getEffectiveIncomeAmount(income, 4, 2026), 850);
     assert.equal(getEffectiveIncomeAmount(income, 7, 2026), 900);
+  });
+
+  it("shows the latest recorded amount while preserving the historical baseline", () => {
+    const income = { amount: 2_308, frequency: "biweekly" as const, amount_history: [
+      { effective_from: "2026-07", amount: 2_401.73 },
+    ] };
+    assert.equal(getLatestRecordedIncomeAmount(income), 2_401.73);
+    assert.equal(getEffectiveIncomeAmount(income, 5, 2026), 2_308);
+    assert.equal(getEffectiveIncomeAmount(income, 6, 2026), 2_401.73);
   });
 });

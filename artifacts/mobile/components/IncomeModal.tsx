@@ -9,6 +9,7 @@ import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { MONTH_NAMES } from "@/lib/dateLabels";
+import { getLatestRecordedIncomeAmount } from "@/lib/schedule";
 
 const FREQUENCIES: { key: IncomeItem["frequency"]; label: string; desc: string }[] = [
   { key: "monthly",  label: "Monthly",  desc: "×1/mo"   },
@@ -36,6 +37,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
   const [amount,          setAmount]          = useState("");
   const [frequency,       setFrequency]       = useState<IncomeItem["frequency"]>("monthly");
   const [firstPayDate,    setFirstPayDate]    = useState("");
+  const [baselineAmount,  setBaselineAmount]  = useState(0);
 
   const [history,         setHistory]         = useState<IncomeAmountEntry[]>([]);
   const [showUpdateForm,  setShowUpdateForm]  = useState(false);
@@ -86,12 +88,14 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
   useEffect(() => {
     if (editItem) {
       setName(editItem.name);
-      setAmount(editItem.amount.toString());
+      setBaselineAmount(editItem.amount);
+      setAmount(getLatestRecordedIncomeAmount(editItem).toString());
       setFrequency(editItem.frequency);
       setFirstPayDate(editItem.next_payment_date ?? editItem.start_date ?? "");
       setHistory(editItem.amount_history ?? []);
     } else {
       setName(""); setAmount(""); setFrequency("monthly");
+      setBaselineAmount(0);
       setFirstPayDate(""); setHistory([]);
     }
     setShowUpdateForm(false);
@@ -111,13 +115,18 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
+    const nextHistory = [...history].sort((left, right) => left.effective_from.localeCompare(right.effective_from));
+    if (nextHistory.length > 0) {
+      const latestIndex = nextHistory.length - 1;
+      if (nextHistory[latestIndex].amount !== a) nextHistory[latestIndex] = { ...nextHistory[latestIndex], amount: a };
+    }
     const data: Omit<IncomeItem, "id"> = {
       name: name.trim(),
-      amount: a,
+      amount: nextHistory.length > 0 ? baselineAmount : a,
       frequency,
       start_date: payday,
       next_payment_date: payday,
-      amount_history: history.length > 0 ? history : undefined,
+      amount_history: nextHistory.length > 0 ? nextHistory : undefined,
     };
     setSaving(true);
     try {
@@ -136,18 +145,20 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
     if (isNaN(a) || a <= 0 || !raiseDate) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const ef = raiseDate.slice(0, 7);
-    setHistory(prev => {
-      const filtered = prev.filter(h => h.effective_from !== ef);
-      return [...filtered, { effective_from: ef, amount: a }]
-        .sort((a, b) => a.effective_from.localeCompare(b.effective_from));
-    });
+    const nextHistory = [...history.filter(h => h.effective_from !== ef), { effective_from: ef, amount: a }]
+      .sort((left, right) => left.effective_from.localeCompare(right.effective_from));
+    if (history.length === 0) setBaselineAmount(parseFloat(amount) || baselineAmount);
+    setHistory(nextHistory);
+    setAmount(getLatestRecordedIncomeAmount({ amount: baselineAmount, frequency, amount_history: nextHistory }).toString());
     setRaiseAmount("");
     setShowUpdateForm(false);
   };
 
   const handleDeleteHistoryEntry = (ef: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setHistory(prev => prev.filter(h => h.effective_from !== ef));
+    const nextHistory = history.filter(h => h.effective_from !== ef);
+    setHistory(nextHistory);
+    setAmount(getLatestRecordedIncomeAmount({ amount: baselineAmount, frequency, amount_history: nextHistory }).toString());
   };
 
   const monthlyEquiv = (() => {

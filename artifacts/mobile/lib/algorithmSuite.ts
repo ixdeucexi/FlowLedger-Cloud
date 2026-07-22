@@ -75,6 +75,7 @@ export interface AlgorithmSuiteInput {
     goalAllocations: number;
   };
   dailyBalances: AlgorithmDailyBalance[];
+  nextPaycheckForecast?: { label: string; lowestBalance: number } | null;
   bills: AlgorithmBill[];
   transactions: AlgorithmTransaction[];
   incomes: AlgorithmIncome[];
@@ -261,6 +262,7 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
       : null,
     forecastConfidence: input.forecastConfidence.level,
     nextPaycheckLabel: nextPaycheck ? formatMonthDay(input, nextPaycheck.day) : null,
+    nextPaycheckForecast: input.nextPaycheckForecast,
   });
   const riskDayCounts = remainingBalances.reduce(
     (counts, day) => {

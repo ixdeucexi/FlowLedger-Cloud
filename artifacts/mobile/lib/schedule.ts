@@ -214,3 +214,10 @@ export function getEffectiveIncomeAmount(income: ScheduledIncome, month: number,
   }
   return effective;
 }
+
+export function getLatestRecordedIncomeAmount(income: ScheduledIncome): number {
+  if (!income.amount_history?.length) return income.amount;
+  return [...income.amount_history]
+    .sort((a, b) => a.effective_from.localeCompare(b.effective_from))
+    .at(-1)?.amount ?? income.amount;
+}

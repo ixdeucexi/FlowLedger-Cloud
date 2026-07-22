@@ -150,6 +150,63 @@ describe("anchorForecastToBankBalance", () => {
     assert.equal(result.days[2].balance, 1_879.39);
     assert.ok(Math.abs(result.days[3].balance - 1_591.87) < 1e-8);
   });
+
+  it("places a newly observed paycheck on today without rewriting earlier balances", () => {
+    const scheduledPaycheck = event({
+      id: "income:today",
+      sourceType: "income",
+      sourceId: "income-today",
+      date: "2026-07-22",
+      amount: 2_401.73,
+      kind: "scheduled_income",
+      status: "scheduled",
+    });
+    const anchored = anchorForecastToBankBalance(
+      [scheduledPaycheck],
+      3_401.73,
+      "2026-07-22",
+      new Set(),
+      1_000,
+    );
+    const result = forecastBalances({ ...anchored, startDate: "2026-07-01", endDate: "2026-07-22" });
+
+    assert.equal(result.days[0].balance, 1_000);
+    assert.equal(result.days[21].balance, 3_401.73);
+    assert.deepEqual(result.days[21].events.map(item => item.kind), ["bank_adjustment"]);
+  });
+
+  it("does not count a posted paycheck and its same-day plan twice", () => {
+    const postedPaycheck = event({
+      id: "transaction:paycheck",
+      sourceType: "transaction",
+      sourceId: "paycheck",
+      date: "2026-07-22",
+      amount: 2_401.73,
+      kind: "transaction_income",
+      status: "actual",
+    });
+    const scheduledPaycheck = event({
+      id: "income:today",
+      sourceType: "income",
+      sourceId: "income-today",
+      date: "2026-07-22",
+      amount: 2_401.73,
+      kind: "scheduled_income",
+      status: "scheduled",
+    });
+    const anchored = anchorForecastToBankBalance(
+      [postedPaycheck, scheduledPaycheck],
+      3_401.73,
+      "2026-07-22",
+      new Set([postedPaycheck.id]),
+      1_000,
+    );
+    const result = forecastBalances({ ...anchored, startDate: "2026-07-01", endDate: "2026-07-22" });
+
+    assert.equal(result.days[0].balance, 1_000);
+    assert.equal(result.days[21].balance, 3_401.73);
+    assert.deepEqual(result.days[21].events.map(item => item.id), [postedPaycheck.id]);
+  });
 });
 
 describe("evaluateAffordability", () => {

@@ -61,6 +61,25 @@ test("separates safety through payday from the 90-day backup path", () => {
   assert.equal(result.nextMilestone, "30 protected days");
 });
 
+test("uses the next scheduled paycheck across a month boundary", () => {
+  const result = buildStabilityProgress({
+    balances: [
+      { day: 22, balance: 1_000 },
+      { day: 31, balance: 700 },
+    ],
+    todayDay: 22,
+    safetyFloor: 200,
+    monthlyRequiredOutflow: 900,
+    overdueBills: 0,
+    forecastConfidence: "high",
+    nextPaycheckForecast: { label: "August 5, 2026", lowestBalance: 650 },
+  });
+
+  assert.equal(result.safeUntilPayday, true);
+  assert.equal(result.nextPaycheckLabel, "August 5, 2026");
+  assert.notEqual(result.stageLabel, "Confirm the next paycheck");
+});
+
 test("requires a complete essential-expense plan before claiming reserve progress", () => {
   const result = buildStabilityProgress({
     balances: [{ day: 1, balance: 1000 }],

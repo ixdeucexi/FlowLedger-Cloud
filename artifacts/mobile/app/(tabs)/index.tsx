@@ -775,14 +775,27 @@ export default function DashboardScreen() {
   );
   const decisionForecastDays = useMemo(() => {
     const days = [];
-    for (let i = 0; i < settings.forecast_horizon_months; i += 1) {
+    for (let i = 0; i < Math.max(2, settings.forecast_horizon_months); i += 1) {
       const month = (currentMonth + i) % 12;
       const year = selectedYear + Math.floor((currentMonth + i) / 12);
       const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
-      days.push(...getDailyBalances(month, year).map(day => ({ date: `${monthPrefix}-${String(day.day).padStart(2, "0")}`, balance: day.balance })));
+      days.push(...getDailyBalances(month, year).map(day => ({
+        date: `${monthPrefix}-${String(day.day).padStart(2, "0")}`,
+        balance: day.balance,
+        income: day.income,
+      })));
     }
     return days.filter(day => day.date >= todayIso);
   }, [getDailyBalances, currentMonth, selectedYear, settings.forecast_horizon_months, todayIso]);
+  const nextPaycheckForecast = useMemo(() => {
+    const nextPaycheck = decisionForecastDays.find(day => day.date > todayIso && day.income > 0.005);
+    if (!nextPaycheck) return null;
+    const throughPayday = decisionForecastDays.filter(day => day.date <= nextPaycheck.date);
+    return {
+      label: formatShortDate(nextPaycheck.date),
+      lowestBalance: throughPayday.reduce((lowest, day) => Math.min(lowest, day.balance), throughPayday[0]?.balance ?? nextPaycheck.balance),
+    };
+  }, [decisionForecastDays, todayIso]);
   const monthlyReview = useMemo(() => {
     const overCategory = [...categoryPlan]
       .filter(row => row.remaining < -0.005)
@@ -835,6 +848,7 @@ export default function DashboardScreen() {
       net: day.net,
       balance: day.balance,
     })),
+    nextPaycheckForecast,
     bills: getMonthlyBills(currentMonth, selectedYear).map(bill => ({
       id: bill.id,
       name: bill.name,
@@ -888,6 +902,7 @@ export default function DashboardScreen() {
     getTransactionsForMonth,
     goals,
     incomes,
+    nextPaycheckForecast,
     selectedYear,
     settings.safety_floor,
     today,
