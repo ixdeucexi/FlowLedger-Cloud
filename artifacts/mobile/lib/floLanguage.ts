@@ -39,6 +39,7 @@ export function humanizeFloText(text: string): string {
   FRIENDLY_TERMS.forEach(([pattern, replacement]) => {
     friendly = friendly.replace(pattern, replacement);
   });
+  if (isWeakFloReply(friendly)) return "I couldn't finish that answer. Ask again and I'll use your latest numbers.";
   return compactFloText(friendly
     .replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, friendlyDate)
     .replace(/(^|\n)[ \t]*-[ \t]+/g, "$1• ")

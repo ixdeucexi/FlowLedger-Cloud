@@ -30,4 +30,5 @@ test("Flo replies stay concise", () => {
 test("weak model fallbacks are recognized", () => {
   assert.equal(isWeakFloReply("I couldn't form a reliable account answer."), true);
   assert.equal(isWeakFloReply("You have two bills left."), false);
+  assert.equal(humanizeFloText("I couldn't form a reliable account answer."), "I couldn't finish that answer. Ask again and I'll use your latest numbers.");
 });
