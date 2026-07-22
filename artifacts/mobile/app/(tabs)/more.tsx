@@ -23,6 +23,7 @@ import { HouseholdMemberActionsModal } from "@/components/HouseholdMemberActions
 import { LegalDocumentModal } from "@/components/LegalDocumentModal";
 import { MembershipPanel } from "@/components/MembershipPanel";
 import { NotificationSettings } from "@/components/NotificationSettings";
+import { PayRaiseCelebrationModal } from "@/components/PayRaiseCelebrationModal";
 import { MoreHub } from "@/components/settings/MoreHub";
 import { SettingsSectionHeader } from "@/components/settings/SettingsSectionHeader";
 import { PlanFeatureGate } from "@/components/PlanFeatureGate";
@@ -43,7 +44,9 @@ import { isCashFlowTransaction } from "@/lib/billMatching";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { localDateString } from "@/lib/dateLabels";
 import { parseStatementCsv } from "@/lib/accounts";
+import { orderActiveDebtsForStrategy } from "@/lib/debtOrder";
 import { resetFloMemory } from "@/lib/flo";
+import { getLatestIncomeChange, getLatestRecordedIncomeAmount, incomeAmountToMonthly } from "@/lib/schedule";
 import { startLearningTour } from "@/lib/learningTour";
 import { confirmAction } from "@/lib/confirmAction";
 import {
@@ -267,6 +270,16 @@ function formatMemberDate(value?: string) {
   return date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
 }
 
+function formatIncomeEffectiveFrom(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month) return value;
+  return new Date(year, month - 1, day || 1, 12).toLocaleDateString(undefined, {
+    month: "short",
+    ...(day ? { day: "numeric" as const } : {}),
+    year: "numeric",
+  });
+}
+
 function formatActivityTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
@@ -384,6 +397,7 @@ export default function MoreScreen() {
   const [accountMode, setAccountMode] = useState<"add" | "edit" | "reconcile">("add");
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
   const [editIncome, setEditIncome] = useState<IncomeItem | null>(null);
+  const [payRaiseNoticeVisible, setPayRaiseNoticeVisible] = useState(false);
   const [newCategory, setNewCategory] = useState("");
   const [renamingCategory, setRenamingCategory] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -434,6 +448,40 @@ export default function MoreScreen() {
     ? `flowledger_child_profiles_${activeHousehold.householdId}`
     : user?.id ? `flowledger_child_profiles_${user.id}` : "flowledger_child_profiles_guest";
   const childMoneySummary = useMemo(() => buildChildMoneySummary(childProfiles), [childProfiles]);
+  const latestIncomeChange = useMemo(() => incomes
+    .map(income => ({ change: getLatestIncomeChange(income), income }))
+    .filter((entry): entry is { change: NonNullable<ReturnType<typeof getLatestIncomeChange>>; income: IncomeItem } => Boolean(entry.change))
+    .sort((left, right) => right.change.effectiveFrom.localeCompare(left.change.effectiveFrom))[0] ?? null,
+  [incomes]);
+  const latestRaise = latestIncomeChange && latestIncomeChange.change.difference > 0.005
+    ? latestIncomeChange
+    : null;
+  const snowballDebtTarget = useMemo(() => orderActiveDebtsForStrategy(
+    bills.filter(bill => bill.is_debt),
+    "snowball",
+  )[0] ?? null, [bills]);
+  const payRaiseNoticeKey = latestRaise
+    ? `flowledger_raise_seen_${activeHousehold?.householdId ?? user?.id ?? "guest"}_${latestRaise.income.id}_${latestRaise.change.effectiveFrom}_${latestRaise.change.currentAmount}`
+    : null;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (activeSettingsSection !== "money" || incomeModalVisible || !payRaiseNoticeKey) {
+      setPayRaiseNoticeVisible(false);
+      return () => { cancelled = true; };
+    }
+    void AsyncStorage.getItem(payRaiseNoticeKey).then(seen => {
+      if (!cancelled) setPayRaiseNoticeVisible(!seen);
+    }).catch(() => {
+      if (!cancelled) setPayRaiseNoticeVisible(true);
+    });
+    return () => { cancelled = true; };
+  }, [activeSettingsSection, incomeModalVisible, payRaiseNoticeKey]);
+
+  const dismissPayRaiseNotice = useCallback(() => {
+    setPayRaiseNoticeVisible(false);
+    if (payRaiseNoticeKey) void AsyncStorage.setItem(payRaiseNoticeKey, "true");
+  }, [payRaiseNoticeKey]);
 
   useEffect(() => {
     const requestedSectionParam = Array.isArray(routeParams.section) ? routeParams.section[0] : routeParams.section;
@@ -2102,8 +2150,12 @@ export default function MoreScreen() {
           <Text style={[styles.emptyText, { color: c.mutedForeground }]}>No income sources added yet.</Text>
         ) : (
           incomes.map((item, i) => {
-            const monthly = item.frequency === "weekly" ? item.amount * 4
-              : item.frequency === "biweekly" ? item.amount * 2 : item.amount;
+            const currentAmount = getLatestRecordedIncomeAmount(item);
+            const monthly = incomeAmountToMonthly(currentAmount, item.frequency);
+            const historyCount = item.amount_history?.length ?? 0;
+            const latestEffectiveFrom = item.amount_history?.slice()
+              .sort((a, b) => a.effective_from.localeCompare(b.effective_from))
+              .at(-1)?.effective_from;
             return (
               <View key={item.id} style={[styles.incomeRow, { borderTopWidth: i > 0 ? 1 : 0, borderTopColor: c.border }]}>
                 <View style={[styles.incomeIcon, { backgroundColor: c.success + "20" }]}>
@@ -2112,9 +2164,17 @@ export default function MoreScreen() {
                 <Pressable onPress={() => { setEditIncome(item); setIncomeModalVisible(true); }} style={styles.incomeInfo}>
                   <Text style={[styles.incomeName, { color: c.foreground }]}>{item.name}</Text>
                   <Text style={[styles.incomeFreq, { color: c.mutedForeground }]}>
-                    ${item.amount.toLocaleString()} · {FREQ_LABELS[item.frequency]}
-                    {item.start_date ? ` · from ${item.start_date}` : ""}
+                    ${currentAmount.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} · {FREQ_LABELS[item.frequency]}
+                    {latestEffectiveFrom ? ` · current from ${formatIncomeEffectiveFrom(latestEffectiveFrom)}` : item.start_date ? ` · from ${formatIncomeEffectiveFrom(item.start_date)}` : ""}
                   </Text>
+                  {historyCount > 0 ? (
+                    <View style={styles.incomeHistoryHint}>
+                      <Feather name="clock" size={11} color={c.primary} />
+                      <Text style={[styles.incomeHistoryHintText, { color: c.primary }]}>
+                        {historyCount} pay {historyCount === 1 ? "change" : "changes"} · tap for history
+                      </Text>
+                    </View>
+                  ) : null}
                 </Pressable>
                 <View style={styles.incomeRight}>
                   <Text style={[styles.incomeMonthly, { color: c.success }]}>
@@ -3095,6 +3155,18 @@ export default function MoreScreen() {
 
       <LegalDocumentModal documentId={legalDoc} onClose={() => setLegalDoc(null)} />
 
+      <PayRaiseCelebrationModal
+        visible={payRaiseNoticeVisible && Boolean(latestRaise)}
+        difference={latestRaise?.change.difference ?? 0}
+        monthlyDifference={latestRaise?.change.monthlyDifference ?? 0}
+        debtName={snowballDebtTarget?.name}
+        onClose={dismissPayRaiseNotice}
+        onViewDebt={() => {
+          dismissPayRaiseNotice();
+          router.push("/(tabs)/bills" as any);
+        }}
+      />
+
       <IncomeModal
         visible={incomeModalVisible}
         onClose={() => { setIncomeModalVisible(false); setEditIncome(null); }}
@@ -3210,6 +3282,8 @@ const styles = StyleSheet.create({
   incomeInfo: { flex: 1 },
   incomeName: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   incomeFreq: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  incomeHistoryHint: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 5 },
+  incomeHistoryHintText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   incomeRight: { alignItems: "flex-end", gap: 4 },
   incomeMonthly: { fontSize: 15, fontFamily: "Inter_700Bold" },
   incomeMonthlyUnit: { fontSize: 11, fontFamily: "Inter_400Regular" },

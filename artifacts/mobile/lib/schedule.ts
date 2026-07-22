@@ -221,3 +221,33 @@ export function getLatestRecordedIncomeAmount(income: ScheduledIncome): number {
     .sort((a, b) => a.effective_from.localeCompare(b.effective_from))
     .at(-1)?.amount ?? income.amount;
 }
+
+export function incomeAmountToMonthly(amount: number, frequency: ScheduledIncome["frequency"]): number {
+  if (frequency === "biweekly") return amount * 26 / 12;
+  if (frequency === "weekly") return amount * 52 / 12;
+  return amount;
+}
+
+export type LatestIncomeChange = {
+  currentAmount: number;
+  difference: number;
+  effectiveFrom: string;
+  monthlyDifference: number;
+  previousAmount: number;
+};
+
+export function getLatestIncomeChange(income: ScheduledIncome): LatestIncomeChange | null {
+  if (!income.amount_history?.length) return null;
+  const sorted = [...income.amount_history].sort((a, b) => a.effective_from.localeCompare(b.effective_from));
+  const latest = sorted.at(-1);
+  if (!latest) return null;
+  const previousAmount = sorted.length > 1 ? sorted[sorted.length - 2].amount : income.amount;
+  const difference = Math.round((latest.amount - previousAmount) * 100) / 100;
+  return {
+    currentAmount: latest.amount,
+    difference,
+    effectiveFrom: latest.effective_from,
+    monthlyDifference: incomeAmountToMonthly(difference, income.frequency),
+    previousAmount,
+  };
+}

@@ -19,7 +19,7 @@ import { diagnosticErrorCode } from "@/lib/diagnosticPolicy";
 import { decisionDbPayload } from "@/lib/decisionPersistence";
 import { recordDiagnostic } from "@/lib/diagnostics";
 import { isDevDemoMode } from "@/lib/demoMode";
-import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, isBillActiveForMonth, isIncomeActiveForMonth, moveSettledBillOverrideDate, resolveFinalizedBillOccurrenceDays } from "@/lib/schedule";
+import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, getLatestRecordedIncomeAmount, isBillActiveForMonth, isIncomeActiveForMonth, moveSettledBillOverrideDate, resolveFinalizedBillOccurrenceDays } from "@/lib/schedule";
 import { bankBalanceAdjustment, connectedCheckingAnchor, evaluateForecastConfidence, operatingAccountAnchor, type AccountSnapshot, type AccountType, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
 import { scenarioDates, type DecisionResult, type DecisionScenario, type DecisionType } from "@/lib/decisions";
 import {
@@ -2912,7 +2912,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
             const amt = getEffectiveIncomeAmount(i, month, year);
             return s + getIncomeOccurrenceDays(i, month, year).length * amt;
           }
-          return s + incomeToMonthly(i.amount, i.frequency);
+          return s + incomeToMonthly(getLatestRecordedIncomeAmount(i), i.frequency);
         }, 0),
     [incomes]
   );

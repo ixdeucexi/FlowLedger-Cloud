@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, getLatestRecordedIncomeAmount, isBillActiveForMonth, isValidDateInMonth, moveSettledBillOverrideDate, resolveFinalizedBillOccurrenceDays } from "./schedule";
+import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, getLatestIncomeChange, getLatestRecordedIncomeAmount, incomeAmountToMonthly, isBillActiveForMonth, isValidDateInMonth, moveSettledBillOverrideDate, resolveFinalizedBillOccurrenceDays } from "./schedule";
 
 describe("bill scheduling", () => {
   it("validates a selected calendar date inside the intended month", () => {
@@ -147,5 +147,24 @@ describe("income scheduling", () => {
     assert.equal(getLatestRecordedIncomeAmount(income), 2_401.73);
     assert.equal(getEffectiveIncomeAmount(income, 5, 2026), 2_308);
     assert.equal(getEffectiveIncomeAmount(income, 6, 2026), 2_401.73);
+  });
+
+  it("calculates the true monthly average for weekly and biweekly income", () => {
+    assert.equal(incomeAmountToMonthly(1_000, "monthly"), 1_000);
+    assert.equal(incomeAmountToMonthly(1_000, "biweekly"), 26_000 / 12);
+    assert.equal(incomeAmountToMonthly(1_000, "weekly"), 52_000 / 12);
+  });
+
+  it("describes the latest raise against the amount that came before it", () => {
+    const income = { amount: 2_308, frequency: "biweekly" as const, amount_history: [
+      { effective_from: "2026-07", amount: 2_401.73 },
+    ] };
+    assert.deepEqual(getLatestIncomeChange(income), {
+      currentAmount: 2_401.73,
+      difference: 93.73,
+      effectiveFrom: "2026-07",
+      monthlyDifference: 93.73 * 26 / 12,
+      previousAmount: 2_308,
+    });
   });
 });
