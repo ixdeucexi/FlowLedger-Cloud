@@ -693,7 +693,7 @@ function SetupWizard() {
         </View>
 
         {householdMessage ? <Text style={styles.householdMessage}>{householdMessage}</Text> : null}
-        <Text style={styles.householdFootnote}>You can skip this and invite people later from More → Accounts & household.</Text>
+        <Text style={styles.householdFootnote}>You can invite people later in More.</Text>
       </View>
     );
   };
@@ -901,7 +901,7 @@ function SetupWizard() {
             {(current.kind === "multi" || current.kind === "single") ? (
               <View style={styles.safeNote}>
                 <Feather name="lock" size={13} color="#38bdf8" />
-                <Text style={styles.safeNoteText}>These choices personalize Flo only. Your account balances, bills, debts, and goals stay unchanged.</Text>
+                <Text style={styles.safeNoteText}>These choices do not change your money.</Text>
               </View>
             ) : null}
           </View>

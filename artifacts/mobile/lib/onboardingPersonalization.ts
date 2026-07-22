@@ -34,7 +34,7 @@ export function buildSetupPersonalization(preferences: OnboardingPreferences): S
       return {
         focus,
         title: "Debt payoff focus",
-        summary: "I’ll keep debt snowball decisions close, protect your cushion, and point extra money toward the next payoff target.",
+        summary: "I’ll protect your cushion and focus extra money on your next debt.",
         nextActionLabel: "Review snowball",
         nextActionPrompt: "Show me my debt snowball target and the next safe move.",
         nextRoute: "/(tabs)/bills",
@@ -49,7 +49,7 @@ export function buildSetupPersonalization(preferences: OnboardingPreferences): S
       return {
         focus,
         title: "Savings focus",
-        summary: "I’ll protect your cushion first, then look for safe leftover money that can move toward savings goals.",
+        summary: "I’ll protect your cushion, then find money for savings.",
         nextActionLabel: "Plan savings",
         nextActionPrompt: "What can I safely move to savings without hurting the forecast?",
         nextRoute: "/(tabs)/flo",
@@ -64,7 +64,7 @@ export function buildSetupPersonalization(preferences: OnboardingPreferences): S
       return {
         focus,
         title: "Bill review focus",
-        summary: "I’ll watch due dates, bill pressure, and timing before payday so fewer bills surprise the forecast.",
+        summary: "I’ll watch due dates and bills before payday.",
         nextActionLabel: "Review bills",
         nextActionPrompt: "Which bill should I review first, and is any bill squeezing my month?",
         nextRoute: "/(tabs)/bills",
@@ -79,7 +79,7 @@ export function buildSetupPersonalization(preferences: OnboardingPreferences): S
       return {
         focus,
         title: "Spending focus",
-        summary: "I’ll help connect actual transactions to the plan so spending choices do not quietly break the forecast.",
+        summary: "I’ll connect actual spending to your plan.",
         nextActionLabel: "Review activity",
         nextActionPrompt: "Where is my spending putting the most pressure on the plan?",
         nextRoute: "/(tabs)/transactions",
@@ -94,7 +94,7 @@ export function buildSetupPersonalization(preferences: OnboardingPreferences): S
       return {
         focus,
         title: "Budget setup focus",
-        summary: "I’ll start with income, bills, categories, and cushion so FlowLedger can answer decisions from a complete plan.",
+        summary: "I’ll start with income, bills, categories, and your cushion.",
         nextActionLabel: "Continue setup",
         nextActionPrompt: "What setup step should I finish next?",
         nextRoute: "/setup",
@@ -109,7 +109,7 @@ export function buildSetupPersonalization(preferences: OnboardingPreferences): S
       return {
         focus,
         title: "Stay organized focus",
-        summary: "I’ll keep the next action visible and make it easier to review decisions, bills, and forecast changes.",
+        summary: "I’ll keep your next action easy to find.",
         nextActionLabel: "Ask what’s next",
         nextActionPrompt: "What needs my attention next?",
         nextRoute: "/(tabs)/flo",
@@ -125,7 +125,7 @@ export function buildSetupPersonalization(preferences: OnboardingPreferences): S
       return {
         focus: "full",
         title: "Full forecast focus",
-        summary: "I’ll help you finish the core forecast first: accounts, income, bills, debt, goals, and safety cushion.",
+        summary: "I’ll build your core forecast one step at a time.",
         nextActionLabel: "Build forecast",
         nextActionPrompt: "Walk me through the next setup step.",
         nextRoute: "/setup",
@@ -138,4 +138,3 @@ export function buildSetupPersonalization(preferences: OnboardingPreferences): S
       };
   }
 }
-

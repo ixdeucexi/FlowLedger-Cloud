@@ -52,48 +52,48 @@ const DEMO_TOUR_STEPS = [
     title: "Dashboard",
     path: "/(tabs)",
     nextLabel: "Open Monthly",
-    short: "This is the quick answer page.",
-    detail: "Dashboard is where a user checks the headline: balance today, lowest forecast, bills paid, unpaid bills, debt, upcoming bills, and anything Flo thinks needs attention.",
+    short: "Your money at a glance.",
+    detail: "See today's balance, forecast, and next move.",
   },
   {
     route: "monthly",
     title: "Monthly",
     path: "/(tabs)/monthly",
     nextLabel: "Open Bills",
-    short: "This is the calendar and plan view.",
-    detail: "Monthly shows how money moves day by day. Tap a date to see the income, bills, transactions, planned decisions, and projected balance for that day.",
+    short: "Your daily forecast.",
+    detail: "Tap a date to see what changes its balance.",
   },
   {
     route: "bills",
     title: "Bills",
     path: "/(tabs)/bills",
     nextLabel: "Open Activity",
-    short: "This is where obligations are set up.",
-    detail: "Bills holds recurring bills and debts. This is where a user manages due dates, minimum payments, snowball settings, and recurring obligations.",
+    short: "Bills and debt.",
+    detail: "Manage due dates, minimums, and payoff order.",
   },
   {
     route: "transactions",
     title: "Activity",
     path: "/(tabs)/transactions",
     nextLabel: "Open Flo",
-    short: "This is what actually happened.",
-    detail: "Activity is the log of what actually happened. It shows spending, income, transfers, debt payments, and anything imported or manually added so the forecast can stay honest.",
+    short: "What actually happened.",
+    detail: "See spending, income, transfers, and payments.",
   },
   {
     route: "flo",
     title: "Flo",
     path: "/(tabs)/flo",
     nextLabel: "Open More",
-    short: "This is the action and decision layer.",
-    detail: "Flo is where users ask money questions, create plans, preview changes, and get plain-English explanations. Flo should confirm before changing the real plan.",
+    short: "Ask Flo.",
+    detail: "Ask a question or preview a change.",
   },
   {
     route: "more",
     title: "More",
     path: "/(tabs)/more",
     nextLabel: "Finish tour",
-    short: "This is the control room.",
-    detail: "More is where users manage accounts, setup, safety cushion, forecast horizon, imports, exports, app install help, Flo memory, and decision settings.",
+    short: "App controls.",
+    detail: "Manage accounts, setup, data, and preferences.",
   },
 ] as const;
 
@@ -230,7 +230,7 @@ function DemoModeBanner() {
               <Text style={styles.demoExplainTitle}>{activeStep.short}</Text>
             </View>
             {showDetails ? <Text style={styles.demoBannerBody}>{activeStep.detail}</Text> : null}
-            <Text style={styles.demoTapHint}>{showDetails ? "Tap to hide explanation" : "Tap to explain this page"}</Text>
+            <Text style={styles.demoTapHint}>{showDetails ? "Hide" : "Explain"}</Text>
           </Pressable>
           <View style={styles.demoButtonRow}>
             <Pressable onPress={openNextTourStep} style={[styles.demoSmallButton, styles.demoPrimaryButton]}>

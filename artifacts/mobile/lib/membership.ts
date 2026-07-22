@@ -36,15 +36,15 @@ export const PLAN_CATALOG: Record<PlanTier, PlanDefinition> = {
     tier: "free",
     name: "Basic",
     promise: "Build it yourself",
-    description: "The complete manual FlowLedger app for building and running your money plan.",
+    description: "Plan and track everything manually.",
     monthlyPrice: 0,
     annualPrice: 0,
     features: ["manual_budgeting", "flo_basic"],
     highlights: [
-      "Basic Flo guided answers with no AI usage",
-      "Manual accounts and transactions",
+      "Basic Flo guidance",
+      "Manual accounts and activity",
       "Bills, income, categories, and goals",
-      "Forecasts, reports, and reconciliation",
+      "Forecasts and reports",
       "Household sharing",
     ],
   },
@@ -52,7 +52,7 @@ export const PLAN_CATALOG: Record<PlanTier, PlanDefinition> = {
     tier: "pro",
     name: "Pro",
     promise: "Connect and automate",
-    description: "Let Flo and connected bank activity keep the plan current and help with the work.",
+    description: "Connect your bank and let Flo help.",
     monthlyPrice: 9.99,
     annualPrice: 89,
     features: [
@@ -65,11 +65,11 @@ export const PLAN_CATALOG: Record<PlanTier, PlanDefinition> = {
       "connected_insights",
     ],
     highlights: [
-      "Basic Flo guided answers",
-      "Account-aware Flo chat and confirmed actions",
+      "Account-aware Flo",
+      "Confirmed plan changes",
       "Snowball and avalanche payoff tools",
-      "Plaid bank sync and transaction matching",
-      "Automatic review and connected insights",
+      "Bank sync and matching",
+      "Automatic review and insights",
     ],
   },
 };
@@ -77,23 +77,23 @@ export const PLAN_CATALOG: Record<PlanTier, PlanDefinition> = {
 export const PLAN_FEATURE_COPY: Record<Exclude<PlanFeature, "manual_budgeting" | "flo_basic">, { title: string; description: string }> = {
   flo_account_chat: {
     title: "Account-aware Flo chat is Pro",
-    description: "Upgrade to Pro for free-form chat, private history, live household records, and confirmed money-plan proposals. Basic Flo guided answers remain available.",
+    description: "Get account-aware chat, private history, and confirmed plan changes.",
   },
   debt_payoff: {
     title: "Debt payoff tools are Pro",
-    description: "Upgrade to Pro for snowball and avalanche ordering, safe extra-payment calculations, and payoff projections.",
+    description: "Get payoff order, safe extra payments, and projections.",
   },
   plaid_sync: {
     title: "Bank sync is a Pro feature",
-    description: "Upgrade to Pro to connect accounts through Plaid and automatically import bank activity.",
+    description: "Connect accounts and import bank activity.",
   },
   transaction_matching: {
     title: "Bill matching is a Pro feature",
-    description: "Upgrade to Pro to match imported bank transactions to planned bills without counting them twice.",
+    description: "Match bank activity to planned bills once.",
   },
   connected_insights: {
     title: "Connected insights are Pro",
-    description: "Upgrade to Pro for automatic review, categorization, subscription detection, and proactive insights.",
+    description: "Get automatic review, categories, and insights.",
   },
 };
 

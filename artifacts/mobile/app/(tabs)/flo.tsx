@@ -1189,7 +1189,7 @@ export default function FloScreen() {
           </Pressable>
         ) : null}
         <View style={[styles.bubble, styles.floBubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.bubbleText, { color: colors.foreground }]}>Hi, I&apos;m Flo. Ask me about this household&apos;s accounts, activity, bills, income, budget, debts, goals, forecasts, or plans.</Text>
+          <Text style={[styles.bubbleText, { color: colors.foreground }]}>Hi, I&apos;m Flo. What would you like to know?</Text>
         </View>
 
         {chat.messages.map(message => (

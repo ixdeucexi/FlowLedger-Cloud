@@ -60,7 +60,7 @@ export function UnplannedChargeModal({ visible, transaction, categories, saving,
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-            <Text style={[styles.intro, { color: c.mutedForeground }]}>You cannot plan every swipe or emergency. Keep it as a one-time expense, or turn a forgotten signup into a bill so FlowLedger remembers it next time.</Text>
+            <Text style={[styles.intro, { color: c.mutedForeground }]}>Keep it one-time or make it a bill.</Text>
 
             <View style={[styles.bankCard, { backgroundColor: c.card, borderColor: c.border }]}>
               <View style={[styles.bankIcon, { backgroundColor: c.destructive + "16" }]}><Feather name="credit-card" size={19} color={c.destructive} /></View>
@@ -71,8 +71,8 @@ export function UnplannedChargeModal({ visible, transaction, categories, saving,
               <Text style={[styles.bankAmount, { color: c.destructive }]}>−{money(transaction.amount)}</Text>
             </View>
 
-            <Text style={[styles.sectionTitle, { color: c.foreground }]}>One-time or emergency expense</Text>
-            <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Choose where the charge belongs. It stays as one bank transaction and will not repeat next month.</Text>
+            <Text style={[styles.sectionTitle, { color: c.foreground }]}>One-time expense</Text>
+            <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Choose its category. It will not repeat.</Text>
             <View style={styles.categoryGrid}>
               {categoryOptions.map(category => (
                 <Pressable
@@ -93,13 +93,13 @@ export function UnplannedChargeModal({ visible, transaction, categories, saving,
             </Pressable>
 
             <View style={[styles.divider, { borderTopColor: c.border }]} />
-            <Text style={[styles.sectionTitle, { color: c.foreground }]}>Forgotten bill or subscription?</Text>
-            <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Create a recurring bill from this payment. The normal bill window will be filled in with the bank name, amount, and date.</Text>
+            <Text style={[styles.sectionTitle, { color: c.foreground }]}>Will it happen again?</Text>
+            <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Create a bill using this payment.</Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Create a bill from this bank charge" disabled={saving} onPress={onCreateBill} style={({ pressed }) => [styles.billButton, { borderColor: c.primary + "66", backgroundColor: c.primary + "10", opacity: pressed ? 0.76 : 1 }]}>
               <View style={[styles.billIcon, { backgroundColor: c.primary + "18" }]}><Feather name="file-text" size={17} color={c.primary} /></View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.billTitle, { color: c.foreground }]}>Make this a bill</Text>
-                <Text style={[styles.billCopy, { color: c.mutedForeground }]}>Useful for subscriptions, memberships, payments, and anything that will happen again.</Text>
+                <Text style={[styles.billCopy, { color: c.mutedForeground }]}>Best for recurring charges.</Text>
               </View>
               <Feather name="chevron-right" size={18} color={c.primary} />
             </Pressable>

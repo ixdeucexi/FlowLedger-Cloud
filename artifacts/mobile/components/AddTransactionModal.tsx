@@ -310,7 +310,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
 
             {!isTransfer && isExpense && activeDebts.length > 0 && <>
               <Text style={labelStyle}>Apply Toward Debt (Optional)</Text>
-              <Text style={[styles.helpText, { color: c.mutedForeground }]}>The payment stays on the calendar and reduces the selected debt when this date arrives.</Text>
+              <Text style={[styles.helpText, { color: c.mutedForeground }]}>Reduces the debt on this date.</Text>
               <View style={styles.categoryGrid}>
                 <Pressable onPress={() => setLinkedBillId(undefined)} style={[styles.chip, { backgroundColor: !linkedBillId ? c.primary : c.muted, borderRadius: 8 }]}>
                   <Text style={[styles.chipText, { color: !linkedBillId ? c.primaryForeground : c.mutedForeground }]}>No debt</Text>

@@ -1241,7 +1241,7 @@ export function ActivityScreen() {
                   <Feather name="check-circle" size={22} color={c.success} />
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.matchRowTitle, { color: c.foreground }]}>Matched to {matchedBillForModal.name}</Text>
-                    <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>This bank payment replaces the bill’s planned cash-flow event.</Text>
+                    <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>Replaces the planned bill.</Text>
                   </View>
                 </View>
                 <Pressable accessibilityRole="button" accessibilityLabel={`Undo match to ${matchedBillForModal.name}`} disabled={savingMatch} onPress={() => void handleUnmatchBill()} style={[styles.unmatchButton, { borderColor: c.destructive, opacity: savingMatch ? 0.55 : 1 }]}>
@@ -1250,7 +1250,7 @@ export function ActivityScreen() {
               </View>
             ) : (
               <>
-                <Text style={[styles.matchIntro, { color: c.mutedForeground }]}>Choose the bill this payment fulfilled. FlowLedger will mark it paid and count the money once.</Text>
+                <Text style={[styles.matchIntro, { color: c.mutedForeground }]}>Choose the bill this payment covered.</Text>
                 <ScrollView style={styles.matchList} showsVerticalScrollIndicator={false}>
                   {billMatchOptions.length > 0 ? billMatchOptions.map((option, index) => (
                     <Pressable
@@ -1281,7 +1281,7 @@ export function ActivityScreen() {
                   )) : (
                     <View style={[styles.noMatchCard, { backgroundColor: c.card, borderColor: c.border }]}>
                       <Text style={[styles.matchRowTitle, { color: c.foreground }]}>No bills due this month</Text>
-                      <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>Create the bill first, then return here to match it.</Text>
+                      <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>Create a bill, then match it here.</Text>
                     </View>
                   )}
                 </ScrollView>

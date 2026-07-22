@@ -98,10 +98,10 @@ export function PlanViewSelector({ textStyle }: PlanViewSelectorProps) {
                     <Text style={[styles.sheetTitle, { color: c.foreground }]}>Try Zero Budget</Text>
                   </View>
                 </View>
-                <Text style={[styles.explanation, { color: c.mutedForeground }]}>Hi, I’m Flo. Zero Budget changes this tab into a place where you give every planned dollar a job. Your real income, bills, bank activity, calendar, and FlowLedger algorithms stay connected.</Text>
+                <Text style={[styles.explanation, { color: c.mutedForeground }]}>I&apos;ll help you give every planned dollar a job. Your full plan stays connected.</Text>
                 <View style={[styles.preserveNote, { backgroundColor: c.success + "12", borderColor: c.success + "35" }]}>
                   <Feather name="shield" size={17} color={c.success} />
-                  <Text style={[styles.preserveText, { color: c.foreground }]}>You can switch back anytime without losing your saved assignments.</Text>
+                  <Text style={[styles.preserveText, { color: c.foreground }]}>Switch back anytime without losing assignments.</Text>
                 </View>
                 <Pressable disabled={switching} onPress={confirmFloIntro} style={[styles.primaryButton, { backgroundColor: c.primary, opacity: switching ? 0.55 : 1 }]}>
                   <Text style={[styles.primaryButtonText, { color: c.primaryForeground }]}>{switching ? "Switching…" : "Use Zero Budget"}</Text>
@@ -114,7 +114,7 @@ export function PlanViewSelector({ textStyle }: PlanViewSelectorProps) {
               <>
                 <Text style={[styles.eyebrow, { color: c.primary }]}>PLAN VIEW</Text>
                 <Text style={[styles.sheetTitle, { color: c.foreground }]}>How do you want to work?</Text>
-                <Text style={[styles.sheetSubtitle, { color: c.mutedForeground }]}>Both views use the same FlowLedger plan and real account activity.</Text>
+                <Text style={[styles.sheetSubtitle, { color: c.mutedForeground }]}>Both views use the same money.</Text>
                 <PlanViewOption
                   c={c}
                   icon="repeat"

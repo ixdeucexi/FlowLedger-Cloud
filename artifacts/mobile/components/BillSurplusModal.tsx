@@ -61,8 +61,8 @@ export function BillSurplusModal({ visible, billName, itemType = "bill", budgete
             minDate={paymentDateMin}
             maxDate={paymentDateMax}
           />}
-          {snowballEnabled && <Text style={[styles.dateHelp, { color: c.mutedForeground }]}>This date will appear as the extra debt payment on your calendar.</Text>}
-          {snowballEnabled && !targetDebt && <Text style={[styles.note, { color: c.mutedForeground }]}>No debt is currently included in your snowball.</Text>}
+          {snowballEnabled && <Text style={[styles.dateHelp, { color: c.mutedForeground }]}>Adds the debt payment to your calendar.</Text>}
+          {snowballEnabled && !targetDebt && <Text style={[styles.note, { color: c.mutedForeground }]}>No snowball debt selected.</Text>}
           {snowballEnabled && targetDebt && !paymentDateValid && <Text style={[styles.note, { color: c.warning }]}>Choose a valid date in this bill&apos;s month.</Text>}
           {snowballEnabled && targetDebt && paymentDateValid && !snowballSafe && <Text style={[styles.note, { color: c.warning }]}>Keep this money available to preserve your ${safetyFloor.toFixed(0)} floor across {forecastHorizonMonths} months.</Text>}
           {snowballEnabled && <Pressable disabled={saving || !targetDebt || !snowballSafe} onPress={onSnowball} style={[styles.primary, { backgroundColor: targetDebt && snowballSafe ? c.primary : c.muted, opacity: saving ? 0.55 : 1 }]}>

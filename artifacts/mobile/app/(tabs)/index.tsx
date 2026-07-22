@@ -1214,7 +1214,7 @@ export default function DashboardScreen() {
             }) : (
               <Pressable onPress={() => { setEditGoal(null); setGoalModalVisible(true); }} style={[styles.referenceGoalsEmpty, { backgroundColor: dashboardTheme.purpleSurface, borderColor: dashboardTheme.purpleBorder }]}>
                 <Feather name="target" size={17} color="#a78bfa" />
-                <AppText style={[styles.referenceGoalsEmptyText, { color: dashboardTheme.mutedText }]}>No goals yet. Add one to start tracking progress.</AppText>
+                <AppText style={[styles.referenceGoalsEmptyText, { color: dashboardTheme.mutedText }]}>No goals yet.</AppText>
               </Pressable>
             )}
             {currentGoals.length > 3 && <AppText style={styles.referenceGoalsMore}>+{currentGoals.length - 3} more goal{currentGoals.length - 3 === 1 ? "" : "s"}</AppText>}

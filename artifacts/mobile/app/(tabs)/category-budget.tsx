@@ -178,7 +178,7 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
             <Feather name="pie-chart" size={24} color={c.primary} />
           </View>
           <Text style={[styles.modeGateTitle, { color: c.foreground }]}>Zero-Based Budget is off</Text>
-          <Text style={[styles.modeGateText, { color: c.mutedForeground }]}>Switch to Zero Budget to give every dollar a category, track what remains, and move money between categories. Your saved category amounts are still here.</Text>
+          <Text style={[styles.modeGateText, { color: c.mutedForeground }]}>Turn it on to assign and move money by category.</Text>
           <Pressable onPress={() => void updateSettings({ zeroBasedBudgetEnabled: true })} style={[styles.modeGateButton, { backgroundColor: c.primary }]}>
             <Text style={[styles.modeGateButtonText, { color: c.primaryForeground }]}>Use Zero Budget</Text>
           </Pressable>

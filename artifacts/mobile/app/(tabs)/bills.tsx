@@ -788,7 +788,7 @@ export default function BillsScreen() {
             <EmptyState
               icon="credit-card"
               title="No Debts Tracked"
-              message="Add credit cards, loans, or any debt to track payoff progress and get snowball/avalanche recommendations."
+        message="Add a debt to build your payoff plan."
               actionLabel="Add Debt"
               onAction={() => { setEditBill(null); setModalVisible(true); }}
             />

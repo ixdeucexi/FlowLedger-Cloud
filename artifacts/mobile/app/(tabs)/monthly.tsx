@@ -1393,7 +1393,7 @@ export default function MonthlyScreen() {
                     <View style={[styles.zeroBudgetMonthlyIcon, { backgroundColor: c.primary + "18" }]}><Feather name="pie-chart" size={15} color={c.primary} /></View>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.zeroBudgetMonthlyTitle, { color: c.foreground }]}>Zero-Based Plan</Text>
-                      <Text style={[styles.zeroBudgetMonthlyText, { color: c.mutedForeground }]}>Review assignments or move money between categories.</Text>
+                      <Text style={[styles.zeroBudgetMonthlyText, { color: c.mutedForeground }]}>Assign or move money.</Text>
                     </View>
                     <Feather name="chevron-right" size={16} color={c.primary} />
                   </Pressable>

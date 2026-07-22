@@ -1568,7 +1568,7 @@ export default function MoreScreen() {
         <View style={[styles.floSetupHero, { backgroundColor: c.primary + "10", borderColor: c.primary + "30" }]}>
           <FloLogo size={54} />
           <View style={{ flex: 1 }}>
-            <Text style={[styles.floSetupTitle, { color: c.foreground }]}>Hi, I&apos;m Flo. Let&apos;s set up your money.</Text>
+            <Text style={[styles.floSetupTitle, { color: c.foreground }]}>Let&apos;s set up your plan.</Text>
             <Text style={[styles.floSetupDesc, { color: c.mutedForeground }]}>
               I&apos;ll ask one question at a time, then FlowLedger will use your answers for forecasts and decisions.
             </Text>
@@ -1658,7 +1658,7 @@ export default function MoreScreen() {
             <Feather name="check-circle" size={16} color={c.success} />
             <View style={{ flex: 1 }}>
               <Text style={[styles.accountName, { color: c.foreground }]}>Setup is complete</Text>
-              <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>You can restart Flo setup or replay the Demo any time.</Text>
+              <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Restart setup or replay the demo.</Text>
             </View>
           </View>
           <Pressable
@@ -1820,14 +1820,14 @@ export default function MoreScreen() {
           <View style={styles.householdPanelHeader}>
             <View style={styles.householdPanelHeaderCopy}>
               <Text style={[styles.householdPanelTitle, { color: c.foreground }]}>Members</Text>
-              <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Everyone here sees the same household plan.</Text>
+              <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Shared by this household.</Text>
             </View>
             <Pressable onPress={refreshHouseholds} disabled={householdBusy} hitSlop={10} style={({ pressed }) => ({ opacity: pressed || householdBusy ? 0.6 : 1 })}>
               <Feather name="refresh-cw" size={16} color={c.primary} />
             </Pressable>
           </View>
           {householdMembers.length === 0 ? (
-            <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Members will show here after the household syncs.</Text>
+            <Text style={[styles.emptyText, { color: c.mutedForeground }]}>No members yet.</Text>
           ) : householdMembers.map(member => {
             const label = member.displayName || member.email || `Member ${member.userId.slice(0, 6)}`;
             const assignableRoles = householdAssignableRolesFor(activeHousehold?.role, member.role, member.isCurrentUser);
@@ -1945,7 +1945,7 @@ export default function MoreScreen() {
               )}
             </>
           ) : (
-            <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Only household owners and managers can create invite codes.</Text>
+            <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Only owners and managers can invite.</Text>
           )}
         </View>
 
@@ -1986,7 +1986,7 @@ export default function MoreScreen() {
             </Pressable>
           </View>
           {householdActivity.length === 0 ? (
-            <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Household edits will appear here after the activity table is available.</Text>
+            <Text style={[styles.emptyText, { color: c.mutedForeground }]}>No household changes yet.</Text>
           ) : householdActivity.slice(0, 12).map(activity => {
             const actor = activity.actorName || activity.actorEmail || "A household member";
             return (
@@ -2029,7 +2029,7 @@ export default function MoreScreen() {
             <View style={styles.accountRight}><Text style={[styles.incomeMonthly, { color: c.foreground }]}>${account.current_balance.toFixed(2)}</Text><Text style={[styles.reconcileText, { color: c.mutedForeground }]}>Proj ${projected.toFixed(2)}</Text><Pressable onPress={() => openAccount("reconcile", account)}><Text style={[styles.reconcileText, { color: c.primary }]}>Reconcile</Text></Pressable></View>
           </View>;
         })}
-        {!accounts.some(account => account.is_active) && <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Add checking, savings, or cash accounts that fund your budget.</Text>}
+        {!accounts.some(account => account.is_active) && <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Add your first account.</Text>}
         <Pressable onPress={() => openAccount("add")} style={[styles.addBtn, { backgroundColor: c.primary + "12", borderRadius: 10 }]}><Feather name="plus" size={16} color={c.primary} /><Text style={[styles.addBtnText, { color: c.primary }]}>Add Account</Text></Pressable>
       </View>
 
@@ -2039,7 +2039,7 @@ export default function MoreScreen() {
       {activeSettingsSection === "money" && <>
       <SLabel c={c} text="Planning Tools" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        <Text style={[styles.planningModeIntro, { color: c.mutedForeground }]}>Turn either tool on or off. You can use zero-based budgeting with Snowball or Avalanche, and switching tools never removes saved data.</Text>
+        <Text style={[styles.planningModeIntro, { color: c.mutedForeground }]}>Choose your budgeting and payoff tools. Switching keeps your data.</Text>
         <View style={styles.planningModeList}>
           <PlanningToolToggle
             c={c}
@@ -2089,7 +2089,7 @@ export default function MoreScreen() {
                   <Text style={[styles.zeroBudgetLabBadgeText, { color: c.success }]}>ISOLATED</Text>
                 </View>
               </View>
-              <Text style={[styles.zeroBudgetLabDescription, { color: c.mutedForeground }]}>Test the new assign-every-dollar experience with sample money. Your real household stays unchanged.</Text>
+              <Text style={[styles.zeroBudgetLabDescription, { color: c.mutedForeground }]}>Test Zero Budget with sample money.</Text>
             </View>
             <Feather name="chevron-right" size={19} color={c.primary} />
           </Pressable>
@@ -2156,7 +2156,7 @@ export default function MoreScreen() {
           </View>
           <View style={styles.switchInfo}>
             <Text style={[styles.switchLabel, { color: c.foreground }]}>Open Zero Budget</Text>
-            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Open the Budget tab to assign money, move it, and ask Flo by category.</Text>
+              <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Assign and move money in Budget.</Text>
           </View>
           <Feather name="chevron-right" size={18} color={c.primary} />
         </Pressable>}
@@ -2270,7 +2270,7 @@ export default function MoreScreen() {
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
         <View>
           <Text style={[styles.switchLabel, { color: c.foreground, marginBottom: 2 }]}>Forecast Safety</Text>
-          <Text style={[styles.switchDesc, { color: c.mutedForeground, marginBottom: 10 }]}>Protect this minimum balance across your selected forecast window.</Text>
+          <Text style={[styles.switchDesc, { color: c.mutedForeground, marginBottom: 10 }]}>The minimum balance your forecast protects.</Text>
           <View style={forecastSafetyLayout.fields}>
             <View style={forecastSafetyLayout.field}>
               <Text style={[styles.balanceFieldLabel, { color: c.mutedForeground }]}>Safety floor ($)</Text>
@@ -2305,7 +2305,7 @@ export default function MoreScreen() {
         </View>
         <View style={[styles.balanceDivider, { borderTopColor: c.border }]}>
           <Text style={[styles.switchLabel, { color: c.foreground, marginBottom: 2 }]}>Forecast balance source</Text>
-          <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Your active accounts now supply the dated starting balance. Reconcile an account above whenever the bank and FlowLedger differ.</Text>
+          <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Reconcile when FlowLedger and your bank differ.</Text>
         </View>
       </View>
 
@@ -2600,7 +2600,7 @@ export default function MoreScreen() {
           </View>
         ))}
         {!smartReminders.length && (
-          <Text style={[styles.emptyText, { color: c.mutedForeground }]}>No reminders right now. I’ll surface bills, reviews, subscriptions, goals, and reconciliation items here.</Text>
+          <Text style={[styles.emptyText, { color: c.mutedForeground }]}>No reminders right now.</Text>
         )}
       </View>
       </>}
@@ -2634,7 +2634,7 @@ export default function MoreScreen() {
           );
         })}
         {!goalFundingPlans.length && (
-          <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Add a goal from the plus button and I’ll turn it into a funding plan that respects your safety floor.</Text>
+          <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Add a goal to build its funding plan.</Text>
         )}
       </View>
       </>}
@@ -2706,7 +2706,7 @@ export default function MoreScreen() {
           </View>
         ))}
         {!childMoneySummary.length && (
-          <Text style={[styles.emptyText, { color: c.mutedForeground }]}>No child profiles yet. Add one to start testing allowance, savings goals, and kid-safe money coaching without exposing adult controls.</Text>
+          <Text style={[styles.emptyText, { color: c.mutedForeground }]}>No child profiles yet.</Text>
         )}
       </View>
       </>}
@@ -2753,7 +2753,7 @@ export default function MoreScreen() {
           </View>
           <View style={styles.switchInfo}>
             <Text style={[styles.switchLabel, { color: c.foreground }]}>Send FlowLedger feedback</Text>
-            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Tell me what felt broken, confusing, slow, or useful. This goes to the FlowLedger app inbox, not your household.</Text>
+            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Tell us what worked or needs improvement.</Text>
           </View>
         </View>
         <View style={styles.feedbackChipGrid}>
@@ -3067,7 +3067,7 @@ export default function MoreScreen() {
                 <Text style={[styles.infoSheetTitle, { color: c.foreground }]}>Use Zero-Based Budget</Text>
               </View>
             </View>
-            <Text style={[styles.infoSheetDesc, { color: c.mutedForeground }]}>FlowLedger will use planned take-home income, bills, savings, and debt to help you give every dollar a job. This does not turn off your debt payoff plan.</Text>
+            <Text style={[styles.infoSheetDesc, { color: c.mutedForeground }]}>Assign planned income to bills, savings, debt, and spending.</Text>
             <View style={styles.zeroBudgetIntroSteps}>
               {["Confirm monthly income", "Review suggested assignments", "Reach $0 left to assign"].map((step, index) => (
                 <View key={step} style={styles.zeroBudgetIntroStep}>

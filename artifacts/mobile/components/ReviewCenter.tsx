@@ -498,7 +498,7 @@ export function ReviewCenter() {
         <View style={{ flex: 1 }}>
           <Text style={[styles.eyebrow, { color: c.primary }]}>PRO REVIEW CENTER</Text>
           <Text style={[styles.heroTitle, { color: c.foreground }]}>Match the bank to your plan</Text>
-          <Text style={[styles.heroCopy, { color: c.mutedForeground }]}>Confirm each posted transaction once. FlowLedger updates the calendar and moves to the next item.</Text>
+          <Text style={[styles.heroCopy, { color: c.mutedForeground }]}>Match each posted transaction once.</Text>
         </View>
       </View>
 
@@ -508,7 +508,7 @@ export function ReviewCenter() {
             <View style={[styles.heroIcon, { backgroundColor: c.primary + "18" }]}><Feather name="shopping-bag" size={19} color={c.primary} /></View>
             <View style={styles.optionCopy}>
               <Text style={[styles.sectionTitle, styles.bucketManagerTitle, { color: c.foreground }]}>Spending buckets</Text>
-              <Text style={[styles.sectionCopy, styles.bucketManagerCopy, { color: c.mutedForeground }]}>Edit a plan or close it without waiting for another transaction.</Text>
+              <Text style={[styles.sectionCopy, styles.bucketManagerCopy, { color: c.mutedForeground }]}>Edit, close, or archive a bucket.</Text>
             </View>
           </View>
           {bucketMessage ? <Text style={[styles.bucketMessage, { color: c.success, backgroundColor: c.success + "12" }]}>{bucketMessage}</Text> : null}
@@ -615,7 +615,7 @@ export function ReviewCenter() {
         <View style={[styles.emptyCard, { backgroundColor: c.card, borderColor: c.warning + "44" }]}>
           <Feather name="clock" size={30} color={c.warning} />
           <Text style={[styles.emptyTitle, { color: c.foreground }]}>Skipped for now</Text>
-          <Text style={[styles.emptyText, { color: c.mutedForeground }]}>These transactions are still waiting. Nothing was marked reviewed or changed.</Text>
+          <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Nothing was changed.</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Review skipped transactions" onPress={() => setSkippedIds([])} style={[styles.primaryButton, styles.reviewSkippedButton, { backgroundColor: c.primary }]}>
             <Text style={[styles.primaryButtonText, { color: c.primaryForeground }]}>Review skipped items</Text>
           </Pressable>
@@ -624,7 +624,7 @@ export function ReviewCenter() {
         <View style={[styles.emptyCard, { backgroundColor: c.card, borderColor: c.success + "44" }]}>
           <Feather name="check-circle" size={32} color={c.success} />
           <Text style={[styles.emptyTitle, { color: c.foreground }]}>You’re caught up</Text>
-          <Text style={[styles.emptyText, { color: c.mutedForeground }]}>New posted bank activity will appear here. Pending items stay out until the bank posts them.</Text>
+          <Text style={[styles.emptyText, { color: c.mutedForeground }]}>New posted activity will appear here.</Text>
         </View>
       ) : (
         <View style={[styles.reviewCard, { backgroundColor: c.card, borderColor: c.border }]}>
@@ -657,27 +657,27 @@ export function ReviewCenter() {
               <Feather name="plus-circle" size={18} color={c.primary} />
               <View style={styles.optionCopy}>
                 <Text style={[styles.optionTitle, { color: c.foreground }]}>Create a spending bucket</Text>
-                <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Use this for a weekend, trip, emergency, or purchase you planned as one total amount.</Text>
+                <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Set aside money for several purchases.</Text>
               </View>
               <Feather name="chevron-right" size={17} color={c.primary} />
             </Pressable>
 
             {groupedTargets.bills.length ? <>
               <Text style={[styles.subsectionTitle, { color: c.foreground }]}>Bills and debt</Text>
-              <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Use these only when the bank charge paid a bill or debt payment.</Text>
+              <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Choose the bill or debt this paid.</Text>
               {groupedTargets.bills.map(renderTarget)}
             </> : null}
           </>}
 
           <View style={[styles.divider, { borderTopColor: c.border }]} />
           <Text style={[styles.sectionTitle, { color: c.foreground }]}>Other options</Text>
-          <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Handle activity that was not part of the plan, or come back to it later.</Text>
+          <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Finish it another way or skip it.</Text>
           {current.amount < 0 ? <>
             <Pressable accessibilityRole="button" accessibilityLabel="Open forgotten expense options" disabled={saving} onPress={() => setUnplannedChargeVisible(true)} style={({ pressed }) => [styles.optionButton, { borderColor: c.border, backgroundColor: "transparent", opacity: saving ? 0.55 : pressed ? 0.75 : 1 }]}>
               <Feather name="shopping-bag" size={17} color={c.primary} />
               <View style={styles.optionCopy}>
                 <Text style={[styles.optionTitle, { color: c.foreground }]}>Forgotten or one-time expense</Text>
-                <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Handle an emergency swipe, one-time charge, or forgotten subscription.</Text>
+                <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Categorize it or create a bill.</Text>
               </View>
               <Feather name="chevron-right" size={17} color={c.mutedForeground} />
             </Pressable>
@@ -686,7 +686,7 @@ export function ReviewCenter() {
               <Feather name="plus-circle" size={17} color={c.success} />
               <View style={styles.optionCopy}>
                 <Text style={[styles.optionTitle, { color: c.foreground }]}>Unplanned income</Text>
-                <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Keep this deposit without matching expected income.</Text>
+                <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Record it without a planned match.</Text>
               </View>
               <Feather name="chevron-right" size={17} color={c.mutedForeground} />
             </Pressable>
@@ -695,7 +695,7 @@ export function ReviewCenter() {
             <Feather name="repeat" size={17} color={c.primary} />
             <View style={styles.optionCopy}>
               <Text style={[styles.optionTitle, { color: c.foreground }]}>Transfer between my accounts</Text>
-              <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Only use this when money moved between accounts you track. Transfers are excluded from cash flow.</Text>
+              <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Not counted as income or spending.</Text>
             </View>
             <Feather name="chevron-right" size={17} color={c.mutedForeground} />
           </Pressable>
@@ -783,7 +783,7 @@ export function ReviewCenter() {
                   : `${variance.target.name} was ${money(Math.abs(variance.transaction.amount) - variance.target.plannedAmount)} over plan`}
               </Text>
               {variance.direction === "lower" && (variance.target.type === "goal" || variance.target.type === "decision") ? (
-                <Text style={[styles.modalDescription, { color: c.mutedForeground }]}>Add this purchase to the bucket and keep the rest set aside, or close the bucket and make the leftover available again.</Text>
+                <Text style={[styles.modalDescription, { color: c.mutedForeground }]}>Keep the rest set aside or close the bucket.</Text>
               ) : null}
               <View style={[styles.amountBox, { backgroundColor: c.muted }]}>
                 <View style={styles.amountLine}><Text style={[styles.amountLabel, { color: c.mutedForeground }]}>{variance.target.type === "goal" || variance.target.type === "decision" ? "Bucket remaining" : "Plan amount"}</Text><Text style={[styles.amountValue, { color: c.foreground }]}>{money(variance.target.plannedAmount)}</Text></View>

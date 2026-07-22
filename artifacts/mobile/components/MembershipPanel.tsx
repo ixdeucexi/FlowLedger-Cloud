@@ -56,7 +56,7 @@ export function MembershipPanel() {
 
       <View style={[styles.earlyAccess, { backgroundColor: c.success + "10", borderColor: c.success + "35" }]}>
         <Feather name="check-circle" size={17} color={c.success} />
-        <Text style={[styles.earlyAccessText, { color: c.foreground }]}>Basic Flo and manual planning are included with Basic. Bank connections, reconciliation, and account-aware Flo require Pro.</Text>
+        <Text style={[styles.earlyAccessText, { color: c.foreground }]}>Basic includes manual planning. Pro adds bank connections and account-aware Flo.</Text>
       </View>
 
       {isAdmin ? (<>
@@ -65,7 +65,7 @@ export function MembershipPanel() {
             <Feather name="tool" size={18} color={c.warning} />
             <View style={styles.currentCopy}>
               <Text style={[styles.adminTitle, { color: c.foreground }]}>Admin Plan Preview</Text>
-              <Text style={[styles.adminDescription, { color: c.mutedForeground }]}>Test future locks on this device without changing the household’s real plan.</Text>
+              <Text style={[styles.adminDescription, { color: c.mutedForeground }]}>Preview plan locks on this device.</Text>
             </View>
           </View>
           <View style={styles.adminActions}>
@@ -99,7 +99,7 @@ export function MembershipPanel() {
             <Feather name="user-check" size={18} color={c.primary} />
             <View style={styles.currentCopy}>
               <Text style={[styles.adminTitle, { color: c.foreground }]}>Tester Access</Text>
-              <Text style={[styles.adminDescription, { color: c.mutedForeground }]}>Grant or remove real Pro access for a tester's personal household. This is separate from Plan Preview.</Text>
+              <Text style={[styles.adminDescription, { color: c.mutedForeground }]}>Manage a tester&apos;s real plan.</Text>
             </View>
           </View>
           <TextInput
