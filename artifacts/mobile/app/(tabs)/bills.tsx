@@ -3,7 +3,7 @@ import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View,
+  Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -65,6 +65,7 @@ export default function BillsScreen() {
   const [editBill, setEditBill]         = useState<Bill | null>(null);
   const [filter, setFilter]             = useState<Filter>("all");
   const [sortMode, setSortMode]         = useState<SortMode>("priority");
+  const [debtInfoVisible, setDebtInfoVisible] = useState(false);
   const [dismissedBillPromptKey, setDismissedBillPromptKey] = useState<string | null>(null);
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
 
@@ -651,12 +652,7 @@ export default function BillsScreen() {
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`How the ${settings.paymentMethod} plan works`}
-                    onPress={() => Alert.alert(
-                      settings.paymentMethod === "avalanche" ? "How Avalanche works" : "How Snowball works",
-                      settings.paymentMethod === "avalanche"
-                        ? "Keep paying every minimum. Extra money goes to the highest-interest debt first. When it is paid off, that payment rolls to the next debt."
-                        : "Keep paying every minimum. Extra money goes to the smallest balance first. When it is paid off, that payment rolls to the next debt.",
-                    )}
+                    onPress={() => setDebtInfoVisible(true)}
                     style={({ pressed }) => [styles.debtInfoButton, { borderColor: c.border, opacity: pressed ? 0.7 : 1 }]}
                   >
                     <Feather name="info" size={17} color={c.primary} />
@@ -854,6 +850,53 @@ export default function BillsScreen() {
 
       </ScrollView>
 
+      <Modal
+        animationType="fade"
+        transparent
+        visible={debtInfoVisible}
+        onRequestClose={() => setDebtInfoVisible(false)}
+      >
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close payoff information"
+          onPress={() => setDebtInfoVisible(false)}
+          style={styles.debtInfoOverlay}
+        >
+          <Pressable
+            accessibilityRole="none"
+            onPress={event => event.stopPropagation()}
+            style={[styles.debtInfoModal, { backgroundColor: c.card, borderColor: c.border }]}
+          >
+            <View style={styles.debtInfoHeader}>
+              <View style={[styles.debtInfoIcon, { backgroundColor: c.primary + "18" }]}>
+                <Feather name="info" size={20} color={c.primary} />
+              </View>
+              <Text style={[styles.debtInfoTitle, { color: c.foreground }]}>How {settings.paymentMethod === "avalanche" ? "Avalanche" : "Snowball"} works</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                onPress={() => setDebtInfoVisible(false)}
+                hitSlop={10}
+              >
+                <Feather name="x" size={21} color={c.mutedForeground} />
+              </Pressable>
+            </View>
+            <View style={styles.debtInfoSteps}>
+              <Text style={[styles.debtInfoStep, { color: c.foreground }]}>1. Pay every minimum.</Text>
+              <Text style={[styles.debtInfoStep, { color: c.foreground }]}>2. Send extra to the {settings.paymentMethod === "avalanche" ? "highest-interest debt" : "smallest balance"}.</Text>
+              <Text style={[styles.debtInfoStep, { color: c.foreground }]}>3. Roll that payment to the next debt.</Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setDebtInfoVisible(false)}
+              style={({ pressed }) => [styles.debtInfoDone, { backgroundColor: c.primary, opacity: pressed ? 0.8 : 1 }]}
+            >
+              <Text style={[styles.debtInfoDoneText, { color: c.primaryForeground }]}>Got it</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <AddBillModal
         visible={modalVisible}
         onClose={() => { setModalVisible(false); setEditBill(null); }}
@@ -942,6 +985,15 @@ const styles = StyleSheet.create({
   debtAlgoTitle:  { fontSize: 17, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
   debtAlgoActions: { flexDirection: "row", alignItems: "center", gap: 7 },
   debtInfoButton: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  debtInfoOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.72)", alignItems: "center", justifyContent: "center", padding: 24 },
+  debtInfoModal: { width: "100%", maxWidth: 420, borderWidth: 1, borderRadius: 22, padding: 18, gap: 18 },
+  debtInfoHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  debtInfoIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  debtInfoTitle: { flex: 1, fontSize: 18, fontFamily: "Inter_800ExtraBold" },
+  debtInfoSteps: { gap: 12 },
+  debtInfoStep: { fontSize: 14, lineHeight: 20, fontFamily: "Inter_600SemiBold" },
+  debtInfoDone: { height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  debtInfoDoneText: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   debtPlanApplyButton: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999 },
   debtPlanApplyText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   debtPaymentSummary: { flexDirection: "row", borderWidth: 1, borderRadius: 15, paddingVertical: 10 },
