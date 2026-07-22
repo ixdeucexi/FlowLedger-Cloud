@@ -265,35 +265,12 @@ export default function BillsScreen() {
   const assignedDebtExtra = settings.zeroBasedBudgetEnabled
     ? Math.max(0, Number(categoryBudgets.Debt ?? totalMinPayments) - totalMinPayments)
     : cashFlowSafeSnowballAmount;
-  const safeSnowballAmount = settings.zeroBasedBudgetEnabled
-    ? Math.min(cashFlowSafeSnowballAmount, assignedDebtExtra)
-    : cashFlowSafeSnowballAmount;
   const highestAPR       = debts.length ? Math.max(...debts.map(b => b.interest_rate)) : 0;
   const snowballTarget = snowballOrder[0] ?? null;
   const avalancheTarget = avalancheOrder[0] ?? null;
-  const cashFlowTarget = activeDebts.slice().sort((a, b) => {
-    const aMin = Math.max(0.01, debtMonthlyMinimum(a));
-    const bMin = Math.max(0.01, debtMonthlyMinimum(b));
-    return (a.balance / aMin) - (b.balance / bMin) || bMin - aMin || a.balance - b.balance || a.name.localeCompare(b.name);
-  })[0] ?? null;
   const activeDebtTarget = settings.paymentMethod === "avalanche" ? avalancheTarget ?? snowballTarget : snowballTarget;
   const activeDebtMinimum = activeDebtTarget ? debtMonthlyMinimum(activeDebtTarget) : 0;
-  const activeDebtMonths = activeDebtTarget && activeDebtMinimum > 0 ? Math.ceil(activeDebtTarget.balance / activeDebtMinimum) : 0;
   const nextStrategyTarget = strategyOrder[1] ?? null;
-  const targetReason = activeDebtTarget
-    ? settings.paymentMethod === "avalanche"
-      ? activeDebtTarget.interest_rate > 0
-        ? `It has your highest APR at ${activeDebtTarget.interest_rate}%.`
-        : "It is first in your Avalanche order."
-      : "It has your smallest active balance."
-    : "";
-  const debtRoomExplanation = settings.zeroBasedBudgetEnabled && cashFlowSafeSnowballAmount > 0 && assignedDebtExtra <= 0
-    ? "Your cash flow can support an extra debt payment, but assign that money to Debt first."
-    : activeDebtTarget && safeSnowballAmount > 0
-      ? `Put safe extra money toward ${activeDebtTarget.name} first. ${targetReason}`
-      : activeDebtTarget
-        ? `Keep extra cash available for now. When there is room, ${activeDebtTarget.name} is first. ${targetReason}`
-        : "Add an active debt to build a payoff order.";
 
   const priorityColors = ["#22c55e", "#f0b429", "#ef4444", "#8b5cf6", "#ec4899"];
   const todayIso = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -668,9 +645,7 @@ export default function BillsScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.debtAlgoEyebrow, { color: c.primary }]}>{settings.paymentMethod === "avalanche" ? "Avalanche Plan" : "Snowball Plan"}</Text>
-                  <Text style={[styles.debtAlgoTitle, { color: c.foreground }]}>
-                    {activeDebtTarget ? `Focus on ${activeDebtTarget.name}` : "No active target"}
-                  </Text>
+                  <Text style={[styles.debtAlgoTitle, { color: c.foreground }]}>{activeDebtTarget?.name ?? "No active target"}</Text>
                 </View>
                 <Pressable
                   accessibilityRole="button"
@@ -683,25 +658,24 @@ export default function BillsScreen() {
                 >
                   <Feather name="calendar" size={13} color={c.primaryForeground} />
                   <Text style={[styles.debtPlanApplyText, { color: c.primaryForeground }]}>
-                    {existingSnowball ? "Edit extra" : "Plan extra"}
+                    {existingSnowball ? "Edit" : "Plan extra"}
                   </Text>
                 </Pressable>
               </View>
               {existingSnowball ? (
                 <View style={[styles.debtPaymentSummary, { backgroundColor: c.background + "88", borderColor: c.border }]}>
-                  <View style={styles.debtPaymentEquation}>
-                    <Text style={[styles.debtPaymentEquationLabel, { color: c.mutedForeground }]}>Required minimums</Text>
-                    <Text style={[styles.debtPaymentEquationValue, { color: c.foreground }]}>${debtPaymentPlan.requiredMinimum.toFixed(2)}</Text>
+                  <View style={styles.debtPaymentStat}>
+                    <Text style={[styles.debtPaymentStatLabel, { color: c.mutedForeground }]}>MINIMUM</Text>
+                    <Text style={[styles.debtPaymentStatValue, { color: c.foreground }]}>${debtPaymentPlan.requiredMinimum.toFixed(0)}</Text>
                   </View>
-                  <View style={styles.debtPaymentEquation}>
-                    <Text style={[styles.debtPaymentEquationLabel, { color: c.mutedForeground }]}>Planned extra</Text>
-                    <Text style={[styles.debtPaymentEquationValue, { color: c.primary }]}>+${debtPaymentPlan.extraPayment.toFixed(2)}</Text>
+                  <View style={[styles.debtPaymentStat, styles.debtPaymentStatBorder, { borderLeftColor: c.border }]}>
+                    <Text style={[styles.debtPaymentStatLabel, { color: c.mutedForeground }]}>EXTRA</Text>
+                    <Text style={[styles.debtPaymentStatValue, { color: c.primary }]}>+${debtPaymentPlan.extraPayment.toFixed(0)}</Text>
                   </View>
-                  <View style={[styles.debtPaymentTotal, { borderTopColor: c.border }]}>
-                    <Text style={[styles.debtPaymentTotalLabel, { color: c.foreground }]}>Total debt planned</Text>
-                    <Text style={[styles.debtPaymentTotalValue, { color: c.success }]}>${debtPaymentPlan.totalPlanned.toFixed(2)}</Text>
+                  <View style={[styles.debtPaymentStat, styles.debtPaymentStatBorder, { borderLeftColor: c.border }]}>
+                    <Text style={[styles.debtPaymentStatLabel, { color: c.mutedForeground }]}>TOTAL</Text>
+                    <Text style={[styles.debtPaymentStatValue, { color: c.success }]}>${debtPaymentPlan.totalPlanned.toFixed(0)}</Text>
                   </View>
-                  <Text style={[styles.debtPaymentNote, { color: c.mutedForeground }]}>Your required minimums do not change.</Text>
                 </View>
               ) : null}
               {debtPlanIsFuture ? (
@@ -709,26 +683,11 @@ export default function BillsScreen() {
                   Your next payoff order begins {MONTH_FULL[debtPlanMonth]} {debtPlanYear}.
                 </Text>
               ) : null}
-              <View style={styles.debtPlanValueRow}>
-                <View style={[styles.debtPlanMetric, { backgroundColor: c.success + "10", borderColor: c.success + "24" }]}>
-                  <Text style={[styles.debtPlanLabel, { color: c.mutedForeground }]}>Above safety floor</Text>
-                  <Text style={[styles.debtPlanValue, { color: safeSnowballAmount > 0 ? c.success : c.mutedForeground }]}>${safeSnowballAmount.toFixed(2)}</Text>
-                </View>
-                <View style={[styles.debtPlanMetric, { backgroundColor: c.primary + "10", borderColor: c.primary + "24" }]}>
-                  <Text style={[styles.debtPlanLabel, { color: c.mutedForeground }]}>Method</Text>
-                  <Text style={[styles.debtPlanValue, { color: c.primary }]}>{settings.paymentMethod === "avalanche" ? "Avalanche" : "Snowball"}</Text>
-                </View>
-              </View>
-              <Text style={[styles.debtAlgoCopy, { color: c.mutedForeground }]} numberOfLines={3}>
-                {safeSnowballAmount > 0
-                  ? `${debtRoomExplanation} Using it will reduce your backup days.`
-                  : debtRoomExplanation}
-              </Text>
               {activeDebtTarget && nextStrategyTarget ? (
                 <View style={[styles.rolloverCard, { backgroundColor: c.success + "10", borderColor: c.success + "24" }]}>
                   <Feather name="repeat" size={13} color={c.success} />
                   <Text style={[styles.rolloverText, { color: c.foreground }]}>
-                    After {activeDebtTarget.name} is paid off, its ${activeDebtMinimum.toFixed(2)}/mo rolls into {nextStrategyTarget.name}.
+                    ${activeDebtMinimum.toFixed(0)}/mo rolls to {nextStrategyTarget.name} next.
                   </Text>
                 </View>
               ) : null}
@@ -972,18 +931,11 @@ const styles = StyleSheet.create({
   debtAlgoTitle:  { fontSize: 17, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
   debtPlanApplyButton: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999 },
   debtPlanApplyText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
-  debtPlanValueRow: { flexDirection: "row", gap: 8 },
-  debtPaymentSummary: { borderWidth: 1, borderRadius: 15, padding: 12, gap: 8 },
-  debtPaymentEquation: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
-  debtPaymentEquationLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
-  debtPaymentEquationValue: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
-  debtPaymentTotal: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, borderTopWidth: 1, paddingTop: 8 },
-  debtPaymentTotalLabel: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
-  debtPaymentTotalValue: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
-  debtPaymentNote: { fontSize: 11, fontFamily: "Inter_500Medium" },
-  debtPlanMetric: { flex: 1, borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 9 },
-  debtPlanLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 3 },
-  debtPlanValue: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
+  debtPaymentSummary: { flexDirection: "row", borderWidth: 1, borderRadius: 15, paddingVertical: 10 },
+  debtPaymentStat: { flex: 1, alignItems: "center", gap: 3, paddingHorizontal: 5 },
+  debtPaymentStatBorder: { borderLeftWidth: 1 },
+  debtPaymentStatLabel: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.6 },
+  debtPaymentStatValue: { fontSize: 15, fontFamily: "Inter_800ExtraBold" },
   debtAlgoCopy:   { fontSize: 13, fontFamily: "Inter_600SemiBold", lineHeight: 18 },
   debtAlgoMeta:   { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: -4 },
   snowballExplain: { borderWidth: 1, borderRadius: 12, padding: 10, flexDirection: "row", gap: 8, alignItems: "flex-start" },
