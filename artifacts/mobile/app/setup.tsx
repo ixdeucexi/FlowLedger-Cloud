@@ -38,6 +38,7 @@ import {
 import { loadOnboardingPreferences, saveOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { LEARNING_TOUR_STEPS, writeLearningTourState } from "@/lib/learningTour";
 import { readStoredSetupStepAsync, writeStoredSetupStep, type SetupStepKey } from "@/lib/setupProgress";
+import { loadFloVoiceIdentifier } from "@/lib/floVoicePreference";
 
 interface SetupStep {
   key: SetupStepKey;
@@ -150,6 +151,7 @@ function SetupWizard() {
   const stepTranslate = useRef(new Animated.Value(0)).current;
   const scrollRef = useRef<ScrollView>(null);
   const [speaking, setSpeaking] = useState(false);
+  const [floVoiceIdentifier, setFloVoiceIdentifier] = useState<string | null>(null);
 
   const activeAccount = accounts.find(account => account.is_active) ?? null;
   const householdForInvite = useMemo(
@@ -403,6 +405,20 @@ function SetupWizard() {
 
   useEffect(() => () => { void Speech.stop(); }, []);
 
+  useEffect(() => {
+    let active = true;
+    void Promise.all([loadFloVoiceIdentifier(), Speech.getAvailableVoicesAsync()])
+      .then(([savedIdentifier, availableVoices]) => {
+        if (!active) return;
+        const installed = savedIdentifier && availableVoices.some(voice => voice.identifier === savedIdentifier);
+        setFloVoiceIdentifier(installed ? savedIdentifier : null);
+      })
+      .catch(() => {
+        if (active) setFloVoiceIdentifier(null);
+      });
+    return () => { active = false; };
+  }, []);
+
   const goNext = () => setIndex(value => Math.min(value + 1, steps.length - 1));
   const goBack = () => setIndex(value => Math.max(0, value - 1));
   const confirmAndNext = (message: string) => {
@@ -418,6 +434,7 @@ function SetupWizard() {
     }
     setSpeaking(true);
     Speech.speak(`${current.title}. ${current.ask} ${current.body}`, {
+      voice: floVoiceIdentifier ?? undefined,
       rate: 0.94,
       pitch: 1.03,
       onDone: () => setSpeaking(false),

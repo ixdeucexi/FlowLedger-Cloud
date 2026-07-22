@@ -18,6 +18,7 @@ import { AccountModal } from "@/components/AccountModal";
 import { AppText } from "@/components/AppText";
 import { FloLogo } from "@/components/FloLogo";
 import { FeedbackManageModal } from "@/components/FeedbackManageModal";
+import { FloVoiceLab } from "@/components/FloVoiceLab";
 import { IncomeModal } from "@/components/IncomeModal";
 import { HouseholdMemberActionsModal } from "@/components/HouseholdMemberActionsModal";
 import { LegalDocumentModal } from "@/components/LegalDocumentModal";
@@ -2073,26 +2074,29 @@ export default function MoreScreen() {
                 : "Tracking view: focus on balances, bills, transactions, and forecasts."}
         </Text>
         {feedbackAdmin ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Open isolated Zero Budget Lab"
-            onPress={() => router.push("/(tabs)/zero-budget-lab" as any)}
-            style={[styles.zeroBudgetLabCard, { backgroundColor: c.primary + "12", borderColor: c.primary + "3D" }]}
-          >
-            <View style={[styles.zeroBudgetLabIcon, { backgroundColor: c.primary + "1F" }]}>
-              <Feather name="shield" size={19} color={c.primary} />
-            </View>
-            <View style={styles.zeroBudgetLabCopy}>
-              <View style={styles.zeroBudgetLabTitleRow}>
-                <Text style={[styles.zeroBudgetLabTitle, { color: c.foreground }]}>Admin Zero Budget Lab</Text>
-                <View style={[styles.zeroBudgetLabBadge, { backgroundColor: c.success + "1F" }]}>
-                  <Text style={[styles.zeroBudgetLabBadgeText, { color: c.success }]}>ISOLATED</Text>
-                </View>
+          <>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open isolated Zero Budget Lab"
+              onPress={() => router.push("/(tabs)/zero-budget-lab" as any)}
+              style={[styles.zeroBudgetLabCard, { backgroundColor: c.primary + "12", borderColor: c.primary + "3D" }]}
+            >
+              <View style={[styles.zeroBudgetLabIcon, { backgroundColor: c.primary + "1F" }]}>
+                <Feather name="shield" size={19} color={c.primary} />
               </View>
-              <Text style={[styles.zeroBudgetLabDescription, { color: c.mutedForeground }]}>Test the new assign-every-dollar experience with sample money. Your real household stays unchanged.</Text>
-            </View>
-            <Feather name="chevron-right" size={19} color={c.primary} />
-          </Pressable>
+              <View style={styles.zeroBudgetLabCopy}>
+                <View style={styles.zeroBudgetLabTitleRow}>
+                  <Text style={[styles.zeroBudgetLabTitle, { color: c.foreground }]}>Admin Zero Budget Lab</Text>
+                  <View style={[styles.zeroBudgetLabBadge, { backgroundColor: c.success + "1F" }]}>
+                    <Text style={[styles.zeroBudgetLabBadgeText, { color: c.success }]}>ISOLATED</Text>
+                  </View>
+                </View>
+                <Text style={[styles.zeroBudgetLabDescription, { color: c.mutedForeground }]}>Test the new assign-every-dollar experience with sample money. Your real household stays unchanged.</Text>
+              </View>
+              <Feather name="chevron-right" size={19} color={c.primary} />
+            </Pressable>
+            <FloVoiceLab />
+          </>
         ) : null}
       </View>
 
