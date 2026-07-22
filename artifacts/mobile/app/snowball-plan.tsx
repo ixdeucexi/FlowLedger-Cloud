@@ -9,7 +9,8 @@ import { DatePickerField } from "@/components/DatePickerField";
 import { FloLogo } from "@/components/FloLogo";
 import { PlanFeatureGate } from "@/components/PlanFeatureGate";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
-import { useBudget } from "@/context/BudgetContext";
+import { BudgetProvider, useBudget } from "@/context/BudgetContext";
+import { MembershipProvider } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { buildDebtPaymentPlanSummary } from "@/lib/debtPaymentPlan";
 import { orderActiveDebtsForStrategy } from "@/lib/debtOrder";
@@ -30,7 +31,7 @@ function maximumPlanDate(start: string, horizonMonths: number) {
   return localDateString(end);
 }
 
-export default function SnowballPlanScreen() {
+function SnowballPlanScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -328,6 +329,16 @@ export default function SnowballPlanScreen() {
         </PlanFeatureGate>
       </ScrollView>
     </View>
+  );
+}
+
+export default function SnowballPlanRoute() {
+  return (
+    <BudgetProvider>
+      <MembershipProvider>
+        <SnowballPlanScreen />
+      </MembershipProvider>
+    </BudgetProvider>
   );
 }
 
