@@ -1818,7 +1818,7 @@ export default function MoreScreen() {
 
         <View style={[styles.householdPanel, { backgroundColor: c.muted, borderColor: c.border }]}>
           <View style={styles.householdPanelHeader}>
-            <View>
+            <View style={styles.householdPanelHeaderCopy}>
               <Text style={[styles.householdPanelTitle, { color: c.foreground }]}>Members</Text>
               <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>Everyone here sees the same household plan.</Text>
             </View>
@@ -1977,7 +1977,7 @@ export default function MoreScreen() {
 
         <View style={[styles.householdPanel, { backgroundColor: c.muted, borderColor: c.border }]}>
           <View style={styles.householdPanelHeader}>
-            <View>
+            <View style={styles.householdPanelHeaderCopy}>
               <Text style={[styles.householdPanelTitle, { color: c.foreground }]}>Recent activity</Text>
               <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>See who changed what and when.</Text>
             </View>
@@ -3027,7 +3027,7 @@ export default function MoreScreen() {
             <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: c.primary + "22", alignItems: "center", justifyContent: "center", marginRight: 12 }}>
               <Feather name="user" size={18} color={c.primary} />
             </View>
-            <Text style={{ flex: 1, fontSize: 14, fontFamily: "Inter_500Medium", color: c.mutedForeground }} numberOfLines={1}>{user?.email}</Text>
+            <Text style={{ flex: 1, minWidth: 0, fontSize: 14, lineHeight: 20, fontFamily: "Inter_500Medium", color: c.mutedForeground }}>{user?.email}</Text>
           </View>
           <Pressable
             onPress={() => {
@@ -3225,6 +3225,7 @@ const styles = StyleSheet.create({
   householdChipText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   householdPanel: { borderWidth: 1, borderRadius: 14, padding: 12, marginTop: 10 },
   householdPanelHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 },
+  householdPanelHeaderCopy: { flex: 1, minWidth: 0 },
   householdPanelTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold", marginBottom: 4 },
   memberRow: { flexDirection: "row", alignItems: "center", gap: 10, borderTopWidth: 1, paddingTop: 10, marginTop: 10 },
   memberAvatar: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center" },
@@ -3288,7 +3289,7 @@ const styles = StyleSheet.create({
   renameInput: { flex: 1, height: 36, borderRadius: 8, paddingHorizontal: 10, fontSize: 14, fontFamily: "Inter_400Regular" },
   renameConfirm: { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   addCatRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10, paddingTop: 10 },
-  addCatInput: { flex: 1, height: 40, borderRadius: 10, paddingHorizontal: 12, fontSize: 14, fontFamily: "Inter_400Regular" },
+  addCatInput: { flex: 1, minWidth: 0, height: 40, borderRadius: 10, paddingHorizontal: 12, fontSize: 14, fontFamily: "Inter_400Regular" },
   addCatBtn: { width: 40, height: 40, borderRadius: 10, alignItems: "center", justifyContent: "center" },
 
   methodRow: { flexDirection: "row", padding: 4, gap: 4 },
@@ -3361,7 +3362,7 @@ const styles = StyleSheet.create({
   feedbackChip: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 8 },
   feedbackChipText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   feedbackInput: { minHeight: 112, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 12, fontSize: 14, fontFamily: "Inter_500Medium", lineHeight: 20 },
-  feedbackRatingRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 },
+  feedbackRatingRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8, marginTop: 12 },
   feedbackSmallLabel: { fontSize: 11, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.6, marginRight: 2 },
   feedbackRatingButton: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   feedbackRatingText: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },

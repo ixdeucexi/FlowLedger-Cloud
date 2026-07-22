@@ -21,6 +21,7 @@ import { ThemeProvider, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import { readLastAppRoute, rememberCurrentAppRoute } from "@/lib/navigationMemory";
 import { supabase } from "@/lib/supabase";
+import { WEB_VIEWPORT_CONTENT } from "@/lib/webViewport";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -231,10 +232,7 @@ export default function RootLayout() {
       document.head.appendChild(viewport);
     }
 
-    viewport.setAttribute(
-      "content",
-      "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover",
-    );
+    viewport.setAttribute("content", WEB_VIEWPORT_CONTENT);
   }, []);
 
   return (

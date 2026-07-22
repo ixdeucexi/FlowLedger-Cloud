@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Tabs, useRouter, useSegments } from "expo-router";
 import React from "react";
-import { Animated, Easing, Image, Platform, Pressable, StyleSheet, StyleProp, Text, View, ViewStyle } from "react-native";
+import { Animated, Easing, Image, Platform, Pressable, StyleSheet, StyleProp, Text, useWindowDimensions, View, ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/context/AuthContext";
@@ -28,6 +28,7 @@ import { buildCurrentMonthReviewQueue } from "@/lib/reviewCenter";
 import { tabBadgeValue } from "@/lib/tabBadge";
 import { buildOverdueBillOccurrences, groupOverdueBills } from "@/lib/overdueBills";
 import { planningTabPresentation } from "@/lib/planningMode";
+import { tabBarDisplayLabel, tabBarLabelSize } from "@/lib/mobileLayout";
 
 const MIN_BUDGET_LOADING_MS = 220;
 
@@ -370,6 +371,7 @@ function FloDemo() {
 }
 
 function TabContent() {
+  const { width: viewportWidth } = useWindowDimensions();
   const colors = useColors();
   const {
     loading, loadError, retryBudgetLoad, demoMode, transactions, pendingBankTransactions, settings,
@@ -459,7 +461,7 @@ function TabContent() {
             headerShown: false,
             tabBarLabelStyle: {
               fontFamily: "Inter_600SemiBold",
-              fontSize: 10,
+              fontSize: tabBarLabelSize(viewportWidth),
               marginTop: 1,
             },
             tabBarItemStyle: {
@@ -536,6 +538,7 @@ function TabContent() {
                 name={tab.name}
                 options={{
                   title: tabTitle,
+                  tabBarLabel: tabBarDisplayLabel(tabTitle, viewportWidth),
                   tabBarIcon: ({ color }) => <Feather name={tabIcon} size={22} color={color} />,
                   tabBarBadge: badge,
                   tabBarBadgeStyle: badge ? styles.alertTabBadge : undefined,
