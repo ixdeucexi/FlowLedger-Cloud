@@ -74,6 +74,23 @@ export interface SnowballProjectionResult {
 
 const cents = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
 
+type PaymentAllocation = Pick<SnowballAllocationResult, "billId" | "payment">;
+
+export function diffAppliedSnowballAllocations(
+  previous: PaymentAllocation[],
+  previousApplied: boolean,
+  next: PaymentAllocation[],
+  nextApplied: boolean,
+): Map<string, number> {
+  const deltas = new Map<string, number>();
+  const add = (allocation: PaymentAllocation, direction: number) => {
+    deltas.set(allocation.billId, cents((deltas.get(allocation.billId) ?? 0) + allocation.payment * direction));
+  };
+  if (previousApplied) previous.forEach(allocation => add(allocation, -1));
+  if (nextApplied) next.forEach(allocation => add(allocation, 1));
+  return new Map([...deltas].filter(([, delta]) => Math.abs(delta) >= 0.005));
+}
+
 export function monthlyInterestCharge(balance: number, annualPercentageRate: number): number {
   return cents(Math.max(0, Number(balance) || 0) * (Math.max(0, Number(annualPercentageRate) || 0) / 100) / 12);
 }

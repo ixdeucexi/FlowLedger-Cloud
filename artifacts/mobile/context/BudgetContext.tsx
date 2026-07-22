@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
 import {
   allocateSnowballExtra,
+  diffAppliedSnowballAllocations,
   effectiveDebtMinimum,
   monthlyDebtAmount,
   orderDebts,
@@ -2150,6 +2151,13 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       : clearSnowballSourcesPending(sources);
 
     if (demoMode) {
+      const existingApplied = Boolean(existing && !hasPendingSnowballBalanceApply(existing));
+      const balanceDeltas = diffAppliedSnowballAllocations(
+        existing?.allocations ?? [],
+        existingApplied,
+        preview.allocations,
+        !isFuturePayment,
+      );
       const nextPayment: ExtraPayment = {
         id: paymentId, month, year,
         amount: preview.selectedExtra, allocations: preview.allocations,
@@ -2158,27 +2166,26 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setExtraPayments(prev => existing
         ? prev.map(ep => ep.id === existing.id ? nextPayment : ep)
         : [...prev, nextPayment]);
-      if (!isFuturePayment) {
-        setBills(prev => reorderDebtPriorities(prev.map(bill => {
-          const allocation = preview.allocations.find(item => item.billId === bill.id);
-          return allocation ? { ...bill, balance: Math.max(0, bill.balance - allocation.payment) } : bill;
-        })));
-        setOverrides(prev => {
-          const next = [...prev];
-          preview.allocations.forEach(allocation => {
-            const existingOverride = next.find(o => o.bill_id === allocation.billId && o.month === month && o.year === year);
-            if (existingOverride) existingOverride.paid_amount = Math.max(0, existingOverride.paid_amount + allocation.payment);
-            else next.push({ id: genId(), bill_id: allocation.billId, month, year, paid_amount: allocation.payment });
-          });
-          overridesRef.current = next;
-          return next;
+      setBills(prev => reorderDebtPriorities(prev.map(bill => {
+        const delta = balanceDeltas.get(bill.id) ?? 0;
+        return Math.abs(delta) >= 0.005 ? { ...bill, balance: Math.max(0, bill.balance - delta) } : bill;
+      })));
+      setOverrides(prev => {
+        const next = prev.map(override => {
+          const delta = override.month === month && override.year === year
+            ? balanceDeltas.get(override.bill_id) ?? 0
+            : 0;
+          return Math.abs(delta) >= 0.005
+            ? { ...override, paid_amount: Math.max(0, override.paid_amount + delta) }
+            : override;
         });
-      }
-      return;
-    }
-
-    if (isFuturePayment) {
-      await saveExtraPayment(month, year, preview.selectedExtra, preview.allocations, preview.paymentDate, payloadSources);
+        balanceDeltas.forEach((delta, billId) => {
+          const exists = next.some(override => override.bill_id === billId && override.month === month && override.year === year);
+          if (!exists && delta > 0.005) next.push({ id: genId(), bill_id: billId, month, year, paid_amount: delta });
+        });
+        overridesRef.current = next;
+        return next;
+      });
       return;
     }
 
@@ -2191,6 +2198,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       p_allocations: preview.allocations,
       p_sources: payloadSources,
       p_household_id: householdScopeRef.current?.householdId ?? null,
+      p_apply_now: !isFuturePayment,
     });
     if (error) throw new Error(`Apply debt snowball: ${error.message}`);
     const rollover = await supabase.rpc("recalculate_debt_minimum_boosts", { p_household_id: householdScopeRef.current?.householdId ?? null });
@@ -2221,7 +2229,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setExtraPayments(prev => existing
       ? prev.map(ep => ep.id === existing.id ? nextPayment : ep)
       : [...prev, nextPayment]);
-  }, [user, extraPayments, saveExtraPayment, demoMode, applyHouseholdSelect, assertCanEditHousehold, settings.debtPayoffEnabled]);
+  }, [user, extraPayments, demoMode, applyHouseholdSelect, assertCanEditHousehold, settings.debtPayoffEnabled]);
 
   const removeDebtSnowballPayment = useCallback(async (month: number, year: number) => {
     const existing = extraPayments.find(ep => ep.month === month && ep.year === year);

@@ -686,17 +686,10 @@ export function ActivityScreen() {
   }, [previewDebtSnowball]);
 
   const editExtraDateLimits = useMemo(() => {
-    if (!editExtraPayment) return { min: undefined, max: undefined, scheduled: false };
+    if (!editExtraPayment) return { min: undefined, max: undefined };
     const monthStart = `${editExtraPayment.year}-${String(editExtraPayment.month + 1).padStart(2, "0")}-01`;
     const monthEnd = `${editExtraPayment.year}-${String(editExtraPayment.month + 1).padStart(2, "0")}-${String(new Date(editExtraPayment.year, editExtraPayment.month + 1, 0).getDate()).padStart(2, "0")}`;
-    const today = todayIsoDate();
-    const tomorrowDate = new Date(`${today}T12:00:00`);
-    tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-    const tomorrow = `${tomorrowDate.getFullYear()}-${String(tomorrowDate.getMonth() + 1).padStart(2, "0")}-${String(tomorrowDate.getDate()).padStart(2, "0")}`;
-    const scheduled = (editExtraPayment.sources ?? []).some(source => source.pendingBalanceApply) || (editExtraPayment.payment_date ?? "") > today;
-    return scheduled
-      ? { min: monthStart > tomorrow ? monthStart : tomorrow, max: monthEnd, scheduled }
-      : { min: monthStart, max: monthEnd < today ? monthEnd : today, scheduled };
+    return { min: monthStart, max: monthEnd };
   }, [editExtraPayment]);
 
   const updateExtraPaymentAmount = useCallback((value: string) => {
@@ -722,9 +715,7 @@ export function ActivityScreen() {
     if ((editExtraDateLimits.min && editExtraDate < editExtraDateLimits.min) || (editExtraDateLimits.max && editExtraDate > editExtraDateLimits.max)) {
       Alert.alert(
         "Choose a valid payment date",
-        editExtraDateLimits.scheduled
-          ? "A scheduled payment must stay on a future date. Delete it and create a new payment if it should be applied today."
-          : "An applied payment must stay on today or an earlier date. Delete it and create a scheduled payment if it belongs in the future.",
+        "Choose any day within this Snowball payment’s month.",
       );
       return;
     }

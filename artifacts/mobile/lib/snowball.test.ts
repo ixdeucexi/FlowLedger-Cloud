@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { allocateSnowballExtra, effectiveDebtMinimum, monthlyDebtAmount, monthlyInterestCharge, orderDebts, projectSnowballMonth, scheduledDebtPaymentAmount, simulateSnowballPayoff, type SnowballDebtInput } from "./snowball";
+import { allocateSnowballExtra, diffAppliedSnowballAllocations, effectiveDebtMinimum, monthlyDebtAmount, monthlyInterestCharge, orderDebts, projectSnowballMonth, scheduledDebtPaymentAmount, simulateSnowballPayoff, type SnowballDebtInput } from "./snowball";
 
 const debts: SnowballDebtInput[] = [
   { id: "large", name: "Large", balance: 1_000, minimum: 100, apr: 12, dueDay: 15, included: true },
@@ -27,6 +27,14 @@ describe("debt ordering and allocation", () => {
     assert.equal(scheduledDebtPaymentAmount(-100, "2026-06-25", "2026-06-24", 500), 0);
     assert.equal(scheduledDebtPaymentAmount(-100, "2026-06-25", "2026-06-25", 500), 100);
     assert.equal(scheduledDebtPaymentAmount(-600, "2026-06-25", "2026-06-26", 500), 500);
+  });
+  it("restores an applied payment when it is moved to a future date", () => {
+    const previous = [{ billId: "camera", payment: 12.48 }];
+    assert.deepEqual([...diffAppliedSnowballAllocations(previous, true, previous, false)], [["camera", -12.48]]);
+  });
+  it("applies a scheduled payment once when its date arrives", () => {
+    const payment = [{ billId: "camera", payment: 12.48 }];
+    assert.deepEqual([...diffAppliedSnowballAllocations(payment, false, payment, true)], [["camera", 12.48]]);
   });
   it("orders snowball and avalanche deterministically", () => {
     assert.deepEqual(orderDebts(debts, "snowball").map(item => item.id), ["excluded", "small", "large"]);
