@@ -59,7 +59,7 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
     : progress.safeUntilPayday === false
       ? `${currency(progress.paydayShortfall)} short before ${progress.nextPaycheckLabel ?? "payday"}`
       : "Next payday not confirmed";
-  const paydayDetail = progress.safeUntilPayday === true
+  const paydayAccessibilityDetail = progress.safeUntilPayday === true
     ? "Your forecast keeps Must Pay bills and the safety floor covered until income arrives."
     : progress.safeUntilPayday === false
       ? "Close this gap before treating any money as extra."
@@ -84,12 +84,13 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
       <AppText tone="title" style={[styles.headline, { color: theme.text }]}>{progress.headline}</AppText>
       <AppText style={[styles.explanation, { color: theme.mutedText }]}>{progress.explanation}</AppText>
 
-      <View style={[styles.paydayCard, { backgroundColor: `${paydayColor}10`, borderColor: `${paydayColor}35` }]}>
-        <Feather name={progress.safeUntilPayday === true ? "check-circle" : progress.safeUntilPayday === false ? "alert-circle" : "calendar"} size={17} color={paydayColor} />
-        <View style={styles.paydayCopy}>
-          <AppText tone="title" style={[styles.paydayTitle, { color: paydayColor }]}>{paydayTitle}</AppText>
-          <AppText style={[styles.paydayDetail, { color: theme.mutedText }]}>{paydayDetail}</AppText>
-        </View>
+      <View
+        accessible
+        accessibilityLabel={`${paydayTitle}. ${paydayAccessibilityDetail}`}
+        style={[styles.paydayCard, { backgroundColor: `${paydayColor}10`, borderColor: `${paydayColor}35` }]}
+      >
+        <Feather name={progress.safeUntilPayday === true ? "check-circle" : progress.safeUntilPayday === false ? "alert-circle" : "calendar"} size={16} color={paydayColor} />
+        <AppText tone="title" numberOfLines={1} style={[styles.paydayTitle, { color: paydayColor }]}>{paydayTitle}</AppText>
       </View>
 
       <View style={styles.progressHeader}>
@@ -171,10 +172,8 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.4 },
   headline: { color: "#f8fafc", fontSize: 20, lineHeight: 25, fontFamily: "Inter_800ExtraBold", marginTop: 14 },
   explanation: { color: "#94a3b8", fontSize: 12, lineHeight: 17, fontFamily: "Inter_500Medium", marginTop: 4 },
-  paydayCard: { flexDirection: "row", alignItems: "flex-start", gap: 9, borderWidth: 1, borderRadius: 15, padding: 11, marginTop: 13 },
-  paydayCopy: { flex: 1 },
-  paydayTitle: { fontSize: 13, lineHeight: 17, fontFamily: "Inter_800ExtraBold" },
-  paydayDetail: { color: "#94a3b8", fontSize: 12, lineHeight: 17, fontFamily: "Inter_500Medium", marginTop: 2 },
+  paydayCard: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8, marginTop: 11 },
+  paydayTitle: { flex: 1, fontSize: 12, lineHeight: 16, fontFamily: "Inter_800ExtraBold" },
   progressHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 14, marginBottom: 6 },
   progressLabel: { color: "#cbd5e1", fontSize: 12, fontFamily: "Inter_700Bold" },
   progressValue: { color: "#f8fafc", fontSize: 12, fontFamily: "Inter_800ExtraBold" },
