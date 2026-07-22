@@ -647,28 +647,39 @@ export default function BillsScreen() {
                   <Text style={[styles.debtAlgoEyebrow, { color: c.primary }]}>{settings.paymentMethod === "avalanche" ? "Avalanche Plan" : "Snowball Plan"}</Text>
                   <Text style={[styles.debtAlgoTitle, { color: c.foreground }]}>{activeDebtTarget?.name ?? "No active target"}</Text>
                 </View>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={existingSnowball ? "Edit extra debt payment plan" : "Plan an extra debt payment"}
-                  onPress={openSnowballPlanner}
-                  style={({ pressed }) => [
-                    styles.debtPlanApplyButton,
-                    { backgroundColor: c.primary, opacity: pressed ? 0.8 : 1 },
-                  ]}
-                >
-                  <Feather name="calendar" size={13} color={c.primaryForeground} />
-                  <Text style={[styles.debtPlanApplyText, { color: c.primaryForeground }]}>
-                    {existingSnowball ? "Edit" : "Plan extra"}
-                  </Text>
-                </Pressable>
+                <View style={styles.debtAlgoActions}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`How the ${settings.paymentMethod} plan works`}
+                    onPress={() => Alert.alert(
+                      settings.paymentMethod === "avalanche" ? "How Avalanche works" : "How Snowball works",
+                      settings.paymentMethod === "avalanche"
+                        ? "Keep paying every minimum. Extra money goes to the highest-interest debt first. When it is paid off, that payment rolls to the next debt."
+                        : "Keep paying every minimum. Extra money goes to the smallest balance first. When it is paid off, that payment rolls to the next debt.",
+                    )}
+                    style={({ pressed }) => [styles.debtInfoButton, { borderColor: c.border, opacity: pressed ? 0.7 : 1 }]}
+                  >
+                    <Feather name="info" size={17} color={c.primary} />
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={existingSnowball ? "Edit extra debt payment plan" : "Plan an extra debt payment"}
+                    onPress={openSnowballPlanner}
+                    style={({ pressed }) => [
+                      styles.debtPlanApplyButton,
+                      { backgroundColor: c.primary, opacity: pressed ? 0.8 : 1 },
+                    ]}
+                  >
+                    <Feather name="calendar" size={13} color={c.primaryForeground} />
+                    <Text style={[styles.debtPlanApplyText, { color: c.primaryForeground }]}>
+                      {existingSnowball ? "Edit" : "Plan extra"}
+                    </Text>
+                  </Pressable>
+                </View>
               </View>
               {existingSnowball ? (
                 <View style={[styles.debtPaymentSummary, { backgroundColor: c.background + "88", borderColor: c.border }]}>
                   <View style={styles.debtPaymentStat}>
-                    <Text style={[styles.debtPaymentStatLabel, { color: c.mutedForeground }]}>MINIMUM</Text>
-                    <Text style={[styles.debtPaymentStatValue, { color: c.foreground }]}>${debtPaymentPlan.requiredMinimum.toFixed(0)}</Text>
-                  </View>
-                  <View style={[styles.debtPaymentStat, styles.debtPaymentStatBorder, { borderLeftColor: c.border }]}>
                     <Text style={[styles.debtPaymentStatLabel, { color: c.mutedForeground }]}>EXTRA</Text>
                     <Text style={[styles.debtPaymentStatValue, { color: c.primary }]}>+${debtPaymentPlan.extraPayment.toFixed(0)}</Text>
                   </View>
@@ -929,6 +940,8 @@ const styles = StyleSheet.create({
   dataIcon:       { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   debtAlgoEyebrow:{ fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8 },
   debtAlgoTitle:  { fontSize: 17, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
+  debtAlgoActions: { flexDirection: "row", alignItems: "center", gap: 7 },
+  debtInfoButton: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   debtPlanApplyButton: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999 },
   debtPlanApplyText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   debtPaymentSummary: { flexDirection: "row", borderWidth: 1, borderRadius: 15, paddingVertical: 10 },
