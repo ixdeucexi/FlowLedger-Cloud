@@ -881,11 +881,27 @@ export default function BillsScreen() {
                 <Feather name="x" size={21} color={c.mutedForeground} />
               </Pressable>
             </View>
+            {activeDebtTarget ? (
+              <View style={[styles.debtInfoTarget, { backgroundColor: c.primary + "10", borderColor: c.primary + "28" }]}>
+                <Text style={[styles.debtInfoTargetLabel, { color: c.primary }]}>WHY {activeDebtTarget.name.toUpperCase()} IS FIRST</Text>
+                <Text style={[styles.debtInfoTargetCopy, { color: c.foreground }]}>
+                  Put safe extra money toward {activeDebtTarget.name} first. It has your {settings.paymentMethod === "avalanche" ? "highest interest rate" : "smallest active balance"}. Using extra will reduce your backup days.
+                </Text>
+              </View>
+            ) : null}
             <View style={styles.debtInfoSteps}>
               <Text style={[styles.debtInfoStep, { color: c.foreground }]}>1. Pay every minimum.</Text>
               <Text style={[styles.debtInfoStep, { color: c.foreground }]}>2. Send extra to the {settings.paymentMethod === "avalanche" ? "highest-interest debt" : "smallest balance"}.</Text>
               <Text style={[styles.debtInfoStep, { color: c.foreground }]}>3. Roll that payment to the next debt.</Text>
             </View>
+            {activeDebtTarget && nextStrategyTarget ? (
+              <View style={[styles.debtInfoRollover, { backgroundColor: c.success + "10", borderColor: c.success + "28" }]}>
+                <Feather name="repeat" size={15} color={c.success} />
+                <Text style={[styles.debtInfoRolloverText, { color: c.foreground }]}>
+                  After {activeDebtTarget.name} is paid off, its ${activeDebtMinimum.toFixed(2)}/month rolls into {nextStrategyTarget.name}.
+                </Text>
+              </View>
+            ) : null}
             <Pressable
               accessibilityRole="button"
               onPress={() => setDebtInfoVisible(false)}
@@ -990,8 +1006,13 @@ const styles = StyleSheet.create({
   debtInfoHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
   debtInfoIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   debtInfoTitle: { flex: 1, fontSize: 18, fontFamily: "Inter_800ExtraBold" },
+  debtInfoTarget: { borderWidth: 1, borderRadius: 14, padding: 14, gap: 6 },
+  debtInfoTargetLabel: { fontSize: 11, letterSpacing: 0.7, fontFamily: "Inter_800ExtraBold" },
+  debtInfoTargetCopy: { fontSize: 14, lineHeight: 20, fontFamily: "Inter_600SemiBold" },
   debtInfoSteps: { gap: 12 },
   debtInfoStep: { fontSize: 14, lineHeight: 20, fontFamily: "Inter_600SemiBold" },
+  debtInfoRollover: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderRadius: 14, padding: 12, gap: 10 },
+  debtInfoRolloverText: { flex: 1, fontSize: 13, lineHeight: 18, fontFamily: "Inter_600SemiBold" },
   debtInfoDone: { height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   debtInfoDoneText: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   debtPlanApplyButton: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999 },
