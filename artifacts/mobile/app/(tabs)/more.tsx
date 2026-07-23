@@ -7,7 +7,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
 import * as Sharing from "expo-sharing";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert, Modal, Platform, Pressable, ScrollView, StyleSheet,
   Text, TextInput, useWindowDimensions, View,
@@ -61,7 +61,7 @@ import {
 import { DEFAULT_ONBOARDING_PREFERENCES } from "@/lib/onboarding";
 import { loadOnboardingPreferences, readOnboardingPreferences, saveOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
-import { getForecastSafetyLayout } from "@/lib/settingsLayout";
+import { getForecastSafetyLayout, isCompactSettingsLayout } from "@/lib/settingsLayout";
 import {
   SETTINGS_SECTIONS,
   attentionCountStatus,
@@ -407,11 +407,15 @@ export default function MoreScreen() {
   const [legalDoc, setLegalDoc] = useState<"terms" | "privacy" | null>(null);
   useBackDismiss(Boolean(legalDoc), () => setLegalDoc(null));
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>(() => readStoredSettingsSection());
+  const settingsScrollRef = useRef<ScrollView>(null);
   const openSettingsSection = useCallback((sectionId: SettingsSectionId) => {
     setActiveSettingsSection(sectionId);
     writeStoredSettingsSection(sectionId);
   }, []);
   useBackDismiss(activeSettingsSection !== "overview", () => openSettingsSection("overview"));
+  useEffect(() => {
+    settingsScrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [activeSettingsSection]);
   const [householdInviteRole, setHouseholdInviteRole] = useState<HouseholdInviteRole>("editor");
   const [householdInviteCode, setHouseholdInviteCode] = useState("");
   const [householdJoinCode, setHouseholdJoinCode] = useState("");
@@ -1584,6 +1588,7 @@ export default function MoreScreen() {
     <View style={[styles.screen, { backgroundColor: c.background }]}>
       <PremiumBackdrop variant="blue" />
       <ScrollView
+        ref={settingsScrollRef}
         style={styles.scroller}
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 12 + webTopPad, paddingBottom: insets.bottom + 100 }]}
       >
@@ -1761,14 +1766,14 @@ export default function MoreScreen() {
       {activeSettingsSection === "appearance" && <>
       <SLabel c={c} text="Theme" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        <View style={[styles.themeRow, { backgroundColor: c.muted, borderRadius: 10 }]}>
+        <View style={[styles.themeRow, isCompactSettingsLayout(viewportWidth) && styles.themeRowCompact, { backgroundColor: c.muted, borderRadius: 10 }]}>
           {THEME_OPTIONS.map(opt => {
             const active = themeMode === opt.value;
             return (
               <Pressable
                 key={opt.value}
                 onPress={() => { setThemeMode(opt.value); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-                style={[styles.themeBtn, { backgroundColor: active ? c.primary : "transparent", borderRadius: 8 }]}
+                style={[styles.themeBtn, isCompactSettingsLayout(viewportWidth) && styles.themeBtnCompact, { backgroundColor: active ? c.primary : "transparent", borderRadius: 8 }]}
               >
                 <Feather name={opt.icon as any} size={14} color={active ? "#fff" : c.mutedForeground} />
                 <Text style={[styles.themeBtnText, { color: active ? "#fff" : c.mutedForeground }]}>{opt.label}</Text>
@@ -3218,6 +3223,9 @@ function PlanningToolToggle({ c, icon, label, description, enabled, disabled, on
   disabled: boolean;
   onPress: () => void;
 }) {
+  const { width: viewportWidth } = useWindowDimensions();
+  const compactLayout = isCompactSettingsLayout(viewportWidth);
+
   return (
     <Pressable
       accessibilityRole="switch"
@@ -3228,6 +3236,7 @@ function PlanningToolToggle({ c, icon, label, description, enabled, disabled, on
       onPress={onPress}
       style={({ pressed }) => [
         styles.planningModeOption,
+        compactLayout && styles.planningModeOptionCompact,
         {
           backgroundColor: enabled ? c.primary + "16" : c.muted,
           borderColor: enabled ? c.primary : c.border,
@@ -3242,7 +3251,7 @@ function PlanningToolToggle({ c, icon, label, description, enabled, disabled, on
         <Text style={[styles.planningModeTitle, { color: c.foreground }]}>{label}</Text>
         <Text style={[styles.planningModeShort, { color: c.mutedForeground }]}>{description}</Text>
       </View>
-      <View style={[styles.planningToolSwitch, { backgroundColor: enabled ? c.primary : c.border }]}>
+      <View style={[styles.planningToolSwitch, compactLayout && styles.planningToolSwitchCompact, { backgroundColor: enabled ? c.primary : c.border }]}>
         <View style={[styles.planningToolThumb, { backgroundColor: c.primaryForeground, transform: [{ translateX: enabled ? 18 : 0 }] }]} />
       </View>
     </Pressable>
@@ -3258,6 +3267,7 @@ const styles = StyleSheet.create({
   planningModeIntro: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 18, marginBottom: 12 },
   planningModeList: { gap: 9 },
   planningModeOption: { minHeight: 66, borderWidth: 1, borderRadius: 16, padding: 11, flexDirection: "row", alignItems: "center", gap: 11 },
+  planningModeOptionCompact: { alignItems: "stretch", flexDirection: "column", gap: 8 },
   planningModeIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   planningModeCopy: { flex: 1 },
   planningModeTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
@@ -3272,6 +3282,7 @@ const styles = StyleSheet.create({
   zeroBudgetLabBadgeText: { fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7 },
   zeroBudgetLabDescription: { fontSize: 11, fontFamily: "Inter_500Medium", lineHeight: 16, marginTop: 3 },
   planningToolSwitch: { width: 44, height: 26, borderRadius: 13, padding: 3, justifyContent: "center" },
+  planningToolSwitchCompact: { alignSelf: "flex-end" },
   planningToolThumb: { width: 20, height: 20, borderRadius: 10 },
   zeroBudgetIntroSteps: { gap: 10, marginTop: 16, marginBottom: 4 },
   zeroBudgetIntroStep: { flexDirection: "row", alignItems: "center", gap: 10 },
@@ -3372,7 +3383,9 @@ const styles = StyleSheet.create({
   methodRow: { flexDirection: "row", padding: 4, gap: 4 },
   methodBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10 },
   themeRow:  { flexDirection: "row", padding: 4, gap: 4 },
+  themeRowCompact: { flexDirection: "column" },
   themeBtn:  { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10 },
+  themeBtnCompact: { flex: 0, width: "100%" },
   themeBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   methodText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   methodDesc: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 19, marginTop: 10 },

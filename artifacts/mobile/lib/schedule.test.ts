@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, getLatestIncomeChange, getLatestRecordedIncomeAmount, incomeAmountToMonthly, isBillActiveForMonth, isValidDateInMonth, moveSettledBillOverrideDate, resolveFinalizedBillOccurrenceDays } from "./schedule";
+import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, getLatestIncomeChange, getLatestRecordedIncomeAmount, incomeAmountToMonthly, isBillActiveForMonth, isValidDateInMonth, moveSettledBillOverrideDate, normalizeIncomeExcludedDates, resolveFinalizedBillOccurrenceDays } from "./schedule";
 
 describe("bill scheduling", () => {
   it("validates a selected calendar date inside the intended month", () => {
@@ -141,6 +141,34 @@ describe("income scheduling", () => {
     };
     assert.deepEqual(getIncomeOccurrenceDays(income, 6, 2026), [9]);
     assert.deepEqual(getIncomeOccurrenceDays(income, 7, 2026), [6, 20]);
+  });
+
+  it("preserves valid removed paydays across an income edit", () => {
+    const savedExclusions = normalizeIncomeExcludedDates([
+      "2026-07-17T12:00:00Z",
+      "2026-07-17",
+      "not-a-date",
+    ]);
+    const editedIncome = {
+      amount: 2_400,
+      frequency: "biweekly" as const,
+      next_payment_date: "2026-07-03",
+      excluded_dates: savedExclusions,
+    };
+
+    assert.deepEqual(savedExclusions, ["2026-07-17"]);
+    assert.deepEqual(getIncomeOccurrenceDays(editedIncome, 6, 2026), [3, 31]);
+  });
+
+  it("ignores malformed stored income exclusions instead of breaking the forecast", () => {
+    const income = {
+      amount: 2_400,
+      frequency: "biweekly" as const,
+      next_payment_date: "2026-07-03",
+      excluded_dates: { unexpected: true } as unknown as string[],
+    };
+
+    assert.deepEqual(getIncomeOccurrenceDays(income, 6, 2026), [3, 17, 31]);
   });
 
   it("uses the latest effective income amount without changing prior months", () => {

@@ -95,7 +95,7 @@ export default function FloScreen() {
   const params = useLocalSearchParams<{ prompt?: string; promptId?: string }>();
   const { user } = useAuth();
   const { isFeatureLocked, previewTier } = useMembership();
-  const { activeHousehold, bills, billDateMoves, transactions, decisions, settings, forecastConfidence, getDailyBalances, getMonthlyIncome, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getPaidAmount, moveBillOccurrence, removeBillOccurrenceMove, saveDecision, updateDecision, updateBill, setCustomAmount, saveExtraPayment, getTransactionsForMonth, categories, incomes, goals } = useBudget();
+  const { activeHousehold, bills, billDateMoves, transactions, decisions, settings, forecastConfidence, getDailyBalances, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getPaidAmount, moveBillOccurrence, removeBillOccurrenceMove, saveDecision, updateDecision, updateBill, setCustomAmount, saveExtraPayment, getTransactionsForMonth, categories, incomes, goals } = useBudget();
   const categoryBudgetScope = useMemo(() => ({
     userId: user?.id,
     householdId: activeHousehold?.householdId,
@@ -460,7 +460,7 @@ export default function FloScreen() {
       lowestBalance: lowest.balance,
       lowestBalanceDate: lowest.date,
       safetyFloor: settings.safety_floor,
-      monthlyIncome: getMonthlyIncome(),
+      monthlyIncome: cashFlow.monthlyIncome,
       monthlyBills: cashFlow.totalBillsDue,
       monthlyRemaining: cashFlow.remaining,
       billsLeftAmount: billSummary.remaining,
@@ -638,7 +638,7 @@ export default function FloScreen() {
         })),
       },
     };
-  }, [baseline, today, settings.safety_floor, getMonthlyIncome, getCashFlow, getDailyBalances, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getPaidAmount, getTransactionsForMonth, transactions, upcoming, decisions, forecastConfidence, categoryPlan, paycheckPlan, billDateMoves, bills, decisionHistory, decisionRiskAlerts, now, incomes, goals, decisionHubSettings]);
+  }, [baseline, today, settings.safety_floor, getCashFlow, getDailyBalances, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getPaidAmount, getTransactionsForMonth, transactions, upcoming, decisions, forecastConfidence, categoryPlan, paycheckPlan, billDateMoves, bills, decisionHistory, decisionRiskAlerts, now, incomes, goals, decisionHubSettings]);
 
   const setupPersonalization = useMemo(
     () => buildSetupPersonalization(onboardingPreferences),

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { getForecastSafetyLayout, SETTINGS_STACK_BREAKPOINT } from "./settingsLayout";
+import { getForecastSafetyLayout, isCompactSettingsLayout, SETTINGS_STACK_BREAKPOINT } from "./settingsLayout";
 
 describe("Forecast Safety responsive layout", () => {
   it("stacks full-width fields on common phone widths without collapsing them", () => {
@@ -26,4 +26,11 @@ describe("Forecast Safety responsive layout", () => {
     assert.equal(layout.field.flexShrink, 1);
     assert.equal(layout.field.flexBasis, 0);
   });
+});
+
+it("stacks Settings row status below long labels under zoom pressure", () => {
+  assert.equal(isCompactSettingsLayout(240), true);
+  assert.equal(isCompactSettingsLayout(275), true);
+  assert.equal(isCompactSettingsLayout(320), false);
+  assert.equal(isCompactSettingsLayout(360), false);
 });

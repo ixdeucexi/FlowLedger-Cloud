@@ -1,9 +1,10 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useState } from "react";
-import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { Pressable, StyleSheet, Switch, Text, useWindowDimensions, View } from "react-native";
 
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { isCompactSettingsLayout } from "@/lib/settingsLayout";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   disablePushNotifications,
@@ -61,6 +62,8 @@ const ALERT_OPTIONS: AlertOption[] = [
 
 export function NotificationSettings() {
   const c = useColors();
+  const { width: viewportWidth } = useWindowDimensions();
+  const compactLayout = isCompactSettingsLayout(viewportWidth);
   const { session, user } = useAuth();
   const [status, setStatus] = useState<PushNotificationStatus>("checking");
   const [preferences, setPreferences] = useState<NotificationPreferences>(DEFAULT_NOTIFICATION_PREFERENCES);
@@ -173,7 +176,7 @@ export function NotificationSettings() {
   return (
     <View style={styles.container}>
       <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
-        <View style={styles.row}>
+        <View style={[styles.row, compactLayout && styles.rowCompact]}>
           <View style={[styles.icon, { backgroundColor: c.primary + "18" }]}>
             <Feather name="bell" size={20} color={c.primary} />
           </View>
@@ -188,6 +191,7 @@ export function NotificationSettings() {
             onValueChange={value => void toggleDevice(value)}
             trackColor={{ false: c.border, true: c.primary + "88" }}
             thumbColor={enabled ? c.primary : c.mutedForeground}
+            style={compactLayout ? styles.switchCompact : undefined}
           />
         </View>
       </View>
@@ -203,6 +207,7 @@ export function NotificationSettings() {
             key={option.key}
             style={[
               styles.optionRow,
+              compactLayout && styles.optionRowCompact,
               index < options.length - 1 ? { borderBottomWidth: 1, borderBottomColor: c.border } : null,
             ]}
           >
@@ -241,6 +246,7 @@ export function NotificationSettings() {
               onValueChange={value => void togglePreference(option.key, value)}
               trackColor={{ false: c.border, true: c.primary + "88" }}
               thumbColor={preferences[option.key] ? c.primary : c.mutedForeground}
+              style={compactLayout ? styles.switchCompact : undefined}
             />
           </View>
         ))}
@@ -266,6 +272,7 @@ const styles = StyleSheet.create({
   container: { gap: 14 },
   card: { borderWidth: 1, borderRadius: 16, padding: 16 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
+  rowCompact: { alignItems: "stretch", flexDirection: "column", gap: 9 },
   icon: { width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   smallIcon: { width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center" },
   copy: { flex: 1, gap: 3 },
@@ -276,10 +283,12 @@ const styles = StyleSheet.create({
   sectionDescription: { fontFamily: "Inter_400Regular", fontSize: 12, lineHeight: 17 },
   optionsCard: { borderWidth: 1, borderRadius: 16, overflow: "hidden" },
   optionRow: { minHeight: 82, paddingHorizontal: 14, paddingVertical: 13, flexDirection: "row", alignItems: "center", gap: 11 },
+  optionRowCompact: { alignItems: "stretch", flexDirection: "column", gap: 9 },
   optionTitle: { fontFamily: "Inter_700Bold", fontSize: 14 },
   inlineTest: { alignSelf: "flex-start", minHeight: 30, borderWidth: 1, borderRadius: 9, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 6, marginTop: 5 },
   inlineTestText: { fontFamily: "Inter_700Bold", fontSize: 11 },
   privacy: { borderWidth: 1, borderRadius: 12, padding: 12, flexDirection: "row", alignItems: "flex-start", gap: 9 },
   privacyText: { flex: 1, fontFamily: "Inter_400Regular", fontSize: 12, lineHeight: 18 },
   message: { fontFamily: "Inter_600SemiBold", fontSize: 12, lineHeight: 17 },
+  switchCompact: { alignSelf: "flex-end" },
 });

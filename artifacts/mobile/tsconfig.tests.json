@@ -73,6 +73,8 @@
     ,"lib/billMatching.test.ts"
     ,"lib/membership.ts"
     ,"lib/membership.test.ts"
+    ,"lib/membershipLayout.ts"
+    ,"lib/membershipLayout.test.ts"
     ,"lib/reviewCenter.ts"
     ,"lib/reviewCenter.test.ts"
     ,"lib/settingsHub.ts"

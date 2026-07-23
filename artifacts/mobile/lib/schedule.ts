@@ -150,7 +150,7 @@ export function isIncomeActiveForMonth(income: ScheduledIncome, month: number, y
 export function getIncomeOccurrenceDays(income: ScheduledIncome, month: number, year: number): number[] {
   if (!isIncomeActiveForMonth(income, month, year)) return [];
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const excludedDates = new Set((income.excluded_dates ?? []).map(date => date.slice(0, 10)));
+  const excludedDates = new Set(normalizeIncomeExcludedDates(income.excluded_dates));
   const isIncluded = (day: number) => {
     const occurrence = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     return !excludedDates.has(occurrence);
@@ -180,6 +180,16 @@ export function getIncomeOccurrenceDays(income: ScheduledIncome, month: number, 
     cursor = new Date(cursor.getTime() + intervalDays * 86_400_000);
   }
   return days.filter(day => onOrAfterStart(day) && isIncluded(day));
+}
+
+export function normalizeIncomeExcludedDates(dates: unknown): string[] {
+  if (!Array.isArray(dates)) return [];
+  return Array.from(new Set(
+    dates
+      .filter((date): date is string => typeof date === "string")
+      .map(date => date.slice(0, 10))
+      .filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date)),
+  )).sort();
 }
 
 function dateDayOfWeek(date?: string): number | null {

@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import type { ComponentProps } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
 import {
@@ -9,6 +9,7 @@ import {
   type SettingsDestinationId,
   type SettingsStatus,
 } from "@/lib/settingsHub";
+import { isCompactSettingsLayout } from "@/lib/settingsLayout";
 
 interface MoreHubProps {
   householdName: string;
@@ -28,6 +29,8 @@ export function MoreHub({
   onOpenSection,
 }: MoreHubProps) {
   const colors = useColors();
+  const { width: viewportWidth } = useWindowDimensions();
+  const compactLayout = isCompactSettingsLayout(viewportWidth);
 
   return (
     <>
@@ -63,6 +66,7 @@ export function MoreHub({
                   onPress={() => onOpenSection(section.id)}
                   style={({ pressed }) => [
                     styles.row,
+                    compactLayout && styles.rowCompact,
                     {
                       borderBottomColor: colors.border,
                       borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
@@ -70,21 +74,23 @@ export function MoreHub({
                     },
                   ]}
                 >
-                  <View style={[styles.rowIcon, { backgroundColor: colors.primary + "11" }]}>
+                  <View style={[styles.rowIcon, compactLayout && styles.rowIconCompact, { backgroundColor: colors.primary + "11" }]}>
                     <Feather name={section.icon as ComponentProps<typeof Feather>["name"]} size={19} color={colors.primary} />
                   </View>
-                  <Text style={[styles.rowTitle, { color: colors.foreground }]}>{section.label}</Text>
-                  {status ? (
-                    <View style={[
-                      styles.statusPill,
-                      {
-                        backgroundColor: status.tone === "attention" ? colors.warning + "18" : colors.muted,
-                        borderColor: status.tone === "attention" ? colors.warning + "38" : colors.border,
-                      },
-                    ]}>
-                      <Text style={[styles.statusText, { color: status.tone === "attention" ? colors.warning : colors.mutedForeground }]} numberOfLines={1}>{status.label}</Text>
-                    </View>
-                  ) : null}
+                  <View style={[styles.rowMain, compactLayout && styles.rowMainCompact]}>
+                    <Text style={[styles.rowTitle, { color: colors.foreground }]}>{section.label}</Text>
+                    {status ? (
+                      <View style={[
+                        styles.statusPill,
+                        {
+                          backgroundColor: status.tone === "attention" ? colors.warning + "18" : colors.muted,
+                          borderColor: status.tone === "attention" ? colors.warning + "38" : colors.border,
+                        },
+                      ]}>
+                        <Text style={[styles.statusText, { color: status.tone === "attention" ? colors.warning : colors.mutedForeground }]} numberOfLines={1}>{status.label}</Text>
+                      </View>
+                    ) : null}
+                  </View>
                   <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
                 </Pressable>
               );
@@ -110,7 +116,11 @@ const styles = StyleSheet.create({
   groupTitle: { fontSize: 20, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.35, marginBottom: 9, paddingHorizontal: 12 },
   groupCard: { borderWidth: 1, borderRadius: 22, overflow: "hidden" },
   row: { minHeight: 64, paddingHorizontal: 14, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 12 },
+  rowCompact: { paddingHorizontal: 10, gap: 8 },
   rowIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  rowIconCompact: { width: 34, height: 34 },
+  rowMain: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 8 },
+  rowMainCompact: { alignItems: "flex-start", flexDirection: "column", gap: 4 },
   rowTitle: { flex: 1, minWidth: 0, fontSize: 15, fontFamily: "Inter_700Bold" },
   statusPill: { maxWidth: 108, borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5 },
   statusText: { fontSize: 9, fontFamily: "Inter_800ExtraBold" },

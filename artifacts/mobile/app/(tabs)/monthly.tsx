@@ -548,7 +548,7 @@ export default function MonthlyScreen() {
   }, [month, selectedYear]);
 
   const cashFlow = useMemo(() => getCashFlow(month, selectedYear), [getCashFlow, month, selectedYear]);
-  const monthlyIncome = getMonthlyIncome();
+  const monthlyIncome = getMonthlyIncome(month, selectedYear);
 
   const surplusSnowballOffer = useMemo(() => {
     if (!surplusPrompt || !settings.debtPayoffEnabled) return null;

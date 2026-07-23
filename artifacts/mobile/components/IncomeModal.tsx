@@ -9,7 +9,7 @@ import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { MONTH_NAMES } from "@/lib/dateLabels";
-import { getLatestRecordedIncomeAmount } from "@/lib/schedule";
+import { getLatestRecordedIncomeAmount, normalizeIncomeExcludedDates } from "@/lib/schedule";
 
 const FREQUENCIES: { key: IncomeItem["frequency"]; label: string; desc: string }[] = [
   { key: "monthly",  label: "Monthly",  desc: "×1/mo"   },
@@ -127,6 +127,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
       start_date: payday,
       next_payment_date: payday,
       amount_history: nextHistory.length > 0 ? nextHistory : undefined,
+      excluded_dates: editItem ? normalizeIncomeExcludedDates(editItem.excluded_dates) : undefined,
     };
     setSaving(true);
     try {

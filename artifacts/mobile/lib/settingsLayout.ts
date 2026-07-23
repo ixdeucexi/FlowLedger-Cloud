@@ -23,3 +23,7 @@ export function getForecastSafetyLayout(viewportWidth: number): ForecastSafetyLa
     input: { width: "100%", minHeight: 48 },
   };
 }
+
+export function isCompactSettingsLayout(viewportWidth: number) {
+  return viewportWidth < 320;
+}

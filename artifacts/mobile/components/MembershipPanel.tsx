@@ -1,14 +1,17 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 
 import { useAuth } from "@/context/AuthContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { PLAN_CATALOG, PLAN_TIERS, annualMonthlyEquivalent, annualSavings, type PlanTier } from "@/lib/membership";
+import { isCompactMembershipLayout } from "@/lib/membershipLayout";
 
 export function MembershipPanel() {
   const c = useColors();
+  const { width: viewportWidth } = useWindowDimensions();
+  const compactLayout = isCompactMembershipLayout(viewportWidth);
   const { session } = useAuth();
   const { actualPlan, previewTier, isAdmin, loading, setPreviewTier, resetPreview } = useMembership();
   const [billingCadence, setBillingCadence] = useState<"monthly" | "annual">("annual");
@@ -41,7 +44,7 @@ export function MembershipPanel() {
 
   return (
     <View style={styles.root}>
-      <View style={[styles.currentCard, { backgroundColor: c.card, borderColor: c.primary + "55" }]}>
+      <View style={[styles.currentCard, compactLayout && styles.currentCardCompact, { backgroundColor: c.card, borderColor: c.primary + "55" }]}>
         <View style={[styles.planIcon, { backgroundColor: c.primary + "18" }]}>
           <Feather name="award" size={22} color={c.primary} />
         </View>
@@ -133,7 +136,7 @@ export function MembershipPanel() {
         </View>
       </>) : null}
 
-      <View style={[styles.cadence, { backgroundColor: c.muted, borderColor: c.border }]}>
+      <View style={[styles.cadence, compactLayout && styles.cadenceCompact, { backgroundColor: c.muted, borderColor: c.border }]}>
         {(["monthly", "annual"] as const).map(cadence => {
           const selected = billingCadence === cadence;
           return (
@@ -142,7 +145,7 @@ export function MembershipPanel() {
               accessibilityRole="button"
               accessibilityLabel={`Show ${cadence} pricing`}
               onPress={() => setBillingCadence(cadence)}
-              style={[styles.cadenceButton, { backgroundColor: selected ? c.card : "transparent" }]}
+              style={[styles.cadenceButton, compactLayout && styles.cadenceButtonCompact, { backgroundColor: selected ? c.card : "transparent" }]}
             >
               <Text style={[styles.cadenceText, { color: selected ? c.foreground : c.mutedForeground }]}>{cadence === "annual" ? "Annual · save" : "Monthly"}</Text>
             </Pressable>
@@ -156,8 +159,8 @@ export function MembershipPanel() {
         const isPreview = previewTier === tier;
         const price = billingCadence === "annual" ? plan.annualPrice : plan.monthlyPrice;
         return (
-          <View key={tier} style={[styles.planCard, { backgroundColor: c.card, borderColor: isPreview ? c.warning : tier === "pro" ? c.primary + "66" : c.border }]}>
-            <View style={styles.planHeader}>
+          <View key={tier} style={[styles.planCard, compactLayout && styles.planCardCompact, { backgroundColor: c.card, borderColor: isPreview ? c.warning : tier === "pro" ? c.primary + "66" : c.border }]}>
+            <View style={[styles.planHeader, compactLayout && styles.planHeaderCompact]}>
               <View style={styles.currentCopy}>
                 <View style={styles.planNameRow}>
                   <Text style={[styles.planName, { color: c.foreground }]}>{plan.name}</Text>
@@ -165,13 +168,13 @@ export function MembershipPanel() {
                 </View>
                 <Text style={[styles.promise, { color: c.primary }]}>{plan.promise}</Text>
               </View>
-              <View style={styles.priceWrap}>
+              <View style={[styles.priceWrap, compactLayout && styles.priceWrapCompact]}>
                 <Text style={[styles.price, { color: c.foreground }]}>{price === 0 ? "$0" : `$${price.toFixed(price % 1 === 0 ? 0 : 2)}`}</Text>
                 <Text style={[styles.priceCadence, { color: c.mutedForeground }]}>{price === 0 ? "forever" : billingCadence === "annual" ? "/year" : "/month"}</Text>
               </View>
             </View>
             {tier === "pro" && billingCadence === "annual" ? (
-              <Text style={[styles.savings, { color: c.success }]}>${annualMonthlyEquivalent("pro").toFixed(2)}/month · save ${annualSavings("pro").toFixed(2)} yearly</Text>
+              <Text style={[styles.savings, compactLayout && styles.savingsCompact, { color: c.success }]}>${annualMonthlyEquivalent("pro").toFixed(2)}/month · save ${annualSavings("pro").toFixed(2)} yearly</Text>
             ) : null}
             <Text style={[styles.planDescription, { color: c.mutedForeground }]}>{plan.description}</Text>
             <View style={styles.highlightList}>
@@ -195,6 +198,7 @@ export function MembershipPanel() {
 const styles = StyleSheet.create({
   root: { gap: 12 },
   currentCard: { borderWidth: 1, borderRadius: 18, padding: 16, flexDirection: "row", alignItems: "center", gap: 12 },
+  currentCardCompact: { alignItems: "flex-start", flexDirection: "column", padding: 12 },
   planIcon: { width: 46, height: 46, borderRadius: 23, alignItems: "center", justifyContent: "center" },
   currentCopy: { flex: 1 },
   eyebrow: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.8 },
@@ -213,19 +217,25 @@ const styles = StyleSheet.create({
   testerButton: { flex: 1, minHeight: 43, minWidth: 120, borderWidth: 1, borderColor: "transparent", borderRadius: 12, alignItems: "center", justifyContent: "center", paddingHorizontal: 12 },
   testerMessage: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_700Bold", marginTop: 10 },
   cadence: { alignSelf: "center", flexDirection: "row", borderWidth: 1, borderRadius: 14, padding: 4 },
+  cadenceCompact: { alignSelf: "stretch" },
   cadenceButton: { minWidth: 112, minHeight: 38, borderRadius: 10, alignItems: "center", justifyContent: "center", paddingHorizontal: 12 },
+  cadenceButtonCompact: { flex: 1, minWidth: 0, paddingHorizontal: 6 },
   cadenceText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   planCard: { borderWidth: 1, borderRadius: 20, padding: 17 },
+  planCardCompact: { padding: 12 },
   planHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  planHeaderCompact: { flexDirection: "column", gap: 6 },
   planNameRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
   planName: { fontSize: 23, fontFamily: "Inter_800ExtraBold" },
   bestBadge: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 },
   bestBadgeText: { fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.5 },
   promise: { fontSize: 12, fontFamily: "Inter_700Bold", marginTop: 2 },
   priceWrap: { alignItems: "flex-end" },
+  priceWrapCompact: { alignItems: "flex-start" },
   price: { fontSize: 22, fontFamily: "Inter_800ExtraBold" },
   priceCadence: { fontSize: 10, fontFamily: "Inter_500Medium" },
   savings: { fontSize: 11, fontFamily: "Inter_700Bold", textAlign: "right", marginTop: 4 },
+  savingsCompact: { textAlign: "left" },
   planDescription: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 18, marginTop: 12 },
   highlightList: { gap: 8, marginTop: 13 },
   highlightRow: { flexDirection: "row", alignItems: "center", gap: 8 },

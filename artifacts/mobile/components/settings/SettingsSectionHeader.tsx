@@ -1,9 +1,10 @@
 import { Feather } from "@expo/vector-icons";
 import type { ComponentProps } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
 import type { SettingsSectionMeta } from "@/lib/settingsHub";
+import { isCompactSettingsLayout } from "@/lib/settingsLayout";
 
 interface SettingsSectionHeaderProps {
   section: SettingsSectionMeta;
@@ -13,6 +14,8 @@ interface SettingsSectionHeaderProps {
 
 export function SettingsSectionHeader({ section, onBack, backLabel = "More" }: SettingsSectionHeaderProps) {
   const colors = useColors();
+  const { width: viewportWidth } = useWindowDimensions();
+  const compactLayout = isCompactSettingsLayout(viewportWidth);
 
   return (
     <View style={styles.container}>
@@ -26,7 +29,7 @@ export function SettingsSectionHeader({ section, onBack, backLabel = "More" }: S
         <Feather name="chevron-left" size={22} color={colors.primary} />
         <Text style={[styles.backText, { color: colors.primary }]}>{backLabel}</Text>
       </Pressable>
-      <View style={styles.headingRow}>
+      <View style={[styles.headingRow, compactLayout && styles.headingRowCompact]}>
         <View style={[styles.icon, { backgroundColor: colors.primary + "16" }]}>
           <Feather name={section.icon as ComponentProps<typeof Feather>["name"]} size={21} color={colors.primary} />
         </View>
@@ -44,6 +47,7 @@ const styles = StyleSheet.create({
   backRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 12, alignSelf: "flex-start" },
   backText: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   headingRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  headingRowCompact: { alignItems: "flex-start", flexDirection: "column", gap: 8 },
   icon: { width: 46, height: 46, borderRadius: 15, alignItems: "center", justifyContent: "center" },
   headingCopy: { flex: 1, minWidth: 0 },
   title: { fontSize: 27, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.7 },
