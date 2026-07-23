@@ -27,7 +27,7 @@ import { WEB_VIEWPORT_CONTENT } from "@/lib/webViewport";
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
-const MIN_STARTUP_MS = 450;
+const MIN_STARTUP_MS = 3200;
 
 function AuthObserver() {
   const { session, loading } = useAuth();
