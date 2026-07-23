@@ -32,6 +32,7 @@ import type { SnowballProjectionResult } from "@/lib/snowball";
 import { isValidDateInMonth } from "@/lib/schedule";
 import { confirmAction } from "@/lib/confirmAction";
 import { buildDebtPaymentPlanSummary } from "@/lib/debtPaymentPlan";
+import { replaceBillSurplusFundingSource } from "@/lib/snowballFunding";
 
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
@@ -748,30 +749,6 @@ export default function MonthlyScreen() {
     await finalizeBillPayment(prompt.bill.id, month, selectedYear, prompt.actual, prompt.paidDate);
   }, [finalizeBillPayment, month, selectedYear, setPaidAmount]);
 
-  const upsertDebtSurplusTransaction = useCallback(async (
-    sourceDebt: Bill,
-    targetDebt: { billId: string; billName: string },
-    amount: number,
-    paymentDate: string,
-  ) => {
-    const key = debtSurplusTransactionKey(sourceDebt.id);
-    const existingTx = transactions.find(transaction => transaction.import_hash === key);
-    const nextTx = {
-      date: paymentDate,
-      amount: -Math.abs(amount),
-      category: "Debt",
-      note: `${targetDebt.billName} snowball`,
-      linked_bill_id: targetDebt.billId,
-      debt_applied_amount: 0,
-      debt_applied_bill_id: undefined,
-      import_hash: key,
-      account_id: existingTx?.account_id,
-      transfer_group_id: existingTx?.transfer_group_id,
-    };
-    if (existingTx) await updateTransaction({ ...existingTx, ...nextTx });
-    else await addTransaction(nextTx);
-  }, [addTransaction, debtSurplusTransactionKey, transactions, updateTransaction]);
-
   const matchSurplusAmountToActual = useCallback(async (prompt: { bill: Bill; actual: number; matchAmountToActual?: boolean } | null) => {
     if (!prompt?.matchAmountToActual || prompt.bill.frequency === "weekly") return;
     await setCustomAmount(
@@ -849,19 +826,28 @@ export default function MonthlyScreen() {
     if (surplusPrompt.bill.is_debt) {
       const target = surplusSnowballOffer.preview.allocations[0];
       if (!surplusSnowballOffer.safe || !target) return;
+      const existing = getExtraPayment(month, selectedYear);
+      const sources = replaceBillSurplusFundingSource(
+        existing?.sources,
+        existing?.amount ?? 0,
+        {
+          type: "bill_surplus",
+          amount: surplus,
+          billId: surplusPrompt.bill.id,
+          billName: surplusPrompt.bill.name,
+        },
+      );
       const directPaidBefore = getPaidAmount(surplusPrompt.bill.id, month, selectedYear);
       await finalizeBillAtActualForMonth(surplusPrompt);
+      let snowballAdded = false;
       try {
-        await upsertDebtSurplusTransaction(
-          surplusPrompt.bill,
-          { billId: target.billId, billName: target.billName },
-          surplus,
-          surplusPaymentDate,
-        );
+        await removeDebtSurplusTransaction(surplusPrompt.bill.id);
+        await applyDebtSnowballPayment(surplusSnowballOffer.preview, sources);
+        snowballAdded = true;
       } catch {
         Alert.alert(
           "Debt Finalized",
-          "The debt payment was saved, but the leftover could not be added as a snowball transaction. The difference is still available, so you can try again.",
+          "The debt payment was saved, but the leftover could not be added as a snowball payment. The difference is still available, so you can try again.",
         );
       }
       const delta = surplusPrompt.actual - directPaidBefore;
@@ -869,7 +855,9 @@ export default function MonthlyScreen() {
         showDebtPaymentNotice(surplusPrompt.bill, delta, surplusPrompt.paidDate, {
           scheduled: false,
           balanceBefore: surplusPrompt.bill.balance,
-          extraMessage: `I also added $${surplus.toFixed(2)} to ${target.billName} for ${formatShortDate(surplusPaymentDate)}.`,
+          extraMessage: snowballAdded
+            ? `I also added $${surplus.toFixed(2)} to ${target.billName} for ${formatShortDate(surplusPaymentDate)}.`
+            : undefined,
         });
       }
       await matchSurplusAmountToActual(surplusPrompt);

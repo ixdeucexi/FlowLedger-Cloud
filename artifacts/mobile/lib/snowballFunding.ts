@@ -7,8 +7,36 @@ export interface SnowballFundingSourceLike {
   pendingBalanceApply?: boolean;
 }
 
+export interface BillSurplusFundingSource extends SnowballFundingSourceLike {
+  type: "bill_surplus";
+  billId: string;
+}
+
 function cents(value: number): number {
   return Math.max(0, Math.round((Number(value) || 0) * 100));
+}
+
+/**
+ * Replaces one bill's contribution while keeping the result in the dedicated
+ * snowball funding trail. A legacy payment without sources is preserved as
+ * manual funding instead of being dropped.
+ */
+export function replaceBillSurplusFundingSource(
+  sources: readonly SnowballFundingSourceLike[] | undefined,
+  existingPaymentAmount: number,
+  replacement: BillSurplusFundingSource,
+): SnowballFundingSourceLike[] {
+  const existing = sources ?? (cents(existingPaymentAmount) > 0
+    ? [{ type: "manual" as const, amount: cents(existingPaymentAmount) / 100 }]
+    : []);
+  return [
+    ...existing.filter(source => !(
+      source.type === "bill_surplus"
+      && source.billId === replacement.billId
+      && !source.reviewTransactionId
+    )),
+    { ...replacement, amount: cents(replacement.amount) / 100 },
+  ].filter(source => cents(source.amount) > 0);
 }
 
 /**
@@ -39,4 +67,3 @@ export function resizeSnowballFundingSources<T extends SnowballFundingSourceLike
 
   return resized;
 }
-
