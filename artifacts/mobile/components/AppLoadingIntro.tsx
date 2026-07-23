@@ -136,6 +136,10 @@ export function AppLoadingIntro({ phase = "app", style }: AppLoadingIntroProps) 
     inputRange: [0, 1],
     outputRange: ["360deg", "0deg"],
   });
+  const logoFloat = orbit.interpolate({
+    inputRange: [0, 0.25, 0.5, 0.75, 1],
+    outputRange: [0, -5, 0, 5, 0],
+  });
   const haloScale = pulse.interpolate({
     inputRange: [0, 1],
     outputRange: [0.92, 1.08],
@@ -163,11 +167,24 @@ export function AppLoadingIntro({ phase = "app", style }: AppLoadingIntroProps) 
         <Animated.View style={[styles.outerRing, { transform: [{ rotate: ringRotation }] }]} />
         <Animated.View style={[styles.innerRing, { transform: [{ rotate: reverseRingRotation }] }]} />
         <Animated.View
+          pointerEvents="none"
+          style={[styles.outerOrbit, { transform: [{ rotate: ringRotation }] }]}
+        >
+          <View style={[styles.orbitMarker, styles.outerMarkerTop]} />
+          <View style={[styles.orbitMarker, styles.outerMarkerSide]} />
+        </Animated.View>
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.innerOrbit, { transform: [{ rotate: reverseRingRotation }] }]}
+        >
+          <View style={[styles.orbitMarker, styles.innerMarker]} />
+        </Animated.View>
+        <Animated.View
           style={[
             styles.logoFrame,
             {
               opacity: entrance,
-              transform: [{ scale: logoScale }],
+              transform: [{ translateY: logoFloat }, { scale: logoScale }],
             },
           ]}
         >
@@ -256,6 +273,51 @@ const styles = StyleSheet.create({
     borderColor: "rgba(139,92,246,0.16)",
     borderBottomColor: "#8b5cf6",
     borderLeftColor: "#34d399",
+  },
+  outerOrbit: {
+    position: "absolute",
+    width: 184,
+    height: 184,
+  },
+  innerOrbit: {
+    position: "absolute",
+    width: 152,
+    height: 152,
+  },
+  orbitMarker: {
+    position: "absolute",
+    width: 11,
+    height: 11,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.8)",
+    shadowOpacity: 0.85,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  outerMarkerTop: {
+    top: -5,
+    left: 86,
+    backgroundColor: "#22d3ee",
+    shadowColor: "#22d3ee",
+  },
+  outerMarkerSide: {
+    right: -5,
+    top: 86,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#8b5cf6",
+    shadowColor: "#8b5cf6",
+  },
+  innerMarker: {
+    bottom: -5,
+    left: 71,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#34d399",
+    shadowColor: "#34d399",
   },
   logoFrame: {
     width: 126,
