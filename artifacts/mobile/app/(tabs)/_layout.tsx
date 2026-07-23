@@ -9,6 +9,7 @@ import { useAuth } from "@/context/AuthContext";
 import { BudgetProvider, useBudget } from "@/context/BudgetContext";
 import { SaveStatusBanner } from "@/components/SaveStatusBanner";
 import { DecisionDueModal } from "@/components/DecisionDueModal";
+import { AppLoadingIntro } from "@/components/AppLoadingIntro";
 import { FloLogo } from "@/components/FloLogo";
 import { PlanPreviewBanner } from "@/components/PlanPreviewBanner";
 import { useColors } from "@/hooks/useColors";
@@ -98,18 +99,7 @@ const DEMO_TOUR_STEPS = [
 ] as const;
 
 function BudgetLoadingScreen({ style }: { style?: StyleProp<ViewStyle> } = {}) {
-  const colors = useColors();
-  return (
-    <Animated.View style={[styles.loadingScreen, { backgroundColor: colors.background }, style]}>
-      <Image
-        source={require("../../assets/images/startup_f_transparent.png")}
-        style={styles.loadingLogo}
-        resizeMode="contain"
-      />
-      <Text style={[styles.loadingTitle, { color: colors.foreground }]}>FlowLedger Algo</Text>
-      <Text style={[styles.loadingSub, { color: colors.mutedForeground }]}>Opening your plan...</Text>
-    </Animated.View>
-  );
+  return <AppLoadingIntro phase="plan" style={style} />;
 }
 
 function BudgetLoadErrorScreen({ message, onRetry }: { message: string; onRetry: () => void }) {
@@ -619,15 +609,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.22,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
-  },
-  loadingTitle: {
-    fontSize: 20,
-    fontWeight: "800",
-    marginBottom: 4,
-  },
-  loadingSub: {
-    fontSize: 14,
-    marginTop: 4,
   },
   loadErrorTitle: {
     fontSize: 24,
