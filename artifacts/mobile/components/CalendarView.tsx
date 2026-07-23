@@ -4,6 +4,7 @@ import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-n
 import type { DailyBalance, DecisionRecord, Goal, GoalExpense, Transaction } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { isConfirmedBillMatch } from "@/lib/billMatching";
+import { isSnowballPaymentTransaction, snowballPaymentName } from "@/lib/debtPaymentPlan";
 import { allocationLabel, groupPlannedExpenseAllocations } from "@/lib/reviewCenter";
 import { scenarioDates } from "@/lib/decisions";
 import { formatCalendarBalance } from "@/lib/forecastDisplay";
@@ -212,6 +213,8 @@ export function CalendarView({
           const plannedExpenseGroups = groupPlannedExpenseAllocations(dayTxs);
           const groupedPlannedExpenseTransactionIds = new Set(plannedExpenseGroups.flatMap(group => group.transactionIds));
           const ungroupedDayTxs = dayTxs.filter(transaction => !groupedPlannedExpenseTransactionIds.has(transaction.id));
+          const snowballTransactions = ungroupedDayTxs.filter(isSnowballPaymentTransaction);
+          const ordinaryDayTxs = ungroupedDayTxs.filter(transaction => !isSnowballPaymentTransaction(transaction));
           const billEvents = (db?.events ?? [])
             .filter(event => event.amount < 0 && (event.sourceType === "bill" || event.kind === "bill"))
             .slice(0, 3);
@@ -230,15 +233,23 @@ export function CalendarView({
           const chips: { label: string; kind: ChipKind }[] = [];
 
           if (db && db.scheduledIncome > 0) chips.push({ label: "Payday", kind: "income" });
-          ungroupedDayTxs.filter(tx => tx.amount > 0 && tx.review_status !== "transfer").slice(0, 1).forEach(tx => chips.push({ label: `${allocationLabel(tx) || tx.note || tx.category} +$${fmt(tx.amount)}`, kind: "income" }));
+          ordinaryDayTxs.filter(tx => tx.amount > 0 && tx.review_status !== "transfer").slice(0, 1).forEach(tx => chips.push({ label: `${allocationLabel(tx) || tx.note || tx.category} +$${fmt(tx.amount)}`, kind: "income" }));
           if (billEvents.length > 0) billEvents.forEach(event => chips.push({ label: event.name || `Bill $${fmt(Math.abs(event.amount))}`, kind: "bill" }));
           else if (db && db.bills > 0) chips.push({ label: `Bills $${fmt(db.bills)}`, kind: "bill" });
           debtEvents.forEach(event => {
             const target = (event.name || "Snowball").replace(/ debt payment$/i, "");
             chips.push({ label: `${target} -$${fmt(event.amount)}`, kind: "debt" });
           });
+          const debtEventSourceIds = new Set(debtEvents.map(event => event.sourceId));
+          snowballTransactions
+            .filter(transaction => !debtEventSourceIds.has(transaction.id))
+            .slice(0, 2)
+            .forEach(transaction => chips.push({
+              label: `${snowballPaymentName(transaction)} -$${fmt(transaction.amount)}`,
+              kind: "debt",
+            }));
           plannedExpenseGroups.slice(0, 2).forEach(group => chips.push({ label: group.name, kind: "expense" }));
-          ungroupedDayTxs.filter(tx => tx.amount < 0 && tx.review_status !== "transfer").slice(0, 2).forEach(tx => chips.push({
+          ordinaryDayTxs.filter(tx => tx.amount < 0 && tx.review_status !== "transfer").slice(0, 2).forEach(tx => chips.push({
             label: `${allocationLabel(tx) || tx.note || tx.category} -$${fmt(tx.amount)}`,
             kind: isConfirmedBillMatch(tx) ? "bill" : "expense",
           }));
