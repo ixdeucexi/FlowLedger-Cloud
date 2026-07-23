@@ -2037,7 +2037,7 @@ export default function MonthlyScreen() {
                         {selectedSnowballTransactions.map(transaction => {
                           const debtId = transaction.debt_applied_bill_id ?? transaction.linked_bill_id;
                           const debt = bills.find(bill => bill.is_debt && bill.id === debtId);
-                          const amount = Math.abs(Number(transaction.debt_applied_amount ?? transaction.amount));
+                          const amount = Math.abs(Number(transaction.amount));
                           const applied = transaction.date <= todayIsoDate();
                           const requiredMinimum = debt
                             ? getBillMonthlyTotal(debt, month, selectedYear)
@@ -2051,7 +2051,13 @@ export default function MonthlyScreen() {
                               applied={applied}
                               statusLabel={applied ? "Applied" : "Scheduled"}
                               requiredMinimum={requiredMinimum}
-                              onEdit={() => openEditTransaction(transaction)}
+                              onEdit={() => {
+                                setSelectedDate(null);
+                                router.push({
+                                  pathname: "/snowball-plan",
+                                  params: { transactionId: transaction.id },
+                                } as never);
+                              }}
                               onRemove={() => confirmAction({
                                 title: "Remove this snowball payment?",
                                 message: "This removes the extra payment from the calendar and restores the debt balance.",

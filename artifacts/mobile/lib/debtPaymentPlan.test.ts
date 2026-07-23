@@ -4,7 +4,9 @@ import { describe, it } from "node:test";
 import {
   buildDebtPaymentPlanSummary,
   isSnowballPaymentTransaction,
+  replacementSnowballSafeMaximum,
   snowballPaymentName,
+  snowballTransactionEditDraft,
 } from "./debtPaymentPlan";
 
 describe("extra debt payment plan", () => {
@@ -29,6 +31,7 @@ describe("snowball transaction recognition", () => {
   it("recognizes an imported debt-surplus payment", () => {
     const transaction = {
       amount: -30,
+      date: "2026-07-23",
       category: "Debt",
       note: "Camera snowball",
       import_hash: "flowledger:debt-surplus:discover:2026-07",
@@ -38,6 +41,11 @@ describe("snowball transaction recognition", () => {
 
     assert.equal(isSnowballPaymentTransaction(transaction), true);
     assert.equal(snowballPaymentName(transaction), "Camera");
+    assert.deepEqual(snowballTransactionEditDraft(transaction), {
+      amount: 30,
+      debtId: "camera",
+      paymentDate: "2026-07-23",
+    });
   });
 
   it("does not turn an ordinary debt payment into a snowball card", () => {
@@ -56,5 +64,9 @@ describe("snowball transaction recognition", () => {
       note: "Camera snowball",
       linked_bill_id: "camera",
     }), false);
+  });
+
+  it("adds the existing payment back when calculating an editable safe maximum", () => {
+    assert.equal(replacementSnowballSafeMaximum(849.02, 30), 879.02);
   });
 });

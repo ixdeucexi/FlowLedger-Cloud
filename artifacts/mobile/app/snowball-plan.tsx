@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -12,7 +12,12 @@ import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { BudgetProvider, useBudget } from "@/context/BudgetContext";
 import { MembershipProvider } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
-import { buildDebtPaymentPlanSummary } from "@/lib/debtPaymentPlan";
+import {
+  buildDebtPaymentPlanSummary,
+  isSnowballPaymentTransaction,
+  replacementSnowballSafeMaximum,
+  snowballTransactionEditDraft,
+} from "@/lib/debtPaymentPlan";
 import { orderActiveDebtsForStrategy } from "@/lib/debtOrder";
 import { localDateString, MONTH_NAMES } from "@/lib/dateLabels";
 
@@ -35,10 +40,12 @@ function SnowballPlanScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const params = useLocalSearchParams<{ suggested?: string }>();
+  const params = useLocalSearchParams<{ suggested?: string; transactionId?: string }>();
   const {
     applyDebtSnowballPayment,
+    bills,
     canEditHousehold,
+    deleteTransaction,
     extraPayments,
     getBillMonthlyTotal,
     getExtraPayment,
@@ -46,6 +53,8 @@ function SnowballPlanScreen() {
     previewDebtSnowball,
     removeDebtSnowballPayment,
     settings,
+    transactions,
+    updateTransaction,
   } = useBudget();
   const today = localDateString();
   const todayParts = dateParts(today);
@@ -54,19 +63,44 @@ function SnowballPlanScreen() {
     .slice()
     .sort((left, right) => (left.payment_date ?? "").localeCompare(right.payment_date ?? ""))[0];
   const suggestedAmount = Math.max(0, Number.parseFloat(Array.isArray(params.suggested) ? params.suggested[0] : params.suggested ?? "") || 0);
-  const [paymentDate, setPaymentDate] = useState(firstUpcomingPlan?.payment_date ?? today);
+  const transactionId = Array.isArray(params.transactionId) ? params.transactionId[0] : params.transactionId;
+  const editTransaction = useMemo(
+    () => transactionId
+      ? transactions.find(transaction => transaction.id === transactionId && isSnowballPaymentTransaction(transaction))
+      : undefined,
+    [transactionId, transactions],
+  );
+  const editDraft = useMemo(
+    () => editTransaction ? snowballTransactionEditDraft(editTransaction) : null,
+    [editTransaction],
+  );
+  const [paymentDate, setPaymentDate] = useState(today);
   const [extraAmount, setExtraAmount] = useState(
-    firstUpcomingPlan
-      ? (firstUpcomingPlan.amount + suggestedAmount).toFixed(2)
-      : suggestedAmount > 0
-        ? suggestedAmount.toFixed(2)
-        : "",
+    suggestedAmount > 0 ? suggestedAmount.toFixed(2) : "",
   );
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const hydratedTransactionRef = useRef<string | null>(null);
+  const hydratedDefaultPlanRef = useRef(false);
+
+  useEffect(() => {
+    if (transactionId) {
+      if (!editTransaction || !editDraft || hydratedTransactionRef.current === editTransaction.id) return;
+      hydratedTransactionRef.current = editTransaction.id;
+      setPaymentDate(editDraft.paymentDate);
+      setExtraAmount(editDraft.amount.toFixed(2));
+      setSaved(false);
+      return;
+    }
+    if (firstUpcomingPlan && !hydratedDefaultPlanRef.current) {
+      hydratedDefaultPlanRef.current = true;
+      setPaymentDate(firstUpcomingPlan.payment_date ?? today);
+      setExtraAmount((firstUpcomingPlan.amount + suggestedAmount).toFixed(2));
+    }
+  }, [editDraft, editTransaction, firstUpcomingPlan, suggestedAmount, today, transactionId]);
 
   const planDate = dateParts(paymentDate);
-  const existingPayment = getExtraPayment(planDate.month, planDate.year);
+  const existingPayment = transactionId ? undefined : getExtraPayment(planDate.month, planDate.year);
   const requestedExtra = Math.max(0, Number.parseFloat(extraAmount) || 0);
   const preview = previewDebtSnowball(
     planDate.month,
@@ -76,25 +110,44 @@ function SnowballPlanScreen() {
     paymentDate,
     existingPayment?.id,
   );
-  const activeDebts = getMonthlyBills(planDate.month, planDate.year)
+  const monthDebts = getMonthlyBills(planDate.month, planDate.year)
+    .filter(debt => debt.is_debt);
+  const activeDebts = monthDebts
     .filter(debt => debt.is_debt && debt.balance > 0.009);
   const payoffOrder = orderActiveDebtsForStrategy(activeDebts, settings.paymentMethod);
-  const target = payoffOrder[0] ?? null;
+  const editTarget = editDraft
+    ? monthDebts.find(debt => debt.id === editDraft.debtId) ?? bills.find(debt => debt.id === editDraft.debtId && debt.is_debt)
+    : undefined;
+  const target = editTarget ?? payoffOrder[0] ?? null;
   const requiredMinimum = activeDebts.reduce(
     (total, debt) => total + getBillMonthlyTotal(debt, planDate.month, planDate.year),
     0,
   );
   const summary = buildDebtPaymentPlanSummary(requiredMinimum, requestedExtra);
-  const safeMaximum = preview.safeMaximum;
+  const safeMaximum = editDraft
+    ? replacementSnowballSafeMaximum(preview.safeMaximum, editDraft.amount)
+    : preview.safeMaximum;
+  const editTargetCapacity = editDraft && target
+    ? Math.max(0, Number(target.balance) + Number(editTransaction?.debt_applied_amount ?? editDraft.amount))
+    : Number.POSITIVE_INFINITY;
   const valid = canEditHousehold
     && requestedExtra > 0.005
     && requestedExtra <= safeMaximum + 0.005
-    && preview.allocations.length > 0;
+    && requestedExtra <= editTargetCapacity + 0.005
+    && (editTransaction ? Boolean(target) : preview.allocations.length > 0);
   const monthLabel = `${MONTH_NAMES[planDate.month]} ${planDate.year}`;
   const scheduledPlans = useMemo(() => extraPayments
     .slice()
     .sort((left, right) => (right.payment_date ?? "").localeCompare(left.payment_date ?? "")),
   [extraPayments]);
+  const displayedAllocations = editTransaction && target
+    ? [{
+        billId: target.id,
+        billName: target.name,
+        payment: Math.min(requestedExtra, editTargetCapacity),
+        paidOff: requestedExtra >= editTargetCapacity - 0.005,
+      }]
+    : preview.allocations;
 
   const choosePlan = (date: string, amount: number) => {
     setPaymentDate(date);
@@ -106,7 +159,18 @@ function SnowballPlanScreen() {
     if (!valid || saving) return;
     setSaving(true);
     try {
-      await applyDebtSnowballPayment(preview);
+      if (editTransaction && target) {
+        await updateTransaction({
+          ...editTransaction,
+          amount: -requestedExtra,
+          category: "Debt",
+          date: paymentDate,
+          linked_bill_id: target.id,
+          note: `${target.name} snowball`,
+        });
+      } else {
+        await applyDebtSnowballPayment(preview);
+      }
       setSaved(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
@@ -117,10 +181,11 @@ function SnowballPlanScreen() {
   };
 
   const removePlan = async () => {
-    if (!existingPayment || saving) return;
+    if ((!existingPayment && !editTransaction) || saving) return;
     setSaving(true);
     try {
-      await removeDebtSnowballPayment(planDate.month, planDate.year);
+      if (editTransaction) await deleteTransaction(editTransaction.id);
+      else await removeDebtSnowballPayment(planDate.month, planDate.year);
       setExtraAmount("");
       setSaved(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -202,7 +267,7 @@ function SnowballPlanScreen() {
             </View>
 
             <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>EXTRA PAYMENT</Text>
-            <View style={[styles.inputWrap, { backgroundColor: c.background, borderColor: requestedExtra > safeMaximum ? c.destructive : c.border }]}>
+            <View style={[styles.inputWrap, { backgroundColor: c.background, borderColor: requestedExtra > safeMaximum || requestedExtra > editTargetCapacity ? c.destructive : c.border }]}>
               <Text style={[styles.dollar, { color: c.foreground }]}>$</Text>
               <TextInput
                 accessibilityLabel="Extra debt payment"
@@ -216,6 +281,11 @@ function SnowballPlanScreen() {
             </View>
             {requestedExtra > safeMaximum ? (
               <Text style={[styles.error, { color: c.destructive }]}>Lower this to {money(safeMaximum)} or less to protect your safety floor.</Text>
+            ) : null}
+            {editTransaction && requestedExtra > editTargetCapacity ? (
+              <Text style={[styles.error, { color: c.destructive }]}>
+                {target?.name ?? "This debt"} has {money(editTargetCapacity)} available for this payment.
+              </Text>
             ) : null}
             {safeMaximum > 0 && requestedExtra <= 0 ? (
               <Pressable accessibilityRole="button" onPress={() => setExtraAmount(safeMaximum.toFixed(2))} style={styles.safeLink}>
@@ -247,10 +317,10 @@ function SnowballPlanScreen() {
               <Text style={[styles.minimumNote, { color: c.mutedForeground }]}>The extra payment does not replace or increase any required minimum.</Text>
             </View>
 
-            {preview.allocations.length > 0 ? (
+            {displayedAllocations.length > 0 ? (
               <View style={styles.allocations}>
                 <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>WHERE THE EXTRA GOES</Text>
-                {preview.allocations.map(allocation => (
+                {displayedAllocations.map(allocation => (
                   <View key={allocation.billId} style={[styles.allocationRow, { borderTopColor: c.border }]}>
                     <Feather name={allocation.paidOff ? "check-circle" : "arrow-right-circle"} size={16} color={allocation.paidOff ? c.success : c.primary} />
                     <Text style={[styles.allocationName, { color: c.foreground }]}>{allocation.billName}</Text>
@@ -266,12 +336,14 @@ function SnowballPlanScreen() {
             {saved ? (
               <View style={[styles.savedNotice, { backgroundColor: c.success + "16" }]}>
                 <Feather name="check-circle" size={17} color={c.success} />
-                <Text style={[styles.savedText, { color: c.success }]}>Extra payment added to Calendar.</Text>
+                <Text style={[styles.savedText, { color: c.success }]}>
+                  {editTransaction ? "Snowball payment updated." : "Extra payment added to Calendar."}
+                </Text>
               </View>
             ) : null}
 
             <View style={styles.actions}>
-              {existingPayment ? (
+              {existingPayment || editTransaction ? (
                 <Pressable accessibilityRole="button" disabled={saving} onPress={removePlan} style={[styles.removeButton, { borderColor: c.destructive }]}>
                   <Feather name="trash-2" size={15} color={c.destructive} />
                   <Text style={[styles.removeText, { color: c.destructive }]}>Remove</Text>
@@ -279,19 +351,23 @@ function SnowballPlanScreen() {
               ) : null}
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={existingPayment ? "Update extra payment on calendar" : "Add extra payment to calendar"}
+                accessibilityLabel={editTransaction ? "Update snowball payment" : existingPayment ? "Update extra payment on calendar" : "Add extra payment to calendar"}
                 disabled={!valid || saving}
                 onPress={savePlan}
                 style={[styles.saveButton, { backgroundColor: valid ? c.primary : c.muted, opacity: saving ? 0.7 : 1 }]}
               >
                 <Feather name="calendar" size={16} color={valid ? c.primaryForeground : c.mutedForeground} />
                 <Text style={[styles.saveText, { color: valid ? c.primaryForeground : c.mutedForeground }]}>
-                  {saving ? "Saving…" : existingPayment ? "Update calendar plan" : "Add to Calendar"}
+                  {saving ? "Saving…" : editTransaction ? "Update snowball payment" : existingPayment ? "Update calendar plan" : "Add to Calendar"}
                 </Text>
               </Pressable>
             </View>
             {saved ? (
-              <Pressable accessibilityRole="button" onPress={() => router.replace("/(tabs)/monthly" as never)} style={[styles.calendarLink, { borderColor: c.primary + "55" }]}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => router.replace({ pathname: "/(tabs)/monthly", params: { openDate: paymentDate } } as never)}
+                style={[styles.calendarLink, { borderColor: c.primary + "55" }]}
+              >
                 <Text style={[styles.calendarLinkText, { color: c.primary }]}>View Monthly</Text>
                 <Feather name="arrow-right" size={15} color={c.primary} />
               </Pressable>
