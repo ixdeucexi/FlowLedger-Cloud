@@ -4,6 +4,7 @@ import {
   Animated,
   Easing,
   Image,
+  Platform,
   StyleProp,
   StyleSheet,
   Text,
@@ -30,13 +31,14 @@ interface AppLoadingIntroProps {
   style?: StyleProp<ViewStyle>;
 }
 
+const USE_NATIVE_DRIVER = Platform.OS !== "web";
+
 export function AppLoadingIntro({ phase = "app", style }: AppLoadingIntroProps) {
   const colors = useColors();
   const [messageIndex, setMessageIndex] = useState(0);
   const [reduceMotion, setReduceMotion] = useState(false);
   const entrance = useRef(new Animated.Value(0)).current;
   const orbit = useRef(new Animated.Value(0)).current;
-  const pulse = useRef(new Animated.Value(0)).current;
   const messages = phase === "plan" ? PLAN_MESSAGES : APP_MESSAGES;
 
   useEffect(() => {
@@ -55,60 +57,39 @@ export function AppLoadingIntro({ phase = "app", style }: AppLoadingIntroProps) 
   useEffect(() => {
     entrance.stopAnimation();
     orbit.stopAnimation();
-    pulse.stopAnimation();
 
     if (reduceMotion) {
       entrance.setValue(1);
       orbit.setValue(0);
-      pulse.setValue(0);
       return;
     }
 
     entrance.setValue(0);
     orbit.setValue(0);
-    pulse.setValue(0);
 
     const entranceAnimation = Animated.timing(entrance, {
       toValue: 1,
       duration: 650,
       easing: Easing.out(Easing.back(1.2)),
-      useNativeDriver: true,
+      useNativeDriver: USE_NATIVE_DRIVER,
     });
     const orbitAnimation = Animated.loop(
       Animated.timing(orbit, {
         toValue: 1,
-        duration: 4200,
+        duration: 3600,
         easing: Easing.linear,
-        useNativeDriver: true,
+        useNativeDriver: USE_NATIVE_DRIVER,
       }),
-    );
-    const pulseAnimation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, {
-          toValue: 1,
-          duration: 900,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulse, {
-          toValue: 0,
-          duration: 900,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ]),
     );
 
     entranceAnimation.start();
     orbitAnimation.start();
-    pulseAnimation.start();
 
     return () => {
       entranceAnimation.stop();
       orbitAnimation.stop();
-      pulseAnimation.stop();
     };
-  }, [entrance, orbit, pulse, reduceMotion]);
+  }, [entrance, orbit, reduceMotion]);
 
   useEffect(() => {
     setMessageIndex(0);
@@ -128,25 +109,33 @@ export function AppLoadingIntro({ phase = "app", style }: AppLoadingIntroProps) 
     inputRange: [0, 1],
     outputRange: [14, 0],
   });
-  const ringRotation = orbit.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "360deg"],
-  });
-  const reverseRingRotation = orbit.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["360deg", "0deg"],
-  });
   const logoFloat = orbit.interpolate({
     inputRange: [0, 0.25, 0.5, 0.75, 1],
     outputRange: [0, -5, 0, 5, 0],
   });
-  const haloScale = pulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.92, 1.08],
+  const outerOrbitX = orbit.interpolate({
+    inputRange: [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1],
+    outputRange: [0, 53.74, 76, 53.74, 0, -53.74, -76, -53.74, 0],
   });
-  const haloOpacity = pulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.22, 0.5],
+  const outerOrbitY = orbit.interpolate({
+    inputRange: [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1],
+    outputRange: [-76, -53.74, 0, 53.74, 76, 53.74, 0, -53.74, -76],
+  });
+  const sideOrbitX = orbit.interpolate({
+    inputRange: [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1],
+    outputRange: [64, 45.25, 0, -45.25, -64, -45.25, 0, 45.25, 64],
+  });
+  const sideOrbitY = orbit.interpolate({
+    inputRange: [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1],
+    outputRange: [0, -45.25, -64, -45.25, 0, 45.25, 64, 45.25, 0],
+  });
+  const innerOrbitX = orbit.interpolate({
+    inputRange: [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1],
+    outputRange: [0, -41.01, -58, -41.01, 0, 41.01, 58, 41.01, 0],
+  });
+  const innerOrbitY = orbit.interpolate({
+    inputRange: [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1],
+    outputRange: [58, 41.01, 0, -41.01, -58, -41.01, 0, 41.01, 58],
   });
 
   return (
@@ -155,30 +144,33 @@ export function AppLoadingIntro({ phase = "app", style }: AppLoadingIntroProps) 
       style={[styles.screen, { backgroundColor: colors.background }, style]}
     >
       <View style={styles.brandStage}>
+        <View style={styles.halo} />
+        <View style={styles.outerRing} />
+        <View style={styles.innerRing} />
         <Animated.View
+          pointerEvents="none"
           style={[
-            styles.halo,
-            {
-              opacity: haloOpacity,
-              transform: [{ scale: haloScale }],
-            },
+            styles.orbitMarker,
+            styles.outerMarkerTop,
+            { transform: [{ translateX: outerOrbitX }, { translateY: outerOrbitY }] },
           ]}
         />
-        <Animated.View style={[styles.outerRing, { transform: [{ rotate: ringRotation }] }]} />
-        <Animated.View style={[styles.innerRing, { transform: [{ rotate: reverseRingRotation }] }]} />
         <Animated.View
           pointerEvents="none"
-          style={[styles.outerOrbit, { transform: [{ rotate: ringRotation }] }]}
-        >
-          <View style={[styles.orbitMarker, styles.outerMarkerTop]} />
-          <View style={[styles.orbitMarker, styles.outerMarkerSide]} />
-        </Animated.View>
+          style={[
+            styles.orbitMarker,
+            styles.outerMarkerSide,
+            { transform: [{ translateX: sideOrbitX }, { translateY: sideOrbitY }] },
+          ]}
+        />
         <Animated.View
           pointerEvents="none"
-          style={[styles.innerOrbit, { transform: [{ rotate: reverseRingRotation }] }]}
-        >
-          <View style={[styles.orbitMarker, styles.innerMarker]} />
-        </Animated.View>
+          style={[
+            styles.orbitMarker,
+            styles.innerMarker,
+            { transform: [{ translateX: innerOrbitX }, { translateY: innerOrbitY }] },
+          ]}
+        />
         <Animated.View
           style={[
             styles.logoFrame,
@@ -249,6 +241,7 @@ const styles = StyleSheet.create({
     height: 156,
     borderRadius: 78,
     backgroundColor: "#0ea5e9",
+    opacity: 0.3,
     shadowColor: "#22d3ee",
     shadowOpacity: 0.7,
     shadowRadius: 30,
@@ -274,16 +267,6 @@ const styles = StyleSheet.create({
     borderBottomColor: "#8b5cf6",
     borderLeftColor: "#34d399",
   },
-  outerOrbit: {
-    position: "absolute",
-    width: 184,
-    height: 184,
-  },
-  innerOrbit: {
-    position: "absolute",
-    width: 152,
-    height: 152,
-  },
   orbitMarker: {
     position: "absolute",
     width: 11,
@@ -296,14 +279,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
   },
   outerMarkerTop: {
-    top: -5,
-    left: 86,
+    top: 89,
+    left: 89,
     backgroundColor: "#22d3ee",
     shadowColor: "#22d3ee",
   },
   outerMarkerSide: {
-    right: -5,
-    top: 86,
+    top: 90,
+    left: 90,
     width: 8,
     height: 8,
     borderRadius: 4,
@@ -311,8 +294,8 @@ const styles = StyleSheet.create({
     shadowColor: "#8b5cf6",
   },
   innerMarker: {
-    bottom: -5,
-    left: 71,
+    top: 89,
+    left: 89,
     width: 10,
     height: 10,
     borderRadius: 5,
