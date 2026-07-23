@@ -5,6 +5,7 @@ import {
   buildDebtPaymentPlanSummary,
   isSnowballPaymentTransaction,
   replacementSnowballSafeMaximum,
+  requiredDebtPlanTotal,
   snowballPaymentName,
   snowballTransactionEditDraft,
 } from "./debtPaymentPlan";
@@ -68,5 +69,12 @@ describe("snowball transaction recognition", () => {
 
   it("adds the existing payment back when calculating an editable safe maximum", () => {
     assert.equal(replacementSnowballSafeMaximum(849.02, 30), 879.02);
+  });
+
+  it("keeps the saved required payment separate from a snowball extra", () => {
+    assert.equal(requiredDebtPlanTotal({
+      amount: 38.27,
+      snowball_minimum_boost: 29,
+    }), 67.27);
   });
 });

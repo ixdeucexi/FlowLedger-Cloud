@@ -16,6 +16,7 @@ import {
   buildDebtPaymentPlanSummary,
   isSnowballPaymentTransaction,
   replacementSnowballSafeMaximum,
+  requiredDebtPlanTotal,
   snowballTransactionEditDraft,
 } from "@/lib/debtPaymentPlan";
 import { orderActiveDebtsForStrategy } from "@/lib/debtOrder";
@@ -47,7 +48,7 @@ function SnowballPlanScreen() {
     canEditHousehold,
     deleteTransaction,
     extraPayments,
-    getBillMonthlyTotal,
+    getBillOccurrencesInMonth,
     getExtraPayment,
     getMonthlyBills,
     previewDebtSnowball,
@@ -120,7 +121,10 @@ function SnowballPlanScreen() {
     : undefined;
   const target = editTarget ?? payoffOrder[0] ?? null;
   const requiredMinimum = activeDebts.reduce(
-    (total, debt) => total + getBillMonthlyTotal(debt, planDate.month, planDate.year),
+    (total, debt) => total + requiredDebtPlanTotal(
+      debt,
+      getBillOccurrencesInMonth(debt, planDate.month, planDate.year).length,
+    ),
     0,
   );
   const summary = buildDebtPaymentPlanSummary(requiredMinimum, requestedExtra);

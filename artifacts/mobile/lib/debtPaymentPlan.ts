@@ -20,6 +20,11 @@ export type SnowballTransactionEditDraft = {
   paymentDate: string;
 };
 
+export type RequiredDebtPaymentLike = {
+  amount: number;
+  snowball_minimum_boost?: number | null;
+};
+
 function money(value: number) {
   return Math.round(Math.max(0, Number(value) || 0) * 100) / 100;
 }
@@ -65,4 +70,13 @@ export function snowballTransactionEditDraft(
 
 export function replacementSnowballSafeMaximum(safeMaximum: number, existingAmount: number): number {
   return money(safeMaximum + existingAmount);
+}
+
+export function requiredDebtPlanTotal(
+  debt: RequiredDebtPaymentLike,
+  occurrenceCount = 1,
+): number {
+  const requiredPerOccurrence = Math.max(0, Number(debt.amount) || 0)
+    + Math.max(0, Number(debt.snowball_minimum_boost) || 0);
+  return money(requiredPerOccurrence * Math.max(0, occurrenceCount));
 }

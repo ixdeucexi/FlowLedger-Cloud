@@ -34,6 +34,7 @@ import { confirmAction } from "@/lib/confirmAction";
 import {
   buildDebtPaymentPlanSummary,
   isSnowballPaymentTransaction,
+  requiredDebtPlanTotal,
   snowballPaymentName,
 } from "@/lib/debtPaymentPlan";
 import { replaceBillSurplusFundingSource } from "@/lib/snowballFunding";
@@ -150,10 +151,10 @@ function CalendarDebtPaymentCard({
       {requiredMinimum !== undefined ? (
         <View style={[styles.dayDebtPlanSummary, { backgroundColor: c.background + "66", borderColor: c.border }]}>
           <Text style={[styles.dayDebtPlanText, { color: c.mutedForeground }]}>
-            Minimum {`$${paymentPlan.requiredMinimum.toFixed(2)}`} + extra {`$${paymentPlan.extraPayment.toFixed(2)}`}
+            Required payment {`$${paymentPlan.requiredMinimum.toFixed(2)}`} + snowball extra {`$${paymentPlan.extraPayment.toFixed(2)}`}
           </Text>
-          <Text style={[styles.dayDebtPlanTotal, { color: c.success }]}>{`$${paymentPlan.totalPlanned.toFixed(2)}`} planned this month</Text>
-          <Text style={[styles.dayDebtPlanNote, { color: c.mutedForeground }]}>The required minimum stays the same.</Text>
+          <Text style={[styles.dayDebtPlanTotal, { color: c.success }]}>{`$${paymentPlan.totalPlanned.toFixed(2)}`} debt plan this month</Text>
+          <Text style={[styles.dayDebtPlanNote, { color: c.mutedForeground }]}>The snowball extra does not change the required payment.</Text>
         </View>
       ) : null}
 
@@ -2007,7 +2008,13 @@ export default function MonthlyScreen() {
                           const requiredMinimum = savedPayment
                             ? bills
                               .filter(bill => bill.is_debt && allocatedDebtIds.has(bill.id))
-                              .reduce((total, bill) => total + getBillMonthlyTotal(bill, savedPayment.month, savedPayment.year), 0)
+                              .reduce(
+                                (total, bill) => total + requiredDebtPlanTotal(
+                                  bill,
+                                  getBillOccurrencesInMonth(bill, savedPayment.month, savedPayment.year).length,
+                                ),
+                                0,
+                              )
                             : undefined;
                           return (
                             <CalendarDebtPaymentCard
@@ -2040,7 +2047,10 @@ export default function MonthlyScreen() {
                           const amount = Math.abs(Number(transaction.amount));
                           const applied = transaction.date <= todayIsoDate();
                           const requiredMinimum = debt
-                            ? getBillMonthlyTotal(debt, month, selectedYear)
+                            ? requiredDebtPlanTotal(
+                                debt,
+                                getBillOccurrencesInMonth(debt, month, selectedYear).length,
+                              )
                             : undefined;
                           const name = snowballPaymentName(transaction, debt?.name ?? "Debt payment");
                           return (
