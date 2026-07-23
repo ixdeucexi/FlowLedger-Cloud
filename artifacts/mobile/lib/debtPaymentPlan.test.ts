@@ -3,10 +3,13 @@ import { describe, it } from "node:test";
 
 import {
   buildDebtPaymentPlanSummary,
+  isScheduledSnowballPlanTransaction,
   isSnowballPaymentTransaction,
   replacementSnowballSafeMaximum,
   requiredDebtPlanTotal,
+  SNOWBALL_PLAN_SOURCE,
   snowballPaymentName,
+  snowballPlanTotalThroughDate,
   snowballTransactionEditDraft,
 } from "./debtPaymentPlan";
 
@@ -76,5 +79,32 @@ describe("snowball transaction recognition", () => {
       amount: 38.27,
       snowball_minimum_boost: 29,
     }), 38.27);
+  });
+
+  it("keeps scheduled plan transactions separate from paid debt", () => {
+    assert.equal(isScheduledSnowballPlanTransaction({
+      amount: -30,
+      source: SNOWBALL_PLAN_SOURCE,
+      linked_bill_id: "camera",
+    }), true);
+  });
+
+  it("shows the cumulative snowball plan through each date in the month", () => {
+    const plans = [
+      { amount: 12.48, date: "2026-07-22" },
+      { amount: -30, date: "2026-07-24" },
+      { amount: 10, date: "2026-08-01" },
+    ];
+    assert.equal(snowballPlanTotalThroughDate(plans, "2026-07-22"), 12.48);
+    assert.equal(snowballPlanTotalThroughDate(plans, "2026-07-24"), 42.48);
+    assert.equal(buildDebtPaymentPlanSummary(
+      38.27,
+      snowballPlanTotalThroughDate(plans, "2026-07-22"),
+    ).totalPlanned, 50.75);
+    assert.equal(buildDebtPaymentPlanSummary(
+      38.27,
+      snowballPlanTotalThroughDate(plans, "2026-07-24"),
+    ).totalPlanned, 80.75);
+    assert.equal(snowballPlanTotalThroughDate(plans, "not-a-date"), 0);
   });
 });

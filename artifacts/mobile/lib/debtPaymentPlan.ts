@@ -9,9 +9,16 @@ export type SnowballPaymentTransactionLike = {
   date?: string | null;
   category?: string | null;
   note?: string | null;
+  source?: string | null;
   import_hash?: string | null;
   linked_bill_id?: string | null;
   debt_applied_bill_id?: string | null;
+  debt_applied_amount?: number | null;
+};
+
+export type DatedSnowballPlanLike = {
+  amount: number;
+  date?: string | null;
 };
 
 export type SnowballTransactionEditDraft = {
@@ -29,6 +36,8 @@ function money(value: number) {
   return Math.round(Math.max(0, Number(value) || 0) * 100) / 100;
 }
 
+export const SNOWBALL_PLAN_SOURCE = "snowball_plan";
+
 export function buildDebtPaymentPlanSummary(requiredMinimum: number, extraPayment: number): DebtPaymentPlanSummary {
   const minimum = money(requiredMinimum);
   const extra = money(extraPayment);
@@ -39,6 +48,10 @@ export function buildDebtPaymentPlanSummary(requiredMinimum: number, extraPaymen
   };
 }
 
+export function isScheduledSnowballPlanTransaction(transaction: SnowballPaymentTransactionLike): boolean {
+  return transaction.source === SNOWBALL_PLAN_SOURCE;
+}
+
 export function isSnowballPaymentTransaction(transaction: SnowballPaymentTransactionLike): boolean {
   const linkedDebtId = transaction.debt_applied_bill_id ?? transaction.linked_bill_id;
   if (!linkedDebtId || Number(transaction.amount) >= 0) return false;
@@ -47,7 +60,20 @@ export function isSnowballPaymentTransaction(transaction: SnowballPaymentTransac
   const isNamedSnowballPayment = String(transaction.category ?? "").toLowerCase() === "debt"
     && /\bsnowball\b/i.test(String(transaction.note ?? ""));
 
-  return isGeneratedDebtSurplus || isNamedSnowballPayment;
+  return isScheduledSnowballPlanTransaction(transaction) || isGeneratedDebtSurplus || isNamedSnowballPayment;
+}
+
+export function snowballPlanTotalThroughDate(
+  plans: DatedSnowballPlanLike[],
+  throughDate: string,
+): number {
+  const monthPrefix = /^\d{4}-\d{2}-\d{2}$/.test(throughDate) ? throughDate.slice(0, 7) : "";
+  if (!monthPrefix) return 0;
+  return money(plans.reduce((total, plan) => {
+    const date = String(plan.date ?? "");
+    if (!date.startsWith(`${monthPrefix}-`) || date > throughDate) return total;
+    return total + Math.abs(Number(plan.amount) || 0);
+  }, 0));
 }
 
 export function snowballPaymentName(transaction: SnowballPaymentTransactionLike, fallback = "Debt payment"): string {

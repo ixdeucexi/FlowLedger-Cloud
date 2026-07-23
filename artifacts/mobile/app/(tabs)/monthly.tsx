@@ -33,9 +33,11 @@ import { isValidDateInMonth } from "@/lib/schedule";
 import { confirmAction } from "@/lib/confirmAction";
 import {
   buildDebtPaymentPlanSummary,
+  isScheduledSnowballPlanTransaction,
   isSnowballPaymentTransaction,
   requiredDebtPlanTotal,
   snowballPaymentName,
+  snowballPlanTotalThroughDate,
 } from "@/lib/debtPaymentPlan";
 import { replaceBillSurplusFundingSource } from "@/lib/snowballFunding";
 
@@ -105,6 +107,7 @@ function CalendarDebtPaymentCard({
   applied,
   statusLabel,
   requiredMinimum,
+  snowballMonthToDate,
   onEdit,
   onRemove,
 }: {
@@ -113,11 +116,12 @@ function CalendarDebtPaymentCard({
   applied: boolean;
   statusLabel: string;
   requiredMinimum?: number;
+  snowballMonthToDate?: number;
   onEdit?: () => void;
   onRemove?: () => void;
 }) {
   const c = useColors();
-  const paymentPlan = buildDebtPaymentPlanSummary(requiredMinimum ?? 0, amount);
+  const paymentPlan = buildDebtPaymentPlanSummary(requiredMinimum ?? 0, snowballMonthToDate ?? amount);
 
   return (
     <View
@@ -151,9 +155,9 @@ function CalendarDebtPaymentCard({
       {requiredMinimum !== undefined ? (
         <View style={[styles.dayDebtPlanSummary, { backgroundColor: c.background + "66", borderColor: c.border }]}>
           <Text style={[styles.dayDebtPlanText, { color: c.mutedForeground }]}>
-            Required payment {`$${paymentPlan.requiredMinimum.toFixed(2)}`} + snowball extra {`$${paymentPlan.extraPayment.toFixed(2)}`}
+            Required {`$${paymentPlan.requiredMinimum.toFixed(2)}`} + snowball through this date {`$${paymentPlan.extraPayment.toFixed(2)}`}
           </Text>
-          <Text style={[styles.dayDebtPlanTotal, { color: c.success }]}>{`$${paymentPlan.totalPlanned.toFixed(2)}`} debt plan this month</Text>
+          <Text style={[styles.dayDebtPlanTotal, { color: c.success }]}>{`$${paymentPlan.totalPlanned.toFixed(2)}`} planned for debt this month</Text>
           <Text style={[styles.dayDebtPlanNote, { color: c.mutedForeground }]}>The snowball extra does not change the required payment.</Text>
         </View>
       ) : null}
@@ -303,7 +307,7 @@ export default function MonthlyScreen() {
     const key = debtSurplusTransactionImportHash(sourceDebtId, targetMonth, targetYear);
     return transactions
       .filter(transaction => transaction.import_hash === key)
-      .reduce((sum, transaction) => sum + Math.abs(Number(transaction.amount) || 0), 0);
+      .reduce((sum, transaction) => sum + Math.max(0, Number(transaction.debt_applied_amount) || 0), 0);
   }, [transactions, month, selectedYear]);
 
   const getEffectivePaidAmount = useCallback((bill: Bill, targetMonth = month, targetYear = selectedYear) => {
@@ -564,6 +568,18 @@ export default function MonthlyScreen() {
         transaction.date === selectedDate && isSnowballPaymentTransaction(transaction))
       : [],
     [calendarTransactions, selectedDate],
+  );
+  const snowballPlanEntries = useMemo(
+    () => [
+      ...extraPayments.map(payment => ({
+        amount: payment.amount,
+        date: payment.payment_date ?? `${payment.year}-${String(payment.month + 1).padStart(2, "0")}-01`,
+      })),
+      ...transactions
+        .filter(isScheduledSnowballPlanTransaction)
+        .map(transaction => ({ amount: transaction.amount, date: transaction.date })),
+    ],
+    [extraPayments, transactions],
   );
   const incomeForSelectedDay = useMemo(
     () => selectedDay === null ? [] : incomeOccurrences.filter(item => item.day === selectedDay),
@@ -2016,6 +2032,8 @@ export default function MonthlyScreen() {
                                 0,
                               )
                             : undefined;
+                          const paymentDate = savedPayment?.payment_date ?? payment.event.date;
+                          const snowballMonthToDate = snowballPlanTotalThroughDate(snowballPlanEntries, paymentDate);
                           return (
                             <CalendarDebtPaymentCard
                               key={`overlay-debt-${payment.event.id}`}
@@ -2024,14 +2042,15 @@ export default function MonthlyScreen() {
                               applied={applied}
                               statusLabel={payment.statusLabel}
                               requiredMinimum={requiredMinimum}
+                              snowballMonthToDate={snowballMonthToDate}
                               onEdit={savedPayment ? () => {
                                 setSelectedDate(null);
                                 router.push("/snowball-plan" as never);
                               } : undefined}
                               onRemove={savedPayment ? () => confirmAction({
                                 title: "Remove this debt payment?",
-                                message: "This undoes the snowball payment and restores the debt balances it changed.",
-                                confirmText: "Remove payment",
+                                message: "This removes the snowball plan. It does not change the debt balance.",
+                                confirmText: "Remove plan",
                                 destructive: true,
                                 onConfirm: async () => {
                                   await removeDebtSnowballPayment(savedPayment.month, savedPayment.year);
@@ -2045,7 +2064,8 @@ export default function MonthlyScreen() {
                           const debtId = transaction.debt_applied_bill_id ?? transaction.linked_bill_id;
                           const debt = bills.find(bill => bill.is_debt && bill.id === debtId);
                           const amount = Math.abs(Number(transaction.amount));
-                          const applied = transaction.date <= todayIsoDate();
+                          const scheduledPlan = isScheduledSnowballPlanTransaction(transaction);
+                          const applied = !scheduledPlan && Number(transaction.debt_applied_amount ?? 0) > 0.005;
                           const requiredMinimum = debt
                             ? requiredDebtPlanTotal(
                                 debt,
@@ -2053,6 +2073,9 @@ export default function MonthlyScreen() {
                               )
                             : undefined;
                           const name = snowballPaymentName(transaction, debt?.name ?? "Debt payment");
+                          const snowballMonthToDate = scheduledPlan
+                            ? snowballPlanTotalThroughDate(snowballPlanEntries, transaction.date)
+                            : amount;
                           return (
                             <CalendarDebtPaymentCard
                               key={`overlay-snowball-tx-${transaction.id}`}
@@ -2061,6 +2084,7 @@ export default function MonthlyScreen() {
                               applied={applied}
                               statusLabel={applied ? "Applied" : "Scheduled"}
                               requiredMinimum={requiredMinimum}
+                              snowballMonthToDate={snowballMonthToDate}
                               onEdit={() => {
                                 setSelectedDate(null);
                                 router.push({
@@ -2070,8 +2094,8 @@ export default function MonthlyScreen() {
                               }}
                               onRemove={() => confirmAction({
                                 title: "Remove this snowball payment?",
-                                message: "This removes the extra payment from the calendar and restores the debt balance.",
-                                confirmText: "Remove payment",
+                                message: "This removes the snowball plan. It does not change the debt balance.",
+                                confirmText: "Remove plan",
                                 destructive: true,
                                 onConfirm: async () => {
                                   await deleteTransaction(transaction.id);

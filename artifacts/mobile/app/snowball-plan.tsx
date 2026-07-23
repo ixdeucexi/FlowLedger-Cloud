@@ -17,6 +17,7 @@ import {
   isSnowballPaymentTransaction,
   replacementSnowballSafeMaximum,
   requiredDebtPlanTotal,
+  SNOWBALL_PLAN_SOURCE,
   snowballTransactionEditDraft,
 } from "@/lib/debtPaymentPlan";
 import { orderActiveDebtsForStrategy } from "@/lib/debtOrder";
@@ -171,6 +172,8 @@ function SnowballPlanScreen() {
           date: paymentDate,
           linked_bill_id: target.id,
           note: `${target.name} snowball`,
+          source: SNOWBALL_PLAN_SOURCE,
+          debt_applied_amount: 0,
         });
       } else {
         await applyDebtSnowballPayment(preview);
