@@ -9,6 +9,7 @@ import {
   settingsGroupById,
   settingsGroupForSection,
   settingsSectionById,
+  visibleSettingsGroups,
 } from "./settingsHub";
 
 test("settings hub places every destination in exactly one group", () => {
@@ -25,6 +26,7 @@ test("settings hub preserves the intended group order", () => {
     ["review", "subscriptions", "reports"],
     ["appearance", "notifications", "setup", "backup", "deleted"],
     ["membership", "security", "help", "legal"],
+    ["admin"],
   ]);
   assert.equal(settingsSectionById("setup").label, "Flo setup & demo");
 });
@@ -47,4 +49,10 @@ test("settings group lookups preserve the destination hierarchy", () => {
   assert.equal(settingsGroupForSection("appearance").id, "preferences");
   assert.equal(settingsGroupForSection("deleted").id, "preferences");
   assert.equal(settingsGroupForSection("legal").id, "account");
+  assert.equal(settingsGroupForSection("admin").id, "admin");
+});
+
+test("admin settings are visible only to approved admins", () => {
+  assert.equal(visibleSettingsGroups(false).some(group => group.id === "admin"), false);
+  assert.equal(visibleSettingsGroups(true).some(group => group.id === "admin"), true);
 });

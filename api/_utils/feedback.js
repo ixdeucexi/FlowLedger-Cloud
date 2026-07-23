@@ -45,7 +45,7 @@ function feedbackNotificationPayload(feedbackId, feedbackType, sender) {
   return {
     title: "New FlowLedger feedback",
     body: `${typeLabel} from ${senderLabel}. Tap to review it.`,
-    url: "/more?section=help",
+    url: "/more?section=admin",
     tag: `feedback-${feedbackId}`,
   };
 }

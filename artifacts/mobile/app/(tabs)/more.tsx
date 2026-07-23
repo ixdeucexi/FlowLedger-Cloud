@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AccountModal } from "@/components/AccountModal";
+import { AdminMembershipTools } from "@/components/AdminMembershipTools";
 import { AppText } from "@/components/AppText";
 import { FloLogo } from "@/components/FloLogo";
 import { FeedbackManageModal } from "@/components/FeedbackManageModal";
@@ -370,7 +371,7 @@ export default function MoreScreen() {
     setFontStyle,
   } = useThemeMode();
   const { signOut, user, session, loading: authLoading } = useAuth();
-  const { refreshFeedbackCount } = useFeedbackBadge();
+  const { newFeedbackCount, refreshFeedbackCount } = useFeedbackBadge();
   const {
     effectiveTier,
     isAdmin: feedbackAdmin,
@@ -413,6 +414,11 @@ export default function MoreScreen() {
     writeStoredSettingsSection(sectionId);
   }, []);
   useBackDismiss(activeSettingsSection !== "overview", () => openSettingsSection("overview"));
+  useEffect(() => {
+    if (!membershipLoading && activeSettingsSection === "admin" && !feedbackAdmin) {
+      openSettingsSection("overview");
+    }
+  }, [activeSettingsSection, feedbackAdmin, membershipLoading, openSettingsSection]);
   useEffect(() => {
     settingsScrollRef.current?.scrollTo({ y: 0, animated: false });
   }, [activeSettingsSection]);
@@ -645,10 +651,8 @@ export default function MoreScreen() {
   };
 
   useEffect(() => {
-    if (activeSettingsSection === "help") {
-      if (feedbackAdmin) void loadFeedbackInbox();
-      else void loadMyFeedback();
-    }
+    if (activeSettingsSection === "help") void loadMyFeedback();
+    if (activeSettingsSection === "admin" && feedbackAdmin) void loadFeedbackInbox();
   }, [activeSettingsSection, feedbackAdmin, feedbackStatusFilter, routeParams.feedback, user?.id]);
 
   const saveSafetySettings = () => {
@@ -1056,6 +1060,9 @@ export default function MoreScreen() {
     backup: backupExported ? { label: "Backup saved" } : { label: "Not backed up", tone: "attention" },
     deleted: { label: deletedTransactions.length ? formatCountStatus(deletedTransactions.length, "item") : "Empty" },
     membership: { label: membershipStatusLabel },
+    admin: newFeedbackCount
+      ? { label: formatCountStatus(newFeedbackCount, "new item"), tone: "attention" }
+      : { label: "Admin tools" },
   }), [
     activeAccounts.length,
     backupExported,
@@ -1063,6 +1070,7 @@ export default function MoreScreen() {
     deletedTransactions.length,
     goals.length,
     membershipStatusLabel,
+    newFeedbackCount,
     reviewTransactionCount,
     setupComplete,
     setupIsComplete,
@@ -1599,6 +1607,7 @@ export default function MoreScreen() {
           identity={user?.email ?? "Signed in"}
           membershipLabel={membershipStatusLabel}
           statuses={hubStatuses}
+          isAdmin={feedbackAdmin}
           onOpenSection={sectionId => {
             openSettingsSection(sectionId);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -2125,28 +2134,6 @@ export default function MoreScreen() {
                 ? "Debt view: keep cash-flow tracking with payoff recommendations."
                 : "Tracking view: focus on balances, bills, transactions, and forecasts."}
         </Text>
-        {feedbackAdmin ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Open isolated Zero Budget Lab"
-            onPress={() => router.push("/(tabs)/zero-budget-lab" as any)}
-            style={[styles.zeroBudgetLabCard, { backgroundColor: c.primary + "12", borderColor: c.primary + "3D" }]}
-          >
-            <View style={[styles.zeroBudgetLabIcon, { backgroundColor: c.primary + "1F" }]}>
-              <Feather name="shield" size={19} color={c.primary} />
-            </View>
-            <View style={styles.zeroBudgetLabCopy}>
-              <View style={styles.zeroBudgetLabTitleRow}>
-                <Text style={[styles.zeroBudgetLabTitle, { color: c.foreground }]}>Admin Zero Budget Lab</Text>
-                <View style={[styles.zeroBudgetLabBadge, { backgroundColor: c.success + "1F" }]}>
-                  <Text style={[styles.zeroBudgetLabBadgeText, { color: c.success }]}>ISOLATED</Text>
-                </View>
-              </View>
-              <Text style={[styles.zeroBudgetLabDescription, { color: c.mutedForeground }]}>Test Zero Budget with sample money.</Text>
-            </View>
-            <Feather name="chevron-right" size={19} color={c.primary} />
-          </Pressable>
-        ) : null}
       </View>
 
       <SLabel c={c} text="Income" />
@@ -2807,8 +2794,44 @@ export default function MoreScreen() {
 
       {activeSettingsSection === "deleted" && <RecentlyDeletedTransactions />}
 
-      {activeSettingsSection === "help" && <>
-      {!feedbackAdmin ? (
+      {activeSettingsSection === "admin" && feedbackAdmin ? (
+        <>
+          <SLabel c={c} text="Access & testers" />
+          <AdminMembershipTools />
+
+          <SLabel c={c} text="Test labs" />
+          <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open isolated Zero Budget Lab"
+              onPress={() => router.push("/(tabs)/zero-budget-lab" as any)}
+              style={[styles.zeroBudgetLabCard, { backgroundColor: c.primary + "12", borderColor: c.primary + "3D" }]}
+            >
+              <View style={[styles.zeroBudgetLabIcon, { backgroundColor: c.primary + "1F" }]}>
+                <Feather name="shield" size={19} color={c.primary} />
+              </View>
+              <View style={styles.zeroBudgetLabCopy}>
+                <View style={styles.zeroBudgetLabTitleRow}>
+                  <Text style={[styles.zeroBudgetLabTitle, { color: c.foreground }]}>Zero Budget Lab</Text>
+                  <View style={[styles.zeroBudgetLabBadge, { backgroundColor: c.success + "1F" }]}>
+                    <Text style={[styles.zeroBudgetLabBadgeText, { color: c.success }]}>ISOLATED</Text>
+                  </View>
+                </View>
+                <Text style={[styles.zeroBudgetLabDescription, { color: c.mutedForeground }]}>
+                  Test Zero Budget with sample money.
+                </Text>
+              </View>
+              <Feather name="chevron-right" size={19} color={c.primary} />
+            </Pressable>
+          </View>
+
+          <SLabel c={c} text="Admin notifications" />
+          <NotificationSettings scope="admin" />
+        </>
+      ) : null}
+
+      {(activeSettingsSection === "help" || activeSettingsSection === "admin") && <>
+      {activeSettingsSection === "help" ? (
       <>
       <SLabel c={c} text="Tester Feedback" />
       <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
@@ -2947,7 +2970,7 @@ export default function MoreScreen() {
       </>
       ) : null}
 
-      {feedbackAdmin ? (
+      {activeSettingsSection === "admin" && feedbackAdmin ? (
         <>
           <SLabel c={c} text="Feedback Inbox" />
           <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>

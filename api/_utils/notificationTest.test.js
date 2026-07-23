@@ -9,6 +9,7 @@ test("every notification test has a unique tag and expected destination", () => 
   assert.equal(notificationTestPayload("pending_transactions").url, "/transactions");
   assert.equal(notificationTestPayload("posted_transactions").url, "/more?section=review");
   assert.equal(notificationTestPayload("overdue_bills").url, "/bills?attention=overdue");
+  assert.equal(notificationTestPayload("admin_feedback").url, "/more?section=admin");
 });
 
 test("unknown notification test types are rejected", () => {

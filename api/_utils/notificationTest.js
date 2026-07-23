@@ -26,7 +26,7 @@ const NOTIFICATION_TEST_PAYLOADS = Object.freeze({
   admin_feedback: Object.freeze({
     title: "Test: New tester feedback",
     body: "A tester sent new feedback to the admin inbox.",
-    url: "/more?section=help",
+    url: "/more?section=admin",
     tag: "flowledger-test-admin-feedback",
   }),
 });

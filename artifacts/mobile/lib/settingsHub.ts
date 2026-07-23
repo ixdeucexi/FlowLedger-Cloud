@@ -16,7 +16,8 @@ export type SettingsSectionId =
   | "backup"
   | "deleted"
   | "security"
-  | "legal";
+  | "legal"
+  | "admin";
 
 export type SettingsDestinationId = Exclude<SettingsSectionId, "overview">;
 
@@ -28,7 +29,7 @@ export interface SettingsSectionMeta {
 }
 
 export interface SettingsGroup {
-  id: "money" | "insights" | "preferences" | "account";
+  id: "money" | "insights" | "preferences" | "account" | "admin";
   label: string;
   sectionIds: readonly SettingsDestinationId[];
 }
@@ -56,6 +57,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
   { id: "security", label: "Account & security", description: "Account controls", icon: "user" },
   { id: "help", label: "Help & feedback", description: "Support and feedback", icon: "message-square" },
   { id: "legal", label: "Legal & privacy", description: "Terms and privacy", icon: "file-text" },
+  { id: "admin", label: "Admin", description: "Testing and tester management", icon: "shield" },
 ] as const;
 
 export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
@@ -63,7 +65,12 @@ export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
   { id: "insights", label: "Review & insights", sectionIds: ["review", "subscriptions", "reports"] },
   { id: "preferences", label: "App", sectionIds: ["appearance", "notifications", "setup", "backup", "deleted"] },
   { id: "account", label: "Account & support", sectionIds: ["membership", "security", "help", "legal"] },
+  { id: "admin", label: "Admin", sectionIds: ["admin"] },
 ] as const;
+
+export function visibleSettingsGroups(isAdmin: boolean): readonly SettingsGroup[] {
+  return SETTINGS_GROUPS.filter(group => group.id !== "admin" || isAdmin);
+}
 
 export function settingsGroupById(groupId: SettingsGroup["id"]): SettingsGroup {
   const group = SETTINGS_GROUPS.find(item => item.id === groupId);

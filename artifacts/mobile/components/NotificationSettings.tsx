@@ -60,7 +60,11 @@ const ALERT_OPTIONS: AlertOption[] = [
   },
 ];
 
-export function NotificationSettings() {
+interface NotificationSettingsProps {
+  scope?: "user" | "admin";
+}
+
+export function NotificationSettings({ scope = "user" }: NotificationSettingsProps) {
   const c = useColors();
   const { width: viewportWidth } = useWindowDimensions();
   const compactLayout = isCompactSettingsLayout(viewportWidth);
@@ -171,34 +175,46 @@ export function NotificationSettings() {
       ? "This browser or app does not support FlowLedger phone notifications."
       : "Allow this device to receive the alerts you choose below.";
 
-  const options = ALERT_OPTIONS.filter(option => !option.adminOnly || isFeedbackAdmin);
+  const options = ALERT_OPTIONS.filter(option => (
+    scope === "admin"
+      ? option.adminOnly && isFeedbackAdmin
+      : !option.adminOnly
+  ));
 
   return (
     <View style={styles.container}>
-      <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
-        <View style={[styles.row, compactLayout && styles.rowCompact]}>
-          <View style={[styles.icon, { backgroundColor: c.primary + "18" }]}>
-            <Feather name="bell" size={20} color={c.primary} />
+      {scope === "user" ? (
+        <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
+          <View style={[styles.row, compactLayout && styles.rowCompact]}>
+            <View style={[styles.icon, { backgroundColor: c.primary + "18" }]}>
+              <Feather name="bell" size={20} color={c.primary} />
+            </View>
+            <View style={styles.copy}>
+              <Text style={[styles.title, { color: c.foreground }]}>Phone notifications</Text>
+              <Text style={[styles.description, { color: c.mutedForeground }]}>{detail}</Text>
+            </View>
+            <Switch
+              accessibilityLabel="Phone notifications on this device"
+              disabled={deviceBusy || testingKey !== null || status === "checking" || unavailable}
+              value={enabled}
+              onValueChange={value => void toggleDevice(value)}
+              trackColor={{ false: c.border, true: c.primary + "88" }}
+              thumbColor={enabled ? c.primary : c.mutedForeground}
+              style={compactLayout ? styles.switchCompact : undefined}
+            />
           </View>
-          <View style={styles.copy}>
-            <Text style={[styles.title, { color: c.foreground }]}>Phone notifications</Text>
-            <Text style={[styles.description, { color: c.mutedForeground }]}>{detail}</Text>
-          </View>
-          <Switch
-            accessibilityLabel="Phone notifications on this device"
-            disabled={deviceBusy || testingKey !== null || status === "checking" || unavailable}
-            value={enabled}
-            onValueChange={value => void toggleDevice(value)}
-            trackColor={{ false: c.border, true: c.primary + "88" }}
-            thumbColor={enabled ? c.primary : c.mutedForeground}
-            style={compactLayout ? styles.switchCompact : undefined}
-          />
         </View>
-      </View>
+      ) : null}
 
       <View style={styles.sectionHeading}>
-        <Text style={[styles.sectionTitle, { color: c.foreground }]}>Choose your alerts</Text>
-        <Text style={[styles.sectionDescription, { color: c.mutedForeground }]}>These choices follow your account on every device.</Text>
+        <Text style={[styles.sectionTitle, { color: c.foreground }]}>
+          {scope === "admin" ? "Admin alerts" : "Choose your alerts"}
+        </Text>
+        <Text style={[styles.sectionDescription, { color: c.mutedForeground }]}>
+          {scope === "admin"
+            ? "Get notified when new tester feedback arrives."
+            : "These choices follow your account on every device."}
+        </Text>
       </View>
 
       <View style={[styles.optionsCard, { backgroundColor: c.card, borderColor: c.border }]}>
@@ -252,12 +268,18 @@ export function NotificationSettings() {
         ))}
       </View>
 
-      <View style={[styles.privacy, { backgroundColor: c.muted, borderColor: c.border }]}>
-        <Feather name="lock" size={14} color={c.success} />
-        <Text style={[styles.privacyText, { color: c.mutedForeground }]}>
-          Lock-screen alerts hide bill, merchant, and amount details. Opening an alert takes you to the right place in FlowLedger.
+      {scope === "user" ? (
+        <View style={[styles.privacy, { backgroundColor: c.muted, borderColor: c.border }]}>
+          <Feather name="lock" size={14} color={c.success} />
+          <Text style={[styles.privacyText, { color: c.mutedForeground }]}>
+            Lock-screen alerts hide bill, merchant, and amount details. Opening an alert takes you to the right place in FlowLedger.
+          </Text>
+        </View>
+      ) : !enabled ? (
+        <Text style={[styles.message, { color: c.mutedForeground }]}>
+          Turn on phone notifications in Settings → Notifications to receive this alert.
         </Text>
-      </View>
+      ) : null}
 
       {message ? (
         <Text style={[styles.message, { color: message.includes("Could not") || message.includes("blocked") ? c.destructive : c.primary }]}>

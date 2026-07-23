@@ -4,10 +4,10 @@ import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-na
 
 import { useColors } from "@/hooks/useColors";
 import {
-  SETTINGS_GROUPS,
   settingsSectionById,
   type SettingsDestinationId,
   type SettingsStatus,
+  visibleSettingsGroups,
 } from "@/lib/settingsHub";
 import { isCompactSettingsLayout } from "@/lib/settingsLayout";
 
@@ -17,6 +17,7 @@ interface MoreHubProps {
   identity: string;
   membershipLabel: string;
   statuses: Partial<Record<SettingsDestinationId, SettingsStatus>>;
+  isAdmin: boolean;
   onOpenSection: (sectionId: SettingsDestinationId) => void;
 }
 
@@ -26,6 +27,7 @@ export function MoreHub({
   identity,
   membershipLabel,
   statuses,
+  isAdmin,
   onOpenSection,
 }: MoreHubProps) {
   const colors = useColors();
@@ -49,7 +51,7 @@ export function MoreHub({
         </View>
       </View>
 
-      {SETTINGS_GROUPS.map(group => (
+      {visibleSettingsGroups(isAdmin).map(group => (
         <View key={group.id} style={styles.groupBlock}>
           <Text style={[styles.groupTitle, { color: colors.foreground }]}>{group.label}</Text>
           <View style={[styles.groupCard, { backgroundColor: colors.card, borderColor: colors.border }]}>

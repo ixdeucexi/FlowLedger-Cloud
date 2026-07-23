@@ -36,7 +36,7 @@ test("feedback notification opens the admin inbox without exposing the message",
   const payload = feedbackNotificationPayload("1234", "idea", "Tia");
   assert.equal(payload.title, "New FlowLedger feedback");
   assert.equal(payload.body, "New idea from Tia. Tap to review it.");
-  assert.equal(payload.url, "/more?section=help");
+  assert.equal(payload.url, "/more?section=admin");
   assert.equal(payload.tag, "feedback-1234");
 });
 
