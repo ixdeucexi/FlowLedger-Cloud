@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { buildDebtPaymentPlanSummary } from "./debtPaymentPlan";
+import {
+  buildDebtPaymentPlanSummary,
+  isSnowballPaymentTransaction,
+  snowballPaymentName,
+} from "./debtPaymentPlan";
 
 describe("extra debt payment plan", () => {
   it("keeps the required minimum separate from the optional extra", () => {
@@ -18,5 +22,39 @@ describe("extra debt payment plan", () => {
       extraPayment: 0,
       totalPlanned: 0,
     });
+  });
+});
+
+describe("snowball transaction recognition", () => {
+  it("recognizes an imported debt-surplus payment", () => {
+    const transaction = {
+      amount: -30,
+      category: "Debt",
+      note: "Camera snowball",
+      import_hash: "flowledger:debt-surplus:discover:2026-07",
+      linked_bill_id: "camera",
+      debt_applied_bill_id: "camera",
+    };
+
+    assert.equal(isSnowballPaymentTransaction(transaction), true);
+    assert.equal(snowballPaymentName(transaction), "Camera");
+  });
+
+  it("does not turn an ordinary debt payment into a snowball card", () => {
+    assert.equal(isSnowballPaymentTransaction({
+      amount: -83,
+      category: "Debt",
+      note: "Discover",
+      linked_bill_id: "discover",
+    }), false);
+  });
+
+  it("rejects money coming in even when the note says snowball", () => {
+    assert.equal(isSnowballPaymentTransaction({
+      amount: 30,
+      category: "Debt",
+      note: "Camera snowball",
+      linked_bill_id: "camera",
+    }), false);
   });
 });

@@ -31,7 +31,11 @@ import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { isValidDateInMonth } from "@/lib/schedule";
 import { confirmAction } from "@/lib/confirmAction";
-import { buildDebtPaymentPlanSummary } from "@/lib/debtPaymentPlan";
+import {
+  buildDebtPaymentPlanSummary,
+  isSnowballPaymentTransaction,
+  snowballPaymentName,
+} from "@/lib/debtPaymentPlan";
 import { replaceBillSurplusFundingSource } from "@/lib/snowballFunding";
 
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -93,6 +97,95 @@ const ps = StyleSheet.create({
   badge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
   text: { fontSize: 10, fontFamily: "Inter_700Bold", letterSpacing: 0.5 },
 });
+
+function CalendarDebtPaymentCard({
+  name,
+  amount,
+  applied,
+  statusLabel,
+  requiredMinimum,
+  onEdit,
+  onRemove,
+}: {
+  name: string;
+  amount: number;
+  applied: boolean;
+  statusLabel: string;
+  requiredMinimum?: number;
+  onEdit?: () => void;
+  onRemove?: () => void;
+}) {
+  const c = useColors();
+  const paymentPlan = buildDebtPaymentPlanSummary(requiredMinimum ?? 0, amount);
+
+  return (
+    <View
+      style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: "#3b82f640" }]}
+    >
+      <View style={styles.dayBillTop}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text numberOfLines={1} style={[styles.dayBillName, { color: c.foreground }]}>{name}</Text>
+          <Text style={[styles.dayBillMeta, { color: c.mutedForeground }]}>Snowball payment</Text>
+        </View>
+        <View style={[styles.dayTransactionBadge, { backgroundColor: "#3b82f620" }]}>
+          <Text style={[styles.dayTransactionBadgeText, { color: "#3b82f6" }]}>{statusLabel.toUpperCase()}</Text>
+        </View>
+      </View>
+
+      <View style={styles.dayBillNumbers}>
+        <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
+          <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Amount</Text>
+          <Text style={[styles.dayBillNumberValue, { color: c.foreground }]}>${amount.toFixed(2)}</Text>
+        </View>
+        <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
+          <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Paid</Text>
+          <Text style={[styles.dayBillNumberValue, { color: applied ? c.success : c.mutedForeground }]}>${(applied ? amount : 0).toFixed(2)}</Text>
+        </View>
+        <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
+          <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Left</Text>
+          <Text style={[styles.dayBillNumberValue, { color: applied ? c.success : c.warning }]}>${(applied ? 0 : amount).toFixed(2)}</Text>
+        </View>
+      </View>
+
+      {requiredMinimum !== undefined ? (
+        <View style={[styles.dayDebtPlanSummary, { backgroundColor: c.background + "66", borderColor: c.border }]}>
+          <Text style={[styles.dayDebtPlanText, { color: c.mutedForeground }]}>
+            Minimum {`$${paymentPlan.requiredMinimum.toFixed(2)}`} + extra {`$${paymentPlan.extraPayment.toFixed(2)}`}
+          </Text>
+          <Text style={[styles.dayDebtPlanTotal, { color: c.success }]}>{`$${paymentPlan.totalPlanned.toFixed(2)}`} planned this month</Text>
+          <Text style={[styles.dayDebtPlanNote, { color: c.mutedForeground }]}>The required minimum stays the same.</Text>
+        </View>
+      ) : null}
+
+      {onEdit || onRemove ? (
+        <View style={styles.dayBillActions}>
+          {onEdit ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Edit ${name} snowball payment`}
+              onPress={onEdit}
+              style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.primary + "16", borderColor: c.primary + "35", opacity: pressed ? 0.74 : 1 }]}
+            >
+              <Feather name="edit-2" size={13} color={c.primary} />
+              <Text style={[styles.dayBillActionText, { color: c.primary }]}>Edit</Text>
+            </Pressable>
+          ) : null}
+          {onRemove ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Remove ${name} snowball payment`}
+              onPress={onRemove}
+              style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.destructive + "12", borderColor: c.destructive + "35", opacity: pressed ? 0.74 : 1 }]}
+            >
+              <Feather name="rotate-ccw" size={13} color={c.destructive} />
+              <Text style={[styles.dayBillActionText, { color: c.destructive }]}>Remove</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
 
 export default function MonthlyScreen() {
   const c = useColors();
@@ -463,6 +556,13 @@ export default function MonthlyScreen() {
   const selectedDebtPayments = useMemo(
     () => selectedForecastGroups.find(group => group.key === "debt")?.events ?? [],
     [selectedForecastGroups],
+  );
+  const selectedSnowballTransactions = useMemo(
+    () => selectedDate
+      ? calendarTransactions.filter(transaction =>
+        transaction.date === selectedDate && isSnowballPaymentTransaction(transaction))
+      : [],
+    [calendarTransactions, selectedDate],
   );
   const incomeForSelectedDay = useMemo(
     () => selectedDay === null ? [] : incomeOccurrences.filter(item => item.day === selectedDay),
@@ -1177,6 +1277,7 @@ export default function MonthlyScreen() {
 
   const displayedTxs = selectedDate
     ? calendarTransactions.filter(t => t.date === selectedDate).filter(transaction => {
+      if (isSnowballPaymentTransaction(transaction)) return false;
       const allocations = transaction.review_allocations ?? [];
       if (allocations.some(allocation => allocation.type === "planned_expense")) return false;
       return !allocations.some(allocation =>
@@ -1190,7 +1291,7 @@ export default function MonthlyScreen() {
   const groupedBucketEventReduction = plannedExpenseGroupsForSelectedDay.reduce((sum, group) =>
     sum + Math.max(0, group.transactionIds.length - 1) + (group.remainingAmount > 0.005 ? 1 : 0), 0);
   const selectedForecastEventCount = Math.max(0, rawSelectedForecastEventCount - groupedBucketEventReduction);
-  const selectedVisibleItemCount = scheduledBillsForDay.length + selectedDebtPayments.length + incomeForSelectedDay.length + displayedTxs.length + plannedExpenseGroupsForSelectedDay.length + displayedGoalsForSelectedDay.length + plansForSelectedDay.length;
+  const selectedVisibleItemCount = scheduledBillsForDay.length + selectedDebtPayments.length + selectedSnowballTransactions.length + incomeForSelectedDay.length + displayedTxs.length + plannedExpenseGroupsForSelectedDay.length + displayedGoalsForSelectedDay.length + plansForSelectedDay.length;
   const selectedDayItemCount = Math.max(selectedForecastEventCount, selectedVisibleItemCount);
 
   const changeMonth = useCallback((delta: number) => {
@@ -1895,7 +1996,7 @@ export default function MonthlyScreen() {
                       </View>
                     ) : null}
 
-                    {selectedDebtPayments.length > 0 ? (
+                    {selectedDebtPayments.length > 0 || selectedSnowballTransactions.length > 0 ? (
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
                         <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Planned debt payments</Text>
                         {selectedDebtPayments.map(payment => {
@@ -1907,76 +2008,61 @@ export default function MonthlyScreen() {
                             ? bills
                               .filter(bill => bill.is_debt && allocatedDebtIds.has(bill.id))
                               .reduce((total, bill) => total + getBillMonthlyTotal(bill, savedPayment.month, savedPayment.year), 0)
-                            : 0;
-                          const paymentPlan = buildDebtPaymentPlanSummary(requiredMinimum, amount);
+                            : undefined;
                           return (
-                            <View
+                            <CalendarDebtPaymentCard
                               key={`overlay-debt-${payment.event.id}`}
-                              style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: "#3b82f640" }]}
-                            >
-                              <View style={styles.dayBillTop}>
-                                <View style={{ flex: 1, minWidth: 0 }}>
-                                  <Text numberOfLines={1} style={[styles.dayBillName, { color: c.foreground }]}>
-                                    {payment.label.replace(/ debt payment$/i, "")}
-                                  </Text>
-                                  <Text style={[styles.dayBillMeta, { color: c.mutedForeground }]}>Snowball payment</Text>
-                                </View>
-                                <View style={[styles.dayTransactionBadge, { backgroundColor: "#3b82f620" }]}>
-                                  <Text style={[styles.dayTransactionBadgeText, { color: "#3b82f6" }]}>{payment.statusLabel.toUpperCase()}</Text>
-                                </View>
-                              </View>
-                              <View style={styles.dayBillNumbers}>
-                                <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
-                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Amount</Text>
-                                  <Text style={[styles.dayBillNumberValue, { color: c.foreground }]}>${amount.toFixed(2)}</Text>
-                                </View>
-                                <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
-                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Paid</Text>
-                                  <Text style={[styles.dayBillNumberValue, { color: applied ? c.success : c.mutedForeground }]}>${(applied ? amount : 0).toFixed(2)}</Text>
-                                </View>
-                                <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
-                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Left</Text>
-                                  <Text style={[styles.dayBillNumberValue, { color: applied ? c.success : c.warning }]}>${(applied ? 0 : amount).toFixed(2)}</Text>
-                                </View>
-                              </View>
-                              {savedPayment ? (
-                                <View style={[styles.dayDebtPlanSummary, { backgroundColor: c.background + "66", borderColor: c.border }]}>
-                                  <Text style={[styles.dayDebtPlanText, { color: c.mutedForeground }]}>Minimum {`$${paymentPlan.requiredMinimum.toFixed(2)}`} + extra {`$${paymentPlan.extraPayment.toFixed(2)}`}</Text>
-                                  <Text style={[styles.dayDebtPlanTotal, { color: c.success }]}>{`$${paymentPlan.totalPlanned.toFixed(2)}`} planned this month</Text>
-                                  <Text style={[styles.dayDebtPlanNote, { color: c.mutedForeground }]}>The required minimum stays the same.</Text>
-                                </View>
-                              ) : null}
-                              {savedPayment ? (
-                                <View style={styles.dayBillActions}>
-                                  <Pressable
-                                    onPress={() => {
-                                      setSelectedDate(null);
-                                      router.push("/snowball-plan" as never);
-                                    }}
-                                    style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.primary + "16", borderColor: c.primary + "35", opacity: pressed ? 0.74 : 1 }]}
-                                  >
-                                    <Feather name="edit-2" size={13} color={c.primary} />
-                                    <Text style={[styles.dayBillActionText, { color: c.primary }]}>Edit</Text>
-                                  </Pressable>
-                                  <Pressable
-                                    onPress={() => confirmAction({
-                                      title: "Remove this debt payment?",
-                                      message: "This undoes the snowball payment and restores the debt balances it changed.",
-                                      confirmText: "Remove payment",
-                                      destructive: true,
-                                      onConfirm: async () => {
-                                        await removeDebtSnowballPayment(savedPayment.month, savedPayment.year);
-                                        setSelectedDate(null);
-                                      },
-                                    })}
-                                    style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.destructive + "12", borderColor: c.destructive + "35", opacity: pressed ? 0.74 : 1 }]}
-                                  >
-                                    <Feather name="rotate-ccw" size={13} color={c.destructive} />
-                                    <Text style={[styles.dayBillActionText, { color: c.destructive }]}>Remove</Text>
-                                  </Pressable>
-                                </View>
-                              ) : null}
-                            </View>
+                              name={payment.label.replace(/ debt payment$/i, "")}
+                              amount={amount}
+                              applied={applied}
+                              statusLabel={payment.statusLabel}
+                              requiredMinimum={requiredMinimum}
+                              onEdit={savedPayment ? () => {
+                                setSelectedDate(null);
+                                router.push("/snowball-plan" as never);
+                              } : undefined}
+                              onRemove={savedPayment ? () => confirmAction({
+                                title: "Remove this debt payment?",
+                                message: "This undoes the snowball payment and restores the debt balances it changed.",
+                                confirmText: "Remove payment",
+                                destructive: true,
+                                onConfirm: async () => {
+                                  await removeDebtSnowballPayment(savedPayment.month, savedPayment.year);
+                                  setSelectedDate(null);
+                                },
+                              }) : undefined}
+                            />
+                          );
+                        })}
+                        {selectedSnowballTransactions.map(transaction => {
+                          const debtId = transaction.debt_applied_bill_id ?? transaction.linked_bill_id;
+                          const debt = bills.find(bill => bill.is_debt && bill.id === debtId);
+                          const amount = Math.abs(Number(transaction.debt_applied_amount ?? transaction.amount));
+                          const applied = transaction.date <= todayIsoDate();
+                          const requiredMinimum = debt
+                            ? getBillMonthlyTotal(debt, month, selectedYear)
+                            : undefined;
+                          const name = snowballPaymentName(transaction, debt?.name ?? "Debt payment");
+                          return (
+                            <CalendarDebtPaymentCard
+                              key={`overlay-snowball-tx-${transaction.id}`}
+                              name={name}
+                              amount={amount}
+                              applied={applied}
+                              statusLabel={applied ? "Applied" : "Scheduled"}
+                              requiredMinimum={requiredMinimum}
+                              onEdit={() => openEditTransaction(transaction)}
+                              onRemove={() => confirmAction({
+                                title: "Remove this snowball payment?",
+                                message: "This removes the extra payment from the calendar and restores the debt balance.",
+                                confirmText: "Remove payment",
+                                destructive: true,
+                                onConfirm: async () => {
+                                  await deleteTransaction(transaction.id);
+                                  setSelectedDate(null);
+                                },
+                              })}
+                            />
                           );
                         })}
                       </View>
