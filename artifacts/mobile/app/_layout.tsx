@@ -139,13 +139,13 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
         toValue: 0,
         duration: 520,
         easing: Easing.inOut(Easing.cubic),
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== "web",
       }),
       Animated.timing(appOpacity, {
         toValue: 1,
         duration: 520,
         easing: Easing.inOut(Easing.cubic),
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== "web",
       }),
     ]).start(() => setShowStartupOverlay(false));
   }, [appReady, appOpacity, hideSplash, startupOpacity]);
@@ -170,24 +170,26 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
     return () => subscription.remove();
   }, [appReady, router]);
 
-  if (!appReady) return <StartupScreen />;
-
   return (
     <View style={[styles.transitionRoot, { backgroundColor: colors.background }]}>
       <Animated.View style={[styles.transitionContent, { opacity: appOpacity }]}>
-        <AuthObserver />
-        <GestureHandlerRootView style={{ flex: 1 }}>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="login" />
-            <Stack.Screen name="legal" />
-            <Stack.Screen name="setup" />
-            <Stack.Screen name="snowball-plan" />
-            <Stack.Screen name="(tabs)" />
-          </Stack>
-          <PwaInstallPrompt />
-        </GestureHandlerRootView>
-        <LegalAcceptanceGate />
+        {appReady ? (
+          <>
+            <AuthObserver />
+            <GestureHandlerRootView style={{ flex: 1 }}>
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="index" />
+                <Stack.Screen name="login" />
+                <Stack.Screen name="legal" />
+                <Stack.Screen name="setup" />
+                <Stack.Screen name="snowball-plan" />
+                <Stack.Screen name="(tabs)" />
+              </Stack>
+              <PwaInstallPrompt />
+            </GestureHandlerRootView>
+            <LegalAcceptanceGate />
+          </>
+        ) : null}
       </Animated.View>
       {showStartupOverlay ? (
         <StartupScreen style={[styles.startupOverlay, { opacity: startupOpacity }]} />

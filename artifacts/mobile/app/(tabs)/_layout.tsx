@@ -422,24 +422,25 @@ function TabContent() {
         toValue: 0,
         duration: 360,
         easing: Easing.inOut(Easing.cubic),
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== "web",
       }),
       Animated.timing(tabsOpacity, {
         toValue: 1,
         duration: 360,
         easing: Easing.inOut(Easing.cubic),
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== "web",
       }),
     ]).start(() => setShowLoadingOverlay(false));
   }, [contentReady, loadingOpacity, tabsOpacity]);
 
-  if (!contentReady) return <BudgetLoadingScreen />;
   if (loadError) return <BudgetLoadErrorScreen message={loadError} onRetry={retryBudgetLoad} />;
 
   return (
     <View style={[styles.tabTransitionRoot, { backgroundColor: colors.background }]}>
       <Animated.View style={[styles.tabTransitionContent, { opacity: tabsOpacity }]}>
-        <Tabs
+        {contentReady ? (
+          <>
+            <Tabs
           backBehavior="history"
           detachInactiveScreens={false}
           screenOptions={{
@@ -547,12 +548,14 @@ function TabContent() {
           <Tabs.Screen name="category-budget" options={{ href: null }} />
           <Tabs.Screen name="zero-budget-lab" options={{ href: null, tabBarStyle: { display: "none" } }} />
           <Tabs.Screen name="how-flowledger-works" options={{ href: null, tabBarStyle: { display: "none" } }} />
-        </Tabs>
-        {demoMode ? <DemoModeBanner /> : null}
-        <PlanPreviewBanner />
-        <SaveStatusBanner />
-        <DecisionDueModal />
-        <FloDemo />
+            </Tabs>
+            {demoMode ? <DemoModeBanner /> : null}
+            <PlanPreviewBanner />
+            <SaveStatusBanner />
+            <DecisionDueModal />
+            <FloDemo />
+          </>
+        ) : null}
       </Animated.View>
       {showLoadingOverlay ? (
         <BudgetLoadingScreen style={[styles.loadingOverlay, { opacity: loadingOpacity }]} />
