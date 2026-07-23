@@ -39,6 +39,17 @@ export function connectedCheckingAnchor(accounts: ConnectedCheckingSnapshot[], d
   return balance === null ? null : { balance, date };
 }
 
+export function historicalMonthOpeningBalance(
+  projectedOpeningBalance: number,
+  balanceAsOfDate: string | undefined,
+  monthStartDate: string,
+): number | undefined {
+  if (!Number.isFinite(projectedOpeningBalance)) return undefined;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(balanceAsOfDate ?? "")) return undefined;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(monthStartDate)) return undefined;
+  return balanceAsOfDate! <= monthStartDate ? projectedOpeningBalance : undefined;
+}
+
 export function accountForecastValue(account: Pick<AccountSnapshot, "type" | "currentBalance">): number {
   return account.currentBalance;
 }

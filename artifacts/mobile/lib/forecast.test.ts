@@ -207,6 +207,30 @@ describe("anchorForecastToBankBalance", () => {
     assert.equal(result.days[21].balance, 3_401.73);
     assert.deepEqual(result.days[21].events.map(item => item.id), [postedPaycheck.id]);
   });
+
+  it("keeps a matched prior-day paycheck continuous with today's bank balance", () => {
+    const postedPaycheck = event({
+      id: "transaction:matched-paycheck",
+      sourceType: "transaction",
+      sourceId: "matched-paycheck",
+      date: "2026-07-22",
+      amount: 2_401.73,
+      kind: "transaction_income",
+      status: "actual",
+    });
+    const anchored = anchorForecastToBankBalance(
+      [postedPaycheck],
+      3_516.94,
+      "2026-07-23",
+      new Set([postedPaycheck.id]),
+    );
+    const result = forecastBalances({ ...anchored, startDate: "2026-07-01", endDate: "2026-07-23" });
+
+    assert.equal(result.days[20].balance, 1_115.21);
+    assert.equal(result.days[21].balance, 3_516.94);
+    assert.equal(result.days[22].balance, 3_516.94);
+    assert.deepEqual(result.days[22].events, []);
+  });
 });
 
 describe("evaluateAffordability", () => {

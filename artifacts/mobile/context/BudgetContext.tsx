@@ -20,7 +20,7 @@ import { decisionDbPayload } from "@/lib/decisionPersistence";
 import { recordDiagnostic } from "@/lib/diagnostics";
 import { isDevDemoMode } from "@/lib/demoMode";
 import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, getLatestRecordedIncomeAmount, isBillActiveForMonth, isIncomeActiveForMonth, moveSettledBillOverrideDate, resolveFinalizedBillOccurrenceDays } from "@/lib/schedule";
-import { bankBalanceAdjustment, connectedCheckingAnchor, evaluateForecastConfidence, operatingAccountAnchor, type AccountSnapshot, type AccountType, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
+import { bankBalanceAdjustment, connectedCheckingAnchor, evaluateForecastConfidence, historicalMonthOpeningBalance, operatingAccountAnchor, type AccountSnapshot, type AccountType, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
 import { scenarioDates, type DecisionResult, type DecisionScenario, type DecisionType } from "@/lib/decisions";
 import {
   acceptHouseholdInviteCode,
@@ -3343,7 +3343,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         connectedBankAnchor.balance,
         connectedBankAnchor.date,
         settledTransactionEventIds,
-        openingBalance,
+        historicalMonthOpeningBalance(
+          openingBalance,
+          settings.starting_balance_date,
+          `${currentMonthPrefix}-01`,
+        ),
       );
       openingBalance = anchored.openingBalance;
       balanceEvents = anchored.events;

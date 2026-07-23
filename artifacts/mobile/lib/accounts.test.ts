@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { bankBalanceAdjustment, connectedCheckingAnchor, connectedCheckingBalance, evaluateForecastConfidence, operatingAccountAnchor, parseStatementCsv, totalForecastBalance, type AccountSnapshot } from "./accounts";
+import { bankBalanceAdjustment, connectedCheckingAnchor, connectedCheckingBalance, evaluateForecastConfidence, historicalMonthOpeningBalance, operatingAccountAnchor, parseStatementCsv, totalForecastBalance, type AccountSnapshot } from "./accounts";
 
 const accounts: AccountSnapshot[] = [
   { id: "checking", name: "Checking", type: "checking", currentBalance: 1200, balanceAsOf: "2026-06-23", lastReconciledAt: "2026-06-23", active: true },
@@ -26,6 +26,12 @@ test("connected checking uses the same balance for dashboard and calendar", () =
   ];
   assert.equal(connectedCheckingBalance(connected), 1000);
   assert.deepEqual(connectedCheckingAnchor(connected, "2026-07-17"), { balance: 1000, date: "2026-07-17" });
+});
+
+test("a mid-month saved balance is not reused as the first-day bank opening", () => {
+  assert.equal(historicalMonthOpeningBalance(4_137.69, "2026-07-15", "2026-07-01"), undefined);
+  assert.equal(historicalMonthOpeningBalance(3_007.76, "2026-07-01", "2026-07-01"), 3_007.76);
+  assert.equal(historicalMonthOpeningBalance(3_007.76, "2026-06-29", "2026-07-01"), 3_007.76);
 });
 test("bank reconciliation adds one explicit adjustment without rewriting the opening balance", () => {
   const adjustment = bankBalanceAdjustment(600, 1000, "2026-06-24", [
