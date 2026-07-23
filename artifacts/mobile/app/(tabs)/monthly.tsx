@@ -104,7 +104,7 @@ export default function MonthlyScreen() {
     moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, settings,
     selectedYear, setSelectedYear, dashboardFilter, setDashboardFilter,
-    getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill, deleteBill, updateIncome, deleteIncome,
+    getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill, deleteBill, updateIncome,
     getCashFlow, getMonthlyIncome, getDailyBalances, getIncomeOccurrencesInMonth,
     previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, finalizeBillPayment, getExtraPayment,
     updateDecision, deleteDecision, deleteGoal,
@@ -1060,22 +1060,29 @@ export default function MonthlyScreen() {
     });
   }, [deleteBill]);
 
-  const handleDeleteIncomeFromDay = useCallback((income: IncomeItem) => {
+  const handleDeleteIncomeFromDay = useCallback((income: IncomeItem, day: number) => {
+    const occurrenceDate = isoDateForMonthDay(selectedYear, month, day);
     confirmAction({
-      title: "Delete Income",
-      message: `Delete "${income.name}" completely? This removes its future income dates from Monthly and your forecast.`,
-      confirmText: "Delete",
+      title: "Remove This Payday",
+      message: `Remove "${income.name}" on ${formatShortDate(occurrenceDate)}? The income and future paydays will stay.`,
+      confirmText: "Remove",
       destructive: true,
       onConfirm: async () => {
         try {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          await deleteIncome(income.id);
+          await updateIncome({
+            ...income,
+            excluded_dates: Array.from(new Set([
+              ...(income.excluded_dates ?? []).map(date => date.slice(0, 10)),
+              occurrenceDate,
+            ])).sort(),
+          });
         } catch (error) {
-          Alert.alert("Couldn't delete income", error instanceof Error ? error.message : "Try again in a moment.");
+          Alert.alert("Couldn't remove payday", error instanceof Error ? error.message : "Try again in a moment.");
         }
       },
     });
-  }, [deleteIncome]);
+  }, [month, selectedYear, updateIncome]);
 
   const handleDeleteGoalFromDay = useCallback((goalId: string, goalName: string) => {
     confirmAction({
@@ -1754,11 +1761,11 @@ export default function MonthlyScreen() {
                               <Pressable
                                 accessibilityRole="button"
                                 accessibilityLabel={`Delete ${item.name}`}
-                                onPress={() => handleDeleteIncomeFromDay(item.income)}
+                                onPress={() => handleDeleteIncomeFromDay(item.income, item.day)}
                                 style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.destructive + "12", borderColor: c.destructive + "35", opacity: pressed ? 0.74 : 1 }]}
                               >
                                 <Feather name="trash-2" size={13} color={c.destructive} />
-                                <Text style={[styles.dayBillActionText, { color: c.destructive }]}>Delete</Text>
+                                <Text style={[styles.dayBillActionText, { color: c.destructive }]}>Remove date</Text>
                               </Pressable>
                             </View>
                           </View>

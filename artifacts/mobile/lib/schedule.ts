@@ -13,6 +13,7 @@ export interface ScheduledIncome {
   start_date?: string;
   next_payment_date?: string;
   amount_history?: { effective_from: string; amount: number }[];
+  excluded_dates?: string[];
 }
 
 export interface ScheduledBillDateMove {
@@ -149,6 +150,11 @@ export function isIncomeActiveForMonth(income: ScheduledIncome, month: number, y
 export function getIncomeOccurrenceDays(income: ScheduledIncome, month: number, year: number): number[] {
   if (!isIncomeActiveForMonth(income, month, year)) return [];
   const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const excludedDates = new Set((income.excluded_dates ?? []).map(date => date.slice(0, 10)));
+  const isIncluded = (day: number) => {
+    const occurrence = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return !excludedDates.has(occurrence);
+  };
   const onOrAfterStart = (day: number) => {
     if (!income.start_date) return true;
     const occurrence = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -156,10 +162,10 @@ export function getIncomeOccurrenceDays(income: ScheduledIncome, month: number, 
   };
   if (income.frequency === "monthly") {
     const anchorDate = income.next_payment_date || income.start_date;
-    if (!anchorDate) return [1];
+    if (!anchorDate) return isIncluded(1) ? [1] : [];
     const [, , day] = anchorDate.split("-").map(Number);
     const occurrenceDay = Math.min(Math.max(day || 1, 1), daysInMonth);
-    return onOrAfterStart(occurrenceDay) ? [occurrenceDay] : [];
+    return onOrAfterStart(occurrenceDay) && isIncluded(occurrenceDay) ? [occurrenceDay] : [];
   }
   const intervalDays = income.frequency === "biweekly" ? 14 : 7;
   if (!income.next_payment_date) return [];
@@ -173,7 +179,7 @@ export function getIncomeOccurrenceDays(income: ScheduledIncome, month: number, 
     days.push(cursor.getDate());
     cursor = new Date(cursor.getTime() + intervalDays * 86_400_000);
   }
-  return days.filter(onOrAfterStart);
+  return days.filter(day => onOrAfterStart(day) && isIncluded(day));
 }
 
 function dateDayOfWeek(date?: string): number | null {

@@ -210,6 +210,7 @@ export interface IncomeItem {
   start_date?: string;
   next_payment_date?: string;
   amount_history?: IncomeAmountEntry[];
+  excluded_dates?: string[];
   last_reviewed_at?: string;
 }
 

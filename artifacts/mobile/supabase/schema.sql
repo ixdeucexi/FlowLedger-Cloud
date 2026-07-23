@@ -63,7 +63,8 @@ create table if not exists incomes (
   frequency           text not null default 'monthly',
   start_date          text,
   next_payment_date   text,
-  amount_history      jsonb not null default '[]'
+  amount_history      jsonb not null default '[]',
+  excluded_dates      jsonb not null default '[]'
 );
 alter table incomes enable row level security;
 create policy "incomes: user owns rows" on incomes for all using (auth.uid() = user_id);

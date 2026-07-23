@@ -131,6 +131,18 @@ describe("income scheduling", () => {
     assert.deepEqual(getIncomeOccurrenceDays(income, 7, 2026), [5, 12, 19, 26]);
   });
 
+  it("removes only the selected income occurrence", () => {
+    const income = {
+      amount: 1_000,
+      frequency: "biweekly" as const,
+      start_date: "2026-07-09",
+      next_payment_date: "2026-07-09",
+      excluded_dates: ["2026-07-23"],
+    };
+    assert.deepEqual(getIncomeOccurrenceDays(income, 6, 2026), [9]);
+    assert.deepEqual(getIncomeOccurrenceDays(income, 7, 2026), [6, 20]);
+  });
+
   it("uses the latest effective income amount without changing prior months", () => {
     const income = { amount: 800, frequency: "biweekly" as const, amount_history: [
       { effective_from: "2026-07-01", amount: 900 }, { effective_from: "2026-04-01", amount: 850 },
