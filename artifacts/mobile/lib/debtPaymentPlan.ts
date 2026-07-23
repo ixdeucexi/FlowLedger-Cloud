@@ -76,7 +76,6 @@ export function requiredDebtPlanTotal(
   debt: RequiredDebtPaymentLike,
   occurrenceCount = 1,
 ): number {
-  const requiredPerOccurrence = Math.max(0, Number(debt.amount) || 0)
-    + Math.max(0, Number(debt.snowball_minimum_boost) || 0);
+  const requiredPerOccurrence = Math.max(0, Number(debt.amount) || 0);
   return money(requiredPerOccurrence * Math.max(0, occurrenceCount));
 }

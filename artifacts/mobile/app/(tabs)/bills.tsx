@@ -46,6 +46,10 @@ function debtMonthlyMinimum(debt: Pick<Bill, "amount" | "snowball_minimum_boost"
   return effectiveDebtMinimum(debt.amount, Number(debt.snowball_minimum_boost ?? 0));
 }
 
+function debtRequiredMinimum(debt: Pick<Bill, "amount">): number {
+  return Math.max(0, Number(debt.amount) || 0);
+}
+
 export default function BillsScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
@@ -261,8 +265,15 @@ export default function BillsScreen() {
   })();
 
   const totalDebt = debtBills.reduce((sum, debt) => sum + debt.balance, 0);
-  const totalMinPayments = planDebts.reduce((sum, debt) => sum + debtMonthlyMinimum(debt), 0);
-  const debtPaymentPlan = buildDebtPaymentPlanSummary(totalMinPayments, existingSnowball?.amount ?? 0);
+  const totalMinPayments = planDebts.reduce((sum, debt) => sum + debtRequiredMinimum(debt), 0);
+  const rolledSnowballPayments = planDebts.reduce(
+    (sum, debt) => sum + Math.max(0, Number(debt.snowball_minimum_boost ?? 0)),
+    0,
+  );
+  const debtPaymentPlan = buildDebtPaymentPlanSummary(
+    totalMinPayments,
+    rolledSnowballPayments + (existingSnowball?.amount ?? 0),
+  );
   const assignedDebtExtra = settings.zeroBasedBudgetEnabled
     ? Math.max(0, Number(categoryBudgets.Debt ?? totalMinPayments) - totalMinPayments)
     : cashFlowSafeSnowballAmount;
@@ -756,6 +767,7 @@ export default function BillsScreen() {
                   ? c.mutedForeground
                   : priorityColors[Math.min((strategyRank ?? 1) - 1, priorityColors.length - 1)] ?? c.primary;
               const effectiveMinimum = debtMonthlyMinimum(item);
+              const requiredMinimum = debtRequiredMinimum(item);
               const monthsToPayoff = item.balance > 0 && effectiveMinimum > 0
                 ? Math.ceil(item.balance / effectiveMinimum)
                 : 0;
@@ -788,8 +800,8 @@ export default function BillsScreen() {
                       </View>
                       <View style={styles.cardRight}>
                         <Text style={[styles.balance, { color: isPaidOff ? c.success : c.destructive }]}>{isPaidOff ? "Paid" : `$${item.balance.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}</Text>
-                        {!isPaidOff && <Text style={[styles.minPay, { color: c.mutedForeground }]}>${effectiveMinimum.toFixed(2)}/mo min</Text>}
-                        {!isPaidOff && (item.snowball_minimum_boost ?? 0) > 0 && <Text style={[styles.metaText, { color: c.success }]}>Includes ${Number(item.snowball_minimum_boost).toFixed(2)} rolled over</Text>}
+                        {!isPaidOff && <Text style={[styles.minPay, { color: c.mutedForeground }]}>${requiredMinimum.toFixed(2)}/mo required</Text>}
+                        {!isPaidOff && (item.snowball_minimum_boost ?? 0) > 0 && <Text style={[styles.metaText, { color: c.success }]}>+${Number(item.snowball_minimum_boost).toFixed(2)} snowball rollover</Text>}
                       </View>
                     </View>
 

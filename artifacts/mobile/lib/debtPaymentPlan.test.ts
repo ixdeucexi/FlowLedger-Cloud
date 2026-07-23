@@ -71,10 +71,10 @@ describe("snowball transaction recognition", () => {
     assert.equal(replacementSnowballSafeMaximum(849.02, 30), 879.02);
   });
 
-  it("keeps the saved required payment separate from a snowball extra", () => {
+  it("does not turn a snowball rollover into a required minimum", () => {
     assert.equal(requiredDebtPlanTotal({
       amount: 38.27,
       snowball_minimum_boost: 29,
-    }), 67.27);
+    }), 38.27);
   });
 });

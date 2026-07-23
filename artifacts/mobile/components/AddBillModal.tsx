@@ -252,8 +252,9 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
               placeholderTextColor={c.mutedForeground} returnKeyType="next" />
 
             {/* Amount */}
-            <Text style={lbl}>Payment Amount ($)</Text>
+            <Text style={lbl}>{isDebt ? "Required Minimum Payment ($)" : "Payment Amount ($)"}</Text>
             <TextInput style={inp} value={amount} onChangeText={setAmount}
+              accessibilityLabel={isDebt ? "Required minimum payment" : "Payment amount"}
               placeholder="0.00" placeholderTextColor={c.mutedForeground} keyboardType="decimal-pad" />
 
             {/* Frequency */}
