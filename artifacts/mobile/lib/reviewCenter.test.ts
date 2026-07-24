@@ -135,6 +135,32 @@ test("set-aside money stays separate from bills in Review Center", () => {
   assert.deepEqual(grouped.income, []);
 });
 
+test("Snowball plans appear with bills and debt in Review Center", () => {
+  const grouped = groupReviewTargets(rankReviewTargets(
+    { amount: -12.48, date: "2026-07-23", note: "Affirm", category: "Debt" },
+    [
+      { type: "snowball", id: "camera", name: "Camera snowball", category: "Debt", plannedAmount: 12.48, occurrenceDate: "2026-07-22", isDebt: true },
+      { type: "bill", id: "streaming", name: "Streaming", category: "Entertainment", plannedAmount: 12.48, occurrenceDate: "2026-07-25" },
+    ],
+  ));
+
+  assert.deepEqual(grouped.bills.map(target => target.id), ["camera", "streaming"]);
+  assert.equal(grouped.bills[0]?.type, "snowball");
+});
+
+test("Snowball matches settle only their exact planned debt occurrence", () => {
+  const matches = matchedOccurrenceAllocations([
+    { id: "snowball", date: "2026-07-23", amount: -12.48, category: "Debt", note: "Affirm", review_status: "matched", review_resolution: "snowball", review_allocations: [
+      { type: "extra_principal", targetId: "camera", occurrenceDate: "2026-07-22", amount: 12.48, plannedAmount: 12.48, settlement: "exact" },
+    ] },
+    { id: "other-principal", date: "2026-07-23", amount: -12.48, category: "Debt", note: "Other", review_status: "matched", review_resolution: "bill", review_allocations: [
+      { type: "extra_principal", targetId: "camera", occurrenceDate: "2026-07-22", amount: 12.48, plannedAmount: 12.48, settlement: "exact" },
+    ] },
+  ], "extra_principal", "snowball");
+
+  assert.equal(matches.get(occurrenceKey("camera", "2026-07-22"))?.amount, 12.48);
+});
+
 test("multiple charges matched to one bucket become one calendar summary", () => {
   const transactions = [
     { id: "walmart-1", date: "2026-07-18", amount: -101.08, category: "Shopping", note: "Walmart", review_status: "matched", review_allocations: [

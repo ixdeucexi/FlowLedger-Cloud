@@ -66,7 +66,7 @@ function isValidDateInMonth(value: string, month: number, year: number) {
 export function ReviewCenter() {
   const c = useColors();
   const {
-    transactions, goals, decisions, categories, canEditHousehold, settings,
+    transactions, goals, decisions, extraPayments, categories, canEditHousehold, settings,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getIncomeOccurrencesInMonth,
     addBill, addGoal, updateGoal, deleteGoal, closeSpendingBucket, reopenSpendingBucket,
     archiveSpendingBucket, restoreArchivedSpendingBucket,
@@ -111,6 +111,7 @@ export function ReviewCenter() {
     const candidates: ReviewTarget[] = [];
     const billMatches = matchedOccurrenceAllocations(transactions, "bill");
     const incomeMatches = matchedOccurrenceAllocations(transactions, "income");
+    const snowballMatches = matchedOccurrenceAllocations(transactions, "extra_principal", "snowball");
     if (current.amount < 0) {
       getMonthlyBills(month, year).forEach(bill => {
         const days = getBillOccurrencesInMonth(bill, month, year);
@@ -125,6 +126,29 @@ export function ReviewCenter() {
             plannedAmount: remaining, occurrenceDate, isDebt: bill.is_debt });
         });
       });
+      extraPayments
+        .filter(payment => payment.month === month && payment.year === year)
+        .forEach(payment => {
+          const occurrenceDate = payment.payment_date ?? `${year}-${String(month + 1).padStart(2, "0")}-01`;
+          payment.allocations.forEach(allocation => {
+            const previous = snowballMatches.get(occurrenceKey(allocation.billId, occurrenceDate));
+            const remaining = !previous
+              ? Math.max(0, allocation.payment)
+              : previous.settlement === "partial"
+                ? Math.max(0, Number(previous.plannedAmount ?? allocation.payment) - Number(previous.amount || 0))
+                : 0;
+            if (remaining <= 0.005) return;
+            candidates.push({
+              type: "snowball",
+              id: allocation.billId,
+              name: `${allocation.billName} snowball`,
+              category: "Debt",
+              plannedAmount: remaining,
+              occurrenceDate,
+              isDebt: true,
+            });
+          });
+        });
       goals.filter(goal => goal.goal_type === "planned_expense" && isOpenSpendingBucket(goal) && goal.target_date?.startsWith(`${year}-${String(month + 1).padStart(2, "0")}`))
         .forEach(goal => candidates.push({
           type: "goal", id: goal.id, name: goal.name, category: "Planned spending",
@@ -149,7 +173,7 @@ export function ReviewCenter() {
       });
     }
     return rankReviewTargets(current, candidates);
-  }, [current, decisions, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getMonthlyBills, goals, transactions]);
+  }, [current, decisions, extraPayments, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getMonthlyBills, goals, transactions]);
   const groupedTargets = useMemo(() => groupReviewTargets(targets), [targets]);
   const spendingBuckets = useMemo(() => goals
     .filter(goal => goal.goal_type === "planned_expense" && !goal.archived_at)
@@ -318,7 +342,10 @@ export function ReviewCenter() {
     const actual = Math.abs(current.amount);
     const difference = Math.abs(actual - target.plannedAmount);
     const isBucket = target.type === "goal" || target.type === "decision";
-    const label = target.type === "income" ? `${target.name} received` : isBucket ? `${target.name} bucket updated` : `${target.name} paid`;
+    const label = target.type === "income" ? `${target.name} received`
+      : target.type === "snowball" ? `${target.name} paid`
+      : isBucket ? `${target.name} bucket updated`
+      : `${target.name} paid`;
     const notice = isBucket
       ? settlement === "partial"
         ? `${target.name} bucket updated · ${money(difference)} still set aside`
@@ -474,12 +501,12 @@ export function ReviewCenter() {
   const renderTarget = (target: RankedReviewTarget, index: number) => current ? (
     <Pressable accessibilityRole="button" accessibilityLabel={`Match ${transactionName(current)} to ${target.name}`} key={`${target.type}-${target.id}-${target.occurrenceDate}`} disabled={saving} onPress={() => chooseTarget(target)} style={({ pressed }) => [styles.targetRow, { backgroundColor: c.muted, borderColor: index === 0 && target.score >= 48 ? c.success + "66" : c.border, opacity: saving ? 0.55 : pressed ? 0.8 : 1 }]}>
       <View style={[styles.targetIcon, { backgroundColor: (target.type === "income" ? c.success : target.isDebt ? c.warning : c.primary) + "18" }]}>
-        <Feather name={target.type === "income" ? "trending-up" : target.type === "bill" ? "file-text" : "shopping-bag"} size={17} color={target.type === "income" ? c.success : target.isDebt ? c.warning : c.primary} />
+        <Feather name={target.type === "income" ? "trending-up" : target.type === "bill" ? "file-text" : target.type === "snowball" ? "target" : "shopping-bag"} size={17} color={target.type === "income" ? c.success : target.isDebt ? c.warning : c.primary} />
       </View>
       <View style={{ flex: 1 }}>
         <View style={styles.targetHeading}><Text style={[styles.targetName, { color: c.foreground }]} numberOfLines={2}>{target.name}</Text>{index === 0 && target.score >= 48 ? <Text style={[styles.suggested, { color: c.success }]}>SUGGESTED</Text> : null}</View>
         <Text style={[styles.targetMeta, { color: c.mutedForeground }]}>
-          {target.type === "income" ? "Expected income" : target.type === "bill" ? "Bill" : "Set-aside bucket"}: {money(target.plannedAmount)} · {displayDate(target.occurrenceDate)}
+          {target.type === "income" ? "Expected income" : target.type === "bill" ? "Bill" : target.type === "snowball" ? "Snowball plan" : "Set-aside bucket"}: {money(target.plannedAmount)} · {displayDate(target.occurrenceDate)}
         </Text>
         {target.reasons.length ? <Text style={[styles.targetReason, { color: c.success }]}>{target.reasons.slice(0, 2).join(" · ")}</Text> : null}
       </View>

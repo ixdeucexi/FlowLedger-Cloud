@@ -2061,18 +2061,26 @@ export default function MonthlyScreen() {
                           );
                         })}
                         {selectedSnowballTransactions.map(transaction => {
-                          const debtId = transaction.debt_applied_bill_id ?? transaction.linked_bill_id;
+                          const reviewedSnowballAllocation = transaction.review_resolution === "snowball"
+                            ? transaction.review_allocations?.find(allocation => allocation.type === "extra_principal")
+                            : undefined;
+                          const debtId = reviewedSnowballAllocation?.targetId
+                            ?? transaction.debt_applied_bill_id
+                            ?? transaction.linked_bill_id;
                           const debt = bills.find(bill => bill.is_debt && bill.id === debtId);
                           const amount = Math.abs(Number(transaction.amount));
                           const scheduledPlan = isScheduledSnowballPlanTransaction(transaction);
-                          const applied = !scheduledPlan && Number(transaction.debt_applied_amount ?? 0) > 0.005;
+                          const reviewedSnowball = transaction.review_resolution === "snowball";
+                          const applied = reviewedSnowball
+                            || (!scheduledPlan && Number(transaction.debt_applied_amount ?? 0) > 0.005);
                           const requiredMinimum = debt
                             ? requiredDebtPlanTotal(
                                 debt,
                                 getBillOccurrencesInMonth(debt, month, selectedYear).length,
                               )
                             : undefined;
-                          const name = snowballPaymentName(transaction, debt?.name ?? "Debt payment");
+                          const name = reviewedSnowballAllocation?.name
+                            ?? snowballPaymentName(transaction, debt?.name ?? "Debt payment");
                           const snowballMonthToDate = scheduledPlan
                             ? snowballPlanTotalThroughDate(snowballPlanEntries, transaction.date)
                             : amount;
@@ -2085,14 +2093,14 @@ export default function MonthlyScreen() {
                               statusLabel={applied ? "Applied" : "Scheduled"}
                               requiredMinimum={requiredMinimum}
                               snowballMonthToDate={snowballMonthToDate}
-                              onEdit={() => {
+                              onEdit={reviewedSnowball ? undefined : () => {
                                 setSelectedDate(null);
                                 router.push({
                                   pathname: "/snowball-plan",
                                   params: { transactionId: transaction.id },
                                 } as never);
                               }}
-                              onRemove={() => confirmAction({
+                              onRemove={reviewedSnowball ? undefined : () => confirmAction({
                                 title: "Remove this snowball payment?",
                                 message: "This removes the snowball plan. It does not change the debt balance.",
                                 confirmText: "Remove plan",

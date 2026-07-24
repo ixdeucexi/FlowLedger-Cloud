@@ -10,6 +10,7 @@ export type SnowballPaymentTransactionLike = {
   category?: string | null;
   note?: string | null;
   source?: string | null;
+  review_resolution?: string | null;
   import_hash?: string | null;
   linked_bill_id?: string | null;
   debt_applied_bill_id?: string | null;
@@ -53,6 +54,7 @@ export function isScheduledSnowballPlanTransaction(transaction: SnowballPaymentT
 }
 
 export function isSnowballPaymentTransaction(transaction: SnowballPaymentTransactionLike): boolean {
+  if (transaction.review_resolution === "snowball" && Number(transaction.amount) < 0) return true;
   const linkedDebtId = transaction.debt_applied_bill_id ?? transaction.linked_bill_id;
   if (!linkedDebtId || Number(transaction.amount) >= 0) return false;
 

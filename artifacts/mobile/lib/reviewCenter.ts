@@ -49,7 +49,7 @@ export interface ForgottenBillDefaults {
   frequency: "monthly";
 }
 
-export type ReviewTargetType = "bill" | "income" | "goal" | "decision";
+export type ReviewTargetType = "bill" | "income" | "goal" | "decision" | "snowball";
 
 export interface ReviewTarget {
   type: ReviewTargetType;
@@ -247,11 +247,13 @@ export function matchedOccurrenceKeys(
 
 export function matchedOccurrenceAllocations(
   transactions: ReviewTransactionLike[],
-  type: "bill" | "income",
+  type: "bill" | "income" | "extra_principal",
+  resolution?: string,
 ): Map<string, ReviewAllocationLike> {
   const matches = new Map<string, ReviewAllocationLike>();
   transactions.forEach(transaction => {
     if (transaction.review_status !== "matched") return;
+    if (resolution && transaction.review_resolution !== resolution) return;
     (transaction.review_allocations ?? []).forEach(allocation => {
       if (allocation.type !== type || !allocation.targetId || !allocation.occurrenceDate) return;
       const key = occurrenceKey(allocation.targetId, allocation.occurrenceDate);
@@ -276,7 +278,7 @@ export function matchedOccurrenceAllocations(
 export function groupReviewTargets(targets: RankedReviewTarget[]) {
   return {
     setAside: targets.filter(target => target.type === "goal" || target.type === "decision"),
-    bills: targets.filter(target => target.type === "bill"),
+    bills: targets.filter(target => target.type === "bill" || target.type === "snowball"),
     income: targets.filter(target => target.type === "income"),
   };
 }

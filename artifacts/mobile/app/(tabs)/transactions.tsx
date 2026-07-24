@@ -204,6 +204,11 @@ export function ActivityScreen() {
     const today        = new Date();
     const currentMonth = today.getMonth();
     const currentYear  = today.getFullYear();
+    const snowballMatches = matchedOccurrenceAllocations(
+      transactions,
+      "extra_principal",
+      "snowball",
+    );
     const confirmedBillMatchKeys = new Set(transactions
       .filter(isConfirmedBillMatch)
       .flatMap(transaction => {
@@ -321,19 +326,30 @@ export function ActivityScreen() {
     // 4. Extra debt payments
     for (const ep of extraPayments) {
       const date  = ep.payment_date ?? `${ep.year}-${String(ep.month + 1).padStart(2, "0")}-01`;
-      const names = ep.allocations.map(a => a.billName).join(", ");
+      const remainingAllocations = ep.allocations.map(allocation => {
+        const match = snowballMatches.get(occurrenceKey(allocation.billId, date));
+        const remaining = !match
+          ? allocation.payment
+          : match.settlement === "partial"
+            ? Math.max(0, Number(match.plannedAmount ?? allocation.payment) - Number(match.amount || 0))
+            : 0;
+        return { ...allocation, payment: remaining };
+      }).filter(allocation => allocation.payment > 0.005);
+      const remainingAmount = remainingAllocations.reduce((sum, allocation) => sum + allocation.payment, 0);
+      if (remainingAmount <= 0.005) continue;
+      const names = remainingAllocations.map(a => a.billName).join(", ");
       const funding = (ep.sources ?? []).map(source => source.type === "bill_surplus" ? `${source.billName ?? "bill"} surplus` : "manual safe extra").join(", ");
       const status = debtPaymentStatusLabel(date, (ep.sources ?? []).some(source => source.pendingBalanceApply));
       items.push({
         id:       `extra-${ep.id}`,
         date,
-        amount:   -ep.amount,
+        amount:   -remainingAmount,
         label:    names || "Extra debt payment",
         category: "Debt",
         source:   "extra_payment",
         editable: true,
         extraPayment: ep,
-        detail:   `$${ep.amount.toFixed(2)} ${status} ${status === "scheduled" ? "for" : "to"} ${names || "debt accounts"} on ${formatDateLong(date)}${funding ? ` · Funded by ${funding}` : ""}`,
+        detail:   `$${remainingAmount.toFixed(2)} ${status} ${status === "scheduled" ? "for" : "to"} ${names || "debt accounts"} on ${formatDateLong(date)}${funding ? ` · Funded by ${funding}` : ""}`,
       });
     }
 

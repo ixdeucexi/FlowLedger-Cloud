@@ -128,14 +128,14 @@ export interface Transaction {
   match_confidence?: number;
   match_reason?: string;
   review_status?: "needs_review" | "matched" | "categorized" | "transfer" | "legacy_reviewed";
-  review_resolution?: "bill" | "income" | "goal" | "decision" | "category" | "transfer";
+  review_resolution?: "bill" | "income" | "goal" | "decision" | "snowball" | "category" | "transfer";
   review_allocations?: ReviewAllocation[];
   reviewed_at?: string;
   reviewed_by?: string;
   user_edited_at?: string;
   linked_income_id?: string;
   linked_plan_id?: string;
-  linked_plan_type?: "goal" | "decision";
+  linked_plan_type?: "goal" | "decision" | "snowball";
   matched_occurrence_date?: string;
 }
 
@@ -163,7 +163,7 @@ export interface ReviewAllocation {
 
 export interface ReconcileTransactionInput {
   transactionId: string;
-  resolution: "bill" | "income" | "goal" | "decision" | "category" | "transfer";
+  resolution: "bill" | "income" | "goal" | "decision" | "snowball" | "category" | "transfer";
   targetId?: string;
   occurrenceDate?: string;
   plannedAmount?: number;
@@ -733,6 +733,15 @@ const markSnowballSourcesPending = (sources: SnowballFundingSource[]) =>
 
 const hasPendingSnowballBalanceApply = (payment: Pick<ExtraPayment, "sources">) =>
   (payment.sources ?? []).some(source => source.pendingBalanceApply);
+
+const remainingSnowballAllocationAmount = (
+  plannedAmount: number,
+  match: ReviewAllocation | undefined,
+) => {
+  if (!match) return Math.max(0, Number(plannedAmount) || 0);
+  if (match.settlement !== "partial") return 0;
+  return Math.max(0, Number(match.plannedAmount ?? plannedAmount) - Number(match.amount || 0));
+};
 
 function normalizeBillRow(bill: any): Bill {
   return {
@@ -2528,12 +2537,25 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!transaction) throw new Error("Transaction not found");
 
     if (demoMode) {
+      const snowballPayment = input.resolution === "snowball"
+        ? extraPayments.find(payment =>
+          payment.payment_date === input.occurrenceDate
+          && payment.allocations.some(allocation => allocation.billId === input.targetId))
+        : undefined;
+      const snowballDebt = input.resolution === "snowball"
+        ? bills.find(bill => bill.id === input.targetId && bill.is_debt)
+        : undefined;
+      if (input.resolution === "snowball" && (!snowballPayment || !snowballDebt)) {
+        throw new Error("Snowball payment not found");
+      }
       const allocation: ReviewAllocation = {
         type: input.resolution === "bill" ? "bill"
           : input.resolution === "income" ? "income"
           : input.resolution === "goal" || input.resolution === "decision" ? "planned_expense"
+          : input.resolution === "snowball" ? "extra_principal"
           : input.resolution,
         targetId: input.targetId,
+        name: input.resolution === "snowball" ? snowballDebt?.name : undefined,
         category: input.resolution === "category" ? input.targetId : undefined,
         amount: Math.abs(transaction.amount),
         plannedAmount: input.plannedAmount,
@@ -2548,36 +2570,56 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           : item.category,
         linked_bill_id: input.resolution === "bill" ? input.targetId : undefined,
         linked_income_id: input.resolution === "income" ? input.targetId : undefined,
-        linked_plan_id: input.resolution === "goal" || input.resolution === "decision" ? input.targetId : undefined,
-        linked_plan_type: input.resolution === "goal" || input.resolution === "decision" ? input.resolution : undefined,
+        linked_plan_id: input.resolution === "goal" || input.resolution === "decision" ? input.targetId
+          : input.resolution === "snowball" ? snowballPayment?.id
+          : undefined,
+        linked_plan_type: input.resolution === "goal" || input.resolution === "decision" || input.resolution === "snowball" ? input.resolution : undefined,
         matched_occurrence_date: input.occurrenceDate,
         match_confidence: input.resolution === "category" || input.resolution === "transfer" ? undefined : 1,
         match_reason: input.resolution === "bill" ? "confirmed_bill_match"
           : input.resolution === "income" ? "confirmed_income_match"
           : input.resolution === "goal" || input.resolution === "decision" ? "confirmed_plan_match"
+          : input.resolution === "snowball" ? "confirmed_snowball_match"
           : undefined,
         review_status: input.resolution === "category" ? "categorized" : input.resolution === "transfer" ? "transfer" : "matched",
         review_resolution: input.resolution,
         review_allocations: [allocation],
         reviewed_at: new Date().toISOString(),
       } : item));
+      if (input.resolution === "snowball" && snowballDebt) {
+        setBills(previous => reorderDebtPriorities(previous.map(bill =>
+          bill.id === snowballDebt.id
+            ? { ...bill, balance: roundMoney(Math.max(0, bill.balance - Math.abs(transaction.amount))) }
+            : bill)));
+      }
       return;
     }
 
     markSaveStarted();
     try {
-      const result = await supabase.rpc("reconcile_transaction", {
-        p_transaction_id: input.transactionId,
-        p_resolution: input.resolution,
-        p_target_id: input.targetId ?? null,
-        p_occurrence_date: input.occurrenceDate ?? null,
-        p_planned_amount: input.plannedAmount ?? null,
-        p_settlement: input.settlement ?? null,
-        p_extra_category: input.extraCategory ?? null,
-      });
+      const result = input.resolution === "snowball"
+        ? await supabase.rpc("reconcile_snowball_transaction", {
+          p_transaction_id: input.transactionId,
+          p_debt_id: input.targetId ?? null,
+          p_occurrence_date: input.occurrenceDate ?? null,
+          p_planned_amount: input.plannedAmount ?? null,
+          p_settlement: input.settlement ?? null,
+          p_extra_category: input.extraCategory ?? null,
+        })
+        : await supabase.rpc("reconcile_transaction", {
+          p_transaction_id: input.transactionId,
+          p_resolution: input.resolution,
+          p_target_id: input.targetId ?? null,
+          p_occurrence_date: input.occurrenceDate ?? null,
+          p_planned_amount: input.plannedAmount ?? null,
+          p_settlement: input.settlement ?? null,
+          p_extra_category: input.extraCategory ?? null,
+        });
       if (result.error) throw new Error(`Review transaction: ${result.error.message}`);
       await refreshBillMatchData();
-      if (input.resolution === "bill" && bills.some(bill => bill.id === input.targetId && bill.is_debt)) {
+      if (input.resolution === "snowball") {
+        await refreshDebtRows();
+      } else if (input.resolution === "bill" && bills.some(bill => bill.id === input.targetId && bill.is_debt)) {
         await syncDebtTransactionsAndRefresh();
       }
       markSaveCompleted();
@@ -2585,14 +2627,29 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       markSaveFailed(error, () => reconcileTransaction(input));
       throw error;
     }
-  }, [user, assertCanEditHousehold, transactions, bills, demoMode, refreshBillMatchData, syncDebtTransactionsAndRefresh, markSaveStarted, markSaveCompleted, markSaveFailed]);
+  }, [user, assertCanEditHousehold, transactions, bills, extraPayments, demoMode, refreshBillMatchData, refreshDebtRows, syncDebtTransactionsAndRefresh, markSaveStarted, markSaveCompleted, markSaveFailed]);
 
   const undoTransactionReconciliation = useCallback(async (transactionId: string) => {
     if (!user) throw new Error("Sign in to undo this review");
     assertCanEditHousehold("undo a transaction review");
     const reviewedTransaction = transactions.find(item => item.id === transactionId);
     const wasDebtMatch = Boolean(reviewedTransaction?.linked_bill_id && bills.some(bill => bill.id === reviewedTransaction.linked_bill_id && bill.is_debt));
+    const wasSnowballMatch = reviewedTransaction?.review_resolution === "snowball";
     if (demoMode) {
+      if (wasSnowballMatch) {
+        const restoredByDebt = new Map<string, number>();
+        reviewedTransaction?.review_allocations?.forEach(allocation => {
+          if (allocation.type !== "extra_principal" || !allocation.targetId) return;
+          restoredByDebt.set(
+            allocation.targetId,
+            roundMoney((restoredByDebt.get(allocation.targetId) ?? 0) + Math.max(0, allocation.amount)),
+          );
+        });
+        setBills(previous => reorderDebtPriorities(previous.map(bill => {
+          const restored = restoredByDebt.get(bill.id);
+          return restored ? { ...bill, balance: roundMoney(bill.balance + restored) } : bill;
+        })));
+      }
       setTransactions(previous => previous.map(item => item.id === transactionId ? {
         ...item,
         linked_bill_id: undefined,
@@ -2614,13 +2671,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const result = await supabase.rpc("undo_transaction_reconciliation", { p_transaction_id: transactionId });
       if (result.error) throw new Error(`Undo review: ${result.error.message}`);
       await refreshBillMatchData();
-      if (wasDebtMatch) await syncDebtTransactionsAndRefresh();
+      if (wasSnowballMatch) await refreshDebtRows();
+      else if (wasDebtMatch) await syncDebtTransactionsAndRefresh();
       markSaveCompleted();
     } catch (error) {
       markSaveFailed(error, () => undoTransactionReconciliation(transactionId));
       throw error;
     }
-  }, [user, assertCanEditHousehold, transactions, bills, demoMode, refreshBillMatchData, syncDebtTransactionsAndRefresh, markSaveStarted, markSaveCompleted, markSaveFailed]);
+  }, [user, assertCanEditHousehold, transactions, bills, demoMode, refreshBillMatchData, refreshDebtRows, syncDebtTransactionsAndRefresh, markSaveStarted, markSaveCompleted, markSaveFailed]);
 
   const matchTransactionToBill = useCallback(async (transactionId: string, billId: string, occurrenceDate?: string, plannedAmount?: number) => {
     if (!user) throw new Error("Sign in to match a bill");
@@ -3020,6 +3078,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const getCashFlow = useCallback((month: number, year: number): CashFlow => {
     const billMatches = matchedOccurrenceAllocations(transactions, "bill");
     const incomeMatches = matchedOccurrenceAllocations(transactions, "income");
+    const snowballMatches = matchedOccurrenceAllocations(transactions, "extra_principal", "snowball");
     const monthlyIncome = incomes
       .filter(i => isIncomeActiveForMonth(i, month, year))
       .reduce((sum, income) => {
@@ -3054,7 +3113,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       return ty === year && tm === month + 1 && isCheckingBalanceTransaction(t, connectedBankAccounts);
     });
     const netTransactions = monthTxs.reduce((s, t) => s + t.amount, 0);
-    const snowballExtra = extraPayments.find(ep => ep.month === month && ep.year === year)?.amount ?? 0;
+    const snowballPayment = extraPayments.find(ep => ep.month === month && ep.year === year);
+    const snowballPaymentDate = snowballPayment?.payment_date ?? `${year}-${String(month + 1).padStart(2, "0")}-01`;
+    const snowballExtra = snowballPayment?.allocations.reduce((sum, allocation) => sum + remainingSnowballAllocationAmount(
+      allocation.payment,
+      snowballMatches.get(occurrenceKey(allocation.billId, snowballPaymentDate)),
+    ), 0) ?? 0;
     const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
     const monthEnd = `${monthPrefix}-${String(new Date(year, month + 1, 0).getDate()).padStart(2, "0")}`;
     const plannedDecisionNet = decisions
@@ -3105,6 +3169,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         && (!startExclusive || date > startExclusive);
       const billMatches = matchedOccurrenceAllocations(transactions, "bill");
       const incomeMatches = matchedOccurrenceAllocations(transactions, "income");
+      const snowballMatches = matchedOccurrenceAllocations(transactions, "extra_principal", "snowball");
       const inc = incomes.reduce((sum, income) => {
         const amount = getEffectiveIncomeAmount(income, m, y);
         return sum + getIncomeOccurrenceDays(income, m, y).reduce((occurrenceSum, day) => {
@@ -3151,7 +3216,13 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         return s;
       }, 0);
       const monthlyExtra = extraPayments.find(ep => ep.month === m && ep.year === y);
-      const snowball = monthlyExtra && includeDate(monthlyExtra.payment_date ?? `${monthPrefix}-01`) ? monthlyExtra.amount : 0;
+      const monthlyExtraDate = monthlyExtra?.payment_date ?? `${monthPrefix}-01`;
+      const snowball = monthlyExtra && includeDate(monthlyExtraDate)
+        ? monthlyExtra.allocations.reduce((sum, allocation) => sum + remainingSnowballAllocationAmount(
+          allocation.payment,
+          snowballMatches.get(occurrenceKey(allocation.billId, monthlyExtraDate)),
+        ), 0)
+        : 0;
       const monthEnd = `${y}-${String(m + 1).padStart(2, "0")}-${String(new Date(y, m + 1, 0).getDate()).padStart(2, "0")}`;
       const decisionNet = decisions.filter(d => d.status === "planned" || d.status === "calendar").reduce((sum, d) => {
         const count = scenarioDates(d.scenario, monthEnd).filter(date => date.startsWith(monthPrefix) && includeDate(date)).length;
@@ -3207,6 +3278,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const financialEvents: FinancialEvent[] = [];
     const billMatches = matchedOccurrenceAllocations(transactions, "bill");
     const incomeMatches = matchedOccurrenceAllocations(transactions, "income");
+    const snowballMatches = matchedOccurrenceAllocations(transactions, "extra_principal", "snowball");
     const incomeByDay: Record<number, number> = {};
     incomes.forEach(i => {
       const occ = getIncomeOccurrenceDays(i, month, year);
@@ -3293,14 +3365,25 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const day = Number(paymentDate.split("-")[2]);
       if (!Number.isFinite(day) || day < 1 || day > daysInMonth) return;
       const pending = hasPendingSnowballBalanceApply(ep) || paymentDate > localDateString();
-      const targetNames = Array.from(new Set(ep.allocations
+      const remainingAllocations = ep.allocations
+        .map(allocation => ({
+          ...allocation,
+          remaining: remainingSnowballAllocationAmount(
+            allocation.payment,
+            snowballMatches.get(occurrenceKey(allocation.billId, paymentDate)),
+          ),
+        }))
+        .filter(allocation => allocation.remaining > 0.005);
+      const remainingAmount = remainingAllocations.reduce((sum, allocation) => sum + allocation.remaining, 0);
+      if (remainingAmount <= 0.005) return;
+      const targetNames = Array.from(new Set(remainingAllocations
         .map(allocation => allocation.billName || bills.find(bill => bill.id === allocation.billId)?.name)
         .filter(Boolean))).join(", ");
-      debtExtrasByDay[day] = (debtExtrasByDay[day] ?? 0) + ep.amount;
+      debtExtrasByDay[day] = (debtExtrasByDay[day] ?? 0) + remainingAmount;
       financialEvents.push({
         id: `extra:${ep.id}:${year}-${month + 1}-${day}`, sourceType: "extra_payment", sourceId: ep.id,
         date: paymentDate,
-        kind: "debt_payment", amount: -ep.amount, status: pending ? "scheduled" : "applied", name: targetNames ? `${targetNames} debt payment` : "Snowball debt payment",
+        kind: "debt_payment", amount: -remainingAmount, status: pending ? "scheduled" : "applied", name: targetNames ? `${targetNames} debt payment` : "Snowball debt payment",
       });
     });
     const goalsByDay: Record<number, GoalExpense[]> = {};

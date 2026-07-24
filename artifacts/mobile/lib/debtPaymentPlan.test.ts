@@ -61,6 +61,15 @@ describe("snowball transaction recognition", () => {
     }), false);
   });
 
+  it("recognizes a bank transaction matched to a Snowball plan", () => {
+    assert.equal(isSnowballPaymentTransaction({
+      amount: -12.48,
+      category: "Debt",
+      note: "Affirm",
+      review_resolution: "snowball",
+    }), true);
+  });
+
   it("rejects money coming in even when the note says snowball", () => {
     assert.equal(isSnowballPaymentTransaction({
       amount: 30,
