@@ -11,6 +11,7 @@ import {
   snowballPaymentName,
   snowballPlanTotalThroughDate,
   snowballTransactionEditDraft,
+  upsertSnowballPlanById,
 } from "./debtPaymentPlan";
 
 describe("extra debt payment plan", () => {
@@ -28,6 +29,32 @@ describe("extra debt payment plan", () => {
       extraPayment: 0,
       totalPlanned: 0,
     });
+  });
+
+  it("moves one saved plan without replacing other calendar data", () => {
+    const existingPlans = [
+      { id: "snowball-july", amount: 30, date: "2026-07-22" },
+      { id: "snowball-august", amount: 20, date: "2026-08-14" },
+    ];
+    const dayTransactions = [
+      { id: "payday", amount: 2401.73, date: "2026-07-24" },
+      { id: "groceries", amount: -84.02, date: "2026-07-24" },
+    ];
+
+    const movedPlans = upsertSnowballPlanById(existingPlans, {
+      id: "snowball-july",
+      amount: 30,
+      date: "2026-07-24",
+    });
+
+    assert.deepEqual(movedPlans, [
+      { id: "snowball-july", amount: 30, date: "2026-07-24" },
+      { id: "snowball-august", amount: 20, date: "2026-08-14" },
+    ]);
+    assert.deepEqual(dayTransactions, [
+      { id: "payday", amount: 2401.73, date: "2026-07-24" },
+      { id: "groceries", amount: -84.02, date: "2026-07-24" },
+    ]);
   });
 });
 

@@ -13,7 +13,7 @@ import {
   type SnowballDebtInput,
   type SnowballProjectionResult,
 } from "@/lib/snowball";
-import { SNOWBALL_PLAN_SOURCE } from "@/lib/debtPaymentPlan";
+import { SNOWBALL_PLAN_SOURCE, upsertSnowballPlanById } from "@/lib/debtPaymentPlan";
 import { anchorForecastToBankBalance, forecastBalances, type FinancialEvent } from "@/lib/forecast";
 import { diagnosticErrorCode } from "@/lib/diagnosticPolicy";
 import { decisionDbPayload } from "@/lib/decisionPersistence";
@@ -383,7 +383,7 @@ interface BudgetContextType {
 
   runSnowball: (month: number, year: number, extraAmount: number) => SnowballAllocation[];
   previewDebtSnowball: (month: number, year: number, extraAmount?: number, additionalSafeCredit?: number, paymentDateOverride?: string, editingPaymentId?: string) => SnowballProjectionResult;
-  applyDebtSnowballPayment: (preview: SnowballProjectionResult, sources?: SnowballFundingSource[]) => Promise<void>;
+  applyDebtSnowballPayment: (preview: SnowballProjectionResult, sources?: SnowballFundingSource[], existingPaymentId?: string) => Promise<void>;
   saveExtraPayment: (month: number, year: number, amount: number, allocations: SnowballAllocation[], paymentDate?: string, sources?: SnowballFundingSource[]) => Promise<void>;
   removeDebtSnowballPayment: (month: number, year: number) => Promise<void>;
   finalizeBillPayment: (billId: string, month: number, year: number, actualAmount: number, paidDate: string) => Promise<{ budgeted: number; actual: number; surplus: number }>;
@@ -2144,13 +2144,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const applyDebtSnowballPayment = useCallback(async (
     preview: SnowballProjectionResult,
     sources: SnowballFundingSource[] = [{ type: "manual", amount: preview.selectedExtra }],
+    existingPaymentId?: string,
   ) => {
     if (!user) return;
     if (!settings.debtPayoffEnabled) throw new Error("Turn on Debt Payoff Plan before applying an automatic debt payment.");
     assertCanEditHousehold("apply a debt snowball payment");
     const [year, monthNumber] = preview.paymentDate.split("-").map(Number);
     const month = monthNumber - 1;
-    const existing = extraPayments.find(ep => ep.month === month && ep.year === year);
+    const existing = existingPaymentId
+      ? extraPayments.find(ep => ep.id === existingPaymentId)
+      : extraPayments.find(ep => ep.month === month && ep.year === year);
     const paymentId = existing?.id ?? genId();
     const payloadSources = markSnowballSourcesPending(sources);
 
@@ -2160,9 +2163,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         amount: preview.selectedExtra, allocations: preview.allocations,
         payment_date: preview.paymentDate, sources: payloadSources,
       };
-      setExtraPayments(prev => existing
-        ? prev.map(ep => ep.id === existing.id ? nextPayment : ep)
-        : [...prev, nextPayment]);
+      setExtraPayments(prev => upsertSnowballPlanById(prev, nextPayment));
       return;
     }
 
@@ -2203,9 +2204,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       amount: preview.selectedExtra, allocations: preview.allocations,
       payment_date: preview.paymentDate, sources: payloadSources,
     };
-    setExtraPayments(prev => existing
-      ? prev.map(ep => ep.id === existing.id ? nextPayment : ep)
-      : [...prev, nextPayment]);
+    setExtraPayments(prev => upsertSnowballPlanById(prev, nextPayment));
   }, [user, extraPayments, demoMode, applyHouseholdSelect, assertCanEditHousehold, settings.debtPayoffEnabled]);
 
   const removeDebtSnowballPayment = useCallback(async (month: number, year: number) => {

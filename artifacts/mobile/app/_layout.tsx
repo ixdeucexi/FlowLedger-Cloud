@@ -18,6 +18,8 @@ import { AppLoadingIntro } from "@/components/AppLoadingIntro";
 import { LegalAcceptanceGate } from "@/components/LegalAcceptanceGate";
 import { PwaInstallPrompt } from "@/components/PwaInstallPrompt";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { BudgetProvider } from "@/context/BudgetContext";
+import { MembershipProvider } from "@/context/MembershipContext";
 import { ThemeProvider, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import { readLastAppRoute, rememberCurrentAppRoute } from "@/lib/navigationMemory";
@@ -177,14 +179,18 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
           <>
             <AuthObserver />
             <GestureHandlerRootView style={{ flex: 1 }}>
-              <Stack screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="index" />
-                <Stack.Screen name="login" />
-                <Stack.Screen name="legal" />
-                <Stack.Screen name="setup" />
-                <Stack.Screen name="snowball-plan" />
-                <Stack.Screen name="(tabs)" />
-              </Stack>
+              <BudgetProvider>
+                <MembershipProvider>
+                  <Stack screenOptions={{ headerShown: false }}>
+                    <Stack.Screen name="index" />
+                    <Stack.Screen name="login" />
+                    <Stack.Screen name="legal" />
+                    <Stack.Screen name="setup" />
+                    <Stack.Screen name="snowball-plan" />
+                    <Stack.Screen name="(tabs)" />
+                  </Stack>
+                </MembershipProvider>
+              </BudgetProvider>
               <PwaInstallPrompt />
             </GestureHandlerRootView>
             <LegalAcceptanceGate />

@@ -6,7 +6,7 @@ import { Animated, Easing, Image, Platform, Pressable, StyleSheet, StyleProp, Te
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/context/AuthContext";
-import { BudgetProvider, useBudget } from "@/context/BudgetContext";
+import { useBudget } from "@/context/BudgetContext";
 import { SaveStatusBanner } from "@/components/SaveStatusBanner";
 import { DecisionDueModal } from "@/components/DecisionDueModal";
 import { AppLoadingIntro } from "@/components/AppLoadingIntro";
@@ -23,7 +23,6 @@ import {
   writeLearningTourState,
 } from "@/lib/learningTour";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
-import { MembershipProvider } from "@/context/MembershipContext";
 import { FeedbackBadgeProvider, useFeedbackBadge } from "@/context/FeedbackBadgeContext";
 import { buildCurrentMonthReviewQueue } from "@/lib/reviewCenter";
 import { tabBadgeValue } from "@/lib/tabBadge";
@@ -566,13 +565,9 @@ function TabContent() {
 
 export default function TabLayout() {
   return (
-    <BudgetProvider>
-      <MembershipProvider>
-        <FeedbackBadgeProvider>
-          <TabContent />
-        </FeedbackBadgeProvider>
-      </MembershipProvider>
-    </BudgetProvider>
+    <FeedbackBadgeProvider>
+      <TabContent />
+    </FeedbackBadgeProvider>
   );
 }
 

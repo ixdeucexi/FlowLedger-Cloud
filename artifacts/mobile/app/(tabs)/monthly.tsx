@@ -2045,7 +2045,10 @@ export default function MonthlyScreen() {
                               snowballMonthToDate={snowballMonthToDate}
                               onEdit={savedPayment ? () => {
                                 setSelectedDate(null);
-                                router.push("/snowball-plan" as never);
+                                router.push({
+                                  pathname: "/snowball-plan",
+                                  params: { paymentId: savedPayment.id },
+                                } as never);
                               } : undefined}
                               onRemove={savedPayment ? () => confirmAction({
                                 title: "Remove this debt payment?",

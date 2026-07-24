@@ -13,7 +13,7 @@ import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { GoalModal } from "@/components/GoalModal";
 import { IncomeModal } from "@/components/IncomeModal";
 import { useAuth } from "@/context/AuthContext";
-import { BudgetProvider, useBudget, type Account, type Bill, type Goal, type IncomeItem } from "@/context/BudgetContext";
+import { useBudget, type Account, type Bill, type Goal, type IncomeItem } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import {
   acceptHouseholdInviteCode,
@@ -1109,11 +1109,7 @@ function FloCoachOverlay({ visible, title, message, onClose }: {
 }
 
 export default function SetupScreen() {
-  return (
-    <BudgetProvider>
-      <SetupWizard />
-    </BudgetProvider>
-  );
+  return <SetupWizard />;
 }
 
 const styles = StyleSheet.create({

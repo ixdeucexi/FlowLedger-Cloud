@@ -107,3 +107,9 @@ export function requiredDebtPlanTotal(
   const requiredPerOccurrence = Math.max(0, Number(debt.amount) || 0);
   return money(requiredPerOccurrence * Math.max(0, occurrenceCount));
 }
+
+export function upsertSnowballPlanById<T extends { id: string }>(plans: T[], nextPlan: T): T[] {
+  const existingIndex = plans.findIndex(plan => plan.id === nextPlan.id);
+  if (existingIndex < 0) return [...plans, nextPlan];
+  return plans.map(plan => plan.id === nextPlan.id ? nextPlan : plan);
+}
