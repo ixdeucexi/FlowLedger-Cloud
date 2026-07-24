@@ -9,12 +9,11 @@ import { useFonts } from "expo-font";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, BackHandler, Easing, Platform, StyleSheet, StyleProp, View, ViewStyle } from "react-native";
+import { Animated, BackHandler, Easing, Image, Platform, StyleSheet, StyleProp, Text, View, ViewStyle } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { AppLoadingIntro } from "@/components/AppLoadingIntro";
 import { LegalAcceptanceGate } from "@/components/LegalAcceptanceGate";
 import { PwaInstallPrompt } from "@/components/PwaInstallPrompt";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
@@ -106,7 +105,19 @@ function AuthObserver() {
 }
 
 function StartupScreen({ style }: { style?: StyleProp<ViewStyle> } = {}) {
-  return <AppLoadingIntro phase="app" style={style} />;
+  const colors = useColors();
+  return (
+    <Animated.View style={[styles.startup, { backgroundColor: colors.background }, style]}>
+      <Image
+        accessibilityIgnoresInvertColors
+        accessibilityLabel="FlowLedger"
+        source={require("../assets/images/startup_f_transparent.png")}
+        style={styles.startupIcon}
+        resizeMode="contain"
+      />
+      <Text style={[styles.startupTitle, { color: colors.foreground }]}>FlowLedger Algo</Text>
+    </Animated.View>
+  );
 }
 
 function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSplash: () => void }) {
@@ -267,5 +278,26 @@ const styles = StyleSheet.create({
   },
   startupOverlay: {
     ...StyleSheet.absoluteFillObject,
+  },
+  startup: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#050816",
+  },
+  startupIcon: {
+    width: 118,
+    height: 118,
+    borderRadius: 30,
+    marginBottom: 14,
+    shadowColor: "#38bdf8",
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  startupTitle: {
+    color: "#f8fafc",
+    fontSize: 20,
+    fontWeight: "800",
   },
 });
