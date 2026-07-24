@@ -186,7 +186,14 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
                     <Stack.Screen name="login" />
                     <Stack.Screen name="legal" />
                     <Stack.Screen name="setup" />
-                    <Stack.Screen name="snowball-plan" />
+                    <Stack.Screen
+                      name="snowball-plan"
+                      options={{
+                        animation: "slide_from_bottom",
+                        animationTypeForReplace: "pop",
+                        presentation: "modal",
+                      }}
+                    />
                     <Stack.Screen name="(tabs)" />
                   </Stack>
                 </MembershipProvider>

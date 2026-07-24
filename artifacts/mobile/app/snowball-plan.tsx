@@ -190,7 +190,7 @@ function SnowballPlanScreen() {
         await applyDebtSnowballPayment(preview, undefined, existingPayment?.id);
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.replace({
+      router.dismissTo({
         pathname: "/(tabs)/monthly",
         params: { openDate: paymentDate, openDateAt: String(Date.now()) },
       } as never);
