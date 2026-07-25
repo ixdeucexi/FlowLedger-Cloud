@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { allocationLabel, allocationTotal, buildCurrentMonthReviewQueue, buildForgottenBillDefaults, forgottenBillSettlement, groupPlannedExpenseAllocations, groupReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewAllocationsAreBalanced, reviewedBillMonthSettlement, reviewQueueAfterSkips, reviewSettlementSummary, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
+import { allocationLabel, allocationTotal, buildCurrentMonthReviewQueue, buildForgottenBillDefaults, forgottenBillSettlement, groupPlannedExpenseAllocations, groupReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewAllocationsAreBalanced, reviewedBillMonthSettlement, reviewQueueAfterSkips, reviewSettlementSummary, scheduledSnowballReviewTargets, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
 
 test("queues only active current-month posted Plaid transactions oldest first", () => {
   const queue = buildCurrentMonthReviewQueue([
@@ -146,6 +146,63 @@ test("Snowball plans appear with bills and debt in Review Center", () => {
 
   assert.deepEqual(grouped.bills.map(target => target.id), ["camera", "streaming"]);
   assert.equal(grouped.bills[0]?.type, "snowball");
+});
+
+test("scheduled Snowball calendar transactions are available to match", () => {
+  const targets = scheduledSnowballReviewTargets([
+    {
+      id: "camera-plan",
+      amount: -30,
+      date: "2026-07-24",
+      note: "Camera snowball",
+      category: "Debt",
+      source: "snowball_plan",
+      debt_applied_bill_id: "camera",
+    },
+    {
+      id: "ordinary",
+      amount: -30,
+      date: "2026-07-24",
+      note: "Ordinary activity",
+      category: "Debt",
+      source: "manual",
+      debt_applied_bill_id: "other",
+    },
+  ], "2026-07", new Map());
+
+  assert.deepEqual(targets, [{
+    type: "snowball",
+    id: "camera",
+    name: "Camera snowball",
+    category: "Debt",
+    plannedAmount: 30,
+    occurrenceDate: "2026-07-24",
+    isDebt: true,
+  }]);
+});
+
+test("completed scheduled Snowball occurrences are not offered again", () => {
+  const matches = new Map([
+    [occurrenceKey("camera", "2026-07-24"), {
+      type: "extra_principal" as const,
+      targetId: "camera",
+      occurrenceDate: "2026-07-24",
+      amount: 30,
+      plannedAmount: 30,
+      settlement: "exact" as const,
+    }],
+  ]);
+  const targets = scheduledSnowballReviewTargets([{
+    id: "camera-plan",
+    amount: -30,
+    date: "2026-07-24",
+    note: "Camera snowball",
+    category: "Debt",
+    source: "snowball_plan",
+    linked_bill_id: "camera",
+  }], "2026-07", matches);
+
+  assert.deepEqual(targets, []);
 });
 
 test("Snowball matches settle only their exact planned debt occurrence", () => {

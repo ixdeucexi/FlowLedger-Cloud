@@ -9,7 +9,6 @@ import { useAuth } from "@/context/AuthContext";
 import { useBudget } from "@/context/BudgetContext";
 import { SaveStatusBanner } from "@/components/SaveStatusBanner";
 import { DecisionDueModal } from "@/components/DecisionDueModal";
-import { AppLoadingIntro } from "@/components/AppLoadingIntro";
 import { FloLogo } from "@/components/FloLogo";
 import { PlanPreviewBanner } from "@/components/PlanPreviewBanner";
 import { useColors } from "@/hooks/useColors";
@@ -98,7 +97,8 @@ const DEMO_TOUR_STEPS = [
 ] as const;
 
 function BudgetLoadingScreen({ style }: { style?: StyleProp<ViewStyle> } = {}) {
-  return <AppLoadingIntro phase="plan" style={style} />;
+  const colors = useColors();
+  return <View style={[styles.loadingScreen, { backgroundColor: colors.background }, style]} />;
 }
 
 function BudgetLoadErrorScreen({ message, onRetry }: { message: string; onRetry: () => void }) {

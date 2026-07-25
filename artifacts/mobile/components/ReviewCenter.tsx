@@ -12,7 +12,7 @@ import type { Bill, Goal, ReconcileTransactionInput, Transaction } from "@/conte
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { confirmAction } from "@/lib/confirmAction";
-import { buildCurrentMonthReviewQueue, buildForgottenBillDefaults, forgottenBillSettlement, groupReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewQueueAfterSkips, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
+import { buildCurrentMonthReviewQueue, buildForgottenBillDefaults, forgottenBillSettlement, groupReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewQueueAfterSkips, scheduledSnowballReviewTargets, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
 import { isOpenSpendingBucket, spendingBucketSummary } from "@/lib/spendingBuckets";
 
 function todayIso() {
@@ -113,6 +113,7 @@ export function ReviewCenter() {
     const incomeMatches = matchedOccurrenceAllocations(transactions, "income");
     const snowballMatches = matchedOccurrenceAllocations(transactions, "extra_principal", "snowball");
     if (current.amount < 0) {
+      const snowballTargets = new Map<string, ReviewTarget>();
       getMonthlyBills(month, year).forEach(bill => {
         const days = getBillOccurrencesInMonth(bill, month, year);
         const monthlyTotal = getBillMonthlyTotal(bill, month, year);
@@ -138,7 +139,7 @@ export function ReviewCenter() {
                 ? Math.max(0, Number(previous.plannedAmount ?? allocation.payment) - Number(previous.amount || 0))
                 : 0;
             if (remaining <= 0.005) return;
-            candidates.push({
+            snowballTargets.set(occurrenceKey(allocation.billId, occurrenceDate), {
               type: "snowball",
               id: allocation.billId,
               name: `${allocation.billName} snowball`,
@@ -149,6 +150,14 @@ export function ReviewCenter() {
             });
           });
         });
+      scheduledSnowballReviewTargets(
+        transactions,
+        `${year}-${String(month + 1).padStart(2, "0")}`,
+        snowballMatches,
+      ).forEach(target => {
+        snowballTargets.set(occurrenceKey(target.id, target.occurrenceDate), target);
+      });
+      candidates.push(...snowballTargets.values());
       goals.filter(goal => goal.goal_type === "planned_expense" && isOpenSpendingBucket(goal) && goal.target_date?.startsWith(`${year}-${String(month + 1).padStart(2, "0")}`))
         .forEach(goal => candidates.push({
           type: "goal", id: goal.id, name: goal.name, category: "Planned spending",

@@ -1,3 +1,5 @@
+import { isScheduledSnowballPlanTransaction, snowballPaymentName } from "./debtPaymentPlan";
+
 export interface ReviewAllocationLike {
   type: "bill" | "income" | "planned_expense" | "category" | "transfer" | "extra_principal";
   amount: number;
@@ -24,6 +26,8 @@ export interface ReviewTransactionLike {
   user_edited_at?: string;
   pending?: boolean;
   removed_at?: string;
+  linked_bill_id?: string | null;
+  debt_applied_bill_id?: string | null;
 }
 
 export interface PlannedExpenseAllocationGroup {
@@ -281,6 +285,50 @@ export function groupReviewTargets(targets: RankedReviewTarget[]) {
     bills: targets.filter(target => target.type === "bill" || target.type === "snowball"),
     income: targets.filter(target => target.type === "income"),
   };
+}
+
+export function scheduledSnowballReviewTargets(
+  transactions: ReviewTransactionLike[],
+  monthPrefix: string,
+  matches: Map<string, ReviewAllocationLike>,
+): ReviewTarget[] {
+  const targets = new Map<string, ReviewTarget>();
+
+  transactions.forEach(transaction => {
+    if (
+      transaction.removed_at
+      || transaction.pending
+      || transaction.amount >= 0
+      || !transaction.date.startsWith(monthPrefix)
+      || !isScheduledSnowballPlanTransaction(transaction)
+    ) return;
+
+    const debtId = transaction.debt_applied_bill_id ?? transaction.linked_bill_id;
+    if (!debtId) return;
+
+    const occurrenceDate = transaction.date.slice(0, 10);
+    const plannedAmount = Math.abs(Number(transaction.amount) || 0);
+    const previous = matches.get(occurrenceKey(debtId, occurrenceDate));
+    const remaining = !previous
+      ? plannedAmount
+      : previous.settlement === "partial"
+        ? Math.max(0, Number(previous.plannedAmount ?? plannedAmount) - Number(previous.amount || 0))
+        : 0;
+    if (remaining <= 0.005) return;
+
+    const name = snowballPaymentName(transaction, "Debt");
+    targets.set(occurrenceKey(debtId, occurrenceDate), {
+      type: "snowball",
+      id: debtId,
+      name: `${name} snowball`,
+      category: "Debt",
+      plannedAmount: remaining,
+      occurrenceDate,
+      isDebt: true,
+    });
+  });
+
+  return Array.from(targets.values());
 }
 
 export type ReviewedBillMonthSettlement = {
