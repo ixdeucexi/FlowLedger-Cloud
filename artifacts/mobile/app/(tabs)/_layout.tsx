@@ -98,7 +98,11 @@ const DEMO_TOUR_STEPS = [
 
 function BudgetLoadingScreen({ style }: { style?: StyleProp<ViewStyle> } = {}) {
   const colors = useColors();
-  return <View style={[styles.loadingScreen, { backgroundColor: colors.background }, style]} />;
+  return (
+    <View style={[styles.loadingScreen, { backgroundColor: colors.background }, style]}>
+      <Text style={[styles.loadingPlanText, { color: colors.mutedForeground }]}>Loading your plan…</Text>
+    </View>
+  );
 }
 
 function BudgetLoadErrorScreen({ message, onRetry }: { message: string; onRetry: () => void }) {
@@ -597,6 +601,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#050816",
+  },
+  loadingPlanText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 15,
+    letterSpacing: 0.2,
   },
   loadingLogo: {
     width: 118,
