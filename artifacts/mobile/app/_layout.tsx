@@ -116,6 +116,7 @@ function StartupScreen({ style }: { style?: StyleProp<ViewStyle> } = {}) {
         resizeMode="contain"
       />
       <Text style={[styles.startupTitle, { color: colors.foreground }]}>FlowLedger Algo</Text>
+      <Text style={[styles.startupStatus, { color: colors.mutedForeground }]}>Loading your plan…</Text>
     </Animated.View>
   );
 }
@@ -299,5 +300,11 @@ const styles = StyleSheet.create({
     color: "#f8fafc",
     fontSize: 20,
     fontWeight: "800",
+  },
+  startupStatus: {
+    marginTop: 8,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 14,
+    letterSpacing: 0.2,
   },
 });
