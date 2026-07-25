@@ -17,7 +17,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LegalAcceptanceGate } from "@/components/LegalAcceptanceGate";
 import { PwaInstallPrompt } from "@/components/PwaInstallPrompt";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
-import { BudgetProvider } from "@/context/BudgetContext";
+import { BudgetProvider, useBudget } from "@/context/BudgetContext";
 import { MembershipProvider } from "@/context/MembershipContext";
 import { ThemeProvider, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
@@ -123,14 +123,15 @@ function StartupScreen({ style }: { style?: StyleProp<ViewStyle> } = {}) {
 
 function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSplash: () => void }) {
   const colors = useColors();
-  const { loading: authLoading } = useAuth();
+  const { session, loading: authLoading } = useAuth();
+  const { loading: budgetLoading } = useBudget();
   const { ready: themeReady } = useThemeMode();
   const router = useRouter();
   const [minimumStartupReady, setMinimumStartupReady] = useState(false);
   const [showStartupOverlay, setShowStartupOverlay] = useState(true);
   const startupOpacity = useRef(new Animated.Value(1)).current;
   const appOpacity = useRef(new Animated.Value(0)).current;
-  const servicesReady = fontsReady && !authLoading && themeReady;
+  const servicesReady = fontsReady && !authLoading && themeReady && (!session || !budgetLoading);
   const appReady = servicesReady && minimumStartupReady;
 
   useEffect(() => {
@@ -191,25 +192,21 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
           <>
             <AuthObserver />
             <GestureHandlerRootView style={{ flex: 1 }}>
-              <BudgetProvider>
-                <MembershipProvider>
-                  <Stack screenOptions={{ headerShown: false }}>
-                    <Stack.Screen name="index" />
-                    <Stack.Screen name="login" />
-                    <Stack.Screen name="legal" />
-                    <Stack.Screen name="setup" />
-                    <Stack.Screen
-                      name="snowball-plan"
-                      options={{
-                        animation: "slide_from_bottom",
-                        animationTypeForReplace: "pop",
-                        presentation: "modal",
-                      }}
-                    />
-                    <Stack.Screen name="(tabs)" />
-                  </Stack>
-                </MembershipProvider>
-              </BudgetProvider>
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="index" />
+                <Stack.Screen name="login" />
+                <Stack.Screen name="legal" />
+                <Stack.Screen name="setup" />
+                <Stack.Screen
+                  name="snowball-plan"
+                  options={{
+                    animation: "slide_from_bottom",
+                    animationTypeForReplace: "pop",
+                    presentation: "modal",
+                  }}
+                />
+                <Stack.Screen name="(tabs)" />
+              </Stack>
               <PwaInstallPrompt />
             </GestureHandlerRootView>
             <LegalAcceptanceGate />
@@ -260,7 +257,11 @@ export default function RootLayout() {
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
             <AuthProvider>
-              <RootNavigator fontsReady={fontsReady} hideSplash={hideSplash} />
+              <BudgetProvider>
+                <MembershipProvider>
+                  <RootNavigator fontsReady={fontsReady} hideSplash={hideSplash} />
+                </MembershipProvider>
+              </BudgetProvider>
             </AuthProvider>
           </QueryClientProvider>
         </ThemeProvider>

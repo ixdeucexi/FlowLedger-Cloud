@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Tabs, useRouter, useSegments } from "expo-router";
 import React from "react";
-import { Animated, Easing, Image, Platform, Pressable, StyleSheet, StyleProp, Text, useWindowDimensions, View, ViewStyle } from "react-native";
+import { Image, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View, ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/context/AuthContext";
@@ -29,7 +29,6 @@ import { buildOverdueBillOccurrences, groupOverdueBills } from "@/lib/overdueBil
 import { planningTabPresentation } from "@/lib/planningMode";
 import { tabBarDisplayLabel, tabBarLabelSize } from "@/lib/mobileLayout";
 
-const MIN_BUDGET_LOADING_MS = 220;
 
 function todayIsoDate() {
   const now = new Date();
@@ -95,11 +94,6 @@ const DEMO_TOUR_STEPS = [
     detail: "Manage accounts, setup, data, and preferences.",
   },
 ] as const;
-
-function BudgetLoadingScreen({ style }: { style?: StyleProp<ViewStyle> } = {}) {
-  const colors = useColors();
-  return <View style={[styles.loadingScreen, { backgroundColor: colors.background }, style]} />;
-}
 
 function BudgetLoadErrorScreen({ message, onRetry }: { message: string; onRetry: () => void }) {
   const colors = useColors();
@@ -363,14 +357,10 @@ function TabContent() {
   const { width: viewportWidth } = useWindowDimensions();
   const colors = useColors();
   const {
-    loading, loadError, retryBudgetLoad, demoMode, transactions, pendingBankTransactions, settings,
+    loadError, retryBudgetLoad, demoMode, transactions, pendingBankTransactions, settings,
     getMonthlyBills, getBillOccurrencesInMonth, getBillEffectiveMonthlyTotal, getPaidAmount,
   } = useBudget();
   const { newFeedbackCount } = useFeedbackBadge();
-  const [minimumBudgetLoadingReady, setMinimumBudgetLoadingReady] = React.useState(false);
-  const [showLoadingOverlay, setShowLoadingOverlay] = React.useState(true);
-  const loadingOpacity = React.useRef(new Animated.Value(1)).current;
-  const tabsOpacity = React.useRef(new Animated.Value(0)).current;
   const themeMode = useEffectiveThemeMode();
   const isDark = themeMode === "dark";
   const isIOS = Platform.OS === "ios";
@@ -400,45 +390,11 @@ function TabContent() {
     return groupOverdueBills(occurrences).length;
   }, [getBillEffectiveMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, getPaidAmount]);
 
-  React.useEffect(() => {
-    const t = setTimeout(() => setMinimumBudgetLoadingReady(true), MIN_BUDGET_LOADING_MS);
-    return () => clearTimeout(t);
-  }, []);
-
-  const contentReady = !loading && minimumBudgetLoadingReady;
-
-  React.useEffect(() => {
-    if (!contentReady) {
-      loadingOpacity.setValue(1);
-      tabsOpacity.setValue(0);
-      setShowLoadingOverlay(true);
-      return;
-    }
-
-    setShowLoadingOverlay(true);
-    Animated.parallel([
-      Animated.timing(loadingOpacity, {
-        toValue: 0,
-        duration: 360,
-        easing: Easing.inOut(Easing.cubic),
-        useNativeDriver: Platform.OS !== "web",
-      }),
-      Animated.timing(tabsOpacity, {
-        toValue: 1,
-        duration: 360,
-        easing: Easing.inOut(Easing.cubic),
-        useNativeDriver: Platform.OS !== "web",
-      }),
-    ]).start(() => setShowLoadingOverlay(false));
-  }, [contentReady, loadingOpacity, tabsOpacity]);
-
   if (loadError) return <BudgetLoadErrorScreen message={loadError} onRetry={retryBudgetLoad} />;
 
   return (
     <View style={[styles.tabTransitionRoot, { backgroundColor: colors.background }]}>
-      <Animated.View style={[styles.tabTransitionContent, { opacity: tabsOpacity }]}>
-        {contentReady ? (
-          <>
+      <View style={styles.tabTransitionContent}>
             <Tabs
           backBehavior="history"
           detachInactiveScreens={false}
@@ -553,12 +509,7 @@ function TabContent() {
             <SaveStatusBanner />
             <DecisionDueModal />
             <FloDemo />
-          </>
-        ) : null}
-      </Animated.View>
-      {showLoadingOverlay ? (
-        <BudgetLoadingScreen style={[styles.loadingOverlay, { opacity: loadingOpacity }]} />
-      ) : null}
+      </View>
     </View>
   );
 }
@@ -588,9 +539,6 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_800ExtraBold",
     fontSize: 10,
     lineHeight: 18,
-  },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
   },
   loadingScreen: {
     flex: 1,
