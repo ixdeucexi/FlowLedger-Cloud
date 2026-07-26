@@ -1,10 +1,11 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 import colors from "@/constants/colors";
 import { useColors } from "@/hooks/useColors";
 import type { ReminderItem, ReportsSummary } from "@/lib/competitiveGrowth";
+import { shouldStackSettingsMetrics } from "@/lib/settingsLayout";
 
 interface ReportsInsightsViewProps {
   monthLabel: string;
@@ -24,6 +25,8 @@ export function ReportsInsightsView({
   onOpenBills,
 }: ReportsInsightsViewProps) {
   const c = useColors();
+  const { width: viewportWidth } = useWindowDimensions();
+  const stackCompactContent = shouldStackSettingsMetrics(viewportWidth);
   const hasActivity = summary.income > 0 || summary.spending > 0;
   const moneyKept = summary.net >= 0;
   const spendingPercent = summary.income > 0
@@ -41,8 +44,8 @@ export function ReportsInsightsView({
   return (
     <View style={styles.page}>
       <View style={[styles.hero, { backgroundColor: c.card, borderColor: c.border }]}>
-        <View style={styles.heroHeading}>
-          <View>
+        <View style={[styles.heroHeading, stackCompactContent && styles.heroHeadingCompact]}>
+          <View style={styles.heroCopy}>
             <Text style={[styles.eyebrow, { color: c.primary }]}>{monthLabel.toUpperCase()}</Text>
             <Text style={[styles.heroTitle, { color: c.foreground }]}>Your month at a glance</Text>
           </View>
@@ -65,7 +68,7 @@ export function ReportsInsightsView({
               : "more went out than came in"}
         </Text>
 
-        <View style={styles.metricRow}>
+        <View style={[styles.metricRow, stackCompactContent && styles.metricRowCompact]}>
           <Metric label="Money in" value={money(summary.income)} color={c.success} background={c.muted} />
           <Metric label="Money out" value={money(summary.spending)} color={c.destructive} background={c.muted} />
         </View>
@@ -256,6 +259,8 @@ const styles = StyleSheet.create({
   page: { gap: 12 },
   hero: { borderWidth: 1, borderRadius: colors.radius, padding: 18 },
   heroHeading: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10 },
+  heroHeadingCompact: { flexDirection: "column" },
+  heroCopy: { flex: 1, minWidth: 0 },
   eyebrow: { fontFamily: "Inter_700Bold", fontSize: 11, letterSpacing: 1 },
   heroTitle: { fontFamily: "Inter_700Bold", fontSize: 22, marginTop: 3 },
   statusPill: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999 },
@@ -263,6 +268,7 @@ const styles = StyleSheet.create({
   netValue: { fontFamily: "Inter_700Bold", fontSize: 42, letterSpacing: -1.2, marginTop: 22 },
   netCaption: { fontFamily: "Inter_400Regular", fontSize: 13, marginTop: 2 },
   metricRow: { flexDirection: "row", gap: 10, marginTop: 18 },
+  metricRowCompact: { flexDirection: "column" },
   metric: { flex: 1, borderRadius: 14, padding: 13 },
   metricLabel: { fontFamily: "Inter_600SemiBold", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6 },
   metricValue: { fontFamily: "Inter_700Bold", fontSize: 21, marginTop: 5 },

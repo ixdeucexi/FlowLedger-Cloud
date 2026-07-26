@@ -290,7 +290,7 @@ export function groupReviewTargets(targets: RankedReviewTarget[]) {
 export function scheduledSnowballReviewTargets(
   transactions: ReviewTransactionLike[],
   monthPrefix: string,
-  matches: Map<string, ReviewAllocationLike>,
+  _matches: Map<string, ReviewAllocationLike>,
 ): ReviewTarget[] {
   const targets = new Map<string, ReviewTarget>();
 
@@ -307,13 +307,10 @@ export function scheduledSnowballReviewTargets(
     if (!debtId) return;
 
     const occurrenceDate = transaction.date.slice(0, 10);
-    const plannedAmount = Math.abs(Number(transaction.amount) || 0);
-    const previous = matches.get(occurrenceKey(debtId, occurrenceDate));
-    const remaining = !previous
-      ? plannedAmount
-      : previous.settlement === "partial"
-        ? Math.max(0, Number(previous.plannedAmount ?? plannedAmount) - Number(previous.amount || 0))
-        : 0;
+    // Scheduled plan rows store their current unmatched remainder. Prior
+    // reconciliations are still useful for summaries, but subtracting them
+    // here would count a partial payment twice.
+    const remaining = Math.abs(Number(transaction.amount) || 0);
     if (remaining <= 0.005) return;
 
     const name = snowballPaymentName(transaction, "Debt");

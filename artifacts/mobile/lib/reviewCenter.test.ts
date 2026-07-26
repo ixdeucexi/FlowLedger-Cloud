@@ -181,17 +181,31 @@ test("scheduled Snowball calendar transactions are available to match", () => {
   }]);
 });
 
-test("completed scheduled Snowball occurrences are not offered again", () => {
+test("partial scheduled Snowball occurrences use the stored remainder exactly once", () => {
   const matches = new Map([
     [occurrenceKey("camera", "2026-07-24"), {
       type: "extra_principal" as const,
       targetId: "camera",
       occurrenceDate: "2026-07-24",
       amount: 30,
-      plannedAmount: 30,
-      settlement: "exact" as const,
+      plannedAmount: 100,
+      settlement: "partial" as const,
     }],
   ]);
+  const targets = scheduledSnowballReviewTargets([{
+    id: "camera-plan",
+    amount: -70,
+    date: "2026-07-24",
+    note: "Camera snowball",
+    category: "Debt",
+    source: "snowball_plan",
+    linked_bill_id: "camera",
+  }], "2026-07", matches);
+
+  assert.equal(targets[0]?.plannedAmount, 70);
+});
+
+test("removed scheduled Snowball occurrences are not offered again", () => {
   const targets = scheduledSnowballReviewTargets([{
     id: "camera-plan",
     amount: -30,
@@ -200,7 +214,8 @@ test("completed scheduled Snowball occurrences are not offered again", () => {
     category: "Debt",
     source: "snowball_plan",
     linked_bill_id: "camera",
-  }], "2026-07", matches);
+    removed_at: "2026-07-24T12:00:00Z",
+  }], "2026-07", new Map());
 
   assert.deepEqual(targets, []);
 });

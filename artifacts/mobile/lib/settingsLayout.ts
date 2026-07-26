@@ -27,3 +27,7 @@ export function getForecastSafetyLayout(viewportWidth: number): ForecastSafetyLa
 export function isCompactSettingsLayout(viewportWidth: number) {
   return viewportWidth < 320;
 }
+
+export function shouldStackSettingsMetrics(viewportWidth: number) {
+  return isCompactSettingsLayout(viewportWidth);
+}

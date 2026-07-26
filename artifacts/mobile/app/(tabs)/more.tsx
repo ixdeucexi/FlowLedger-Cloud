@@ -64,7 +64,7 @@ import {
 import { DEFAULT_ONBOARDING_PREFERENCES } from "@/lib/onboarding";
 import { loadOnboardingPreferences, readOnboardingPreferences, saveOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
-import { getForecastSafetyLayout, isCompactSettingsLayout } from "@/lib/settingsLayout";
+import { getForecastSafetyLayout, isCompactSettingsLayout, shouldStackSettingsMetrics } from "@/lib/settingsLayout";
 import {
   SETTINGS_SECTIONS,
   attentionCountStatus,
@@ -2399,7 +2399,7 @@ export default function MoreScreen() {
           </Text>
         </View>
         {growthNotice ? <Text style={[styles.feedbackNotice, { color: c.success }]}>{growthNotice}</Text> : null}
-        <View style={styles.growthMetricGrid}>
+        <View style={[styles.growthMetricGrid, shouldStackSettingsMetrics(viewportWidth) && styles.growthMetricGridCompact]}>
           <View style={[styles.growthMetric, { backgroundColor: c.muted }]}>
             <Text style={[styles.growthMetricValue, { color: c.primary }]}>{reviewTransactions.length}</Text>
             <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>Items to check</Text>
@@ -2507,7 +2507,7 @@ export default function MoreScreen() {
             I use this screen for recurring charges that need cleanup. Detected Activity patterns show first; subscription-style bills already in your Bills tab are shown below so you know they are being tracked.
           </Text>
         </View>
-        <View style={styles.growthMetricGrid}>
+        <View style={[styles.growthMetricGrid, shouldStackSettingsMetrics(viewportWidth) && styles.growthMetricGridCompact]}>
           <View style={[styles.growthMetric, { backgroundColor: c.muted }]}>
             <Text style={[styles.growthMetricValue, { color: c.primary }]}>${subscriptions.reduce((sum, item) => sum + item.monthlyEquivalent, 0).toFixed(0)}</Text>
             <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>Monthly</Text>
@@ -3311,6 +3311,7 @@ const styles = StyleSheet.create({
   growthScoreText: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
   growthHeaderCopy: { flex: 1, gap: 4 },
   growthMetricGrid: { flexDirection: "row", gap: 10, marginBottom: 12 },
+  growthMetricGridCompact: { flexDirection: "column" },
   growthMetric: { flex: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 11 },
   growthMetricValue: { fontSize: 18, fontFamily: "Inter_800ExtraBold" },
   growthMetricLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7, marginTop: 2, textTransform: "uppercase" },

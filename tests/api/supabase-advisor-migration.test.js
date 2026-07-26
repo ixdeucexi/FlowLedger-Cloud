@@ -28,6 +28,7 @@ const repairedVersions = {
   allow_members_leave_personal_household: "20260720054113",
   stabilize_monthly_reconciliation_audit: "20260720065731",
   exclude_single_income_occurrence: "20260723062723",
+  reschedule_snowball_plan_across_months: "20260724153744",
 };
 
 test("migration versions are unique and repaired names match production history", async () => {
@@ -117,5 +118,41 @@ test("transfer foundation restores the missing grouping key and lookup index", a
   assert.match(
     migration,
     /create index if not exists transactions_user_transfer_group_idx[\s\S]*on transactions\(user_id, transfer_group_id\)/i,
+  );
+});
+
+test("partial scheduled Snowball reconciliation keeps one canonical remainder", async () => {
+  const migration = await readFile(
+    path.join(migrationsDir, "20260726075743_keep_partial_snowball_plan_exactly_once.sql"),
+    "utf8",
+  );
+
+  assert.match(
+    migration,
+    /v_remaining := case[\s\S]*when v_scheduled_plan\.id is not null then v_plan_amount/i,
+  );
+  assert.match(
+    migration,
+    /'scheduledPlanOriginalAmount', v_plan_original_amount/i,
+  );
+  assert.match(
+    migration,
+    /set amount = -round\(greatest\(0, v_remaining - v_primary\), 2\),[\s\S]*removed_at = null/i,
+  );
+  assert.match(
+    migration,
+    /coalesce\(sum\(\(item ->> 'amount'\)::numeric\), 0\)[\s\S]*reconciliation\.transaction_id <> old\.transaction_id/i,
+  );
+  assert.match(
+    migration,
+    /set amount = -round\(v_plan_remaining, 2\),[\s\S]*removed_at = null/i,
+  );
+  assert.match(
+    migration,
+    /update public\.transactions plan[\s\S]*source = 'snowball_plan'[\s\S]*removed_at is null/i,
+  );
+  assert.match(
+    migration,
+    /security definer[\s\S]*set search_path = ''/i,
   );
 });
