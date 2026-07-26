@@ -739,7 +739,7 @@ export default function DashboardScreen() {
       if (action === "bill")          setAddBillVisible(true);
       else if (action === "income")   router.push({ pathname: "/(tabs)/more", params: { section: "money", add: "income" } } as any);
       else if (action === "expense")  router.push("/(tabs)/monthly" as any);
-      else if (action === "debt")     navigate("debt", "bills");
+      else if (action === "snowball") router.push("/snowball-plan" as any);
       else if (action === "goal")     { setEditGoal(null); setGoalModalVisible(true); }
       else if (action === "afford") {} // handled inline
     }, 250);
@@ -1432,9 +1432,11 @@ export default function DashboardScreen() {
               { id: "income",  icon: "trending-up" as const, label: "Add Income",        sub: "Log a salary, freelance, or other",    col: c.success     },
               { id: "expense", icon: "shopping-bag"as const, label: "Add a Transaction", sub: "Record a one-time expense or income",  col: c.warning     },
               { id: "goal",    icon: "target"      as const, label: "Set Aside Money",   sub: "Create a savings goal or spending bucket", col: "#8b5cf6" },
-              { id: "debt",    icon: "credit-card" as const, label: "Pay Down Debt",     sub: "Go to snowball / avalanche planner",   col: c.destructive },
+              { id: "snowball", icon: "trending-down" as const, label: "Snowball Payment", sub: "Plan or change an extra debt payment", col: c.destructive },
             ].map(item => (
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={item.label}
                 key={item.id}
                 onPress={() => openAction(item.id)}
                 style={({ pressed }) => [styles.actionRow, { borderColor: c.border, opacity: pressed ? 0.75 : 1 }]}
