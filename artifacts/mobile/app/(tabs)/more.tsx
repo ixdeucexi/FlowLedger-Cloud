@@ -18,7 +18,6 @@ import { AccountModal } from "@/components/AccountModal";
 import { AdminMembershipTools } from "@/components/AdminMembershipTools";
 import { AppText } from "@/components/AppText";
 import { FloLogo } from "@/components/FloLogo";
-import { FamilyMoneyView } from "@/components/FamilyMoneyView";
 import { FeedbackManageModal } from "@/components/FeedbackManageModal";
 import { IncomeModal } from "@/components/IncomeModal";
 import { HouseholdMemberActionsModal } from "@/components/HouseholdMemberActionsModal";
@@ -94,7 +93,6 @@ import {
   buildSmartReminders,
   detectSubscriptions,
   evaluateForecastReadiness,
-  type ChildProfile,
   type SubscriptionCandidate,
 } from "@/lib/competitiveGrowth";
 
@@ -120,17 +118,6 @@ type SubscriptionDecision = "keep" | "not_subscription" | "cancelled" | "bill_cr
 type SubscriptionDecisionRow = {
   merchant: string;
   status: "review" | "keep" | "cancel_manually" | "convert_to_bill" | "not_subscription";
-};
-
-type ChildProfileRow = {
-  id: string;
-  name: string;
-  allowance_amount: number | null;
-  allowance_frequency: ChildProfile["allowanceFrequency"] | null;
-  savings_goal: number | null;
-  current_savings: number | null;
-  spending_limit: number | null;
-  is_active: boolean | null;
 };
 
 function normalizeStorageMap<T extends string>(value: unknown): Record<string, T> {
@@ -173,22 +160,6 @@ function stableUuidFromString(seed: string) {
   return `${chunks.slice(0, 8)}-${chunks.slice(8, 12)}-4${chunks.slice(13, 16)}-a${chunks.slice(17, 20)}-${chunks.slice(20, 32)}`;
 }
 
-function makeClientUuid(label: string) {
-  return stableUuidFromString(`${label}-${Date.now()}-${Math.random()}`);
-}
-
-function numberOrNull(value: unknown): number | null {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : null;
-}
-
-function normalizeChildProfileIds(profiles: ChildProfile[]) {
-  return profiles.map(profile => ({
-    ...profile,
-    id: isUuid(profile.id) ? profile.id : stableUuidFromString(`child-profile:${profile.id}:${profile.name}`),
-  }));
-}
-
 function subscriptionStatusToDecision(status: SubscriptionDecisionRow["status"]): SubscriptionDecision | null {
   if (status === "keep") return "keep";
   if (status === "cancel_manually") return "cancelled";
@@ -201,35 +172,6 @@ function subscriptionDecisionToStatus(decision: SubscriptionDecision): Subscript
   if (decision === "cancelled") return "cancel_manually";
   if (decision === "bill_created") return "convert_to_bill";
   return decision;
-}
-
-function mapChildRow(row: ChildProfileRow): ChildProfile {
-  return {
-    id: row.id,
-    name: row.name,
-    allowanceAmount: numberOrNull(row.allowance_amount),
-    allowanceFrequency: row.allowance_frequency,
-    savingsGoal: numberOrNull(row.savings_goal),
-    currentSavings: numberOrNull(row.current_savings) ?? 0,
-    spendingLimit: numberOrNull(row.spending_limit),
-  };
-}
-
-function mapChildForSupabase(profile: ChildProfile, userId: string, householdId: string) {
-  const id = isUuid(profile.id) ? profile.id : stableUuidFromString(`child-profile:${profile.id}:${profile.name}`);
-  return {
-    id,
-    household_id: householdId,
-    owner_user_id: userId,
-    name: profile.name,
-    allowance_amount: profile.allowanceAmount ?? null,
-    allowance_frequency: profile.allowanceFrequency ?? null,
-    savings_goal: profile.savingsGoal ?? null,
-    current_savings: profile.currentSavings ?? 0,
-    spending_limit: profile.spendingLimit ?? null,
-    is_active: true,
-    updated_at: new Date().toISOString(),
-  };
 }
 
 const VISIBLE_SETTINGS_SECTIONS = SETTINGS_SECTIONS;
@@ -444,7 +386,6 @@ export default function MoreScreen() {
   const [feedbackManageBusy, setFeedbackManageBusy] = useState(false);
   const [subscriptionDecisions, setSubscriptionDecisions] = useState<Record<string, SubscriptionDecision>>({});
   const [growthNotice, setGrowthNotice] = useState<string | null>(null);
-  const [childProfiles, setChildProfiles] = useState<ChildProfile[]>([]);
   const [backupExported, setBackupExported] = useState(() => {
     try { return Platform.OS === "web" && globalThis.localStorage?.getItem(BACKUP_COMPLETE_KEY) === "true"; }
     catch { return false; }
@@ -452,9 +393,6 @@ export default function MoreScreen() {
   const [signingOut, setSigningOut] = useState(false);
   const inviteRoles = useMemo(() => householdInviteRolesFor(activeHousehold?.role), [activeHousehold?.role]);
   const subscriptionDecisionStorageKey = user?.id ? `flowledger_subscription_decisions_${user.id}` : "flowledger_subscription_decisions_guest";
-  const childProfileStorageKey = activeHousehold?.householdId
-    ? `flowledger_child_profiles_${activeHousehold.householdId}`
-    : user?.id ? `flowledger_child_profiles_${user.id}` : "flowledger_child_profiles_guest";
   const latestIncomeChange = useMemo(() => incomes
     .map(income => ({ change: getLatestIncomeChange(income), income }))
     .filter((entry): entry is { change: NonNullable<ReturnType<typeof getLatestIncomeChange>>; income: IncomeItem } => Boolean(entry.change))
@@ -562,33 +500,6 @@ export default function MoreScreen() {
       cancelled = true;
     };
   }, [activeHousehold?.householdId, subscriptionDecisionStorageKey, user?.id]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const value = await AsyncStorage.getItem(childProfileStorageKey).catch(() => null);
-      if (!cancelled) {
-        const parsed = value ? JSON.parse(value) : [];
-        setChildProfiles(Array.isArray(parsed) ? normalizeChildProfileIds(parsed) : []);
-      }
-      if (!user?.id || !activeHousehold?.householdId) return;
-      const { data, error } = await supabase
-        .from("child_profiles")
-        .select("id,name,allowance_amount,allowance_frequency,savings_goal,current_savings,spending_limit,is_active")
-        .eq("household_id", activeHousehold.householdId)
-        .eq("is_active", true)
-        .order("created_at", { ascending: false });
-      if (cancelled || error || !data) return;
-      const mapped = (data as ChildProfileRow[]).map(mapChildRow);
-      setChildProfiles(mapped);
-      await AsyncStorage.setItem(childProfileStorageKey, JSON.stringify(mapped)).catch(() => undefined);
-    })().catch(() => {
-      if (!cancelled) setChildProfiles([]);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeHousehold?.householdId, childProfileStorageKey, user?.id]);
 
   useEffect(() => {
     if (inviteRoles.length > 0 && !inviteRoles.includes(householdInviteRole)) {
@@ -1048,7 +959,6 @@ export default function MoreScreen() {
   const hubStatuses = useMemo<Partial<Record<SettingsDestinationId, SettingsStatus>>>(() => ({
     accounts: { label: formatCountStatus(activeAccounts.length, "account") },
     goals: { label: formatCountStatus(goals.length, "goal") },
-    children: { label: formatCountStatus(childProfiles.length, "profile") },
     review: attentionCountStatus(reviewTransactionCount, "Clear", "to review", "to review"),
     subscriptions: { label: `${subscriptions.length} found` },
     reports: { label: formatCountStatus(smartReminders.length, "reminder") },
@@ -1065,7 +975,6 @@ export default function MoreScreen() {
   }), [
     activeAccounts.length,
     backupExported,
-    childProfiles.length,
     deletedTransactions.length,
     goals.length,
     membershipStatusLabel,
@@ -1102,17 +1011,6 @@ export default function MoreScreen() {
       last_reviewed_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });
-    if (error) return;
-  };
-
-  const saveChildProfiles = async (next: ChildProfile[]) => {
-    const normalized = normalizeChildProfileIds(next);
-    setChildProfiles(normalized);
-    await AsyncStorage.setItem(childProfileStorageKey, JSON.stringify(normalized)).catch(() => undefined);
-    if (!user?.id || !activeHousehold?.householdId || !canEditHousehold) return;
-    const rows = normalized.map(profile => mapChildForSupabase(profile, user.id, activeHousehold.householdId));
-    if (!rows.length) return;
-    const { error } = await supabase.from("child_profiles").upsert(rows);
     if (error) return;
   };
 
@@ -1192,52 +1090,6 @@ export default function MoreScreen() {
           Alert.alert("Couldn’t fund goal", error instanceof Error ? error.message : "Try again.");
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         }
-      },
-    });
-  };
-
-  const handleAddChildProfile = async (input: {
-    name: string;
-    allowanceAmount: number | null;
-    savingsGoal: number | null;
-  }) => {
-    const next: ChildProfile = {
-      id: makeClientUuid("child-profile"),
-      name: input.name,
-      allowanceAmount: input.allowanceAmount,
-      allowanceFrequency: input.allowanceAmount ? "weekly" : null,
-      savingsGoal: input.savingsGoal,
-      currentSavings: 0,
-      spendingLimit: 0,
-    };
-    await saveChildProfiles([next, ...childProfiles]);
-    setGrowthNotice(`${input.name}'s money plan is ready.`);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  };
-
-  const handleUpdateChildProfile = async (profile: ChildProfile) => {
-    await saveChildProfiles(childProfiles.map(item => item.id === profile.id ? profile : item));
-    setGrowthNotice(`${profile.name}'s money was updated.`);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  };
-
-  const handleRemoveChildProfile = (profile: ChildProfile) => {
-    confirmAction({
-      title: "Remove child profile?",
-      message: `This removes ${profile.name}'s money plan from this household.`,
-      confirmText: "Remove",
-      destructive: true,
-      onConfirm: async () => {
-        await saveChildProfiles(childProfiles.filter(item => item.id !== profile.id));
-        if (user?.id && activeHousehold?.householdId && canEditHousehold && isUuid(profile.id)) {
-          const { error } = await supabase
-            .from("child_profiles")
-            .update({ is_active: false, updated_at: new Date().toISOString() })
-            .eq("id", profile.id)
-            .eq("household_id", activeHousehold.householdId);
-          if (error) return;
-        }
-        setGrowthNotice("Child profile removed.");
       },
     });
   };
@@ -2641,17 +2493,6 @@ export default function MoreScreen() {
           <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Add a goal to build its funding plan.</Text>
         )}
       </View>
-      </>}
-
-      {activeSettingsSection === "children" && <>
-      <FamilyMoneyView
-        profiles={childProfiles}
-        canEdit={canEditHousehold}
-        notice={growthNotice}
-        onAdd={handleAddChildProfile}
-        onUpdate={handleUpdateChildProfile}
-        onRemove={handleRemoveChildProfile}
-      />
       </>}
 
       {activeSettingsSection === "backup" && <>

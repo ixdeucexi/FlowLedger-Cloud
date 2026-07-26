@@ -3,7 +3,6 @@ import test from "node:test";
 
 import {
   applyTransactionRules,
-  buildChildMoneySummary,
   buildGoalFundingPlans,
   buildReportsSummary,
   buildReviewQueue,
@@ -115,26 +114,4 @@ test("builds reminders", () => {
   assert.ok(reminders.some(item => item.type === "low_balance"));
   assert.ok(reminders.some(item => item.type === "transaction_review"));
 
-});
-
-test("child summaries stay limited and parent-safe", () => {
-  const summary = buildChildMoneySummary([
-    { id: "child", name: "Avery", currentSavings: 25, savingsGoal: 100 },
-  ]);
-
-  assert.equal(summary[0].progress, 25);
-  assert.equal(summary[0].saved, 25);
-  assert.equal(summary[0].spendAvailable, 0);
-  assert.equal(summary[0].status, "needs_money");
-  assert.match(summary[0].message, /\$25/);
-});
-
-test("child summaries separate spend money from savings", () => {
-  const summary = buildChildMoneySummary([
-    { id: "child", name: "Avery", currentSavings: 30, spendingLimit: 20, savingsGoal: 100 },
-  ]);
-
-  assert.equal(summary[0].total, 50);
-  assert.equal(summary[0].status, "ready");
-  assert.equal(summary[0].progress, 30);
 });

@@ -11,7 +11,6 @@ export type SettingsSectionId =
   | "subscriptions"
   | "reports"
   | "goals"
-  | "children"
   | "help"
   | "backup"
   | "deleted"
@@ -44,7 +43,6 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
   { id: "plaid", label: "Bank connections", description: "Connections and imports", icon: "credit-card" },
   { id: "money", label: "Money plan", description: "Income, safety, and payoff", icon: "sliders" },
   { id: "goals", label: "Goals", description: "Savings plans", icon: "target" },
-  { id: "children", label: "Family money", description: "Spend, save, and allowance", icon: "smile" },
   { id: "review", label: "Review Center", description: "Match bank activity", icon: "check-square" },
   { id: "subscriptions", label: "Subscriptions", description: "Recurring charges", icon: "repeat" },
   { id: "reports", label: "Reports & insights", description: "Monthly results and next steps", icon: "bar-chart-2" },
@@ -61,7 +59,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
 ] as const;
 
 export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
-  { id: "money", label: "Plan", sectionIds: ["money", "accounts", "plaid", "goals", "children"] },
+  { id: "money", label: "Plan", sectionIds: ["money", "accounts", "plaid", "goals"] },
   { id: "insights", label: "Review & insights", sectionIds: ["review", "subscriptions", "reports"] },
   { id: "preferences", label: "App", sectionIds: ["appearance", "notifications", "setup", "backup", "deleted"] },
   { id: "account", label: "Account & support", sectionIds: ["membership", "security", "help", "legal"] },

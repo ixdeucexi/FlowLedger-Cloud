@@ -159,16 +159,6 @@ export interface ReminderItem {
   severity: "info" | "watch" | "risk";
 }
 
-export interface ChildProfile {
-  id: string;
-  name: string;
-  allowanceAmount?: number | null;
-  allowanceFrequency?: "weekly" | "biweekly" | "monthly" | null;
-  savingsGoal?: number | null;
-  currentSavings?: number | null;
-  spendingLimit?: number | null;
-}
-
 const KNOWN_SUBSCRIPTION_WORDS = [
   "netflix",
   "hulu",
@@ -488,28 +478,6 @@ export function buildSmartReminders(input: {
   return reminders;
 }
 
-
-export function buildChildMoneySummary(children: ChildProfile[]) {
-  return children.map(child => {
-    const spendAvailable = Math.max(0, roundCurrency(child.spendingLimit ?? 0));
-    const saved = Math.max(0, roundCurrency(child.currentSavings ?? 0));
-    const progress = child.savingsGoal && child.savingsGoal > 0
-      ? Math.min(100, Math.round((saved / child.savingsGoal) * 100))
-      : 0;
-    return {
-      id: child.id,
-      name: child.name,
-      progress,
-      spendAvailable,
-      saved,
-      total: roundCurrency(spendAvailable + saved),
-      status: spendAvailable > 0 ? "ready" as const : "needs_money" as const,
-      message: child.savingsGoal
-        ? `$${saved.toFixed(2)} saved toward a $${child.savingsGoal.toFixed(2)} goal.`
-        : "Add a savings goal when they are ready.",
-    };
-  });
-}
 
 function ruleMatches(transaction: GrowthTransaction, description: string, rule: TransactionRule) {
   if (rule.matchType === "amount_range") {

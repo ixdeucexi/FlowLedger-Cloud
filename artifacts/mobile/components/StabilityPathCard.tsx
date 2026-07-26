@@ -15,7 +15,7 @@ const STABILITY_THEMES = {
   dark: {
     card: "rgba(15,23,42,0.78)", border: "rgba(34,211,238,0.22)", shadow: "#22d3ee", shadowOpacity: 0.18,
     eyebrow: "#67e8f9", text: "#f8fafc", mutedText: "#94a3b8", labelText: "#cbd5e1",
-    track: "rgba(148,163,184,0.18)", metric: "rgba(2,6,23,0.34)", purpleText: "#c4b5fd",
+    track: "rgba(148,163,184,0.18)", purpleText: "#c4b5fd",
     purpleStrongText: "#ede9fe", purpleSurface: "rgba(124,58,237,0.12)", purpleIconSurface: "rgba(124,58,237,0.24)",
     purpleBorder: "rgba(192,132,252,0.22)", buttonText: "#bfdbfe", buttonIcon: "#93c5fd",
     buttonSurface: "rgba(37,99,235,0.12)", buttonBorder: "rgba(96,165,250,0.22)",
@@ -23,7 +23,7 @@ const STABILITY_THEMES = {
   light: {
     card: "rgba(255,255,255,0.92)", border: "rgba(14,116,144,0.22)", shadow: "#64748b", shadowOpacity: 0.12,
     eyebrow: "#0e7490", text: "#0f172a", mutedText: "#64748b", labelText: "#334155",
-    track: "rgba(100,116,139,0.20)", metric: "rgba(241,245,249,0.96)", purpleText: "#6d28d9",
+    track: "rgba(100,116,139,0.20)", purpleText: "#6d28d9",
     purpleStrongText: "#4c1d95", purpleSurface: "rgba(124,58,237,0.09)", purpleIconSurface: "rgba(124,58,237,0.14)",
     purpleBorder: "rgba(109,40,217,0.22)", buttonText: "#1d4ed8", buttonIcon: "#2563eb",
     buttonSurface: "rgba(37,99,235,0.08)", buttonBorder: "rgba(37,99,235,0.20)",
@@ -72,7 +72,7 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
           <Feather name="shield" size={18} color={color} />
         </View>
         <View style={styles.headerCopy}>
-          <AppText tone="label" style={[styles.eyebrow, { color: theme.eyebrow }]}>Your stability path</AppText>
+          <AppText tone="label" style={[styles.eyebrow, { color: theme.eyebrow }]}>Stability path</AppText>
           <AppText tone="title" style={[styles.stage, { color: theme.text }]}>{progress.stageLabel}</AppText>
         </View>
         <View style={[styles.statusPill, { backgroundColor: `${color}18`, borderColor: `${color}38` }]}>
@@ -81,8 +81,19 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
         </View>
       </View>
 
-      <AppText tone="title" style={[styles.headline, { color: theme.text }]}>{progress.headline}</AppText>
-      <AppText style={[styles.explanation, { color: theme.mutedText }]}>{progress.explanation}</AppText>
+      <View style={styles.summary}>
+        <View style={styles.summaryPrimary}>
+          <AppText tone="number" style={[styles.summaryDays, { color: theme.text }]}>{progress.protectedDays} days</AppText>
+          <AppText style={[styles.summaryLabel, { color: theme.mutedText }]}>backed up</AppText>
+        </View>
+        <View style={styles.summaryGoal}>
+          <AppText tone="label" style={[styles.summaryGoalLabel, { color: theme.eyebrow }]}>Next goal</AppText>
+          <AppText tone="title" numberOfLines={1} style={[styles.summaryGoalTitle, { color: theme.text }]}>{progress.nextMilestone}</AppText>
+          {progress.nextMilestoneAmount > 0 ? (
+            <AppText style={[styles.summaryGoalAmount, { color: theme.mutedText }]}>{currency(progress.nextMilestoneAmount)} to go</AppText>
+          ) : null}
+        </View>
+      </View>
 
       <View
         accessible
@@ -94,7 +105,7 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
       </View>
 
       <View style={styles.progressHeader}>
-        <AppText style={[styles.progressLabel, { color: theme.labelText }]}>90-day backup path</AppText>
+        <AppText style={[styles.progressLabel, { color: theme.labelText }]}>90-day path</AppText>
         <AppText tone="number" style={[styles.progressValue, { color: theme.text }]}>{Math.round(progress.backupProgress * 100)}%</AppText>
       </View>
       <View style={[styles.progressTrack, { backgroundColor: theme.track }]} accessibilityLabel={`${progress.protectedDays} of 90 backup days protected`}>
@@ -106,28 +117,13 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
         ))}
       </View>
 
-      <View style={styles.metrics}>
-        <View style={[styles.metric, { backgroundColor: theme.metric }]}>
-          <AppText tone="number" style={[styles.metricValue, { color: theme.text }]}>{progress.protectedDays}</AppText>
-          <AppText style={[styles.metricLabel, { color: theme.mutedText }]}>days backed up</AppText>
-        </View>
-        <View style={[styles.metric, { backgroundColor: theme.metric }]}>
-          <AppText tone="number" style={[styles.metricValue, { color: theme.text }]}>{currency(progress.protectedAmount)}</AppText>
-          <AppText style={[styles.metricLabel, { color: theme.mutedText }]}>backup money</AppText>
-        </View>
-        <View style={[styles.metric, { backgroundColor: theme.metric }]}>
-          <AppText tone="number" style={[styles.metricValue, { color: theme.text }]}>{currency(progress.backupTarget)}</AppText>
-          <AppText style={[styles.metricLabel, { color: theme.mutedText }]}>90-day target</AppText>
-        </View>
-      </View>
-
       <View style={[styles.nextMove, { backgroundColor: theme.purpleSurface, borderColor: theme.purpleBorder }]}>
         <View style={[styles.nextMoveIcon, { backgroundColor: theme.purpleIconSurface }]}>
           <Feather name="arrow-up-right" size={15} color={theme.purpleText} />
         </View>
         <View style={styles.nextMoveCopy}>
-          <AppText tone="label" style={[styles.nextMoveLabel, { color: theme.purpleText }]}>Next action</AppText>
-          <AppText style={[styles.nextMoveText, { color: theme.purpleStrongText }]}>{progress.nextAction}</AppText>
+          <AppText tone="label" style={[styles.nextMoveLabel, { color: theme.purpleText }]}>Next</AppText>
+          <AppText numberOfLines={2} style={[styles.nextMoveText, { color: theme.purpleStrongText }]}>{progress.nextAction}</AppText>
         </View>
       </View>
 
@@ -139,7 +135,7 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
           style={({ pressed }) => [styles.secondaryButton, { backgroundColor: theme.buttonSurface, borderColor: theme.buttonBorder, opacity: pressed ? 0.72 : 1 }]}
         >
           <Feather name="map" size={14} color={theme.buttonIcon} />
-          <AppText style={[styles.secondaryButtonText, { color: theme.buttonText }]}>See how this works</AppText>
+          <AppText style={[styles.secondaryButtonText, { color: theme.buttonText }]}>How it works</AppText>
         </Pressable>
       </View>
     </View>
@@ -170,9 +166,15 @@ const styles = StyleSheet.create({
   statusPill: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 6 },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusText: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.4 },
-  headline: { color: "#f8fafc", fontSize: 20, lineHeight: 25, fontFamily: "Inter_800ExtraBold", marginTop: 14 },
-  explanation: { color: "#94a3b8", fontSize: 12, lineHeight: 17, fontFamily: "Inter_500Medium", marginTop: 4 },
-  paydayCard: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8, marginTop: 11 },
+  summary: { flexDirection: "row", alignItems: "center", gap: 14, marginTop: 14 },
+  summaryPrimary: { minWidth: 96 },
+  summaryDays: { color: "#f8fafc", fontSize: 24, lineHeight: 28, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.6 },
+  summaryLabel: { color: "#94a3b8", fontSize: 11, fontFamily: "Inter_700Bold", marginTop: 1 },
+  summaryGoal: { flex: 1, minWidth: 0, borderLeftWidth: 1, borderLeftColor: "rgba(148,163,184,0.18)", paddingLeft: 14 },
+  summaryGoalLabel: { color: "#67e8f9", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7 },
+  summaryGoalTitle: { color: "#f8fafc", fontSize: 13, lineHeight: 17, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
+  summaryGoalAmount: { color: "#94a3b8", fontSize: 10, fontFamily: "Inter_700Bold", marginTop: 1 },
+  paydayCard: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8, marginTop: 12 },
   paydayTitle: { flex: 1, fontSize: 12, lineHeight: 16, fontFamily: "Inter_800ExtraBold" },
   progressHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 14, marginBottom: 6 },
   progressLabel: { color: "#cbd5e1", fontSize: 12, fontFamily: "Inter_700Bold" },
@@ -181,11 +183,7 @@ const styles = StyleSheet.create({
   progressFill: { height: "100%", borderRadius: 999 },
   milestones: { flexDirection: "row", justifyContent: "space-between", marginTop: 5 },
   milestone: { color: "#94a3b8", fontSize: 10, fontFamily: "Inter_800ExtraBold" },
-  metrics: { flexDirection: "row", alignItems: "stretch", flexWrap: "wrap", gap: 8, marginTop: 14 },
-  metric: { flexGrow: 1, flexBasis: 90, minWidth: 82, borderRadius: 12, backgroundColor: "rgba(2,6,23,0.34)", padding: 9 },
-  metricValue: { color: "#f8fafc", fontSize: 17, fontFamily: "Inter_800ExtraBold" },
-  metricLabel: { color: "#94a3b8", fontSize: 11, lineHeight: 14, fontFamily: "Inter_700Bold", marginTop: 2 },
-  nextMove: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 16, borderWidth: 1, borderColor: "rgba(192,132,252,0.22)", backgroundColor: "rgba(124,58,237,0.12)", padding: 11, marginTop: 14 },
+  nextMove: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 16, borderWidth: 1, borderColor: "rgba(192,132,252,0.22)", backgroundColor: "rgba(124,58,237,0.12)", padding: 10, marginTop: 12 },
   nextMoveIcon: { width: 31, height: 31, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.24)" },
   nextMoveCopy: { flex: 1 },
   nextMoveLabel: { color: "#c4b5fd", fontSize: 10, fontFamily: "Inter_800ExtraBold" },

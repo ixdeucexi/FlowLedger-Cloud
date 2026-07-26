@@ -48,7 +48,6 @@ const DASHBOARD_THEMES = {
   dark: {
     screen: "#030712",
     heading: "#f8fafc",
-    subheading: "#a5b4fc",
     hero: "rgba(2,6,23,0.42)",
     heroBorder: "rgba(148,163,184,0.14)",
     heroShadow: "#22d3ee",
@@ -60,9 +59,6 @@ const DASHBOARD_THEMES = {
     purpleText: "#c4b5fd",
     purpleSurface: "rgba(124,58,237,0.18)",
     purpleBorder: "rgba(196,181,253,0.28)",
-    planSurface: "rgba(15,23,42,0.62)",
-    planBorder: "rgba(192,132,252,0.26)",
-    milestoneSurface: "rgba(139,92,246,0.22)",
     goalSurface: "rgba(15,23,42,0.56)",
     goalBorder: "rgba(148,163,184,0.12)",
     gaugeTrack: "rgba(148,163,184,0.18)",
@@ -75,7 +71,6 @@ const DASHBOARD_THEMES = {
   light: {
     screen: "#f8fafc",
     heading: "#0f172a",
-    subheading: "#64748b",
     hero: "rgba(255,255,255,0.90)",
     heroBorder: "rgba(148,163,184,0.34)",
     heroShadow: "#64748b",
@@ -87,9 +82,6 @@ const DASHBOARD_THEMES = {
     purpleText: "#6d28d9",
     purpleSurface: "rgba(124,58,237,0.10)",
     purpleBorder: "rgba(109,40,217,0.24)",
-    planSurface: "rgba(241,245,249,0.94)",
-    planBorder: "rgba(109,40,217,0.22)",
-    milestoneSurface: "rgba(124,58,237,0.10)",
     goalSurface: "rgba(241,245,249,0.96)",
     goalBorder: "rgba(148,163,184,0.28)",
     gaugeTrack: "rgba(100,116,139,0.20)",
@@ -1013,10 +1005,7 @@ export default function DashboardScreen() {
             <Image source={FLOWLEDGER_LOGO} style={styles.brandMarkImage} resizeMode="cover" />
           </View>
           <View>
-            <AppText tone="label" style={styles.brandEyebrow}>FLOWLEDGER</AppText>
-            <AppText tone="label" style={styles.brandAlgo}>ALGO</AppText>
             <AppText tone="title" style={[styles.heading, { color: dashboardTheme.heading, textShadowColor: c.isDark ? "rgba(56,189,248,0.35)" : "transparent" }]}>Command Center</AppText>
-            <AppText style={[styles.subheading, { color: dashboardTheme.subheading }]}>{MONTH_FULL[currentMonth]} {selectedYear}</AppText>
           </View>
         </View>
         <CommandPlusButton onPress={() => setActionModalVisible(true)} accessibilityLabel="Add to FlowLedger" />
@@ -1146,10 +1135,10 @@ export default function DashboardScreen() {
           shadowOpacity: dashboardTheme.heroShadowOpacity,
         },
       ]}>
-        <View style={styles.referenceHeroFlipShell}>
+        <View style={[styles.referenceHeroFlipShell, !isCommandWide && !flipped && styles.referenceHeroFlipShellCompact]}>
           <Animated.View
             pointerEvents={flipped ? "none" : "auto"}
-            style={[styles.referenceHeroFace, { transform: [{ perspective: 1000 }, { rotateY: frontRotate }] }]}
+            style={[styles.referenceHeroFace, !isCommandWide && !flipped && styles.referenceHeroFaceCompact, { transform: [{ perspective: 1000 }, { rotateY: frontRotate }] }]}
           >
             <View style={styles.referenceMoneyHeader}>
               <View style={{ flex: 1 }}>
@@ -1162,30 +1151,6 @@ export default function DashboardScreen() {
             </View>
             <AppText tone="label" style={[styles.referenceHeroLabel, { color: dashboardTheme.mutedText }]}>Checking balance</AppText>
             <AppText tone="number" style={[styles.referenceHeroAmount, { color: dashboardTheme.amount, textShadowColor: c.isDark ? "rgba(34,211,238,0.25)" : "transparent" }]}>{formatDashboardCurrency(dashboardCheckingBalance)}</AppText>
-
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Open Flo"
-              onPress={openFlo}
-              style={({ pressed }) => [styles.referencePlanSnapshot, { backgroundColor: dashboardTheme.planSurface, borderColor: dashboardTheme.planBorder, opacity: pressed ? 0.84 : 1 }]}
-            >
-              <View style={styles.referencePlanFocusBlock}>
-                <AppText tone="label" style={[styles.referencePlanLabel, { color: dashboardTheme.subtleText }]}>Current stage</AppText>
-                <AppText tone="title" style={[styles.referencePlanFocusTitle, { color: dashboardTheme.text }]} numberOfLines={1}>{algorithmSuite.stability.stageLabel}</AppText>
-                <View style={[styles.referencePlanNextRow, { backgroundColor: dashboardTheme.milestoneSurface, borderColor: dashboardTheme.purpleBorder }]}>
-                  <AppText tone="label" style={[styles.referencePlanNextLabel, { color: dashboardTheme.purpleText }]}>Next milestone</AppText>
-                  <AppText style={[styles.referencePlanNextText, { color: dashboardTheme.text }]} numberOfLines={2}>
-                    {algorithmSuite.stability.nextMilestoneAmount > 0
-                      ? `${algorithmSuite.stability.nextMilestone} - ${formatDashboardCurrency(algorithmSuite.stability.nextMilestoneAmount)} to go`
-                      : algorithmSuite.stability.nextMilestone}
-                  </AppText>
-                </View>
-              </View>
-              <View style={styles.referencePlanFloPill}>
-                <Feather name="message-circle" size={13} color="#f8fafc" />
-                <AppText style={styles.referencePlanFloText}>Flo</AppText>
-              </View>
-            </Pressable>
           </Animated.View>
 
           <Animated.View
@@ -2054,10 +2019,7 @@ const styles = StyleSheet.create({
   brandLockup: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
   brandMark: { width: 48, height: 48, borderRadius: 17, alignItems: "center", justifyContent: "center", overflow: "hidden", borderWidth: 1, borderColor: "rgba(96,165,250,0.35)", backgroundColor: "#020617", shadowColor: "#38bdf8", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 18, elevation: 9 },
   brandMarkImage: { width: "100%", height: "100%" },
-  brandEyebrow: { color: "#38bdf8", fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 2.3, marginBottom: -1 },
-  brandAlgo: { color: "#a78bfa", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 7, marginBottom: 1, opacity: 0.9 },
   heading:    { fontSize: 30, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.0, color: "#f8fafc", textShadowColor: "rgba(56,189,248,0.35)", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 12 },
-  subheading: { fontSize: 12, fontFamily: "Inter_600SemiBold", marginTop: 2, color: "#a5b4fc" },
   headerActionButton: { width: 54, height: 54, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.82)", borderWidth: 1, borderColor: "rgba(34,211,238,0.38)", shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.52, shadowRadius: 22, elevation: 12 },
   setupCard: { borderWidth: 1, borderRadius: 18, padding: 14, marginBottom: 12 },
   setupHeader: { flexDirection: "row", alignItems: "flex-start", marginBottom: 8 },
@@ -2100,7 +2062,9 @@ const styles = StyleSheet.create({
   },
   referenceCommandHeroWide: { flexDirection: "row", minHeight: 320, padding: 30, alignItems: "center", gap: 22 },
   referenceHeroFlipShell: { flex: 1, minHeight: 210, position: "relative" },
+  referenceHeroFlipShellCompact: { minHeight: 118 },
   referenceHeroFace: { minHeight: 210, backfaceVisibility: "hidden" },
+  referenceHeroFaceCompact: { minHeight: 118 },
   referenceHeroBackFace: { ...StyleSheet.absoluteFillObject },
   referenceMoneyHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   referenceFlipButton: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, borderWidth: 1, borderColor: "rgba(196,181,253,0.28)", backgroundColor: "rgba(124,58,237,0.18)", paddingHorizontal: 9, paddingVertical: 6 },
@@ -2121,29 +2085,6 @@ const styles = StyleSheet.create({
   referenceGreeting: { color: "#f8fafc", fontSize: 19, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.7 },
   referenceHeroLabel: { color: "#cbd5e1", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.4, textTransform: "uppercase" },
   referenceHeroAmount: { color: "#ffffff", fontSize: 40, lineHeight: 44, fontFamily: "Inter_800ExtraBold", letterSpacing: -2.2, textShadowColor: "rgba(34,211,238,0.25)", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 18 },
-  referencePlanSnapshot: {
-    marginTop: 8,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "rgba(192,132,252,0.26)",
-    backgroundColor: "rgba(15,23,42,0.62)",
-    padding: 9,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  referencePlanAmountBlock: { minWidth: 100 },
-  referencePlanEyebrow: { color: "#a78bfa", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.1, textTransform: "uppercase", marginBottom: 5 },
-  referencePlanLabel: { color: "#94a3b8", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7, textTransform: "uppercase" },
-  referencePlanAmount: { color: "#f8fafc", fontSize: 22, lineHeight: 25, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.7, marginTop: 1 },
-  referencePlanDivider: { width: 1, alignSelf: "stretch", backgroundColor: "rgba(148,163,184,0.18)" },
-  referencePlanFocusBlock: { flex: 1, minWidth: 0 },
-  referencePlanFocusTitle: { color: "#f8fafc", fontSize: 14, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
-  referencePlanNextRow: { marginTop: 5, borderRadius: 999, alignSelf: "flex-start", maxWidth: "100%", paddingHorizontal: 8, paddingVertical: 4, backgroundColor: "rgba(139,92,246,0.22)", borderWidth: 1, borderColor: "rgba(192,132,252,0.24)" },
-  referencePlanNextLabel: { color: "#c4b5fd", fontSize: 8, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.7 },
-  referencePlanNextText: { color: "#f5f3ff", fontSize: 10, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
-  referencePlanFloPill: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 999, backgroundColor: "rgba(124,58,237,0.34)", borderWidth: 1, borderColor: "rgba(216,180,254,0.34)" },
-  referencePlanFloText: { color: "#f8fafc", fontSize: 10, fontFamily: "Inter_800ExtraBold" },
   referenceScorePanel: { alignItems: "center", justifyContent: "center", paddingTop: 4 },
   referenceGaugeWrap: { width: 102, height: 102, alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
   referenceGaugeSvg: { backgroundColor: "transparent" },
