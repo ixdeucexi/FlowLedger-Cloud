@@ -89,9 +89,6 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
         <View style={styles.summaryGoal}>
           <AppText tone="label" style={[styles.summaryGoalLabel, { color: theme.eyebrow }]}>Next goal</AppText>
           <AppText tone="title" numberOfLines={1} style={[styles.summaryGoalTitle, { color: theme.text }]}>{progress.nextMilestone}</AppText>
-          {progress.nextMilestoneAmount > 0 ? (
-            <AppText style={[styles.summaryGoalAmount, { color: theme.mutedText }]}>{currency(progress.nextMilestoneAmount)} to go</AppText>
-          ) : null}
         </View>
       </View>
 
@@ -173,7 +170,6 @@ const styles = StyleSheet.create({
   summaryGoal: { flex: 1, minWidth: 0, borderLeftWidth: 1, borderLeftColor: "rgba(148,163,184,0.18)", paddingLeft: 14 },
   summaryGoalLabel: { color: "#67e8f9", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7 },
   summaryGoalTitle: { color: "#f8fafc", fontSize: 13, lineHeight: 17, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
-  summaryGoalAmount: { color: "#94a3b8", fontSize: 10, fontFamily: "Inter_700Bold", marginTop: 1 },
   paydayCard: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8, marginTop: 12 },
   paydayTitle: { flex: 1, fontSize: 12, lineHeight: 16, fontFamily: "Inter_800ExtraBold" },
   progressHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 14, marginBottom: 6 },
