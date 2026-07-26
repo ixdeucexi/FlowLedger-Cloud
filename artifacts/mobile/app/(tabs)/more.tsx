@@ -18,6 +18,7 @@ import { AccountModal } from "@/components/AccountModal";
 import { AdminMembershipTools } from "@/components/AdminMembershipTools";
 import { AppText } from "@/components/AppText";
 import { FloLogo } from "@/components/FloLogo";
+import { FamilyMoneyView } from "@/components/FamilyMoneyView";
 import { FeedbackManageModal } from "@/components/FeedbackManageModal";
 import { IncomeModal } from "@/components/IncomeModal";
 import { HouseholdMemberActionsModal } from "@/components/HouseholdMemberActionsModal";
@@ -33,6 +34,7 @@ import { ReviewCenter } from "@/components/ReviewCenter";
 import { PWA_INSTALL_EVENT } from "@/components/PwaInstallPrompt";
 import { PlaidLinkButton } from "@/components/PlaidLinkButton";
 import { RecentlyDeletedTransactions } from "@/components/RecentlyDeletedTransactions";
+import { ReportsInsightsView } from "@/components/ReportsInsightsView";
 import colors from "@/constants/colors";
 import type { Account, IncomeItem } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
@@ -87,7 +89,6 @@ import {
 } from "@/lib/feedback";
 import { manageFeedback, submitFeedback } from "@/lib/feedbackApi";
 import {
-  buildChildMoneySummary,
   buildGoalFundingPlans,
   buildReportsSummary,
   buildSmartReminders,
@@ -444,9 +445,6 @@ export default function MoreScreen() {
   const [subscriptionDecisions, setSubscriptionDecisions] = useState<Record<string, SubscriptionDecision>>({});
   const [growthNotice, setGrowthNotice] = useState<string | null>(null);
   const [childProfiles, setChildProfiles] = useState<ChildProfile[]>([]);
-  const [childName, setChildName] = useState("");
-  const [childAllowanceText, setChildAllowanceText] = useState("");
-  const [childGoalText, setChildGoalText] = useState("");
   const [backupExported, setBackupExported] = useState(() => {
     try { return Platform.OS === "web" && globalThis.localStorage?.getItem(BACKUP_COMPLETE_KEY) === "true"; }
     catch { return false; }
@@ -457,7 +455,6 @@ export default function MoreScreen() {
   const childProfileStorageKey = activeHousehold?.householdId
     ? `flowledger_child_profiles_${activeHousehold.householdId}`
     : user?.id ? `flowledger_child_profiles_${user.id}` : "flowledger_child_profiles_guest";
-  const childMoneySummary = useMemo(() => buildChildMoneySummary(childProfiles), [childProfiles]);
   const latestIncomeChange = useMemo(() => incomes
     .map(income => ({ change: getLatestIncomeChange(income), income }))
     .filter((entry): entry is { change: NonNullable<ReturnType<typeof getLatestIncomeChange>>; income: IncomeItem } => Boolean(entry.change))
@@ -938,7 +935,9 @@ export default function MoreScreen() {
       : "manual" as const,
     linkedBillId: transaction.linked_bill_id ?? transaction.debt_applied_bill_id ?? null,
   })), [transactions]);
-  const growthReportTransactions = useMemo(() => growthTransactions.flatMap(transaction => {
+  const growthReportTransactions = useMemo(() => growthTransactions
+    .filter(transaction => transaction.date.startsWith(currentMonthPrefix))
+    .flatMap(transaction => {
     const source = transactions.find(item => item.id === transaction.id);
     if (!source) return [transaction];
     if (!isCashFlowTransaction(source)) return [];
@@ -951,7 +950,7 @@ export default function MoreScreen() {
       description: part.label,
       category: part.category,
     }));
-  }), [growthTransactions, transactions]);
+  }), [currentMonthPrefix, growthTransactions, transactions]);
   const growthBills = useMemo(() => bills.map(bill => ({
     id: bill.id,
     name: bill.name,
@@ -1197,35 +1196,35 @@ export default function MoreScreen() {
     });
   };
 
-  const handleAddChildProfile = async () => {
-    const name = childName.trim();
-    if (!name) {
-      Alert.alert("Child profile", "Add a child name first.");
-      return;
-    }
-    const allowanceAmount = Math.max(0, parseFloat(childAllowanceText) || 0);
-    const savingsGoal = Math.max(0, parseFloat(childGoalText) || 0);
+  const handleAddChildProfile = async (input: {
+    name: string;
+    allowanceAmount: number | null;
+    savingsGoal: number | null;
+  }) => {
     const next: ChildProfile = {
       id: makeClientUuid("child-profile"),
-      name,
-      allowanceAmount: allowanceAmount || null,
-      allowanceFrequency: allowanceAmount ? "weekly" : null,
-      savingsGoal: savingsGoal || null,
+      name: input.name,
+      allowanceAmount: input.allowanceAmount,
+      allowanceFrequency: input.allowanceAmount ? "weekly" : null,
+      savingsGoal: input.savingsGoal,
       currentSavings: 0,
-      spendingLimit: null,
+      spendingLimit: 0,
     };
     await saveChildProfiles([next, ...childProfiles]);
-    setChildName("");
-    setChildAllowanceText("");
-    setChildGoalText("");
-    setGrowthNotice("Child profile added for starter tracking.");
+    setGrowthNotice(`${input.name}'s money plan is ready.`);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  const handleUpdateChildProfile = async (profile: ChildProfile) => {
+    await saveChildProfiles(childProfiles.map(item => item.id === profile.id ? profile : item));
+    setGrowthNotice(`${profile.name}'s money was updated.`);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
   const handleRemoveChildProfile = (profile: ChildProfile) => {
     confirmAction({
       title: "Remove child profile?",
-      message: `This removes ${profile.name} from local child money tracking.`,
+      message: `This removes ${profile.name}'s money plan from this household.`,
       confirmText: "Remove",
       destructive: true,
       onConfirm: async () => {
@@ -2601,60 +2600,13 @@ export default function MoreScreen() {
       </>}
 
       {activeSettingsSection === "reports" && <>
-      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        <View style={styles.growthMetricGrid}>
-          <View style={[styles.growthMetric, { backgroundColor: c.muted }]}>
-            <Text style={[styles.growthMetricValue, { color: c.success }]}>${reportsSummary.income.toFixed(0)}</Text>
-            <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>Income</Text>
-          </View>
-          <View style={[styles.growthMetric, { backgroundColor: c.muted }]}>
-            <Text style={[styles.growthMetricValue, { color: c.destructive }]}>${reportsSummary.spending.toFixed(0)}</Text>
-            <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>Spending</Text>
-          </View>
-          <View style={[styles.growthMetric, { backgroundColor: c.muted }]}>
-            <Text style={[styles.growthMetricValue, { color: reportsSummary.net >= 0 ? c.success : c.destructive }]}>${reportsSummary.net.toFixed(0)}</Text>
-            <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>Net</Text>
-          </View>
-        </View>
-        <View style={[styles.priorityNote, { backgroundColor: c.primary + "12", borderRadius: 10, marginTop: 12 }]}>
-          <Feather name="bar-chart-2" size={13} color={c.primary} />
-          <Text style={[styles.priorityNoteText, { color: c.mutedForeground }]}>{reportsSummary.insight}</Text>
-        </View>
-        {reportsSummary.categoryTotals.slice(0, 5).map((category, index) => (
-          <View key={category.category} style={[styles.growthListRow, { borderTopWidth: index ? 1 : 0, borderTopColor: c.border }]}>
-            <View style={styles.dataBody}>
-              <Text style={[styles.dataLabel, { color: c.foreground }]}>{category.category}</Text>
-              <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>Flexible spending category</Text>
-            </View>
-            <Text style={[styles.incomeMonthly, { color: c.destructive }]}>${category.amount.toFixed(0)}</Text>
-          </View>
-        ))}
-        <View style={[styles.growthListRow, { borderTopWidth: 1, borderTopColor: c.border }]}>
-          <View style={styles.dataBody}>
-            <Text style={[styles.dataLabel, { color: c.foreground }]}>Debt remaining</Text>
-            <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>Balances included in payoff reporting</Text>
-          </View>
-          <Text style={[styles.incomeMonthly, { color: c.destructive }]}>${reportsSummary.debtTotal.toFixed(0)}</Text>
-        </View>
-      </View>
-
-      <SLabel c={c} text="Smart Reminders" />
-      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        {smartReminders.slice(0, 8).map((reminder, index) => (
-          <View key={reminder.id} style={[styles.growthListRow, { borderTopWidth: index ? 1 : 0, borderTopColor: c.border }]}>
-            <View style={[styles.dataIcon, { backgroundColor: reminder.severity === "risk" ? c.destructive + "18" : reminder.severity === "watch" ? c.warning + "18" : c.primary + "18" }]}>
-              <Feather name={reminder.severity === "risk" ? "alert-triangle" : "bell"} size={17} color={reminder.severity === "risk" ? c.destructive : reminder.severity === "watch" ? c.warning : c.primary} />
-            </View>
-            <View style={styles.dataBody}>
-              <Text style={[styles.dataLabel, { color: c.foreground }]}>{reminder.title}</Text>
-              <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{reminder.message}</Text>
-            </View>
-          </View>
-        ))}
-        {!smartReminders.length && (
-          <Text style={[styles.emptyText, { color: c.mutedForeground }]}>No reminders right now.</Text>
-        )}
-      </View>
+      <ReportsInsightsView
+        monthLabel={new Date(`${currentMonthPrefix}-01T12:00:00`).toLocaleDateString(undefined, { month: "long", year: "numeric" })}
+        summary={reportsSummary}
+        reminders={smartReminders}
+        onOpenReview={() => openSettingsSection("review")}
+        onOpenBills={() => router.push("/(tabs)/bills")}
+      />
       </>}
 
       {activeSettingsSection === "goals" && <>
@@ -2692,75 +2644,14 @@ export default function MoreScreen() {
       </>}
 
       {activeSettingsSection === "children" && <>
-      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        {growthNotice ? <Text style={[styles.feedbackNotice, { color: c.success }]}>{growthNotice}</Text> : null}
-        <View style={styles.growthHeaderRow}>
-          <View style={[styles.growthScoreBubble, { backgroundColor: c.primary + "18" }]}>
-            <Feather name="smile" size={20} color={c.primary} />
-          </View>
-          <View style={styles.growthHeaderCopy}>
-            <Text style={[styles.switchLabel, { color: c.foreground }]}>Family money skills</Text>
-            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>
-              Child profiles will support allowance, savings goals, simple limits, and parent-safe learning prompts.
-            </Text>
-          </View>
-        </View>
-        <View style={[styles.childForm, { borderColor: c.border, backgroundColor: c.muted }]}>
-          <TextInput
-            value={childName}
-            onChangeText={setChildName}
-            placeholder="Child name"
-            placeholderTextColor={c.mutedForeground}
-            style={[styles.childInput, { color: c.foreground, borderColor: c.border, backgroundColor: c.card }]}
-          />
-          <View style={[styles.childFormRow, useStackedSettingsFields && styles.formRowStacked]}>
-            <TextInput
-              value={childAllowanceText}
-              onChangeText={setChildAllowanceText}
-              placeholder="Weekly allowance"
-              placeholderTextColor={c.mutedForeground}
-              keyboardType="decimal-pad"
-              style={[styles.childHalfInput, useStackedSettingsFields && styles.formInputStacked, { color: c.foreground, borderColor: c.border, backgroundColor: c.card }]}
-            />
-            <TextInput
-              value={childGoalText}
-              onChangeText={setChildGoalText}
-              placeholder="Savings goal"
-              placeholderTextColor={c.mutedForeground}
-              keyboardType="decimal-pad"
-              style={[styles.childHalfInput, useStackedSettingsFields && styles.formInputStacked, { color: c.foreground, borderColor: c.border, backgroundColor: c.card }]}
-            />
-          </View>
-          <Pressable
-            onPress={() => void handleAddChildProfile()}
-            style={({ pressed }) => [styles.balanceSaveFullBtn, { backgroundColor: c.primary, opacity: pressed ? 0.75 : 1 }]}
-          >
-            <Feather name="plus" size={15} color={c.primaryForeground} />
-            <Text style={[styles.balanceSaveBtnText, { color: c.primaryForeground }]}>Add Child Profile</Text>
-          </Pressable>
-        </View>
-        {childMoneySummary.map(child => (
-          <View key={child.id} style={[styles.growthListRow, { borderTopWidth: 1, borderTopColor: c.border }]}>
-            <View style={styles.dataBody}>
-              <Text style={[styles.dataLabel, { color: c.foreground }]}>{child.name}</Text>
-              <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{child.message}</Text>
-            </View>
-            <Text style={[styles.incomeMonthly, { color: c.primary }]}>{child.progress}%</Text>
-            <Pressable
-              onPress={() => {
-                const profile = childProfiles.find(item => item.id === child.id);
-                if (profile) handleRemoveChildProfile(profile);
-              }}
-              hitSlop={10}
-            >
-              <Feather name="trash-2" size={15} color={c.destructive} />
-            </Pressable>
-          </View>
-        ))}
-        {!childMoneySummary.length && (
-          <Text style={[styles.emptyText, { color: c.mutedForeground }]}>No child profiles yet.</Text>
-        )}
-      </View>
+      <FamilyMoneyView
+        profiles={childProfiles}
+        canEdit={canEditHousehold}
+        notice={growthNotice}
+        onAdd={handleAddChildProfile}
+        onUpdate={handleUpdateChildProfile}
+        onRemove={handleRemoveChildProfile}
+      />
       </>}
 
       {activeSettingsSection === "backup" && <>
@@ -3437,10 +3328,6 @@ const styles = StyleSheet.create({
   reviewActionStack: { alignItems: "flex-end", gap: 6, marginLeft: 8 },
   subscriptionActionRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
   growthInlineButton: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7, marginTop: 8 },
-  childForm: { borderWidth: 1, borderRadius: 16, padding: 12, marginTop: 14, gap: 10 },
-  childFormRow: { width: "100%", flexDirection: "row", gap: 10 },
-  childInput: { width: "100%", minWidth: 0, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 11, fontSize: 14, fontFamily: "Inter_500Medium" },
-  childHalfInput: { flex: 1, minWidth: 0, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 11, fontSize: 13, fontFamily: "Inter_500Medium" },
   formRowStacked: { flexDirection: "column" },
   formInputStacked: { flex: 0, width: "100%" },
 

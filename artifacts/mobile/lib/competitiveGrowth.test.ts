@@ -94,6 +94,9 @@ test("summarizes reports without AI guessing", () => {
   );
 
   assert.equal(report.debtTotal, 500);
+  assert.equal(report.plannedBills, 300);
+  assert.equal(report.debtMinimums, 50);
+  assert.equal(report.net, report.income - report.spending);
   assert.equal(report.goalProgress[0].percent, 25);
   assert.ok(report.subscriptionTotal > 0);
 });
@@ -120,5 +123,18 @@ test("child summaries stay limited and parent-safe", () => {
   ]);
 
   assert.equal(summary[0].progress, 25);
-  assert.match(summary[0].message, /Avery/);
+  assert.equal(summary[0].saved, 25);
+  assert.equal(summary[0].spendAvailable, 0);
+  assert.equal(summary[0].status, "needs_money");
+  assert.match(summary[0].message, /\$25/);
+});
+
+test("child summaries separate spend money from savings", () => {
+  const summary = buildChildMoneySummary([
+    { id: "child", name: "Avery", currentSavings: 30, spendingLimit: 20, savingsGoal: 100 },
+  ]);
+
+  assert.equal(summary[0].total, 50);
+  assert.equal(summary[0].status, "ready");
+  assert.equal(summary[0].progress, 30);
 });

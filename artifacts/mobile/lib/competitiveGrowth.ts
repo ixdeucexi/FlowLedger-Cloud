@@ -131,6 +131,8 @@ export interface ReportsSummary {
   income: number;
   spending: number;
   net: number;
+  plannedBills: number;
+  debtMinimums: number;
   topCategory: string | null;
   categoryTotals: { category: string; amount: number }[];
   subscriptionTotal: number;
@@ -387,11 +389,16 @@ export function buildReportsSummary(
     .sort((a, b) => b.amount - a.amount);
   const subscriptions = detectSubscriptions(transactions);
   const debtTotal = roundCurrency(debts.reduce((sum, debt) => sum + Math.max(0, debt.balance), 0));
-  const recurringBills = roundCurrency(bills.filter(bill => bill.isRecurring !== false && !bill.stopped).reduce((sum, bill) => sum + Math.max(0, bill.amount), 0));
+  const plannedBills = roundCurrency(bills
+    .filter(bill => bill.isRecurring !== false && !bill.isDebt && !bill.stopped)
+    .reduce((sum, bill) => sum + Math.max(0, bill.amount), 0));
+  const debtMinimums = roundCurrency(debts.reduce((sum, debt) => sum + Math.max(0, debt.minimumPayment ?? 0), 0));
   return {
     income,
     spending,
-    net: roundCurrency(income - spending - recurringBills),
+    net: roundCurrency(income - spending),
+    plannedBills,
+    debtMinimums,
     topCategory: categoryTotals[0]?.category ?? null,
     categoryTotals,
     subscriptionTotal: roundCurrency(subscriptions.reduce((sum, sub) => sum + sub.monthlyEquivalent, 0)),
@@ -484,16 +491,22 @@ export function buildSmartReminders(input: {
 
 export function buildChildMoneySummary(children: ChildProfile[]) {
   return children.map(child => {
+    const spendAvailable = Math.max(0, roundCurrency(child.spendingLimit ?? 0));
+    const saved = Math.max(0, roundCurrency(child.currentSavings ?? 0));
     const progress = child.savingsGoal && child.savingsGoal > 0
-      ? Math.min(100, Math.round(((child.currentSavings ?? 0) / child.savingsGoal) * 100))
+      ? Math.min(100, Math.round((saved / child.savingsGoal) * 100))
       : 0;
     return {
       id: child.id,
       name: child.name,
       progress,
+      spendAvailable,
+      saved,
+      total: roundCurrency(spendAvailable + saved),
+      status: spendAvailable > 0 ? "ready" as const : "needs_money" as const,
       message: child.savingsGoal
-        ? `${child.name} is ${progress}% toward their savings goal.`
-        : `${child.name} is ready for a starter money plan.`,
+        ? `$${saved.toFixed(2)} saved toward a $${child.savingsGoal.toFixed(2)} goal.`
+        : "Add a savings goal when they are ready.",
     };
   });
 }
