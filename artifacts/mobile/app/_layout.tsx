@@ -14,6 +14,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ConfirmActionModal } from "@/components/ConfirmActionModal";
 import { LegalAcceptanceGate } from "@/components/LegalAcceptanceGate";
 import { PwaInstallPrompt } from "@/components/PwaInstallPrompt";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
@@ -208,6 +209,7 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
                 <Stack.Screen name="(tabs)" />
               </Stack>
               <PwaInstallPrompt />
+              <ConfirmActionModal />
             </GestureHandlerRootView>
             <LegalAcceptanceGate />
           </>

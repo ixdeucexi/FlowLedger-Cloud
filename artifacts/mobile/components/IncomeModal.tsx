@@ -8,6 +8,7 @@ import type { IncomeAmountEntry, IncomeItem } from "@/context/BudgetContext";
 import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
+import { confirmAction } from "@/lib/confirmAction";
 import { MONTH_NAMES } from "@/lib/dateLabels";
 import { getLatestRecordedIncomeAmount, normalizeIncomeExcludedDates } from "@/lib/schedule";
 
@@ -63,26 +64,21 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
 
   const handleDelete = () => {
     if (!editItem || !onDelete || saving) return;
-    Alert.alert(
-      "Delete income?",
-      `Delete "${editItem.name}" from Income and Calendar?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            setSaving(true);
-            try {
-              await onDelete(editItem.id);
-              onClose();
-            } finally {
-              setSaving(false);
-            }
-          },
-        },
-      ],
-    );
+    confirmAction({
+      title: "Delete this income?",
+      message: `Delete "${editItem.name}" from Income and Calendar?`,
+      confirmText: "Delete",
+      destructive: true,
+      onConfirm: async () => {
+        setSaving(true);
+        try {
+          await onDelete(editItem.id);
+          onClose();
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
   };
 
   useEffect(() => {
@@ -156,10 +152,18 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
   };
 
   const handleDeleteHistoryEntry = (ef: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const nextHistory = history.filter(h => h.effective_from !== ef);
-    setHistory(nextHistory);
-    setAmount(getLatestRecordedIncomeAmount({ amount: baselineAmount, frequency, amount_history: nextHistory }).toString());
+    confirmAction({
+      title: "Delete this income update?",
+      message: `Remove the amount change that starts ${formatYYMM(ef)}? Earlier income amounts will stay unchanged.`,
+      confirmText: "Delete",
+      destructive: true,
+      onConfirm: () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        const nextHistory = history.filter(h => h.effective_from !== ef);
+        setHistory(nextHistory);
+        setAmount(getLatestRecordedIncomeAmount({ amount: baselineAmount, frequency, amount_history: nextHistory }).toString());
+      },
+    });
   };
 
   const monthlyEquiv = (() => {

@@ -1394,18 +1394,16 @@ export default function MoreScreen() {
 
   const handleResetFlo = () => {
     if (!user) return;
-    Alert.alert(
-      "Reset Flo Memory",
-      "Remove Flo's saved preference and context summary? Your financial data will not be changed.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Reset",
-          style: "destructive",
-          onPress: () => void resetFloMemory(user.id).then(() => Alert.alert("Flo Memory Reset", "Flo's rolling summary was removed.")),
-        },
-      ],
-    );
+    confirmAction({
+      title: "Reset Flo Memory?",
+      message: "Remove Flo's saved preferences and context? Your financial data will not change.",
+      confirmText: "Reset",
+      destructive: true,
+      onConfirm: async () => {
+        await resetFloMemory(user.id);
+        Alert.alert("Flo Memory Reset", "Flo's saved memory was removed.");
+      },
+    });
   };
 
   const handleShowInstallPrompt = () => {

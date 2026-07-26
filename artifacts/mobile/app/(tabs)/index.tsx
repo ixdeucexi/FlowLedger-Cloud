@@ -1005,6 +1005,7 @@ export default function DashboardScreen() {
             <Image source={FLOWLEDGER_LOGO} style={styles.brandMarkImage} resizeMode="cover" />
           </View>
           <View>
+            <AppText tone="label" style={[styles.brandEyebrow, { color: c.primary }]}>FlowLedger Algo</AppText>
             <AppText tone="title" style={[styles.heading, { color: dashboardTheme.heading, textShadowColor: c.isDark ? "rgba(56,189,248,0.35)" : "transparent" }]}>Command Center</AppText>
           </View>
         </View>
@@ -1026,8 +1027,7 @@ export default function DashboardScreen() {
         <View style={[styles.dashboardFloAccessIcon, { backgroundColor: c.primary + "22" }]}>
           <Feather name="message-circle" size={17} color={c.primary} />
         </View>
-        <AppText tone="title" style={[styles.dashboardFloAccessText, { color: c.foreground }]}>Ask Flo</AppText>
-        <Feather name="chevron-right" size={17} color={c.primary} />
+        <AppText tone="title" style={[styles.dashboardFloAccessText, { color: c.foreground }]}>Flo</AppText>
       </Pressable>
 
       {!settings.onboarding_completed && (() => {
@@ -2040,11 +2040,12 @@ const styles = StyleSheet.create({
   brandLockup: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
   brandMark: { width: 48, height: 48, borderRadius: 17, alignItems: "center", justifyContent: "center", overflow: "hidden", borderWidth: 1, borderColor: "rgba(96,165,250,0.35)", backgroundColor: "#020617", shadowColor: "#38bdf8", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 18, elevation: 9 },
   brandMarkImage: { width: "100%", height: "100%" },
+  brandEyebrow: { fontSize: 9, lineHeight: 12, fontFamily: "Inter_800ExtraBold", letterSpacing: 2.1, textTransform: "uppercase", marginBottom: 1 },
   heading:    { fontSize: 30, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.0, color: "#f8fafc", textShadowColor: "rgba(56,189,248,0.35)", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 12 },
   headerActionButton: { width: 54, height: 54, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.82)", borderWidth: 1, borderColor: "rgba(34,211,238,0.38)", shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.52, shadowRadius: 22, elevation: 12 },
-  dashboardFloAccess: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 16, paddingHorizontal: 12, marginTop: -6, marginBottom: 14 },
+  dashboardFloAccess: { alignSelf: "flex-start", minHeight: 40, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 999, paddingHorizontal: 11, marginTop: -6, marginBottom: 14 },
   dashboardFloAccessIcon: { width: 30, height: 30, borderRadius: 11, alignItems: "center", justifyContent: "center" },
-  dashboardFloAccessText: { flex: 1, fontSize: 14 },
+  dashboardFloAccessText: { fontSize: 14, paddingRight: 3 },
   setupCard: { borderWidth: 1, borderRadius: 18, padding: 14, marginBottom: 12 },
   setupHeader: { flexDirection: "row", alignItems: "flex-start", marginBottom: 8 },
   setupTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },

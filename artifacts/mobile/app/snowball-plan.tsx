@@ -9,6 +9,7 @@ import { DatePickerField } from "@/components/DatePickerField";
 import { FloLogo } from "@/components/FloLogo";
 import { PlanFeatureGate } from "@/components/PlanFeatureGate";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
+import { confirmAction } from "@/lib/confirmAction";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import {
@@ -201,19 +202,27 @@ function SnowballPlanScreen() {
     }
   };
 
-  const removePlan = async () => {
+  const removePlan = () => {
     if ((!existingPayment && !editTransaction) || saving) return;
-    setSaving(true);
-    try {
-      if (editTransaction) await deleteTransaction(editTransaction.id);
-      else await removeDebtSnowballPayment(planDate.month, planDate.year);
-      setExtraAmount("");
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (error) {
-      Alert.alert("Couldn’t remove the extra payment", error instanceof Error ? error.message : "Try again.");
-    } finally {
-      setSaving(false);
-    }
+    confirmAction({
+      title: "Remove this Snowball payment?",
+      message: "This removes the extra payment from your calendar. It does not change the debt’s required payment or balance.",
+      confirmText: "Remove",
+      destructive: true,
+      onConfirm: async () => {
+        setSaving(true);
+        try {
+          if (editTransaction) await deleteTransaction(editTransaction.id);
+          else await removeDebtSnowballPayment(planDate.month, planDate.year);
+          setExtraAmount("");
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (error) {
+          Alert.alert("Couldn’t remove the extra payment", error instanceof Error ? error.message : "Try again.");
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
   };
 
   return (
