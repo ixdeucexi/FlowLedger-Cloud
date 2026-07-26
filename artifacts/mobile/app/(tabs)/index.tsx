@@ -1010,6 +1010,25 @@ export default function DashboardScreen() {
         </View>
         <CommandPlusButton onPress={() => setActionModalVisible(true)} accessibilityLabel="Add to FlowLedger" />
       </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open Flo"
+        onPress={openFlo}
+        style={({ pressed }) => [
+          styles.dashboardFloAccess,
+          {
+            backgroundColor: c.primary + "14",
+            borderColor: c.primary + "38",
+            opacity: pressed ? 0.78 : 1,
+          },
+        ]}
+      >
+        <View style={[styles.dashboardFloAccessIcon, { backgroundColor: c.primary + "22" }]}>
+          <Feather name="message-circle" size={17} color={c.primary} />
+        </View>
+        <AppText tone="title" style={[styles.dashboardFloAccessText, { color: c.foreground }]}>Ask Flo</AppText>
+        <Feather name="chevron-right" size={17} color={c.primary} />
+      </Pressable>
 
       {!settings.onboarding_completed && (() => {
         const steps = [
@@ -2023,6 +2042,9 @@ const styles = StyleSheet.create({
   brandMarkImage: { width: "100%", height: "100%" },
   heading:    { fontSize: 30, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.0, color: "#f8fafc", textShadowColor: "rgba(56,189,248,0.35)", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 12 },
   headerActionButton: { width: 54, height: 54, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.82)", borderWidth: 1, borderColor: "rgba(34,211,238,0.38)", shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.52, shadowRadius: 22, elevation: 12 },
+  dashboardFloAccess: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 16, paddingHorizontal: 12, marginTop: -6, marginBottom: 14 },
+  dashboardFloAccessIcon: { width: 30, height: 30, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  dashboardFloAccessText: { flex: 1, fontSize: 14 },
   setupCard: { borderWidth: 1, borderRadius: 18, padding: 14, marginBottom: 12 },
   setupHeader: { flexDirection: "row", alignItems: "flex-start", marginBottom: 8 },
   setupTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
