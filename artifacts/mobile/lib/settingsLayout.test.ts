@@ -4,6 +4,8 @@ import {
   getForecastSafetyLayout,
   isCompactSettingsLayout,
   SETTINGS_STACK_BREAKPOINT,
+  shouldExpandReportDetails,
+  shouldStackAccountControls,
   shouldStackSettingsMetrics,
 } from "./settingsLayout";
 
@@ -46,5 +48,16 @@ it("stacks Settings metrics instead of collapsing values under enlarged text", (
   }
   for (const width of [320, 360, 390, 412]) {
     assert.equal(shouldStackSettingsMetrics(width), false);
+  }
+});
+
+it("stacks account controls and expands report details under enlarged text", () => {
+  for (const width of [240, 260, 275]) {
+    assert.equal(shouldExpandReportDetails(width), true);
+    assert.equal(shouldStackAccountControls(width), true);
+  }
+  for (const width of [320, 360, 390, 412]) {
+    assert.equal(shouldExpandReportDetails(width), false);
+    assert.equal(shouldStackAccountControls(width), false);
   }
 });

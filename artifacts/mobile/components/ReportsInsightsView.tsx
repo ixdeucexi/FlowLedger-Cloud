@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-na
 import colors from "@/constants/colors";
 import { useColors } from "@/hooks/useColors";
 import type { ReminderItem, ReportsSummary } from "@/lib/competitiveGrowth";
-import { shouldStackSettingsMetrics } from "@/lib/settingsLayout";
+import { shouldExpandReportDetails, shouldStackSettingsMetrics } from "@/lib/settingsLayout";
 
 interface ReportsInsightsViewProps {
   monthLabel: string;
@@ -27,6 +27,7 @@ export function ReportsInsightsView({
   const c = useColors();
   const { width: viewportWidth } = useWindowDimensions();
   const stackCompactContent = shouldStackSettingsMetrics(viewportWidth);
+  const expandCompactDetails = shouldExpandReportDetails(viewportWidth);
   const hasActivity = summary.income > 0 || summary.spending > 0;
   const moneyKept = summary.net >= 0;
   const spendingPercent = summary.income > 0
@@ -97,14 +98,19 @@ export function ReportsInsightsView({
           const width = largestCategory > 0 ? Math.max(4, Math.round((category.amount / largestCategory) * 100)) : 0;
           return (
             <View key={category.category} style={[styles.categoryRow, index > 0 && { borderTopColor: c.border, borderTopWidth: 1 }]}>
-              <View style={styles.categoryTop}>
+              <View style={[styles.categoryTop, expandCompactDetails && styles.categoryTopCompact]}>
                 <View style={styles.categoryLabelRow}>
                   <View style={[styles.rank, { backgroundColor: c.primary + "18" }]}>
                     <Text style={[styles.rankText, { color: c.primary }]}>{index + 1}</Text>
                   </View>
-                  <Text style={[styles.categoryName, { color: c.foreground }]} numberOfLines={1}>{category.category}</Text>
+                  <Text
+                    style={[styles.categoryName, { color: c.foreground }]}
+                    numberOfLines={expandCompactDetails ? undefined : 1}
+                  >
+                    {category.category}
+                  </Text>
                 </View>
-                <View style={styles.categoryAmountWrap}>
+                <View style={[styles.categoryAmountWrap, expandCompactDetails && styles.categoryAmountWrapCompact]}>
                   <Text style={[styles.categoryAmount, { color: c.foreground }]}>{money(category.amount)}</Text>
                   <Text style={[styles.categoryShare, { color: c.mutedForeground }]}>{share}%</Text>
                 </View>
@@ -121,10 +127,10 @@ export function ReportsInsightsView({
 
       <SectionTitle label="Plan at a glance" />
       <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
-        <PlanRow icon="calendar" label="Recurring bills" detail="planned each month" value={money(summary.plannedBills)} color={c.warning} />
-        <PlanRow icon="credit-card" label="Debt minimums" detail="required each month" value={money(summary.debtMinimums)} color={c.primary} borderColor={c.border} />
-        <PlanRow icon="repeat" label="Subscriptions" detail="estimated monthly" value={money(summary.subscriptionTotal)} color="#8b5cf6" borderColor={c.border} />
-        <PlanRow icon="trending-down" label="Debt remaining" detail="current balances" value={money(summary.debtTotal)} color={c.destructive} borderColor={c.border} />
+        <PlanRow icon="calendar" label="Recurring bills" detail="planned each month" value={money(summary.plannedBills)} color={c.warning} compact={expandCompactDetails} />
+        <PlanRow icon="credit-card" label="Debt minimums" detail="required each month" value={money(summary.debtMinimums)} color={c.primary} borderColor={c.border} compact={expandCompactDetails} />
+        <PlanRow icon="repeat" label="Subscriptions" detail="estimated monthly" value={money(summary.subscriptionTotal)} color="#8b5cf6" borderColor={c.border} compact={expandCompactDetails} />
+        <PlanRow icon="trending-down" label="Debt remaining" detail="current balances" value={money(summary.debtTotal)} color={c.destructive} borderColor={c.border} compact={expandCompactDetails} />
       </View>
 
       {summary.goalProgress.length ? (
@@ -170,14 +176,19 @@ export function ReportsInsightsView({
               />
               <View style={styles.reminderCopy}>
                 <Text style={[styles.reminderTitle, { color: c.foreground }]}>{reminder.title}</Text>
-                <Text style={[styles.reminderText, { color: c.mutedForeground }]} numberOfLines={2}>{reminder.message}</Text>
+                <Text
+                  style={[styles.reminderText, { color: c.mutedForeground }]}
+                  numberOfLines={expandCompactDetails ? undefined : 2}
+                >
+                  {reminder.message}
+                </Text>
               </View>
             </View>
           ))}
         </View>
       ) : null}
 
-      <View style={styles.buttonRow}>
+      <View style={[styles.buttonRow, expandCompactDetails && styles.buttonRowCompact]}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Open Review Center"
@@ -217,6 +228,7 @@ function PlanRow({
   value,
   color,
   borderColor,
+  compact = false,
 }: {
   icon: React.ComponentProps<typeof Feather>["name"];
   label: string;
@@ -224,10 +236,11 @@ function PlanRow({
   value: string;
   color: string;
   borderColor?: string;
+  compact?: boolean;
 }) {
   const c = useColors();
   return (
-    <View style={[styles.planRow, borderColor ? { borderTopColor: borderColor, borderTopWidth: 1 } : null]}>
+    <View style={[styles.planRow, compact && styles.planRowCompact, borderColor ? { borderTopColor: borderColor, borderTopWidth: 1 } : null]}>
       <View style={[styles.planIcon, { backgroundColor: color + "18" }]}>
         <Feather name={icon} size={17} color={color} />
       </View>
@@ -235,7 +248,7 @@ function PlanRow({
         <Text style={[styles.planLabel, { color: c.foreground }]}>{label}</Text>
         <Text style={[styles.planDetail, { color: c.mutedForeground }]}>{detail}</Text>
       </View>
-      <Text style={[styles.planValue, { color: c.foreground }]}>{value}</Text>
+      <Text style={[styles.planValue, compact && styles.planValueCompact, { color: c.foreground }]}>{value}</Text>
     </View>
   );
 }
@@ -281,21 +294,25 @@ const styles = StyleSheet.create({
   card: { borderWidth: 1, borderRadius: colors.radius, paddingHorizontal: 16 },
   categoryRow: { paddingVertical: 14 },
   categoryTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  categoryTopCompact: { flexDirection: "column", alignItems: "stretch", gap: 7 },
   categoryLabelRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: 9 },
   rank: { width: 26, height: 26, borderRadius: 9, alignItems: "center", justifyContent: "center" },
   rankText: { fontFamily: "Inter_700Bold", fontSize: 12 },
   categoryName: { flex: 1, fontFamily: "Inter_600SemiBold", fontSize: 15 },
   categoryAmountWrap: { alignItems: "flex-end" },
+  categoryAmountWrapCompact: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   categoryAmount: { fontFamily: "Inter_700Bold", fontSize: 15 },
   categoryShare: { fontFamily: "Inter_400Regular", fontSize: 11, marginTop: 1 },
   categoryTrack: { height: 4, borderRadius: 99, overflow: "hidden", marginTop: 9, marginLeft: 35 },
   categoryFill: { height: "100%", borderRadius: 99 },
   planRow: { minHeight: 70, flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 12 },
+  planRowCompact: { flexWrap: "wrap" },
   planIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   planCopy: { flex: 1 },
   planLabel: { fontFamily: "Inter_600SemiBold", fontSize: 14 },
   planDetail: { fontFamily: "Inter_400Regular", fontSize: 11, marginTop: 2 },
   planValue: { fontFamily: "Inter_700Bold", fontSize: 16 },
+  planValueCompact: { width: "100%", textAlign: "right", marginTop: 2 },
   goalRow: { paddingVertical: 14 },
   goalHeading: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   goalName: { fontFamily: "Inter_600SemiBold", fontSize: 14 },
@@ -310,6 +327,7 @@ const styles = StyleSheet.create({
   reminderTitle: { fontFamily: "Inter_600SemiBold", fontSize: 14 },
   reminderText: { fontFamily: "Inter_400Regular", fontSize: 12, lineHeight: 17, marginTop: 3 },
   buttonRow: { flexDirection: "row", gap: 10, marginTop: 2 },
+  buttonRowCompact: { flexDirection: "column" },
   button: { flex: 1, minHeight: 50, borderRadius: 15, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   buttonText: { fontFamily: "Inter_700Bold", fontSize: 13 },
   empty: { minHeight: 110, alignItems: "center", justifyContent: "center", gap: 8 },

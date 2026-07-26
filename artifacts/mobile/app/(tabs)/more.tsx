@@ -63,7 +63,12 @@ import {
 import { DEFAULT_ONBOARDING_PREFERENCES } from "@/lib/onboarding";
 import { loadOnboardingPreferences, readOnboardingPreferences, saveOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
-import { getForecastSafetyLayout, isCompactSettingsLayout, shouldStackSettingsMetrics } from "@/lib/settingsLayout";
+import {
+  getForecastSafetyLayout,
+  isCompactSettingsLayout,
+  shouldStackAccountControls,
+  shouldStackSettingsMetrics,
+} from "@/lib/settingsLayout";
 import {
   SETTINGS_SECTIONS,
   attentionCountStatus,
@@ -304,6 +309,7 @@ export default function MoreScreen() {
   const insets = useSafeAreaInsets();
   const { width: viewportWidth } = useWindowDimensions();
   const useStackedSettingsFields = viewportWidth < 480;
+  const stackCompactAccountControls = shouldStackAccountControls(viewportWidth);
   const forecastSafetyLayout = useMemo(() => getForecastSafetyLayout(viewportWidth), [viewportWidth]);
   const router = useRouter();
   const routeParams = useLocalSearchParams<{ section?: string; feedback?: string; add?: string }>();
@@ -1864,9 +1870,14 @@ export default function MoreScreen() {
 
         <View style={[styles.householdPanel, { backgroundColor: c.muted, borderColor: c.border }]}>
           <Text style={[styles.householdPanelTitle, { color: c.foreground }]}>Join a household</Text>
-          <View style={styles.joinRow}>
+          <View style={[styles.joinRow, stackCompactAccountControls && styles.joinRowCompact]}>
             <TextInput
-              style={[styles.renameInput, styles.joinInput, { backgroundColor: c.card, color: c.foreground, borderColor: c.border }]}
+              style={[
+                styles.renameInput,
+                styles.joinInput,
+                stackCompactAccountControls && styles.joinInputCompact,
+                { backgroundColor: c.card, color: c.foreground, borderColor: c.border },
+              ]}
               value={householdJoinCode}
               onChangeText={text => setHouseholdJoinCode(text.toUpperCase())}
               placeholder="Enter invite code"
@@ -1880,6 +1891,7 @@ export default function MoreScreen() {
               disabled={householdBusy || !householdJoinCode.trim()}
               style={({ pressed }) => [
                 styles.joinButton,
+                stackCompactAccountControls && styles.joinButtonCompact,
                 { backgroundColor: c.primary, opacity: pressed || householdBusy || !householdJoinCode.trim() ? 0.55 : 1 },
               ]}
             >
@@ -1936,10 +1948,10 @@ export default function MoreScreen() {
           const age = Math.max(0, Math.floor((Date.now() - new Date(reviewed).getTime()) / 86_400_000));
           const monthDelta = accountMonthDeltas.get(account.id) ?? 0;
           const projected = account.current_balance + monthDelta;
-          return <View key={account.id} style={[styles.accountRow, { borderTopWidth: index ? 1 : 0, borderTopColor: c.border }]}>
+          return <View key={account.id} style={[styles.accountRow, stackCompactAccountControls && styles.accountRowCompact, { borderTopWidth: index ? 1 : 0, borderTopColor: c.border }]}>
             <View style={[styles.incomeIcon, { backgroundColor: c.primary + "16" }]}><Feather name={account.account_type === "savings" ? "heart" : "dollar-sign"} size={17} color={c.primary} /></View>
             <Pressable style={{ flex: 1 }} onPress={() => openAccount("edit", account)}><Text style={[styles.accountName, { color: c.foreground }]}>{account.name}</Text><Text style={[styles.incomeFreq, { color: age > 30 ? c.destructive : c.mutedForeground }]}>{account.account_type.replace("_", " ")} · {age === 0 ? "reconciled today" : `${age} days since review`}</Text></Pressable>
-            <View style={styles.accountRight}><Text style={[styles.incomeMonthly, { color: c.foreground }]}>${account.current_balance.toFixed(2)}</Text><Text style={[styles.reconcileText, { color: c.mutedForeground }]}>Proj ${projected.toFixed(2)}</Text><Pressable onPress={() => openAccount("reconcile", account)}><Text style={[styles.reconcileText, { color: c.primary }]}>Reconcile</Text></Pressable></View>
+            <View style={[styles.accountRight, stackCompactAccountControls && styles.accountRightCompact]}><Text style={[styles.incomeMonthly, { color: c.foreground }]}>${account.current_balance.toFixed(2)}</Text><Text style={[styles.reconcileText, { color: c.mutedForeground }]}>Proj ${projected.toFixed(2)}</Text><Pressable onPress={() => openAccount("reconcile", account)}><Text style={[styles.reconcileText, { color: c.primary }]}>Reconcile</Text></Pressable></View>
           </View>;
         })}
         {!accounts.some(account => account.is_active) && <Text style={[styles.emptyText, { color: c.mutedForeground }]}>Add your first account.</Text>}
@@ -3091,13 +3103,18 @@ const styles = StyleSheet.create({
   inviteCodeLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 },
   inviteCodeText: { fontSize: 22, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.8 },
   joinRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 },
+  joinRowCompact: { flexDirection: "column", alignItems: "stretch" },
   joinInput: { flex: 1, minWidth: 0, borderWidth: 1, height: 44 },
+  joinInputCompact: { flex: 0, width: "100%", minHeight: 44, paddingVertical: 10 },
   joinButton: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  joinButtonCompact: { width: "100%" },
   householdMessage: { fontSize: 12, fontFamily: "Inter_700Bold", lineHeight: 17, marginTop: 10 },
   confidenceBox: { flexDirection: "row", alignItems: "flex-start", gap: 9, padding: 11, borderRadius: 10, marginBottom: 8 },
   accountRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12 },
+  accountRowCompact: { alignItems: "flex-start", flexWrap: "wrap" },
   accountName: { fontSize: 14, fontFamily: "Inter_600SemiBold", textTransform: "capitalize" },
   accountRight: { alignItems: "flex-end", gap: 3 },
+  accountRightCompact: { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   reconcileText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   setupHeader: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
   setupStep: { flexDirection: "row", alignItems: "center", gap: 9, paddingVertical: 5 },

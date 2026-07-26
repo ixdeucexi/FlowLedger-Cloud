@@ -31,3 +31,11 @@ export function isCompactSettingsLayout(viewportWidth: number) {
 export function shouldStackSettingsMetrics(viewportWidth: number) {
   return isCompactSettingsLayout(viewportWidth);
 }
+
+export function shouldExpandReportDetails(viewportWidth: number) {
+  return isCompactSettingsLayout(viewportWidth);
+}
+
+export function shouldStackAccountControls(viewportWidth: number) {
+  return isCompactSettingsLayout(viewportWidth);
+}
