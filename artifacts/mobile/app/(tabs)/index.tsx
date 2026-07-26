@@ -1011,25 +1011,6 @@ export default function DashboardScreen() {
         </View>
         <CommandPlusButton onPress={() => setActionModalVisible(true)} accessibilityLabel="Add to FlowLedger" />
       </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Open Flo"
-        onPress={openFlo}
-        style={({ pressed }) => [
-          styles.dashboardFloAccess,
-          {
-            backgroundColor: c.primary + "14",
-            borderColor: c.primary + "38",
-            opacity: pressed ? 0.78 : 1,
-          },
-        ]}
-      >
-        <View style={[styles.dashboardFloAccessIcon, { backgroundColor: c.primary + "22" }]}>
-          <Feather name="message-circle" size={17} color={c.primary} />
-        </View>
-        <AppText tone="title" style={[styles.dashboardFloAccessText, { color: c.foreground }]}>Flo</AppText>
-      </Pressable>
-
       {!settings.onboarding_completed && (() => {
         const steps = [
           { label: "Add an account", done: accounts.some(account => account.is_active) },
@@ -1168,8 +1149,30 @@ export default function DashboardScreen() {
                 <AppText style={[styles.referenceFlipButtonText, { color: dashboardTheme.purpleText }]}>Savings</AppText>
               </Pressable>
             </View>
-            <AppText tone="label" style={[styles.referenceHeroLabel, { color: dashboardTheme.mutedText }]}>Checking balance</AppText>
-            <AppText tone="number" style={[styles.referenceHeroAmount, { color: dashboardTheme.amount, textShadowColor: c.isDark ? "rgba(34,211,238,0.25)" : "transparent" }]}>{formatDashboardCurrency(dashboardCheckingBalance)}</AppText>
+            <View style={styles.referenceBalanceRow}>
+              <View style={styles.referenceBalanceAmount}>
+                <AppText tone="label" style={[styles.referenceHeroLabel, { color: dashboardTheme.mutedText }]}>Checking balance</AppText>
+                <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={[styles.referenceHeroAmount, { color: dashboardTheme.amount, textShadowColor: c.isDark ? "rgba(34,211,238,0.25)" : "transparent" }]}>{formatDashboardCurrency(dashboardCheckingBalance)}</AppText>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Open Flo"
+                onPress={openFlo}
+                style={({ pressed }) => [
+                  styles.referenceHeroFloButton,
+                  {
+                    backgroundColor: c.primary + "14",
+                    borderColor: c.primary + "38",
+                    opacity: pressed ? 0.78 : 1,
+                  },
+                ]}
+              >
+                <View style={[styles.referenceHeroFloIcon, { backgroundColor: c.primary + "22" }]}>
+                  <Feather name="message-circle" size={17} color={c.primary} />
+                </View>
+                <AppText tone="title" style={[styles.referenceHeroFloText, { color: dashboardTheme.text }]}>Flo</AppText>
+              </Pressable>
+            </View>
           </Animated.View>
 
           <Animated.View
@@ -2043,9 +2046,6 @@ const styles = StyleSheet.create({
   brandEyebrow: { fontSize: 9, lineHeight: 12, fontFamily: "Inter_800ExtraBold", letterSpacing: 2.1, textTransform: "uppercase", marginBottom: 1 },
   heading:    { fontSize: 30, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.0, color: "#f8fafc", textShadowColor: "rgba(56,189,248,0.35)", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 12 },
   headerActionButton: { width: 54, height: 54, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.82)", borderWidth: 1, borderColor: "rgba(34,211,238,0.38)", shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.52, shadowRadius: 22, elevation: 12 },
-  dashboardFloAccess: { alignSelf: "flex-start", minHeight: 40, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 999, paddingHorizontal: 11, marginTop: -6, marginBottom: 14 },
-  dashboardFloAccessIcon: { width: 30, height: 30, borderRadius: 11, alignItems: "center", justifyContent: "center" },
-  dashboardFloAccessText: { fontSize: 14, paddingRight: 3 },
   setupCard: { borderWidth: 1, borderRadius: 18, padding: 14, marginBottom: 12 },
   setupHeader: { flexDirection: "row", alignItems: "flex-start", marginBottom: 8 },
   setupTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
@@ -2092,6 +2092,11 @@ const styles = StyleSheet.create({
   referenceHeroFaceCompact: { minHeight: 118 },
   referenceHeroBackFace: { ...StyleSheet.absoluteFillObject },
   referenceMoneyHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  referenceBalanceRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  referenceBalanceAmount: { flex: 1, minWidth: 0 },
+  referenceHeroFloButton: { minHeight: 40, flexDirection: "row", alignItems: "center", gap: 7, borderWidth: 1, borderRadius: 999, paddingHorizontal: 9 },
+  referenceHeroFloIcon: { width: 29, height: 29, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  referenceHeroFloText: { fontSize: 13, paddingRight: 3 },
   referenceFlipButton: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, borderWidth: 1, borderColor: "rgba(196,181,253,0.28)", backgroundColor: "rgba(124,58,237,0.18)", paddingHorizontal: 9, paddingVertical: 6 },
   referenceFlipButtonText: { color: "#c4b5fd", fontSize: 9, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.5 },
   referenceSavingsAmount: { color: "#6ee7b7", fontSize: 34, lineHeight: 38, letterSpacing: -1.4 },
