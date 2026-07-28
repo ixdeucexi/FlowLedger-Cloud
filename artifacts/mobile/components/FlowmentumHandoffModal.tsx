@@ -1,8 +1,9 @@
 import { Feather } from "@expo/vector-icons";
-import React from "react";
-import { Modal, Pressable, StyleSheet, View } from "react-native";
+import React, { useEffect, useRef } from "react";
+import { Animated, Easing, Modal, Pressable, StyleSheet, View } from "react-native";
 
 import { AppText } from "@/components/AppText";
+import { FloLogo } from "@/components/FloLogo";
 import { FLOWMENTUM_PROTECTED_DAYS } from "@/lib/flowmentumHandoff";
 
 interface FlowmentumHandoffModalProps {
@@ -12,26 +13,106 @@ interface FlowmentumHandoffModalProps {
   onExplore: () => void;
 }
 
+const CELEBRATION_PARTICLES = [
+  { color: "#a855f7", x: -126, y: -42 }, { color: "#22d3ee", x: -100, y: -96 },
+  { color: "#facc15", x: -52, y: -124 }, { color: "#fb7185", x: 4, y: -132 },
+  { color: "#34d399", x: 62, y: -116 }, { color: "#60a5fa", x: 108, y: -76 },
+  { color: "#f97316", x: 132, y: -18 }, { color: "#e879f9", x: 118, y: 42 },
+  { color: "#2dd4bf", x: 76, y: 88 }, { color: "#fde047", x: 20, y: 108 },
+  { color: "#818cf8", x: -44, y: 98 }, { color: "#fb7185", x: -106, y: 54 },
+] as const;
+
 export function FlowmentumHandoffModal({
   visible,
   isAdminPreview = false,
   onDismiss,
   onExplore,
 }: FlowmentumHandoffModalProps) {
+  const celebration = useRef(new Animated.Value(0)).current;
+  const floEntrance = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!visible) {
+      celebration.stopAnimation();
+      floEntrance.stopAnimation();
+      celebration.setValue(0);
+      floEntrance.setValue(0);
+      return;
+    }
+
+    celebration.setValue(0);
+    floEntrance.setValue(0);
+    Animated.parallel([
+      Animated.spring(floEntrance, {
+        toValue: 1,
+        friction: 5,
+        tension: 72,
+        useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.delay(120),
+        Animated.timing(celebration, {
+          toValue: 1,
+          duration: 1_650,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+  }, [celebration, floEntrance, visible]);
+
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss}>
+    <Modal visible={visible} transparent animationType="fade" presentationStyle="overFullScreen" statusBarTranslucent onRequestClose={onDismiss}>
       <View style={styles.backdrop}>
         <View style={styles.card}>
+          <View pointerEvents="none" style={styles.fireworks}>
+            {CELEBRATION_PARTICLES.map((particle, index) => (
+              <Animated.View
+                key={`${particle.x}:${particle.y}`}
+                style={[
+                  styles.particle,
+                  {
+                    backgroundColor: particle.color,
+                    opacity: celebration.interpolate({
+                      inputRange: [0, 0.08, 0.72, 1],
+                      outputRange: [0, 1, 0.92, 0],
+                    }),
+                    transform: [
+                      { translateX: celebration.interpolate({ inputRange: [0, 1], outputRange: [0, particle.x] }) },
+                      { translateY: celebration.interpolate({ inputRange: [0, 1], outputRange: [0, particle.y] }) },
+                      { rotate: celebration.interpolate({ inputRange: [0, 1], outputRange: ["0deg", `${180 + index * 37}deg`] }) },
+                      { scale: celebration.interpolate({ inputRange: [0, 0.12, 1], outputRange: [0.3, 1.15, 0.7] }) },
+                    ],
+                  },
+                ]}
+              />
+            ))}
+          </View>
           <View style={styles.handle} />
           <View style={styles.header}>
-            <View style={styles.icon}>
-              <Feather name="trending-up" size={20} color="#67e8f9" />
-            </View>
+            <Animated.View
+              style={[
+                styles.floIcon,
+                {
+                  opacity: floEntrance,
+                  transform: [
+                    { scale: floEntrance.interpolate({ inputRange: [0, 1], outputRange: [0.45, 1] }) },
+                    { rotate: floEntrance.interpolate({ inputRange: [0, 1], outputRange: ["-12deg", "0deg"] }) },
+                  ],
+                },
+              ]}
+            >
+              <FloLogo size={58} />
+              <View style={styles.floSpark}>
+                <Feather name="star" size={11} color="#422006" />
+              </View>
+            </Animated.View>
             <View style={styles.headerCopy}>
               <AppText tone="label" style={styles.eyebrow}>
-                {isAdminPreview ? "ADMIN PREVIEW" : "180-DAY MILESTONE"}
+                {isAdminPreview ? "ADMIN PREVIEW · FLO'S CELEBRATION" : "FLO IS CELEBRATING WITH YOU"}
               </AppText>
-              <AppText tone="title" style={styles.title}>Your foundation is protected</AppText>
+              <AppText tone="title" style={styles.title}>You did it!</AppText>
+              <AppText style={styles.floMessage}>Your foundation is protected.</AppText>
             </View>
             <Pressable accessibilityRole="button" accessibilityLabel="Close milestone introduction" onPress={onDismiss} hitSlop={10}>
               <Feather name="x" size={21} color="#94a3b8" />
@@ -83,13 +164,17 @@ export function FlowmentumHandoffModal({
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(2,6,23,0.78)", alignItems: "center", justifyContent: "center", padding: 20 },
-  card: { width: "100%", maxWidth: 500, borderRadius: 28, borderWidth: 1, borderColor: "rgba(34,211,238,0.32)", backgroundColor: "rgba(15,23,42,0.98)", padding: 18, shadowColor: "#22d3ee", shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.24, shadowRadius: 34, elevation: 16 },
+  card: { width: "100%", maxWidth: 500, borderRadius: 28, borderWidth: 1, borderColor: "rgba(34,211,238,0.38)", backgroundColor: "rgba(15,23,42,0.98)", padding: 18, overflow: "hidden", shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.32, shadowRadius: 34, elevation: 16 },
+  fireworks: { position: "absolute", left: "50%", top: 98, zIndex: 0 },
+  particle: { position: "absolute", width: 8, height: 14, borderRadius: 3 },
   handle: { alignSelf: "center", width: 44, height: 4, borderRadius: 999, backgroundColor: "rgba(148,163,184,0.42)", marginBottom: 16 },
-  header: { flexDirection: "row", alignItems: "flex-start", gap: 11 },
-  icon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(103,232,249,0.28)", backgroundColor: "rgba(6,182,212,0.14)" },
+  header: { flexDirection: "row", alignItems: "center", gap: 13, zIndex: 1 },
+  floIcon: { width: 66, height: 66, borderRadius: 33, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(2,6,23,0.88)", shadowColor: "#22d3ee", shadowOpacity: 0.55, shadowRadius: 16, shadowOffset: { width: 0, height: 5 }, elevation: 8 },
+  floSpark: { position: "absolute", right: -1, top: -2, width: 23, height: 23, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#fde047", borderWidth: 2, borderColor: "#0f172a" },
   headerCopy: { flex: 1 },
-  eyebrow: { color: "#67e8f9", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.05 },
-  title: { color: "#f8fafc", fontSize: 20, lineHeight: 25, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
+  eyebrow: { color: "#67e8f9", fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.9 },
+  title: { color: "#f8fafc", fontSize: 25, lineHeight: 29, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
+  floMessage: { color: "#c4b5fd", fontSize: 13, lineHeight: 18, fontFamily: "Inter_700Bold", marginTop: 2 },
   milestone: { flexDirection: "row", alignItems: "center", gap: 13, borderRadius: 18, borderWidth: 1, borderColor: "rgba(52,211,153,0.25)", backgroundColor: "rgba(16,185,129,0.10)", padding: 14, marginTop: 17 },
   milestoneNumber: { color: "#6ee7b7", fontSize: 34, lineHeight: 38, fontFamily: "Inter_800ExtraBold", letterSpacing: -1 },
   milestoneCopy: { flex: 1 },
