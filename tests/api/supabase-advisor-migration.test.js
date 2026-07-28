@@ -29,6 +29,12 @@ const repairedVersions = {
   stabilize_monthly_reconciliation_audit: "20260720065731",
   exclude_single_income_occurrence: "20260723062723",
   reschedule_snowball_plan_across_months: "20260724153744",
+  pro_automatic_calendar_rollover: "20260727215111",
+  ensure_calendar_rollover_household_settings: "20260727215701",
+  match_posted_to_manual_calendar_transactions: "20260727215857",
+  privatize_calendar_automation_rpcs: "20260727220645",
+  add_quarterly_bill_frequency_and_remove_manual_matching: "20260727225110",
+  fix_automatic_rollover_for_all_bill_cadences: "20260727225412",
 };
 
 test("migration versions are unique and repaired names match production history", async () => {

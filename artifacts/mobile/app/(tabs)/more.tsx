@@ -1636,6 +1636,8 @@ export default function MoreScreen() {
             return (
               <Pressable
                 key={opt.value}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
                 onPress={() => { setThemeMode(opt.value); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
                 style={[styles.themeBtn, isCompactSettingsLayout(viewportWidth) && styles.themeBtnCompact, { backgroundColor: active ? c.primary : "transparent", borderRadius: 8 }]}
               >
@@ -1653,6 +1655,8 @@ export default function MoreScreen() {
           return (
             <Pressable
               key={opt.value}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
               onPress={() => {
                 setFontStyle(opt.value);
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

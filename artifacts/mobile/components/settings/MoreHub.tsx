@@ -42,12 +42,12 @@ export function MoreHub({
         <View style={styles.householdCopy}>
           <Text style={[styles.eyebrow, { color: colors.mutedForeground }]}>CURRENT HOUSEHOLD</Text>
           <View style={styles.householdNameRow}>
-            <Text style={[styles.householdName, { color: colors.foreground }]} numberOfLines={1}>{householdName}</Text>
+            <Text style={[styles.householdName, { color: colors.foreground }]}>{householdName}</Text>
             <View style={[styles.membershipPill, { backgroundColor: colors.primary + "16", borderColor: colors.primary + "35" }]}>
               <Text style={[styles.membershipText, { color: colors.primary }]} numberOfLines={1}>{membershipLabel}</Text>
             </View>
           </View>
-          <Text style={[styles.identity, { color: colors.mutedForeground }]} numberOfLines={1}>{identity} · {householdRole}</Text>
+          <Text style={[styles.identity, { color: colors.mutedForeground }]}>{identity} · {householdRole}</Text>
         </View>
       </View>
 
