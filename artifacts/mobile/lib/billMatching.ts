@@ -218,27 +218,21 @@ interface ConnectedTransactionAccount {
   is_active?: boolean | null;
 }
 
-/**
- * Posted bank activity changes the checking ledger before it is reviewed.
- * Review status controls categorization, never whether cash moved. Transfers
- * still count only on the checking side so account-to-account moves are not
- * doubled.
- */
-export function isCheckingBalanceTransaction(
-  transaction: {
-    source?: string | null;
-    plaid_account_id?: string | null;
-    removed_at?: string | null;
-    deleted_at?: string | null;
-    pending?: boolean | null;
-    review_status?: string | null;
-  },
+interface CheckingLedgerTransaction {
+  source?: string | null;
+  import_hash?: string | null;
+  plaid_account_id?: string | null;
+  removed_at?: string | null;
+  deleted_at?: string | null;
+  pending?: boolean | null;
+  review_status?: string | null;
+}
+
+function isCheckingSideOfTransfer(
+  transaction: CheckingLedgerTransaction,
   connectedAccounts: ConnectedTransactionAccount[],
 ): boolean {
-  if (!isActiveTransaction(transaction)) return false;
-  if (transaction.review_status !== "transfer") return true;
   if (transaction.source !== "plaid" || !transaction.plaid_account_id) return false;
-
   const sourceAccount = connectedAccounts.find(account =>
     account.is_active !== false && account.plaid_account_id === transaction.plaid_account_id
   );
@@ -246,4 +240,36 @@ export function isCheckingBalanceTransaction(
   const type = String(sourceAccount.account_type || "").toLowerCase();
   const subtype = String(sourceAccount.account_subtype || "").toLowerCase();
   return type === "depository" && subtype === "checking";
+}
+
+/**
+ * Posted bank activity changes the checking ledger before it is reviewed.
+ * Review status controls categorization, never whether cash moved. Transfers
+ * still count only on the checking side so account-to-account moves are not
+ * doubled.
+ */
+export function isCheckingBalanceTransaction(
+  transaction: CheckingLedgerTransaction,
+  connectedAccounts: ConnectedTransactionAccount[],
+): boolean {
+  if (!isActiveTransaction(transaction)) return false;
+  if (transaction.review_status !== "transfer") return true;
+  return isCheckingSideOfTransfer(transaction, connectedAccounts);
+}
+
+/**
+ * Hiding a posted bank row must not erase money that already moved.
+ * Keep its cash impact in forecasts without restoring it to user-facing lists.
+ */
+export function isCheckingForecastLedgerTransaction(
+  transaction: CheckingLedgerTransaction,
+  connectedAccounts: ConnectedTransactionAccount[],
+): boolean {
+  if (isCheckingBalanceTransaction(transaction, connectedAccounts)) return true;
+  const isPostedBankRow = (transaction.source === "plaid" || Boolean(transaction.import_hash))
+    && !transaction.removed_at
+    && transaction.pending !== true;
+  if (!transaction.deleted_at || !isPostedBankRow) return false;
+  if (transaction.review_status !== "transfer") return true;
+  return isCheckingSideOfTransfer(transaction, connectedAccounts);
 }

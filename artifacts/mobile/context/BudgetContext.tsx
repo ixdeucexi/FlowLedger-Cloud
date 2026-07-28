@@ -42,7 +42,7 @@ import {
   type HouseholdRole,
 } from "@/lib/households";
 import { canEditHouseholdPlan, canManageHouseholdMembers } from "@/lib/householdPermissions";
-import { isActiveTransaction, isCashFlowTransaction, isCheckingBalanceTransaction, isConfirmedBillMatch, isDeletedTransaction } from "@/lib/billMatching";
+import { isActiveTransaction, isCashFlowTransaction, isCheckingBalanceTransaction, isCheckingForecastLedgerTransaction, isConfirmedBillMatch, isDeletedTransaction } from "@/lib/billMatching";
 import { matchedOccurrenceAllocations, occurrenceKey, reviewedBillMonthSettlements } from "@/lib/reviewCenter";
 import { normalizePlanningTools } from "@/lib/planningMode";
 import { localDateString } from "@/lib/dateLabels";
@@ -3111,6 +3111,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Cash Flow ────────────────────────────────────────────────────────────────
 
+  const forecastLedgerTransactions = useMemo(
+    () => [...transactions, ...deletedTransactions],
+    [transactions, deletedTransactions],
+  );
+
   const getCashFlow = useCallback((month: number, year: number): CashFlow => {
     const billMatches = matchedOccurrenceAllocations(transactions, "bill");
     const incomeMatches = matchedOccurrenceAllocations(transactions, "income");
@@ -3144,9 +3149,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const totalPaid = transactions.reduce((sum, transaction) => sum + (transaction.review_allocations ?? [])
       .filter(allocation => allocation.type === "bill" && allocation.occurrenceDate?.startsWith(`${year}-${String(month + 1).padStart(2, "0")}`))
       .reduce((allocationSum, allocation) => allocationSum + allocation.amount, 0), 0);
-    const monthTxs = transactions.filter(t => {
+    const monthTxs = forecastLedgerTransactions.filter(t => {
       const [ty, tm] = t.date.split("-").map(Number);
-      return ty === year && tm === month + 1 && isCheckingBalanceTransaction(t, connectedBankAccounts);
+      return ty === year && tm === month + 1 && isCheckingForecastLedgerTransaction(t, connectedBankAccounts);
     });
     const netTransactions = monthTxs.reduce((s, t) => s + t.amount, 0);
     const snowballPayment = extraPayments.find(ep => ep.month === month && ep.year === year);
@@ -3177,7 +3182,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       goalAllocations,
       remaining: monthlyIncome - totalBillsDue - goalAllocations - snowballExtra + netTransactions + plannedDecisionNet,
     };
-  }, [incomes, transactions, connectedBankAccounts, extraPayments, decisions, goals, getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills]);
+  }, [incomes, transactions, forecastLedgerTransactions, connectedBankAccounts, extraPayments, decisions, goals, getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills]);
 
   // ─── Daily Balances ───────────────────────────────────────────────────────────
 
@@ -3185,7 +3190,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     monthNet: new Map<string, number>(),
     carryover: new Map<string, number>(),
     daily: new Map<string, DailyBalance[]>(),
-  }), [bills, transactions, incomes, goals, decisions, overrides, billDateMoves, extraPayments, connectedBankAccounts, accounts, getBillEffectiveMonthlyTotal, settings.starting_balance, settings.starting_balance_date]);
+  }), [bills, transactions, deletedTransactions, incomes, goals, decisions, overrides, billDateMoves, extraPayments, connectedBankAccounts, accounts, getBillEffectiveMonthlyTotal, settings.starting_balance, settings.starting_balance_date]);
 
   const getDailyBalances = useCallback((month: number, year: number): DailyBalance[] => {
     const dailyKey = `${year}-${month}`;
@@ -3240,8 +3245,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           return occurrenceSum + (match.settlement === "partial" ? Math.max(0, Number(match.plannedAmount ?? amountPerOccurrence) - Number(match.amount || 0)) : 0);
         }, 0);
       }, 0);
-      const tx = transactions
-        .filter(t => t.date.startsWith(monthPrefix) && includeDate(t.date) && isCheckingBalanceTransaction(t, connectedBankAccounts))
+      const tx = forecastLedgerTransactions
+        .filter(t => t.date.startsWith(monthPrefix) && includeDate(t.date) && isCheckingForecastLedgerTransaction(t, connectedBankAccounts))
         .reduce((s, t) => s + t.amount, 0);
       const goalDeductions = goals.reduce((s, g) => {
         if (g.goal_type !== "planned_expense") return s;
@@ -3333,9 +3338,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         });
       });
     });
-    const monthTxs = transactions.filter(t => {
+    const monthTxs = forecastLedgerTransactions.filter(t => {
       const [ty, tm] = t.date.split("-").map(Number);
-      return ty === year && tm === month + 1 && isCheckingBalanceTransaction(t, connectedBankAccounts);
+      return ty === year && tm === month + 1 && isCheckingForecastLedgerTransaction(t, connectedBankAccounts);
     });
     monthTxs.forEach(t => {
       const isBankActivity = t.source === "plaid" || t.source === "statement" || Boolean(t.import_hash);
@@ -3499,10 +3504,17 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       }).catch(() => undefined);
     }
     const visibleEventsByDate = new Map<string, FinancialEvent[]>();
-    financialEvents.forEach(event => visibleEventsByDate.set(event.date, [...(visibleEventsByDate.get(event.date) ?? []), event]));
+    const visibleTransactionIds = new Set(transactions.map(transaction => transaction.id));
+    financialEvents.forEach(event => {
+      if (event.sourceType === "transaction" && !visibleTransactionIds.has(event.sourceId)) return;
+      visibleEventsByDate.set(event.date, [...(visibleEventsByDate.get(event.date) ?? []), event]);
+    });
     const result: DailyBalance[] = [];
     for (let day = 1; day <= daysInMonth; day++) {
-      const dayTxs = monthTxs.filter(t => { const [, , td] = t.date.split("-").map(Number); return td === day; });
+      const dayTxs = transactions.filter(t => {
+        const [ty, tm, td] = t.date.split("-").map(Number);
+        return ty === year && tm === month + 1 && td === day && isCheckingBalanceTransaction(t, connectedBankAccounts);
+      });
       const scheduledIncome = incomeByDay[day] ?? 0;
       const txIncome     = dayTxs.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
       const incomeToday  = scheduledIncome + txIncome;
@@ -3520,7 +3532,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     balanceComputationCache.daily.set(dailyKey, result);
     return result;
-  }, [bills, transactions, incomes, goals, decisions, overrides, billDateMoves, extraPayments, connectedBankAccounts, accounts, getBillEffectiveMonthlyTotal, getBillMonthlyTotal, getBillOccurrencesInMonth, getProjectedDebtSnowballMonth, settings.starting_balance, settings.starting_balance_date, balanceComputationCache, user]);
+  }, [bills, transactions, deletedTransactions, forecastLedgerTransactions, incomes, goals, decisions, overrides, billDateMoves, extraPayments, connectedBankAccounts, accounts, getBillEffectiveMonthlyTotal, getBillMonthlyTotal, getBillOccurrencesInMonth, getProjectedDebtSnowballMonth, settings.starting_balance, settings.starting_balance_date, balanceComputationCache, user]);
 
   const previewDebtSnowball = useCallback((month: number, year: number, requestedExtra?: number, additionalSafeCredit = 0, paymentDateOverride?: string, editingPaymentId?: string): SnowballProjectionResult => {
     const existing = extraPayments.find(ep => ep.month === month && ep.year === year);
@@ -3852,28 +3864,43 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     assertCanEditHousehold("update an account");
     const previous = accounts.find(item => item.id === account.id);
-    const next = accounts.map(item => item.id === account.id ? account : item);
+    const balanceChanged = Boolean(previous) && (
+      Math.abs(Number(previous?.current_balance ?? 0) - Number(account.current_balance ?? 0)) >= 0.005
+      || previous?.balance_as_of !== account.balance_as_of
+    );
+    const savedAccount = balanceChanged
+      ? { ...account, last_reconciled_at: new Date().toISOString() }
+      : account;
+    const next = accounts.map(item => item.id === account.id ? savedAccount : item);
     setAccounts(next);
-    if (demoMode) {
-      await persistAccountAnchor(next);
-      return;
-    }
+    if (demoMode) return;
     markSaveStarted();
     try {
       await ensureSaved(supabase.from("accounts").update({
-        name: account.name,
-        account_type: account.account_type,
-        current_balance: account.current_balance,
-        balance_as_of: account.balance_as_of,
-        is_active: account.is_active,
+        name: savedAccount.name,
+        account_type: savedAccount.account_type,
+        current_balance: savedAccount.current_balance,
+        balance_as_of: savedAccount.balance_as_of,
+        last_reconciled_at: savedAccount.last_reconciled_at,
+        is_active: savedAccount.is_active,
       }).eq("id", account.id), "Update account");
-      try {
-        await persistAccountAnchor(next);
-      } catch (anchorError) {
-        void recordDiagnostic(user.id, {
-          eventType: "save_failure", operation: "account_save", platform: diagnosticPlatform(),
-          errorCode: diagnosticErrorCode(anchorError),
-        }).catch(() => undefined);
+      if (balanceChanged) {
+        const historyResult = await supabase.from("account_balances").insert({
+          ...scopedPayload({
+            id: genId(),
+            account_id: savedAccount.id,
+            user_id: user.id,
+            balance: savedAccount.current_balance,
+          }),
+          as_of_date: savedAccount.balance_as_of,
+          source: "reconciliation",
+        });
+        if (historyResult.error) {
+          void recordDiagnostic(user.id, {
+            eventType: "save_failure", operation: "account_save", platform: diagnosticPlatform(),
+            errorCode: diagnosticErrorCode(historyResult.error),
+          }).catch(() => undefined);
+        }
       }
       markSaveCompleted();
     } catch (error) {
@@ -3881,7 +3908,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       markSaveFailed(error, () => updateAccount(account));
       throw error;
     }
-  }, [user, accounts, persistAccountAnchor, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, assertCanEditHousehold]);
+  }, [user, accounts, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, scopedPayload, assertCanEditHousehold]);
 
   const reconcileAccount = useCallback(async (accountId: string, balance: number, asOfDate: string) => {
     if (!user) return;
@@ -3891,10 +3918,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       ...account, current_balance: balance, balance_as_of: asOfDate, last_reconciled_at: reconciledAt,
     } : account);
     setAccounts(next);
-    if (demoMode) {
-      await persistAccountAnchor(next);
-      return;
-    }
+    if (demoMode) return;
     markSaveStarted();
     try {
       await ensureSaved(supabase.from("accounts").update({
@@ -3910,14 +3934,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           errorCode: diagnosticErrorCode(historyResult.error),
         }).catch(() => undefined);
       }
-      try {
-        await persistAccountAnchor(next);
-      } catch (anchorError) {
-        void recordDiagnostic(user.id, {
-          eventType: "save_failure", operation: "reconciliation", platform: diagnosticPlatform(),
-          errorCode: diagnosticErrorCode(anchorError),
-        }).catch(() => undefined);
-      }
       markSaveCompleted();
       void recordDiagnostic(user.id, { eventType: "performance", operation: "reconciliation", platform: diagnosticPlatform() }).catch(() => undefined);
     } catch (error) {
@@ -3925,7 +3941,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       markSaveFailed(error, () => reconcileAccount(accountId, balance, asOfDate));
       throw error;
     }
-  }, [user, accounts, persistAccountAnchor, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, scopedPayload, assertCanEditHousehold]);
+  }, [user, accounts, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, scopedPayload, assertCanEditHousehold]);
 
   const archiveAccount = useCallback(async (accountId: string) => {
     const account = accounts.find(item => item.id === accountId);

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { canMatchExpenseToBill, confirmedBillMatchId, confirmedBillMatchOccurrenceDate, isActiveTransaction, isCashFlowTransaction, isCheckingBalanceTransaction, isConfirmedBillMatch, isDeletedTransaction, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "./billMatching";
+import { canMatchExpenseToBill, confirmedBillMatchId, confirmedBillMatchOccurrenceDate, isActiveTransaction, isCashFlowTransaction, isCheckingBalanceTransaction, isCheckingForecastLedgerTransaction, isConfirmedBillMatch, isDeletedTransaction, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "./billMatching";
 
 test("ranks an exact nearby utility payment above unrelated bills", () => {
   const ranked = rankBillMatches(
@@ -59,6 +59,39 @@ test("only the checking side of a reviewed transfer changes the checking forecas
   assert.equal(isCheckingBalanceTransaction({ source: "plaid", plaid_account_id: "checking-1", review_status: "categorized" }, accounts), true);
   assert.equal(isCheckingBalanceTransaction({ source: "plaid", plaid_account_id: "checking-1", review_status: "needs_review" }, accounts), true);
   assert.equal(isCheckingBalanceTransaction({ source: "plaid", plaid_account_id: "checking-1", review_status: "needs_review", pending: true }, accounts), false);
+});
+
+test("forecast ledger keeps hidden posted bank money without reviving manual or pending rows", () => {
+  const accounts = [
+    { plaid_account_id: "checking-1", account_type: "depository", account_subtype: "checking", is_active: true },
+  ];
+  assert.equal(isCheckingForecastLedgerTransaction({
+    source: "plaid",
+    plaid_account_id: "checking-1",
+    review_status: "matched",
+    deleted_at: "2026-07-28T12:00:00Z",
+  }, accounts), true);
+  assert.equal(isCheckingForecastLedgerTransaction({
+    source: "statement",
+    import_hash: "statement-row",
+    deleted_at: "2026-07-28T12:00:00Z",
+  }, accounts), true);
+  assert.equal(isCheckingForecastLedgerTransaction({
+    source: "manual",
+    deleted_at: "2026-07-28T12:00:00Z",
+  }, accounts), false);
+  assert.equal(isCheckingForecastLedgerTransaction({
+    source: "plaid",
+    plaid_account_id: "checking-1",
+    deleted_at: "2026-07-28T12:00:00Z",
+    pending: true,
+  }, accounts), false);
+  assert.equal(isCheckingForecastLedgerTransaction({
+    source: "plaid",
+    plaid_account_id: "checking-1",
+    deleted_at: "2026-07-28T12:00:00Z",
+    removed_at: "2026-07-28T13:00:00Z",
+  }, accounts), false);
 });
 
 test("only confirmed matches replace a planned bill event", () => {
