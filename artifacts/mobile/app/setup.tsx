@@ -107,7 +107,7 @@ const TRUST_CARDS: { icon: React.ComponentProps<typeof Feather>["name"]; title: 
 const FINISH_CARDS: { icon: React.ComponentProps<typeof Feather>["name"]; title: string; text: string }[] = [
   { icon: "shield", title: "Protect your floor", text: "Your safety floor is money you want left untouched after bills." },
   { icon: "calendar", title: "Spot low-balance dates", text: "Calendar shows when planned money may run low." },
-  { icon: "trending-up", title: "Build breathing room", text: "Work from the next payday toward 7, 30, 60, and 90 protected days." },
+  { icon: "trending-up", title: "Build breathing room", text: "Work from the next payday toward 7, 30, 60, 90, and 180 protected days." },
 ];
 
 function SetupWizard() {

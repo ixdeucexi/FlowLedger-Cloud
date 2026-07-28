@@ -1,16 +1,20 @@
 import { Feather } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { useAuth } from "@/context/AuthContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
+import { flowmentumPreviewStorageKey } from "@/lib/flowmentumHandoff";
 import { PLAN_CATALOG, PLAN_TIERS, type PlanTier } from "@/lib/membership";
 
 export function AdminMembershipTools() {
   const colors = useColors();
-  const { session } = useAuth();
-  const { previewTier, setPreviewTier, resetPreview } = useMembership();
+  const router = useRouter();
+  const { session, user } = useAuth();
+  const { actualPlan, previewTier, setPreviewTier, resetPreview } = useMembership();
   const [testerEmail, setTesterEmail] = useState("");
   const [testerBusy, setTesterBusy] = useState(false);
   const [testerMessage, setTesterMessage] = useState("");
@@ -38,6 +42,13 @@ export function AdminMembershipTools() {
     } finally {
       setTesterBusy(false);
     }
+  };
+
+  const previewFlowmentumHandoff = async () => {
+    if (!user?.id) return;
+    const key = flowmentumPreviewStorageKey(user.id, actualPlan.householdId || "personal");
+    await AsyncStorage.setItem(key, "true");
+    router.replace("/(tabs)" as any);
   };
 
   return (
@@ -91,6 +102,35 @@ export function AdminMembershipTools() {
             ]}
           >
             <Text style={[styles.buttonText, { color: colors.mutedForeground }]}>Reset</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.success + "55" }]}>
+        <View style={styles.header}>
+          <Feather name="trending-up" size={18} color={colors.success} />
+          <View style={styles.copy}>
+            <Text style={[styles.title, { color: colors.foreground }]}>180-Day Handoff Preview</Text>
+            <Text style={[styles.description, { color: colors.mutedForeground }]}>
+              Test the hidden milestone without changing money or protected days.
+            </Text>
+          </View>
+        </View>
+        <View style={styles.actions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Preview the 180-day Flowmentum handoff"
+            disabled={!user?.id}
+            onPress={() => void previewFlowmentumHandoff()}
+            style={({ pressed }) => [
+              styles.testerButton,
+              {
+                backgroundColor: colors.success,
+                opacity: !user?.id ? 0.45 : pressed ? 0.76 : 1,
+              },
+            ]}
+          >
+            <Text style={[styles.buttonText, { color: "#052e16" }]}>Preview handoff</Text>
           </Pressable>
         </View>
       </View>
