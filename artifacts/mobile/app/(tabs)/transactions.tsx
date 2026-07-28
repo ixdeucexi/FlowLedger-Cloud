@@ -13,6 +13,7 @@ import { CommandPlusButton } from "@/components/CommandPlusButton";
 import { DebtPaymentAppliedModal, type DebtPaymentAppliedDetail } from "@/components/DebtPaymentAppliedModal";
 import { EmptyState } from "@/components/EmptyState";
 import { FullPaymentPromptModal } from "@/components/FullPaymentPromptModal";
+import { GoalModal } from "@/components/GoalModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { PlanViewSelector } from "@/components/PlanViewSelector";
 import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
@@ -145,7 +146,7 @@ export function ActivityScreen() {
     bills, incomes, overrides, extraPayments, settings,
     getIncomeOccurrencesInMonth, getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal,
     matchTransactionToBill, unmatchTransactionFromBill, reconcileTransaction, undoTransactionReconciliation, removeReviewSurplusFunding,
-    getExtraPayment, previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment,
+    getExtraPayment, previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, addGoal,
   } = useBudget();
 
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -172,6 +173,11 @@ export function ActivityScreen() {
   const [editExtraDate, setEditExtraDate] = useState("");
   const [editExtraPreview, setEditExtraPreview] = useState<SnowballProjectionResult | null>(null);
   const [savingExtraPayment, setSavingExtraPayment] = useState(false);
+  const [pendingBucketDraft, setPendingBucketDraft] = useState<{
+    name: string;
+    amount: number;
+    date: string;
+  } | null>(null);
   const handledExtraPaymentRouteRef = useRef("");
   useBackDismiss(!!detailItem, () => setDetailItem(null));
   useBackDismiss(filterModalVisible, () => setFilterModalVisible(false));
@@ -1020,6 +1026,37 @@ export function ActivityScreen() {
               </Text>
             </View>
 
+            {detailItem.pending && isExpense ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Set aside ${Math.abs(detailItem.amount).toFixed(2)} dollars for ${detailItem.label}`}
+                onPress={() => {
+                  const draft = {
+                    name: detailItem.label,
+                    amount: Math.abs(detailItem.amount),
+                    date: detailItem.date < todayIsoDate() ? todayIsoDate() : detailItem.date,
+                  };
+                  setDetailItem(null);
+                  setTimeout(() => setPendingBucketDraft(draft), MODAL_HANDOFF_DELAY_MS);
+                }}
+                style={({ pressed }) => [
+                  styles.pendingBucketButton,
+                  { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 },
+                ]}
+              >
+                <Feather name="calendar" size={17} color={c.primaryForeground} />
+                <View style={styles.pendingBucketButtonCopy}>
+                  <Text style={[styles.pendingBucketButtonTitle, { color: c.primaryForeground }]}>
+                    Set aside for this charge
+                  </Text>
+                  <Text style={[styles.pendingBucketButtonBody, { color: c.primaryForeground }]}>
+                    Create a ${Math.abs(detailItem.amount).toFixed(2)} spending bucket
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={18} color={c.primaryForeground} />
+              </Pressable>
+            ) : null}
+
             <Pressable
               onPress={() => setDetailItem(null)}
               style={({ pressed }) => [styles.sheetClose, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
@@ -1590,6 +1627,22 @@ export function ActivityScreen() {
         onConfirm={() => { void saveEditedExtraPayment(); }}
         onRemove={removeEditedExtraPayment}
       />
+      <GoalModal
+        visible={Boolean(pendingBucketDraft)}
+        onClose={() => setPendingBucketDraft(null)}
+        onSave={async goal => {
+          if ("id" in goal) return;
+          await addGoal(goal);
+          Alert.alert(
+            "Money set aside",
+            `Your ${goal.name} bucket is ready. Match the charge to it after the bank posts it.`,
+          );
+        }}
+        initialMode="budget"
+        initialName={pendingBucketDraft?.name ?? ""}
+        initialTargetAmount={pendingBucketDraft?.amount}
+        initialTargetDate={pendingBucketDraft?.date}
+      />
 
       {/* ── Detail sheet (auto-generated entries) ── */}
       {renderWeeklySummarySheet()}
@@ -1751,6 +1804,10 @@ const styles = StyleSheet.create({
   sheetRowValue:   { fontSize: 14, fontFamily: "Inter_400Regular" },
   sheetNote:       { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, marginTop: 16, marginBottom: 4 },
   sheetNoteText:   { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
+  pendingBucketButton: { minHeight: 62, borderRadius: colors.radius, paddingHorizontal: 15, paddingVertical: 11, marginTop: 12, flexDirection: "row", alignItems: "center", gap: 11 },
+  pendingBucketButtonCopy: { flex: 1 },
+  pendingBucketButtonTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
+  pendingBucketButtonBody: { fontSize: 11, lineHeight: 15, fontFamily: "Inter_500Medium", marginTop: 2, opacity: 0.82 },
   sheetClose:      { height: 50, borderRadius: 14, alignItems: "center", justifyContent: "center", marginTop: 14 },
   sheetCloseText:  { fontSize: 15, fontFamily: "Inter_600SemiBold" },
 });
