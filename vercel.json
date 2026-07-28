@@ -7,6 +7,10 @@
     {
       "path": "/api/notifications/overdue-bills",
       "schedule": "15 14 * * *"
+    },
+    {
+      "path": "/api/money-health/nightly",
+      "schedule": "10 8 * * *"
     }
   ],
   "headers": [

@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Platform } from "react-native";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
@@ -49,6 +50,7 @@ import { localDateString } from "@/lib/dateLabels";
 import { spendingBucketSummary } from "@/lib/spendingBuckets";
 import { canonicalConnectedAccounts, pendingPlaidActivityWithBalanceHolds } from "@/lib/plaidActivity";
 import { normalizeBillImportance, type BillImportance } from "@/lib/billImportance";
+import { buildTransactionLedger, remainingPlannedAmount } from "@/lib/ledgerEngine";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -896,6 +898,7 @@ const BudgetContext = createContext<BudgetContextType | undefined>(undefined);
 // ─── Provider ──────────────────────────────────────────────────────────────────
 
 export function BudgetProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const demoMode = isDevDemoMode();
 
@@ -1084,8 +1087,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const retryBudgetLoad = useCallback(() => {
     setLoadError(null);
+    void queryClient.invalidateQueries({ queryKey: ["budget-core"] });
     setLoadRetryNonce(value => value + 1);
-  }, []);
+  }, [queryClient]);
 
   const refreshHouseholds = useCallback(async () => {
     if (!user || demoMode) return;
@@ -1100,6 +1104,24 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const activity = await loadHouseholdActivity(activeHousehold.householdId, 12);
     setHouseholdActivity(activity);
   }, [activeHousehold]);
+
+  useEffect(() => {
+    if (!user || demoMode || !activeHousehold || activeHousehold.role === "viewer" || Platform.OS !== "web") return;
+    const detectedTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    if (detectedTimeZone === "UTC") return;
+    void (async () => {
+      const { data } = await supabase
+        .from("household_settings")
+        .select("time_zone")
+        .eq("household_id", activeHousehold.householdId)
+        .maybeSingle();
+      if (data?.time_zone !== "UTC") return;
+      await supabase
+        .from("household_settings")
+        .update({ time_zone: detectedTimeZone, updated_at: new Date().toISOString() })
+        .eq("household_id", activeHousehold.householdId);
+    })();
+  }, [user, demoMode, activeHousehold]);
 
   const switchHousehold = useCallback(async (householdId: string) => {
     if (!user || demoMode) return;
@@ -1211,38 +1233,48 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
             console.warn("Scheduled debt sync skipped", error);
           }
         }
-        const results = await withLoadTimeout(
-          Promise.all([
-            applyHouseholdSelect(supabase.from("bills").select("*"), uid),
-            applyHouseholdSelect(supabase.from("monthly_overrides").select("*"), uid),
-            applyHouseholdSelect(supabase.from("transactions").select("*"), uid),
-            applyHouseholdSelect(
-              supabase.from("plaid_transactions")
-                .select("plaid_transaction_id,transaction_date,amount,name,merchant_name,category,plaid_account_id")
-                .eq("pending", true)
-                .is("removed_at", null)
-                .order("transaction_date", { ascending: false })
-                .limit(100),
-              uid,
-            ),
-            applyHouseholdSelect(supabase.from("incomes").select("*"), uid),
-            applyHouseholdSelect(supabase.from("goals").select("*"), uid),
-            applyHouseholdSelect(supabase.from("extra_payments").select("*"), uid),
-            loadScopedSettings(uid, scope),
-            applyHouseholdSelect(supabase.from("categories").select("name"), uid),
-            applyHouseholdSelect(supabase.from("accounts").select("*"), uid).order("created_at"),
-            applyHouseholdSelect(
-              supabase.from("plaid_accounts")
-                .select("id,name,official_name,mask,persistent_account_id,account_type,account_subtype,current_balance,available_balance,is_active,updated_at")
-                .eq("is_active", true)
-                .order("name"),
-              uid,
-            ),
-            applyHouseholdSelect(supabase.from("decisions").select("*"), uid).order("created_at", { ascending: false }),
-          ]),
+        const coreLoad = await withLoadTimeout(
+          queryClient.fetchQuery({
+            queryKey: ["budget-core", uid, scope?.householdId ?? "personal", scope?.budgetId ?? "default"],
+            staleTime: 15_000,
+            gcTime: 5 * 60_000,
+            queryFn: async () => {
+              const results = await Promise.all([
+                applyHouseholdSelect(supabase.from("bills").select("*"), uid),
+                applyHouseholdSelect(supabase.from("monthly_overrides").select("*"), uid),
+                applyHouseholdSelect(supabase.from("transactions").select("*"), uid),
+                applyHouseholdSelect(
+                  supabase.from("plaid_transactions")
+                    .select("plaid_transaction_id,transaction_date,amount,name,merchant_name,category,plaid_account_id")
+                    .eq("pending", true)
+                    .is("removed_at", null)
+                    .order("transaction_date", { ascending: false })
+                    .limit(100),
+                  uid,
+                ),
+                applyHouseholdSelect(supabase.from("incomes").select("*"), uid),
+                applyHouseholdSelect(supabase.from("goals").select("*"), uid),
+                applyHouseholdSelect(supabase.from("extra_payments").select("*"), uid),
+                loadScopedSettings(uid, scope),
+                applyHouseholdSelect(supabase.from("categories").select("name"), uid),
+                applyHouseholdSelect(supabase.from("accounts").select("*"), uid).order("created_at"),
+                applyHouseholdSelect(
+                  supabase.from("plaid_accounts")
+                    .select("id,name,official_name,mask,persistent_account_id,account_type,account_subtype,current_balance,available_balance,is_active,updated_at")
+                    .eq("is_active", true)
+                    .order("name"),
+                  uid,
+                ),
+                applyHouseholdSelect(supabase.from("decisions").select("*"), uid).order("created_at", { ascending: false }),
+              ]);
+              const storedBillDateMoves = await loadBillDateMoves(uid, scope);
+              return { results, storedBillDateMoves };
+            },
+          }),
           12000,
           "Load budget data",
         );
+        const { results, storedBillDateMoves } = coreLoad;
         const failed = results.find(result => result.error);
         if (failed?.error) throw new Error(`Load budget data: ${failed.error.message}`);
         const [
@@ -1260,7 +1292,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           { data: dData },
         ] = results;
 
-        const storedBillDateMoves = await withLoadTimeout(loadBillDateMoves(uid, scope), 8000, "Load moved bill dates");
         if (requestId !== loadRequestRef.current) return;
 
         setBills(reorderDebtPriorities((bData ?? []).map(normalizeBillRow)));
@@ -1333,7 +1364,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }).catch(() => undefined);
       }
     })();
-  }, [user, demoMode, loadRetryNonce, resolveHouseholds, applyHouseholdSelect, loadScopedSettings]);
+  }, [user, demoMode, loadRetryNonce, resolveHouseholds, applyHouseholdSelect, loadScopedSettings, queryClient]);
 
   const loadBankData = useCallback(async () => {
     if (!user || demoMode) return;
@@ -3111,10 +3142,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Cash Flow ────────────────────────────────────────────────────────────────
 
-  const forecastLedgerTransactions = useMemo(
-    () => [...transactions, ...deletedTransactions],
-    [transactions, deletedTransactions],
+  const transactionLedger = useMemo(
+    () => buildTransactionLedger(
+      [...transactions, ...deletedTransactions],
+      transactions,
+      connectedBankAccounts,
+    ),
+    [transactions, deletedTransactions, connectedBankAccounts],
   );
+  const forecastLedgerTransactions = transactionLedger.cashTransactions;
 
   const getCashFlow = useCallback((month: number, year: number): CashFlow => {
     const billMatches = matchedOccurrenceAllocations(transactions, "bill");
@@ -3127,9 +3163,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         return sum + getIncomeOccurrenceDays(income, month, year).reduce((occurrenceSum, day) => {
           const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
           const match = incomeMatches.get(occurrenceKey(income.id, date));
-          const remaining = match?.settlement === "partial"
-            ? Math.max(0, Number(match.plannedAmount ?? amount) - Number(match.amount || 0))
-            : match ? 0 : amount;
+          const remaining = remainingPlannedAmount(amount, match);
           return occurrenceSum + remaining;
         }, 0);
       }, 0);
@@ -3140,9 +3174,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       return sum + occurrences.reduce((occurrenceSum, day) => {
         const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
         const match = billMatches.get(occurrenceKey(bill.id, date));
-        const remaining = match?.settlement === "partial"
-          ? Math.max(0, Number(match.plannedAmount ?? amount) - Number(match.amount || 0))
-          : match ? 0 : amount;
+        const remaining = remainingPlannedAmount(amount, match);
         return occurrenceSum + remaining;
       }, 0);
     }, 0);
@@ -3151,7 +3183,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       .reduce((allocationSum, allocation) => allocationSum + allocation.amount, 0), 0);
     const monthTxs = forecastLedgerTransactions.filter(t => {
       const [ty, tm] = t.date.split("-").map(Number);
-      return ty === year && tm === month + 1 && isCheckingForecastLedgerTransaction(t, connectedBankAccounts);
+      return ty === year && tm === month + 1;
     });
     const netTransactions = monthTxs.reduce((s, t) => s + t.amount, 0);
     const snowballPayment = extraPayments.find(ep => ep.month === month && ep.year === year);
@@ -3217,8 +3249,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           const date = `${monthPrefix}-${String(day).padStart(2, "0")}`;
           if (!includeDate(date)) return occurrenceSum;
           const match = incomeMatches.get(occurrenceKey(income.id, date));
-          if (!match) return occurrenceSum + amount;
-          return occurrenceSum + (match.settlement === "partial" ? Math.max(0, Number(match.plannedAmount ?? amount) - Number(match.amount || 0)) : 0);
+          return occurrenceSum + remainingPlannedAmount(amount, match);
         }, 0);
       }, 0);
       const debtPlan = getProjectedDebtSnowballMonth(m, y);
@@ -3241,12 +3272,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         const amountPerOccurrence = total / dates.length;
         return s + dates.filter(includeDate).reduce((occurrenceSum, date) => {
           const match = billMatches.get(occurrenceKey(b.id, date));
-          if (!match) return occurrenceSum + amountPerOccurrence;
-          return occurrenceSum + (match.settlement === "partial" ? Math.max(0, Number(match.plannedAmount ?? amountPerOccurrence) - Number(match.amount || 0)) : 0);
+          return occurrenceSum + remainingPlannedAmount(amountPerOccurrence, match);
         }, 0);
       }, 0);
       const tx = forecastLedgerTransactions
-        .filter(t => t.date.startsWith(monthPrefix) && includeDate(t.date) && isCheckingForecastLedgerTransaction(t, connectedBankAccounts))
+        .filter(t => t.date.startsWith(monthPrefix) && includeDate(t.date))
         .reduce((s, t) => s + t.amount, 0);
       const goalDeductions = goals.reduce((s, g) => {
         if (g.goal_type !== "planned_expense") return s;
@@ -3327,7 +3357,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       occ.forEach(d => {
         const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
         const match = incomeMatches.get(occurrenceKey(i.id, date));
-        const scheduledAmount = !match ? amt : match.settlement === "partial" ? Math.max(0, Number(match.plannedAmount ?? amt) - Number(match.amount || 0)) : 0;
+        const scheduledAmount = remainingPlannedAmount(amt, match);
         if (scheduledAmount <= 0.005) return;
         incomeByDay[d] = (incomeByDay[d] ?? 0) + scheduledAmount;
         financialEvents.push({
@@ -3340,7 +3370,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     });
     const monthTxs = forecastLedgerTransactions.filter(t => {
       const [ty, tm] = t.date.split("-").map(Number);
-      return ty === year && tm === month + 1 && isCheckingForecastLedgerTransaction(t, connectedBankAccounts);
+      return ty === year && tm === month + 1;
     });
     monthTxs.forEach(t => {
       const isBankActivity = t.source === "plaid" || t.source === "statement" || Boolean(t.import_hash);
@@ -3375,7 +3405,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         finalizedOccurrences.forEach(d => {
           const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
           const match = billMatches.get(occurrenceKey(b.id, date));
-          const remaining = match?.settlement === "partial" ? Math.max(0, Number(match.plannedAmount ?? finalizedAmount) - Number(match.amount || 0)) : match ? 0 : finalizedAmount;
+          const remaining = remainingPlannedAmount(finalizedAmount, match);
           if (remaining <= 0.005) return;
           billsByDay[d] = (billsByDay[d] ?? 0) + remaining;
           financialEvents.push({
@@ -3390,7 +3420,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       occ.forEach(d => {
         const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
         const match = billMatches.get(occurrenceKey(b.id, date));
-        const remaining = match?.settlement === "partial" ? Math.max(0, Number(match.plannedAmount ?? amt) - Number(match.amount || 0)) : match ? 0 : amt;
+        const remaining = remainingPlannedAmount(amt, match);
         if (remaining <= 0.005) return;
         billsByDay[d] = (billsByDay[d] ?? 0) + remaining;
         financialEvents.push({
@@ -3504,16 +3534,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       }).catch(() => undefined);
     }
     const visibleEventsByDate = new Map<string, FinancialEvent[]>();
-    const visibleTransactionIds = new Set(transactions.map(transaction => transaction.id));
+    const visibleTransactionIds = new Set(transactionLedger.visibleTransactions.map(transaction => transaction.id));
     financialEvents.forEach(event => {
       if (event.sourceType === "transaction" && !visibleTransactionIds.has(event.sourceId)) return;
       visibleEventsByDate.set(event.date, [...(visibleEventsByDate.get(event.date) ?? []), event]);
     });
     const result: DailyBalance[] = [];
     for (let day = 1; day <= daysInMonth; day++) {
-      const dayTxs = transactions.filter(t => {
+      const dayTxs = transactionLedger.visibleCheckingTransactions.filter(t => {
         const [ty, tm, td] = t.date.split("-").map(Number);
-        return ty === year && tm === month + 1 && td === day && isCheckingBalanceTransaction(t, connectedBankAccounts);
+        return ty === year && tm === month + 1 && td === day;
       });
       const scheduledIncome = incomeByDay[day] ?? 0;
       const txIncome     = dayTxs.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
@@ -3532,7 +3562,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     balanceComputationCache.daily.set(dailyKey, result);
     return result;
-  }, [bills, transactions, deletedTransactions, forecastLedgerTransactions, incomes, goals, decisions, overrides, billDateMoves, extraPayments, connectedBankAccounts, accounts, getBillEffectiveMonthlyTotal, getBillMonthlyTotal, getBillOccurrencesInMonth, getProjectedDebtSnowballMonth, settings.starting_balance, settings.starting_balance_date, balanceComputationCache, user]);
+  }, [bills, transactions, deletedTransactions, forecastLedgerTransactions, transactionLedger, incomes, goals, decisions, overrides, billDateMoves, extraPayments, connectedBankAccounts, accounts, getBillEffectiveMonthlyTotal, getBillMonthlyTotal, getBillOccurrencesInMonth, getProjectedDebtSnowballMonth, settings.starting_balance, settings.starting_balance_date, balanceComputationCache, user]);
 
   const previewDebtSnowball = useCallback((month: number, year: number, requestedExtra?: number, additionalSafeCredit = 0, paymentDateOverride?: string, editingPaymentId?: string): SnowballProjectionResult => {
     const existing = extraPayments.find(ep => ep.month === month && ep.year === year);

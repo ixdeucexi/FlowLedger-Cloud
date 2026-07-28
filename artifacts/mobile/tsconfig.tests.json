@@ -99,5 +99,7 @@
     ,"lib/zeroBudgetLab.test.ts"
     ,"lib/legalDocuments.ts"
     ,"lib/legalDocuments.test.ts"
+    ,"lib/ledgerEngine.ts"
+    ,"lib/ledgerEngine.test.ts"
   ]
 }

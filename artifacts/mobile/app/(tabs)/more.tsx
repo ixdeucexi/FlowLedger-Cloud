@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AccountModal } from "@/components/AccountModal";
 import { AdminMembershipTools } from "@/components/AdminMembershipTools";
+import { AdminMoneyHealth } from "@/components/AdminMoneyHealth";
 import { AppText } from "@/components/AppText";
 import { FloLogo } from "@/components/FloLogo";
 import { FeedbackManageModal } from "@/components/FeedbackManageModal";
@@ -2570,6 +2571,9 @@ export default function MoreScreen() {
               <Feather name="chevron-right" size={19} color={c.primary} />
             </Pressable>
           </View>
+
+          <SLabel c={c} text="System integrity" />
+          <AdminMoneyHealth householdId={activeHousehold?.householdId} />
 
           <SLabel c={c} text="Admin notifications" />
           <NotificationSettings scope="admin" />
