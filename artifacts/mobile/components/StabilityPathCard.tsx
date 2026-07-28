@@ -102,14 +102,14 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
       </View>
 
       <View style={styles.progressHeader}>
-        <AppText style={[styles.progressLabel, { color: theme.labelText }]}>90-day path</AppText>
+        <AppText style={[styles.progressLabel, { color: theme.labelText }]}>180-day path</AppText>
         <AppText tone="number" style={[styles.progressValue, { color: theme.text }]}>{Math.round(progress.backupProgress * 100)}%</AppText>
       </View>
-      <View style={[styles.progressTrack, { backgroundColor: theme.track }]} accessibilityLabel={`${progress.protectedDays} of 90 backup days protected`}>
+      <View style={[styles.progressTrack, { backgroundColor: theme.track }]} accessibilityLabel={`${progress.protectedDays} of 180 backup days protected`}>
         <View style={[styles.progressFill, { backgroundColor: color, width: progressWidth }]} />
       </View>
       <View style={styles.milestones}>
-        {[7, 30, 60, 90].map(days => (
+        {[7, 30, 60, 90, 180].map(days => (
           <AppText key={days} style={[styles.milestone, { color: theme.mutedText }, progress.protectedDays >= days && { color }]}> {days}d </AppText>
         ))}
       </View>

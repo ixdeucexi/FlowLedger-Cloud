@@ -36,10 +36,10 @@ test("turns breathing room into understandable protected days", () => {
   assert.doesNotMatch(result.explanation, /30 days/i);
   assert.equal(result.nextMilestoneAmount, 600);
   assert.equal(result.safeUntilPayday, true);
-  assert.equal(result.backupTarget, 3600);
+  assert.equal(result.backupTarget, 7200);
 });
 
-test("separates safety through payday from the 90-day backup path", () => {
+test("separates safety through payday from the 180-day backup path", () => {
   const result = buildStabilityProgress({
     balances: [
       { day: 1, balance: 700 },
@@ -59,6 +59,27 @@ test("separates safety through payday from the 90-day backup path", () => {
   assert.equal(result.protectedDays, 10);
   assert.equal(result.stage, "reserve");
   assert.equal(result.nextMilestone, "30 protected days");
+});
+
+test("keeps building after 90 days until the 180-day goal", () => {
+  const result = buildStabilityProgress({
+    balances: [
+      { day: 1, balance: 5_000 },
+      { day: 10, balance: 5_000, income: 1_000 },
+    ],
+    todayDay: 1,
+    safetyFloor: 200,
+    monthlyRequiredOutflow: 1_200,
+    overdueBills: 0,
+    forecastConfidence: "high",
+    nextPaycheckLabel: "July 10, 2026",
+  });
+
+  assert.equal(result.protectedDays, 120);
+  assert.equal(result.stage, "freedom");
+  assert.equal(result.nextMilestone, "180 protected days");
+  assert.equal(result.nextMilestoneAmount, 2_400);
+  assert.equal(result.backupProgress, 2 / 3);
 });
 
 test("uses the next scheduled paycheck across a month boundary", () => {

@@ -83,7 +83,7 @@ const STARTING_POINT_OPTIONS: {
   { id: "switching_apps", label: "I'm switching from another app", description: "Help me confirm what I already have without starting over.", icon: "refresh-cw" },
   { id: "catching_up", label: "I need to catch up", description: "Put urgent bills and low-balance days first.", icon: "alert-circle" },
   { id: "paycheck_to_paycheck", label: "I keep running out before payday", description: "Help me reach the next paycheck safely and build breathing room.", icon: "calendar" },
-  { id: "building_room", label: "I want to get further ahead", description: "Help me build 7, 30, 60, then 90 days of backup.", icon: "trending-up" },
+  { id: "building_room", label: "I want to get further ahead", description: "Help me build 7, 30, 60, 90, then 180 days of backup.", icon: "trending-up" },
 ];
 
 function moneyKeyToStepKey(key: MoneySetupKey): SetupStepKey {

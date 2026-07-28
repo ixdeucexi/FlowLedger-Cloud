@@ -46,21 +46,21 @@ export const STABILITY_PATH_GUIDE: readonly StabilityPathGuideStep[] = [
   },
   {
     id: "freedom",
-    title: "Build a 90-day backup",
-    range: "60-89 protected days",
-    description: "Three protected months create time to make a plan instead of reacting to every surprise.",
+    title: "Build a 180-day backup",
+    range: "60-179 protected days",
+    description: "Reach 90 days, then keep building toward six protected months.",
   },
   {
     id: "standing",
     title: "Protect the freedom buffer",
-    range: "90 protected days",
+    range: "180 protected days",
     description: "Keep the buffer full, and rebuild it after using it for a real need.",
   },
 ] as const;
 
 export const ALGORITHM_GUIDE: readonly AlgorithmGuideItem[] = [
   { id: "forecast", title: "Daily Forecast", description: "Projects checking money day by day from posted activity, planned income, bills, and spending." },
-  { id: "stability", title: "Stability Path", description: "Checks safety through payday, then turns backup money into 7, 30, 60, and 90 days of Must Pay protection." },
+  { id: "stability", title: "Stability Path", description: "Checks safety through payday, then turns backup money into 7, 30, 60, 90, and 180 days of Must Pay protection." },
   { id: "flow-score", title: "Flow Score", description: "Summarizes cushion, bill readiness, forecast risk, spending pressure, and data confidence." },
   { id: "breathing-room", title: "Breathing Room", description: "Shows money remaining above the safety floor at the lowest point in the forecast." },
   { id: "bill-priority", title: "Bill Priority", description: "Ranks required bills by due date, payment status, and their effect on upcoming low-balance days." },

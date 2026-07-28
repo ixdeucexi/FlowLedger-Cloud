@@ -8,7 +8,7 @@ export const STABILITY_POLICY = {
   extraMoneyMinimum: 25,
   extraMoneyRoomMinimum: 250,
   reserveGoalDays: 30,
-  freedomGoalDays: 90,
+  freedomGoalDays: 180,
 } as const;
 
 export type StabilityStage =
@@ -180,18 +180,19 @@ export function buildStabilityProgress(input: StabilityProgressInput): Stability
   if (protectedDays < 30) return stageResult("reserve", "watch", 30);
   if (protectedDays < 60) return stageResult("momentum", "safe", 60);
   if (protectedDays < 90) return stageResult("freedom", "safe", 90);
+  if (protectedDays < 180) return stageResult("freedom", "safe", 180);
 
   return {
     ...base,
     stage: "standing",
     stageLabel: "Protect your freedom buffer",
     status: input.forecastConfidence === "high" ? "safe" : "watch",
-    headline: "You have 90 days of Must Pay expenses backed up.",
+    headline: "You have 180 days of Must Pay expenses backed up.",
     explanation: "A surprise can happen without immediately pushing you back to the next paycheck.",
     nextAction: input.forecastConfidence === "high"
       ? "Keep bills current and rebuild the buffer whenever you use it."
-      : "Reconcile your accounts so the 90-day number stays trustworthy.",
-    nextMilestone: "Maintain 90 protected days",
+      : "Reconcile your accounts so the 180-day number stays trustworthy.",
+    nextMilestone: "Maintain 180 protected days",
     nextMilestoneAmount: 0,
   };
 

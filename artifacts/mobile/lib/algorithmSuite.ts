@@ -1357,7 +1357,7 @@ function buildFlowScoreDetails(
   }
 
   if (facts.stability.reserveTarget > 0 && facts.stability.protectedDays >= STABILITY_POLICY.freedomGoalDays) {
-    positiveFactors.push("A 90-day Must Pay backup is protected.");
+    positiveFactors.push("A 180-day Must Pay backup is protected.");
   } else if (facts.stability.reserveTarget > 0 && facts.stability.protectedDays >= 30) {
     positiveFactors.push(`${facts.stability.protectedDays} days of Must Pay expenses are protected.`);
   } else if (facts.stability.reserveTarget > 0) {
@@ -1392,8 +1392,8 @@ function buildFlowScoreDetails(
   });
   breakdownItems.push({
     label: "Backup Coverage",
-    value: facts.stability.reserveTarget > 0 ? `${facts.stability.protectedDays}/90 days` : "Needs Must Pay bills",
-    tone: facts.stability.protectedDays >= 90 ? "safe" : facts.stability.protectedDays > 0 ? "watch" : "risk",
+    value: facts.stability.reserveTarget > 0 ? `${facts.stability.protectedDays}/${STABILITY_POLICY.freedomGoalDays} days` : "Needs Must Pay bills",
+    tone: facts.stability.protectedDays >= STABILITY_POLICY.freedomGoalDays ? "safe" : facts.stability.protectedDays > 0 ? "watch" : "risk",
   });
   if (facts.categoryPressure.length) {
     breakdownItems.push({

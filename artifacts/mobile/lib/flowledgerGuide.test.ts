@@ -8,10 +8,10 @@ test("stability guide follows the calculation stages in order", () => {
     STABILITY_PATH_GUIDE.map(step => step.id),
     ["stabilize", "next_paycheck", "breathing_room", "reserve", "momentum", "freedom", "standing"],
   );
-  assert.match(STABILITY_PATH_GUIDE.at(-1)?.range ?? "", /90 protected days/);
+  assert.match(STABILITY_PATH_GUIDE.at(-1)?.range ?? "", /180 protected days/);
   assert.match(STABILITY_PATH_GUIDE.map(step => step.range).join(" "), /7-29 protected days/);
   assert.match(STABILITY_PATH_GUIDE.map(step => step.range).join(" "), /30-59 protected days/);
-  assert.match(STABILITY_PATH_GUIDE.map(step => step.range).join(" "), /60-89 protected days/);
+  assert.match(STABILITY_PATH_GUIDE.map(step => step.range).join(" "), /60-179 protected days/);
 });
 
 test("the guide explains core money rules without unrelated product messaging", () => {

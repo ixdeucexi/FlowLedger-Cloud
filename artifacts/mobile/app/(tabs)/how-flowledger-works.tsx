@@ -86,7 +86,7 @@ export default function HowFlowLedgerWorksScreen() {
         <View style={styles.metrics}>
           <Metric label="Safe to payday" value={safeUntilPayday === "true" ? `Yes · ${nextPaycheckLabel}` : safeUntilPayday === "false" ? "Not yet" : "Needs pay date"} />
           <Metric label="Backup" value={`${protectedDays} days`} />
-          <Metric label="90-day target" value={currency(backupTarget)} />
+          <Metric label="180-day target" value={currency(backupTarget)} />
         </View>
         <View style={[styles.nextCard, { backgroundColor: c.primary + "12", borderColor: c.primary + "33" }]}>
           <AppText tone="label" style={[styles.nextLabel, { color: c.primary }]}>NEXT MILESTONE</AppText>
@@ -141,7 +141,7 @@ export default function HowFlowLedgerWorksScreen() {
         <CalculationRow label="Protected safety floor" value={`-${currency(amount(params.safetyFloor))}`} />
         <CalculationRow label="Backup money above the floor" value={currency(protectedAmount)} emphasized />
         <CalculationRow label="30 days of Must Pay expenses" value={currency(reserveTarget)} />
-        <CalculationRow label="90-day backup target" value={currency(backupTarget)} />
+        <CalculationRow label="180-day backup target" value={currency(backupTarget)} />
         <CalculationRow label="Forecast confidence" value={param(params.confidence, "Building")} />
       </View>
 
