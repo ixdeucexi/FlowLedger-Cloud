@@ -22,6 +22,31 @@ describe("bill scheduling", () => {
     assert.equal(isBillActiveForMonth(stoppedBill, 6, 2026), false);
   });
 
+  it("repeats quarterly bills every three months from the first payment date", () => {
+    const bill = {
+      frequency: "quarterly" as const,
+      due_day: 27,
+      next_payment_date: "2026-07-27",
+      start_date: "2026-07-27",
+    };
+    assert.deepEqual(getBillOccurrenceDays(bill, 6, 2026), [27]);
+    assert.deepEqual(getBillOccurrenceDays(bill, 7, 2026), []);
+    assert.deepEqual(getBillOccurrenceDays(bill, 8, 2026), []);
+    assert.deepEqual(getBillOccurrenceDays(bill, 9, 2026), [27]);
+    assert.deepEqual(getBillOccurrenceDays(bill, 0, 2027), [27]);
+  });
+
+  it("clamps a quarterly occurrence to the end of a shorter month", () => {
+    const bill = {
+      frequency: "quarterly" as const,
+      due_day: 31,
+      next_payment_date: "2026-08-31",
+      start_date: "2026-08-31",
+    };
+    assert.deepEqual(getBillOccurrenceDays(bill, 10, 2026), [30]);
+    assert.deepEqual(getBillOccurrenceDays(bill, 1, 2027), [28]);
+  });
+
   it("finds every weekly occurrence including overlapping month boundaries", () => {
     const bill = { frequency: "weekly" as const, due_day: 1, day_of_week: 1 };
     assert.deepEqual(getBillOccurrenceDays(bill, 5, 2026), [1, 8, 15, 22, 29]);

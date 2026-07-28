@@ -1718,7 +1718,7 @@ export default function MonthlyScreen() {
                     </View>
                   </View>
 
-                  {bill.frequency === "monthly" && (
+                  {(bill.frequency === "monthly" || bill.frequency === "quarterly") && (
                     <View style={styles.dueDayRow}>
                       <Feather name="calendar" size={11} color={customDay !== undefined ? c.primary : c.mutedForeground} style={{ marginRight: 6 }} />
                       <Text style={[styles.fieldLabel, { color: customDay !== undefined ? c.primary : c.mutedForeground, marginBottom: 0, marginRight: 8 }]}>
@@ -1890,7 +1890,7 @@ export default function MonthlyScreen() {
                           const isPartial = effectivePaid > 0 && !isPaid;
                           const remaining = Math.max(0, amount - effectivePaid);
                           const movedIn = movedInByBillId.get(bill.id);
-                          const canReschedule = bill.frequency === "monthly";
+                          const canReschedule = bill.frequency === "monthly" || bill.frequency === "quarterly";
                           const amtKey = `${bill.id}-overlay-amount`;
                           const showAmt = editingAmounts[amtKey] !== undefined ? editingAmounts[amtKey] : amount.toFixed(2);
                           const amountEditing = editingAmounts[amtKey] !== undefined;

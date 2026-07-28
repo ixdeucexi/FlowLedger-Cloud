@@ -67,7 +67,7 @@ export interface Bill {
   start_date?: string;
   end_date?: string;
   is_recurring: boolean;
-  frequency: "monthly" | "biweekly" | "weekly";
+  frequency: "monthly" | "quarterly" | "biweekly" | "weekly";
   created_at: string;
   smart_priority?: BillImportance;
   include_in_snowball?: boolean;
@@ -128,14 +128,14 @@ export interface Transaction {
   match_confidence?: number;
   match_reason?: string;
   review_status?: "needs_review" | "matched" | "categorized" | "transfer" | "legacy_reviewed";
-  review_resolution?: "bill" | "income" | "goal" | "decision" | "snowball" | "category" | "transfer";
+  review_resolution?: "bill" | "income" | "goal" | "decision" | "snowball" | "manual" | "category" | "transfer";
   review_allocations?: ReviewAllocation[];
   reviewed_at?: string;
   reviewed_by?: string;
   user_edited_at?: string;
   linked_income_id?: string;
   linked_plan_id?: string;
-  linked_plan_type?: "goal" | "decision" | "snowball";
+  linked_plan_type?: "goal" | "decision" | "snowball" | "transaction";
   matched_occurrence_date?: string;
 }
 
@@ -152,7 +152,7 @@ export interface PendingBankTransaction {
 export interface ReviewAllocation {
   type: "bill" | "income" | "planned_expense" | "category" | "transfer" | "extra_principal";
   targetId?: string | null;
-  source?: "goal" | "decision";
+  source?: "goal" | "decision" | "transaction";
   name?: string;
   category?: string | null;
   amount: number;
@@ -163,7 +163,7 @@ export interface ReviewAllocation {
 
 export interface ReconcileTransactionInput {
   transactionId: string;
-  resolution: "bill" | "income" | "goal" | "decision" | "snowball" | "category" | "transfer";
+  resolution: "bill" | "income" | "goal" | "decision" | "snowball" | "manual" | "category" | "transfer";
   targetId?: string;
   occurrenceDate?: string;
   plannedAmount?: number;
@@ -746,7 +746,7 @@ const remainingSnowballAllocationAmount = (
 function normalizeBillRow(bill: any): Bill {
   return {
     ...bill,
-    frequency: (bill.frequency ?? "monthly") as "monthly" | "biweekly" | "weekly",
+    frequency: (bill.frequency ?? "monthly") as "monthly" | "quarterly" | "biweekly" | "weekly",
     day_of_week: bill.day_of_week ?? 0,
     next_payment_date: bill.next_payment_date ?? undefined,
     amount: Number(bill.amount),
@@ -903,6 +903,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [overrides,     setOverrides]     = useState<MonthlyOverride[]>([]);
   const [billDateMoves, setBillDateMoves] = useState<BillDateMove[]>([]);
   const [transactions,  setTransactions]  = useState<Transaction[]>([]);
+  const demoManualMatchTargets = useRef(new Map<string, Transaction>());
   const [deletedTransactions, setDeletedTransactions] = useState<Transaction[]>([]);
   const [pendingBankTransactions, setPendingBankTransactions] = useState<PendingBankTransaction[]>([]);
   const [incomes,       setIncomes]       = useState<IncomeItem[]>([]);
@@ -1999,7 +2000,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const daysInMonth = new Date(year, month + 1, 0).getDate();
       let occ = getBillOccurrenceDays(bill, month, year);
       const o = overrides.find(ov => ov.bill_id === bill.id && ov.month === month && ov.year === year);
-      if (o?.custom_due_day !== undefined && bill.frequency === "monthly") {
+      if (o?.custom_due_day !== undefined && (bill.frequency === "monthly" || bill.frequency === "quarterly")) {
         occ = [Math.min(o.custom_due_day, daysInMonth)];
       }
       return applyBillDateMovesToOccurrences(bill, month, year, occ);
@@ -2536,6 +2537,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!transaction) throw new Error("Transaction not found");
 
     if (demoMode) {
+      const manualTarget = input.resolution === "manual"
+        ? transactions.find(item => item.id === input.targetId && item.source !== "plaid" && item.amount < 0)
+        : undefined;
       const snowballPayment = input.resolution === "snowball"
         ? extraPayments.find(payment =>
           payment.payment_date === input.occurrenceDate
@@ -2547,38 +2551,52 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       if (input.resolution === "snowball" && (!snowballPayment || !snowballDebt)) {
         throw new Error("Snowball payment not found");
       }
+      if (input.resolution === "manual" && !manualTarget) {
+        throw new Error("Manual calendar transaction not found");
+      }
       const allocation: ReviewAllocation = {
         type: input.resolution === "bill" ? "bill"
           : input.resolution === "income" ? "income"
-          : input.resolution === "goal" || input.resolution === "decision" ? "planned_expense"
+          : input.resolution === "goal" || input.resolution === "decision" || input.resolution === "manual" ? "planned_expense"
           : input.resolution === "snowball" ? "extra_principal"
           : input.resolution,
         targetId: input.targetId,
-        name: input.resolution === "snowball" ? snowballDebt?.name : undefined,
+        source: input.resolution === "manual" ? "transaction" : undefined,
+        name: input.resolution === "snowball" ? snowballDebt?.name
+          : input.resolution === "manual" ? manualTarget?.note || manualTarget?.category
+          : undefined,
         category: input.resolution === "category" ? input.targetId : undefined,
         amount: Math.abs(transaction.amount),
         plannedAmount: input.plannedAmount,
         occurrenceDate: input.occurrenceDate,
         settlement: input.settlement ?? "regular",
       };
-      setTransactions(previous => previous.map(item => item.id === input.transactionId ? {
+      if (manualTarget) demoManualMatchTargets.current.set(input.transactionId, manualTarget);
+      setTransactions(previous => previous
+        .filter(item => input.resolution !== "manual" || item.id !== input.targetId)
+        .map(item => item.id === input.transactionId ? {
         ...item,
         category: input.resolution === "category" ? input.targetId ?? item.category
           : input.resolution === "transfer" ? "Transfer"
           : input.resolution === "income" ? "Income"
+          : input.resolution === "manual" ? manualTarget?.category ?? item.category
           : item.category,
         linked_bill_id: input.resolution === "bill" ? input.targetId : undefined,
         linked_income_id: input.resolution === "income" ? input.targetId : undefined,
         linked_plan_id: input.resolution === "goal" || input.resolution === "decision" ? input.targetId
           : input.resolution === "snowball" ? snowballPayment?.id
+          : input.resolution === "manual" ? manualTarget?.id
           : undefined,
-        linked_plan_type: input.resolution === "goal" || input.resolution === "decision" || input.resolution === "snowball" ? input.resolution : undefined,
+        linked_plan_type: input.resolution === "manual" ? "transaction"
+          : input.resolution === "goal" || input.resolution === "decision" || input.resolution === "snowball" ? input.resolution
+          : undefined,
         matched_occurrence_date: input.occurrenceDate,
         match_confidence: input.resolution === "category" || input.resolution === "transfer" ? undefined : 1,
         match_reason: input.resolution === "bill" ? "confirmed_bill_match"
           : input.resolution === "income" ? "confirmed_income_match"
           : input.resolution === "goal" || input.resolution === "decision" ? "confirmed_plan_match"
           : input.resolution === "snowball" ? "confirmed_snowball_match"
+          : input.resolution === "manual" ? "confirmed_manual_match"
           : undefined,
         review_status: input.resolution === "category" ? "categorized" : input.resolution === "transfer" ? "transfer" : "matched",
         review_resolution: input.resolution,
@@ -2604,6 +2622,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           p_planned_amount: input.plannedAmount ?? null,
           p_settlement: input.settlement ?? null,
           p_extra_category: input.extraCategory ?? null,
+        })
+        : input.resolution === "manual"
+        ? await supabase.rpc("reconcile_manual_transaction", {
+          p_transaction_id: input.transactionId,
+          p_manual_transaction_id: input.targetId ?? null,
+          p_occurrence_date: input.occurrenceDate ?? null,
+          p_planned_amount: input.plannedAmount ?? null,
+          p_settlement: input.settlement ?? null,
         })
         : await supabase.rpc("reconcile_transaction", {
           p_transaction_id: input.transactionId,
@@ -2634,6 +2660,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const reviewedTransaction = transactions.find(item => item.id === transactionId);
     const wasDebtMatch = Boolean(reviewedTransaction?.linked_bill_id && bills.some(bill => bill.id === reviewedTransaction.linked_bill_id && bill.is_debt));
     const wasSnowballMatch = reviewedTransaction?.review_resolution === "snowball";
+    const wasManualMatch = reviewedTransaction?.review_resolution === "manual";
     if (demoMode) {
       if (wasSnowballMatch) {
         const restoredByDebt = new Map<string, number>();
@@ -2649,7 +2676,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           return restored ? { ...bill, balance: roundMoney(bill.balance + restored) } : bill;
         })));
       }
-      setTransactions(previous => previous.map(item => item.id === transactionId ? {
+      const restoredManualTarget = wasManualMatch ? demoManualMatchTargets.current.get(transactionId) : undefined;
+      setTransactions(previous => {
+        const restored = restoredManualTarget && !previous.some(item => item.id === restoredManualTarget.id)
+          ? [...previous, restoredManualTarget]
+          : previous;
+        return restored.map(item => item.id === transactionId ? {
         ...item,
         linked_bill_id: undefined,
         linked_income_id: undefined,
@@ -2662,12 +2694,17 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         review_resolution: undefined,
         review_allocations: [],
         reviewed_at: undefined,
-      } : item));
+        } : item);
+      });
+      if (wasManualMatch) demoManualMatchTargets.current.delete(transactionId);
       return;
     }
     markSaveStarted();
     try {
-      const result = await supabase.rpc("undo_transaction_reconciliation", { p_transaction_id: transactionId });
+      const result = await supabase.rpc(
+        wasManualMatch ? "undo_manual_transaction_reconciliation" : "undo_transaction_reconciliation",
+        { p_transaction_id: transactionId },
+      );
       if (result.error) throw new Error(`Undo review: ${result.error.message}`);
       await refreshBillMatchData();
       if (wasSnowballMatch) await refreshDebtRows();
@@ -3973,7 +4010,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     assertCanEditHousehold("import bills");
     const newBills = imported.map(b => ({
       ...b,
-      frequency:   (["monthly", "biweekly", "weekly"].includes(String(b.frequency)) ? b.frequency : "monthly") as "monthly" | "biweekly" | "weekly",
+      frequency:   (["monthly", "quarterly", "biweekly", "weekly"].includes(String(b.frequency)) ? b.frequency : "monthly") as "monthly" | "quarterly" | "biweekly" | "weekly",
       day_of_week: b.day_of_week ?? 0,
       next_payment_date: b.next_payment_date ?? undefined,
       id:          genId(),

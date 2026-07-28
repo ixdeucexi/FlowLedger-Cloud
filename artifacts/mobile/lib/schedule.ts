@@ -1,5 +1,5 @@
 export interface ScheduledBill {
-  frequency: "monthly" | "biweekly" | "weekly";
+  frequency: "monthly" | "quarterly" | "biweekly" | "weekly";
   due_day: number;
   day_of_week?: number;
   next_payment_date?: string;
@@ -107,6 +107,16 @@ export function getBillOccurrenceDays(bill: ScheduledBill, month: number, year: 
   if (bill.frequency === "biweekly") {
     return occurrenceDaysFromAnchor(bill.next_payment_date ?? bill.start_date, bill.due_day, month, year, 14)
       .filter(withinActiveDates);
+  }
+  if (bill.frequency === "quarterly") {
+    const anchor = bill.next_payment_date ?? bill.start_date;
+    const match = anchor ? /^(\d{4})-(\d{2})-(\d{2})/.exec(anchor) : null;
+    if (!match) return [];
+    const anchorMonthIndex = Number(match[1]) * 12 + Number(match[2]) - 1;
+    const requestedMonthIndex = year * 12 + month;
+    if (requestedMonthIndex < anchorMonthIndex || (requestedMonthIndex - anchorMonthIndex) % 3 !== 0) return [];
+    const day = Math.min(bill.due_day || Number(match[3]), daysInMonth);
+    return day > 0 && withinActiveDates(day) ? [day] : [];
   }
   const day = Math.min(bill.due_day, daysInMonth);
   return day > 0 && withinActiveDates(day) ? [day] : [];

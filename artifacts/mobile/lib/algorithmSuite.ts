@@ -16,7 +16,7 @@ export interface AlgorithmBill {
   name: string;
   amount: number;
   monthlyMinimum?: number;
-  frequency?: "monthly" | "biweekly" | "weekly";
+  frequency?: "monthly" | "quarterly" | "biweekly" | "weekly";
   includeInSnowball?: boolean;
   category: string;
   due_day: number;

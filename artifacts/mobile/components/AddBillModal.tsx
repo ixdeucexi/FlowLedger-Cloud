@@ -144,6 +144,10 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
     if (saving) return;
     const parsedAmount = parseFloat(amount);
     if (!name.trim() || isNaN(parsedAmount) || parsedAmount <= 0) return;
+    if (frequency === "quarterly" && !nextPaymentDate.trim()) {
+      Alert.alert("Choose the first payment date", "FlowLedger uses it to repeat this bill every 3 months.");
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const data: Omit<Bill, "id" | "created_at"> = {
       name: name.trim(),
@@ -260,14 +264,14 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
             {/* Frequency */}
             <Text style={lbl}>Frequency</Text>
             <View style={[styles.segRow, { backgroundColor: c.muted, borderRadius: 10 }]}>
-              {(["monthly", "biweekly", "weekly"] as Bill["frequency"][]).map(f => (
+              {(["monthly", "quarterly", "biweekly", "weekly"] as Bill["frequency"][]).map(f => (
                 <Pressable key={f} onPress={() => setFrequency(f)}
                   style={[styles.segBtn, { backgroundColor: frequency === f ? c.primary : "transparent", borderRadius: 8 }]}
                 >
                   <Feather name={f === "monthly" ? "calendar" : "repeat"} size={12}
                     color={frequency === f ? c.primaryForeground : c.mutedForeground} />
                   <Text style={[styles.segLabel, { color: frequency === f ? c.primaryForeground : c.mutedForeground }]}>
-                    {f === "monthly" ? "Monthly" : f === "biweekly" ? "Biweekly" : "Weekly"}
+                    {f === "monthly" ? "Monthly" : f === "quarterly" ? "Every 3 months" : f === "biweekly" ? "Biweekly" : "Weekly"}
                   </Text>
                 </Pressable>
               ))}
@@ -275,7 +279,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
 
             {/* Monthly → calendar day picker; Weekly → day-of-week grid */}
             <DatePickerField
-              label={frequency === "monthly" ? "Payment Date (optional)" : "First Pay Date"}
+              label={frequency === "monthly" ? "Payment Date (optional)" : "First Payment Date"}
               value={nextPaymentDate}
               onChange={handlePaymentDateChange}
               placeholder={frequency === "monthly" ? "Use due day only" : "Pick the first pay date"}
@@ -355,6 +359,13 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
                   </View>
                 )}
               </>
+            ) : frequency === "quarterly" ? (
+              <View style={[styles.infoBox, { backgroundColor: c.primary + "12" }]}>
+                <Feather name="info" size={12} color={c.primary} />
+                <Text style={[styles.infoText, { color: c.mutedForeground }]}>
+                  Repeats every 3 months from the first payment date.
+                </Text>
+              </View>
             ) : frequency === "weekly" ? (
               <>
                 <Text style={lbl}>Repeats Every</Text>
@@ -588,8 +599,8 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontFamily: "Inter_700Bold" },
   label: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginBottom: 6, marginTop: 14, textTransform: "uppercase", letterSpacing: 0.7 },
   input: { height: 48, borderRadius: 10, paddingHorizontal: 14, fontSize: 16, fontFamily: "Inter_400Regular" },
-  segRow: { flexDirection: "row", padding: 4, gap: 4 },
-  segBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10 },
+  segRow: { flexDirection: "row", flexWrap: "wrap", padding: 4, gap: 4 },
+  segBtn: { flexBasis: "48%", flexGrow: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10 },
   segLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   dowRow: { flexDirection: "row", gap: 6, marginTop: 4 },
   dowBtn: { flex: 1, alignItems: "center", paddingVertical: 10 },

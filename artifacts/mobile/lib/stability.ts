@@ -36,7 +36,7 @@ export interface StabilityProgressInput {
     name: string;
     overdueAmount: number;
     dueLabel: string;
-    frequency?: "monthly" | "biweekly" | "weekly";
+    frequency?: "monthly" | "quarterly" | "biweekly" | "weekly";
     overdueOccurrenceCount?: number;
   } | null;
   forecastConfidence: "high" | "medium" | "low";

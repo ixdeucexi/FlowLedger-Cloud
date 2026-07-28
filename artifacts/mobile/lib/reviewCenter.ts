@@ -4,7 +4,7 @@ export interface ReviewAllocationLike {
   type: "bill" | "income" | "planned_expense" | "category" | "transfer" | "extra_principal";
   amount: number;
   targetId?: string | null;
-  source?: "goal" | "decision";
+  source?: "goal" | "decision" | "transaction";
   name?: string;
   category?: string | null;
   occurrenceDate?: string;
@@ -33,7 +33,7 @@ export interface ReviewTransactionLike {
 export interface PlannedExpenseAllocationGroup {
   key: string;
   targetId: string;
-  source: "goal" | "decision";
+  source: "goal" | "decision" | "transaction";
   name: string;
   occurrenceDate: string;
   plannedAmount: number;

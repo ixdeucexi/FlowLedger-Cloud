@@ -198,6 +198,7 @@ export default function BillsScreen() {
     if (!bill.is_recurring) return "one-time";
     if (bill.frequency === "weekly") return "/week";
     if (bill.frequency === "biweekly") return "biweekly";
+    if (bill.frequency === "quarterly") return "every 3 months";
     return "/month";
   }, []);
   const formatStoppedText = useCallback((bill: Bill) => {

@@ -548,10 +548,49 @@ export function ActivityScreen() {
       category: matchTx.category,
     }, candidates);
   }, [matchTx, getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal]);
+  const manualMatchOptions = useMemo(() => {
+    if (!matchTx || matchTx.source !== "plaid" || matchTx.amount >= 0) return [];
+    const monthPrefix = matchTx.date.slice(0, 7);
+    const candidates = transactions
+      .filter(transaction =>
+        transaction.id !== matchTx.id
+        && transaction.source !== "plaid"
+        && transaction.amount < 0
+        && transaction.date.startsWith(monthPrefix)
+        && !transaction.pending
+        && !transaction.removed_at
+        && !transaction.deleted_at
+        && !transaction.linked_bill_id
+        && !transaction.debt_applied_bill_id
+        && !transaction.linked_plan_id
+        && transaction.review_status !== "matched"
+        && transaction.category !== "Transfer")
+      .map(transaction => ({
+        billId: transaction.id,
+        name: transaction.note?.trim() || transaction.category || "Manual transaction",
+        category: transaction.category,
+        plannedAmount: Math.abs(transaction.amount),
+        occurrenceDates: [transaction.date],
+      }));
+    return rankBillMatches({
+      date: matchTx.date,
+      amount: matchTx.amount,
+      description: matchTx.merchant_name || matchTx.note || matchTx.category,
+      category: matchTx.category,
+    }, candidates);
+  }, [matchTx, transactions]);
+  const combinedMatchOptions = useMemo(() => [
+    ...billMatchOptions.map(option => ({ ...option, targetType: "bill" as const })),
+    ...manualMatchOptions.map(option => ({ ...option, targetType: "manual" as const })),
+  ].sort((left, right) => right.score - left.score || (left.daysApart ?? 999) - (right.daysApart ?? 999)), [billMatchOptions, manualMatchOptions]);
   const matchedBillIdForModal = matchTx ? confirmedBillMatchId(matchTx) : null;
   const matchedBillForModal = matchedBillIdForModal
     ? bills.find(bill => bill.id === matchedBillIdForModal)
     : undefined;
+  const matchedManualAllocation = matchTx?.review_resolution === "manual"
+    ? matchTx.review_allocations?.find(allocation => allocation.type === "planned_expense" && allocation.source === "transaction")
+    : undefined;
+  const matchedTargetName = matchedBillForModal?.name ?? matchedManualAllocation?.name;
   const matchingBankActivity = matchTx?.source === "plaid";
 
   const surplusSnowballOffer = useMemo(() => {
@@ -598,6 +637,31 @@ export function ActivityScreen() {
       setMatchTx(null);
     } catch (error) {
       Alert.alert("Could not match bill", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSavingMatch(false);
+    }
+  };
+
+  const handleMatchManual = async (transactionId: string) => {
+    if (!matchTx || savingMatch) return;
+    const option = manualMatchOptions.find(item => item.billId === transactionId);
+    if (!option) return;
+    const actual = Math.abs(matchTx.amount);
+    setSavingMatch(true);
+    try {
+      await reconcileTransaction({
+        transactionId: matchTx.id,
+        resolution: "manual",
+        targetId: transactionId,
+        // The posted bank date becomes the calendar date once it replaces
+        // the manually planned item.
+        occurrenceDate: matchTx.date,
+        plannedAmount: option.plannedAmount,
+        settlement: Math.abs(actual - option.plannedAmount) < 0.005 ? "exact" : "full",
+      });
+      setMatchTx(null);
+    } catch (error) {
+      Alert.alert("Could not match transaction", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSavingMatch(false);
     }
@@ -680,8 +744,8 @@ export function ActivityScreen() {
     if (!matchTx || savingMatch) return;
     setSavingMatch(true);
     try {
-      if (matchTx.review_status === "matched" && matchTx.review_resolution === "bill") {
-        await removeReviewSurplusFunding(matchTx.id);
+      if (matchTx.review_status === "matched" && (matchTx.review_resolution === "bill" || matchTx.review_resolution === "manual")) {
+        if (matchTx.review_resolution === "bill") await removeReviewSurplusFunding(matchTx.id);
         await undoTransactionReconciliation(matchTx.id);
       } else {
         await unmatchTransactionFromBill(matchTx.id);
@@ -1247,34 +1311,34 @@ export function ActivityScreen() {
               </Pressable>
             </View>
 
-            {matchedBillForModal ? (
+            {matchedTargetName ? (
               <View style={styles.matchBody}>
                 <View style={[styles.matchedCard, { backgroundColor: c.success + "16", borderColor: c.success + "55" }]}>
                   <Feather name="check-circle" size={22} color={c.success} />
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.matchRowTitle, { color: c.foreground }]}>Matched to {matchedBillForModal.name}</Text>
-                    <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>Replaces the planned bill.</Text>
+                    <Text style={[styles.matchRowTitle, { color: c.foreground }]}>Matched to {matchedTargetName}</Text>
+                    <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>Replaces the planned item.</Text>
                   </View>
                 </View>
-                <Pressable accessibilityRole="button" accessibilityLabel={`Undo match to ${matchedBillForModal.name}`} disabled={savingMatch} onPress={() => void handleUnmatchBill()} style={[styles.unmatchButton, { borderColor: c.destructive, opacity: savingMatch ? 0.55 : 1 }]}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Undo match to ${matchedTargetName}`} disabled={savingMatch} onPress={() => void handleUnmatchBill()} style={[styles.unmatchButton, { borderColor: c.destructive, opacity: savingMatch ? 0.55 : 1 }]}>
                   <Text style={[styles.unmatchButtonText, { color: c.destructive }]}>{savingMatch ? "Updating…" : "Undo match"}</Text>
                 </Pressable>
               </View>
             ) : (
               <>
-                <Text style={[styles.matchIntro, { color: c.mutedForeground }]}>Choose the bill this payment covered.</Text>
+                <Text style={[styles.matchIntro, { color: c.mutedForeground }]}>Choose what this payment covered.</Text>
                 <ScrollView style={styles.matchList} showsVerticalScrollIndicator={false}>
-                  {billMatchOptions.length > 0 ? billMatchOptions.map((option, index) => (
+                  {combinedMatchOptions.length > 0 ? combinedMatchOptions.map((option, index) => (
                     <Pressable
-                      key={option.billId}
+                      key={`${option.targetType}-${option.billId}`}
                       accessibilityRole="button"
                       accessibilityLabel={`Match transaction to ${option.name}, planned ${option.plannedAmount.toFixed(2)}`}
                       disabled={savingMatch}
-                      onPress={() => void handleMatchBill(option.billId)}
+                      onPress={() => void (option.targetType === "manual" ? handleMatchManual(option.billId) : handleMatchBill(option.billId))}
                       style={({ pressed }) => [styles.matchRow, { backgroundColor: c.card, borderColor: index === 0 && option.score >= 48 ? c.success + "66" : c.border, opacity: savingMatch ? 0.55 : pressed ? 0.82 : 1 }]}
                     >
                       <View style={[styles.matchIcon, { backgroundColor: (index === 0 && option.score >= 48 ? c.success : c.primary) + "18" }]}>
-                        <Feather name="file-text" size={17} color={index === 0 && option.score >= 48 ? c.success : c.primary} />
+                        <Feather name={option.targetType === "manual" ? "edit-3" : "file-text"} size={17} color={index === 0 && option.score >= 48 ? c.success : c.primary} />
                       </View>
                       <View style={{ flex: 1 }}>
                         <View style={styles.matchRowHeading}>
@@ -1285,15 +1349,15 @@ export function ActivityScreen() {
                             </View>
                           )}
                         </View>
-                        <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>Planned ${option.plannedAmount.toFixed(2)} · {option.daysApart === 0 ? "due same day" : option.daysApart === 1 ? "1 day from due date" : option.daysApart !== null ? `${option.daysApart} days from due date` : option.category}</Text>
+                        <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>{option.targetType === "manual" ? "Manual plan" : "Bill"} · ${option.plannedAmount.toFixed(2)} · {option.daysApart === 0 ? "same day" : option.daysApart === 1 ? "1 day away" : option.daysApart !== null ? `${option.daysApart} days away` : option.category}</Text>
                         {option.reasons.length > 0 && <Text style={[styles.matchReason, { color: c.success }]}>{option.reasons.slice(0, 2).join(" · ")}</Text>}
                       </View>
                       <Feather name="chevron-right" size={17} color={c.mutedForeground} />
                     </Pressable>
                   )) : (
                     <View style={[styles.noMatchCard, { backgroundColor: c.card, borderColor: c.border }]}>
-                      <Text style={[styles.matchRowTitle, { color: c.foreground }]}>No bills due this month</Text>
-                      <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>Create a bill, then match it here.</Text>
+                      <Text style={[styles.matchRowTitle, { color: c.foreground }]}>Nothing planned this month</Text>
+                      <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>Add a bill or manual transaction, then match it here.</Text>
                     </View>
                   )}
                 </ScrollView>
