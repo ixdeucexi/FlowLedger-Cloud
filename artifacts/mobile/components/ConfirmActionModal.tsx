@@ -45,10 +45,20 @@ function ConfirmActionModalView() {
   };
 
   return (
-    <Modal visible={Boolean(request)} transparent animationType="fade" onRequestClose={close}>
+    <Modal
+      visible={Boolean(request)}
+      transparent
+      animationType="fade"
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      navigationBarTranslucent
+      hardwareAccelerated
+      onRequestClose={close}
+    >
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Cancel ${confirmText.toLowerCase()}`}
+        accessibilityViewIsModal
         style={styles.overlay}
         onPress={close}
       >

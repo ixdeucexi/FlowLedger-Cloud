@@ -93,15 +93,17 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
 
   const handleDelete = () => {
     if (!editGoal || !onDelete) return;
+    const deletingBucket = editGoal.goal_type === "planned_expense";
+    const deleteLabel = deletingBucket ? "bucket" : "goal";
     const doDelete = () => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       onDelete(editGoal.id);
       onClose();
     };
     confirmAction({
-      title: "Delete Goal",
-      message: `Remove "${editGoal.name}"?`,
-      confirmText: "Delete",
+      title: `Delete ${deletingBucket ? "Bucket" : "Goal"}`,
+      message: `Delete "${editGoal.name}"? This removes the ${deleteLabel} from Monthly and your plan.`,
+      confirmText: `Delete ${deleteLabel}`,
       destructive: true,
       onConfirm: doDelete,
     });

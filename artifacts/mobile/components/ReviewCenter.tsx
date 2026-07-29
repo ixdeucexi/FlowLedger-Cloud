@@ -289,6 +289,29 @@ export function ReviewCenter() {
     }
   };
 
+  const deleteBucket = (goal: Goal) => {
+    if (saving) return;
+    confirmAction({
+      title: `Delete ${goal.name}?`,
+      message: "This removes the bucket from Monthly and your plan. Matched bank transactions stay in Activity.",
+      confirmText: "Delete bucket",
+      destructive: true,
+      onConfirm: async () => {
+        setSaving(true);
+        setBucketMessage(null);
+        try {
+          await deleteGoal(goal.id);
+          setBucketMessage(`${goal.name} deleted`);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (error) {
+          Alert.alert("Couldn’t delete bucket", error instanceof Error ? error.message : "Please try again.");
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
+  };
+
   const completeReview = async (input: ReconcileTransactionInput, notice?: string) => {
     if (!current || saving) throw new Error("This transaction is no longer available for review.");
     const reviewed = current;
@@ -544,7 +567,7 @@ export function ReviewCenter() {
             <View style={[styles.heroIcon, { backgroundColor: c.primary + "18" }]}><Feather name="shopping-bag" size={19} color={c.primary} /></View>
             <View style={styles.optionCopy}>
               <Text style={[styles.sectionTitle, styles.bucketManagerTitle, { color: c.foreground }]}>Spending buckets</Text>
-              <Text style={[styles.sectionCopy, styles.bucketManagerCopy, { color: c.mutedForeground }]}>Edit, close, or archive a bucket.</Text>
+              <Text style={[styles.sectionCopy, styles.bucketManagerCopy, { color: c.mutedForeground }]}>Edit, close, archive, or delete a bucket.</Text>
             </View>
           </View>
           {bucketMessage ? <Text style={[styles.bucketMessage, { color: c.success, backgroundColor: c.success + "12" }]}>{bucketMessage}</Text> : null}
@@ -592,6 +615,16 @@ export function ReviewCenter() {
                       <Text style={[styles.bucketActionText, { color: c.mutedForeground }]}>Archive</Text>
                     </Pressable>
                   ) : null}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete ${goal.name} bucket`}
+                    disabled={saving}
+                    onPress={() => deleteBucket(goal)}
+                    style={({ pressed }) => [styles.bucketActionButton, { borderColor: c.destructive + "66", opacity: saving ? 0.5 : pressed ? 0.72 : 1 }]}
+                  >
+                    <Feather name="trash-2" size={13} color={c.destructive} />
+                    <Text style={[styles.bucketActionText, { color: c.destructive }]}>Delete</Text>
+                  </Pressable>
                 </View>
               </View>
             );
@@ -614,16 +647,28 @@ export function ReviewCenter() {
                     <Text numberOfLines={1} style={[styles.optionTitle, { color: c.foreground }]}>{goal.name}</Text>
                     <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Completed bucket · history preserved</Text>
                   </View>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Restore ${goal.name} bucket`}
-                    disabled={saving}
-                    onPress={() => void restoreBucket(goal)}
-                    style={({ pressed }) => [styles.bucketActionButton, { borderColor: c.primary + "66", opacity: saving ? 0.5 : pressed ? 0.72 : 1 }]}
-                  >
-                    <Feather name="rotate-ccw" size={13} color={c.primary} />
-                    <Text style={[styles.bucketActionText, { color: c.primary }]}>Restore</Text>
-                  </Pressable>
+                  <View style={styles.bucketActions}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Restore ${goal.name} bucket`}
+                      disabled={saving}
+                      onPress={() => void restoreBucket(goal)}
+                      style={({ pressed }) => [styles.bucketActionButton, { borderColor: c.primary + "66", opacity: saving ? 0.5 : pressed ? 0.72 : 1 }]}
+                    >
+                      <Feather name="rotate-ccw" size={13} color={c.primary} />
+                      <Text style={[styles.bucketActionText, { color: c.primary }]}>Restore</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete ${goal.name} bucket`}
+                      disabled={saving}
+                      onPress={() => deleteBucket(goal)}
+                      style={({ pressed }) => [styles.bucketActionButton, { borderColor: c.destructive + "66", opacity: saving ? 0.5 : pressed ? 0.72 : 1 }]}
+                    >
+                      <Feather name="trash-2" size={13} color={c.destructive} />
+                      <Text style={[styles.bucketActionText, { color: c.destructive }]}>Delete</Text>
+                    </Pressable>
+                  </View>
                 </View>
               )) : null}
             </View>

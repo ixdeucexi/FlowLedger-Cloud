@@ -16,10 +16,11 @@ import { CommandPlusButton } from "@/components/CommandPlusButton";
 import { DebtPaymentAppliedModal, type DebtPaymentAppliedDetail } from "@/components/DebtPaymentAppliedModal";
 import { EmptyState } from "@/components/EmptyState";
 import { FullPaymentPromptModal } from "@/components/FullPaymentPromptModal";
+import { GoalModal } from "@/components/GoalModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
 import colors from "@/constants/colors";
-import type { Bill, BillDateMove, DecisionRecord, IncomeItem, Transaction } from "@/context/BudgetContext";
+import type { Bill, BillDateMove, DecisionRecord, Goal, IncomeItem, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
@@ -206,13 +207,14 @@ export default function MonthlyScreen() {
     getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill, deleteBill, updateIncome,
     getCashFlow, getMonthlyIncome, getDailyBalances, getIncomeOccurrencesInMonth,
     previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, finalizeBillPayment, getExtraPayment,
-    updateDecision, deleteDecision, deleteGoal,
+    updateDecision, deleteDecision, updateGoal, deleteGoal,
   } = useBudget();
 
   const [month, setMonth] = useState(new Date().getMonth());
   const [activeTab] = useState<TabView>("calendar");
   const [txModalVisible, setTxModalVisible] = useState(false);
   const [editTx, setEditTx] = useState<Transaction | null>(null);
+  const [editingBucket, setEditingBucket] = useState<Goal | null>(null);
   const [transactionDefaultDate, setTransactionDefaultDate] = useState<string | undefined>();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const handledOpenDateRef = useRef<string | null>(null);
@@ -1191,9 +1193,9 @@ export default function MonthlyScreen() {
 
   const handleDeleteGoalFromDay = useCallback((goalId: string, goalName: string) => {
     confirmAction({
-      title: "Delete Goal",
-      message: `Delete "${goalName}" completely? This removes it from Monthly and your forecast.`,
-      confirmText: "Delete",
+      title: "Delete Bucket",
+      message: `Delete "${goalName}"? This removes the bucket from Monthly and your plan.`,
+      confirmText: "Delete bucket",
       destructive: true,
       onConfirm: async () => {
         try {
@@ -1205,6 +1207,16 @@ export default function MonthlyScreen() {
       },
     });
   }, [deleteGoal]);
+
+  const openEditBucket = useCallback((goalId: string) => {
+    const bucket = goals.find(goal => goal.id === goalId && goal.goal_type === "planned_expense");
+    if (!bucket) {
+      Alert.alert("Bucket not found", "Refresh Monthly and try again.");
+      return;
+    }
+    setSelectedDate(null);
+    setTimeout(() => setEditingBucket(bucket), 0);
+  }, [goals]);
 
   const openEditPlan = (plan: DecisionRecord) => {
     setEditPlan(plan);
@@ -2123,16 +2135,31 @@ export default function MonthlyScreen() {
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
                         <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Plans & goals</Text>
                         {displayedGoalsForSelectedDay.map(goal => (
-                          <View key={`overlay-goal-${goal.id}`} style={styles.dayOverlayRow}>
-                            <Text numberOfLines={1} style={[styles.dayOverlayRowName, { color: c.foreground }]}>★ {goal.name}</Text>
-                            <Text style={[styles.dayOverlayAmount, { color: "#8b5cf6" }]}>-${goal.amount.toFixed(2)}</Text>
-                            <Pressable
-                              onPress={() => handleDeleteGoalFromDay(goal.id, goal.name)}
-                              hitSlop={8}
-                              style={({ pressed }) => [styles.dayOverlayDeleteButton, { backgroundColor: c.destructive + "12", opacity: pressed ? 0.74 : 1 }]}
-                            >
-                              <Feather name="trash-2" size={14} color={c.destructive} />
-                            </Pressable>
+                          <View key={`overlay-goal-${goal.id}`} style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: "#8b5cf640" }]}>
+                            <View style={styles.dayOverlayRow}>
+                              <Text numberOfLines={1} style={[styles.dayOverlayRowName, { color: c.foreground }]}>★ {goal.name}</Text>
+                              <Text style={[styles.dayOverlayAmount, { color: "#8b5cf6" }]}>-${goal.amount.toFixed(2)}</Text>
+                            </View>
+                            <View style={styles.dayBillActions}>
+                              <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={`Edit ${goal.name} bucket`}
+                                onPress={() => openEditBucket(goal.id)}
+                                style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.primary + "16", borderColor: c.primary + "35", opacity: pressed ? 0.74 : 1 }]}
+                              >
+                                <Feather name="edit-2" size={13} color={c.primary} />
+                                <Text style={[styles.dayBillActionText, { color: c.primary }]}>Edit</Text>
+                              </Pressable>
+                              <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={`Delete ${goal.name} bucket`}
+                                onPress={() => handleDeleteGoalFromDay(goal.id, goal.name)}
+                                style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.destructive + "12", borderColor: c.destructive + "35", opacity: pressed ? 0.74 : 1 }]}
+                              >
+                                <Feather name="trash-2" size={13} color={c.destructive} />
+                                <Text style={[styles.dayBillActionText, { color: c.destructive }]}>Delete</Text>
+                              </Pressable>
+                            </View>
                           </View>
                         ))}
                         {plansForSelectedDay.map(plan => {
@@ -2194,6 +2221,28 @@ export default function MonthlyScreen() {
                                   <Text numberOfLines={1} style={[styles.dayBillNumberValue, { color: statusColor }]}>${finalAmount.toFixed(2)}</Text>
                                 </View>
                               </View>
+                              {group.source === "goal" ? (
+                                <View style={styles.dayBillActions}>
+                                  <Pressable
+                                    accessibilityRole="button"
+                                    accessibilityLabel={`Edit ${group.name} bucket`}
+                                    onPress={() => openEditBucket(group.targetId)}
+                                    style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.primary + "16", borderColor: c.primary + "35", opacity: pressed ? 0.74 : 1 }]}
+                                  >
+                                    <Feather name="edit-2" size={13} color={c.primary} />
+                                    <Text style={[styles.dayBillActionText, { color: c.primary }]}>Edit</Text>
+                                  </Pressable>
+                                  <Pressable
+                                    accessibilityRole="button"
+                                    accessibilityLabel={`Delete ${group.name} bucket`}
+                                    onPress={() => handleDeleteGoalFromDay(group.targetId, group.name)}
+                                    style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.destructive + "12", borderColor: c.destructive + "35", opacity: pressed ? 0.74 : 1 }]}
+                                  >
+                                    <Feather name="trash-2" size={13} color={c.destructive} />
+                                    <Text style={[styles.dayBillActionText, { color: c.destructive }]}>Delete</Text>
+                                  </Pressable>
+                                </View>
+                              ) : null}
                             </View>
                           );
                         })}
@@ -2618,6 +2667,16 @@ export default function MonthlyScreen() {
         }}
         editTx={editTx}
         defaultDate={editTx ? undefined : transactionDefaultDate}
+      />
+      <GoalModal
+        visible={Boolean(editingBucket)}
+        onClose={() => setEditingBucket(null)}
+        onSave={async data => {
+          if ("id" in data) await updateGoal(data as Goal);
+        }}
+        onDelete={deleteGoal}
+        editGoal={editingBucket}
+        initialMode="budget"
       />
       <DebtPaymentAppliedModal
         visible={!!debtPaymentNotice}
