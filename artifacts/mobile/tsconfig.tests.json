@@ -67,6 +67,8 @@
     ,"lib/householdPermissions.test.ts"
     ,"lib/spendingBuckets.ts"
     ,"lib/spendingBuckets.test.ts"
+    ,"lib/bucketAffordability.ts"
+    ,"lib/bucketAffordability.test.ts"
     ,"lib/feedback.ts"
     ,"lib/feedback.test.ts"
     ,"lib/billMatching.ts"

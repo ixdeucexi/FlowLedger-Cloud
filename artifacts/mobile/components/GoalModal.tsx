@@ -7,11 +7,12 @@ import {
 } from "react-native";
 
 import colors from "@/constants/colors";
-import type { Goal } from "@/context/BudgetContext";
+import { BucketAffordabilityModal } from "@/components/BucketAffordabilityModal";
 import { DatePickerField } from "@/components/DatePickerField";
+import { useBudget, type Goal, type GoalAffordability } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
-import { confirmAction } from "@/lib/confirmAction";
+import { confirmActionAfterDismiss } from "@/lib/confirmAction";
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
 
@@ -33,6 +34,7 @@ interface Props {
 
 export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initialMode = "savings", initialName = "", initialTargetAmount, initialTargetDate }: Props) {
   const c = useColors();
+  const { checkGoalAffordability, settings } = useBudget();
   useBackDismiss(visible, onClose);
 
   const [name, setName] = useState("");
@@ -41,6 +43,12 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
   const [goalMode, setGoalMode] = useState<"savings" | "budget">("savings");
   const [targetDate, setTargetDate] = useState(""); // YYYY-MM-DD
   const [saving, setSaving] = useState(false);
+  const [bucketCheck, setBucketCheck] = useState<{
+    name: string;
+    amount: number;
+    targetDate: string;
+    result: GoalAffordability;
+  } | null>(null);
 
   const today = new Date();
   const todayYMD = dateToYMD(today);
@@ -79,11 +87,31 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
       closed_at: goalMode === "budget" ? editGoal?.closed_at : undefined,
       closed_by: goalMode === "budget" ? editGoal?.closed_by : undefined,
     };
+    const targetParts = targetDate.split("-").map(Number);
+    const affordability = !editGoal && goalMode === "budget" && targetParts.length === 3
+      ? checkGoalAffordability(
+          {
+            ...data,
+            id: "bucket-affordability-preview",
+            created_at: new Date().toISOString(),
+          },
+          targetParts[1] - 1,
+          targetParts[0],
+        )
+      : null;
     setSaving(true);
     try {
       if (editGoal) await onSave({ ...data, id: editGoal.id, created_at: editGoal.created_at });
       else await onSave(data);
       onClose();
+      if (affordability) {
+        setTimeout(() => setBucketCheck({
+          name: data.name,
+          amount: data.target_amount,
+          targetDate: data.target_date,
+          result: affordability,
+        }), 360);
+      }
     } catch (error) {
       Alert.alert("Couldn’t save", error instanceof Error ? error.message : "Please try again.");
     } finally {
@@ -97,10 +125,9 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
     const deleteLabel = deletingBucket ? "bucket" : "goal";
     const doDelete = () => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      onDelete(editGoal.id);
-      onClose();
+      return onDelete(editGoal.id);
     };
-    confirmAction({
+    confirmActionAfterDismiss(onClose, {
       title: `Delete ${deletingBucket ? "Bucket" : "Goal"}`,
       message: `Delete "${editGoal.name}"? This removes the ${deleteLabel} from Monthly and your plan.`,
       confirmText: `Delete ${deleteLabel}`,
@@ -114,7 +141,8 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
   const itemLabel = goalMode === "budget" ? "Bucket" : "Goal";
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <>
+      <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
         <View style={[styles.container, { backgroundColor: c.background }]}>
           <View style={styles.handle} />
@@ -236,7 +264,17 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
-    </Modal>
+      </Modal>
+      <BucketAffordabilityModal
+        visible={Boolean(bucketCheck)}
+        bucketName={bucketCheck?.name ?? ""}
+        amount={bucketCheck?.amount ?? 0}
+        targetDate={bucketCheck?.targetDate ?? ""}
+        safetyFloor={settings.safety_floor}
+        result={bucketCheck?.result ?? null}
+        onClose={() => setBucketCheck(null)}
+      />
+    </>
   );
 }
 

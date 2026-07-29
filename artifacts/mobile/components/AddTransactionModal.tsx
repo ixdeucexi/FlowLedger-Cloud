@@ -23,7 +23,7 @@ import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { localDateString } from "@/lib/dateLabels";
 import { buildSafetyStop, type SafetyStopWarning } from "@/lib/safetyStop";
-import { confirmAction } from "@/lib/confirmAction";
+import { confirmActionAfterDismiss } from "@/lib/confirmAction";
 
 interface Props {
   visible: boolean;
@@ -225,14 +225,13 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
       try {
         if (isEditingTransfer && editTx.transfer_group_id && onDeleteTransfer) await onDeleteTransfer(editTx.transfer_group_id);
         else await onDelete(editTx.id);
-        onClose();
       } catch (error) {
         Alert.alert(isEditingTransfer ? "Couldn’t delete transfer" : "Couldn’t delete transaction", error instanceof Error ? error.message : "Please try again.");
       } finally {
         setSaving(false);
       }
     };
-    confirmAction({
+    confirmActionAfterDismiss(onClose, {
       title: isEditingTransfer ? "Delete Transfer" : "Delete Transaction",
       message: isEditingTransfer
         ? "Move both sides of this transfer to Recently Deleted?"

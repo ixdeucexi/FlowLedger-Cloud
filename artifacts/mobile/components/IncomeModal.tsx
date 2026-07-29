@@ -8,7 +8,7 @@ import type { IncomeAmountEntry, IncomeItem } from "@/context/BudgetContext";
 import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
-import { confirmAction } from "@/lib/confirmAction";
+import { confirmAction, confirmActionAfterDismiss } from "@/lib/confirmAction";
 import { MONTH_NAMES } from "@/lib/dateLabels";
 import { getLatestRecordedIncomeAmount, normalizeIncomeExcludedDates } from "@/lib/schedule";
 
@@ -64,7 +64,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
 
   const handleDelete = () => {
     if (!editItem || !onDelete || saving) return;
-    confirmAction({
+    confirmActionAfterDismiss(onClose, {
       title: "Delete this income?",
       message: `Delete "${editItem.name}" from Income and Calendar?`,
       confirmText: "Delete",
@@ -73,7 +73,6 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
         setSaving(true);
         try {
           await onDelete(editItem.id);
-          onClose();
         } finally {
           setSaving(false);
         }

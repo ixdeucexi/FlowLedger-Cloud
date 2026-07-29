@@ -13,7 +13,7 @@ import { useBudget } from "@/context/BudgetContext";
 import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
-import { confirmAction } from "@/lib/confirmAction";
+import { confirmActionAfterDismiss } from "@/lib/confirmAction";
 import { MONTH_NAMES } from "@/lib/dateLabels";
 import { BILL_IMPORTANCE_OPTIONS, normalizeBillImportance, type BillImportance } from "@/lib/billImportance";
 
@@ -187,14 +187,13 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       setSaving(true);
       try {
         await onDelete(editBill.id);
-        onClose();
       } catch (error) {
         Alert.alert("Couldn’t delete", error instanceof Error ? error.message : "Please try again.");
       } finally {
         setSaving(false);
       }
     };
-    confirmAction({
+    confirmActionAfterDismiss(onClose, {
       title: `Delete ${noun}`,
       message: `Delete "${editBill.name}" completely? This removes it from Bills and Calendar. Existing manual transactions stay in Activity.`,
       confirmText: "Delete",
@@ -213,14 +212,13 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       setSaving(true);
       try {
         await stopFuture(editBill.id);
-        onClose();
       } catch (error) {
         Alert.alert("Couldn’t stop future bill", error instanceof Error ? error.message : "Please try again.");
       } finally {
         setSaving(false);
       }
     };
-    confirmAction({
+    confirmActionAfterDismiss(onClose, {
       title: `Stop Future ${noun}`,
       message: `Stop "${editBill.name}" after this month? Past months and saved monthly details will stay unchanged.`,
       confirmText: "Stop Future",
