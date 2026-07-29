@@ -23,7 +23,7 @@ import {
 } from "@/lib/learningTour";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
 import { FeedbackBadgeProvider, useFeedbackBadge } from "@/context/FeedbackBadgeContext";
-import { buildCurrentMonthReviewQueue } from "@/lib/reviewCenter";
+import { buildReviewQueue } from "@/lib/reviewCenter";
 import { tabBadgeValue } from "@/lib/tabBadge";
 import { buildOverdueBillOccurrences, groupOverdueBills } from "@/lib/overdueBills";
 import { planningTabPresentation } from "@/lib/planningMode";
@@ -367,7 +367,7 @@ function TabContent() {
   const isWeb = Platform.OS === "web";
   const isIosWeb = isWeb && typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent);
   const activityReviewCount = React.useMemo(
-    () => buildCurrentMonthReviewQueue(transactions, todayIsoDate()).length,
+    () => buildReviewQueue(transactions, todayIsoDate()).length,
     [transactions],
   );
   const activityAlertCount = activityReviewCount + pendingBankTransactions.length;

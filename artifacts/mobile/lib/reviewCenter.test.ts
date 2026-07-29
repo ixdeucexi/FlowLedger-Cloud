@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { allocationLabel, allocationTotal, buildCurrentMonthReviewQueue, buildForgottenBillDefaults, forgottenBillSettlement, groupPlannedExpenseAllocations, groupReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewAllocationsAreBalanced, reviewedBillMonthSettlement, reviewQueueAfterSkips, reviewSettlementSummary, scheduledSnowballReviewTargets, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
+import { allocationLabel, allocationTotal, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupPlannedExpenseAllocations, groupReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewAllocationsAreBalanced, reviewedBillMonthSettlement, reviewQueueAfterSkips, reviewSettlementSummary, scheduledSnowballReviewTargets, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
 
-test("queues only active current-month posted Plaid transactions oldest first", () => {
-  const queue = buildCurrentMonthReviewQueue([
+test("queues active current-month and month-end rollover Plaid transactions oldest first", () => {
+  const queue = buildReviewQueue([
     { id: "newer", date: "2026-07-12", amount: -20, category: "Other", note: "B", source: "plaid", review_status: "needs_review" },
     { id: "older", date: "2026-07-02", amount: -10, category: "Other", note: "A", source: "plaid", review_status: "needs_review" },
     { id: "pending", date: "2026-07-01", amount: -5, category: "Other", note: "P", source: "plaid", review_status: "needs_review", pending: true },
@@ -12,7 +12,26 @@ test("queues only active current-month posted Plaid transactions oldest first", 
     { id: "done", date: "2026-07-03", amount: -9, category: "Other", note: "Done", source: "plaid", review_status: "categorized" },
     { id: "manual", date: "2026-07-04", amount: -7, category: "Other", note: "Manual", source: "manual", review_status: "needs_review" },
   ], "2026-07-14");
-  assert.deepEqual(queue.map(transaction => transaction.id), ["older", "newer"]);
+  assert.deepEqual(queue.map(transaction => transaction.id), ["past", "older", "newer"]);
+});
+
+test("carries an unmatched transaction from the previous month's last day into the new month", () => {
+  const queue = buildReviewQueue([
+    { id: "current", date: "2026-08-01", amount: -20, category: "Other", note: "Current", source: "plaid", review_status: "needs_review" },
+    { id: "rollover", date: "2026-07-31", amount: -10, category: "Other", note: "Rollover", source: "plaid", review_status: "needs_review" },
+    { id: "too-old", date: "2026-07-30", amount: -8, category: "Other", note: "Old", source: "plaid", review_status: "needs_review" },
+    { id: "pending-rollover", date: "2026-07-31", amount: -5, category: "Other", note: "Pending", source: "plaid", review_status: "needs_review", pending: true },
+    { id: "matched-rollover", date: "2026-07-31", amount: -7, category: "Other", note: "Matched", source: "plaid", review_status: "matched" },
+  ], "2026-08-01");
+  assert.deepEqual(queue.map(transaction => transaction.id), ["rollover", "current"]);
+});
+
+test("carries December 31 into January without changing the transaction date", () => {
+  const queue = buildReviewQueue([
+    { id: "year-end", date: "2026-12-31", amount: -25, category: "Other", note: "Year end", source: "plaid", review_status: "needs_review" },
+  ], "2027-01-02");
+  assert.equal(queue[0]?.id, "year-end");
+  assert.equal(queue[0]?.date, "2026-12-31");
 });
 
 test("skip moves an item aside without changing its review state", () => {

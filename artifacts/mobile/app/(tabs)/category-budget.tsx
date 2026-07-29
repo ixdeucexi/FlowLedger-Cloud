@@ -14,7 +14,7 @@ import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { isCashFlowTransaction } from "@/lib/billMatching";
 import { applyCategoryBudgetMove, buildCategoryPlan, buildZeroBudgetSummary, type CategoryPlanRow } from "@/lib/categoryPlanning";
 import { loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets } from "@/lib/categoryBudgetStore";
-import { buildCurrentMonthReviewQueue } from "@/lib/reviewCenter";
+import { buildReviewQueue } from "@/lib/reviewCenter";
 
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const CAT_COLORS: Record<string, string> = {
@@ -96,7 +96,7 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
   const reviewCount = useMemo(() => {
     const today = new Date();
     const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-    return buildCurrentMonthReviewQueue(transactions, todayIso).length;
+    return buildReviewQueue(transactions, todayIso).length;
   }, [transactions]);
 
   const persistBudgets = async (next: Record<string, number>) => {

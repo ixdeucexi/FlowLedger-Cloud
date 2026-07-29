@@ -12,7 +12,7 @@ import type { Bill, Goal, ReconcileTransactionInput, Transaction } from "@/conte
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { confirmAction } from "@/lib/confirmAction";
-import { buildCurrentMonthReviewQueue, buildForgottenBillDefaults, forgottenBillSettlement, groupReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewQueueAfterSkips, scheduledSnowballReviewTargets, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
+import { buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewQueueAfterSkips, scheduledSnowballReviewTargets, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
 import { isOpenSpendingBucket, spendingBucketSummary } from "@/lib/spendingBuckets";
 
 function todayIso() {
@@ -76,7 +76,7 @@ export function ReviewCenter() {
   useEffect(() => {
     void refreshBankData();
   }, [refreshBankData]);
-  const queue = useMemo(() => buildCurrentMonthReviewQueue(transactions, todayIso()), [transactions]);
+  const queue = useMemo(() => buildReviewQueue(transactions, todayIso()), [transactions]);
   const [saving, setSaving] = useState(false);
   const [variance, setVariance] = useState<VarianceChoice | null>(null);
   const [splitCategory, setSplitCategory] = useState<string | null>(null);

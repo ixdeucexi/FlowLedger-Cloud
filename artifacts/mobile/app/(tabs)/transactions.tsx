@@ -30,7 +30,7 @@ import { isValidDateInMonth } from "@/lib/schedule";
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { resizeSnowballFundingSources } from "@/lib/snowballFunding";
 import { isOpenSpendingBucket, spendingBucketMatch, spendingBucketSummary } from "@/lib/spendingBuckets";
-import { buildCurrentMonthReviewQueue, matchedOccurrenceAllocations, occurrenceKey, transactionDisplayName } from "@/lib/reviewCenter";
+import { buildReviewQueue, matchedOccurrenceAllocations, occurrenceKey, transactionDisplayName } from "@/lib/reviewCenter";
 import { CategoryBudgetScreen } from "./category-budget";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -444,7 +444,7 @@ export function ActivityScreen() {
   const sections = useMemo(() => groupByMonth(filtered), [filtered]);
 
   const activityReviewCount = useMemo(
-    () => buildCurrentMonthReviewQueue(transactions, todayIsoDate()).length,
+    () => buildReviewQueue(transactions, todayIsoDate()).length,
     [transactions],
   );
   const pendingActivityCount = pendingBankTransactions.length;

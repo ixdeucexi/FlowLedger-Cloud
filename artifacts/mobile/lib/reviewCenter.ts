@@ -109,12 +109,21 @@ export function forgottenBillSettlement(actualAmount: number, plannedAmount: num
   return Math.abs(Math.abs(actualAmount) - Math.abs(plannedAmount)) < 0.005 ? "exact" : "full";
 }
 
-export function buildCurrentMonthReviewQueue<T extends ReviewTransactionLike>(transactions: T[], todayIso: string): T[] {
+function previousMonthEnd(todayIso: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(todayIso)) return null;
+  const year = Number(todayIso.slice(0, 4));
+  const month = Number(todayIso.slice(5, 7));
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return null;
+  return new Date(Date.UTC(year, month - 1, 0)).toISOString().slice(0, 10);
+}
+
+export function buildReviewQueue<T extends ReviewTransactionLike>(transactions: T[], todayIso: string): T[] {
   const monthPrefix = todayIso.slice(0, 7);
+  const rolloverDate = previousMonthEnd(todayIso);
   return transactions
     .filter(transaction => !transaction.removed_at && transaction.pending !== true)
     .filter(transaction => transaction.source === "plaid")
-    .filter(transaction => transaction.date.startsWith(monthPrefix))
+    .filter(transaction => transaction.date.startsWith(monthPrefix) || transaction.date === rolloverDate)
     .filter(transaction => transaction.review_status === "needs_review")
     .sort((left, right) => left.date.localeCompare(right.date) || left.id.localeCompare(right.id));
 }
