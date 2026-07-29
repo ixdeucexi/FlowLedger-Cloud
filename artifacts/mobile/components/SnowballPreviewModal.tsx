@@ -2,10 +2,12 @@ import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
+import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
 import { DatePickerField } from "@/components/DatePickerField";
 import type { DebtMethod, SnowballProjectionResult } from "@/lib/snowball";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
+import type { ConfirmActionOptions } from "@/lib/confirmAction";
 import { MONTH_NAMES } from "@/lib/dateLabels";
 
 interface Props {
@@ -28,18 +30,22 @@ interface Props {
 
 export function SnowballPreviewModal({ visible, method, preview, amount, existingPayment, paymentDate, paymentDateMin, paymentDateMax, safetyFloor = 200, forecastHorizonMonths = 6, onAmountChange, onPaymentDateChange, onClose, onConfirm, onRemove }: Props) {
   const c = useColors();
-  useBackDismiss(visible, onClose);
+  const [confirmation, setConfirmation] = useState<ConfirmActionOptions | null>(null);
+  useBackDismiss(visible, () => confirmation ? setConfirmation(null) : onClose());
   const requested = Number.parseFloat(amount) || 0;
   const valid = !!preview && requested > 0 && requested <= preview.safeMaximum + 0.005 && preview.allocations.length > 0;
   const methodName = method === "avalanche" ? "Avalanche" : "Snowball";
   const [monthOffset, setMonthOffset] = useState(0);
-  useEffect(() => { if (visible) setMonthOffset(0); }, [visible]);
+  useEffect(() => {
+    if (visible) setMonthOffset(0);
+    else setConfirmation(null);
+  }, [visible]);
   const visibleMonths = preview?.months.slice(monthOffset, monthOffset + forecastHorizonMonths) ?? [];
   const canMoveBack = monthOffset > 0;
   const canMoveForward = Boolean(preview && monthOffset + forecastHorizonMonths < preview.months.length);
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={() => confirmation ? setConfirmation(null) : onClose()}>
       <Pressable style={styles.overlay} onPress={onClose}>
         <Pressable style={[styles.sheet, { backgroundColor: c.background }]} onPress={() => {}}>
           <View style={[styles.handle, { backgroundColor: c.border }]} />
@@ -132,7 +138,16 @@ export function SnowballPreviewModal({ visible, method, preview, amount, existin
 
           <View style={styles.actions}>
             {existingPayment && onRemove && (
-              <Pressable onPress={onRemove} style={[styles.remove, { borderColor: c.destructive }]}>
+              <Pressable
+                onPress={() => setConfirmation({
+                  title: `Remove this ${methodName} payment?`,
+                  message: "This removes the extra payment from Calendar. It does not change the required payment or debt balance.",
+                  confirmText: "Remove payment",
+                  destructive: true,
+                  onConfirm: onRemove,
+                })}
+                style={[styles.remove, { borderColor: c.destructive }]}
+              >
                 <Feather name="rotate-ccw" size={15} color={c.destructive} />
                 <Text style={[styles.removeText, { color: c.destructive }]}>Remove</Text>
               </Pressable>
@@ -142,6 +157,7 @@ export function SnowballPreviewModal({ visible, method, preview, amount, existin
             </Pressable>
           </View>
         </Pressable>
+        <ConfirmActionOverlay request={confirmation} onClose={() => setConfirmation(null)} />
       </Pressable>
     </Modal>
   );

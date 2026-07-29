@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
+import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
 import { ZeroBudgetLabBills } from "@/components/zeroBudgetLab/ZeroBudgetLabBills";
 import { ZeroBudgetLabDashboard } from "@/components/zeroBudgetLab/ZeroBudgetLabDashboard";
 import { ZeroBudgetLabMonthly } from "@/components/zeroBudgetLab/ZeroBudgetLabMonthly";
@@ -27,7 +28,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
-import { confirmAction } from "@/lib/confirmAction";
+import type { ConfirmActionOptions } from "@/lib/confirmAction";
 import {
   applyZeroBudgetMoney,
   categorizeZeroBudgetTransaction,
@@ -143,6 +144,8 @@ export default function ZeroBudgetLabScreen() {
   const [transactionPickerId, setTransactionPickerId] = useState<string | null>(
     null,
   );
+  const [labConfirmation, setLabConfirmation] =
+    useState<ConfirmActionOptions | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -195,7 +198,7 @@ export default function ZeroBudgetLabScreen() {
 
   const resetLab = () => {
     if (!user?.id) return;
-    confirmAction({
+    setLabConfirmation({
       title: "Reset sample plan?",
       message:
         "This resets only the Zero Budget Lab. Your real household stays untouched.",
@@ -316,21 +319,13 @@ export default function ZeroBudgetLabScreen() {
   const deleteCategory = () => {
     if (!categoryForm || categoryFormNew) return;
     const categoryId = categoryForm.id;
-    confirmAction({
-      title: "Remove sample category?",
-      message: "This removes it only from the admin lab.",
-      confirmText: "Remove",
-      destructive: true,
-      onConfirm: () => {
-        setState((previous) => ({
-          ...previous,
-          categories: previous.categories.filter(
-            (category) => category.id !== categoryId,
-          ),
-        }));
-        setCategoryForm(null);
-      },
-    });
+    setState((previous) => ({
+      ...previous,
+      categories: previous.categories.filter(
+        (category) => category.id !== categoryId,
+      ),
+    }));
+    setCategoryForm(null);
   };
 
   const openNewGroup = () => {
@@ -601,6 +596,8 @@ export default function ZeroBudgetLabScreen() {
         title="Zero Budget Lab"
         onClose={() => setMenuVisible(false)}
         c={c}
+        confirmation={labConfirmation}
+        onConfirmationClose={() => setLabConfirmation(null)}
       >
         <SheetRow
           c={c}
@@ -730,6 +727,7 @@ export default function ZeroBudgetLabScreen() {
           onChange={setView}
         />
       ) : null}
+      <ConfirmActionOverlay request={labConfirmation} onClose={() => setLabConfirmation(null)} />
     </View>
   );
 }
@@ -1395,12 +1393,16 @@ function ActionSheet({
   title,
   onClose,
   c,
+  confirmation,
+  onConfirmationClose,
   children,
 }: {
   visible: boolean;
   title: string;
   onClose: () => void;
   c: LabColors;
+  confirmation?: ConfirmActionOptions | null;
+  onConfirmationClose?: () => void;
   children: React.ReactNode;
 }) {
   return (
@@ -1426,6 +1428,7 @@ function ActionSheet({
           </Text>
           {children}
         </Pressable>
+        <ConfirmActionOverlay request={confirmation ?? null} onClose={onConfirmationClose ?? onClose} />
       </Pressable>
     </Modal>
   );
@@ -1749,6 +1752,7 @@ function CategoryEditor({
   onSave: () => void;
   onDelete: () => void;
 }) {
+  const [confirmation, setConfirmation] = useState<ConfirmActionOptions | null>(null);
   const update = (patch: Partial<ZeroBudgetLabCategory>) =>
     category && onChange({ ...category, ...patch });
   return (
@@ -1756,7 +1760,7 @@ function CategoryEditor({
       visible={visible}
       transparent
       animationType="slide"
-      onRequestClose={onClose}
+      onRequestClose={() => confirmation ? setConfirmation(null) : onClose()}
     >
       <View style={styles.overlay}>
         <ScrollView
@@ -1919,7 +1923,16 @@ function CategoryEditor({
             </Text>
           </Pressable>
           {!isNew && (
-            <Pressable onPress={onDelete} style={styles.deleteButton}>
+            <Pressable
+              onPress={() => setConfirmation({
+                title: "Remove sample category?",
+                message: "This removes it only from the admin lab.",
+                confirmText: "Remove",
+                destructive: true,
+                onConfirm: onDelete,
+              })}
+              style={styles.deleteButton}
+            >
               <Feather name="trash-2" size={17} color={c.destructive} />
               <Text style={[styles.deleteText, { color: c.destructive }]}>
                 Remove from sample plan
@@ -1927,6 +1940,7 @@ function CategoryEditor({
             </Pressable>
           )}
         </ScrollView>
+        <ConfirmActionOverlay request={confirmation} onClose={() => setConfirmation(null)} />
       </View>
     </Modal>
   );
@@ -1953,12 +1967,13 @@ function GroupEditor({
   onSave: () => void;
   onDelete: () => void;
 }) {
+  const [confirmation, setConfirmation] = useState<ConfirmActionOptions | null>(null);
   return (
     <Modal
       visible={visible}
       transparent
       animationType="slide"
-      onRequestClose={onClose}
+      onRequestClose={() => confirmation ? setConfirmation(null) : onClose()}
     >
       <View style={styles.overlay}>
         <View
@@ -1999,7 +2014,13 @@ function GroupEditor({
           {!isNew && (
             <Pressable
               disabled={!canDelete}
-              onPress={onDelete}
+              onPress={() => setConfirmation({
+                title: "Delete this budget group?",
+                message: "This removes the empty group from the sample plan.",
+                confirmText: "Delete group",
+                destructive: true,
+                onConfirm: onDelete,
+              })}
               style={[styles.deleteButton, { opacity: canDelete ? 1 : 0.4 }]}
             >
               <Feather name="trash-2" size={17} color={c.destructive} />
@@ -2011,6 +2032,7 @@ function GroupEditor({
             </Pressable>
           )}
         </View>
+        <ConfirmActionOverlay request={confirmation} onClose={() => setConfirmation(null)} />
       </View>
     </Modal>
   );

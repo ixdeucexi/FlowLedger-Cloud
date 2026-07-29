@@ -9,6 +9,7 @@ import type { StabilityProgress } from "@/lib/stability";
 interface StabilityPathCardProps {
   progress: StabilityProgress;
   onViewGuide: () => void;
+  compact?: boolean;
 }
 
 const STABILITY_THEMES = {
@@ -44,7 +45,7 @@ function statusColor(status: StabilityProgress["status"], isDark: boolean) {
   return isDark ? "#34d399" : "#15803d";
 }
 
-function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps) {
+function StabilityPathCardView({ progress, onViewGuide, compact = false }: StabilityPathCardProps) {
   const c = useColors();
   const color = statusColor(progress.status, c.isDark);
   const theme = STABILITY_THEMES[c.mode];
@@ -66,9 +67,9 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
       : "Add the next date in Income so Flo can check the plan through payday.";
 
   return (
-    <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border, shadowColor: theme.shadow, shadowOpacity: theme.shadowOpacity }]}>
+    <View style={[styles.card, compact && styles.cardCompact, { backgroundColor: theme.card, borderColor: theme.border, shadowColor: theme.shadow, shadowOpacity: theme.shadowOpacity }]}>
       <View style={styles.header}>
-        <View style={[styles.icon, { backgroundColor: `${color}18`, borderColor: `${color}38` }]}>
+        <View style={[styles.icon, compact && styles.iconCompact, { backgroundColor: `${color}18`, borderColor: `${color}38` }]}>
           <Feather name="shield" size={18} color={color} />
         </View>
         <View style={styles.headerCopy}>
@@ -79,11 +80,22 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
           <View style={[styles.statusDot, { backgroundColor: color }]} />
           <AppText style={[styles.statusText, { color }]}>{progress.status === "risk" ? "Act now" : progress.status === "watch" ? "Building" : "On track"}</AppText>
         </View>
+        {compact ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="See how the Stability Path and algorithms work"
+            onPress={onViewGuide}
+            hitSlop={8}
+            style={[styles.compactInfoButton, { backgroundColor: theme.buttonSurface, borderColor: theme.buttonBorder }]}
+          >
+            <Feather name="info" size={15} color={theme.buttonIcon} />
+          </Pressable>
+        ) : null}
       </View>
 
-      <View style={styles.summary}>
+      <View style={[styles.summary, compact && styles.summaryCompact]}>
         <View style={styles.summaryPrimary}>
-          <AppText tone="number" style={[styles.summaryDays, { color: theme.text }]}>{progress.protectedDays} days</AppText>
+          <AppText tone="number" style={[styles.summaryDays, compact && styles.summaryDaysCompact, { color: theme.text }]}>{progress.protectedDays} days</AppText>
           <AppText style={[styles.summaryLabel, { color: theme.mutedText }]}>backed up</AppText>
         </View>
         <View style={styles.summaryGoal}>
@@ -95,13 +107,13 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
       <View
         accessible
         accessibilityLabel={`${paydayTitle}. ${paydayAccessibilityDetail}`}
-        style={[styles.paydayCard, { backgroundColor: `${paydayColor}10`, borderColor: `${paydayColor}35` }]}
+        style={[styles.paydayCard, compact && styles.paydayCardCompact, { backgroundColor: `${paydayColor}10`, borderColor: `${paydayColor}35` }]}
       >
         <Feather name={progress.safeUntilPayday === true ? "check-circle" : progress.safeUntilPayday === false ? "alert-circle" : "calendar"} size={16} color={paydayColor} />
         <AppText tone="title" numberOfLines={1} style={[styles.paydayTitle, { color: paydayColor }]}>{paydayTitle}</AppText>
       </View>
 
-      <View style={styles.progressHeader}>
+      <View style={[styles.progressHeader, compact && styles.progressHeaderCompact]}>
         <AppText style={[styles.progressLabel, { color: theme.labelText }]}>180-day path</AppText>
         <AppText tone="number" style={[styles.progressValue, { color: theme.text }]}>{Math.round(progress.backupProgress * 100)}%</AppText>
       </View>
@@ -114,17 +126,17 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
         ))}
       </View>
 
-      <View style={[styles.nextMove, { backgroundColor: theme.purpleSurface, borderColor: theme.purpleBorder }]}>
+      <View style={[styles.nextMove, compact && styles.nextMoveCompact, { backgroundColor: theme.purpleSurface, borderColor: theme.purpleBorder }]}>
         <View style={[styles.nextMoveIcon, { backgroundColor: theme.purpleIconSurface }]}>
           <Feather name="arrow-up-right" size={15} color={theme.purpleText} />
         </View>
         <View style={styles.nextMoveCopy}>
           <AppText tone="label" style={[styles.nextMoveLabel, { color: theme.purpleText }]}>Next</AppText>
-          <AppText numberOfLines={2} style={[styles.nextMoveText, { color: theme.purpleStrongText }]}>{progress.nextAction}</AppText>
+          <AppText numberOfLines={compact ? 1 : 2} style={[styles.nextMoveText, { color: theme.purpleStrongText }]}>{progress.nextAction}</AppText>
         </View>
       </View>
 
-      <View style={styles.actions}>
+      {!compact ? <View style={styles.actions}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="See how the Stability Path and algorithms work"
@@ -134,7 +146,7 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
           <Feather name="map" size={14} color={theme.buttonIcon} />
           <AppText style={[styles.secondaryButtonText, { color: theme.buttonText }]}>How it works</AppText>
         </Pressable>
-      </View>
+      </View> : null}
     </View>
   );
 }
@@ -155,24 +167,31 @@ const styles = StyleSheet.create({
     shadowRadius: 28,
     elevation: 8,
   },
+  cardCompact: { borderRadius: 20, padding: 11, marginBottom: 0 },
   header: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 10 },
   icon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center", borderWidth: 1 },
+  iconCompact: { width: 34, height: 34, borderRadius: 12 },
   headerCopy: { flex: 1, minWidth: 150 },
   eyebrow: { color: "#67e8f9", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.1 },
   stage: { color: "#f8fafc", fontSize: 16, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
   statusPill: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 6 },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusText: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.4 },
+  compactInfoButton: { width: 32, height: 32, borderRadius: 11, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   summary: { flexDirection: "row", alignItems: "center", gap: 14, marginTop: 14 },
+  summaryCompact: { marginTop: 8 },
   summaryPrimary: { minWidth: 96 },
   summaryDays: { color: "#f8fafc", fontSize: 24, lineHeight: 28, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.6 },
+  summaryDaysCompact: { fontSize: 20, lineHeight: 23 },
   summaryLabel: { color: "#94a3b8", fontSize: 11, fontFamily: "Inter_700Bold", marginTop: 1 },
   summaryGoal: { flex: 1, minWidth: 0, borderLeftWidth: 1, borderLeftColor: "rgba(148,163,184,0.18)", paddingLeft: 14 },
   summaryGoalLabel: { color: "#67e8f9", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7 },
   summaryGoalTitle: { color: "#f8fafc", fontSize: 13, lineHeight: 17, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
   paydayCard: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8, marginTop: 12 },
+  paydayCardCompact: { paddingVertical: 6, marginTop: 8 },
   paydayTitle: { flex: 1, fontSize: 12, lineHeight: 16, fontFamily: "Inter_800ExtraBold" },
   progressHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 14, marginBottom: 6 },
+  progressHeaderCompact: { marginTop: 8, marginBottom: 4 },
   progressLabel: { color: "#cbd5e1", fontSize: 12, fontFamily: "Inter_700Bold" },
   progressValue: { color: "#f8fafc", fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   progressTrack: { height: 7, borderRadius: 999, overflow: "hidden", backgroundColor: "rgba(148,163,184,0.18)" },
@@ -180,6 +199,7 @@ const styles = StyleSheet.create({
   milestones: { flexDirection: "row", justifyContent: "space-between", marginTop: 5 },
   milestone: { color: "#94a3b8", fontSize: 10, fontFamily: "Inter_800ExtraBold" },
   nextMove: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 16, borderWidth: 1, borderColor: "rgba(192,132,252,0.22)", backgroundColor: "rgba(124,58,237,0.12)", padding: 10, marginTop: 12 },
+  nextMoveCompact: { borderRadius: 13, padding: 7, marginTop: 7 },
   nextMoveIcon: { width: 31, height: 31, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.24)" },
   nextMoveCopy: { flex: 1 },
   nextMoveLabel: { color: "#c4b5fd", fontSize: 10, fontFamily: "Inter_800ExtraBold" },

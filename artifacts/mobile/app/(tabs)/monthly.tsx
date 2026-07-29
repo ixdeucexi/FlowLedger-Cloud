@@ -13,6 +13,7 @@ import { AddTransactionModal } from "@/components/AddTransactionModal";
 import { BillSurplusModal } from "@/components/BillSurplusModal";
 import { CalendarView } from "@/components/CalendarView";
 import { CommandPlusButton } from "@/components/CommandPlusButton";
+import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
 import { DebtPaymentAppliedModal, type DebtPaymentAppliedDetail } from "@/components/DebtPaymentAppliedModal";
 import { EmptyState } from "@/components/EmptyState";
 import { FullPaymentPromptModal } from "@/components/FullPaymentPromptModal";
@@ -31,7 +32,7 @@ import { buildDayForecastFloPrompt, groupForecastEvents } from "@/lib/forecastDi
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { isValidDateInMonth } from "@/lib/schedule";
-import { confirmAction } from "@/lib/confirmAction";
+import type { ConfirmActionOptions } from "@/lib/confirmAction";
 import {
   buildDebtPaymentPlanSummary,
   isScheduledSnowballPlanTransaction,
@@ -217,6 +218,7 @@ export default function MonthlyScreen() {
   const [editingBucket, setEditingBucket] = useState<Goal | null>(null);
   const [transactionDefaultDate, setTransactionDefaultDate] = useState<string | undefined>();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [dayConfirmation, setDayConfirmation] = useState<ConfirmActionOptions | null>(null);
   const handledOpenDateRef = useRef<string | null>(null);
   const [editingAmounts, setEditingAmounts] = useState<Record<string, string>>({});
   const [editingPaid, setEditingPaid] = useState<Record<string, string>>({});
@@ -1113,7 +1115,7 @@ export default function MonthlyScreen() {
     const tx = transactions.find(transaction => transaction.id === id);
     const isTransfer = Boolean(tx?.transfer_group_id);
     const doDelete = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); deleteTransaction(id); };
-    confirmAction({
+    setDayConfirmation({
       title: isTransfer ? "Delete Transfer" : "Delete Transaction",
       message: isTransfer
         ? "Move both sides of this transfer to Recently Deleted?"
@@ -1140,7 +1142,7 @@ export default function MonthlyScreen() {
 
   const handleDeletePlan = (decision: DecisionRecord) => {
     const doDelete = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); void deleteDecision(decision.id); };
-    confirmAction({
+    setDayConfirmation({
       title: "Remove Plan",
       message: `Remove "${decision.name}" from your calendar and forecast?`,
       confirmText: "Remove",
@@ -1151,7 +1153,7 @@ export default function MonthlyScreen() {
 
   const handleDeleteBillFromDay = useCallback((bill: Bill) => {
     const itemLabel = bill.is_debt ? "debt" : "bill";
-    confirmAction({
+    setDayConfirmation({
       title: `Delete ${bill.is_debt ? "Debt" : "Bill"}`,
       message: `Delete "${bill.name}" completely? This removes it from Bills and Monthly. Existing Activity entries stay for history.`,
       confirmText: "Delete",
@@ -1169,7 +1171,7 @@ export default function MonthlyScreen() {
 
   const handleDeleteIncomeFromDay = useCallback((income: IncomeItem, day: number) => {
     const occurrenceDate = isoDateForMonthDay(selectedYear, month, day);
-    confirmAction({
+    setDayConfirmation({
       title: "Remove This Payday",
       message: `Remove "${income.name}" on ${formatShortDate(occurrenceDate)}? The income and future paydays will stay.`,
       confirmText: "Remove",
@@ -1192,7 +1194,7 @@ export default function MonthlyScreen() {
   }, [month, selectedYear, updateIncome]);
 
   const handleDeleteGoalFromDay = useCallback((goalId: string, goalName: string) => {
-    confirmAction({
+    setDayConfirmation({
       title: "Delete Bucket",
       message: `Delete "${goalName}"? This removes the bucket from Monthly and your plan.`,
       confirmText: "Delete bucket",
@@ -1807,7 +1809,7 @@ export default function MonthlyScreen() {
               visible={selectedDate !== null}
               animationType="fade"
               transparent
-              onRequestClose={() => setSelectedDate(null)}
+              onRequestClose={() => dayConfirmation ? setDayConfirmation(null) : setSelectedDate(null)}
             >
               <Pressable style={styles.dayOverlayBackdrop} onPress={() => setSelectedDate(null)}>
                 <Pressable
@@ -2062,16 +2064,10 @@ export default function MonthlyScreen() {
                                   params: { paymentId: savedPayment.id },
                                 } as never);
                               } : undefined}
-                              onRemove={savedPayment ? () => confirmAction({
-                                title: "Remove this debt payment?",
-                                message: "This removes the snowball plan. It does not change the debt balance.",
-                                confirmText: "Remove plan",
-                                destructive: true,
-                                onConfirm: async () => {
-                                  await removeDebtSnowballPayment(savedPayment.month, savedPayment.year);
-                                  setSelectedDate(null);
-                                },
-                              }) : undefined}
+                              onRemove={savedPayment ? async () => {
+                                await removeDebtSnowballPayment(savedPayment.month, savedPayment.year);
+                                setSelectedDate(null);
+                              } : undefined}
                             />
                           );
                         })}
@@ -2115,16 +2111,10 @@ export default function MonthlyScreen() {
                                   params: { transactionId: transaction.id },
                                 } as never);
                               }}
-                              onRemove={reviewedSnowball ? undefined : () => confirmAction({
-                                title: "Remove this snowball payment?",
-                                message: "This removes the snowball plan. It does not change the debt balance.",
-                                confirmText: "Remove plan",
-                                destructive: true,
-                                onConfirm: async () => {
-                                  await deleteTransaction(transaction.id);
-                                  setSelectedDate(null);
-                                },
-                              })}
+                              onRemove={reviewedSnowball ? undefined : async () => {
+                                await deleteTransaction(transaction.id);
+                                setSelectedDate(null);
+                              }}
                             />
                           );
                         })}
@@ -2379,6 +2369,7 @@ export default function MonthlyScreen() {
                     />
                   </View>
                 </Pressable>
+                <ConfirmActionOverlay request={dayConfirmation} onClose={() => setDayConfirmation(null)} />
               </Pressable>
             </Modal>
 

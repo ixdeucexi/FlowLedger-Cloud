@@ -2,8 +2,10 @@ import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
+import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
+import type { ConfirmActionOptions } from "@/lib/confirmAction";
 import type { AppFeedbackRow, FeedbackManagementAction } from "@/lib/feedback";
 
 interface FeedbackManageModalProps {
@@ -28,14 +30,26 @@ const OUTCOMES: Array<{
 export function FeedbackManageModal({ feedback, busy, onClose, onAction }: FeedbackManageModalProps) {
   const c = useColors();
   const [note, setNote] = useState("");
-  useBackDismiss(Boolean(feedback), onClose);
+  const [confirmation, setConfirmation] = useState<ConfirmActionOptions | null>(null);
+  useBackDismiss(Boolean(feedback), () => confirmation ? setConfirmation(null) : onClose());
 
   useEffect(() => {
     setNote(feedback?.admin_note ?? "");
+    if (!feedback) setConfirmation(null);
   }, [feedback]);
 
+  const confirmDelete = () => {
+    setConfirmation({
+      title: "Delete feedback permanently?",
+      message: "Use this only for spam, test entries, mistakes, or sensitive information. It will disappear from the tester’s history and they will not be notified.",
+      confirmText: "Delete permanently",
+      destructive: true,
+      onConfirm: () => onAction("delete", note.trim()),
+    });
+  };
+
   return (
-    <Modal visible={Boolean(feedback)} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={Boolean(feedback)} transparent animationType="fade" onRequestClose={() => confirmation ? setConfirmation(null) : onClose()}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
@@ -103,7 +117,7 @@ export function FeedbackManageModal({ feedback, busy, onClose, onAction }: Feedb
               accessibilityRole="button"
               accessibilityLabel="Delete feedback permanently"
               disabled={busy}
-              onPress={() => onAction("delete", note.trim())}
+              onPress={confirmDelete}
               style={({ pressed }) => [styles.deleteButton, { borderColor: c.destructive + "66", opacity: busy ? 0.5 : pressed ? 0.74 : 1 }]}
             >
               <Feather name="trash-2" size={16} color={c.destructive} />
@@ -114,6 +128,7 @@ export function FeedbackManageModal({ feedback, busy, onClose, onAction }: Feedb
             </Pressable>
           </ScrollView>
         </View>
+        <ConfirmActionOverlay request={confirmation} onClose={() => setConfirmation(null)} />
       </KeyboardAvoidingView>
     </Modal>
   );

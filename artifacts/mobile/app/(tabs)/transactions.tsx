@@ -23,7 +23,6 @@ import { useBudget } from "@/context/BudgetContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
-import { confirmAction } from "@/lib/confirmAction";
 import { debtPaymentStatusLabel } from "@/lib/forecastDisplay";
 import { canMatchExpenseToBill, confirmedBillMatchId, confirmedBillMatchOccurrenceDate, isCashFlowTransaction, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "@/lib/billMatching";
 import { summarizeActivityMonth } from "@/lib/monthlySummary";
@@ -872,26 +871,19 @@ export function ActivityScreen() {
     }
   }, [applyDebtSnowballPayment, editExtraAmount, editExtraDate, editExtraDateLimits, editExtraPayment, editExtraPreview, savingExtraPayment]);
 
-  const removeEditedExtraPayment = useCallback(() => {
+  const removeEditedExtraPayment = useCallback(async () => {
     if (!editExtraPayment || savingExtraPayment) return;
-    confirmAction({
-      title: "Remove this debt payment?",
-      message: "This undoes the snowball payment and restores the debt balances it changed.",
-      confirmText: "Remove payment",
-      destructive: true,
-      onConfirm: async () => {
-        setSavingExtraPayment(true);
-        try {
-          await removeDebtSnowballPayment(editExtraPayment.month, editExtraPayment.year);
-          setEditExtraPayment(null);
-          setEditExtraPreview(null);
-        } catch (error) {
-          Alert.alert("Could not remove payment", error instanceof Error ? error.message : "Please try again.");
-        } finally {
-          setSavingExtraPayment(false);
-        }
-      },
-    });
+    setSavingExtraPayment(true);
+    try {
+      await removeDebtSnowballPayment(editExtraPayment.month, editExtraPayment.year);
+      setEditExtraPayment(null);
+      setEditExtraPreview(null);
+    } catch (error) {
+      Alert.alert("Could not remove payment", error instanceof Error ? error.message : "Please try again.");
+      throw error;
+    } finally {
+      setSavingExtraPayment(false);
+    }
   }, [editExtraPayment, removeDebtSnowballPayment, savingExtraPayment]);
 
   useEffect(() => {

@@ -1,9 +1,11 @@
 import { Feather } from "@expo/vector-icons";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
+import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
+import type { ConfirmActionOptions } from "@/lib/confirmAction";
 import { householdRoleLabel, type HouseholdInviteRole, type HouseholdRole } from "@/lib/householdPermissions";
 
 const ROLE_DETAILS: Record<HouseholdInviteRole, string> = {
@@ -36,10 +38,25 @@ export function HouseholdMemberActionsModal({
   onRemove,
 }: Props) {
   const c = useColors();
-  useBackDismiss(visible, onClose);
+  const [confirmation, setConfirmation] = useState<ConfirmActionOptions | null>(null);
+  useBackDismiss(visible, () => confirmation ? setConfirmation(null) : onClose());
+
+  useEffect(() => {
+    if (!visible) setConfirmation(null);
+  }, [visible]);
+
+  const confirmRemove = () => {
+    setConfirmation({
+      title: "Remove household member?",
+      message: `${memberName} will no longer see this household plan.`,
+      confirmText: "Remove",
+      destructive: true,
+      onConfirm: onRemove,
+    });
+  };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={() => confirmation ? setConfirmation(null) : onClose()}>
       <Pressable style={styles.overlay} onPress={onClose}>
         <Pressable style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => {}}>
           <View style={styles.header}>
@@ -91,7 +108,7 @@ export function HouseholdMemberActionsModal({
               accessibilityRole="button"
               accessibilityLabel={`Remove ${memberName} from household`}
               disabled={busy}
-              onPress={onRemove}
+              onPress={confirmRemove}
               style={({ pressed }) => [styles.removeButton, { borderColor: c.destructive + "66", opacity: busy ? 0.55 : pressed ? 0.74 : 1 }]}
             >
               <Feather name="user-minus" size={17} color={c.destructive} />
@@ -106,6 +123,7 @@ export function HouseholdMemberActionsModal({
             <Text style={[styles.doneText, { color: c.primaryForeground }]}>Done</Text>
           </Pressable>
         </Pressable>
+        <ConfirmActionOverlay request={confirmation} onClose={() => setConfirmation(null)} />
       </Pressable>
     </Modal>
   );

@@ -176,11 +176,13 @@ export default function DashboardScreen() {
   const [isFocused, setIsFocused] = useState(true);
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { width: viewportWidth } = useWindowDimensions();
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
   const isCommandWide = Platform.OS === "web" && viewportWidth >= 900;
+  const compactDashboard = !isCommandWide;
+  const shortDashboard = compactDashboard && viewportHeight < 760;
   const isIosWeb = Platform.OS === "web" && typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent);
-  const dashboardTopPadding = Platform.OS === "web" ? (isIosWeb ? 72 : 16) : insets.top + 16;
-  const dashboardBottomPadding = Platform.OS === "web" ? (isIosWeb ? 120 : 76) : insets.bottom + 128;
+  const dashboardTopPadding = Platform.OS === "web" ? (isIosWeb ? 58 : 12) : insets.top + (shortDashboard ? 6 : 10);
+  const dashboardBottomPadding = Platform.OS === "web" ? (isIosWeb ? 92 : 68) : insets.bottom + 86;
   const { user } = useAuth();
   const { isAdmin } = useMembership();
   const {
@@ -1017,7 +1019,13 @@ export default function DashboardScreen() {
   return (
     <ScrollView
       style={[styles.screen, styles.dashboardStage, { backgroundColor: dashboardTheme.screen }]}
-      contentContainerStyle={[styles.content, isCommandWide && styles.contentWide, { paddingTop: dashboardTopPadding, paddingBottom: dashboardBottomPadding }]}
+      contentContainerStyle={[
+        styles.content,
+        isCommandWide && styles.contentWide,
+        { paddingTop: dashboardTopPadding, paddingBottom: dashboardBottomPadding },
+      ]}
+      scrollEnabled={isCommandWide}
+      bounces={false}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
       contentInsetAdjustmentBehavior="never"
@@ -1058,17 +1066,17 @@ export default function DashboardScreen() {
           </Pressable>
         </View>
       ) : null}
-      <View style={styles.dashboardHeader}>
+      <View style={[styles.dashboardHeader, compactDashboard && styles.dashboardHeaderCompact]}>
         <View style={styles.brandLockup}>
-          <View style={styles.brandMark}>
+          <View style={[styles.brandMark, compactDashboard && styles.brandMarkCompact]}>
             <Image source={FLOWLEDGER_LOGO} style={styles.brandMarkImage} resizeMode="cover" />
           </View>
           <View>
             <AppText tone="label" style={[styles.brandEyebrow, { color: c.primary }]}>FlowLedger Algo</AppText>
-            <AppText tone="title" style={[styles.heading, { color: dashboardTheme.heading, textShadowColor: c.isDark ? "rgba(56,189,248,0.35)" : "transparent" }]}>Command Center</AppText>
+            <AppText tone="title" style={[styles.heading, compactDashboard && styles.headingCompact, { color: dashboardTheme.heading, textShadowColor: c.isDark ? "rgba(56,189,248,0.35)" : "transparent" }]}>Command Center</AppText>
           </View>
         </View>
-        <CommandPlusButton onPress={() => setActionModalVisible(true)} accessibilityLabel="Add to FlowLedger" />
+        <CommandPlusButton onPress={() => setActionModalVisible(true)} size={compactDashboard ? 48 : 58} accessibilityLabel="Add to FlowLedger" />
       </View>
       {!settings.onboarding_completed && (() => {
         const steps = [
@@ -1081,7 +1089,7 @@ export default function DashboardScreen() {
         const complete = steps.every(step => step.done);
         return <View style={[styles.setupCard, { backgroundColor: c.card, borderColor: c.border }]}>
           <View style={styles.setupHeader}><View style={{ flex: 1 }}><Text style={[styles.setupTitle, { color: c.foreground }]}>Continue setup with Flo</Text><Text style={[styles.setupDesc, { color: c.mutedForeground }]}>Flo will pick up where you left off. {steps.filter(step => step.done).length} of {steps.length} setup steps complete</Text></View><Pressable onPress={() => void updateSettings({ onboarding_completed: true })}><Feather name="x" size={18} color={c.mutedForeground} /></Pressable></View>
-          {steps.map(step => <View key={step.label} style={styles.setupStep}><Feather name={step.done ? "check-circle" : "circle"} size={15} color={step.done ? c.success : c.mutedForeground} /><Text style={[styles.setupStepText, { color: step.done ? c.mutedForeground : c.foreground }]}>{step.label}</Text></View>)}
+          {!compactDashboard ? steps.map(step => <View key={step.label} style={styles.setupStep}><Feather name={step.done ? "check-circle" : "circle"} size={15} color={step.done ? c.success : c.mutedForeground} /><Text style={[styles.setupStepText, { color: step.done ? c.mutedForeground : c.foreground }]}>{step.label}</Text></View>) : null}
           <Pressable onPress={() => complete ? void updateSettings({ onboarding_completed: true }) : router.push("/setup" as any)} style={[styles.setupButton, { backgroundColor: c.primary }]}><Text style={[styles.setupButtonText, { color: c.primaryForeground }]}>{complete ? "Finish Setup" : "Continue with Flo"}</Text></Pressable>
         </View>;
       })()}
@@ -1194,6 +1202,7 @@ export default function DashboardScreen() {
       <View style={[
         styles.referenceCommandHero,
         isCommandWide && styles.referenceCommandHeroWide,
+        compactDashboard && styles.referenceCommandHeroCompact,
         {
           backgroundColor: dashboardTheme.hero,
           borderColor: dashboardTheme.heroBorder,
@@ -1291,7 +1300,7 @@ export default function DashboardScreen() {
 
         <Pressable
           onPress={() => setFlowScoreVisible(true)}
-          style={({ pressed }) => [styles.referenceScorePanel, { opacity: pressed ? 0.86 : 1 }]}
+          style={({ pressed }) => [styles.referenceScorePanel, compactDashboard && styles.referenceScorePanelCompact, { opacity: pressed ? 0.86 : 1 }]}
         >
           <FlowScoreGauge score={algorithmSuite.flowScore.score} theme={dashboardTheme} />
           <AppText tone="title" style={[styles.referenceScoreStatus, { color: dashboardTheme.scoreStatus }]}>{algorithmSuite.flowScore.label}</AppText>
@@ -1302,9 +1311,10 @@ export default function DashboardScreen() {
       <StabilityPathCard
         progress={algorithmSuite.stability}
         onViewGuide={openStabilityGuide}
+        compact={compactDashboard}
       />
 
-      {settings.zeroBasedBudgetEnabled && (
+      {isCommandWide && settings.zeroBasedBudgetEnabled && (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Open this month's zero-based budget"
@@ -1348,7 +1358,7 @@ export default function DashboardScreen() {
 
 
       {/* ── Negative date warning (tappable → 12-month outlook) ── */}
-      {firstYearNegEntry && (
+      {isCommandWide && firstYearNegEntry && (
         <Pressable
           onPress={() => setNegCalendarVisible(true)}
           style={({ pressed }) => [styles.negWarning, { backgroundColor: c.destructive + "18", borderRadius: colors.radius, opacity: pressed ? 0.8 : 1 }]}
@@ -2078,7 +2088,7 @@ function ZeroBudgetStat({ label, value, color }: { label: string; value: number;
 const styles = StyleSheet.create({
   screen:  { flex: 1 },
   dashboardStage: { backgroundColor: "#030712" },
-  content: { minHeight: "100%", paddingHorizontal: 16, position: "relative" },
+  content: { paddingHorizontal: 16, position: "relative" },
   contentWide: { paddingLeft: 220, paddingRight: 28, maxWidth: 1320, alignSelf: "center", width: "100%" },
   referenceDesktopRail: {
     position: "absolute",
@@ -2106,11 +2116,14 @@ const styles = StyleSheet.create({
   referenceRailFloTitle: { color: "#e0f2fe", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   referenceRailFloSub: { color: "#94a3b8", fontSize: 10, fontFamily: "Inter_500Medium" },
   dashboardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 14, marginBottom: 18 },
+  dashboardHeaderCompact: { gap: 10, marginBottom: 9 },
   brandLockup: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
   brandMark: { width: 48, height: 48, borderRadius: 17, alignItems: "center", justifyContent: "center", overflow: "hidden", borderWidth: 1, borderColor: "rgba(96,165,250,0.35)", backgroundColor: "#020617", shadowColor: "#38bdf8", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 18, elevation: 9 },
+  brandMarkCompact: { width: 42, height: 42, borderRadius: 14 },
   brandMarkImage: { width: "100%", height: "100%" },
   brandEyebrow: { fontSize: 9, lineHeight: 12, fontFamily: "Inter_800ExtraBold", letterSpacing: 2.1, textTransform: "uppercase", marginBottom: 1 },
   heading:    { fontSize: 30, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.0, color: "#f8fafc", textShadowColor: "rgba(56,189,248,0.35)", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 12 },
+  headingCompact: { fontSize: 25, letterSpacing: -0.8 },
   headerActionButton: { width: 54, height: 54, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.82)", borderWidth: 1, borderColor: "rgba(34,211,238,0.38)", shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.52, shadowRadius: 22, elevation: 12 },
   setupCard: { borderWidth: 1, borderRadius: 18, padding: 14, marginBottom: 12 },
   setupHeader: { flexDirection: "row", alignItems: "flex-start", marginBottom: 8 },
@@ -2151,6 +2164,7 @@ const styles = StyleSheet.create({
     shadowRadius: 34,
     elevation: 10,
   },
+  referenceCommandHeroCompact: { flexDirection: "row", alignItems: "center", borderRadius: 22, padding: 10, marginBottom: 7 },
   referenceCommandHeroWide: { flexDirection: "row", minHeight: 320, padding: 30, alignItems: "center", gap: 22 },
   referenceHeroFlipShell: { flex: 1, minHeight: 210, position: "relative" },
   referenceHeroFlipShellCompact: { minHeight: 118 },
@@ -2182,6 +2196,7 @@ const styles = StyleSheet.create({
   referenceHeroLabel: { color: "#cbd5e1", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.4, textTransform: "uppercase" },
   referenceHeroAmount: { color: "#ffffff", fontSize: 40, lineHeight: 44, fontFamily: "Inter_800ExtraBold", letterSpacing: -2.2, textShadowColor: "rgba(34,211,238,0.25)", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 18 },
   referenceScorePanel: { alignItems: "center", justifyContent: "center", paddingTop: 4 },
+  referenceScorePanelCompact: { width: 104, paddingTop: 0 },
   referenceGaugeWrap: { width: 102, height: 102, alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
   referenceGaugeSvg: { backgroundColor: "transparent" },
   referenceGaugeCenter: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },

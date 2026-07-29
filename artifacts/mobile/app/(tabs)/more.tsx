@@ -681,16 +681,6 @@ export default function MoreScreen() {
       }
     };
 
-    if (action === "delete") {
-      confirmAction({
-        title: "Delete feedback permanently?",
-        message: "Use this only for spam, test entries, mistakes, or sensitive information. It will disappear from the tester’s history and they will not be notified.",
-        confirmText: "Delete permanently",
-        destructive: true,
-        onConfirm: runAction,
-      });
-      return;
-    }
     void runAction();
   };
 
@@ -755,30 +745,23 @@ export default function MoreScreen() {
     }
   };
 
-  const handleRemoveHouseholdMember = (memberUserId: string, label: string) => {
-    confirmAction({
-      title: "Remove household member?",
-      message: `${label} will no longer see this household plan.`,
-      confirmText: "Remove",
-      destructive: true,
-      onConfirm: async () => {
-        setHouseholdBusy(true);
-        setHouseholdMessage(null);
-        try {
-          await removeHouseholdMember(memberUserId);
-          setHouseholdMessage(`${label} was removed from this household.`);
-          setManagedHouseholdMember(null);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "Could not remove that member.";
-          setHouseholdMessage(message);
-          Alert.alert("Household member", message);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        } finally {
-          setHouseholdBusy(false);
-        }
-      },
-    });
+  const handleRemoveHouseholdMember = async (memberUserId: string, label: string) => {
+    setHouseholdBusy(true);
+    setHouseholdMessage(null);
+    try {
+      await removeHouseholdMember(memberUserId);
+      setHouseholdMessage(`${label} was removed from this household.`);
+      setManagedHouseholdMember(null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not remove that member.";
+      setHouseholdMessage(message);
+      Alert.alert("Household member", message);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      throw error;
+    } finally {
+      setHouseholdBusy(false);
+    }
   };
 
   const handleLeaveHousehold = () => {
@@ -1818,7 +1801,7 @@ export default function MoreScreen() {
             });
           }}
           onRemove={() => {
-            if (managedHouseholdMember) handleRemoveHouseholdMember(managedHouseholdMember.userId, managedHouseholdMember.label);
+            if (managedHouseholdMember) return handleRemoveHouseholdMember(managedHouseholdMember.userId, managedHouseholdMember.label);
           }}
         />
 
