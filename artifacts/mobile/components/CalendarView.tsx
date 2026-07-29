@@ -48,6 +48,7 @@ function CalendarGridViewport({
 }
 
 type ChipKind = "income" | "bill" | "debt" | "expense" | "goal" | "plan" | "risk";
+type CalendarGoalExpense = GoalExpense & { goal_type?: Goal["goal_type"] };
 
 interface CalendarViewProps {
   month: number;
@@ -149,7 +150,8 @@ export function CalendarView({
   const balanceByDay: Record<number, DailyBalance> = {};
   dailyBalances?.forEach(db => { balanceByDay[db.day] = db; });
 
-  const goalsByDay: Record<number, GoalExpense[]> = {};
+  const goalTypeById = new Map(goals.map(goal => [goal.id, goal.goal_type] as const));
+  const goalsByDay: Record<number, CalendarGoalExpense[]> = {};
   goals.forEach(goal => {
     if (!goal.target_date) return;
     const [targetYear, targetMonth, targetDay] = goal.target_date.split("T")[0].split("-").map(Number);
@@ -159,7 +161,12 @@ export function CalendarView({
     const remaining = goal.calendar_marker_only ? target : Math.max(0, target - saved);
     if (remaining <= 0 && !goal.calendar_marker_only) return;
     if (!goalsByDay[targetDay]) goalsByDay[targetDay] = [];
-    goalsByDay[targetDay].push({ id: goal.id, name: goal.name, amount: remaining });
+    goalsByDay[targetDay].push({
+      id: goal.id,
+      name: goal.name,
+      amount: remaining,
+      goal_type: goal.goal_type,
+    });
   });
 
   const decisionsByDay: Record<number, number> = {};
@@ -221,7 +228,10 @@ export function CalendarView({
           const debtEvents = (db?.events ?? [])
             .filter(event => event.amount < 0 && (event.sourceType === "extra_payment" || event.kind === "debt_payment"))
             .slice(0, 2);
-          const calendarGoals = [...(db?.goalExpenses ?? [])];
+          const calendarGoals: CalendarGoalExpense[] = (db?.goalExpenses ?? []).map(goal => ({
+            ...goal,
+            goal_type: goalTypeById.get(goal.id),
+          }));
           (isBeforeStart ? [] : (goalsByDay[day] ?? [])).forEach(goal => {
             if (!calendarGoals.some(existing => existing.id === goal.id)) calendarGoals.push(goal);
           });
@@ -255,7 +265,7 @@ export function CalendarView({
           }));
           ungroupedCalendarGoals.slice(0, 2).forEach(goal => chips.push({
             label: goal.name,
-            kind: "goal_type" in goal && goal.goal_type === "planned_expense" ? "plan" : "goal",
+            kind: goal.goal_type === "planned_expense" ? "plan" : "goal",
           }));
           if (decisionAmount > 0) chips.push({ label: `Plan $${fmt(decisionAmount)}`, kind: "plan" });
           const bankAdjustment = db?.events?.find(event => event.sourceType === "reconciliation");
