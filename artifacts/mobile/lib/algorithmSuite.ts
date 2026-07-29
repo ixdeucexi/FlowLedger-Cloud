@@ -363,7 +363,7 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     riskDays: riskDayCounts.risk,
     remainingDays: remainingBalances.length,
   });
-  const insights = buildInsights(input, {
+  const insights = buildInsights({
     flowScore,
     flowGrade,
     flowLabel,
@@ -1121,7 +1121,7 @@ function findSubscriptionCreep(bills: AlgorithmBill[]) {
     .filter(([, items]) => items.length >= 3)
     .map(([category, items]) => `${capitalize(category)} has ${items.length} recurring bills`);
   const duplicateAmounts = recurring
-    .filter((bill, index, all) => all.findIndex(other => Math.round(other.amount) === Math.round(bill.amount) && other.id !== bill.id) !== -1)
+    .filter((bill, _index, all) => all.findIndex(other => Math.round(other.amount) === Math.round(bill.amount) && other.id !== bill.id) !== -1)
     .slice(0, 2)
     .map(bill => `${bill.name} matches another recurring amount`);
   const items = [...stacked, ...duplicateAmounts].slice(0, 3);
@@ -1435,7 +1435,6 @@ function flowScoreAction(
 }
 
 function buildInsights(
-  input: AlgorithmSuiteInput,
   facts: {
     flowScore: number;
     flowGrade: string;

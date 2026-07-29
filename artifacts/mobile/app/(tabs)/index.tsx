@@ -12,14 +12,13 @@ import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from "re
 import { AddBillModal } from "@/components/AddBillModal";
 import { AppText } from "@/components/AppText";
 import { CommandPlusButton } from "@/components/CommandPlusButton";
-import { DatePickerField } from "@/components/DatePickerField";
 import { FlowmentumHandoffModal } from "@/components/FlowmentumHandoffModal";
 import { GoalModal } from "@/components/GoalModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { StabilityPathCard } from "@/components/StabilityPathCard";
 
 import colors from "@/constants/colors";
-import type { Bill, DashboardFilter, Goal } from "@/context/BudgetContext";
+import type { Bill, Goal } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useAuth } from "@/context/AuthContext";
 import { useMembership } from "@/context/MembershipContext";
@@ -30,7 +29,6 @@ import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { applyCategoryBudgetMove, buildCategoryPlan, buildZeroBudgetSummary } from "@/lib/categoryPlanning";
 import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets as saveCategoryBudgetsRemote, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
 import { DEFAULT_DECISION_HUB_SETTINGS } from "@/lib/decisionHubSettings";
-import { buildDecisionHistory } from "@/lib/decisionHistory";
 import { dateOnlyToLocalDate } from "@/lib/dateLabels";
 import {
   FLOWMENTUM_URL,
@@ -39,7 +37,6 @@ import {
   isFlowmentumHandoffEligible,
   shouldShowFlowmentumHandoff,
 } from "@/lib/flowmentumHandoff";
-import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { transactionCategoryParts } from "@/lib/reviewCenter";
 import { buildAlgorithmSuite, type AlgorithmInsight } from "@/lib/algorithmSuite";
 import { effectiveDebtMinimum } from "@/lib/snowball";
@@ -184,11 +181,11 @@ export default function DashboardScreen() {
   const { user } = useAuth();
   const { isAdmin } = useMembership();
   const {
-    bills, getPaidAmount, getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, selectedYear, setDashboardFilter,
+    bills, getPaidAmount, getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, selectedYear,
     getMonthlyIncome,
-    goals, addGoal, updateGoal, deleteGoal, checkGoalAffordability,
-    getCashFlow, addBill, addTransaction, getDailyBalances, getTransactionsForMonth, settings,
-    accounts, connectedBankAccounts, incomes, decisions, updateSettings, forecastConfidence,
+    goals, addGoal, updateGoal, deleteGoal,
+    getCashFlow, addBill, getDailyBalances, getTransactionsForMonth, settings,
+    accounts, connectedBankAccounts, incomes, updateSettings, forecastConfidence,
     categories, activeHousehold, canEditHousehold,
   } = useBudget();
   const categoryBudgetScope = useMemo(() => ({
@@ -204,15 +201,7 @@ export default function DashboardScreen() {
   const [editGoal, setEditGoal]                     = useState<Goal | null>(null);
   const [actionModalVisible, setActionModalVisible] = useState(false);
   const [addBillVisible, setAddBillVisible]         = useState(false);
-  const [affordAmt, setAffordAmt]                   = useState("");
-  const [addedAsExpense, setAddedAsExpense]          = useState(false);
-  const [expenseNameModal, setExpenseNameModal]      = useState(false);
-  const [expenseNameInput, setExpenseNameInput]      = useState("");
-  const [expenseType, setExpenseType]                = useState<"expense" | "goal">("expense");
   const [negCalendarVisible, setNegCalendarVisible]  = useState(false);
-  const [savingsModalVisible, setSavingsModalVisible] = useState(false);
-  const [savingsGoalId, setSavingsGoalId]             = useState("");
-  const [savingsAmount, setSavingsAmount]             = useState("");
   const [categoryBudgetModalVisible, setCategoryBudgetModalVisible] = useState(false);
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
   const [categoryBudgetDrafts, setCategoryBudgetDrafts] = useState<Record<string, string>>({});
@@ -237,9 +226,7 @@ export default function DashboardScreen() {
   }), []);
 
   useBackDismiss(actionModalVisible, () => setActionModalVisible(false));
-  useBackDismiss(expenseNameModal, () => setExpenseNameModal(false));
   useBackDismiss(negCalendarVisible, () => setNegCalendarVisible(false));
-  useBackDismiss(savingsModalVisible, () => setSavingsModalVisible(false));
   useBackDismiss(categoryBudgetModalVisible, () => setCategoryBudgetModalVisible(false));
   useBackDismiss(Boolean(selectedCategory), () => setSelectedCategory(null));
   useBackDismiss(moveMoneyVisible, () => setMoveMoneyVisible(false));
@@ -291,14 +278,9 @@ export default function DashboardScreen() {
     ? "Good afternoon"
     : "Good evening";
 
-  // ── Afford date picker ─────────────────────────────────────────────────────
-  const [affordDate, setAffordDate] = useState<string>(
-    () => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
-  );
-
   const cashFlow      = useMemo(() => getCashFlow(currentMonth, selectedYear), [getCashFlow, currentMonth, selectedYear]);
 
-  // ── Real daily balance metrics for current month ───────────────────────────
+  // ── Real daily balances for current month ──────────────────────────────────
   const currentBalancesCache = useRef<ReturnType<typeof getDailyBalances>>([]);
   const currentMonthBalances = useMemo(() => {
     if (!isFocused && currentBalancesCache.current.length) return currentBalancesCache.current;
@@ -307,17 +289,6 @@ export default function DashboardScreen() {
     return balances;
   }, [getDailyBalances, currentMonth, selectedYear, isFocused]);
 
-  const balanceMetrics = useMemo(() => {
-    if (!currentMonthBalances.length) return null;
-    const endOfMonthBalance = currentMonthBalances[currentMonthBalances.length - 1]?.balance ?? 0;
-    let lowestBalance = Infinity;
-    let lowestDay = today;
-    currentMonthBalances.forEach(db => {
-      if (db.balance < lowestBalance) { lowestBalance = db.balance; lowestDay = db.day; }
-    });
-    const firstNegEntry = currentMonthBalances.find(db => db.balance < 0);
-    return { endOfMonthBalance, lowestBalance, lowestDay, firstNegDay: firstNegEntry?.day ?? null };
-  }, [currentMonthBalances, today]);
   // ── 12-month negative schedule ─────────────────────────────────────────────
   type OutlookMonth = { month: number; year: number; label: string; firstNegDay: number | null; lowestBalance: number };
   const [yearNegSchedule, setYearNegSchedule] = useState<OutlookMonth[]>([]);
@@ -357,34 +328,6 @@ export default function DashboardScreen() {
   // First month (across all 12) that goes negative
   const firstYearNegEntry = yearNegSchedule.find(e => e.firstNegDay !== null) ?? null;
 
-  const stats = useMemo(() => {
-    const billSummary = summarizeMonthlyBills(
-      getMonthlyBills(currentMonth, selectedYear),
-      bill => getBillMonthlyTotal(bill, currentMonth, selectedYear),
-      bill => getPaidAmount(bill.id, currentMonth, selectedYear),
-    );
-    const totalDebt  = bills.filter(b => b.is_debt).reduce((s, b) => s + b.balance, 0);
-    return { ...billSummary, totalDebt };
-  }, [bills, getMonthlyBills, getBillMonthlyTotal, getPaidAmount, currentMonth, selectedYear]);
-
-  const upcomingBills = useMemo(() => {
-    const sevenDaysLater = today + 7;
-    return bills
-      .filter(b => (b.is_recurring || b.is_debt) && b.due_day >= today && b.due_day <= sevenDaysLater)
-      .sort((a, b) => a.due_day - b.due_day)
-      .slice(0, 5);
-  }, [bills, today]);
-
-  const monthlyBarData = useMemo(() =>
-    MONTH_FULL.map((label, i) => ({ label, value: bills.filter(b => b.is_recurring || b.is_debt).reduce((s, b) => s + getBillMonthlyTotal(b, i, selectedYear), 0) })),
-    [bills, getBillMonthlyTotal, selectedYear]);
-
-  const categoryData = useMemo(() => {
-    const map: Record<string, number> = {};
-    bills.forEach(b => { const cat = b.category || "Other"; map[cat] = (map[cat] || 0) + b.amount; });
-    return Object.entries(map).map(([label, value]) => ({ label, value, color: CAT_COLORS[label] ?? "#94a3b8" })).sort((a, b) => b.value - a.value);
-  }, [bills]);
-
   const categoryBudgetKey = useMemo(
     () => categoryBudgetStorageKey(currentMonth, selectedYear, categoryBudgetScope),
     [categoryBudgetScope, selectedYear, currentMonth],
@@ -405,27 +348,6 @@ export default function DashboardScreen() {
       unsubscribe();
     };
   }, [categoryBudgetKey, categoryBudgetScope, currentMonth, selectedYear]);
-
-  const readCategoryBudgetMap = useCallback((month: number, year: number) => {
-    return readCategoryBudgetCache(month, year, categoryBudgetScope);
-  }, [categoryBudgetScope]);
-
-  const previousCategoryPlan = useMemo(() => {
-    if (!settings.zeroBasedBudgetEnabled) return [];
-    const previousDate = new Date(selectedYear, currentMonth - 1, 1);
-    const month = previousDate.getMonth();
-    const year = previousDate.getFullYear();
-    const monthBills = getMonthlyBills(month, year)
-      .map(bill => ({
-        category: bill.is_debt ? "Debt" : bill.category || "Other",
-        amount: getBillMonthlyTotal(bill, month, year),
-      }));
-    const monthTransactions = getTransactionsForMonth(month, year)
-      .flatMap(transaction => transactionCategoryParts(transaction))
-      .filter(transaction => transaction.category !== "Income");
-    const budgetLimits = Object.entries(readCategoryBudgetMap(month, year)).map(([category, amount]) => ({ category, amount }));
-    return buildCategoryPlan(categories, monthBills, monthTransactions, budgetLimits);
-  }, [categories, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, readCategoryBudgetMap, currentMonth, selectedYear, settings.zeroBasedBudgetEnabled]);
 
   const categoryPlan = useMemo(() => {
     if (!settings.zeroBasedBudgetEnabled) return [];
@@ -511,46 +433,6 @@ export default function DashboardScreen() {
       .filter(transaction => transaction.amount > 0 && transaction.review_status !== "transfer")
       .reduce((sum, transaction) => sum + transaction.amount, 0)
     : 0;
-  const categoryDecisionAlert = useMemo(() => {
-    const over = categoryPlan
-      .filter(row => row.remaining < -0.005)
-      .sort((left, right) => left.remaining - right.remaining)[0];
-    if (over) {
-      const source = categoryPlan
-        .filter(row => row.category !== over.category && row.remaining > 0.005)
-        .sort((left, right) => right.remaining - left.remaining)[0];
-      return {
-        tone: "risk" as const,
-        title: `${over.category} is over by $${Math.abs(over.remaining).toFixed(0)}`,
-        detail: source
-          ? `${source.category} has $${source.remaining.toFixed(0)} available. Ask Flo before moving money.`
-          : "No category has enough extra room yet. Review the budget or spending.",
-        prompt: source
-          ? `Can I move $${Math.abs(over.remaining).toFixed(0)} from ${source.category} to ${over.category}?`
-          : `Why is ${over.category} over?`,
-      };
-    }
-    const watch = categoryPlan
-      .filter(row => row.status === "watch")
-      .sort((left, right) => left.remaining - right.remaining)[0];
-    if (!watch) return null;
-    return {
-      tone: "watch" as const,
-      title: `${watch.category} is running low`,
-      detail: `$${Math.max(0, watch.remaining).toFixed(0)} left this month. Ask Flo before spending more.`,
-      prompt: `How much do I have left for ${watch.category}?`,
-    };
-  }, [categoryPlan]);
-
-  const openCategoryBudgetEditor = () => {
-    const drafts: Record<string, string> = {};
-    budgetEditableCategories.forEach(category => {
-      drafts[category] = categoryBudgets[category] === undefined ? "" : String(categoryBudgets[category]);
-    });
-    setCategoryBudgetDrafts(drafts);
-    setCategoryBudgetModalVisible(true);
-  };
-
   const persistCategoryBudgets = (next: Record<string, number>) => {
     setCategoryBudgets(next);
     void saveCategoryBudgetsRemote(categoryBudgetScope, currentMonth, selectedYear, next).catch(() => undefined);
@@ -623,21 +505,6 @@ export default function DashboardScreen() {
     setCategoryBudgetModalVisible(false);
   };
 
-  const debtPayoffData = useMemo(() => {
-    const debts = bills.filter(b => b.is_debt && b.balance > 0);
-    if (!debts.length) return [];
-    const months: { label: string; value: number }[] = [];
-    let rem = debts.reduce((s, b) => s + b.balance, 0);
-    const monthly = debts.reduce((s, b) => s + b.amount, 0);
-    for (let i = 0; i < 12 && rem > 0; i++) {
-      rem = Math.max(0, rem - monthly);
-      months.push({ label: MONTH_FULL[(currentMonth + i) % 12], value: rem });
-    }
-    return months;
-  }, [bills, currentMonth]);
-
-  // Budget goals use a negative current amount as a backwards-compatible type marker.
-  const savingsGoals = useMemo(() => goals.filter(goal => goal.goal_type === "savings"), [goals]);
   const currentGoals = useMemo(() => goals.filter(goal => !goal.closed_at).sort((left, right) => {
     const leftComplete = left.target_amount > 0 && left.current_amount >= left.target_amount;
     const rightComplete = right.target_amount > 0 && right.current_amount >= right.target_amount;
@@ -669,100 +536,7 @@ export default function DashboardScreen() {
   const dashboardCheckingBalance = checkingAccountBalance;
 
   // ── Savings summary for back of hero card ──────────────────────────────────
-  const savingsData = useMemo(() => {
-    const totalSaved  = savingsGoals.reduce((s, g) => s + g.current_amount, 0);
-    const totalTarget = savingsGoals.reduce((s, g) => s + g.target_amount, 0);
-    const cf          = getCashFlow(currentMonth, now.getFullYear());
-    const monthlySurplus = Math.max(0, cf.remaining);
-    return { totalSaved, totalTarget, monthlySurplus, goalCount: savingsGoals.length };
-  }, [savingsGoals, getCashFlow, currentMonth]);
-
   // ── Affordability check (real calendar projection) ──────────────────────────
-  const RISKY_THRESHOLD = settings.safety_floor;
-  const affordResult = useMemo(() => {
-    const amt = parseFloat(affordAmt);
-    if (!affordAmt.trim() || isNaN(amt) || amt <= 0) return null;
-
-    const [pyStr, pmStr, pdStr] = affordDate.split("-");
-    const purchaseYear  = parseInt(pyStr);
-    const purchaseMonth = parseInt(pmStr) - 1;
-    const purchaseDay   = parseInt(pdStr);
-
-    // Pull the full daily balance array for the purchase month (uses real income/bills/tx)
-    const balances = getDailyBalances(purchaseMonth, purchaseYear);
-    const dayEntry = balances.find(db => db.day === purchaseDay);
-    if (!balances.length) return null;
-
-    // If the date is beyond the last day computed, use the last day
-    const effectiveEntry = dayEntry ?? balances[balances.length - 1];
-    const balanceAtDay   = effectiveEntry.balance;
-    const balanceAfter   = balanceAtDay - amt;
-
-    // Lowest balance from purchase day forward (purchase reduces every subsequent day by flat amt)
-    const fromDay = balances.filter(db => db.day >= (dayEntry?.day ?? effectiveEntry.day));
-    let lowestBal = balanceAfter;
-    let lowestDay = effectiveEntry.day;
-    fromDay.forEach(db => {
-      const adj = db.balance - amt;
-      if (adj < lowestBal) { lowestBal = adj; lowestDay = db.day; }
-    });
-
-    const canAfford = balanceAfter >= 0;
-    const isRisky   = canAfford && lowestBal < RISKY_THRESHOLD;
-    const shortfall = canAfford ? 0 : Math.abs(balanceAfter);
-
-    // First day where balance goes negative after purchase
-    const firstNegAfterEntry = fromDay.find(db => db.balance - amt < 0);
-    const firstNegAfterDay   = firstNegAfterEntry?.day ?? purchaseDay;
-    const firstNegAfterLabel = new Date(purchaseYear, purchaseMonth, firstNegAfterDay)
-      .toLocaleDateString("en-US", { month: "short", day: "numeric" });
-
-    const lowestDateLabel = new Date(purchaseYear, purchaseMonth, lowestDay)
-      .toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    const affordDateStr = `${purchaseYear}-${String(purchaseMonth + 1).padStart(2, "0")}-${String(purchaseDay).padStart(2, "0")}`;
-
-    return {
-      canAfford, isRisky, shortfall,
-      balanceAtDay, balanceAfter,
-      lowestBal, lowestDay, lowestDateLabel,
-      firstNegAfterLabel,
-      purchaseMonth, purchaseYear, purchaseDay, affordDateStr, amt,
-    };
-  }, [affordAmt, affordDate, getDailyBalances]);
-
-  const openSavingsModal = () => {
-    if (savingsGoals.length === 0) {
-      setEditGoal(null);
-      setGoalModalVisible(true);
-      return;
-    }
-    setSavingsGoalId(savingsGoals[0]?.id ?? "");
-    setSavingsAmount("");
-    setSavingsModalVisible(true);
-  };
-
-  const handleAddSavings = async () => {
-    const amount = Number.parseFloat(savingsAmount);
-    const goal = savingsGoals.find(item => item.id === savingsGoalId);
-    if (!goal || !Number.isFinite(amount) || amount <= 0) return;
-
-    await updateGoal({ ...goal, current_amount: goal.current_amount + amount });
-    const contributionDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    await addTransaction({
-      date: contributionDate,
-      amount: -amount,
-      category: "Savings",
-      note: `Savings contribution · ${goal.name}`,
-    });
-    setSavingsModalVisible(false);
-    setSavingsAmount("");
-  };
-
-  const navigate = (filter: DashboardFilter, tab: string) => {
-    setDashboardFilter(filter);
-    router.push(`/(tabs)/${tab}` as any);
-  };
-
   const openAction = (action: string) => {
     setActionModalVisible(false);
     setTimeout(() => {
@@ -775,26 +549,6 @@ export default function DashboardScreen() {
     }, 250);
   };
 
-  const webTopPad = Platform.OS === "web" ? 0 : 0;
-
-  const statCards = [
-    { title: "Bills",   value: `$${stats.totalDue.toFixed(0)}`,    icon: "file-text"    as const, col: c.primary,                                        filter: null    as DashboardFilter, tab: "bills"   },
-    { title: "Paid",    value: `$${stats.totalPaid.toFixed(0)}`,   icon: "check-circle" as const, col: c.success,                                        filter: "paid"  as DashboardFilter, tab: "monthly" },
-    { title: "Unpaid",  value: `$${stats.remaining.toFixed(0)}`,   icon: "alert-circle" as const, col: stats.remaining > 0 ? c.warning : c.success,      filter: "unpaid" as DashboardFilter, tab: "monthly" },
-    { title: "Debt",    value: `$${stats.totalDebt.toFixed(0)}`,   icon: "credit-card"  as const, col: c.destructive,                                    filter: "debt"  as DashboardFilter, tab: "bills"   },
-  ];
-
-  // Build breakdown string: Income − Bills [± Transactions] = Left
-  const txSign    = cashFlow.netTransactions >= 0 ? "+" : "−";
-  const txDisplay = cashFlow.netTransactions !== 0
-    ? ` ${txSign} $${Math.abs(cashFlow.netTransactions).toFixed(0)} spent`
-    : "";
-  const breakdownText =
-    `$${cashFlow.monthlyIncome.toFixed(0)} income − $${cashFlow.totalBillsDue.toFixed(0)} bills${txDisplay} = $${Math.abs(cashFlow.remaining).toFixed(0)} ${cashFlow.remaining >= 0 ? "left" : "short"}`;
-  const decisionHistory = useMemo(
-    () => buildDecisionHistory(decisions, todayIso, now.toISOString()),
-    [decisions, todayIso, now],
-  );
   const decisionForecastDays = useMemo(() => {
     const days = [];
     for (let i = 0; i < Math.max(2, settings.forecast_horizon_months); i += 1) {
@@ -818,44 +572,6 @@ export default function DashboardScreen() {
       lowestBalance: throughPayday.reduce((lowest, day) => Math.min(lowest, day.balance), throughPayday[0]?.balance ?? nextPaycheck.balance),
     };
   }, [decisionForecastDays, todayIso]);
-  const monthlyReview = useMemo(() => {
-    const overCategory = [...categoryPlan]
-      .filter(row => row.remaining < -0.005)
-      .sort((left, right) => left.remaining - right.remaining)[0];
-    const bestCategory = [...categoryPlan]
-      .filter(row => row.remaining > 0.005 && row.budgeted > 0)
-      .sort((left, right) => right.remaining - left.remaining)[0];
-    const savingsPct = savingsData.totalTarget > 0
-      ? Math.min(100, (savingsData.totalSaved / savingsData.totalTarget) * 100)
-      : 0;
-    const billDelta = stats.totalDue - stats.totalPaid;
-    const lowestBalance = balanceMetrics?.lowestBalance ?? 0;
-    const lowestDay = balanceMetrics?.lowestDay ?? today;
-    const headline = stats.unpaidCount <= 0
-      ? "This month is caught up"
-      : `${stats.unpaidCount} bill${stats.unpaidCount === 1 ? "" : "s"} left`;
-    const nextStep = overCategory
-      ? `${overCategory.category} is over by $${Math.abs(overCategory.remaining).toFixed(0)}.`
-      : lowestBalance < settings.safety_floor
-        ? `Lowest balance is $${lowestBalance.toFixed(0)} on ${formatMonthDay(currentMonth, selectedYear, lowestDay)}.`
-        : bestCategory
-          ? `${bestCategory.category} has $${bestCategory.remaining.toFixed(0)} left.`
-          : "Looks steady. Keep updating actuals as bills clear.";
-    return {
-      headline,
-      billDelta,
-      overCategory,
-      bestCategory,
-      paidCount: stats.paidCount,
-      billCount: stats.billCount,
-      unpaidCount: stats.unpaidCount,
-      lowestBalance,
-      lowestDay,
-      savingsPct,
-      nextStep,
-      prompt: "Review my month and tell me what needs attention.",
-    };
-  }, [balanceMetrics, categoryPlan, currentMonth, savingsData.totalSaved, savingsData.totalTarget, settings.safety_floor, stats.billCount, stats.paidCount, stats.totalDue, stats.totalPaid, stats.unpaidCount, today]);
   const algorithmSuite = useMemo(() => buildAlgorithmSuite({
     month: currentMonth,
     year: selectedYear,
@@ -977,7 +693,6 @@ export default function DashboardScreen() {
       detail: `Lowest projected balance: $${lowest.balance.toFixed(0)} on ${formatShortDate(lowest.date)}. Review the reason before changing the plan.`,
       prompt,
       saferBillPrompt: "Which bill should I move?",
-      reducePlanPrompt: "Which planned decisions should I reduce or postpone?",
     };
   }, [decisionForecastDays, now, settings.safety_floor, todayIso]);
   useEffect(() => {
@@ -1151,51 +866,6 @@ export default function DashboardScreen() {
         onDismiss={dismissFlowmentum}
         onExplore={exploreFlowmentum}
       />
-
-      {false ? (
-        <Pressable
-          onPress={() => openFloWithPrompt(nextWeekRisk!.prompt)}
-          style={({ pressed }) => [
-            styles.proactiveAlertCard,
-            {
-              backgroundColor: nextWeekRisk!.tone === "risk" ? c.destructive + "12" : c.warning + "14",
-              borderColor: nextWeekRisk!.tone === "risk" ? c.destructive + "70" : c.warning + "70",
-              opacity: pressed ? 0.82 : 1,
-            },
-          ]}
-        >
-          <View style={[styles.proactiveAlertIcon, { backgroundColor: nextWeekRisk!.tone === "risk" ? c.destructive + "18" : c.warning + "18" }]}>
-            <Feather name="alert-triangle" size={17} color={nextWeekRisk!.tone === "risk" ? c.destructive : c.warning} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.proactiveAlertTitle, { color: c.foreground }]}>{nextWeekRisk!.title}</Text>
-            <Text style={[styles.proactiveAlertText, { color: c.mutedForeground }]}>{nextWeekRisk!.detail}</Text>
-            <View style={styles.proactiveActionRow}>
-              <Pressable
-                onPress={() => openFloWithPrompt(nextWeekRisk!.prompt)}
-                style={({ pressed }) => [styles.proactiveActionButton, { backgroundColor: c.primary + "18", opacity: pressed ? 0.75 : 1 }]}
-              >
-                <Text style={[styles.proactiveActionText, { color: c.primary }]}>Show why</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => openFloWithPrompt(nextWeekRisk!.saferBillPrompt)}
-                style={({ pressed }) => [styles.proactiveActionButton, { backgroundColor: c.warning + "18", opacity: pressed ? 0.75 : 1 }]}
-              >
-                <Text style={[styles.proactiveActionText, { color: c.warning }]}>Find safer bill date</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => openFloWithPrompt(nextWeekRisk!.reducePlanPrompt)}
-                style={({ pressed }) => [styles.proactiveActionButton, { backgroundColor: c.destructive + "12", opacity: pressed ? 0.75 : 1 }]}
-              >
-                <Text style={[styles.proactiveActionText, { color: c.destructive }]}>Reduce planned spending</Text>
-              </Pressable>
-            </View>
-          </View>
-          <View style={[styles.askFloPill, { backgroundColor: c.primary + "18" }]}>
-            <Text style={[styles.askFloPillText, { color: c.primary }]}>Ask Flo</Text>
-          </View>
-        </Pressable>
-      ) : null}
 
       <View style={[
         styles.referenceCommandHero,
@@ -1831,84 +1501,6 @@ export default function DashboardScreen() {
       />
 
       {/* ── Add savings contribution modal ── */}
-      <Modal
-        visible={savingsModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setSavingsModalVisible(false)}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => { Keyboard.dismiss(); setSavingsModalVisible(false); }}>
-          <Pressable style={[styles.actionSheet, { backgroundColor: c.card }]} onPress={() => {}}>
-            <View style={[styles.sheetHandle, { backgroundColor: c.muted }]} />
-            <Text style={[styles.sheetTitle, { color: c.foreground }]}>Add to Savings</Text>
-            <Text style={[styles.sheetSub, { color: c.mutedForeground }]}>
-              Choose a goal and record a contribution. It will also appear in Transactions.
-            </Text>
-
-            <Text style={[styles.savingsFieldLabel, { color: c.mutedForeground }]}>SAVINGS GOAL</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.savingsGoalRow}>
-              {savingsGoals.map(goal => (
-                <Pressable
-                  key={goal.id}
-                  onPress={() => setSavingsGoalId(goal.id)}
-                  style={[
-                    styles.savingsGoalChip,
-                    {
-                      backgroundColor: savingsGoalId === goal.id ? c.primary : c.muted,
-                      borderColor: savingsGoalId === goal.id ? c.primary : c.border,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.savingsGoalText, { color: savingsGoalId === goal.id ? c.primaryForeground : c.foreground }]}>
-                    {goal.name}
-                  </Text>
-                  <Text style={[styles.savingsGoalBalance, { color: savingsGoalId === goal.id ? c.primaryForeground : c.mutedForeground }]}>
-                    {`$${goal.current_amount.toFixed(0)} saved`}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-
-            <Text style={[styles.savingsFieldLabel, { color: c.mutedForeground }]}>CONTRIBUTION AMOUNT</Text>
-            <View style={[styles.savingsAmountWrap, { backgroundColor: c.muted, borderColor: c.border }]}>
-              <Text style={[styles.savingsDollar, { color: c.mutedForeground }]}>$</Text>
-              <TextInput
-                value={savingsAmount}
-                onChangeText={setSavingsAmount}
-                placeholder="0.00"
-                placeholderTextColor={c.mutedForeground}
-                keyboardType="decimal-pad"
-                style={[styles.savingsInput, { color: c.foreground }]}
-                autoFocus
-              />
-            </View>
-
-            <View style={styles.savingsActions}>
-              <Pressable
-                onPress={() => setSavingsModalVisible(false)}
-                style={[styles.savingsCancel, { backgroundColor: c.muted }]}
-              >
-                <Text style={[styles.savingsCancelText, { color: c.mutedForeground }]}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                onPress={handleAddSavings}
-                disabled={!savingsGoalId || !(Number.parseFloat(savingsAmount) > 0)}
-                style={[
-                  styles.savingsSave,
-                  {
-                    backgroundColor: c.success,
-                    opacity: savingsGoalId && Number.parseFloat(savingsAmount) > 0 ? 1 : 0.45,
-                  },
-                ]}
-              >
-                <Feather name="plus" size={16} color="#fff" />
-                <Text style={styles.savingsSaveText}>Add Savings</Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
       {/* ── 12-Month Balance Outlook modal ── */}
       <Modal visible={negCalendarVisible} transparent animationType="slide" onRequestClose={() => setNegCalendarVisible(false)}>
         <Pressable style={styles.negSheetOverlay} onPress={() => setNegCalendarVisible(false)}>
@@ -1921,7 +1513,7 @@ export default function DashboardScreen() {
             </Text>
 
             <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
-              {yearNegSchedule.map((entry, i) => {
+              {yearNegSchedule.map(entry => {
                 const isNeg = entry.firstNegDay !== null;
                 const isLow = !isNeg && entry.lowestBalance < settings.safety_floor;
                 const iconName = isNeg ? "x-circle" as const : isLow ? "alert-circle" as const : "check-circle" as const;
@@ -1973,90 +1565,6 @@ export default function DashboardScreen() {
       </Modal>
 
       {/* ── Save to Budget popup ── */}
-      <Modal visible={expenseNameModal} transparent animationType="fade" onRequestClose={() => setExpenseNameModal(false)}>
-        <Pressable style={styles.expenseOverlay} onPress={() => setExpenseNameModal(false)}>
-          <Pressable style={[styles.expenseSheet, { backgroundColor: c.card }]} onPress={() => {}}>
-            <Text style={[styles.expenseSheetTitle, { color: c.foreground }]}>Save to Budget</Text>
-            <Text style={[styles.expenseSheetSub, { color: c.mutedForeground }]}>
-              ${affordResult?.amt.toFixed(2)} · {affordDate}
-            </Text>
-
-            {/* Type toggle */}
-            <View style={[styles.expenseTypeRow, { backgroundColor: c.muted }]}>
-              <Pressable
-                onPress={() => setExpenseType("expense")}
-                style={[styles.expenseTypeBtn, expenseType === "expense" && { backgroundColor: c.card }]}
-              >
-                <Feather name="shopping-bag" size={14} color={expenseType === "expense" ? c.destructive : c.mutedForeground} />
-                <Text style={[styles.expenseTypeBtnText, { color: expenseType === "expense" ? c.destructive : c.mutedForeground }]}>
-                  Expense
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setExpenseType("goal")}
-                style={[styles.expenseTypeBtn, expenseType === "goal" && { backgroundColor: c.card }]}
-              >
-                <Feather name="target" size={14} color={expenseType === "goal" ? "#8b5cf6" : c.mutedForeground} />
-                <Text style={[styles.expenseTypeBtnText, { color: expenseType === "goal" ? "#8b5cf6" : c.mutedForeground }]}>
-                  Goal
-                </Text>
-              </Pressable>
-            </View>
-
-            {/* Context hint */}
-            <Text style={[styles.expenseTypeHint, { color: c.mutedForeground }]}>
-              {expenseType === "expense"
-                ? "Records a one-time transaction on this date."
-                : "Creates a savings goal with this target amount and date."}
-            </Text>
-
-            <TextInput
-              style={[styles.expenseNameInput, { backgroundColor: c.muted, color: c.foreground }]}
-              placeholder={expenseType === "expense" ? "e.g. Dinner out, New shoes…" : "e.g. Vacation, New laptop…"}
-              placeholderTextColor={c.mutedForeground}
-              autoFocus
-              returnKeyType="done"
-              value={expenseNameInput}
-              onChangeText={setExpenseNameInput}
-              onSubmitEditing={() => {
-                if (!affordResult) return;
-                const name = expenseNameInput.trim() || (expenseType === "expense" ? "Expense" : "Goal");
-                if (expenseType === "expense") {
-                  addTransaction({ amount: -Math.abs(affordResult.amt), category: "Other", note: name, date: affordResult.affordDateStr });
-                } else {
-                  addGoal({ name, target_amount: affordResult.amt, current_amount: 0, target_date: affordResult.affordDateStr, goal_type: "planned_expense" });
-                }
-                setExpenseNameModal(false);
-                setAddedAsExpense(true);
-              }}
-            />
-
-            <View style={styles.expenseBtns}>
-              <Pressable onPress={() => setExpenseNameModal(false)} style={[styles.expenseBtn, { backgroundColor: c.muted }]}>
-                <Text style={[styles.expenseBtnText, { color: c.mutedForeground }]}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  if (!affordResult) return;
-                  const name = expenseNameInput.trim() || (expenseType === "expense" ? "Expense" : "Goal");
-                  if (expenseType === "expense") {
-                    addTransaction({ amount: -Math.abs(affordResult.amt), category: "Other", note: name, date: affordResult.affordDateStr });
-                  } else {
-                    addGoal({ name, target_amount: affordResult.amt, current_amount: 0, target_date: affordResult.affordDateStr, goal_type: "planned_expense" });
-                  }
-                  setExpenseNameModal(false);
-                  setAddedAsExpense(true);
-                }}
-                style={[styles.expenseBtn, { backgroundColor: expenseType === "expense" ? c.destructive : "#8b5cf6" }]}
-              >
-                <Text style={[styles.expenseBtnText, { color: "#fff" }]}>
-                  {expenseType === "expense" ? "Add Expense" : "Add Goal"}
-                </Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
     </ScrollView>
   );
 }
@@ -2117,7 +1625,6 @@ const styles = StyleSheet.create({
   brandMarkImage: { width: "100%", height: "100%" },
   brandEyebrow: { fontSize: 9, lineHeight: 12, fontFamily: "Inter_800ExtraBold", letterSpacing: 2.1, textTransform: "uppercase", marginBottom: 1 },
   heading:    { fontSize: 30, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.0, color: "#f8fafc", textShadowColor: "rgba(56,189,248,0.35)", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 12 },
-  headerActionButton: { width: 54, height: 54, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.82)", borderWidth: 1, borderColor: "rgba(34,211,238,0.38)", shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.52, shadowRadius: 22, elevation: 12 },
   setupCard: { borderWidth: 1, borderRadius: 18, padding: 14, marginBottom: 12 },
   setupHeader: { flexDirection: "row", alignItems: "flex-start", marginBottom: 8 },
   setupTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
@@ -2126,22 +1633,16 @@ const styles = StyleSheet.create({
   setupStepText: { fontSize: 12, fontFamily: "Inter_500Medium" },
   setupButton: { height: 40, borderRadius: 9, alignItems: "center", justifyContent: "center", marginTop: 10 },
   setupButtonText: { fontSize: 13, fontFamily: "Inter_700Bold" },
-  confidenceCard: { flexDirection: "row", alignItems: "center", gap: 9, padding: 12, borderRadius: 12, marginBottom: 14 },
-  proactiveAlertCard: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 18, padding: 13, marginBottom: 14 },
   proactiveAlertIcon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   proactiveAlertTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   proactiveAlertText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 2 },
   proactiveActionRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
   proactiveActionButton: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999 },
   proactiveActionText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
-  askFloPill: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999 },
-  askFloPillText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   startupAlertBackdrop: { flex: 1, backgroundColor: "rgba(2,6,23,0.72)", alignItems: "center", justifyContent: "center", padding: 22 },
   startupAlertCard: { width: "100%", maxWidth: 480, borderRadius: 28, borderWidth: 1, backgroundColor: "rgba(15,23,42,0.96)", padding: 18, shadowColor: "#000", shadowOffset: { width: 0, height: 22 }, shadowOpacity: 0.38, shadowRadius: 34, elevation: 16 },
   startupAlertHandle: { alignSelf: "center", width: 44, height: 4, borderRadius: 999, backgroundColor: "rgba(148,163,184,0.45)", marginBottom: 16 },
   startupAlertHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
-  confidenceTitle: { fontSize: 13, fontFamily: "Inter_700Bold" },
-  confidenceDesc: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
 
   referenceCommandHero: {
     borderRadius: 28,
@@ -2195,80 +1696,9 @@ const styles = StyleSheet.create({
   referenceGaugeLabel: { color: "#cbd5e1", fontSize: 9, fontFamily: "Inter_700Bold" },
   referenceScoreStatus: { color: "#4ade80", fontSize: 12, fontFamily: "Inter_800ExtraBold", marginTop: 4 },
   referenceScoreUnderline: { width: 64, height: 3, borderRadius: 3, backgroundColor: "#22c55e", marginTop: 4, marginBottom: 4 },
-  referenceScoreReason: { color: "#94a3b8", maxWidth: 220, textAlign: "center", fontSize: 10, fontFamily: "Inter_600SemiBold", lineHeight: 13 },
-  referenceScoreTapHint: { color: "#60a5fa", fontSize: 9, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
-  referenceInsightCard: { flex: 1.45, minHeight: 130, borderRadius: 24, borderWidth: 1, borderColor: "rgba(168,85,247,0.22)", backgroundColor: "rgba(15,23,42,0.72)", padding: 16, flexDirection: "row", alignItems: "center", gap: 12, shadowColor: "#8b5cf6", shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.22, shadowRadius: 26 },
-  referenceInsightIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.28)" },
-  referenceInsightText: { color: "#f8fafc", fontSize: 13, fontFamily: "Inter_600SemiBold", lineHeight: 18 },
-  referenceInsightLink: { color: "#c084fc", fontSize: 12, fontFamily: "Inter_800ExtraBold", marginTop: 8 },
-  referenceMiniChart: { flexDirection: "row", alignItems: "flex-end", gap: 4, height: 82, width: 90 },
-  referenceMiniBar: { width: 6, borderRadius: 5, backgroundColor: "#8b5cf6", shadowColor: "#a855f7", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 10 },
-  referenceQuickPanel: { flex: 1, borderRadius: 24, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", backgroundColor: "rgba(2,6,23,0.50)", padding: 14 },
-  referenceQuickTitle: { color: "#f8fafc", fontSize: 14, fontFamily: "Inter_800ExtraBold", marginBottom: 10 },
-  referenceQuickGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  referenceQuickTile: { width: "48%", minHeight: 82, borderRadius: 18, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", backgroundColor: "rgba(15,23,42,0.72)", alignItems: "center", justifyContent: "center", gap: 8, padding: 10 },
-  referenceQuickText: { color: "#e2e8f0", textAlign: "center", fontSize: 11, lineHeight: 14, fontFamily: "Inter_800ExtraBold" },
-
-  // Hero
-  heroCard:          { borderRadius: 36, padding: 24, marginBottom: 14, minHeight: 255, borderWidth: 1, borderColor: "rgba(34,211,238,0.26)", shadowColor: "#7c3aed", shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.46, shadowRadius: 34, elevation: 16 },
-  heroSignalLine:    { position: "absolute", left: 18, right: 18, bottom: 72, height: 1, backgroundColor: "rgba(125,211,252,0.18)" },
-  heroTopRow:        { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 18 },
-  heroStatusBadge:   { flexDirection: "row", alignItems: "center", gap: 7, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
-  heroStatusDot:     { width: 7, height: 7, borderRadius: 4 },
-  heroStatusText:    { fontSize: 11, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8 },
-  heroLabel:         { fontSize: 12, fontFamily: "Inter_800ExtraBold", color: "rgba(219,234,254,0.82)", textTransform: "uppercase", letterSpacing: 1.3, marginBottom: 3 },
-  heroValue:         { fontSize: 58, fontFamily: "Inter_800ExtraBold", color: "#fff", lineHeight: 63, letterSpacing: -2.2 },
-  heroSubtitle:      { fontSize: 12, fontFamily: "Inter_500Medium", color: "rgba(203,213,225,0.75)", marginTop: 4, maxWidth: 270, lineHeight: 17 },
-  heroMetrics:       { flexDirection: "row", marginTop: 18, paddingTop: 17, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.16)" },
-  heroMetric:        { flex: 1 },
-  heroMetricLabel:   { fontSize: 11, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 3 },
-  heroMetricValue:   { fontSize: 15, fontFamily: "Inter_800ExtraBold" },
-  heroMetricDivider: { width: 1, backgroundColor: "rgba(255,255,255,0.2)", marginHorizontal: 14 },
-  heroProgress:      { marginTop: 14 },
-  heroProgressTrack: { height: 5, borderRadius: 3, overflow: "hidden" },
-  heroProgressFill:  { height: 5, borderRadius: 3 },
-  heroProgressLabel: { fontSize: 11, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.75)", marginTop: 5 },
-  heroFlipHint:      { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 6, backgroundColor: "rgba(15,23,42,0.42)" },
-  heroFlipHintText:  { fontSize: 10, fontFamily: "Inter_800ExtraBold", color: "rgba(255,255,255,0.72)", textTransform: "uppercase", letterSpacing: 0.7 },
-  heroGoalRow:       { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 },
-  heroGoalName:      { fontSize: 11, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.85)", width: 90 },
-  heroGoalTrack:     { flex: 1, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.2)", overflow: "hidden" },
-  heroGoalFill:      { height: 4, borderRadius: 2, backgroundColor: "#6ee7b7" },
-  heroGoalPct:       { fontSize: 10, fontFamily: "Inter_700Bold", color: "rgba(255,255,255,0.75)", width: 30, textAlign: "right" },
-  algoSuiteCard: { borderRadius: 30, padding: 15, marginBottom: 12, backgroundColor: "rgba(2,6,23,0.72)", borderWidth: 1, borderColor: "rgba(168,85,247,0.24)", shadowColor: "#38bdf8", shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.22, shadowRadius: 26, elevation: 9 },
-  algoSuiteHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
   algoScoreRing: { width: 68, height: 68, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.24)", borderWidth: 1, borderColor: "rgba(34,211,238,0.42)" },
   algoScoreValue: { color: "#f8fafc", fontSize: 24, fontFamily: "Inter_800ExtraBold", lineHeight: 27 },
   algoScoreLabel: { color: "#93c5fd", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 1 },
-  algoEyebrow: { color: "#38bdf8", fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.1, marginBottom: 2 },
-  algoTitle: { color: "#f8fafc", fontSize: 17, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.3 },
-  algoDesc: { color: "#94a3b8", fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 17, marginTop: 3 },
-  algoGradeBadge: { width: 42, height: 42, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(34,197,94,0.16)", borderWidth: 1, borderColor: "rgba(74,222,128,0.28)" },
-  algoGradeText: { color: "#86efac", fontSize: 19, fontFamily: "Inter_800ExtraBold" },
-  algoMetricRow: { flexDirection: "row", gap: 8, marginTop: 13 },
-  algoMiniMetric: { flex: 1, borderRadius: 16, padding: 10, backgroundColor: "rgba(15,23,42,0.72)", borderWidth: 1, borderColor: "rgba(148,163,184,0.12)" },
-  algoMiniLabel: { color: "#94a3b8", fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7, textTransform: "uppercase", marginBottom: 4 },
-  algoMiniValue: { color: "#f8fafc", fontSize: 17, fontFamily: "Inter_800ExtraBold" },
-  algoMiniHint: { color: "#64748b", fontSize: 9, fontFamily: "Inter_700Bold", marginTop: 2 },
-  algoActionButton: { marginTop: 12, minHeight: 44, borderRadius: 16, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "rgba(37,99,235,0.28)", borderWidth: 1, borderColor: "rgba(147,197,253,0.24)" },
-  algoActionText: { color: "#dbeafe", fontSize: 12, fontFamily: "Inter_800ExtraBold", textAlign: "center", flexShrink: 1 },
-  algoInsightStack: { gap: 8, marginTop: 12 },
-  algoInsightRow: { flexDirection: "row", alignItems: "center", gap: 9, borderRadius: 16, padding: 10, backgroundColor: "rgba(15,23,42,0.56)", borderWidth: 1, borderColor: "rgba(148,163,184,0.1)" },
-  algoInsightDot: { width: 8, height: 8, borderRadius: 4 },
-  algoInsightTitle: { color: "#e5edf8", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
-  algoInsightDetail: { color: "#94a3b8", fontSize: 11, fontFamily: "Inter_500Medium", lineHeight: 15, marginTop: 2 },
-  algoInsightTag: { maxWidth: 90, textAlign: "right", fontSize: 9, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.5 },
-  commandDeck:       { gap: 10, marginBottom: 12 },
-  primaryCommandCard: { borderRadius: 26, overflow: "hidden", borderWidth: 1, borderColor: "rgba(147,197,253,0.28)", shadowColor: "#7c3aed", shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.26, shadowRadius: 24, elevation: 9 },
-  primaryCommandGradient: { minHeight: 112, padding: 16, flexDirection: "row", alignItems: "center", gap: 12 },
-  primaryCommandIcon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(15,23,42,0.36)", borderWidth: 1, borderColor: "rgba(219,234,254,0.28)" },
-  primaryCommandEyebrow: { color: "rgba(219,234,254,0.75)", fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.2, marginBottom: 3 },
-  primaryCommandTitle: { color: "#ffffff", fontSize: 17, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.3 },
-  primaryCommandSub: { color: "rgba(226,232,240,0.78)", fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 17, marginTop: 4 },
-  quickCommandRow: { flexDirection: "row", gap: 9 },
-  quickCommand: { flex: 1, minHeight: 82, borderRadius: 22, padding: 11, justifyContent: "space-between", backgroundColor: "rgba(15,23,42,0.68)", borderWidth: 1, borderColor: "rgba(148,163,184,0.16)" },
-  quickCommandIcon: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  quickCommandText: { color: "#e5edf8", fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   flowScoreSheetHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },
   flowScoreColumns: { flexDirection: "row", gap: 10, marginTop: 6 },
   flowScoreColumn: { flex: 1, borderRadius: 16, padding: 12 },
@@ -2284,17 +1714,6 @@ const styles = StyleSheet.create({
   flowScoreBreakdownValue: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   flowScoreFloButton: { minHeight: 48, borderRadius: 16, marginTop: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   flowScoreFloText: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
-  moneyRadarCard: { borderRadius: 26, padding: 15, marginBottom: 14, backgroundColor: "rgba(15,23,42,0.82)", borderWidth: 1, borderColor: "rgba(148,163,184,0.16)", shadowColor: "#000", shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.3, shadowRadius: 22, elevation: 8 },
-  moneyRadarHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 12 },
-  moneyRadarEyebrow: { color: "#60a5fa", fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.1, marginBottom: 4 },
-  moneyRadarTitle: { color: "#cbd5e1", fontSize: 12, fontFamily: "Inter_600SemiBold", lineHeight: 17 },
-  moneyRadarBadge: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 6 },
-  moneyRadarBadgeText: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.8 },
-  moneyRadarGrid: { flexDirection: "row", flexWrap: "wrap", gap: 9 },
-  radarMetric: { flexBasis: "47%", flexGrow: 1, minHeight: 94, borderRadius: 20, padding: 12, backgroundColor: "rgba(2,6,23,0.48)", borderWidth: 1, borderColor: "rgba(148,163,184,0.12)" },
-  radarMetricIcon: { width: 31, height: 31, borderRadius: 11, alignItems: "center", justifyContent: "center", marginBottom: 10 },
-  radarMetricValue: { fontSize: 22, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.4 },
-  radarMetricLabel: { color: "#94a3b8", fontSize: 11, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8, marginTop: 2 },
   negWarning:          { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, marginBottom: 14 },
   negWarningText:      { flex: 1, fontSize: 13, fontFamily: "Inter_500Medium" },
   // 12-month outlook sheet
@@ -2311,41 +1730,6 @@ const styles = StyleSheet.create({
   negSheetClose:       { marginTop: 12, paddingVertical: 14, borderRadius: 12, alignItems: "center" },
   negSheetCloseText:   { fontSize: 15, fontFamily: "Inter_600SemiBold" },
   // Financial Outlook
-  outlookCard:  { overflow: "hidden", marginBottom: 0, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
-  outlookRow:   { flexDirection: "row", alignItems: "center", gap: 12, padding: 14 },
-  outlookIcon:  { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  outlookLabel: { fontSize: 11, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 },
-  outlookValue: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-
-  // What can I do? button
-  decisionHubCard: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 16, padding: 14, marginBottom: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
-  decisionHubIcon: { width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center" },
-  decisionHubBody: { flex: 1 },
-  decisionHubEyebrow: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 1.1, marginBottom: 3, color: "#60a5fa" },
-  decisionHubTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
-  decisionHubDesc: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 2 },
-  decisionHubStats: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
-  decisionHubStat: { fontSize: 11, fontFamily: "Inter_700Bold" },
-  monthlyReviewCard: { borderWidth: 1, borderColor: "rgba(148,163,184,0.16)", backgroundColor: "rgba(15,23,42,0.78)", borderRadius: 26, padding: 15, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.26, shadowRadius: 22, elevation: 8 },
-  monthlyReviewHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
-  monthlyReviewIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(56,189,248,0.14)", borderWidth: 1, borderColor: "rgba(56,189,248,0.24)" },
-  monthlyReviewTitle: { fontSize: 16, fontFamily: "Inter_800ExtraBold", color: "#f8fafc" },
-  monthlyReviewDesc: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 17, marginTop: 2, color: "#94a3b8" },
-  monthlyReviewAsk: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: "rgba(37,99,235,0.18)", borderWidth: 1, borderColor: "rgba(96,165,250,0.22)" },
-  monthlyReviewAskText: { fontSize: 11, fontFamily: "Inter_800ExtraBold", color: "#60a5fa" },
-  monthlyReviewGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
-  monthlyReviewMetric: { flexBasis: "48%", flexGrow: 1, borderRadius: 16, padding: 11, backgroundColor: "rgba(2,6,23,0.45)", borderWidth: 1, borderColor: "rgba(148,163,184,0.12)" },
-  monthlyReviewLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", marginBottom: 4, color: "#94a3b8", letterSpacing: 0.7 },
-  monthlyReviewValue: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
-  monthlyReviewActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
-  monthlyReviewAction: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 8 },
-  monthlyReviewActionText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
-  whatBtn:     { flexDirection: "row", alignItems: "center", gap: 12, padding: 16, marginBottom: 14, borderWidth: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
-  whatBtnIcon: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  whatBtnText: { flex: 1, fontSize: 16, fontFamily: "Inter_700Bold" },
-
-  // Phase 4 category planning
-  categoryPlanHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 },
   zeroBudgetDashboardCard: { borderWidth: 1, borderRadius: 20, padding: 14, marginBottom: 14 },
   zeroBudgetDashboardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
   zeroBudgetDashboardTitle: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
@@ -2355,25 +1739,10 @@ const styles = StyleSheet.create({
   zeroBudgetDashboardValue: { fontSize: 18, fontFamily: "Inter_800ExtraBold" },
   zeroBudgetDashboardLabel: { color: "#94a3b8", fontSize: 9, fontFamily: "Inter_700Bold", textTransform: "uppercase", marginTop: 2 },
   zeroBudgetDashboardAction: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 4, marginTop: 12 },
-  categoryDecisionAlert: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 12 },
-  categoryDecisionAlertTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
-  categoryDecisionAlertText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 2 },
-  categoryPlanSub: { fontSize: 12, fontFamily: "Inter_400Regular" },
-  categoryPlanHeaderActions: { flexDirection: "row", alignItems: "center", gap: 8 },
-  categoryBudgetEdit: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
   categoryBudgetEditText: { fontSize: 10, fontFamily: "Inter_700Bold" },
   categoryPlanBadge: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
   categoryPlanBadgeText: { fontSize: 10, fontFamily: "Inter_700Bold", letterSpacing: 0.5 },
-  categoryPlanCard: { overflow: "hidden", shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
-  categoryPlanRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12 },
   categoryPlanIcon: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  categoryPlanBody: { flex: 1 },
-  categoryPlanTop: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 7 },
-  categoryPlanName: { flex: 1, fontSize: 14, fontFamily: "Inter_700Bold" },
-  categoryPlanAmount: { fontSize: 14, fontFamily: "Inter_700Bold" },
-  categoryPlanTrack: { height: 6, borderRadius: 3, overflow: "hidden", marginBottom: 5 },
-  categoryPlanFill: { height: 6, borderRadius: 3 },
-  categoryPlanDetail: { fontSize: 11, fontFamily: "Inter_400Regular" },
   categoryBudgetList: { maxHeight: 420, marginBottom: 14 },
   categoryBudgetRow: { flexDirection: "row", alignItems: "center", gap: 12, borderTopWidth: 1, paddingVertical: 12 },
   categoryBudgetCopy: { flex: 1 },
@@ -2408,101 +1777,8 @@ const styles = StyleSheet.create({
   moveAmountInput: { flex: 1, minHeight: 48, fontSize: 18, fontFamily: "Inter_700Bold" },
   moveErrorText: { fontSize: 12, fontFamily: "Inter_600SemiBold", marginBottom: 10 },
 
-  // Affordability card
-  affordCard:           { padding: 16, marginBottom: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
-  affordHeader:         { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
-  affordHeaderIcon:     { width: 32, height: 32, borderRadius: 9, alignItems: "center", justifyContent: "center" },
-  affordTitle:          { fontSize: 16, fontFamily: "Inter_700Bold" },
-  affordAmtRow:         { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
-  affordDollar:         { fontSize: 16, fontFamily: "Inter_500Medium", paddingLeft: 4 },
-  affordInput:          { flex: 1, height: 44, paddingHorizontal: 14, fontSize: 16, fontFamily: "Inter_500Medium" },
-  affordClear:          { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  affordVerdict:        { flexDirection: "row", alignItems: "flex-start", gap: 12, padding: 14, marginBottom: 10 },
-  affordVerdictTitle:   { fontSize: 15, fontFamily: "Inter_700Bold", marginBottom: 4 },
-  affordVerdictSub:     { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 18 },
-  affordInsight:        { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, marginBottom: 10 },
-  affordInsightText:    { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 18 },
-  affordActions:        { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  affordActionBtn:      { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 10 },
-  affordActionBtnText:  { fontSize: 12, fontFamily: "Inter_600SemiBold" },
-  affordActionDone:     { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 9 },
-  affordActionDoneText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
-
   // Upcoming
-  sectionTitle:  { fontSize: 18, fontFamily: "Inter_800ExtraBold", marginBottom: 10, marginTop: 8, letterSpacing: -0.2, color: "#f8fafc" },
-  upcomingCard:  { marginBottom: 16, overflow: "hidden", borderWidth: 1, borderColor: "rgba(148,163,184,0.16)", borderRadius: 24, backgroundColor: "rgba(15,23,42,0.78)" },
-  upcomingRow:   { flexDirection: "row", alignItems: "center", padding: 13, gap: 11, borderTopColor: "rgba(148,163,184,0.13)" },
-  upcomingDot:   { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
-  upcomingInfo:  { flex: 1 },
-  upcomingName:  { fontSize: 14, fontFamily: "Inter_700Bold", color: "#e5edf8" },
-  upcomingDate:  { fontSize: 12, fontFamily: "Inter_500Medium", marginTop: 1, color: "#94a3b8" },
-  upcomingAmt:   { fontSize: 15, fontFamily: "Inter_800ExtraBold", color: "#f8fafc" },
 
-  // Stat pill cards
-  forecastTrustCard: { borderWidth: 1, borderRadius: 16, padding: 12, marginBottom: 10 },
-  forecastTrustHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
-  forecastTrustIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" },
-  forecastTrustTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
-  forecastTrustSub: { fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 16, marginTop: 2 },
-  forecastTrustAsk: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
-  forecastTrustAskText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
-  forecastTrustGrid: { flexDirection: "row", gap: 8, marginTop: 10 },
-  forecastTrustMetric: { flex: 1, borderRadius: 12, padding: 9 },
-  forecastTrustLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", marginBottom: 3 },
-  forecastTrustValue: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
-  forecastTrustDrivers: { fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 16, marginTop: 9 },
-  statsPillRow:  { flexDirection: "row", gap: 8, marginBottom: 14 },
-  statPill:      { flex: 1, borderWidth: 1, borderRadius: 18, paddingVertical: 13, paddingHorizontal: 6, alignItems: "center", justifyContent: "center" },
-  statPillIcon:  { width: 28, height: 28, borderRadius: 10, alignItems: "center", justifyContent: "center", marginBottom: 7 },
-  statPillValue: { fontSize: 19, fontFamily: "Inter_800ExtraBold", marginBottom: 4 },
-  statPillLabel: { fontSize: 10, fontFamily: "Inter_700Bold", letterSpacing: 0.35 },
-  statDebtRow:   { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1, borderRadius: 18, paddingVertical: 15, paddingHorizontal: 16, marginBottom: 14 },
-  statDebtLeft:  { flexDirection: "row", alignItems: "center", gap: 12 },
-  statDebtIcon:  { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  statDebtValue: { fontSize: 28, fontFamily: "Inter_800ExtraBold", marginTop: 2, letterSpacing: -0.6 },
-  commandGrid: { flexDirection: "row", gap: 8, marginBottom: 14 },
-  commandCard: { flex: 1, borderWidth: 1, borderRadius: 18, padding: 11, minHeight: 104 },
-  commandIcon: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 10 },
-  commandLabel: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
-  commandSub: { fontSize: 10, fontFamily: "Inter_500Medium", lineHeight: 13, marginTop: 3 },
-
-  // Goals
-  goalsHeader:        { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10, marginTop: 8, gap: 8 },
-  goalHeaderActions:  { flexDirection: "row", alignItems: "center", gap: 6 },
-  addGoalBtn:         { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 20 },
-  addGoalText:        { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  goalsEmpty:         { padding: 24, alignItems: "center", marginBottom: 16 },
-  goalsEmptyText:     { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: 10, marginBottom: 16, lineHeight: 20 },
-  goalsEmptyBtn:      { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
-  goalsEmptyBtnText:  { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-  goalCard:           { marginBottom: 12, padding: 15, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
-  goalTop:            { flexDirection: "row", alignItems: "flex-start", marginBottom: 10 },
-  goalLeft:           { flex: 1 },
-  goalRight:          { alignItems: "flex-end" },
-  goalNameRow:        { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6 },
-  goalName:           { fontSize: 15, fontFamily: "Inter_600SemiBold" },
-  goalTypeBadge:      { borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3 },
-  goalTypeBadgeText:  { fontSize: 9, fontFamily: "Inter_700Bold", letterSpacing: 0.45 },
-  goalDate:           { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
-  goalAmount:         { fontSize: 16, fontFamily: "Inter_700Bold" },
-  goalTarget:         { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
-  goalProgress:       { height: 6, borderRadius: 3, overflow: "hidden", marginBottom: 10 },
-  goalProgressFill:   { height: 6, borderRadius: 3 },
-  affordBox:          { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 10 },
-  affordText:         { flex: 1 },
-  affordBoxTitle:     { fontSize: 13, fontFamily: "Inter_700Bold" },
-  affordSub:          { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
-
-  // Expense name popup
-  expenseOverlay:     { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", alignItems: "center", padding: 32 },
-  expenseSheet:       { width: "100%", borderRadius: 20, padding: 24, shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 16, elevation: 12 },
-  expenseSheetTitle:  { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 4 },
-  expenseSheetSub:    { fontSize: 13, fontFamily: "Inter_400Regular", marginBottom: 14 },
-  expenseTypeRow:     { flexDirection: "row", borderRadius: 12, padding: 4, gap: 4, marginBottom: 10 },
-  expenseTypeBtn:     { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 9, borderRadius: 9 },
-  expenseTypeBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-  expenseTypeHint:    { fontSize: 12, fontFamily: "Inter_400Regular", marginBottom: 14, lineHeight: 17 },
-  expenseNameInput:   { height: 50, borderRadius: 12, paddingHorizontal: 16, fontSize: 16, fontFamily: "Inter_500Medium", marginBottom: 20 },
   expenseBtns:        { flexDirection: "row", gap: 10 },
   expenseBtn:         { flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: "center" },
   expenseBtnText:     { fontSize: 15, fontFamily: "Inter_600SemiBold" },
@@ -2521,18 +1797,4 @@ const styles = StyleSheet.create({
   sheetCancel:     { marginTop: 14, paddingVertical: 14, alignItems: "center" },
   sheetCancelText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
 
-  // Savings contribution
-  savingsFieldLabel:  { fontSize: 10, fontFamily: "Inter_700Bold", letterSpacing: 0.7, marginBottom: 8 },
-  savingsGoalRow:     { gap: 8, paddingBottom: 16 },
-  savingsGoalChip:    { minWidth: 120, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1 },
-  savingsGoalText:    { fontSize: 13, fontFamily: "Inter_700Bold" },
-  savingsGoalBalance: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 3 },
-  savingsAmountWrap:  { flexDirection: "row", alignItems: "center", borderWidth: 1, borderRadius: 12, marginBottom: 18 },
-  savingsDollar:      { fontSize: 20, fontFamily: "Inter_600SemiBold", paddingLeft: 14 },
-  savingsInput:       { flex: 1, height: 52, paddingHorizontal: 8, fontSize: 20, fontFamily: "Inter_700Bold" },
-  savingsActions:     { flexDirection: "row", gap: 10 },
-  savingsCancel:      { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: "center" },
-  savingsCancelText:  { fontSize: 15, fontFamily: "Inter_600SemiBold" },
-  savingsSave:        { flex: 1.5, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 6, paddingVertical: 14, borderRadius: 12 },
-  savingsSaveText:    { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold" },
 });

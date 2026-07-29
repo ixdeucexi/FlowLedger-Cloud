@@ -27,7 +27,7 @@ import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
 import { isCashFlowTransaction } from "@/lib/billMatching";
-import { loadFloMemory, updateFloMemory, type FloFacts } from "@/lib/flo";
+import { updateFloMemory, type FloFacts } from "@/lib/flo";
 import { humanizeFloText, isWeakFloReply } from "@/lib/floLanguage";
 import {
   createFloConversation,
@@ -55,7 +55,6 @@ import {
   fallbackFloAnswer,
   localFloAnswer,
   reduceFloChat,
-  sanitizeFloSummary,
   type FloCategoryMoveResult,
   type FloBillDateMoveResult,
   type FloBillMoveFact,
@@ -120,7 +119,6 @@ export default function FloScreen() {
   const decisionHubSettings = DEFAULT_DECISION_HUB_SETTINGS;
   const [onboardingPreferences, setOnboardingPreferences] = useState(() => readOnboardingPreferences());
   const [input, setInput] = useState("");
-  const [summary, setSummary] = useState("");
   const [conversations, setConversations] = useState<FloConversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [olderMessageCursor, setOlderMessageCursor] = useState<string | null>(null);
@@ -128,8 +126,6 @@ export default function FloScreen() {
   const [chatError, setChatError] = useState<string | null>(null);
   const [lastPrompt, setLastPrompt] = useState("");
   const [sampleIndex, setSampleIndex] = useState(0);
-  const [completePlan, setCompletePlan] = useState<DecisionRecord | null>(null);
-  const [completeActual, setCompleteActual] = useState("");
   const [postponePlan, setPostponePlan] = useState<DecisionRecord | null>(null);
   const [postponeDate, setPostponeDate] = useState("");
   const [lowerPlan, setLowerPlan] = useState<DecisionRecord | null>(null);
@@ -146,13 +142,8 @@ export default function FloScreen() {
   const now = useMemo(() => new Date(), []);
   const today = localDateString(now);
 
-  useBackDismiss(Boolean(completePlan), () => setCompletePlan(null));
   useBackDismiss(Boolean(postponePlan), () => setPostponePlan(null));
   useBackDismiss(Boolean(lowerPlan), () => setLowerPlan(null));
-
-  useEffect(() => {
-    if (user && !floProLocked) void loadFloMemory(user.id).then(setSummary);
-  }, [floProLocked, user]);
 
   useEffect(() => {
     let cancelled = false;
@@ -246,9 +237,6 @@ export default function FloScreen() {
     const year = now.getFullYear();
     return categoryBudgetStorageKey(month, year, categoryBudgetScope);
   }, [categoryBudgetScope, today]);
-
-  const readCategoryBudgetsFromStorage = (month = now.getMonth(), year = now.getFullYear()) =>
-    readCategoryBudgetCache(month, year, categoryBudgetScope);
 
   useEffect(() => {
     let cancelled = false;
@@ -876,8 +864,6 @@ export default function FloScreen() {
       setReducePlanByMessageId(previous => ({ ...previous, [replyId]: reductionTarget }));
     }
     if (user) {
-      const nextSummary = `Recent topic: ${sanitizeFloSummary(clean).slice(0, 120)}`;
-      setSummary(nextSummary);
       void updateFloMemory(user.id, clean);
     }
   };
@@ -920,38 +906,6 @@ export default function FloScreen() {
   };
 
   const findDecision = (id: string) => decisions.find(decision => decision.id === id) ?? null;
-
-  const openCompletePlan = (id: string) => {
-    const decision = findDecision(id);
-    if (!decision) return;
-    setCompletePlan(decision);
-    setCompleteActual(String(Math.abs(decision.actual_amount ?? decision.scenario.amount)));
-  };
-
-  const completeSelectedPlan = async () => {
-    if (!completePlan) return;
-    const actual = Math.abs(Number(completeActual));
-    if (!Number.isFinite(actual)) return;
-    setHistoryActionState(previous => ({ ...previous, [completePlan.id]: "saving" }));
-    try {
-      await updateDecision({
-        ...completePlan,
-        status: "completed",
-        actual_amount: actual,
-        completed_at: new Date().toISOString(),
-        applied_change: { ...(completePlan.applied_change ?? {}), kind: "decision_follow_through", actualAmount: actual },
-      });
-      setCompletePlan(null);
-      setCompleteActual("");
-      setHistoryActionState(previous => {
-        const next = { ...previous };
-        delete next[completePlan.id];
-        return next;
-      });
-    } catch {
-      setHistoryActionState(previous => ({ ...previous, [completePlan.id]: "failed" }));
-    }
-  };
 
   const openPostponePlan = (id: string) => {
     const decision = findDecision(id);
@@ -1470,40 +1424,6 @@ export default function FloScreen() {
         ))}
       </ScrollView>
 
-      <Modal visible={!!completePlan} transparent animationType="slide" onRequestClose={() => setCompletePlan(null)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setCompletePlan(null)}>
-          <Pressable style={[styles.followSheet, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => {}}>
-            <View style={[styles.sheetHandle, { backgroundColor: colors.mutedForeground }]} />
-            <Text style={[styles.followTitle, { color: colors.foreground }]}>Mark completed</Text>
-            <Text style={[styles.followSub, { color: colors.mutedForeground }]}>
-              What was the actual amount for {completePlan?.name ?? "this plan"}?
-            </Text>
-            <View style={[styles.actualInputWrap, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-              <Text style={[styles.actualPrefix, { color: colors.mutedForeground }]}>$</Text>
-              <TextInput
-                value={completeActual}
-                onChangeText={setCompleteActual}
-                keyboardType="decimal-pad"
-                placeholder="0.00"
-                placeholderTextColor={colors.mutedForeground}
-                style={[styles.actualInput, { color: colors.foreground }]}
-              />
-            </View>
-            {completePlan && historyActionState[completePlan.id] === "failed" ? (
-              <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t update this plan. Try again.</Text>
-            ) : null}
-            <View style={styles.followActions}>
-              <Pressable onPress={() => setCompletePlan(null)} style={[styles.followButton, { backgroundColor: colors.muted }]}>
-                <Text style={[styles.followButtonText, { color: colors.mutedForeground }]}>Cancel</Text>
-              </Pressable>
-              <Pressable onPress={() => void completeSelectedPlan()} style={[styles.followButton, { backgroundColor: colors.success }]}>
-                <Text style={styles.followPrimaryText}>Save actual</Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
       <Modal visible={!!postponePlan} transparent animationType="slide" onRequestClose={() => setPostponePlan(null)}>
         <Pressable style={styles.modalOverlay} onPress={() => setPostponePlan(null)}>
           <Pressable style={[styles.followSheet, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => {}}>
@@ -1700,30 +1620,6 @@ const styles = StyleSheet.create({
   conversationContent: { paddingHorizontal: 18, paddingTop: 18, paddingBottom: 28, gap: 16 },
   loadOlderButton: { alignSelf: "center", minHeight: 36, borderRadius: 999, justifyContent: "center", paddingHorizontal: 14 },
   loadOlderText: { fontSize: 11, fontFamily: "Inter_700Bold" },
-  historyCard: { borderWidth: 1, borderRadius: 20, padding: 14, gap: 12 },
-  historyHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
-  historyIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  historyTitle: { fontSize: 17, fontFamily: "Inter_700Bold" },
-  historySub: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
-  historyStats: { flexDirection: "row", gap: 8 },
-  historyStat: { flex: 1, borderRadius: 12, backgroundColor: "rgba(148,163,184,0.10)", paddingVertical: 9, alignItems: "center" },
-  historyStatValue: { fontSize: 17, fontFamily: "Inter_700Bold" },
-  historyStatLabel: { color: "#94a3b8", fontSize: 10, fontFamily: "Inter_600SemiBold", marginTop: 2 },
-  historyEmpty: { fontSize: 12, lineHeight: 17, fontFamily: "Inter_400Regular" },
-  historySections: { gap: 10 },
-  historySection: { gap: 7 },
-  historySectionTitle: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.7 },
-  historyRow: { borderWidth: 1, borderRadius: 14, padding: 10, flexDirection: "row", gap: 9 },
-  historyStatusDot: { width: 9, height: 9, borderRadius: 5, marginTop: 5 },
-  historyRowBody: { flex: 1 },
-  historyRowTop: { flexDirection: "row", alignItems: "center", gap: 8 },
-  historyRowName: { flex: 1, fontSize: 13, fontFamily: "Inter_700Bold" },
-  historyDate: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
-  historyAmount: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_400Regular", marginTop: 2 },
-  historyVariance: { fontSize: 11, fontFamily: "Inter_700Bold", marginTop: 1 },
-  historyActions: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 9 },
-  historyActionButton: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
-  historyActionText: { fontSize: 11, fontFamily: "Inter_700Bold" },
   modalOverlay: { flex: 1, backgroundColor: "rgba(2,6,23,0.68)", justifyContent: "flex-end" },
   followSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, padding: 18, gap: 12 },
   sheetHandle: { alignSelf: "center", width: 48, height: 4, borderRadius: 999, opacity: 0.5, marginBottom: 4 },

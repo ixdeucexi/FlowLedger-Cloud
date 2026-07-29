@@ -135,15 +135,6 @@ function routeKeyFromSegments(segments: string[]) {
   return known?.route ?? "index";
 }
 
-function demoHintForRoute(routeName: string) {
-  if (routeName === "monthly") return "Monthly is the plan view. Tap a day to see the balance, bills, income, and decisions behind it.";
-  if (routeName === "bills") return "Bills is where obligations and debts live. Try the demo snowball and due-date tools.";
-  if (routeName === "transactions") return "Activity is the transaction trail. These are fake entries so you can explore safely.";
-  if (routeName === "flo") return "Ask Flo: “Can I afford $500 on July 15?” She will preview the decision before anything applies.";
-  if (routeName === "more") return "More is where settings, setup, accounts, imports, and app controls live.";
-  return "Dashboard shows the story at a glance: balance, lowest forecast, bills, debt, and what needs attention.";
-}
-
 function DemoModeBanner() {
   const colors = useColors();
   const router = useRouter();

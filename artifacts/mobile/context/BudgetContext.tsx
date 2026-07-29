@@ -43,7 +43,7 @@ import {
   type HouseholdRole,
 } from "@/lib/households";
 import { canEditHouseholdPlan, canManageHouseholdMembers } from "@/lib/householdPermissions";
-import { isActiveTransaction, isCashFlowTransaction, isCheckingBalanceTransaction, isCheckingForecastLedgerTransaction, isConfirmedBillMatch, isDeletedTransaction } from "@/lib/billMatching";
+import { isActiveTransaction, isConfirmedBillMatch, isDeletedTransaction } from "@/lib/billMatching";
 import { matchedOccurrenceAllocations, occurrenceKey, reviewedBillMonthSettlements } from "@/lib/reviewCenter";
 import { normalizePlanningTools } from "@/lib/planningMode";
 import { localDateString } from "@/lib/dateLabels";
@@ -1370,7 +1370,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!user || demoMode) return;
     const requestId = ++bankRefreshRequestRef.current;
     const uid = user.id;
-    let loadedAccounts: Account[] | null = null;
     const scope = householdScopeRef.current;
     const [transactionResult, pendingResult, accountResult, connectedAccountResult, settingsResult] = await Promise.all([
       applyHouseholdSelect(supabase.from("transactions").select("*"), uid),
@@ -1406,7 +1405,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         last_reconciled_at: a.last_reconciled_at ?? undefined,
         is_active: a.is_active !== false,
       }));
-      loadedAccounts = nextAccounts;
       accountsRef.current = nextAccounts;
       setAccounts(nextAccounts);
     }
@@ -3552,7 +3550,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const expenseToday = dayTxs.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0) + (debtExtrasByDay[day] ?? 0) + Math.max(0, -decisionNet);
       const billsToday   = billsByDay[day] ?? 0;
       const dayGoals     = goalsByDay[day] ?? [];
-      const goalTotal    = dayGoals.reduce((s, ge) => s + ge.amount, 0);
       const forecastDay = forecast.days[day - 1];
       const visibleEvents = visibleEventsByDate.get(forecastDay.date) ?? [];
       result.push({

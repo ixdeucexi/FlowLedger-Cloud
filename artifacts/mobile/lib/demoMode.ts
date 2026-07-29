@@ -26,7 +26,7 @@ export function enableDevDemoMode() {
   }
 }
 
-export function isDevDemoMode(hostname = globalThis.location?.hostname ?? "", authPreference = readDemoAuthPreference()): boolean {
+export function isDevDemoMode(_hostname = globalThis.location?.hostname ?? "", _authPreference = readDemoAuthPreference()): boolean {
   return false;
 }
 

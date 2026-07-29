@@ -59,7 +59,6 @@ function SnowballPlanScreen() {
     updateTransaction,
   } = useBudget();
   const today = localDateString();
-  const todayParts = dateParts(today);
   const firstUpcomingPlan = extraPayments
     .filter(payment => (payment.payment_date ?? "") >= today)
     .slice()

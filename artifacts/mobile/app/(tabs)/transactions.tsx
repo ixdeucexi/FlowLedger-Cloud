@@ -995,7 +995,6 @@ export function ActivityScreen() {
     if (!detailItem) return null;
     const meta      = SOURCE_META[detailItem.source];
     const isExpense = detailItem.amount < 0;
-    const catColor  = CAT_COLORS[detailItem.category] ?? c.primary;
 
     return (
       <Modal
@@ -1704,7 +1703,6 @@ const styles = StyleSheet.create({
   header:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 18, paddingBottom: 10 },
   title:    { fontSize: 30, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.9 },
   subtitle: { fontSize: 12, fontFamily: "Inter_500Medium", marginTop: 2, letterSpacing: 0.1 },
-  addBtn:   { width: 46, height: 46, borderRadius: 16, alignItems: "center", justifyContent: "center", shadowColor: "#2563eb", shadowOpacity: 0.28, shadowRadius: 14, shadowOffset: { width: 0, height: 7 }, elevation: 7 },
   reviewAlertButton: {
     width: 54,
     height: 54,
@@ -1747,10 +1745,6 @@ const styles = StyleSheet.create({
   monthlySummaryStat: { flex: 1, borderRadius: 14, backgroundColor: "rgba(15,23,42,0.42)", borderWidth: 1, paddingHorizontal: 10, paddingVertical: 9 },
   monthlySummaryValue: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
   monthlySummaryLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.5, marginTop: 2 },
-  weekRows: { borderTopWidth: 1, paddingTop: 8, gap: 5 },
-  weekRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  weekLabel: { fontSize: 12, fontFamily: "Inter_700Bold" },
-  weekValue: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   weekSummaryTrigger: { borderTopWidth: 1, paddingTop: 10, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   weekSummaryTitle: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   weekSummarySub: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2, lineHeight: 15 },

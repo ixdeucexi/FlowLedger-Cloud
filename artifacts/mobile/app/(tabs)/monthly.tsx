@@ -25,7 +25,7 @@ import type { Bill, BillDateMove, DecisionRecord, Goal, IncomeItem, Transaction 
 import { useBudget } from "@/context/BudgetContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
-import { confirmedBillMatchId, isCashFlowTransaction, isConfirmedBillMatch } from "@/lib/billMatching";
+import { confirmedBillMatchId, isConfirmedBillMatch } from "@/lib/billMatching";
 import { allocationLabel, groupPlannedExpenseAllocations, matchedOccurrenceAllocations, occurrenceKey, reviewSettlementSummary, transactionDisplayName } from "@/lib/reviewCenter";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
 import { buildDayForecastFloPrompt, groupForecastEvents } from "@/lib/forecastDisplay";
@@ -76,11 +76,6 @@ function isoDateForMonthDay(year: number, month: number, day: number) {
 function dayFromIsoDate(date: string) {
   const day = Number(date.slice(8, 10));
   return Number.isFinite(day) ? day : 1;
-}
-
-function money(amount: number, sign: "auto" | "none" = "none") {
-  const prefix = sign === "auto" && amount > 0 ? "+" : amount < 0 ? "-" : "";
-  return `${prefix}$${Math.abs(amount).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
 
 function debtSurplusTransactionImportHash(sourceDebtId: string, month: number, year: number) {
@@ -277,12 +272,6 @@ export default function MonthlyScreen() {
   const [editPlanDate, setEditPlanDate] = useState("");
   const [savingPlan, setSavingPlan] = useState(false);
   const [savingPaidKey, setSavingPaidKey] = useState<string | null>(null);
-  const [monthSummaryDetail, setMonthSummaryDetail] = useState<{
-    title: string;
-    value: string;
-    details: string[];
-    fallback: string;
-  } | null>(null);
   const [monthSearchVisible, setMonthSearchVisible] = useState(false);
   const [monthSearchQuery, setMonthSearchQuery] = useState("");
 
@@ -293,7 +282,6 @@ export default function MonthlyScreen() {
   });
   useBackDismiss(Boolean(dueDayPicker), () => setDueDayPicker(null));
   useBackDismiss(Boolean(incomeDatePicker), () => setIncomeDatePicker(null));
-  useBackDismiss(Boolean(monthSummaryDetail), () => setMonthSummaryDetail(null));
   useBackDismiss(Boolean(debtPaymentNotice), () => setDebtPaymentNotice(null));
   useBackDismiss(Boolean(editPlan), () => setEditPlan(null));
   useBackDismiss(showSnowballResults, () => setShowSnowballResults(false));
@@ -370,10 +358,6 @@ export default function MonthlyScreen() {
         setEditPlan(null);
         return true;
       }
-      if (monthSummaryDetail) {
-        setMonthSummaryDetail(null);
-        return true;
-      }
       if (dueDayPickerBill) {
         setDueDayPicker(null);
         return true;
@@ -418,7 +402,7 @@ export default function MonthlyScreen() {
     const onPopState = () => setSelectedDate(null);
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [debtPaymentNotice, dueDayPickerBill, editPlan, fullPaymentPrompt, incomeDatePicker, monthSummaryDetail, selectedDate, showSnowballResults, snowballModalVisible, snowballPreview, surplusPrompt, txModalVisible]);
+  }, [debtPaymentNotice, dueDayPickerBill, editPlan, fullPaymentPrompt, incomeDatePicker, selectedDate, showSnowballResults, snowballModalVisible, snowballPreview, surplusPrompt, txModalVisible]);
 
   const monthBills = useMemo(() => getMonthlyBills(month, selectedYear), [getMonthlyBills, month, selectedYear]);
 
@@ -462,7 +446,6 @@ export default function MonthlyScreen() {
   }), [txList]);
   const billOccurrenceMatches = useMemo(() => matchedOccurrenceAllocations(txList, "bill"), [txList]);
   const incomeOccurrenceMatches = useMemo(() => matchedOccurrenceAllocations(txList, "income"), [txList]);
-  const standaloneTxList = useMemo(() => txList.filter(isCashFlowTransaction), [txList]);
   const dailyBalances = useMemo(() => getDailyBalances(month, selectedYear), [getDailyBalances, month, selectedYear]);
   const incomeOccurrences = useMemo(() => {
     const occurrences = getIncomeOccurrencesInMonth(month, selectedYear);
@@ -479,83 +462,6 @@ export default function MonthlyScreen() {
     });
     return flat.sort((a, b) => a.day - b.day);
   }, [getIncomeOccurrencesInMonth, incomeOccurrenceMatches, month, selectedYear]);
-  const txIncome = standaloneTxList.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
-  const txExpense = standaloneTxList.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
-  const monthSummary = useMemo(() => {
-    const first = dailyBalances[0];
-    const last = dailyBalances[dailyBalances.length - 1];
-    const starting = first ? first.balance - first.net : settings.starting_balance;
-    const ending = last?.balance ?? starting;
-    const lowestDay = dailyBalances.reduce((low, day) => !low || day.balance < low.balance ? day : low, undefined as typeof dailyBalances[number] | undefined);
-    const allEvents = dailyBalances.flatMap(day => (day.events ?? []).map(event => ({ ...event, day: day.day })));
-    const scheduledIncome = dailyBalances.reduce((sum, day) => sum + day.scheduledIncome, 0);
-    const scheduledBills = dailyBalances.reduce((sum, day) => sum + day.bills, 0);
-    const planned = allEvents
-      .filter(event => event.sourceType === "decision")
-      .reduce((sum, event) => sum + event.amount, 0);
-    const debtExtras = allEvents
-      .filter(event => event.sourceType === "extra_payment" || event.kind === "debt_payment")
-      .reduce((sum, event) => sum + event.amount, 0);
-    const detailsFor = (predicate: (event: typeof allEvents[number]) => boolean) =>
-      allEvents
-        .filter(predicate)
-        .sort((a, b) => a.day - b.day || Math.abs(b.amount) - Math.abs(a.amount))
-        .slice(0, 10)
-        .map(event => `${MONTH_FULL[month]} ${event.day}: ${event.name || event.kind} ${money(event.amount, "auto")}`);
-    return {
-      starting,
-      ending,
-      lowest: lowestDay?.balance ?? ending,
-      lowestDay: lowestDay?.day,
-      income: scheduledIncome + txIncome,
-      bills: scheduledBills,
-      transactions: txIncome - txExpense,
-      planned,
-      debtExtras,
-      details: {
-        income: [
-          ...detailsFor(event => event.sourceType === "income" || event.kind === "scheduled_income"),
-          ...standaloneTxList.filter(tx => tx.amount > 0).slice(0, 10).map(tx => `${formatShortDate(tx.date)}: ${tx.note || tx.category} ${money(tx.amount, "auto")}`),
-        ],
-        bills: detailsFor(event => event.sourceType === "bill" || event.kind === "bill"),
-        transactions: standaloneTxList.slice(0, 10).map(tx => `${formatShortDate(tx.date)}: ${tx.note || tx.category} ${money(tx.amount, "auto")}`),
-        planned: detailsFor(event => event.sourceType === "decision"),
-        debtExtras: detailsFor(event => event.sourceType === "extra_payment" || event.kind === "debt_payment"),
-      },
-    };
-  }, [dailyBalances, month, settings.starting_balance, standaloneTxList, txIncome, txExpense]);
-
-  const monthWatchInsight = useMemo(() => {
-    if (!monthSummary.lowestDay || monthSummary.lowest >= settings.safety_floor) return null;
-    const eventsBeforeLow = dailyBalances
-      .filter(day => day.day <= (monthSummary.lowestDay ?? 0))
-      .flatMap(day => (day.events ?? []).map(event => ({ ...event, day: day.day })));
-    const biggestOutflows = eventsBeforeLow
-      .filter(event => event.amount < -0.005)
-      .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
-      .slice(0, 3)
-      .map(event => `${event.name || event.kind} ${money(event.amount, "auto")} on ${MONTH_FULL[month]} ${event.day}, ${selectedYear}`);
-    const reason = biggestOutflows.length
-      ? `${MONTH_FULL[month]} drops to ${money(monthSummary.lowest)} on ${MONTH_FULL[month]} ${monthSummary.lowestDay} after ${biggestOutflows.join(", ")}.`
-      : `${MONTH_FULL[month]} drops to ${money(monthSummary.lowest)} on ${MONTH_FULL[month]} ${monthSummary.lowestDay}, below your ${money(settings.safety_floor)} safety floor.`;
-    const prompt = `${reason} What should I fix first? Preview safer options like moving a flexible bill, lowering a planned decision, or keeping more cash above my safety floor.`;
-    return { reason, prompt };
-  }, [dailyBalances, month, monthSummary.lowest, monthSummary.lowestDay, settings.safety_floor]);
-
-  const askFloAboutMonthWatch = useCallback(() => {
-    if (!monthWatchInsight) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    router.push({
-      pathname: "/(tabs)/flo",
-      params: { prompt: monthWatchInsight.prompt },
-    } as never);
-  }, [monthWatchInsight, router]);
-
-  const showMonthSummaryDetail = useCallback((title: string, value: string, details: string[], fallback: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setMonthSummaryDetail({ title, value, details, fallback });
-  }, []);
-
   const selectedDay = selectedDate ? parseInt(selectedDate.split("-")[2]) : null;
   const selectedForecastDay = selectedDay === null ? undefined : dailyBalances.find(item => item.day === selectedDay);
   const selectedForecastGroups = useMemo(
@@ -914,31 +820,6 @@ export default function MonthlyScreen() {
     }
     await matchSurplusAmountToActual(surplusPrompt);
     setSurplusPrompt(null);
-  };
-
-  const askToMatchBillAmountToPaid = (prompt: { bill: Bill; budgeted: number; actual: number }) => {
-    const { bill, budgeted, actual } = prompt;
-    if (bill.is_debt || bill.frequency === "weekly" || Math.abs(budgeted - actual) < 0.005) return;
-    const currentMonthLabel = `${MONTH_FULL[month]} ${selectedYear}`;
-    const showPrompt = () => Alert.alert(
-      "Update bill amount?",
-      `${bill.name} was paid at $${actual.toFixed(2)}. Update ${currentMonthLabel}'s bill amount to $${actual.toFixed(2)} so it shows paid with $0 left?`,
-      [
-        { text: `Keep $${budgeted.toFixed(2)}`, style: "cancel" },
-        {
-          text: `Update to $${actual.toFixed(2)}`,
-          onPress: async () => {
-            try {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              await setCustomAmount(bill.id, month, selectedYear, Math.abs(actual - bill.amount) < 0.005 ? undefined : actual);
-            } catch (error) {
-              Alert.alert("Couldn’t update amount", error instanceof Error ? error.message : "Please try again.");
-            }
-          },
-        },
-      ],
-    );
-    setTimeout(showPrompt, Platform.OS === "web" ? 0 : 250);
   };
 
   const addBillSurplusToSnowball = async () => {
@@ -1619,7 +1500,6 @@ export default function MonthlyScreen() {
               const borderColor = isPaid ? c.success : isPartial ? c.warning : c.destructive;
               const amtKey = `${bill.id}-${month}-${selectedYear}-amt`;
               const paidKey = `${bill.id}-${month}-${selectedYear}-paid`;
-              const dayKey = `${bill.id}-${month}-${selectedYear}-day`;
               const isWeekly = bill.frequency === "weekly";
               const occCount = isWeekly ? Math.round(amount / (perOccurrence || 1)) : 1;
               // For weekly bills: the TextInput edits the per-occurrence (weekly) amount
@@ -2675,36 +2555,6 @@ export default function MonthlyScreen() {
         onClose={() => setDebtPaymentNotice(null)}
       />
       <Modal
-        visible={monthSummaryDetail !== null}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setMonthSummaryDetail(null)}
-      >
-        <Pressable style={styles.pickerOverlay} onPress={() => setMonthSummaryDetail(null)}>
-          <Pressable style={[styles.pickerSheet, { backgroundColor: c.background }]} onPress={e => e.stopPropagation()}>
-            <View style={styles.pickerHandle} />
-            <View style={styles.pickerHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.pickerTitle, { color: c.foreground }]}>{monthSummaryDetail?.title ?? "Month detail"}</Text>
-                <Text style={[styles.monthDetailTotal, { color: c.primary }]}>Total: {monthSummaryDetail?.value ?? "$0"}</Text>
-              </View>
-              <Pressable onPress={() => setMonthSummaryDetail(null)} hitSlop={8}>
-                <Feather name="x" size={20} color={c.mutedForeground} />
-              </Pressable>
-            </View>
-
-            <ScrollView style={styles.monthDetailList} showsVerticalScrollIndicator={false}>
-              {(monthSummaryDetail?.details.length ? monthSummaryDetail.details : [monthSummaryDetail?.fallback ?? "No details available."]).map((detail, index) => (
-                <View key={`${detail}-${index}`} style={[styles.monthDetailRow, { backgroundColor: c.card, borderColor: c.border }]}>
-                  <View style={[styles.monthDetailDot, { backgroundColor: c.primary }]} />
-                  <Text style={[styles.monthDetailText, { color: c.foreground }]}>{detail}</Text>
-                </View>
-              ))}
-            </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
-      <Modal
         visible={editPlan !== null}
         animationType="slide"
         transparent
@@ -2850,17 +2700,14 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 22, paddingBottom: 10 },
   calendarBrand: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 2.2, marginBottom: 3, textTransform: "uppercase" },
   calendarScreenLabel: { fontSize: 28, fontFamily: "Inter_700Bold", letterSpacing: -0.8 },
-  title: { fontSize: 36, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.2, textShadowColor: "rgba(34,211,238,0.22)", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 12 },
   forecastTag: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginTop: 1 },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 10 },
   todayChip: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", borderWidth: 2 },
   todayChipText: { fontSize: 17, fontFamily: "Inter_800ExtraBold", lineHeight: 20 },
-  iconBtn: { width: 54, height: 54, borderRadius: 20, alignItems: "center", justifyContent: "center", shadowColor: "#8b5cf6", shadowOpacity: 0.46, shadowRadius: 22, shadowOffset: { width: 0, height: 10 }, elevation: 10, borderWidth: 1, borderColor: "rgba(34,211,238,0.28)" },
   calendarMonthBar: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginHorizontal: 22, marginTop: 0, marginBottom: 12, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", backgroundColor: "rgba(2,6,23,0.32)", borderRadius: 24, paddingHorizontal: 8, paddingVertical: 10 },
   monthArrowBtn: { width: 46, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: "rgba(15,23,42,0.58)" },
   monthCenterLabel: { flex: 1, minHeight: 42, alignItems: "center", justifyContent: "center", borderRadius: 18 },
   monthCenterPressed: { opacity: 0.72, transform: [{ scale: 0.985 }] },
-  monthTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   monthShortTitle: { fontSize: 28, fontFamily: "Inter_800ExtraBold", letterSpacing: 2.8 },
   monthSwipeHint: { fontSize: 10, fontFamily: "Inter_500Medium", marginTop: 1 },
   monthSearchBackdrop: { flex: 1, backgroundColor: "rgba(2,6,23,0.72)", justifyContent: "center", paddingHorizontal: 22 },
@@ -2878,9 +2725,6 @@ const styles = StyleSheet.create({
   monthSearchOption: { width: "30.9%", minHeight: 72, borderRadius: 18, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 10, justifyContent: "center" },
   monthSearchOptionShort: { fontSize: 18, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.4 },
   monthSearchOptionName: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginTop: 4 },
-  tabBar: { flexDirection: "row", padding: 4, gap: 4 },
-  tabBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 9 },
-  tabBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   summaryRow: { flexDirection: "row", padding: 12 },
   zeroBudgetMonthlyLink: { marginHorizontal: 16, marginTop: 8, borderWidth: 1, borderRadius: 14, padding: 11, flexDirection: "row", alignItems: "center", gap: 10 },
   zeroBudgetMonthlyIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" },
@@ -2928,48 +2772,10 @@ const styles = StyleSheet.create({
   debtNoteText: { fontSize: 11, fontFamily: "Inter_400Regular" },
   dueDayRow: { flexDirection: "row", alignItems: "center", marginHorizontal: 12, marginBottom: 10 },
   dueDayInput: { width: 42, height: 30, borderRadius: 6, textAlign: "center", fontSize: 14, fontFamily: "Inter_600SemiBold", borderWidth: 1 },
-  calScroll: { paddingTop: 8 },
   calFixed: { flex: 1, paddingTop: 8 },
   calInner: { flex: 1, paddingHorizontal: 12 },
   weeklyChip: { flexDirection: "row", alignItems: "center", gap: 5, marginHorizontal: 12, marginTop: 2, marginBottom: 6, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   weeklyChipText: { fontSize: 11, fontFamily: "Inter_500Medium" },
-  balanceBar: { flexDirection: "row", padding: 12, marginBottom: 0 },
-  balanceBarItem: { flex: 1, alignItems: "center" },
-  balanceBarLabel: { fontSize: 10, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 },
-  balanceBarValue: { fontSize: 15, fontFamily: "Inter_700Bold" },
-  monthControlCard: { borderWidth: 1, borderRadius: 16, padding: 12, marginBottom: 10 },
-  monthControlHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 10 },
-  monthControlTitle: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
-  monthControlSubtitle: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
-  monthControlBadge: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
-  monthControlBadgeText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
-  monthSummaryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  monthSummaryTile: { width: "48.5%", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 9, minHeight: 58, justifyContent: "center" },
-  monthSummaryLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.55, marginBottom: 4 },
-  monthSummaryValue: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
-  monthWatchCard: { borderWidth: 1, borderRadius: 14, padding: 12, marginTop: 10 },
-  monthWatchHeader: { flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 6 },
-  monthWatchTitle: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
-  monthWatchText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
-  askFloFixButton: { marginTop: 10, minHeight: 42, borderRadius: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
-  askFloFixText: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
-  txSummary: { flexDirection: "row", padding: 12, marginBottom: 10 },
-  txSumItem: { flex: 1, alignItems: "center" },
-  txSumLabel: { fontSize: 10, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 },
-  txSumValue: { fontSize: 15, fontFamily: "Inter_700Bold" },
-  txListHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8, marginTop: 4 },
-  lowBalanceCard: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 10 },
-  lowBalanceTitle: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
-  lowBalanceText: { fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 16, marginTop: 2 },
-  forecastExplanation: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 10 },
-  forecastExplanationHeader: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginBottom: 6 },
-  forecastExplanationTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  forecastExplanationSub: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
-  forecastGroup: { paddingTop: 6 },
-  forecastGroupTitle: { fontSize: 11, fontFamily: "Inter_700Bold", marginBottom: 2 },
-  forecastSourceRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 5 },
-  forecastSourceName: { flex: 1, fontSize: 11, fontFamily: "Inter_400Regular" },
-  forecastSourceAmount: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   dayOverlayBackdrop: { flex: 1, justifyContent: "center", padding: 18, backgroundColor: "rgba(0,0,0,0.64)" },
   dayOverlayCard: {
     width: "100%",
@@ -2996,8 +2802,6 @@ const styles = StyleSheet.create({
   dayOverlayRiskText: { flex: 1, fontSize: 12, fontFamily: "Inter_600SemiBold" },
   dayOverlaySection: { borderWidth: 1, borderRadius: 18, padding: 12, gap: 8 },
   dayOverlaySectionTitle: { fontSize: 14, fontFamily: "Inter_700Bold", marginBottom: 2 },
-  dayOverlayGroup: { gap: 5 },
-  dayOverlayGroupTitle: { fontSize: 11, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.6 },
   dayOverlayRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: 30 },
   dayOverlayRowMain: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   dayOverlayDeleteButton: { width: 30, height: 30, borderRadius: 999, alignItems: "center", justifyContent: "center" },
@@ -3030,32 +2834,12 @@ const styles = StyleSheet.create({
   dayOverlayActions: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 14 },
   dayOverlayAskPill: { flex: 1, minHeight: 50, borderWidth: 1, borderRadius: 25, alignItems: "center", justifyContent: "center", paddingHorizontal: 14, flexDirection: "row", gap: 6 },
   dayOverlayAskText: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
-  dayOverlayFab: { width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
-  txListTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-  sectionLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.8, marginHorizontal: 16, marginTop: 10, marginBottom: 4 },
-  txRow: { flexDirection: "row", alignItems: "center", marginBottom: 7, overflow: "hidden" },
-  txMain: { flex: 1, flexDirection: "row", alignItems: "center", padding: 11 },
-  txIcon: { width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", marginRight: 10 },
-  txBody: { flex: 1 },
-  txNote: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-  txDate: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
-  txRescheduleHint: { fontSize: 10, fontFamily: "Inter_400Regular", marginTop: 2 },
-  txMovedHint: { fontSize: 10, fontFamily: "Inter_700Bold", marginTop: 2 },
-  txAmt: { fontSize: 14, fontFamily: "Inter_700Bold", marginLeft: 8 },
-  txDelete: { paddingHorizontal: 14, paddingVertical: 11 },
-  restoreMoveButton: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7, marginLeft: 8 },
-  restoreMoveText: { fontSize: 11, fontFamily: "Inter_700Bold" },
   pickerOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.55)" },
   pickerSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 36 },
   pickerHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#555", alignSelf: "center", marginBottom: 16 },
   pickerHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 },
   pickerTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
   pickerSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
-  monthDetailTotal: { fontSize: 22, fontFamily: "Inter_800ExtraBold", marginTop: 6 },
-  monthDetailList: { maxHeight: 360 },
-  monthDetailRow: { flexDirection: "row", alignItems: "flex-start", gap: 9, borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 8 },
-  monthDetailDot: { width: 8, height: 8, borderRadius: 4, marginTop: 5 },
-  monthDetailText: { flex: 1, fontSize: 13, fontFamily: "Inter_500Medium", lineHeight: 18 },
   pickerLabel: { fontSize: 11, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 12 },
   pickerCalDowRow: { flexDirection: "row", marginBottom: 4 },
   pickerCalDowLabel: { width: "14.285714%", textAlign: "center", fontSize: 11, fontFamily: "Inter_600SemiBold" },

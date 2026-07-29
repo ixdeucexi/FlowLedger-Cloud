@@ -85,7 +85,6 @@ import {
   type FeedbackAdminFilter,
   type FeedbackManagementAction,
   type FeedbackType,
-  FEEDBACK_STATUSES,
   FEEDBACK_TYPES,
   canSubmitFeedback,
   feedbackStatusLabel,
@@ -236,24 +235,6 @@ function formatActivityTime(value: string) {
   return date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
 }
 
-function formatReviewDate(value?: string | null) {
-  if (!value) return "No date";
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
-}
-
-function formatSignedMoney(value: number) {
-  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
-  return `${sign}$${Math.abs(value).toFixed(2)}`;
-}
-
-function reviewMoneyLabel(value: number) {
-  if (value > 0) return "Money in";
-  if (value < 0) return "Money out";
-  return "No money impact";
-}
-
 const SUBSCRIPTION_BILL_WORDS = [
   "subscription",
   "netflix",
@@ -309,7 +290,6 @@ export default function MoreScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const { width: viewportWidth } = useWindowDimensions();
-  const useStackedSettingsFields = viewportWidth < 480;
   const stackCompactAccountControls = shouldStackAccountControls(viewportWidth);
   const forecastSafetyLayout = useMemo(() => getForecastSafetyLayout(viewportWidth), [viewportWidth]);
   const router = useRouter();
@@ -320,7 +300,7 @@ export default function MoreScreen() {
     fontStyle,
     setFontStyle,
   } = useThemeMode();
-  const { signOut, user, session, loading: authLoading } = useAuth();
+  const { signOut, user } = useAuth();
   const { newFeedbackCount, refreshFeedbackCount } = useFeedbackBadge();
   const {
     effectiveTier,
@@ -330,12 +310,12 @@ export default function MoreScreen() {
   } = useMembership();
   const {
     bills, transactions, deletedTransactions, overrides, incomes, goals, importBills, settings, updateSettings, accounts, forecastConfidence,
-    addBill, updateBill,
-    addTransaction, updateTransaction, deleteTransaction,
-    addGoal, updateGoal,
+    addBill,
+    addTransaction,
+    updateGoal,
     addIncome, updateIncome, deleteIncome, getMonthlyIncome,
     categories, addCategory, updateCategory, deleteCategory,
-    addAccount, updateAccount, reconcileAccount, archiveAccount, importStatementTransactions,
+    addAccount, updateAccount, reconcileAccount, importStatementTransactions,
     households, householdMembers, householdActivity, activeHousehold, householdRole, canEditHousehold,
     refreshHouseholds, refreshHouseholdActivity, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
     updateHouseholdMemberRole, removeHouseholdMember, leaveActiveHousehold,
@@ -392,7 +372,6 @@ export default function MoreScreen() {
   const [managedFeedback, setManagedFeedback] = useState<AppFeedbackRow | null>(null);
   const [feedbackManageBusy, setFeedbackManageBusy] = useState(false);
   const [subscriptionDecisions, setSubscriptionDecisions] = useState<Record<string, SubscriptionDecision>>({});
-  const [growthNotice, setGrowthNotice] = useState<string | null>(null);
   const [backupExported, setBackupExported] = useState(() => {
     try { return Platform.OS === "web" && globalThis.localStorage?.getItem(BACKUP_COMPLETE_KEY) === "true"; }
     catch { return false; }
@@ -1028,7 +1007,6 @@ export default function MoreScreen() {
             frequency: subscription.cadence === "weekly" ? "weekly" : "monthly",
           });
           await markSubscriptionDecision(subscription, "bill_created");
-          setGrowthNotice("Subscription bill created.");
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (error) {
           Alert.alert("Couldn’t create bill", error instanceof Error ? error.message : "Try again.");
@@ -1040,11 +1018,6 @@ export default function MoreScreen() {
 
   const handleMarkSubscription = (subscription: SubscriptionCandidate, decision: SubscriptionDecision) => {
     void markSubscriptionDecision(subscription, decision);
-    setGrowthNotice(
-      decision === "keep" ? "Subscription kept on the review list." :
-      decision === "cancelled" ? "Marked as cancelled. Stop future bills if this is already scheduled." :
-      "Marked as not a subscription.",
-    );
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
@@ -1074,7 +1047,6 @@ export default function MoreScreen() {
             ...goal,
             current_amount: Math.min(goal.target_amount, goal.current_amount + contribution),
           });
-          setGrowthNotice("Goal contribution added.");
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (error) {
           Alert.alert("Couldn’t fund goal", error instanceof Error ? error.message : "Try again.");
@@ -2218,133 +2190,6 @@ export default function MoreScreen() {
       <PlanFeatureGate feature="transaction_matching" compact>
         <ReviewCenter key={activeHousehold?.householdId ?? activeHousehold?.budgetId ?? "personal"} />
       </PlanFeatureGate>
-      {/* Legacy rules-based Review Center removed. Data remains in Supabase for rollback.
-      <SLabel c={c} text="Forecast Readiness" />
-      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        <View style={styles.growthHeaderRow}>
-          <View style={[styles.growthScoreBubble, { backgroundColor: forecastReadiness.score >= 80 ? c.success + "18" : c.warning + "18" }]}>
-            <Text style={[styles.growthScoreText, { color: forecastReadiness.score >= 80 ? c.success : c.warning }]}>{forecastReadiness.score}%</Text>
-          </View>
-          <View style={styles.growthHeaderCopy}>
-            <Text style={[styles.switchLabel, { color: c.foreground }]}>{forecastReadiness.nextStep}</Text>
-            <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>{forecastReadiness.whyItMatters}</Text>
-          </View>
-        </View>
-        <View style={[styles.setupProgressTrack, { backgroundColor: c.muted, marginTop: 14 }]}>
-          <View style={[styles.setupProgressFill, { backgroundColor: c.primary, width: `${forecastReadiness.score}%` as any }]} />
-        </View>
-        <Text style={[styles.dataDesc, { color: c.mutedForeground, marginTop: 10 }]}>
-          Missing: {forecastReadiness.missing.length ? forecastReadiness.missing.join(", ") : "Nothing major — your forecast is ready."}
-        </Text>
-      </View>
-      </>}
-
-      <PlanFeatureGate feature="connected_insights" compact>
-      <SLabel c={c} text="Transaction Review Queue" />
-      <View style={[styles.card, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-        <View style={[styles.priorityNote, { backgroundColor: c.primary + "12", borderRadius: 10, marginTop: 0, marginBottom: 12 }]}>
-          <Feather name="inbox" size={14} color={c.primary} />
-          <Text style={[styles.priorityNoteText, { color: c.mutedForeground }]}>
-            This is your money inbox. I’ll put transactions here when I should not guess — duplicates, imports, unusual amounts, unclear categories, possible bills, or household edits.
-          </Text>
-        </View>
-        {growthNotice ? <Text style={[styles.feedbackNotice, { color: c.success }]}>{growthNotice}</Text> : null}
-        <View style={[styles.growthMetricGrid, shouldStackSettingsMetrics(viewportWidth) && styles.growthMetricGridCompact]}>
-          <View style={[styles.growthMetric, { backgroundColor: c.muted }]}>
-            <Text style={[styles.growthMetricValue, { color: c.primary }]}>{reviewTransactions.length}</Text>
-            <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>Items to check</Text>
-          </View>
-          <View style={[styles.growthMetric, { backgroundColor: c.muted }]}>
-            <Text style={[styles.growthMetricValue, { color: c.destructive }]}>${reviewImpactSummary.moneyOut.toFixed(0)}</Text>
-            <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>Money out</Text>
-          </View>
-          <View style={[styles.growthMetric, { backgroundColor: c.muted }]}>
-            <Text style={[styles.growthMetricValue, { color: c.success }]}>${reviewImpactSummary.moneyIn.toFixed(0)}</Text>
-            <Text style={[styles.growthMetricLabel, { color: c.mutedForeground }]}>Money in</Text>
-          </View>
-        </View>
-        <Text style={[styles.reviewSummaryLine, { color: c.mutedForeground }]}>
-          Net impact: <Text style={{ color: reviewImpactSummary.net >= 0 ? c.success : c.destructive }}>{formatSignedMoney(reviewImpactSummary.net)}</Text>
-          {"  •  "}
-          {transactionRules.length} saved {transactionRules.length === 1 ? "rule" : "rules"}
-        </Text>
-        {transactionRules.length ? (
-          <Pressable
-            onPress={() => void handleApplySavedRules()}
-            style={({ pressed }) => [styles.balanceSaveFullBtn, { backgroundColor: c.primary, opacity: pressed ? 0.78 : 1, marginTop: 12 }]}
-          >
-            <Feather name="zap" size={15} color={c.primaryForeground} />
-            <Text style={[styles.balanceSaveBtnText, { color: c.primaryForeground }]}>Apply Saved Rules</Text>
-          </Pressable>
-        ) : null}
-        {reviewTransactions.slice(0, 8).map(({ item, transaction }, index) => (
-          <View key={item.transactionId} style={[styles.growthListRow, { borderTopWidth: index ? 1 : 0, borderTopColor: c.border }]}>
-            <View style={[styles.dataIcon, { backgroundColor: item.priority === "high" ? c.destructive + "18" : c.primary + "18" }]}>
-              <Feather name={item.priority === "high" ? "alert-triangle" : "check-square"} size={17} color={item.priority === "high" ? c.destructive : c.primary} />
-            </View>
-            <View style={styles.dataBody}>
-              <View style={styles.reviewItemTitleRow}>
-                <Text style={[styles.dataLabel, { color: c.foreground, flex: 1 }]} numberOfLines={1}>{transaction?.description ?? "Transaction"}</Text>
-                <Text style={[styles.reviewItemAmount, { color: (transaction?.amount ?? 0) >= 0 ? c.success : c.destructive }]}>
-                  {formatSignedMoney(transaction?.amount ?? 0)}
-                </Text>
-              </View>
-              <Text style={[styles.reviewItemMeta, { color: c.mutedForeground }]}>
-                {formatReviewDate(transaction?.date)} • {reviewMoneyLabel(transaction?.amount ?? 0)} • {transaction?.category || "Uncategorized"}
-              </Text>
-              <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>{item.summary}</Text>
-              <Text style={[styles.growthTinyText, { color: c.mutedForeground }]}>{item.reasons.map(reason => reason.replace(/_/g, " ")).join(" • ")}</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.growthActionRow}>
-                {categories.slice(0, 5).map(category => (
-                  <Pressable
-                    key={`${item.transactionId}-${category}`}
-                    onPress={() => void handleCategorizeReview(item.transactionId, category)}
-                    style={({ pressed }) => [styles.growthPillButton, { backgroundColor: c.muted, borderColor: c.border, opacity: pressed ? 0.72 : 1 }]}
-                  >
-                    <Text style={[styles.growthPillButtonText, { color: c.mutedForeground }]}>{category}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
-            <View style={styles.reviewActionStack}>
-              <Pressable
-                onPress={() => handleApproveReview(item.transactionId)}
-                style={({ pressed }) => [styles.growthSmallButton, { backgroundColor: c.success + "18", opacity: pressed ? 0.72 : 1 }]}
-              >
-                <Text style={[styles.growthSmallButtonText, { color: c.success }]}>Approve</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => handleCreateRuleFromReview(item.transactionId)}
-                style={({ pressed }) => [styles.growthSmallButton, { backgroundColor: c.primary + "18", opacity: pressed ? 0.72 : 1 }]}
-              >
-                <Text style={[styles.growthSmallButtonText, { color: c.primary }]}>Rule</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => handleIgnoreReview(item.transactionId)}
-                style={({ pressed }) => [styles.growthSmallButton, { backgroundColor: c.muted, opacity: pressed ? 0.72 : 1 }]}
-              >
-                <Text style={[styles.growthSmallButtonText, { color: c.mutedForeground }]}>Ignore</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => handleDeleteReviewTransaction(item.transactionId, transaction?.description ?? "Transaction")}
-                style={({ pressed }) => [styles.growthSmallButton, { backgroundColor: c.destructive + "14", opacity: pressed ? 0.72 : 1 }]}
-              >
-                <Text style={[styles.growthSmallButtonText, { color: c.destructive }]}>Delete</Text>
-              </Pressable>
-            </View>
-          </View>
-        ))}
-        {!reviewTransactions.length && (
-          <View style={[styles.priorityNote, { backgroundColor: c.success + "12", borderRadius: 10, marginTop: 12 }]}>
-            <Feather name="check-circle" size={14} color={c.success} />
-            <Text style={[styles.priorityNoteText, { color: c.mutedForeground }]}>
-              You’re caught up. When FlowLedger sees a transaction that needs your decision, it will show here with approve, categorize, rule, ignore, or delete options.
-            </Text>
-          </View>
-        )}
-      </View>
-      </PlanFeatureGate>
-      */}
       </>}
 
       {activeSettingsSection === "subscriptions" && <>
@@ -3105,8 +2950,6 @@ const styles = StyleSheet.create({
   accountRight: { alignItems: "flex-end", gap: 3 },
   accountRightCompact: { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   reconcileText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
-  setupHeader: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
-  setupStep: { flexDirection: "row", alignItems: "center", gap: 9, paddingVertical: 5 },
   floSetupHero: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 16, padding: 12, marginBottom: 12 },
   floSetupTitle: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
   floSetupDesc: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 3 },
@@ -3153,33 +2996,18 @@ const styles = StyleSheet.create({
   priorityNote: { flexDirection: "row", alignItems: "center", gap: 8, padding: 10, marginTop: 10 },
   priorityNoteText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
 
-  growthHeaderRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  growthScoreBubble: { width: 56, height: 56, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  growthScoreText: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
-  growthHeaderCopy: { flex: 1, gap: 4 },
   growthMetricGrid: { flexDirection: "row", gap: 10, marginBottom: 12 },
   growthMetricGridCompact: { flexDirection: "column" },
   growthMetric: { flex: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 11 },
   growthMetricValue: { fontSize: 18, fontFamily: "Inter_800ExtraBold" },
   growthMetricLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7, marginTop: 2, textTransform: "uppercase" },
-  reviewSummaryLine: { fontSize: 12, fontFamily: "Inter_700Bold", lineHeight: 17, marginTop: -2, marginBottom: 8 },
   growthListRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12 },
   growthTinyText: { fontSize: 11, fontFamily: "Inter_500Medium", lineHeight: 15, marginTop: 3 },
-  growthSmallButton: { borderRadius: 999, paddingHorizontal: 11, paddingVertical: 7 },
   growthSmallButtonText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
-  growthActionRow: { paddingTop: 8, paddingRight: 8, gap: 8 },
   growthPillButton: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
   growthPillButtonText: { fontSize: 12, fontFamily: "Inter_700Bold" },
-  reviewItemTitleRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  reviewItemAmount: { fontSize: 15, fontFamily: "Inter_800ExtraBold" },
-  reviewItemMeta: { fontSize: 11, fontFamily: "Inter_700Bold", lineHeight: 15, marginTop: 2 },
-  reviewActionStack: { alignItems: "flex-end", gap: 6, marginLeft: 8 },
   subscriptionActionRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
   growthInlineButton: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7, marginTop: 8 },
-  formRowStacked: { flexDirection: "column" },
-  formInputStacked: { flex: 0, width: "100%" },
-
-  switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   switchInfo: { flex: 1, marginRight: 12 },
   switchLabel: { fontSize: 15, fontFamily: "Inter_500Medium" },
   switchDesc: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
@@ -3193,18 +3021,15 @@ const styles = StyleSheet.create({
   infoDoneButton: { alignItems: "center", justifyContent: "center", minHeight: 46, borderRadius: 14, marginTop: 16 },
   infoDoneText: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   balanceDivider: { borderTopWidth: 1, marginTop: 14, paddingTop: 14 },
-  balanceHeader: { marginBottom: 10 },
   balanceFieldLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 6 },
   balanceFullInput: { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 16, fontFamily: "Inter_400Regular" },
   balanceSaveFullBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 44, borderRadius: 10, marginTop: 12 },
   balanceSaveBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-  balanceNote: { flexDirection: "row", alignItems: "flex-start", gap: 6, padding: 9, borderRadius: 8, marginTop: 10 },
   dataRow: { flexDirection: "row", alignItems: "center", paddingVertical: 13 },
   dataIcon: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center", marginRight: 12 },
   dataBody: { flex: 1 },
   dataLabel: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
   dataDesc: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
-  dataHealthRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, paddingVertical: 11 },
   feedbackHero: { flexDirection: "row", alignItems: "flex-start", marginBottom: 12 },
   feedbackChipGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
   feedbackChip: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 8 },
@@ -3236,10 +3061,6 @@ const styles = StyleSheet.create({
   feedbackReply: { borderWidth: 1, borderRadius: 13, padding: 11, marginTop: 10 },
   feedbackReplyText: { fontSize: 13, lineHeight: 19, fontFamily: "Inter_600SemiBold", marginTop: 5 },
 
-  summaryCard: { flexDirection: "row", justifyContent: "space-around", padding: 16, marginBottom: 8 },
-  summaryItem: { alignItems: "center" },
-  summaryNum: { fontSize: 24, fontFamily: "Inter_700Bold" },
-  summaryLabel: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
 
 });
 
