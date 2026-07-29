@@ -248,12 +248,15 @@ export function CalendarView({
               label: `${snowballPaymentName(transaction)} -$${fmt(transaction.amount)}`,
               kind: "debt",
             }));
-          plannedExpenseGroups.slice(0, 2).forEach(group => chips.push({ label: group.name, kind: "expense" }));
+          plannedExpenseGroups.slice(0, 2).forEach(group => chips.push({ label: group.name, kind: "plan" }));
           ordinaryDayTxs.filter(tx => tx.amount < 0 && tx.review_status !== "transfer").slice(0, 2).forEach(tx => chips.push({
             label: `${allocationLabel(tx) || tx.note || tx.category} -$${fmt(tx.amount)}`,
             kind: isConfirmedBillMatch(tx) ? "bill" : "expense",
           }));
-          ungroupedCalendarGoals.slice(0, 2).forEach(goal => chips.push({ label: goal.name, kind: "goal" }));
+          ungroupedCalendarGoals.slice(0, 2).forEach(goal => chips.push({
+            label: goal.name,
+            kind: "goal_type" in goal && goal.goal_type === "planned_expense" ? "plan" : "goal",
+          }));
           if (decisionAmount > 0) chips.push({ label: `Plan $${fmt(decisionAmount)}`, kind: "plan" });
           const bankAdjustment = db?.events?.find(event => event.sourceType === "reconciliation");
           if (bankAdjustment) chips.push({ label: "Bank balance synced", kind: "plan" });

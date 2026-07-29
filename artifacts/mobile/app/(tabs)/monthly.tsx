@@ -2125,10 +2125,10 @@ export default function MonthlyScreen() {
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
                         <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Plans & goals</Text>
                         {displayedGoalsForSelectedDay.map(goal => (
-                          <View key={`overlay-goal-${goal.id}`} style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: "#8b5cf640" }]}>
+                          <View key={`overlay-goal-${goal.id}`} style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: "#3b82f666" }]}>
                             <View style={styles.dayOverlayRow}>
                               <Text numberOfLines={1} style={[styles.dayOverlayRowName, { color: c.foreground }]}>★ {goal.name}</Text>
-                              <Text style={[styles.dayOverlayAmount, { color: "#8b5cf6" }]}>-${goal.amount.toFixed(2)}</Text>
+                              <Text style={[styles.dayOverlayAmount, { color: "#3b82f6" }]}>-${goal.amount.toFixed(2)}</Text>
                             </View>
                             <View style={styles.dayBillActions}>
                               <Pressable
@@ -2183,7 +2183,7 @@ export default function MonthlyScreen() {
                           return (
                             <View
                               key={`overlay-bucket-${group.key}`}
-                              style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: statusColor + "40" }]}
+                              style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: "#3b82f666" }]}
                             >
                               <View style={styles.dayBillTop}>
                                 <View style={{ flex: 1 }}>
