@@ -15,6 +15,7 @@ import {
 } from "react-native";
 
 import colors from "@/constants/colors";
+import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
 import { DatePickerField } from "@/components/DatePickerField";
 import { FloSafetyStopModal } from "@/components/FloSafetyStopModal";
 import type { Transaction } from "@/context/BudgetContext";
@@ -23,7 +24,7 @@ import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { localDateString } from "@/lib/dateLabels";
 import { buildSafetyStop, type SafetyStopWarning } from "@/lib/safetyStop";
-import { confirmActionAfterDismiss } from "@/lib/confirmAction";
+import type { ConfirmActionOptions } from "@/lib/confirmAction";
 
 interface Props {
   visible: boolean;
@@ -49,6 +50,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
   const [transferToAccountId, setTransferToAccountId] = useState<string | undefined>();
   const [linkedBillId, setLinkedBillId] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
+  const [confirmation, setConfirmation] = useState<ConfirmActionOptions | null>(null);
   const [safetyStop, setSafetyStop] = useState<SafetyStopWarning | null>(null);
   const [pendingStandardTx, setPendingStandardTx] = useState<Omit<Transaction, "id"> | Transaction | null>(null);
   const transferMate = editTx?.transfer_group_id
@@ -62,6 +64,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
     );
 
   useEffect(() => {
+    setConfirmation(null);
     if (editTx) {
       setAmount(Math.abs(editTx.amount).toString());
       setCategory(editTx.category);
@@ -225,13 +228,14 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
       try {
         if (isEditingTransfer && editTx.transfer_group_id && onDeleteTransfer) await onDeleteTransfer(editTx.transfer_group_id);
         else await onDelete(editTx.id);
+        onClose();
       } catch (error) {
         Alert.alert(isEditingTransfer ? "Couldn’t delete transfer" : "Couldn’t delete transaction", error instanceof Error ? error.message : "Please try again.");
       } finally {
         setSaving(false);
       }
     };
-    confirmActionAfterDismiss(onClose, {
+    setConfirmation({
       title: isEditingTransfer ? "Delete Transfer" : "Delete Transaction",
       message: isEditingTransfer
         ? "Move both sides of this transfer to Recently Deleted?"
@@ -246,7 +250,12 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
   const labelStyle = [styles.label, { color: c.mutedForeground }];
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={() => confirmation ? setConfirmation(null) : onClose()}
+    >
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
         <View style={[styles.container, { backgroundColor: c.background }]}>
           <View style={styles.header}>
@@ -369,6 +378,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
           onScheduleAnyway={pendingStandardTx ? () => { void saveStandardTransaction(pendingStandardTx); } : undefined}
         />
       </KeyboardAvoidingView>
+      <ConfirmActionOverlay request={confirmation} onClose={() => setConfirmation(null)} />
     </Modal>
   );
 }

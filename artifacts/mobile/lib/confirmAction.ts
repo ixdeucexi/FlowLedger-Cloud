@@ -51,12 +51,3 @@ export function confirmAction({
     { text: confirmText, style: destructive ? "destructive" : "default", onPress: run },
   ]);
 }
-
-export function confirmActionAfterDismiss(
-  dismiss: () => void,
-  options: ConfirmActionOptions,
-) {
-  dismiss();
-  const delay = Platform.OS === "web" ? 0 : 360;
-  setTimeout(() => confirmAction(options), delay);
-}

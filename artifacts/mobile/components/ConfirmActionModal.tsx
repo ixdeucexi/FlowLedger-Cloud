@@ -5,44 +5,103 @@ import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useColors } from "@/hooks/useColors";
 import { subscribeConfirmAction, type ConfirmActionOptions } from "@/lib/confirmAction";
 
-function ConfirmActionModalView() {
+interface DialogProps {
+  request: ConfirmActionOptions;
+  onClose: () => void;
+  contained?: boolean;
+}
+
+function ConfirmActionDialog({ request, onClose, contained = false }: DialogProps) {
   const c = useColors();
-  const [request, setRequest] = useState<ConfirmActionOptions | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
-
-  useEffect(() => subscribeConfirmAction(options => {
-    setError("");
-    setRunning(false);
-    setRequest(options);
-  }), []);
-
-  const confirmText = request?.confirmText ?? "Confirm";
+  const confirmText = request.confirmText ?? "Confirm";
   const destructive = useMemo(
-    () => Boolean(request?.destructive || /delete|remove|leave|stop|archive|discard/i.test(confirmText)),
-    [confirmText, request?.destructive],
+    () => Boolean(request.destructive || /delete|remove|leave|stop|archive|discard/i.test(confirmText)),
+    [confirmText, request.destructive],
   );
   const actionColor = destructive ? c.destructive : c.primary;
+
+  useEffect(() => {
+    setError("");
+    setRunning(false);
+  }, [request]);
 
   const close = () => {
     if (running) return;
     setError("");
-    setRequest(null);
+    onClose();
   };
 
   const confirm = async () => {
-    if (!request || running) return;
+    if (running) return;
     setRunning(true);
     setError("");
     try {
       await request.onConfirm();
-      setRequest(null);
+      onClose();
     } catch {
       setError("That could not be completed. Please try again.");
     } finally {
       setRunning(false);
     }
   };
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Cancel ${confirmText.toLowerCase()}`}
+      accessibilityViewIsModal
+      style={[styles.overlay, contained && styles.containedOverlay]}
+      onPress={close}
+    >
+      <Pressable
+        accessibilityRole="alert"
+        style={[styles.dialog, { backgroundColor: c.card, borderColor: c.border }]}
+        onPress={() => undefined}
+      >
+        <View style={[styles.icon, { backgroundColor: actionColor + "18" }]}>
+          <Feather name={destructive ? "trash-2" : "help-circle"} size={20} color={actionColor} />
+        </View>
+        <Text style={[styles.title, { color: c.foreground }]}>{request.title}</Text>
+        <Text style={[styles.body, { color: c.mutedForeground }]}>{request.message}</Text>
+        {error ? <Text style={[styles.error, { color: c.destructive }]}>{error}</Text> : null}
+        <View style={styles.actions}>
+          <Pressable
+            accessibilityRole="button"
+            disabled={running}
+            onPress={close}
+            style={({ pressed }) => [
+              styles.action,
+              { backgroundColor: c.muted, opacity: running ? 0.5 : pressed ? 0.75 : 1 },
+            ]}
+          >
+            <Text style={[styles.actionText, { color: c.mutedForeground }]}>{request.cancelText ?? "Cancel"}</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${confirmText} now`}
+            disabled={running}
+            onPress={() => void confirm()}
+            style={({ pressed }) => [
+              styles.action,
+              { backgroundColor: actionColor, opacity: running ? 0.65 : pressed ? 0.8 : 1 },
+            ]}
+          >
+            <Text style={[styles.actionText, { color: destructive ? "#fff" : c.primaryForeground }]}>
+              {running ? `${confirmText}…` : confirmText}
+            </Text>
+          </Pressable>
+        </View>
+      </Pressable>
+    </Pressable>
+  );
+}
+
+function ConfirmActionModalView() {
+  const [request, setRequest] = useState<ConfirmActionOptions | null>(null);
+
+  useEffect(() => subscribeConfirmAction(setRequest), []);
 
   return (
     <Modal
@@ -53,57 +112,20 @@ function ConfirmActionModalView() {
       statusBarTranslucent
       navigationBarTranslucent
       hardwareAccelerated
-      onRequestClose={close}
+      onRequestClose={() => setRequest(null)}
     >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Cancel ${confirmText.toLowerCase()}`}
-        accessibilityViewIsModal
-        style={styles.overlay}
-        onPress={close}
-      >
-        <Pressable
-          accessibilityRole="alert"
-          style={[styles.dialog, { backgroundColor: c.card, borderColor: c.border }]}
-          onPress={() => undefined}
-        >
-          <View style={[styles.icon, { backgroundColor: actionColor + "18" }]}>
-            <Feather name={destructive ? "trash-2" : "help-circle"} size={20} color={actionColor} />
-          </View>
-          <Text style={[styles.title, { color: c.foreground }]}>{request?.title}</Text>
-          <Text style={[styles.body, { color: c.mutedForeground }]}>{request?.message}</Text>
-          {error ? <Text style={[styles.error, { color: c.destructive }]}>{error}</Text> : null}
-          <View style={styles.actions}>
-            <Pressable
-              accessibilityRole="button"
-              disabled={running}
-              onPress={close}
-              style={({ pressed }) => [
-                styles.action,
-                { backgroundColor: c.muted, opacity: running ? 0.5 : pressed ? 0.75 : 1 },
-              ]}
-            >
-              <Text style={[styles.actionText, { color: c.mutedForeground }]}>{request?.cancelText ?? "Cancel"}</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`${confirmText} now`}
-              disabled={running}
-              onPress={() => void confirm()}
-              style={({ pressed }) => [
-                styles.action,
-                { backgroundColor: actionColor, opacity: running ? 0.65 : pressed ? 0.8 : 1 },
-              ]}
-            >
-              <Text style={[styles.actionText, { color: destructive ? "#fff" : c.primaryForeground }]}>
-                {running ? `${confirmText}…` : confirmText}
-              </Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Pressable>
+      {request ? <ConfirmActionDialog request={request} onClose={() => setRequest(null)} /> : null}
     </Modal>
   );
+}
+
+interface OverlayProps {
+  request: ConfirmActionOptions | null;
+  onClose: () => void;
+}
+
+export function ConfirmActionOverlay({ request, onClose }: OverlayProps) {
+  return request ? <ConfirmActionDialog request={request} onClose={onClose} contained /> : null;
 }
 
 export const ConfirmActionModal = memo(ConfirmActionModalView);
@@ -111,10 +133,15 @@ export const ConfirmActionModal = memo(ConfirmActionModalView);
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.58)",
+    backgroundColor: "rgba(0,0,0,0.68)",
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
+  },
+  containedOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1000,
+    elevation: 1000,
   },
   dialog: {
     width: "100%",

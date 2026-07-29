@@ -8,11 +8,12 @@ import {
 
 import colors from "@/constants/colors";
 import { BucketAffordabilityModal } from "@/components/BucketAffordabilityModal";
+import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
 import { DatePickerField } from "@/components/DatePickerField";
 import { useBudget, type Goal, type GoalAffordability } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
-import { confirmActionAfterDismiss } from "@/lib/confirmAction";
+import type { ConfirmActionOptions } from "@/lib/confirmAction";
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
 
@@ -43,6 +44,7 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
   const [goalMode, setGoalMode] = useState<"savings" | "budget">("savings");
   const [targetDate, setTargetDate] = useState(""); // YYYY-MM-DD
   const [saving, setSaving] = useState(false);
+  const [confirmation, setConfirmation] = useState<ConfirmActionOptions | null>(null);
   const [bucketCheck, setBucketCheck] = useState<{
     name: string;
     amount: number;
@@ -54,6 +56,7 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
   const todayYMD = dateToYMD(today);
 
   useEffect(() => {
+    setConfirmation(null);
     if (editGoal) {
       setName(editGoal.name);
       setTarget(editGoal.target_amount.toString());
@@ -123,16 +126,16 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
     if (!editGoal || !onDelete) return;
     const deletingBucket = editGoal.goal_type === "planned_expense";
     const deleteLabel = deletingBucket ? "bucket" : "goal";
-    const doDelete = () => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      return onDelete(editGoal.id);
-    };
-    confirmActionAfterDismiss(onClose, {
+    setConfirmation({
       title: `Delete ${deletingBucket ? "Bucket" : "Goal"}`,
       message: `Delete "${editGoal.name}"? This removes the ${deleteLabel} from Monthly and your plan.`,
       confirmText: `Delete ${deleteLabel}`,
       destructive: true,
-      onConfirm: doDelete,
+      onConfirm: async () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        await onDelete(editGoal.id);
+        onClose();
+      },
     });
   };
 
@@ -142,7 +145,12 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
 
   return (
     <>
-      <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <Modal
+        visible={visible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => confirmation ? setConfirmation(null) : onClose()}
+      >
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
         <View style={[styles.container, { backgroundColor: c.background }]}>
           <View style={styles.handle} />
@@ -264,6 +272,7 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
+      <ConfirmActionOverlay request={confirmation} onClose={() => setConfirmation(null)} />
       </Modal>
       <BucketAffordabilityModal
         visible={Boolean(bucketCheck)}

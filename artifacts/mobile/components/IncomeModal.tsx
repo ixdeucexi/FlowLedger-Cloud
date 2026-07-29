@@ -4,11 +4,12 @@ import React, { useEffect, useState } from "react";
 import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import colors from "@/constants/colors";
+import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
 import type { IncomeAmountEntry, IncomeItem } from "@/context/BudgetContext";
 import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
-import { confirmAction, confirmActionAfterDismiss } from "@/lib/confirmAction";
+import type { ConfirmActionOptions } from "@/lib/confirmAction";
 import { MONTH_NAMES } from "@/lib/dateLabels";
 import { getLatestRecordedIncomeAmount, normalizeIncomeExcludedDates } from "@/lib/schedule";
 
@@ -45,6 +46,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
   const [raiseAmount,     setRaiseAmount]     = useState("");
   const [raiseDate,       setRaiseDate]       = useState("");
   const [saving,          setSaving]          = useState(false);
+  const [confirmation, setConfirmation] = useState<ConfirmActionOptions | null>(null);
 
   const setMonthlyEdge = (edge: "first" | "last") => {
     const now = new Date();
@@ -64,7 +66,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
 
   const handleDelete = () => {
     if (!editItem || !onDelete || saving) return;
-    confirmActionAfterDismiss(onClose, {
+    setConfirmation({
       title: "Delete this income?",
       message: `Delete "${editItem.name}" from Income and Calendar?`,
       confirmText: "Delete",
@@ -73,6 +75,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
         setSaving(true);
         try {
           await onDelete(editItem.id);
+          onClose();
         } finally {
           setSaving(false);
         }
@@ -81,6 +84,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
   };
 
   useEffect(() => {
+    setConfirmation(null);
     if (editItem) {
       setName(editItem.name);
       setBaselineAmount(editItem.amount);
@@ -151,7 +155,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
   };
 
   const handleDeleteHistoryEntry = (ef: string) => {
-    confirmAction({
+    setConfirmation({
       title: "Delete this income update?",
       message: `Remove the amount change that starts ${formatYYMM(ef)}? Earlier income amounts will stay unchanged.`,
       confirmText: "Delete",
@@ -196,7 +200,12 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
   })();
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={() => confirmation ? setConfirmation(null) : onClose()}
+    >
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
         <View style={[styles.container, { backgroundColor: c.background }]}>
           <View style={styles.handle} />
@@ -369,6 +378,7 @@ export function IncomeModal({ visible, onClose, onSave, onDelete, editItem }: Pr
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
+      <ConfirmActionOverlay request={confirmation} onClose={() => setConfirmation(null)} />
     </Modal>
   );
 }

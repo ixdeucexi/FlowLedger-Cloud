@@ -8,12 +8,13 @@ import {
 } from "react-native";
 
 import colors from "@/constants/colors";
+import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
 import type { Bill } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
-import { confirmActionAfterDismiss } from "@/lib/confirmAction";
+import type { ConfirmActionOptions } from "@/lib/confirmAction";
 import { MONTH_NAMES } from "@/lib/dateLabels";
 import { BILL_IMPORTANCE_OPTIONS, normalizeBillImportance, type BillImportance } from "@/lib/billImportance";
 
@@ -69,6 +70,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   const [pickerYear,    setPickerYear]    = useState(() => new Date().getFullYear());
   const [pickerMonth,   setPickerMonth]   = useState(() => new Date().getMonth());
   const [saving,         setSaving]        = useState(false);
+  const [confirmation, setConfirmation] = useState<ConfirmActionOptions | null>(null);
 
   const firstDOWInDayPickerMonth = useMemo(
     () => new Date(pickerYear, pickerMonth, 1).getDay(),
@@ -99,6 +101,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   };
 
   useEffect(() => {
+    setConfirmation(null);
     if (editBill) {
       setName(editBill.name);
       setAmount(editBill.amount.toString());
@@ -187,13 +190,14 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       setSaving(true);
       try {
         await onDelete(editBill.id);
+        onClose();
       } catch (error) {
         Alert.alert("Couldn’t delete", error instanceof Error ? error.message : "Please try again.");
       } finally {
         setSaving(false);
       }
     };
-    confirmActionAfterDismiss(onClose, {
+    setConfirmation({
       title: `Delete ${noun}`,
       message: `Delete "${editBill.name}" completely? This removes it from Bills and Calendar. Existing manual transactions stay in Activity.`,
       confirmText: "Delete",
@@ -212,13 +216,14 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       setSaving(true);
       try {
         await stopFuture(editBill.id);
+        onClose();
       } catch (error) {
         Alert.alert("Couldn’t stop future bill", error instanceof Error ? error.message : "Please try again.");
       } finally {
         setSaving(false);
       }
     };
-    confirmActionAfterDismiss(onClose, {
+    setConfirmation({
       title: `Stop Future ${noun}`,
       message: `Stop "${editBill.name}" after this month? Past months and saved monthly details will stay unchanged.`,
       confirmText: "Stop Future",
@@ -232,7 +237,12 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   const lbl = [styles.label, { color: c.mutedForeground }];
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={() => confirmation ? setConfirmation(null) : onClose()}
+    >
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
         <View style={[styles.container, { backgroundColor: c.background }]}>
           <View style={styles.handle} />
@@ -585,6 +595,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
+      <ConfirmActionOverlay request={confirmation} onClose={() => setConfirmation(null)} />
     </Modal>
   );
 }
