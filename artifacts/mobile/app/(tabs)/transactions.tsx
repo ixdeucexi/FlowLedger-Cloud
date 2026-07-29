@@ -30,6 +30,7 @@ import { summarizeActivityMonth } from "@/lib/monthlySummary";
 import { isValidDateInMonth } from "@/lib/schedule";
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { resizeSnowballFundingSources } from "@/lib/snowballFunding";
+import { isOpenSpendingBucket, spendingBucketMatch, spendingBucketSummary } from "@/lib/spendingBuckets";
 import { buildCurrentMonthReviewQueue, matchedOccurrenceAllocations, occurrenceKey, transactionDisplayName } from "@/lib/reviewCenter";
 import { CategoryBudgetScreen } from "./category-budget";
 
@@ -143,7 +144,7 @@ export function ActivityScreen() {
   const { isFeatureLocked, bypassFeature } = useMembership();
   const {
     transactions, pendingBankTransactions, addTransaction, updateTransaction, deleteTransaction, deleteTransfer,
-    bills, incomes, overrides, extraPayments, settings,
+    bills, incomes, goals, overrides, extraPayments, settings,
     getIncomeOccurrencesInMonth, getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal,
     matchTransactionToBill, unmatchTransactionFromBill, reconcileTransaction, undoTransactionReconciliation, removeReviewSurplusFunding,
     getExtraPayment, previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, addGoal,
@@ -585,10 +586,29 @@ export function ActivityScreen() {
       category: matchTx.category,
     }, candidates);
   }, [matchTx, transactions]);
+  const bucketMatchOptions = useMemo(() => {
+    if (!matchTx || matchTx.amount >= 0) return [];
+    const candidates = goals
+      .filter(goal => goal.goal_type === "planned_expense" && !goal.archived_at && isOpenSpendingBucket(goal))
+      .map(goal => ({
+        billId: goal.id,
+        name: goal.name,
+        category: "Planned spending",
+        plannedAmount: spendingBucketSummary(goal).remaining,
+        occurrenceDates: [goal.target_date.slice(0, 10)],
+      }));
+    return rankBillMatches({
+      date: matchTx.date,
+      amount: matchTx.amount,
+      description: matchTx.merchant_name || matchTx.note || matchTx.category,
+      category: matchTx.category,
+    }, candidates);
+  }, [goals, matchTx]);
   const combinedMatchOptions = useMemo(() => [
     ...billMatchOptions.map(option => ({ ...option, targetType: "bill" as const })),
+    ...bucketMatchOptions.map(option => ({ ...option, targetType: "bucket" as const })),
     ...manualMatchOptions.map(option => ({ ...option, targetType: "manual" as const })),
-  ].sort((left, right) => right.score - left.score || (left.daysApart ?? 999) - (right.daysApart ?? 999)), [billMatchOptions, manualMatchOptions]);
+  ].sort((left, right) => right.score - left.score || (left.daysApart ?? 999) - (right.daysApart ?? 999)), [billMatchOptions, bucketMatchOptions, manualMatchOptions]);
   const matchedBillIdForModal = matchTx ? confirmedBillMatchId(matchTx) : null;
   const matchedBillForModal = matchedBillIdForModal
     ? bills.find(bill => bill.id === matchedBillIdForModal)
@@ -596,7 +616,10 @@ export function ActivityScreen() {
   const matchedManualAllocation = matchTx?.review_resolution === "manual"
     ? matchTx.review_allocations?.find(allocation => allocation.type === "planned_expense" && allocation.source === "transaction")
     : undefined;
-  const matchedTargetName = matchedBillForModal?.name ?? matchedManualAllocation?.name;
+  const matchedBucketAllocation = matchTx?.review_resolution === "goal"
+    ? matchTx.review_allocations?.find(allocation => allocation.type === "planned_expense" && allocation.source === "goal")
+    : undefined;
+  const matchedTargetName = matchedBillForModal?.name ?? matchedManualAllocation?.name ?? matchedBucketAllocation?.name;
   const matchingBankActivity = matchTx?.source === "plaid";
 
   const surplusSnowballOffer = useMemo(() => {
@@ -668,6 +691,31 @@ export function ActivityScreen() {
       setMatchTx(null);
     } catch (error) {
       Alert.alert("Could not match transaction", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSavingMatch(false);
+    }
+  };
+
+  const handleMatchBucket = async (goalId: string) => {
+    if (!matchTx || savingMatch) return;
+    const option = bucketMatchOptions.find(item => item.billId === goalId);
+    if (!option) return;
+    const actual = Math.abs(matchTx.amount);
+    const match = spendingBucketMatch(actual, option.plannedAmount);
+    setSavingMatch(true);
+    try {
+      await reconcileTransaction({
+        transactionId: matchTx.id,
+        resolution: "goal",
+        targetId: goalId,
+        occurrenceDate: option.nearestOccurrenceDate ?? matchTx.date,
+        plannedAmount: option.plannedAmount,
+        settlement: match.settlement,
+        extraCategory: match.extra > 0.005 ? matchTx.category || "Other" : undefined,
+      });
+      setMatchTx(null);
+    } catch (error) {
+      Alert.alert("Could not update bucket", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSavingMatch(false);
     }
@@ -750,7 +798,7 @@ export function ActivityScreen() {
     if (!matchTx || savingMatch) return;
     setSavingMatch(true);
     try {
-      if (matchTx.review_status === "matched" && (matchTx.review_resolution === "bill" || matchTx.review_resolution === "manual")) {
+      if (matchTx.review_status === "matched" && (matchTx.review_resolution === "bill" || matchTx.review_resolution === "manual" || matchTx.review_resolution === "goal")) {
         if (matchTx.review_resolution === "bill") await removeReviewSurplusFunding(matchTx.id);
         await undoTransactionReconciliation(matchTx.id);
       } else {
@@ -1371,11 +1419,17 @@ export function ActivityScreen() {
                       accessibilityRole="button"
                       accessibilityLabel={`Match transaction to ${option.name}, planned ${option.plannedAmount.toFixed(2)}`}
                       disabled={savingMatch}
-                      onPress={() => void (option.targetType === "manual" ? handleMatchManual(option.billId) : handleMatchBill(option.billId))}
+                      onPress={() => void (
+                        option.targetType === "manual"
+                          ? handleMatchManual(option.billId)
+                          : option.targetType === "bucket"
+                            ? handleMatchBucket(option.billId)
+                            : handleMatchBill(option.billId)
+                      )}
                       style={({ pressed }) => [styles.matchRow, { backgroundColor: c.card, borderColor: index === 0 && option.score >= 48 ? c.success + "66" : c.border, opacity: savingMatch ? 0.55 : pressed ? 0.82 : 1 }]}
                     >
                       <View style={[styles.matchIcon, { backgroundColor: (index === 0 && option.score >= 48 ? c.success : c.primary) + "18" }]}>
-                        <Feather name={option.targetType === "manual" ? "edit-3" : "file-text"} size={17} color={index === 0 && option.score >= 48 ? c.success : c.primary} />
+                        <Feather name={option.targetType === "manual" ? "edit-3" : option.targetType === "bucket" ? "archive" : "file-text"} size={17} color={index === 0 && option.score >= 48 ? c.success : c.primary} />
                       </View>
                       <View style={{ flex: 1 }}>
                         <View style={styles.matchRowHeading}>
@@ -1386,15 +1440,17 @@ export function ActivityScreen() {
                             </View>
                           )}
                         </View>
-                        <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>{option.targetType === "manual" ? "Manual plan" : "Bill"} · ${option.plannedAmount.toFixed(2)} · {option.daysApart === 0 ? "same day" : option.daysApart === 1 ? "1 day away" : option.daysApart !== null ? `${option.daysApart} days away` : option.category}</Text>
+                        <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>
+                          {option.targetType === "manual" ? "Manual plan" : option.targetType === "bucket" ? "Spending bucket" : "Bill"} · ${option.plannedAmount.toFixed(2)}{option.targetType === "bucket" ? " left" : ""} · {option.daysApart === 0 ? "same day" : option.daysApart === 1 ? "1 day away" : option.daysApart !== null ? `${option.daysApart} days away` : option.category}
+                        </Text>
                         {option.reasons.length > 0 && <Text style={[styles.matchReason, { color: c.success }]}>{option.reasons.slice(0, 2).join(" · ")}</Text>}
                       </View>
                       <Feather name="chevron-right" size={17} color={c.mutedForeground} />
                     </Pressable>
                   )) : (
                     <View style={[styles.noMatchCard, { backgroundColor: c.card, borderColor: c.border }]}>
-                      <Text style={[styles.matchRowTitle, { color: c.foreground }]}>Nothing planned this month</Text>
-                      <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>Add a bill or manual transaction, then match it here.</Text>
+                      <Text style={[styles.matchRowTitle, { color: c.foreground }]}>Nothing available to match</Text>
+                      <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>Add a bill, manual plan, or spending bucket, then return here.</Text>
                     </View>
                   )}
                 </ScrollView>

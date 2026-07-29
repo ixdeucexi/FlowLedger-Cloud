@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isOpenSpendingBucket, spendingBucketSummary } from "./spendingBuckets";
+import { isOpenSpendingBucket, spendingBucketMatch, spendingBucketSummary } from "./spendingBuckets";
 
 test("an open spending bucket protects only its unmatched balance", () => {
   assert.deepEqual(spendingBucketSummary({ target_amount: 450, current_amount: 101.08 }), {
@@ -33,5 +33,23 @@ test("closing an over-budget bucket never creates negative released money", () =
     remaining: 0,
     released: 0,
     closed: true,
+  });
+});
+
+test("bucket matching keeps partial, exact, and overage money separate", () => {
+  assert.deepEqual(spendingBucketMatch(84.02, 139.32), {
+    settlement: "partial",
+    applied: 84.02,
+    extra: 0,
+  });
+  assert.deepEqual(spendingBucketMatch(139.32, 139.32), {
+    settlement: "exact",
+    applied: 139.32,
+    extra: 0,
+  });
+  assert.deepEqual(spendingBucketMatch(150, 139.32), {
+    settlement: "split",
+    applied: 139.32,
+    extra: 10.68,
   });
 });
