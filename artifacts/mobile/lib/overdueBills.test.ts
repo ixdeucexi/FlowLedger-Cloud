@@ -29,7 +29,6 @@ describe("overdue bill alerts", () => {
       billId: "weekly",
       name: "After school",
       occurrenceDate: "2026-07-15",
-      plannedAmount: 90,
       remainingAmount: 90,
       daysPastDue: 6,
     }]);
@@ -71,7 +70,6 @@ describe("overdue bill alerts", () => {
 
     assert.equal(grouped.length, 1);
     assert.equal(grouped[0]?.occurrenceCount, 2);
-    assert.equal(grouped[0]?.plannedAmount, 200);
     assert.equal(grouped[0]?.remainingAmount, 200);
     assert.equal(grouped[0]?.firstOccurrenceDate, "2026-07-08");
   });

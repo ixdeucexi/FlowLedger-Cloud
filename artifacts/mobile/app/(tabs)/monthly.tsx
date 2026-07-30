@@ -17,7 +17,6 @@ import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
 import { DebtPaymentAppliedModal, type DebtPaymentAppliedDetail } from "@/components/DebtPaymentAppliedModal";
 import { EmptyState } from "@/components/EmptyState";
 import { FullPaymentPromptModal } from "@/components/FullPaymentPromptModal";
-import { FloLogo } from "@/components/FloLogo";
 import { GoalModal } from "@/components/GoalModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
@@ -31,7 +30,6 @@ import { allocationLabel, groupPlannedExpenseAllocations, matchedOccurrenceAlloc
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
 import { buildDayForecastFloPrompt, groupForecastEvents } from "@/lib/forecastDisplay";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
-import { buildOverdueBillOccurrences, groupOverdueBills } from "@/lib/overdueBills";
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { isValidDateInMonth } from "@/lib/schedule";
 import type { ConfirmActionOptions } from "@/lib/confirmAction";
@@ -44,13 +42,12 @@ import {
   snowballPlanTotalThroughDate,
 } from "@/lib/debtPaymentPlan";
 import { replaceBillSurplusFundingSource } from "@/lib/snowballFunding";
-import { pendingMatchStatusLabel, pendingPlanMatchForOccurrence } from "@/lib/pendingPlanMatches";
 
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
 
 type TabView = "bills" | "calendar";
-type DueDayPickerState = { bill: Bill; fromDate: string; viewMonth: number; viewYear: number };
+type DueDayPickerState = { bill: Bill; fromDate: string };
 type FullPaymentPromptState = {
   bill: Bill;
   budgeted: number;
@@ -76,6 +73,11 @@ function isoDateForMonthDay(year: number, month: number, day: number) {
   return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+function dayFromIsoDate(date: string) {
+  const day = Number(date.slice(8, 10));
+  return Number.isFinite(day) ? day : 1;
+}
+
 function debtSurplusTransactionImportHash(sourceDebtId: string, month: number, year: number) {
   return `flowledger:debt-surplus:${sourceDebtId}:${year}-${String(month + 1).padStart(2, "0")}`;
 }
@@ -85,12 +87,10 @@ function todayIsoDate() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
-function PayStatus({ paid, partial, overdue = false, pendingLabel }: { paid: boolean; partial: boolean; overdue?: boolean; pendingLabel?: string }) {
+function PayStatus({ paid, partial }: { paid: boolean; partial: boolean }) {
   const c = useColors();
   if (paid) return <View style={[ps.badge, { backgroundColor: c.success + "25" }]}><Text style={[ps.text, { color: c.success }]}>PAID</Text></View>;
-  if (pendingLabel) return <View style={[ps.badge, { backgroundColor: colors.brand.blue + "25" }]}><Text style={[ps.text, { color: colors.brand.blue }]}>{pendingLabel}</Text></View>;
   if (partial) return <View style={[ps.badge, { backgroundColor: c.warning + "25" }]}><Text style={[ps.text, { color: c.warning }]}>PARTIAL</Text></View>;
-  if (overdue) return <View style={[ps.badge, { backgroundColor: c.destructive + "25" }]}><Text style={[ps.text, { color: c.destructive }]}>OVERDUE</Text></View>;
   return <View style={[ps.badge, { backgroundColor: c.destructive + "20" }]}><Text style={[ps.text, { color: c.destructive }]}>UNPAID</Text></View>;
 }
 const ps = StyleSheet.create({
@@ -195,7 +195,7 @@ export default function MonthlyScreen() {
   const router = useRouter();
   const routeParams = useLocalSearchParams<{ openDate?: string | string[]; openDateAt?: string | string[] }>();
   const {
-    bills, overrides, billDateMoves, transactions, pendingBankTransactions, pendingPlanMatches, extraPayments, goals, decisions, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
+    bills, overrides, billDateMoves, transactions, extraPayments, goals, decisions, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
     getCustomDueDay, setCustomDueDay,
     moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, settings,
@@ -900,12 +900,10 @@ export default function MonthlyScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       const cleanFrom = picker.fromDate.slice(0, 10);
       const existingMove = getBillDateMoveForOccurrence(picker.bill.id, cleanFrom);
-      let destinationDate = cleanFrom;
       if (day === undefined) {
         if (existingMove) await removeBillOccurrenceMove(existingMove.id);
       } else {
-        const targetDate = isoDateForMonthDay(picker.viewYear, picker.viewMonth, day);
-        destinationDate = targetDate;
+        const targetDate = isoDateForMonthDay(selectedYear, month, day);
         if (targetDate === cleanFrom) {
           if (existingMove) await removeBillOccurrenceMove(existingMove.id);
         } else {
@@ -913,16 +911,12 @@ export default function MonthlyScreen() {
         }
       }
       setDueDayPicker(null);
-      const [destinationYear, destinationMonth] = destinationDate.split("-").map(Number);
-      setSelectedYear(destinationYear);
-      setMonth(destinationMonth - 1);
-      setSelectedDate(destinationDate);
     } catch (error) {
       Alert.alert("Couldn’t save date", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSavingDueDay(false);
     }
-  }, [getBillDateMoveForOccurrence, moveBillOccurrence, removeBillOccurrenceMove, savingDueDay, setSelectedYear]);
+  }, [getBillDateMoveForOccurrence, month, moveBillOccurrence, removeBillOccurrenceMove, savingDueDay, selectedYear]);
 
   const saveIncomeDateChange = useCallback(async (income: IncomeItem, day: number) => {
     if (savingIncomeDate) return;
@@ -1205,127 +1199,12 @@ export default function MonthlyScreen() {
         && scheduledBillsForDay.some(bill => bill.id === allocation.targetId));
     })
     : [];
-  const carriedBillAlerts = useMemo(() => {
-    const today = new Date();
-    const todayDate = todayIsoDate();
-    if (selectedDate !== todayDate) return [];
-
-    const currentMonth = today.getMonth();
-    const currentYear = today.getFullYear();
-    const previousDate = new Date(currentYear, currentMonth - 1, 1);
-    const periods = [
-      { month: previousDate.getMonth(), year: previousDate.getFullYear(), cutoffDay: new Date(previousDate.getFullYear(), previousDate.getMonth() + 1, 0).getDate() + 1 },
-      { month: currentMonth, year: currentYear, cutoffDay: today.getDate() },
-    ];
-    const billById = new Map<string, Bill>();
-    const overdueOccurrences = periods.flatMap(period => {
-      const periodBills = getMonthlyBills(period.month, period.year);
-      periodBills.forEach(bill => billById.set(bill.id, bill));
-      return buildOverdueBillOccurrences(
-        periodBills.map(bill => ({
-          billId: bill.id,
-          name: bill.name,
-          occurrenceDays: getBillOccurrencesInMonth(bill, period.month, period.year),
-          plannedTotal: getBillMonthlyTotal(bill, period.month, period.year),
-          paidTotal: getEffectivePaidAmount(bill, period.month, period.year),
-        })),
-        period.month,
-        period.year,
-        period.cutoffDay,
-      );
-    });
-    const pendingOccurrences = overdueOccurrences.filter(occurrence =>
-      Boolean(pendingPlanMatchForOccurrence(
-        pendingPlanMatches,
-        pendingBankTransactions,
-        occurrence.billId,
-        occurrence.occurrenceDate,
-      )),
-    );
-    const actionOccurrences = overdueOccurrences.filter(occurrence =>
-      !pendingPlanMatchForOccurrence(
-        pendingPlanMatches,
-        pendingBankTransactions,
-        occurrence.billId,
-        occurrence.occurrenceDate,
-      ),
-    );
-
-    const buildEntries = (items: typeof overdueOccurrences, pending: boolean) => {
-      const monthKeys = [...new Set(items.map(item => item.occurrenceDate.slice(0, 7)))];
-      return monthKeys.flatMap(monthKey =>
-        groupOverdueBills(items.filter(item => item.occurrenceDate.startsWith(monthKey))).flatMap(alert => {
-          const bill = billById.get(alert.billId);
-          if (!bill) return [];
-          const pendingMatch = pending
-            ? pendingPlanMatchForOccurrence(
-              pendingPlanMatches,
-              pendingBankTransactions,
-              alert.billId,
-              alert.firstOccurrenceDate,
-            )
-            : undefined;
-          return [{ ...alert, bill, pendingMatch }];
-        })
-      );
-    };
-
-    return [
-      ...buildEntries(actionOccurrences, false),
-      ...buildEntries(pendingOccurrences, true),
-    ].sort((left, right) =>
-      left.firstOccurrenceDate.localeCompare(right.firstOccurrenceDate)
-        || left.name.localeCompare(right.name)
-    );
-  }, [
-    getBillMonthlyTotal,
-    getBillOccurrencesInMonth,
-    getEffectivePaidAmount,
-    getMonthlyBills,
-    pendingBankTransactions,
-    pendingPlanMatches,
-    selectedDate,
-  ]);
-  const todoBillsForDay = scheduledBillsForDay.filter(bill =>
-    getEffectivePaidAmount(bill, month, selectedYear) + 0.005 < getAmount(bill, month, selectedYear)
-  );
-  const paidBillsForDay = scheduledBillsForDay.filter(bill =>
-    getAmount(bill, month, selectedYear) > 0
-    && getEffectivePaidAmount(bill, month, selectedYear) + 0.005 >= getAmount(bill, month, selectedYear)
-  );
-  const todoDebtPayments = selectedDebtPayments.filter(payment => payment.statusLabel.toLowerCase() !== "applied");
-  const paidDebtPayments = selectedDebtPayments.filter(payment => payment.statusLabel.toLowerCase() === "applied");
-  const todoSnowballTransactions = selectedSnowballTransactions.filter(transaction =>
-    isScheduledSnowballPlanTransaction(transaction)
-    && transaction.review_resolution !== "snowball"
-    && Number(transaction.debt_applied_amount ?? 0) <= 0.005
-  );
-  const paidSnowballTransactions = selectedSnowballTransactions.filter(transaction =>
-    !todoSnowballTransactions.some(candidate => candidate.id === transaction.id)
-  );
-  const todoPlannedExpenseGroups = plannedExpenseGroupsForSelectedDay.filter(group => !group.closed);
-  const paidPlannedExpenseGroups = plannedExpenseGroupsForSelectedDay.filter(group => group.closed);
-  const todoDisplayedTxs = displayedTxs.filter(transaction =>
-    (transaction.review_allocations ?? []).some(allocation => allocation.settlement === "partial")
-  );
-  const paidDisplayedTxs = displayedTxs.filter(transaction =>
-    !todoDisplayedTxs.some(candidate => candidate.id === transaction.id)
-  );
-  const selectedDayTodoCount = todoBillsForDay.length
-    + carriedBillAlerts.length
-    + todoDebtPayments.length
-    + todoSnowballTransactions.length
-    + incomeForSelectedDay.length
-    + displayedGoalsForSelectedDay.length
-    + plansForSelectedDay.length
-    + todoPlannedExpenseGroups.length
-    + todoDisplayedTxs.length;
-  const selectedDayPaidCount = paidBillsForDay.length
-    + paidDebtPayments.length
-    + paidSnowballTransactions.length
-    + paidPlannedExpenseGroups.length
-    + paidDisplayedTxs.length;
-  const visibleDayItemCount = selectedDayTodoCount + selectedDayPaidCount;
+  const rawSelectedForecastEventCount = selectedForecastGroups.reduce((sum, group) => sum + group.events.length, 0);
+  const groupedBucketEventReduction = plannedExpenseGroupsForSelectedDay.reduce((sum, group) =>
+    sum + Math.max(0, group.transactionIds.length - 1) + (group.remainingAmount > 0.005 ? 1 : 0), 0);
+  const selectedForecastEventCount = Math.max(0, rawSelectedForecastEventCount - groupedBucketEventReduction);
+  const selectedVisibleItemCount = scheduledBillsForDay.length + selectedDebtPayments.length + selectedSnowballTransactions.length + incomeForSelectedDay.length + displayedTxs.length + plannedExpenseGroupsForSelectedDay.length + displayedGoalsForSelectedDay.length + plansForSelectedDay.length;
+  const selectedDayItemCount = Math.max(selectedForecastEventCount, selectedVisibleItemCount);
 
   const changeMonth = useCallback((delta: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1737,17 +1616,12 @@ export default function MonthlyScreen() {
                     <View style={styles.dueDayRow}>
                       <Feather name="calendar" size={11} color={customDay !== undefined ? c.primary : c.mutedForeground} style={{ marginRight: 6 }} />
                       <Text style={[styles.fieldLabel, { color: customDay !== undefined ? c.primary : c.mutedForeground, marginBottom: 0, marginRight: 8 }]}>
-                        Plan this payment:
+                        {customDay !== undefined ? "Due date this month:" : "Due date (this month only):"}
                       </Text>
                       <Pressable
                         onPress={() => {
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          setDueDayPicker({
-                            bill,
-                            fromDate: isoDateForMonthDay(selectedYear, month, effectiveDueDay),
-                            viewMonth: month,
-                            viewYear: selectedYear,
-                          });
+                          setDueDayPicker({ bill, fromDate: isoDateForMonthDay(selectedYear, month, effectiveDueDay) });
                         }}
                         style={({ pressed }) => [
                           styles.dueDayInput,
@@ -1838,7 +1712,7 @@ export default function MonthlyScreen() {
                           {selectedDate ? formatLongDate(selectedDate) : ""}
                         </Text>
                         <Text style={[styles.dayOverlaySub, { color: c.mutedForeground }]}>
-                          {visibleDayItemCount} item{visibleDayItemCount === 1 ? "" : "s"}
+                          {selectedDayItemCount} item{selectedDayItemCount === 1 ? "" : "s"}
                           {selectedForecastDay ? ` · projected close $${selectedForecastDay.balance.toFixed(2)}` : ""}
                         </Text>
                       </View>
@@ -1899,109 +1773,10 @@ export default function MonthlyScreen() {
                       </View>
                     ) : null}
 
-                    {carriedBillAlerts.length > 0 ? (
-                      <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.destructive + "45" }]}>
-                        <View style={styles.daySectionHeadingRow}>
-                          <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Needs action today</Text>
-                          <View style={[styles.daySectionCount, { backgroundColor: c.destructive + "20" }]}>
-                            <Text style={[styles.daySectionCountText, { color: c.destructive }]}>{carriedBillAlerts.length}</Text>
-                          </View>
-                        </View>
-                        {carriedBillAlerts.map(alert => {
-                          const plannedAmount = Math.max(alert.remainingAmount, alert.plannedAmount);
-                          const paidAmount = Math.max(0, plannedAmount - alert.remainingAmount);
-                          const pendingLabel = alert.pendingMatch ? pendingMatchStatusLabel(alert.pendingMatch) : undefined;
-                          return (
-                            <View
-                              key={`carried-bill-${alert.billId}-${alert.firstOccurrenceDate}-${pendingLabel ?? "overdue"}`}
-                              style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: alert.pendingMatch ? colors.brand.blue + "55" : c.destructive + "55" }]}
-                            >
-                              <View style={styles.dayBillTop}>
-                                <View style={{ flex: 1, minWidth: 0 }}>
-                                  <Text numberOfLines={1} style={[styles.dayBillName, { color: c.foreground }]}>{alert.name}</Text>
-                                  <Text style={[styles.dayBillMeta, { color: alert.pendingMatch ? colors.brand.blue : c.mutedForeground }]}>
-                                    {alert.pendingMatch ? "Pending at bank" : `Due ${formatShortDate(alert.firstOccurrenceDate)}`}
-                                    {alert.occurrenceCount > 1 ? ` · ${alert.occurrenceCount} payments open` : ""}
-                                  </Text>
-                                </View>
-                                <PayStatus
-                                  paid={false}
-                                  partial={paidAmount > 0.005}
-                                  overdue={!alert.pendingMatch}
-                                  pendingLabel={pendingLabel}
-                                />
-                              </View>
-                              <View style={styles.dayBillNumbers}>
-                                <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
-                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Amount</Text>
-                                  <Text style={[styles.dayBillNumberValue, { color: c.foreground }]}>${plannedAmount.toFixed(2)}</Text>
-                                </View>
-                                <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
-                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Paid</Text>
-                                  <Text style={[styles.dayBillNumberValue, { color: paidAmount > 0 ? c.success : c.mutedForeground }]}>${paidAmount.toFixed(2)}</Text>
-                                </View>
-                                <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
-                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Left</Text>
-                                  <Text style={[styles.dayBillNumberValue, { color: alert.pendingMatch ? colors.brand.blue : c.destructive }]}>${alert.remainingAmount.toFixed(2)}</Text>
-                                </View>
-                              </View>
-                              <View style={styles.dayBillActions}>
-                                {!alert.pendingMatch ? (
-                                  <Pressable
-                                    onPress={async () => {
-                                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                      const occurrenceMonth = Number(alert.firstOccurrenceDate.slice(5, 7)) - 1;
-                                      const occurrenceYear = Number(alert.firstOccurrenceDate.slice(0, 4));
-                                      const paidTotal = getPaidAmount(alert.billId, occurrenceMonth, occurrenceYear);
-                                      await setPaidAmount(alert.billId, occurrenceMonth, occurrenceYear, paidTotal + alert.remainingAmount);
-                                    }}
-                                    style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.success + "20", borderColor: c.success + "35", opacity: pressed ? 0.74 : 1 }]}
-                                  >
-                                    <Feather name="check" size={13} color={c.success} />
-                                    <Text style={[styles.dayBillActionText, { color: c.success }]}>Mark paid</Text>
-                                  </Pressable>
-                                ) : null}
-                                {alert.bill.frequency === "monthly" || alert.bill.frequency === "quarterly" ? (
-                                <Pressable
-                                  onPress={() => {
-                                    const [viewYear, viewMonth] = selectedDate!.split("-").map(Number);
-                                    setSelectedDate(null);
-                                    setDueDayPicker({
-                                      bill: alert.bill,
-                                      fromDate: alert.firstOccurrenceDate,
-                                      viewMonth: viewMonth - 1,
-                                      viewYear,
-                                    });
-                                  }}
-                                  style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.primary + "16", borderColor: c.primary + "35", opacity: pressed ? 0.74 : 1 }]}
-                                >
-                                  <Feather name="calendar" size={13} color={c.primary} />
-                                  <Text style={[styles.dayBillActionText, { color: c.primary }]}>Plan payment</Text>
-                                </Pressable>
-                                ) : null}
-                                <Pressable
-                                  onPress={() => handleDeleteBillFromDay(alert.bill)}
-                                  style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.destructive + "12", borderColor: c.destructive + "35", opacity: pressed ? 0.74 : 1 }]}
-                                >
-                                  <Feather name="trash-2" size={13} color={c.destructive} />
-                                  <Text style={[styles.dayBillActionText, { color: c.destructive }]}>Delete</Text>
-                                </Pressable>
-                              </View>
-                            </View>
-                          );
-                        })}
-                      </View>
-                    ) : null}
-
-                    {([
-                      { key: "due", title: "Bills due this day", bills: todoBillsForDay },
-                      { key: "paid", title: "Paid this day", bills: paidBillsForDay },
-                    ] as const).map(section => section.bills.length > 0 ? (
+                    {scheduledBillsForDay.length > 0 ? (
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
-                        <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>
-                          {section.title}
-                        </Text>
-                        {section.bills.map(bill => {
+                        <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Bills due this day</Text>
+                        {scheduledBillsForDay.map(bill => {
                           const amount = getAmount(bill, month, selectedYear);
                           const paid = getPaidAmount(bill.id, month, selectedYear);
                           const effectivePaid = getEffectivePaidAmount(bill, month, selectedYear);
@@ -2009,12 +1784,6 @@ export default function MonthlyScreen() {
                           const isPartial = effectivePaid > 0 && !isPaid;
                           const remaining = Math.max(0, amount - effectivePaid);
                           const movedIn = movedInByBillId.get(bill.id);
-                          const originalDueDate = movedIn?.from_date ?? selectedDate ?? "";
-                          const pendingMatch = originalDueDate
-                            ? pendingPlanMatchForOccurrence(pendingPlanMatches, pendingBankTransactions, bill.id, originalDueDate)
-                              ?? (selectedDate ? pendingPlanMatchForOccurrence(pendingPlanMatches, pendingBankTransactions, bill.id, selectedDate) : undefined)
-                            : undefined;
-                          const isOverdue = !isPaid && !pendingMatch && Boolean(originalDueDate) && originalDueDate < todayIsoDate();
                           const canReschedule = bill.frequency === "monthly" || bill.frequency === "quarterly";
                           const amtKey = `${bill.id}-overlay-amount`;
                           const showAmt = editingAmounts[amtKey] !== undefined ? editingAmounts[amtKey] : amount.toFixed(2);
@@ -2023,27 +1792,15 @@ export default function MonthlyScreen() {
                           const showPaid = editingPaid[paidKey] !== undefined ? editingPaid[paidKey] : paid > 0 ? paid.toFixed(2) : "";
                           const paidEditing = editingPaid[paidKey] !== undefined;
                           return (
-                            <View key={`overlay-bill-${section.key}-${bill.id}`} style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: isPaid ? c.success + "40" : isPartial ? c.warning + "45" : c.border }]}>
+                            <View key={`overlay-bill-${bill.id}`} style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: isPaid ? c.success + "40" : isPartial ? c.warning + "45" : c.border }]}>
                               <View style={styles.dayBillTop}>
                                 <View style={{ flex: 1 }}>
                                   <Text numberOfLines={1} style={[styles.dayBillName, { color: c.foreground }]}>{bill.name}</Text>
-                                  {pendingMatch ? (
-                                    <Text style={[styles.dayBillMeta, { color: colors.brand.blue }]}>
-                                      {pendingMatch.status === "ready_review" ? "Posted · ready to review" : "Pending at bank"}
-                                    </Text>
-                                  ) : null}
                                   <Text style={[styles.dayBillMeta, { color: c.mutedForeground }]}>
-                                    {isOverdue ? "Overdue · " : ""}
-                                    Due {formatShortDate(originalDueDate)}
-                                    {movedIn ? ` · Planned ${formatShortDate(movedIn.to_date)}` : ""}
+                                    {bill.category}{bill.is_debt ? " · debt" : ""}{movedIn ? ` · moved from ${formatShortDate(movedIn.from_date)}` : ""}
                                   </Text>
                                 </View>
-                                <PayStatus
-                                  paid={isPaid}
-                                  partial={isPartial}
-                                  overdue={isOverdue}
-                                  pendingLabel={pendingMatch ? pendingMatchStatusLabel(pendingMatch) : undefined}
-                                />
+                                <PayStatus paid={isPaid} partial={isPartial} />
                               </View>
                               <View style={styles.dayBillNumbers}>
                                 <View style={[styles.dayBillNumberTile, styles.dayBillPaidTile, { backgroundColor: c.background + "66", borderColor: amountEditing ? c.primary + "80" : c.border }]}>
@@ -2128,21 +1885,12 @@ export default function MonthlyScreen() {
                                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                                       const fromDate = movedInByBillId.get(bill.id)?.from_date ?? selectedDate;
                                       setSelectedDate(null);
-                                      if (fromDate) {
-                                        const effectiveDate = movedInByBillId.get(bill.id)?.to_date ?? fromDate;
-                                        const [viewYear, viewMonth] = effectiveDate.split("-").map(Number);
-                                        setDueDayPicker({
-                                          bill,
-                                          fromDate,
-                                          viewMonth: viewMonth - 1,
-                                          viewYear,
-                                        });
-                                      }
+                                      if (fromDate) setDueDayPicker({ bill, fromDate });
                                     }}
                                     style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.primary + "16", borderColor: c.primary + "35", opacity: pressed ? 0.74 : 1 }]}
                                   >
                                     <Feather name="calendar" size={13} color={c.primary} />
-                                    <Text style={[styles.dayBillActionText, { color: c.primary }]}>Plan payment</Text>
+                                    <Text style={[styles.dayBillActionText, { color: c.primary }]}>Change date</Text>
                                   </Pressable>
                                 ) : null}
                                 <Pressable
@@ -2157,7 +1905,7 @@ export default function MonthlyScreen() {
                           );
                         })}
                       </View>
-                    ) : null)}
+                    ) : null}
 
                     {selectedDebtPayments.length > 0 || selectedSnowballTransactions.length > 0 ? (
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
@@ -2464,7 +2212,7 @@ export default function MonthlyScreen() {
                       </View>
                     ) : null}
 
-                    {visibleDayItemCount === 0 ? (
+                    {selectedDayItemCount === 0 ? (
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
                         <Text style={[styles.dayOverlayEmptyTitle, { color: c.foreground }]}>No activity</Text>
                         <Text style={[styles.dayOverlayEmptyText, { color: c.mutedForeground }]}>Add a transaction or plan for this day.</Text>
@@ -2474,8 +2222,6 @@ export default function MonthlyScreen() {
 
                   <View style={styles.dayOverlayActions}>
                     <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={selectedDate ? `Ask Flo about ${formatLongDate(selectedDate)}` : "Ask Flo about this day"}
                       onPress={() => {
                         if (!selectedDate) return;
                         const date = selectedDate;
@@ -2490,9 +2236,10 @@ export default function MonthlyScreen() {
                           },
                         } as never);
                       }}
-                      style={({ pressed }) => [styles.dayOverlayFloButton, { backgroundColor: c.primary + "16", borderColor: c.primary + "40", opacity: pressed ? 0.8 : 1 }]}
+                      style={({ pressed }) => [styles.dayOverlayAskPill, { backgroundColor: c.primary + "16", borderColor: c.primary + "40", opacity: pressed ? 0.8 : 1 }]}
                     >
-                      <FloLogo size={42} />
+                      <Feather name="message-circle" size={16} color={c.primary} />
+                      <Text style={[styles.dayOverlayAskText, { color: c.primary }]}>Ask Flo</Text>
                     </Pressable>
                     <CommandPlusButton
                       onPress={() => openAddTransaction(selectedDate)}
@@ -2615,18 +2362,12 @@ export default function MonthlyScreen() {
         <Pressable style={styles.pickerOverlay} onPress={() => setDueDayPicker(null)}>
           <Pressable style={[styles.pickerSheet, { backgroundColor: c.background }]} onPress={e => e.stopPropagation()}>
             {dueDayPicker && (() => {
-              const { bill, fromDate, viewMonth, viewYear } = dueDayPicker;
-              const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+              const { bill, fromDate } = dueDayPicker;
+              const daysInMonth = new Date(selectedYear, month + 1, 0).getDate();
               const movedDate = getBillDateMoveForOccurrence(bill.id, fromDate)?.to_date;
               const effectiveDate = movedDate ?? fromDate;
-              const changePickerMonth = (delta: number) => {
-                const next = new Date(viewYear, viewMonth + delta, 1);
-                setDueDayPicker(current => current ? {
-                  ...current,
-                  viewMonth: next.getMonth(),
-                  viewYear: next.getFullYear(),
-                } : null);
-              };
+              const effectiveDay = dayFromIsoDate(effectiveDate);
+              const originalDay = dayFromIsoDate(fromDate);
               return (
                 <>
                   <View style={styles.pickerHandle} />
@@ -2634,8 +2375,8 @@ export default function MonthlyScreen() {
                     <View>
                       <Text style={[styles.pickerTitle, { color: c.foreground }]}>{bill.name}</Text>
                       <Text style={[styles.pickerSub, { color: c.mutedForeground }]}>
-                        Due {formatShortDate(fromDate)}
-                        {movedDate ? ` · Planned ${formatShortDate(movedDate)}` : ""}
+                        Currently {formatShortDate(effectiveDate)}
+                        {movedDate ? ` · moved from ${formatShortDate(fromDate)}` : " · original date"}
                       </Text>
                     </View>
                     <Pressable onPress={() => setDueDayPicker(null)} hitSlop={8}>
@@ -2644,20 +2385,8 @@ export default function MonthlyScreen() {
                   </View>
 
                   <Text style={[styles.pickerLabel, { color: c.mutedForeground }]}>
-                    Plan when the money leaves. The bill’s due date will not change.
+                    Select the new due day for this month only
                   </Text>
-
-                  <View style={styles.pickerMonthRow}>
-                    <Pressable accessibilityLabel="Previous month" onPress={() => changePickerMonth(-1)} style={styles.pickerMonthButton}>
-                      <Feather name="chevron-left" size={20} color={c.foreground} />
-                    </Pressable>
-                    <Text style={[styles.pickerMonthTitle, { color: c.foreground }]}>
-                      {MONTH_FULL[viewMonth]} {viewYear}
-                    </Text>
-                    <Pressable accessibilityLabel="Next month" onPress={() => changePickerMonth(1)} style={styles.pickerMonthButton}>
-                      <Feather name="chevron-right" size={20} color={c.foreground} />
-                    </Pressable>
-                  </View>
 
                   {/* Day-of-week headers */}
                   <View style={styles.pickerCalDowRow}>
@@ -2669,13 +2398,12 @@ export default function MonthlyScreen() {
                   {/* Calendar grid — days aligned to correct weekday column */}
                   <View style={styles.pickerDayGrid}>
                     {[
-                      ...Array(new Date(viewYear, viewMonth, 1).getDay()).fill(null),
+                      ...Array(new Date(selectedYear, month, 1).getDay()).fill(null),
                       ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
                     ].map((day, idx) => {
                       if (day === null) return <View key={`e${idx}`} style={styles.pickerDayBtn} />;
-                      const date = isoDateForMonthDay(viewYear, viewMonth, day);
-                      const isCurrent = date === effectiveDate;
-                      const isOriginal = date === fromDate && date !== effectiveDate;
+                      const isCurrent = day === effectiveDay;
+                      const isOriginal = day === originalDay && !movedDate;
                       return (
                         <Pressable
                           key={day}
@@ -3074,9 +2802,6 @@ const styles = StyleSheet.create({
   dayOverlayRiskText: { flex: 1, fontSize: 12, fontFamily: "Inter_600SemiBold" },
   dayOverlaySection: { borderWidth: 1, borderRadius: 18, padding: 12, gap: 8 },
   dayOverlaySectionTitle: { fontSize: 14, fontFamily: "Inter_700Bold", marginBottom: 2 },
-  daySectionHeadingRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  daySectionCount: { minWidth: 24, height: 24, borderRadius: 999, alignItems: "center", justifyContent: "center", paddingHorizontal: 7 },
-  daySectionCountText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   dayOverlayRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: 30 },
   dayOverlayRowMain: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   dayOverlayDeleteButton: { width: 30, height: 30, borderRadius: 999, alignItems: "center", justifyContent: "center" },
@@ -3106,18 +2831,15 @@ const styles = StyleSheet.create({
   dayBillActionText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   dayOverlayEmptyTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
   dayOverlayEmptyText: { fontSize: 12, fontFamily: "Inter_400Regular" },
-  dayOverlayActions: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 10, paddingTop: 14 },
-  dayOverlayFloButton: { width: 62, height: 62, borderWidth: 1, borderRadius: 31, alignItems: "center", justifyContent: "center" },
-  dayOverlayFab: { width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
+  dayOverlayActions: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 14 },
+  dayOverlayAskPill: { flex: 1, minHeight: 50, borderWidth: 1, borderRadius: 25, alignItems: "center", justifyContent: "center", paddingHorizontal: 14, flexDirection: "row", gap: 6 },
+  dayOverlayAskText: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   pickerOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.55)" },
   pickerSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 36 },
   pickerHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#555", alignSelf: "center", marginBottom: 16 },
   pickerHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 },
   pickerTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
   pickerSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
-  pickerMonthRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 14, marginBottom: 8 },
-  pickerMonthButton: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
-  pickerMonthTitle: { fontSize: 15, fontFamily: "Inter_800ExtraBold" },
   pickerLabel: { fontSize: 11, fontFamily: "Inter_500Medium", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 12 },
   pickerCalDowRow: { flexDirection: "row", marginBottom: 4 },
   pickerCalDowLabel: { width: "14.285714%", textAlign: "center", fontSize: 11, fontFamily: "Inter_600SemiBold" },

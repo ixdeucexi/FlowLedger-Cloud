@@ -10,7 +10,6 @@ export interface OverdueBillOccurrence {
   billId: string;
   name: string;
   occurrenceDate: string;
-  plannedAmount: number;
   remainingAmount: number;
   daysPastDue: number;
 }
@@ -52,7 +51,6 @@ export function buildOverdueBillOccurrences(
         billId: bill.billId,
         name: bill.name,
         occurrenceDate: isoDate(year, month, day),
-        plannedAmount: roundCurrency(occurrenceAmount),
         remainingAmount,
         daysPastDue: Math.max(1, Math.round((today.getTime() - occurrence.getTime()) / 86_400_000)),
       }];
@@ -69,7 +67,6 @@ export function groupOverdueBills(occurrences: OverdueBillOccurrence[]) {
     billId: string;
     name: string;
     firstOccurrenceDate: string;
-    plannedAmount: number;
     remainingAmount: number;
     occurrenceCount: number;
     maxDaysPastDue: number;
@@ -82,14 +79,12 @@ export function groupOverdueBills(occurrences: OverdueBillOccurrence[]) {
         billId: occurrence.billId,
         name: occurrence.name,
         firstOccurrenceDate: occurrence.occurrenceDate,
-        plannedAmount: occurrence.plannedAmount,
         remainingAmount: occurrence.remainingAmount,
         occurrenceCount: 1,
         maxDaysPastDue: occurrence.daysPastDue,
       });
       return;
     }
-    existing.plannedAmount = roundCurrency(existing.plannedAmount + occurrence.plannedAmount);
     existing.remainingAmount = roundCurrency(existing.remainingAmount + occurrence.remainingAmount);
     existing.occurrenceCount += 1;
     existing.maxDaysPastDue = Math.max(existing.maxDaysPastDue, occurrence.daysPastDue);
