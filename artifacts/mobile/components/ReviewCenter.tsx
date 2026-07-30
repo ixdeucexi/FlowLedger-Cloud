@@ -13,6 +13,7 @@ import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { confirmAction } from "@/lib/confirmAction";
 import { buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewQueueAfterSkips, scheduledSnowballReviewTargets, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
+import { prioritizePendingPlanTarget } from "@/lib/pendingPlanMatches";
 import { isOpenSpendingBucket, spendingBucketSummary } from "@/lib/spendingBuckets";
 
 function todayIso() {
@@ -66,7 +67,7 @@ function isValidDateInMonth(value: string, month: number, year: number) {
 export function ReviewCenter() {
   const c = useColors();
   const {
-    transactions, goals, decisions, extraPayments, categories, canEditHousehold, settings,
+    transactions, goals, decisions, extraPayments, categories, canEditHousehold, settings, pendingPlanMatches,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getIncomeOccurrencesInMonth,
     addBill, addGoal, updateGoal, deleteGoal, closeSpendingBucket, reopenSpendingBucket,
     archiveSpendingBucket, restoreArchivedSpendingBucket,
@@ -181,8 +182,8 @@ export function ReviewCenter() {
         });
       });
     }
-    return rankReviewTargets(current, candidates);
-  }, [current, decisions, extraPayments, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getMonthlyBills, goals, transactions]);
+    return prioritizePendingPlanTarget(rankReviewTargets(current, candidates), current.id, pendingPlanMatches);
+  }, [current, decisions, extraPayments, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getMonthlyBills, goals, pendingPlanMatches, transactions]);
   const groupedTargets = useMemo(() => groupReviewTargets(targets), [targets]);
   const spendingBuckets = useMemo(() => goals
     .filter(goal => goal.goal_type === "planned_expense" && !goal.archived_at)

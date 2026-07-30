@@ -89,6 +89,27 @@ test("builds Flow Score, Safe Cushion, and practical algorithm outputs", () => {
   assert.ok(suite.insights.some(insight => insight.algorithm === "Flow Score"));
 });
 
+test("a bank-pending bill occurrence is not treated as paid or overdue", () => {
+  const suite = buildAlgorithmSuite(baseInput({
+    todayDay: 10,
+    bills: [{
+      id: "phone",
+      name: "Phone",
+      amount: 100,
+      category: "Utilities",
+      due_day: 8,
+      occurrenceDays: [8],
+      pendingDays: [8],
+      is_debt: false,
+      is_recurring: true,
+      paidAmount: 0,
+    }],
+  }));
+
+  assert.equal(suite.billPriority.nextBill, null);
+  assert.ok(suite.flowScore.negativeFactors.every(factor => !/overdue bill/i.test(factor)));
+});
+
 test("every active algorithm exposes a decision-engine detail", () => {
   const suite = buildAlgorithmSuite(baseInput());
 

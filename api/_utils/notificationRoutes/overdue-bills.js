@@ -1,6 +1,6 @@
 const { isAuthorizedCron } = require("../cronAuth");
 const { optional } = require("../env");
-const { buildOverdueOccurrences } = require("../overdueBills");
+const { buildOverdueOccurrences, suppressPendingMatchedOccurrences } = require("../overdueBills");
 const { queueOverdueBillNotifications } = require("../push");
 const { safeError, serviceSupabase } = require("../supabase");
 
@@ -50,7 +50,17 @@ module.exports = async function overdueBillNotifications(req, res) {
     if (!bills.length) return res.status(200).json({ ok: true, users: subscribedUserIds.length, overdue: 0, delivered: 0 });
 
     const billIds = bills.map(bill => bill.id);
-    const [{ data: overrides, error: overrideError }, { data: moves, error: moveError }] = await Promise.all([
+    const pendingMatchesRequest = householdIds.length
+      ? db.from("pending_plan_matches")
+        .select("household_id,target_id,occurrence_date,status")
+        .in("household_id", householdIds)
+        .in("status", ["active", "ready_review"])
+      : Promise.resolve({ data: [], error: null });
+    const [
+      { data: overrides, error: overrideError },
+      { data: moves, error: moveError },
+      { data: pendingMatches, error: pendingMatchesError },
+    ] = await Promise.all([
       db.from("monthly_overrides")
         .select("bill_id,custom_amount,custom_due_day,paid_amount,actual_amount,paid_date")
         .eq("month", month)
@@ -59,11 +69,16 @@ module.exports = async function overdueBillNotifications(req, res) {
       db.from("bill_date_moves")
         .select("bill_id,from_date,to_date,created_at,updated_at")
         .in("bill_id", billIds),
+      pendingMatchesRequest,
     ]);
     if (overrideError) throw overrideError;
     if (moveError) throw moveError;
+    if (pendingMatchesError) throw pendingMatchesError;
 
-    const overdue = buildOverdueOccurrences({ bills, overrides, moves, today });
+    const overdue = suppressPendingMatchedOccurrences(
+      buildOverdueOccurrences({ bills, overrides, moves, today }),
+      pendingMatches,
+    );
     const householdRecipients = new Map();
     (memberships || []).forEach(membership => {
       if (!householdRecipients.has(membership.household_id)) householdRecipients.set(membership.household_id, []);

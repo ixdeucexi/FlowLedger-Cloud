@@ -18,7 +18,7 @@ import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { PlanViewSelector } from "@/components/PlanViewSelector";
 import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
 import colors from "@/constants/colors";
-import type { Bill, ExtraPayment, SnowballFundingSource, Transaction } from "@/context/BudgetContext";
+import type { Bill, ExtraPayment, PendingBankTransaction, SnowballFundingSource, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
@@ -31,6 +31,7 @@ import type { SnowballProjectionResult } from "@/lib/snowball";
 import { resizeSnowballFundingSources } from "@/lib/snowballFunding";
 import { isOpenSpendingBucket, spendingBucketMatch, spendingBucketSummary } from "@/lib/spendingBuckets";
 import { buildReviewQueue, matchedOccurrenceAllocations, occurrenceKey, transactionDisplayName } from "@/lib/reviewCenter";
+import { activePendingPlanMatches, pendingMatchStatusLabel } from "@/lib/pendingPlanMatches";
 import { CategoryBudgetScreen } from "./category-budget";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -63,6 +64,8 @@ interface ActivityItem {
   extraPayment?: ExtraPayment;
   detail?: string;          // human-readable explanation shown in detail sheet
   pending?: boolean;
+  rawPending?: PendingBankTransaction;
+  pendingMatchLabel?: string;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -142,10 +145,11 @@ export function ActivityScreen() {
   const params = useLocalSearchParams<{ editDebtPaymentId?: string; editDebtPaymentAt?: string }>();
   const { isFeatureLocked, bypassFeature } = useMembership();
   const {
-    transactions, pendingBankTransactions, addTransaction, updateTransaction, deleteTransaction, deleteTransfer,
+    transactions, pendingBankTransactions, pendingPlanMatches, addTransaction, updateTransaction, deleteTransaction, deleteTransfer,
     bills, incomes, goals, overrides, extraPayments, settings,
     getIncomeOccurrencesInMonth, getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal,
-    matchTransactionToBill, unmatchTransactionFromBill, reconcileTransaction, undoTransactionReconciliation, removeReviewSurplusFunding,
+    matchTransactionToBill, unmatchTransactionFromBill, matchPendingTransactionToBill, removePendingPlanMatch,
+    reconcileTransaction, undoTransactionReconciliation, removeReviewSurplusFunding,
     getExtraPayment, previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, addGoal,
   } = useBudget();
 
@@ -162,6 +166,7 @@ export function ActivityScreen() {
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [weeklySummaryVisible, setWeeklySummaryVisible] = useState(false);
   const [matchTx, setMatchTx] = useState<Transaction | null>(null);
+  const [pendingMatchTx, setPendingMatchTx] = useState<PendingBankTransaction | null>(null);
   const [savingMatch, setSavingMatch] = useState(false);
   const [fullPaymentPrompt, setFullPaymentPrompt] = useState<MatchedPaymentPrompt | null>(null);
   const [queuedFullPaymentPrompt, setQueuedFullPaymentPrompt] = useState<MatchedPaymentPrompt | null>(null);
@@ -183,6 +188,7 @@ export function ActivityScreen() {
   useBackDismiss(filterModalVisible, () => setFilterModalVisible(false));
   useBackDismiss(weeklySummaryVisible, () => setWeeklySummaryVisible(false));
   useBackDismiss(!!matchTx, () => setMatchTx(null));
+  useBackDismiss(!!pendingMatchTx, () => setPendingMatchTx(null));
 
   useEffect(() => {
     if (matchTx || fullPaymentPrompt || !queuedFullPaymentPrompt) return;
@@ -227,7 +233,9 @@ export function ActivityScreen() {
 
     // Pending Plaid rows are previews only. They stay outside the authoritative
     // transaction list so forecasts, reports, matching, and totals cannot count them.
+    const livePendingMatches = activePendingPlanMatches(pendingPlanMatches, pendingBankTransactions);
     for (const pending of pendingBankTransactions) {
+      const pendingMatch = livePendingMatches.find(match => match.pending_plaid_transaction_id === pending.plaid_transaction_id);
       items.push({
         id: `pending-${pending.plaid_transaction_id}`,
         date: pending.transaction_date,
@@ -237,7 +245,11 @@ export function ActivityScreen() {
         source: "bank_transaction",
         editable: false,
         pending: true,
-        detail: "Pending at your bank. FlowLedger is showing this as a preview and will not count it until it posts.",
+        rawPending: pending,
+        pendingMatchLabel: pendingMatch ? pendingMatchStatusLabel(pendingMatch) : undefined,
+        detail: pendingMatch
+          ? `${pendingMatchStatusLabel(pendingMatch)} for ${pendingMatch.target_name}. It is not paid or counted until the bank posts it.`
+          : "Pending at your bank. FlowLedger is showing this as a preview and will not count it until it posts.",
       });
     }
 
@@ -361,7 +373,7 @@ export function ActivityScreen() {
     }
 
     return items;
-  }, [transactions, pendingBankTransactions, overrides, bills, incomes, extraPayments, getIncomeOccurrencesInMonth]);
+  }, [transactions, pendingBankTransactions, pendingPlanMatches, overrides, bills, incomes, extraPayments, getIncomeOccurrencesInMonth]);
 
   // ── Filter & sort ─────────────────────────────────────────────────────────
   const categoryOptions = useMemo(
@@ -554,6 +566,37 @@ export function ActivityScreen() {
       category: matchTx.category,
     }, candidates);
   }, [matchTx, getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal]);
+  const pendingBillMatchOptions = useMemo(() => {
+    if (!pendingMatchTx || pendingMatchTx.amount >= 0) return [];
+    const [year, monthNumber] = pendingMatchTx.transaction_date.split("-").map(Number);
+    const month = monthNumber - 1;
+    const candidates = getMonthlyBills(month, year).flatMap(bill => {
+      const days = getBillOccurrencesInMonth(bill, month, year);
+      if (days.length === 0) return [];
+      const occurrenceBudget = resolveMatchedBillBudget(
+        getBillMonthlyTotal(bill, month, year) / days.length,
+        bill.amount,
+      );
+      return [{
+        billId: bill.id,
+        name: bill.name,
+        category: bill.category,
+        plannedAmount: occurrenceBudget,
+        occurrenceDates: days.map(day =>
+          `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`),
+      }];
+    });
+    return rankBillMatches({
+      date: pendingMatchTx.transaction_date,
+      amount: pendingMatchTx.amount,
+      description: pendingMatchTx.merchant_name || pendingMatchTx.name || pendingMatchTx.category,
+      category: pendingMatchTx.category,
+    }, candidates);
+  }, [pendingMatchTx, getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal]);
+  const selectedPendingPlanMatch = useMemo(() => pendingMatchTx
+    ? activePendingPlanMatches(pendingPlanMatches, pendingBankTransactions)
+      .find(match => match.pending_plaid_transaction_id === pendingMatchTx.plaid_transaction_id)
+    : undefined, [pendingBankTransactions, pendingMatchTx, pendingPlanMatches]);
   const manualMatchOptions = useMemo(() => {
     if (!matchTx || matchTx.source !== "plaid" || matchTx.amount >= 0) return [];
     const monthPrefix = matchTx.date.slice(0, 7);
@@ -665,6 +708,44 @@ export function ActivityScreen() {
       setMatchTx(null);
     } catch (error) {
       Alert.alert("Could not match bill", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSavingMatch(false);
+    }
+  };
+
+  const handleMatchPendingBill = async (billId: string) => {
+    if (!pendingMatchTx || savingMatch) return;
+    const option = pendingBillMatchOptions.find(item => item.billId === billId);
+    if (!option) return;
+    setSavingMatch(true);
+    try {
+      await matchPendingTransactionToBill(
+        pendingMatchTx.plaid_transaction_id,
+        billId,
+        option.nearestOccurrenceDate ?? pendingMatchTx.transaction_date,
+        option.plannedAmount,
+      );
+      setPendingMatchTx(null);
+      setDetailItem(null);
+      Alert.alert(
+        "Payment pending",
+        `${option.name} will not show overdue while this bank charge is pending. Confirm it after it posts.`,
+      );
+    } catch (error) {
+      Alert.alert("Could not match pending payment", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSavingMatch(false);
+    }
+  };
+
+  const handleRemovePendingMatch = async () => {
+    if (!selectedPendingPlanMatch || savingMatch) return;
+    setSavingMatch(true);
+    try {
+      await removePendingPlanMatch(selectedPendingPlanMatch.id);
+      setPendingMatchTx(null);
+    } catch (error) {
+      Alert.alert("Could not remove pending match", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSavingMatch(false);
     }
@@ -1058,12 +1139,47 @@ export function ActivityScreen() {
                 {detailItem.source === "bill_payment"
                   ? "Edit this entry by adjusting the paid amount in Monthly view."
                   : detailItem.pending
-                  ? "This is a bank preview only. It cannot be edited or matched until it posts."
+                  ? "This is a bank preview. A temporary bill match prevents a false overdue warning, but nothing is paid until it posts."
                   : detailItem.source === "income"
                   ? "Edit this entry by updating your income in More → Income Sources."
                   : "Edit this entry from the Bills → Debt tab."}
               </Text>
             </View>
+
+            {detailItem.pending && isExpense ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Match pending ${detailItem.label} to a planned bill`}
+                onPress={() => {
+                  if (!detailItem.rawPending) return;
+                  if (isFeatureLocked("transaction_matching")) {
+                    Alert.alert(
+                      "Pending matching is a Pro feature",
+                      "Upgrade to Pro to connect pending bank charges to planned bills.",
+                    );
+                    return;
+                  }
+                  const pending = detailItem.rawPending;
+                  setDetailItem(null);
+                  setTimeout(() => setPendingMatchTx(pending), MODAL_HANDOFF_DELAY_MS);
+                }}
+                style={({ pressed }) => [
+                  styles.pendingMatchButton,
+                  { borderColor: colors.brand.blue + "70", backgroundColor: colors.brand.blue + "16", opacity: pressed ? 0.8 : 1 },
+                ]}
+              >
+                <Feather name="link-2" size={17} color={colors.brand.blue} />
+                <View style={styles.pendingBucketButtonCopy}>
+                  <Text style={[styles.pendingBucketButtonTitle, { color: c.foreground }]}>
+                    Match to a planned bill
+                  </Text>
+                  <Text style={[styles.pendingBucketButtonBody, { color: c.mutedForeground }]}>
+                    Show Payment pending instead of overdue
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={18} color={colors.brand.blue} />
+              </Pressable>
+            ) : null}
 
             {detailItem.pending && isExpense ? (
               <Pressable
@@ -1337,8 +1453,10 @@ export function ActivityScreen() {
                     </View>
                   )}
                   {item.pending ? (
-                    <View style={[styles.sourceBadge, { backgroundColor: c.warning + "18" }]}>
-                      <Text style={[styles.sourceBadgeText, { color: c.warning }]}>Pending</Text>
+                    <View style={[styles.sourceBadge, { backgroundColor: (item.pendingMatchLabel ? colors.brand.blue : c.warning) + "18" }]}>
+                      <Text style={[styles.sourceBadgeText, { color: item.pendingMatchLabel ? colors.brand.blue : c.warning }]}>
+                        {item.pendingMatchLabel ? "Payment pending" : "Pending"}
+                      </Text>
                     </View>
                   ) : null}
                   <Text style={[styles.txDate, { color: c.mutedForeground }]}>
@@ -1365,6 +1483,111 @@ export function ActivityScreen() {
       />
 
       {/* ── Filter sheet ── */}
+      <Modal
+        visible={!!pendingMatchTx}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPendingMatchTx(null)}
+      >
+        <Pressable style={styles.matchOverlay} onPress={() => setPendingMatchTx(null)}>
+          <Pressable style={[styles.matchSheet, { backgroundColor: c.background }]} onPress={() => {}}>
+            <View style={[styles.filterHandle, { backgroundColor: c.border }]} />
+            <View style={styles.matchHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.matchEyebrow, { color: c.warning }]}>PENDING BANK PAYMENT</Text>
+                <Text style={[styles.matchTitle, { color: c.foreground }]} numberOfLines={2}>
+                  {pendingMatchTx?.merchant_name || pendingMatchTx?.name || "Pending payment"}
+                </Text>
+                <Text style={[styles.matchAmount, { color: c.destructive }]}>
+                  −${Math.abs(pendingMatchTx?.amount ?? 0).toFixed(2)} · {pendingMatchTx ? formatDate(pendingMatchTx.transaction_date) : ""}
+                </Text>
+              </View>
+              <Pressable accessibilityLabel="Close pending bill matching" onPress={() => setPendingMatchTx(null)} hitSlop={10}>
+                <Feather name="x" size={22} color={c.mutedForeground} />
+              </Pressable>
+            </View>
+
+            {selectedPendingPlanMatch ? (
+              <View style={styles.matchBody}>
+                <View style={[styles.matchedCard, { backgroundColor: colors.brand.blue + "16", borderColor: colors.brand.blue + "55" }]}>
+                  <Feather name="clock" size={22} color={colors.brand.blue} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.matchRowTitle, { color: c.foreground }]}>
+                      Payment pending for {selectedPendingPlanMatch.target_name}
+                    </Text>
+                    <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>
+                      Not paid or counted yet. FlowLedger will ask you to confirm when it posts.
+                    </Text>
+                  </View>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove pending match to ${selectedPendingPlanMatch.target_name}`}
+                  disabled={savingMatch}
+                  onPress={() => void handleRemovePendingMatch()}
+                  style={[styles.unmatchButton, { borderColor: c.destructive, opacity: savingMatch ? 0.55 : 1 }]}
+                >
+                  <Text style={[styles.unmatchButtonText, { color: c.destructive }]}>
+                    {savingMatch ? "Updating…" : "Remove pending match"}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : (
+              <>
+                <Text style={[styles.matchIntro, { color: c.mutedForeground }]}>
+                  Choose the bill this pending payment is expected to cover.
+                </Text>
+                <ScrollView style={styles.matchList} showsVerticalScrollIndicator={false}>
+                  {pendingBillMatchOptions.length > 0 ? pendingBillMatchOptions.map((option, index) => (
+                    <Pressable
+                      key={`${option.billId}-${option.nearestOccurrenceDate}`}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Temporarily match pending payment to ${option.name}`}
+                      disabled={savingMatch}
+                      onPress={() => void handleMatchPendingBill(option.billId)}
+                      style={({ pressed }) => [
+                        styles.matchRow,
+                        {
+                          backgroundColor: c.card,
+                          borderColor: index === 0 && option.score >= 48 ? c.success + "66" : c.border,
+                          opacity: savingMatch ? 0.55 : pressed ? 0.82 : 1,
+                        },
+                      ]}
+                    >
+                      <View style={[styles.matchIcon, { backgroundColor: (index === 0 && option.score >= 48 ? c.success : colors.brand.blue) + "18" }]}>
+                        <Feather name="file-text" size={17} color={index === 0 && option.score >= 48 ? c.success : colors.brand.blue} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <View style={styles.matchRowHeading}>
+                          <Text style={[styles.matchRowTitle, { color: c.foreground }]} numberOfLines={1}>{option.name}</Text>
+                          {index === 0 && option.score >= 48 ? (
+                            <View style={[styles.suggestedBadge, { backgroundColor: c.success + "20" }]}>
+                              <Text style={[styles.suggestedBadgeText, { color: c.success }]}>Suggested</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>
+                          Planned ${option.plannedAmount.toFixed(2)} · {option.daysApart === 0 ? "same day" : option.daysApart === 1 ? "1 day away" : `${option.daysApart ?? 0} days away`}
+                        </Text>
+                        {option.reasons.length > 0 ? (
+                          <Text style={[styles.matchReason, { color: c.success }]}>{option.reasons.slice(0, 2).join(" · ")}</Text>
+                        ) : null}
+                      </View>
+                      <Feather name="chevron-right" size={17} color={c.mutedForeground} />
+                    </Pressable>
+                  )) : (
+                    <View style={[styles.noMatchCard, { backgroundColor: c.card, borderColor: c.border }]}>
+                      <Text style={[styles.matchRowTitle, { color: c.foreground }]}>No bill found</Text>
+                      <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>Add the bill first, then return to this pending charge.</Text>
+                    </View>
+                  )}
+                </ScrollView>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <Modal
         visible={!!matchTx}
         transparent
@@ -1847,6 +2070,7 @@ const styles = StyleSheet.create({
   sheetNote:       { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, marginTop: 16, marginBottom: 4 },
   sheetNoteText:   { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
   pendingBucketButton: { minHeight: 62, borderRadius: colors.radius, paddingHorizontal: 15, paddingVertical: 11, marginTop: 12, flexDirection: "row", alignItems: "center", gap: 11 },
+  pendingMatchButton: { minHeight: 62, borderWidth: 1, borderRadius: colors.radius, paddingHorizontal: 15, paddingVertical: 11, marginTop: 12, flexDirection: "row", alignItems: "center", gap: 11 },
   pendingBucketButtonCopy: { flex: 1 },
   pendingBucketButtonTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   pendingBucketButtonBody: { fontSize: 11, lineHeight: 15, fontFamily: "Inter_500Medium", marginTop: 2, opacity: 0.82 },

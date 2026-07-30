@@ -43,6 +43,7 @@ import {
   snowballPlanTotalThroughDate,
 } from "@/lib/debtPaymentPlan";
 import { replaceBillSurplusFundingSource } from "@/lib/snowballFunding";
+import { pendingMatchStatusLabel, pendingPlanMatchForOccurrence } from "@/lib/pendingPlanMatches";
 
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
@@ -84,9 +85,10 @@ function todayIsoDate() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
-function PayStatus({ paid, partial, overdue = false }: { paid: boolean; partial: boolean; overdue?: boolean }) {
+function PayStatus({ paid, partial, overdue = false, pendingLabel }: { paid: boolean; partial: boolean; overdue?: boolean; pendingLabel?: string }) {
   const c = useColors();
   if (paid) return <View style={[ps.badge, { backgroundColor: c.success + "25" }]}><Text style={[ps.text, { color: c.success }]}>PAID</Text></View>;
+  if (pendingLabel) return <View style={[ps.badge, { backgroundColor: colors.brand.blue + "25" }]}><Text style={[ps.text, { color: colors.brand.blue }]}>{pendingLabel}</Text></View>;
   if (partial) return <View style={[ps.badge, { backgroundColor: c.warning + "25" }]}><Text style={[ps.text, { color: c.warning }]}>PARTIAL</Text></View>;
   if (overdue) return <View style={[ps.badge, { backgroundColor: c.destructive + "25" }]}><Text style={[ps.text, { color: c.destructive }]}>OVERDUE</Text></View>;
   return <View style={[ps.badge, { backgroundColor: c.destructive + "20" }]}><Text style={[ps.text, { color: c.destructive }]}>UNPAID</Text></View>;
@@ -193,7 +195,7 @@ export default function MonthlyScreen() {
   const router = useRouter();
   const routeParams = useLocalSearchParams<{ openDate?: string | string[]; openDateAt?: string | string[] }>();
   const {
-    bills, overrides, billDateMoves, transactions, extraPayments, goals, decisions, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
+    bills, overrides, billDateMoves, transactions, pendingBankTransactions, pendingPlanMatches, extraPayments, goals, decisions, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
     getCustomDueDay, setCustomDueDay,
     moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, settings,
@@ -1884,7 +1886,11 @@ export default function MonthlyScreen() {
                           const remaining = Math.max(0, amount - effectivePaid);
                           const movedIn = movedInByBillId.get(bill.id);
                           const originalDueDate = movedIn?.from_date ?? selectedDate ?? "";
-                          const isOverdue = !isPaid && Boolean(originalDueDate) && originalDueDate < todayIsoDate();
+                          const pendingMatch = originalDueDate
+                            ? pendingPlanMatchForOccurrence(pendingPlanMatches, pendingBankTransactions, bill.id, originalDueDate)
+                              ?? (selectedDate ? pendingPlanMatchForOccurrence(pendingPlanMatches, pendingBankTransactions, bill.id, selectedDate) : undefined)
+                            : undefined;
+                          const isOverdue = !isPaid && !pendingMatch && Boolean(originalDueDate) && originalDueDate < todayIsoDate();
                           const canReschedule = bill.frequency === "monthly" || bill.frequency === "quarterly";
                           const amtKey = `${bill.id}-overlay-amount`;
                           const showAmt = editingAmounts[amtKey] !== undefined ? editingAmounts[amtKey] : amount.toFixed(2);
@@ -1897,13 +1903,23 @@ export default function MonthlyScreen() {
                               <View style={styles.dayBillTop}>
                                 <View style={{ flex: 1 }}>
                                   <Text numberOfLines={1} style={[styles.dayBillName, { color: c.foreground }]}>{bill.name}</Text>
+                                  {pendingMatch ? (
+                                    <Text style={[styles.dayBillMeta, { color: colors.brand.blue }]}>
+                                      {pendingMatch.status === "ready_review" ? "Posted · ready to review" : "Pending at bank"}
+                                    </Text>
+                                  ) : null}
                                   <Text style={[styles.dayBillMeta, { color: c.mutedForeground }]}>
                                     {isOverdue ? "Overdue · " : ""}
                                     Due {formatShortDate(originalDueDate)}
                                     {movedIn ? ` · Planned ${formatShortDate(movedIn.to_date)}` : ""}
                                   </Text>
                                 </View>
-                                <PayStatus paid={isPaid} partial={isPartial} overdue={isOverdue} />
+                                <PayStatus
+                                  paid={isPaid}
+                                  partial={isPartial}
+                                  overdue={isOverdue}
+                                  pendingLabel={pendingMatch ? pendingMatchStatusLabel(pendingMatch) : undefined}
+                                />
                               </View>
                               <View style={styles.dayBillNumbers}>
                                 <View style={[styles.dayBillNumberTile, styles.dayBillPaidTile, { backgroundColor: c.background + "66", borderColor: amountEditing ? c.primary + "80" : c.border }]}>

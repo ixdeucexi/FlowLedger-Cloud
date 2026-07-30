@@ -404,6 +404,25 @@ async function upsertPlaidTransaction({ userId, householdId, accountRow, transac
       .eq("plaid_transaction_id", pendingTransactionId)
       .eq("pending", true);
     if (retirePendingError) throw retirePendingError;
+
+    if (flowledgerId) {
+      let pendingPlanUpdate = db
+        .from("pending_plan_matches")
+        .update({
+          status: "ready_review",
+          posted_transaction_id: flowledgerId,
+          posted_plaid_transaction_id: plaidTransactionId,
+          posted_amount: Math.abs(amount),
+          updated_at: now,
+        })
+        .eq("pending_plaid_transaction_id", pendingTransactionId)
+        .eq("status", "active");
+      pendingPlanUpdate = householdId
+        ? pendingPlanUpdate.eq("household_id", householdId)
+        : pendingPlanUpdate.eq("user_id", userId);
+      const { error: carryPendingPlanError } = await pendingPlanUpdate;
+      if (carryPendingPlanError) throw carryPendingPlanError;
+    }
   }
 
   if (!transaction.pending && pendingTransactionId && flowledgerId) {
@@ -558,7 +577,8 @@ async function syncTransactions({ client, userId, item, accessToken }) {
     }
     for (const transaction of page.removed || []) {
       const now = new Date().toISOString();
-      const { error: plaidError } = await serviceSupabase()
+      const db = serviceSupabase();
+      const { error: plaidError } = await db
         .from("plaid_transactions")
         .update({ removed_at: now, updated_at: now })
         .eq("user_id", userId)
@@ -570,6 +590,16 @@ async function syncTransactions({ client, userId, item, accessToken }) {
         .eq("user_id", userId)
         .eq("plaid_transaction_id", transaction.transaction_id);
       if (transactionError) throw transactionError;
+      let pendingPlanUpdate = db
+        .from("pending_plan_matches")
+        .update({ status: "expired", updated_at: now })
+        .eq("pending_plaid_transaction_id", transaction.transaction_id)
+        .eq("status", "active");
+      pendingPlanUpdate = item.household_id
+        ? pendingPlanUpdate.eq("household_id", item.household_id)
+        : pendingPlanUpdate.eq("user_id", userId);
+      const { error: pendingPlanError } = await pendingPlanUpdate;
+      if (pendingPlanError) throw pendingPlanError;
       removed += 1;
     }
 

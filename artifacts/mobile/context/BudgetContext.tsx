@@ -51,6 +51,7 @@ import { spendingBucketSummary } from "@/lib/spendingBuckets";
 import { canonicalConnectedAccounts, pendingPlaidActivityWithBalanceHolds } from "@/lib/plaidActivity";
 import { normalizeBillImportance, type BillImportance } from "@/lib/billImportance";
 import { buildTransactionLedger, remainingPlannedAmount } from "@/lib/ledgerEngine";
+import type { PendingPlanMatch } from "@/lib/pendingPlanMatches";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -324,6 +325,7 @@ interface BudgetContextType {
   transactions: Transaction[];
   deletedTransactions: Transaction[];
   pendingBankTransactions: PendingBankTransaction[];
+  pendingPlanMatches: PendingPlanMatch[];
   incomes: IncomeItem[];
   goals: Goal[];
   extraPayments: ExtraPayment[];
@@ -400,6 +402,8 @@ interface BudgetContextType {
   deleteTransfer: (transferGroupId: string) => Promise<void>;
   matchTransactionToBill: (transactionId: string, billId: string, occurrenceDate?: string, plannedAmount?: number) => Promise<void>;
   unmatchTransactionFromBill: (transactionId: string) => Promise<void>;
+  matchPendingTransactionToBill: (pendingPlaidTransactionId: string, billId: string, occurrenceDate: string, plannedAmount: number) => Promise<void>;
+  removePendingPlanMatch: (matchId: string) => Promise<void>;
   reconcileTransaction: (input: ReconcileTransactionInput) => Promise<void>;
   undoTransactionReconciliation: (transactionId: string) => Promise<void>;
   removeReviewSurplusFunding: (transactionId: string) => Promise<void>;
@@ -834,6 +838,27 @@ function normalizePendingBankRows(rows: any[]): PendingBankTransaction[] {
   }));
 }
 
+function normalizePendingPlanMatchRow(row: any): PendingPlanMatch {
+  return {
+    id: String(row.id),
+    pending_plaid_transaction_id: String(row.pending_plaid_transaction_id),
+    pending_account_id: row.pending_account_id || undefined,
+    target_type: "bill",
+    target_id: String(row.target_id),
+    target_name: String(row.target_name || "Planned bill"),
+    occurrence_date: String(row.occurrence_date).slice(0, 10),
+    planned_amount: Number(row.planned_amount),
+    pending_amount: Number(row.pending_amount),
+    pending_transaction_date: String(row.pending_transaction_date).slice(0, 10),
+    status: row.status,
+    posted_transaction_id: row.posted_transaction_id || undefined,
+    posted_plaid_transaction_id: row.posted_plaid_transaction_id || undefined,
+    posted_amount: row.posted_amount == null ? undefined : Number(row.posted_amount),
+    created_at: String(row.created_at),
+    updated_at: String(row.updated_at),
+  };
+}
+
 function normalizeConnectedBankRows(rows: any[]): ConnectedBankAccount[] {
   return rows.map(account => ({
     ...account,
@@ -882,6 +907,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const demoManualMatchTargets = useRef(new Map<string, Transaction>());
   const [deletedTransactions, setDeletedTransactions] = useState<Transaction[]>([]);
   const [pendingBankTransactions, setPendingBankTransactions] = useState<PendingBankTransaction[]>([]);
+  const [pendingPlanMatches, setPendingPlanMatches] = useState<PendingPlanMatch[]>([]);
   const [incomes,       setIncomes]       = useState<IncomeItem[]>([]);
   const [goals,         setGoals]         = useState<Goal[]>([]);
   const [extraPayments, setExtraPayments] = useState<ExtraPayment[]>([]);
@@ -1225,6 +1251,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
                     .limit(100),
                   uid,
                 ),
+                applyHouseholdSelect(
+                  supabase.from("pending_plan_matches")
+                    .select("*")
+                    .in("status", ["active", "ready_review"]),
+                  uid,
+                ),
                 applyHouseholdSelect(supabase.from("incomes").select("*"), uid),
                 applyHouseholdSelect(supabase.from("goals").select("*"), uid),
                 applyHouseholdSelect(supabase.from("extra_payments").select("*"), uid),
@@ -1255,6 +1287,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           { data: oData },
           { data: tData },
           { data: pendingData },
+          { data: pendingPlanData },
           { data: iData },
           { data: gData },
           { data: epData },
@@ -1278,6 +1311,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         const canonicalBankAccounts = canonicalConnectedAccounts(rawConnectedAccounts);
         setConnectedBankAccounts(canonicalBankAccounts);
         setPendingBankTransactions(pendingPlaidActivityWithBalanceHolds(normalizePendingBankRows(pendingData ?? []), rawConnectedAccounts, localDateString()));
+        setPendingPlanMatches((pendingPlanData ?? []).map(normalizePendingPlanMatchRow));
         setIncomes((iData ?? []).map((i: any) => ({
           ...i,
           amount:         Number(i.amount),
@@ -1344,7 +1378,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const requestId = ++bankRefreshRequestRef.current;
     const uid = user.id;
     const scope = householdScopeRef.current;
-    const [transactionResult, pendingResult, accountResult, connectedAccountResult, settingsResult] = await Promise.all([
+    const [transactionResult, pendingResult, pendingPlanResult, accountResult, connectedAccountResult, settingsResult] = await Promise.all([
       applyHouseholdSelect(supabase.from("transactions").select("*"), uid),
       applyHouseholdSelect(
         supabase.from("plaid_transactions")
@@ -1353,6 +1387,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           .is("removed_at", null)
           .order("transaction_date", { ascending: false })
           .limit(100),
+        uid,
+      ),
+      applyHouseholdSelect(
+        supabase.from("pending_plan_matches")
+          .select("*")
+          .in("status", ["active", "ready_review"]),
         uid,
       ),
       applyHouseholdSelect(supabase.from("accounts").select("*"), uid).order("created_at"),
@@ -1370,6 +1410,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const transactionCollections = splitTransactionRows(transactionResult.data ?? []);
       setTransactions(transactionCollections.active);
       setDeletedTransactions(transactionCollections.deleted);
+    }
+    if (!pendingPlanResult.error) {
+      setPendingPlanMatches((pendingPlanResult.data ?? []).map(normalizePendingPlanMatchRow));
     }
     if (!accountResult.error) {
       const nextAccounts = (accountResult.data ?? []).filter((a: any) => a.account_type !== "credit_card").map((a: any) => ({
@@ -2532,6 +2575,127 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     })));
   }, [user, demoMode, applyHouseholdSelect]);
 
+  const matchPendingTransactionToBill = useCallback(async (
+    pendingPlaidTransactionId: string,
+    billId: string,
+    occurrenceDate: string,
+    plannedAmount: number,
+  ) => {
+    if (!user) throw new Error("Sign in to match a pending payment");
+    assertCanEditHousehold("match a pending payment");
+    const pending = pendingBankTransactions.find(item => item.plaid_transaction_id === pendingPlaidTransactionId);
+    const bill = bills.find(item => item.id === billId);
+    if (!pending || !bill) throw new Error("Pending payment or bill not found");
+    if (pending.amount >= 0) throw new Error("Only pending money-out charges can be matched to bills");
+
+    const now = new Date().toISOString();
+    const existing = pendingPlanMatches.find(item => item.pending_plaid_transaction_id === pendingPlaidTransactionId);
+    const optimistic: PendingPlanMatch = {
+      id: existing?.id ?? genId(),
+      pending_plaid_transaction_id: pendingPlaidTransactionId,
+      pending_account_id: pending.plaid_account_id,
+      target_type: "bill",
+      target_id: bill.id,
+      target_name: bill.name,
+      occurrence_date: occurrenceDate,
+      planned_amount: roundMoney(Math.max(0, plannedAmount)),
+      pending_amount: roundMoney(Math.abs(pending.amount)),
+      pending_transaction_date: pending.transaction_date,
+      status: "active",
+      created_at: existing?.created_at ?? now,
+      updated_at: now,
+    };
+
+    if (demoMode) {
+      setPendingPlanMatches(previous => [
+        ...previous.filter(item => item.pending_plaid_transaction_id !== pendingPlaidTransactionId),
+        optimistic,
+      ]);
+      return;
+    }
+
+    const payload = scopedPayload({
+      user_id: user.id,
+      pending_plaid_transaction_id: optimistic.pending_plaid_transaction_id,
+      pending_account_id: optimistic.pending_account_id ?? null,
+      target_type: optimistic.target_type,
+      target_id: optimistic.target_id,
+      target_name: optimistic.target_name,
+      occurrence_date: optimistic.occurrence_date,
+      planned_amount: optimistic.planned_amount,
+      pending_amount: optimistic.pending_amount,
+      pending_transaction_date: optimistic.pending_transaction_date,
+      status: "active",
+      posted_transaction_id: null,
+      posted_plaid_transaction_id: null,
+      posted_amount: null,
+      created_by: user.id,
+      updated_at: now,
+    });
+    if (!payload.household_id) throw new Error("Choose a household before matching this payment");
+
+    markSaveStarted();
+    try {
+      const result = await supabase
+        .from("pending_plan_matches")
+        .upsert(payload, { onConflict: "household_id,pending_plaid_transaction_id" })
+        .select("*")
+        .single();
+      if (result.error) throw new Error(`Match pending payment: ${result.error.message}`);
+      const saved = normalizePendingPlanMatchRow(result.data);
+      setPendingPlanMatches(previous => [
+        ...previous.filter(item => item.pending_plaid_transaction_id !== pendingPlaidTransactionId),
+        saved,
+      ]);
+      markSaveCompleted();
+    } catch (error) {
+      markSaveFailed(error, () => matchPendingTransactionToBill(
+        pendingPlaidTransactionId,
+        billId,
+        occurrenceDate,
+        plannedAmount,
+      ));
+      throw error;
+    }
+  }, [
+    user,
+    assertCanEditHousehold,
+    pendingBankTransactions,
+    bills,
+    pendingPlanMatches,
+    demoMode,
+    scopedPayload,
+    markSaveStarted,
+    markSaveCompleted,
+    markSaveFailed,
+  ]);
+
+  const removePendingPlanMatch = useCallback(async (matchId: string) => {
+    if (!user) throw new Error("Sign in to remove this pending match");
+    assertCanEditHousehold("remove a pending match");
+    const existing = pendingPlanMatches.find(item => item.id === matchId);
+    if (!existing) return;
+
+    if (demoMode) {
+      setPendingPlanMatches(previous => previous.filter(item => item.id !== matchId));
+      return;
+    }
+
+    markSaveStarted();
+    try {
+      const result = await supabase
+        .from("pending_plan_matches")
+        .update({ status: "cancelled", updated_at: new Date().toISOString() })
+        .eq("id", matchId);
+      if (result.error) throw new Error(`Remove pending match: ${result.error.message}`);
+      setPendingPlanMatches(previous => previous.filter(item => item.id !== matchId));
+      markSaveCompleted();
+    } catch (error) {
+      markSaveFailed(error, () => removePendingPlanMatch(matchId));
+      throw error;
+    }
+  }, [user, assertCanEditHousehold, pendingPlanMatches, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed]);
+
   const reconcileTransaction = useCallback(async (input: ReconcileTransactionInput) => {
     if (!user) throw new Error("Sign in to review transactions");
     assertCanEditHousehold("review transactions");
@@ -2649,6 +2813,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       } else if (input.resolution === "bill" && bills.some(bill => bill.id === input.targetId && bill.is_debt)) {
         await syncDebtTransactionsAndRefresh();
       }
+      setPendingPlanMatches(previous => previous.filter(match => match.posted_transaction_id !== input.transactionId));
       markSaveCompleted();
     } catch (error) {
       markSaveFailed(error, () => reconcileTransaction(input));
@@ -4044,7 +4209,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <BudgetContext.Provider value={{
-      bills, overrides, billDateMoves, transactions, deletedTransactions, pendingBankTransactions, incomes, goals, extraPayments, categories, settings, accounts, connectedBankAccounts, decisions,
+      bills, overrides, billDateMoves, transactions, deletedTransactions, pendingBankTransactions, pendingPlanMatches, incomes, goals, extraPayments, categories, settings, accounts, connectedBankAccounts, decisions,
       households, householdMembers, householdActivity, activeHousehold, householdRole, canEditHousehold,
       refreshHouseholds, refreshHouseholdActivity, switchHousehold, createHouseholdInvite, acceptHouseholdInvite,
       updateHouseholdMemberRole, removeHouseholdMember, leaveActiveHousehold,
@@ -4056,7 +4221,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence, getBillDateMovesForMonth,
       getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal,
       runSnowball, previewDebtSnowball, applyDebtSnowballPayment, saveExtraPayment, getExtraPayment, deleteExtraPayment, removeDebtSnowballPayment, finalizeBillPayment,
-      addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, reconcileTransaction, undoTransactionReconciliation, removeReviewSurplusFunding, getTransactionsForMonth,
+      addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, matchPendingTransactionToBill, removePendingPlanMatch, reconcileTransaction, undoTransactionReconciliation, removeReviewSurplusFunding, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome, getIncomeOccurrencesInMonth,
       addGoal, updateGoal, closeSpendingBucket, reopenSpendingBucket, archiveSpendingBucket, restoreArchivedSpendingBucket, deleteGoal, checkGoalAffordability,
       getCashFlow, getDailyBalances,

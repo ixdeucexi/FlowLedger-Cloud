@@ -24,6 +24,7 @@ import { orderActiveDebtsForStrategy, sortDebtsWithPaidLast } from "@/lib/debtOr
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { loadCategoryBudgets } from "@/lib/categoryBudgetStore";
 import { buildOverdueBillOccurrences, groupOverdueBills } from "@/lib/overdueBills";
+import { activePendingPlanMatches, pendingOccurrenceKeySet } from "@/lib/pendingPlanMatches";
 
 const CAT_COLORS: Record<string, string> = {
   Housing: "#0f9b8e", Utilities: "#f0b429", Insurance: "#6366f1",
@@ -62,6 +63,7 @@ export default function BillsScreen() {
     previewDebtSnowball, getExtraPayment,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal, getPaidAmount,
     getDailyBalances, getIncomeOccurrencesInMonth, activeHousehold,
+    pendingBankTransactions, pendingPlanMatches,
   } = useBudget();
 
   const [activeTab, setActiveTab]       = useState<Tab>("bills");
@@ -172,6 +174,14 @@ export default function BillsScreen() {
     const planned = getBillMonthlyTotal(bill, currentMonth, currentYear);
     return planned > 0 && getPaidAmount(bill.id, currentMonth, currentYear) >= planned - 0.005;
   }).length;
+  const livePendingMatches = useMemo(
+    () => activePendingPlanMatches(pendingPlanMatches, pendingBankTransactions),
+    [pendingBankTransactions, pendingPlanMatches],
+  );
+  const pendingOccurrenceKeys = useMemo(
+    () => pendingOccurrenceKeySet(pendingPlanMatches, pendingBankTransactions),
+    [pendingBankTransactions, pendingPlanMatches],
+  );
   const overdueBills = useMemo(() => groupOverdueBills(buildOverdueBillOccurrences(
     getMonthlyBills(currentMonth, currentYear).map(bill => ({
       billId: bill.id,
@@ -183,12 +193,20 @@ export default function BillsScreen() {
     currentMonth,
     currentYear,
     currentDay,
-  )), [currentDay, currentMonth, currentYear, getBillEffectiveMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, getPaidAmount]);
+  ).filter(occurrence => !pendingOccurrenceKeys.has(`${occurrence.billId}:${occurrence.occurrenceDate}`))),
+  [currentDay, currentMonth, currentYear, getBillEffectiveMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, getPaidAmount, pendingOccurrenceKeys]);
   const overdueByBill = useMemo(
     () => new Map(overdueBills.map(alert => [alert.billId, alert])),
     [overdueBills],
   );
   const firstOverdueBill = overdueBills[0] ?? null;
+  const pendingByBill = useMemo(() => {
+    const result = new Map<string, typeof livePendingMatches[number]>();
+    livePendingMatches.forEach(match => {
+      if (!result.has(match.target_id)) result.set(match.target_id, match);
+    });
+    return result;
+  }, [livePendingMatches]);
   const formatBillDueText = useCallback((bill: Bill) => {
     const next = nextBillOccurrence(bill);
     if (next.days.length > 0) return `Next occurrence: ${MONTH_FULL[next.month]} ${next.days[0]}, ${next.year}`;
@@ -556,6 +574,7 @@ export default function BillsScreen() {
               const beforePayday = paycheckPlan.billsDue.some(bill => bill.id === item.id);
               const stopped = isStoppedFutureBill(item);
               const overdue = overdueByBill.get(item.id);
+              const pending = pendingByBill.get(item.id);
               return (
                 <Pressable
                   key={item.id}
@@ -582,6 +601,13 @@ export default function BillsScreen() {
                           {overdue ? (
                             <View style={[styles.tag, { backgroundColor: c.destructive + "18" }]}>
                               <Text style={[styles.tagText, { color: c.destructive }]}>Past due · ${overdue.remainingAmount.toFixed(2)}</Text>
+                            </View>
+                          ) : null}
+                          {pending ? (
+                            <View style={[styles.tag, { backgroundColor: colors.brand.blue + "18" }]}>
+                              <Text style={[styles.tagText, { color: colors.brand.blue }]}>
+                                {pending.status === "ready_review" ? "Ready to review" : "Payment pending"}
+                              </Text>
                             </View>
                           ) : null}
                           {!stopped && beforePayday ? (

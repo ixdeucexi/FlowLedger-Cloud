@@ -39,6 +39,7 @@ import {
 } from "@/lib/flowmentumHandoff";
 import { transactionCategoryParts } from "@/lib/reviewCenter";
 import { buildAlgorithmSuite, type AlgorithmInsight } from "@/lib/algorithmSuite";
+import { activePendingPlanMatches } from "@/lib/pendingPlanMatches";
 import { effectiveDebtMinimum } from "@/lib/snowball";
 
 const MONTH_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -187,6 +188,7 @@ export default function DashboardScreen() {
     getCashFlow, addBill, getDailyBalances, getTransactionsForMonth, settings,
     accounts, connectedBankAccounts, incomes, updateSettings, forecastConfidence,
     categories, activeHousehold, canEditHousehold,
+    pendingBankTransactions, pendingPlanMatches,
   } = useBudget();
   const categoryBudgetScope = useMemo(() => ({
     userId: user?.id,
@@ -595,6 +597,12 @@ export default function DashboardScreen() {
       frequency: bill.frequency,
       paidAmount: getPaidAmount(bill.id, currentMonth, selectedYear),
       occurrenceDays: getBillOccurrencesInMonth(bill, currentMonth, selectedYear),
+      pendingDays: activePendingPlanMatches(pendingPlanMatches, pendingBankTransactions)
+        .filter(match =>
+          match.target_id === bill.id
+          && match.occurrence_date.startsWith(`${selectedYear}-${String(currentMonth + 1).padStart(2, "0")}-`))
+        .map(match => Number(match.occurrence_date.slice(8, 10)))
+        .filter(Number.isFinite),
       importance: bill.smart_priority,
       category: bill.category || "Other",
       due_day: bill.due_day,
@@ -641,6 +649,8 @@ export default function DashboardScreen() {
     goals,
     incomes,
     nextPaycheckForecast,
+    pendingBankTransactions,
+    pendingPlanMatches,
     selectedYear,
     settings.safety_floor,
     today,

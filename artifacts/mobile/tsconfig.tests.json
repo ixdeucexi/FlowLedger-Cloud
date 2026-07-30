@@ -57,6 +57,8 @@
     ,"lib/algorithmCatalog.ts"
     ,"lib/algorithmSuite.ts"
     ,"lib/algorithmSuite.test.ts"
+    ,"lib/pendingPlanMatches.ts"
+    ,"lib/pendingPlanMatches.test.ts"
     ,"lib/onboarding.ts"
     ,"lib/onboarding.test.ts"
     ,"lib/onboardingPersonalization.ts"

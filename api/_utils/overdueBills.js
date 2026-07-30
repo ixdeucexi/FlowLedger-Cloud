@@ -121,4 +121,12 @@ function buildOverdueOccurrences({ bills, overrides, moves, today }) {
   });
 }
 
-module.exports = { buildOverdueOccurrences, occurrenceDays, plannedOccurrenceAmount };
+function suppressPendingMatchedOccurrences(overdue, pendingMatches) {
+  const protectedKeys = new Set((pendingMatches || [])
+    .filter(match => match.status === "active" || match.status === "ready_review")
+    .map(match => `${match.household_id || ""}:${match.target_id}:${String(match.occurrence_date).slice(0, 10)}`));
+  return (overdue || []).filter(alert =>
+    !protectedKeys.has(`${alert.householdId || ""}:${alert.billId}:${alert.occurrenceDate}`));
+}
+
+module.exports = { buildOverdueOccurrences, occurrenceDays, plannedOccurrenceAmount, suppressPendingMatchedOccurrences };

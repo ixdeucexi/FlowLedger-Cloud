@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const { buildOverdueOccurrences, occurrenceDays } = require("./overdueBills");
+const { buildOverdueOccurrences, occurrenceDays, suppressPendingMatchedOccurrences } = require("./overdueBills");
 
 test("overdue bills use the exact weekly occurrence instead of the monthly total", () => {
   const alerts = buildOverdueOccurrences({
@@ -11,6 +11,37 @@ test("overdue bills use the exact weekly occurrence instead of the monthly total
     moves: [],
   });
   assert.deepEqual(alerts.map(alert => [alert.occurrenceDate, alert.remainingAmount]), [["2026-07-15", 90]]);
+});
+
+test("a temporary pending match suppresses only its exact overdue occurrence", () => {
+  const overdue = [
+    { householdId: "home", billId: "utility", occurrenceDate: "2026-07-02", remainingAmount: 100 },
+    { householdId: "home", billId: "utility", occurrenceDate: "2026-07-16", remainingAmount: 100 },
+    { householdId: "home", billId: "rent", occurrenceDate: "2026-07-03", remainingAmount: 800 },
+  ];
+  const visible = suppressPendingMatchedOccurrences(overdue, [{
+    target_id: "utility",
+    occurrence_date: "2026-07-02",
+    household_id: "home",
+    status: "active",
+  }]);
+
+  assert.deepEqual(visible.map(alert => `${alert.billId}:${alert.occurrenceDate}`), [
+    "utility:2026-07-16",
+    "rent:2026-07-03",
+  ]);
+});
+
+test("expired pending matches do not hide overdue bills", () => {
+  const overdue = [{ householdId: "home", billId: "utility", occurrenceDate: "2026-07-02", remainingAmount: 100 }];
+  const visible = suppressPendingMatchedOccurrences(overdue, [{
+    target_id: "utility",
+    occurrence_date: "2026-07-02",
+    household_id: "home",
+    status: "expired",
+  }]);
+
+  assert.equal(visible.length, 1);
 });
 
 test("a bill due today is not past due", () => {

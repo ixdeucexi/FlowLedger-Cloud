@@ -26,6 +26,7 @@ export interface AlgorithmBill {
   interest_rate?: number;
   paidAmount?: number;
   occurrenceDays?: number[];
+  pendingDays?: number[];
   importance?: BillImportance;
 }
 
@@ -525,26 +526,32 @@ function buildBillScheduleStatus(bill: AlgorithmBill, todayDay: number): BillSch
   }
 
   const occurrenceAmount = totalAmount / occurrences.length;
-  const dueCount = occurrences.filter(day => day <= todayDay).length;
-  const overdueCount = occurrences.filter(day => day < todayDay).length;
-  const dueAmount = roundCurrency(occurrenceAmount * dueCount);
-  const overdueAmount = roundCurrency(Math.max(0, occurrenceAmount * overdueCount - paidAmount));
-  const firstUnpaidIndex = occurrences.findIndex((_day, index) => paidAmount + 0.005 < occurrenceAmount * (index + 1));
-  const firstOverdueIndex = occurrences.findIndex((day, index) => day < todayDay && paidAmount + 0.005 < occurrenceAmount * (index + 1));
+  const pendingDays = new Set((bill.pendingDays ?? []).filter(day => occurrences.includes(day)));
   let paidRemaining = paidAmount;
-  const overdueOccurrenceCount = occurrences.reduce((count, day) => {
+  const occurrenceStatus = occurrences.map(day => {
     const paidForOccurrence = Math.min(occurrenceAmount, paidRemaining);
     paidRemaining = Math.max(0, paidRemaining - paidForOccurrence);
-    return day < todayDay && occurrenceAmount - paidForOccurrence > 0.005 ? count + 1 : count;
-  }, 0);
+    return {
+      day,
+      remaining: Math.max(0, occurrenceAmount - paidForOccurrence),
+      pending: pendingDays.has(day),
+    };
+  });
+  const dueAmount = roundCurrency(occurrenceStatus
+    .filter(occurrence => occurrence.day <= todayDay && !occurrence.pending)
+    .reduce((sum, occurrence) => sum + occurrence.remaining, 0));
+  const overdue = occurrenceStatus
+    .filter(occurrence => occurrence.day < todayDay && !occurrence.pending && occurrence.remaining > 0.005);
+  const overdueAmount = roundCurrency(overdue.reduce((sum, occurrence) => sum + occurrence.remaining, 0));
+  const nextDue = occurrenceStatus.find(occurrence => !occurrence.pending && occurrence.remaining > 0.005);
 
   return {
     dueAmount,
     overdueAmount,
     remainingAmount,
-    nextDueDay: firstUnpaidIndex >= 0 ? occurrences[firstUnpaidIndex] : null,
-    firstOverdueDay: firstOverdueIndex >= 0 ? occurrences[firstOverdueIndex] : null,
-    overdueOccurrenceCount,
+    nextDueDay: nextDue?.day ?? null,
+    firstOverdueDay: overdue[0]?.day ?? null,
+    overdueOccurrenceCount: overdue.length,
   };
 }
 

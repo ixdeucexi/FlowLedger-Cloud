@@ -26,6 +26,7 @@ import { FeedbackBadgeProvider, useFeedbackBadge } from "@/context/FeedbackBadge
 import { buildReviewQueue } from "@/lib/reviewCenter";
 import { tabBadgeValue } from "@/lib/tabBadge";
 import { buildOverdueBillOccurrences, groupOverdueBills } from "@/lib/overdueBills";
+import { pendingOccurrenceKeySet } from "@/lib/pendingPlanMatches";
 import { planningTabPresentation } from "@/lib/planningMode";
 import { tabBarDisplayLabel, tabBarLabelSize } from "@/lib/mobileLayout";
 
@@ -348,7 +349,7 @@ function TabContent() {
   const { width: viewportWidth } = useWindowDimensions();
   const colors = useColors();
   const {
-    loadError, retryBudgetLoad, demoMode, transactions, pendingBankTransactions, settings,
+    loadError, retryBudgetLoad, demoMode, transactions, pendingBankTransactions, pendingPlanMatches, settings,
     getMonthlyBills, getBillOccurrencesInMonth, getBillEffectiveMonthlyTotal, getPaidAmount,
   } = useBudget();
   const { newFeedbackCount } = useFeedbackBadge();
@@ -366,6 +367,7 @@ function TabContent() {
     const now = new Date();
     const month = now.getMonth();
     const year = now.getFullYear();
+    const protectedOccurrences = pendingOccurrenceKeySet(pendingPlanMatches, pendingBankTransactions);
     const occurrences = buildOverdueBillOccurrences(
       getMonthlyBills(month, year).map(bill => ({
         billId: bill.id,
@@ -377,9 +379,9 @@ function TabContent() {
       month,
       year,
       now.getDate(),
-    );
+    ).filter(occurrence => !protectedOccurrences.has(`${occurrence.billId}:${occurrence.occurrenceDate}`));
     return groupOverdueBills(occurrences).length;
-  }, [getBillEffectiveMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, getPaidAmount]);
+  }, [getBillEffectiveMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, getPaidAmount, pendingBankTransactions, pendingPlanMatches]);
 
   if (loadError) return <BudgetLoadErrorScreen message={loadError} onRetry={retryBudgetLoad} />;
 
