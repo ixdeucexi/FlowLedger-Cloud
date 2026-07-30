@@ -5,11 +5,12 @@ import type { DailyBalance, DecisionRecord, Goal, GoalExpense, Transaction } fro
 import { useColors } from "@/hooks/useColors";
 import { isConfirmedBillMatch } from "@/lib/billMatching";
 import { isSnowballPaymentTransaction, snowballPaymentName } from "@/lib/debtPaymentPlan";
-import { allocationLabel, groupPlannedExpenseAllocations } from "@/lib/reviewCenter";
+import { allocationLabel, groupPlannedExpenseAllocations, occurrenceKey } from "@/lib/reviewCenter";
 import { scenarioDates } from "@/lib/decisions";
 import { formatCalendarBalance } from "@/lib/forecastDisplay";
 
 const DAY_NAMES = ["S", "M", "T", "W", "T", "F", "S"];
+const EMPTY_OVERDUE_BILL_KEYS: ReadonlySet<string> = new Set();
 
 const CALENDAR = {
   surface: "rgba(4,8,22,0.70)",
@@ -61,6 +62,7 @@ interface CalendarViewProps {
   decisions?: DecisionRecord[];
   safetyFloor?: number;
   startDate?: string;
+  overdueBillOccurrenceKeys?: ReadonlySet<string>;
 }
 
 function fmt(n: number) {
@@ -99,6 +101,7 @@ export function CalendarView({
   decisions = [],
   safetyFloor = 200,
   startDate,
+  overdueBillOccurrenceKeys = EMPTY_OVERDUE_BILL_KEYS,
 }: CalendarViewProps) {
   const c = useColors();
   const calendarTheme = c.isDark
@@ -244,7 +247,14 @@ export function CalendarView({
 
           if (db && db.scheduledIncome > 0) chips.push({ label: "Payday", kind: "income" });
           ordinaryDayTxs.filter(tx => tx.amount > 0 && tx.review_status !== "transfer").slice(0, 1).forEach(tx => chips.push({ label: `${allocationLabel(tx) || tx.note || tx.category} +$${fmt(tx.amount)}`, kind: "income" }));
-          if (billEvents.length > 0) billEvents.forEach(event => chips.push({ label: event.name || `Bill $${fmt(Math.abs(event.amount))}`, kind: "bill" }));
+          if (billEvents.length > 0) billEvents.forEach(event => {
+            const isOverdue = overdueBillOccurrenceKeys.has(occurrenceKey(event.sourceId, ds));
+            const label = event.name || `Bill $${fmt(Math.abs(event.amount))}`;
+            chips.push({
+              label: isOverdue ? `Overdue · ${label}` : label,
+              kind: isOverdue ? "risk" : "bill",
+            });
+          });
           else if (db && db.bills > 0) chips.push({ label: `Bills $${fmt(db.bills)}`, kind: "bill" });
           debtEvents.forEach(event => {
             const target = (event.name || "Snowball").replace(/ debt payment$/i, "");
