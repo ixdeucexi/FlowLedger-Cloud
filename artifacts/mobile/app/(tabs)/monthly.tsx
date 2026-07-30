@@ -31,6 +31,7 @@ import { allocationLabel, groupPlannedExpenseAllocations, matchedOccurrenceAlloc
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
 import { buildDayForecastFloPrompt, groupForecastEvents } from "@/lib/forecastDisplay";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
+import { buildOverdueBillOccurrences, groupOverdueBills } from "@/lib/overdueBills";
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { isValidDateInMonth } from "@/lib/schedule";
 import type { ConfirmActionOptions } from "@/lib/confirmAction";
@@ -49,7 +50,6 @@ const MONTH_FULL = ["January","February","March","April","May","June","July","Au
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
 
 type TabView = "bills" | "calendar";
-type DayView = "todo" | "paid" | "all";
 type DueDayPickerState = { bill: Bill; fromDate: string; viewMonth: number; viewYear: number };
 type FullPaymentPromptState = {
   bill: Bill;
@@ -213,7 +213,6 @@ export default function MonthlyScreen() {
   const [editingBucket, setEditingBucket] = useState<Goal | null>(null);
   const [transactionDefaultDate, setTransactionDefaultDate] = useState<string | undefined>();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [dayView, setDayView] = useState<DayView>("all");
   const [dayConfirmation, setDayConfirmation] = useState<ConfirmActionOptions | null>(null);
   const handledOpenDateRef = useRef<string | null>(null);
   const [editingAmounts, setEditingAmounts] = useState<Record<string, string>>({});
@@ -1206,6 +1205,87 @@ export default function MonthlyScreen() {
         && scheduledBillsForDay.some(bill => bill.id === allocation.targetId));
     })
     : [];
+  const carriedBillAlerts = useMemo(() => {
+    const today = new Date();
+    const todayDate = todayIsoDate();
+    if (selectedDate !== todayDate) return [];
+
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    const previousDate = new Date(currentYear, currentMonth - 1, 1);
+    const periods = [
+      { month: previousDate.getMonth(), year: previousDate.getFullYear(), cutoffDay: new Date(previousDate.getFullYear(), previousDate.getMonth() + 1, 0).getDate() + 1 },
+      { month: currentMonth, year: currentYear, cutoffDay: today.getDate() },
+    ];
+    const billById = new Map<string, Bill>();
+    const overdueOccurrences = periods.flatMap(period => {
+      const periodBills = getMonthlyBills(period.month, period.year);
+      periodBills.forEach(bill => billById.set(bill.id, bill));
+      return buildOverdueBillOccurrences(
+        periodBills.map(bill => ({
+          billId: bill.id,
+          name: bill.name,
+          occurrenceDays: getBillOccurrencesInMonth(bill, period.month, period.year),
+          plannedTotal: getBillMonthlyTotal(bill, period.month, period.year),
+          paidTotal: getEffectivePaidAmount(bill, period.month, period.year),
+        })),
+        period.month,
+        period.year,
+        period.cutoffDay,
+      );
+    });
+    const pendingOccurrences = overdueOccurrences.filter(occurrence =>
+      Boolean(pendingPlanMatchForOccurrence(
+        pendingPlanMatches,
+        pendingBankTransactions,
+        occurrence.billId,
+        occurrence.occurrenceDate,
+      )),
+    );
+    const actionOccurrences = overdueOccurrences.filter(occurrence =>
+      !pendingPlanMatchForOccurrence(
+        pendingPlanMatches,
+        pendingBankTransactions,
+        occurrence.billId,
+        occurrence.occurrenceDate,
+      ),
+    );
+
+    const buildEntries = (items: typeof overdueOccurrences, pending: boolean) => {
+      const monthKeys = [...new Set(items.map(item => item.occurrenceDate.slice(0, 7)))];
+      return monthKeys.flatMap(monthKey =>
+        groupOverdueBills(items.filter(item => item.occurrenceDate.startsWith(monthKey))).flatMap(alert => {
+          const bill = billById.get(alert.billId);
+          if (!bill) return [];
+          const pendingMatch = pending
+            ? pendingPlanMatchForOccurrence(
+              pendingPlanMatches,
+              pendingBankTransactions,
+              alert.billId,
+              alert.firstOccurrenceDate,
+            )
+            : undefined;
+          return [{ ...alert, bill, pendingMatch }];
+        })
+      );
+    };
+
+    return [
+      ...buildEntries(actionOccurrences, false),
+      ...buildEntries(pendingOccurrences, true),
+    ].sort((left, right) =>
+      left.firstOccurrenceDate.localeCompare(right.firstOccurrenceDate)
+        || left.name.localeCompare(right.name)
+    );
+  }, [
+    getBillMonthlyTotal,
+    getBillOccurrencesInMonth,
+    getEffectivePaidAmount,
+    getMonthlyBills,
+    pendingBankTransactions,
+    pendingPlanMatches,
+    selectedDate,
+  ]);
   const todoBillsForDay = scheduledBillsForDay.filter(bill =>
     getEffectivePaidAmount(bill, month, selectedYear) + 0.005 < getAmount(bill, month, selectedYear)
   );
@@ -1231,12 +1311,8 @@ export default function MonthlyScreen() {
   const paidDisplayedTxs = displayedTxs.filter(transaction =>
     !todoDisplayedTxs.some(candidate => candidate.id === transaction.id)
   );
-  const visibleBillsForDay = dayView === "todo" ? todoBillsForDay : dayView === "paid" ? paidBillsForDay : scheduledBillsForDay;
-  const visibleDebtPayments = dayView === "todo" ? todoDebtPayments : dayView === "paid" ? paidDebtPayments : selectedDebtPayments;
-  const visibleSnowballTransactions = dayView === "todo" ? todoSnowballTransactions : dayView === "paid" ? paidSnowballTransactions : selectedSnowballTransactions;
-  const visiblePlannedExpenseGroups = dayView === "todo" ? todoPlannedExpenseGroups : dayView === "paid" ? paidPlannedExpenseGroups : plannedExpenseGroupsForSelectedDay;
-  const visibleDisplayedTxs = dayView === "todo" ? todoDisplayedTxs : dayView === "paid" ? paidDisplayedTxs : displayedTxs;
   const selectedDayTodoCount = todoBillsForDay.length
+    + carriedBillAlerts.length
     + todoDebtPayments.length
     + todoSnowballTransactions.length
     + incomeForSelectedDay.length
@@ -1249,27 +1325,7 @@ export default function MonthlyScreen() {
     + paidSnowballTransactions.length
     + paidPlannedExpenseGroups.length
     + paidDisplayedTxs.length;
-  const visibleDayItemCount = dayView === "todo"
-    ? selectedDayTodoCount
-    : dayView === "paid"
-      ? selectedDayPaidCount
-      : selectedDayTodoCount + selectedDayPaidCount;
-  const dayViewDateRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!selectedDate) {
-      dayViewDateRef.current = null;
-      return;
-    }
-    if (dayViewDateRef.current !== selectedDate) {
-      dayViewDateRef.current = selectedDate;
-      setDayView(selectedDayTodoCount > 0 ? "todo" : selectedDayPaidCount > 0 ? "paid" : "all");
-      return;
-    }
-    if (dayView === "todo" && selectedDayTodoCount === 0 && selectedDayPaidCount > 0) {
-      setDayView("paid");
-    }
-  }, [dayView, selectedDate, selectedDayPaidCount, selectedDayTodoCount]);
+  const visibleDayItemCount = selectedDayTodoCount + selectedDayPaidCount;
 
   const changeMonth = useCallback((delta: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1792,35 +1848,6 @@ export default function MonthlyScreen() {
                     </Pressable>
                   </View>
 
-                  <View style={[styles.dayViewToggle, { backgroundColor: c.muted, borderColor: c.border }]}>
-                    {([
-                      { key: "todo" as const, label: "To do", count: selectedDayTodoCount },
-                      { key: "paid" as const, label: "Paid", count: selectedDayPaidCount },
-                      { key: "all" as const, label: "All", count: selectedDayTodoCount + selectedDayPaidCount },
-                    ]).map(option => {
-                      const active = dayView === option.key;
-                      return (
-                        <Pressable
-                          key={option.key}
-                          accessibilityRole="tab"
-                          accessibilityState={{ selected: active }}
-                          onPress={() => {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            setDayView(option.key);
-                          }}
-                          style={[
-                            styles.dayViewToggleButton,
-                            { backgroundColor: active ? c.primary : "transparent" },
-                          ]}
-                        >
-                          <Text style={[styles.dayViewToggleText, { color: active ? c.primaryForeground : c.mutedForeground }]}>
-                            {option.label}{option.count > 0 ? ` ${option.count}` : ""}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-
                   <ScrollView style={styles.dayOverlayScroll} contentContainerStyle={styles.dayOverlayScrollContent}>
                     {selectedForecastDay && selectedForecastDay.balance < settings.safety_floor ? (
                       <View style={[styles.dayOverlayRisk, { backgroundColor: selectedForecastDay.balance < 0 ? c.destructive + "14" : c.warning + "16", borderColor: selectedForecastDay.balance < 0 ? c.destructive + "70" : c.warning + "70" }]}>
@@ -1831,7 +1858,7 @@ export default function MonthlyScreen() {
                       </View>
                     ) : null}
 
-                    {dayView !== "paid" && incomeForSelectedDay.length > 0 ? (
+                    {incomeForSelectedDay.length > 0 ? (
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
                         <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Income</Text>
                         {incomeForSelectedDay.map(item => (
@@ -1872,12 +1899,109 @@ export default function MonthlyScreen() {
                       </View>
                     ) : null}
 
-                    {visibleBillsForDay.length > 0 ? (
+                    {carriedBillAlerts.length > 0 ? (
+                      <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.destructive + "45" }]}>
+                        <View style={styles.daySectionHeadingRow}>
+                          <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Needs action today</Text>
+                          <View style={[styles.daySectionCount, { backgroundColor: c.destructive + "20" }]}>
+                            <Text style={[styles.daySectionCountText, { color: c.destructive }]}>{carriedBillAlerts.length}</Text>
+                          </View>
+                        </View>
+                        {carriedBillAlerts.map(alert => {
+                          const plannedAmount = Math.max(alert.remainingAmount, alert.plannedAmount);
+                          const paidAmount = Math.max(0, plannedAmount - alert.remainingAmount);
+                          const pendingLabel = alert.pendingMatch ? pendingMatchStatusLabel(alert.pendingMatch) : undefined;
+                          return (
+                            <View
+                              key={`carried-bill-${alert.billId}-${alert.firstOccurrenceDate}-${pendingLabel ?? "overdue"}`}
+                              style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: alert.pendingMatch ? colors.brand.blue + "55" : c.destructive + "55" }]}
+                            >
+                              <View style={styles.dayBillTop}>
+                                <View style={{ flex: 1, minWidth: 0 }}>
+                                  <Text numberOfLines={1} style={[styles.dayBillName, { color: c.foreground }]}>{alert.name}</Text>
+                                  <Text style={[styles.dayBillMeta, { color: alert.pendingMatch ? colors.brand.blue : c.mutedForeground }]}>
+                                    {alert.pendingMatch ? "Pending at bank" : `Due ${formatShortDate(alert.firstOccurrenceDate)}`}
+                                    {alert.occurrenceCount > 1 ? ` · ${alert.occurrenceCount} payments open` : ""}
+                                  </Text>
+                                </View>
+                                <PayStatus
+                                  paid={false}
+                                  partial={paidAmount > 0.005}
+                                  overdue={!alert.pendingMatch}
+                                  pendingLabel={pendingLabel}
+                                />
+                              </View>
+                              <View style={styles.dayBillNumbers}>
+                                <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
+                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Amount</Text>
+                                  <Text style={[styles.dayBillNumberValue, { color: c.foreground }]}>${plannedAmount.toFixed(2)}</Text>
+                                </View>
+                                <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
+                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Paid</Text>
+                                  <Text style={[styles.dayBillNumberValue, { color: paidAmount > 0 ? c.success : c.mutedForeground }]}>${paidAmount.toFixed(2)}</Text>
+                                </View>
+                                <View style={[styles.dayBillNumberTile, { backgroundColor: c.background + "66" }]}>
+                                  <Text style={[styles.dayBillNumberLabel, { color: c.mutedForeground }]}>Left</Text>
+                                  <Text style={[styles.dayBillNumberValue, { color: alert.pendingMatch ? colors.brand.blue : c.destructive }]}>${alert.remainingAmount.toFixed(2)}</Text>
+                                </View>
+                              </View>
+                              <View style={styles.dayBillActions}>
+                                {!alert.pendingMatch ? (
+                                  <Pressable
+                                    onPress={async () => {
+                                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                      const occurrenceMonth = Number(alert.firstOccurrenceDate.slice(5, 7)) - 1;
+                                      const occurrenceYear = Number(alert.firstOccurrenceDate.slice(0, 4));
+                                      const paidTotal = getPaidAmount(alert.billId, occurrenceMonth, occurrenceYear);
+                                      await setPaidAmount(alert.billId, occurrenceMonth, occurrenceYear, paidTotal + alert.remainingAmount);
+                                    }}
+                                    style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.success + "20", borderColor: c.success + "35", opacity: pressed ? 0.74 : 1 }]}
+                                  >
+                                    <Feather name="check" size={13} color={c.success} />
+                                    <Text style={[styles.dayBillActionText, { color: c.success }]}>Mark paid</Text>
+                                  </Pressable>
+                                ) : null}
+                                {alert.bill.frequency === "monthly" || alert.bill.frequency === "quarterly" ? (
+                                <Pressable
+                                  onPress={() => {
+                                    const [viewYear, viewMonth] = selectedDate!.split("-").map(Number);
+                                    setSelectedDate(null);
+                                    setDueDayPicker({
+                                      bill: alert.bill,
+                                      fromDate: alert.firstOccurrenceDate,
+                                      viewMonth: viewMonth - 1,
+                                      viewYear,
+                                    });
+                                  }}
+                                  style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.primary + "16", borderColor: c.primary + "35", opacity: pressed ? 0.74 : 1 }]}
+                                >
+                                  <Feather name="calendar" size={13} color={c.primary} />
+                                  <Text style={[styles.dayBillActionText, { color: c.primary }]}>Plan payment</Text>
+                                </Pressable>
+                                ) : null}
+                                <Pressable
+                                  onPress={() => handleDeleteBillFromDay(alert.bill)}
+                                  style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.destructive + "12", borderColor: c.destructive + "35", opacity: pressed ? 0.74 : 1 }]}
+                                >
+                                  <Feather name="trash-2" size={13} color={c.destructive} />
+                                  <Text style={[styles.dayBillActionText, { color: c.destructive }]}>Delete</Text>
+                                </Pressable>
+                              </View>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    ) : null}
+
+                    {([
+                      { key: "due", title: "Bills due this day", bills: todoBillsForDay },
+                      { key: "paid", title: "Paid this day", bills: paidBillsForDay },
+                    ] as const).map(section => section.bills.length > 0 ? (
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
                         <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>
-                          {dayView === "paid" ? "Paid bills" : "Bills due this day"}
+                          {section.title}
                         </Text>
-                        {visibleBillsForDay.map(bill => {
+                        {section.bills.map(bill => {
                           const amount = getAmount(bill, month, selectedYear);
                           const paid = getPaidAmount(bill.id, month, selectedYear);
                           const effectivePaid = getEffectivePaidAmount(bill, month, selectedYear);
@@ -1899,7 +2023,7 @@ export default function MonthlyScreen() {
                           const showPaid = editingPaid[paidKey] !== undefined ? editingPaid[paidKey] : paid > 0 ? paid.toFixed(2) : "";
                           const paidEditing = editingPaid[paidKey] !== undefined;
                           return (
-                            <View key={`overlay-bill-${bill.id}`} style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: isPaid ? c.success + "40" : isPartial ? c.warning + "45" : c.border }]}>
+                            <View key={`overlay-bill-${section.key}-${bill.id}`} style={[styles.dayBillCard, { backgroundColor: c.muted, borderColor: isPaid ? c.success + "40" : isPartial ? c.warning + "45" : c.border }]}>
                               <View style={styles.dayBillTop}>
                                 <View style={{ flex: 1 }}>
                                   <Text numberOfLines={1} style={[styles.dayBillName, { color: c.foreground }]}>{bill.name}</Text>
@@ -2033,12 +2157,12 @@ export default function MonthlyScreen() {
                           );
                         })}
                       </View>
-                    ) : null}
+                    ) : null)}
 
-                    {visibleDebtPayments.length > 0 || visibleSnowballTransactions.length > 0 ? (
+                    {selectedDebtPayments.length > 0 || selectedSnowballTransactions.length > 0 ? (
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
                         <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Planned debt payments</Text>
-                        {visibleDebtPayments.map(payment => {
+                        {selectedDebtPayments.map(payment => {
                           const savedPayment = extraPayments.find(item => item.id === payment.event.sourceId);
                           const amount = Math.abs(payment.event.amount);
                           const applied = payment.statusLabel.toLowerCase() === "applied";
@@ -2079,7 +2203,7 @@ export default function MonthlyScreen() {
                             />
                           );
                         })}
-                        {visibleSnowballTransactions.map(transaction => {
+                        {selectedSnowballTransactions.map(transaction => {
                           const reviewedSnowballAllocation = transaction.review_resolution === "snowball"
                             ? transaction.review_allocations?.find(allocation => allocation.type === "extra_principal")
                             : undefined;
@@ -2129,7 +2253,7 @@ export default function MonthlyScreen() {
                       </View>
                     ) : null}
 
-                    {dayView !== "paid" && (displayedGoalsForSelectedDay.length > 0 || plansForSelectedDay.length > 0) ? (
+                    {displayedGoalsForSelectedDay.length > 0 || plansForSelectedDay.length > 0 ? (
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
                         <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Plans & goals</Text>
                         {displayedGoalsForSelectedDay.map(goal => (
@@ -2181,10 +2305,10 @@ export default function MonthlyScreen() {
                       </View>
                     ) : null}
 
-                    {visiblePlannedExpenseGroups.length > 0 || visibleDisplayedTxs.length > 0 ? (
+                    {plannedExpenseGroupsForSelectedDay.length > 0 || displayedTxs.length > 0 ? (
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
                         <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Activity</Text>
-                        {visiblePlannedExpenseGroups.map(group => {
+                        {plannedExpenseGroupsForSelectedDay.map(group => {
                           const statusColor = group.closed ? c.success : c.warning;
                           const finalLabel = group.closed ? "Released" : "Left";
                           const finalAmount = group.closed ? group.releasedAmount : group.remainingAmount;
@@ -2244,7 +2368,7 @@ export default function MonthlyScreen() {
                             </View>
                           );
                         })}
-                        {visibleDisplayedTxs.map(tx => {
+                        {displayedTxs.map(tx => {
                           const sourceLabel = isConfirmedBillMatch(tx)
                             ? "Bill payment"
                             : tx.review_resolution === "income"
@@ -2944,15 +3068,15 @@ const styles = StyleSheet.create({
   dayOverlayBigDay: { fontSize: 34, fontFamily: "Inter_700Bold", lineHeight: 40 },
   dayOverlayTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
   dayOverlaySub: { fontSize: 12, fontFamily: "Inter_500Medium", marginTop: 2 },
-  dayViewToggle: { flexDirection: "row", borderWidth: 1, borderRadius: 999, padding: 4, marginBottom: 12 },
-  dayViewToggleButton: { flex: 1, minHeight: 36, borderRadius: 999, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
-  dayViewToggleText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   dayOverlayScroll: { maxHeight: 470 },
   dayOverlayScrollContent: { gap: 10, paddingBottom: 8 },
   dayOverlayRisk: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 16, padding: 12 },
   dayOverlayRiskText: { flex: 1, fontSize: 12, fontFamily: "Inter_600SemiBold" },
   dayOverlaySection: { borderWidth: 1, borderRadius: 18, padding: 12, gap: 8 },
   dayOverlaySectionTitle: { fontSize: 14, fontFamily: "Inter_700Bold", marginBottom: 2 },
+  daySectionHeadingRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  daySectionCount: { minWidth: 24, height: 24, borderRadius: 999, alignItems: "center", justifyContent: "center", paddingHorizontal: 7 },
+  daySectionCountText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   dayOverlayRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: 30 },
   dayOverlayRowMain: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   dayOverlayDeleteButton: { width: 30, height: 30, borderRadius: 999, alignItems: "center", justifyContent: "center" },
