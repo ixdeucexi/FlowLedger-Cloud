@@ -52,7 +52,7 @@ module.exports = async function overdueBillNotifications(req, res) {
     const billIds = bills.map(bill => bill.id);
     const pendingMatchesRequest = householdIds.length
       ? db.from("pending_plan_matches")
-        .select("household_id,target_id,occurrence_date,status")
+        .select("household_id,pending_plaid_transaction_id,target_id,occurrence_date,status")
         .in("household_id", householdIds)
         .in("status", ["active", "ready_review"])
       : Promise.resolve({ data: [], error: null });
@@ -75,9 +75,24 @@ module.exports = async function overdueBillNotifications(req, res) {
     if (moveError) throw moveError;
     if (pendingMatchesError) throw pendingMatchesError;
 
+    const activePendingIds = unique((pendingMatches || [])
+      .filter(match => match.status === "active")
+      .map(match => match.pending_plaid_transaction_id));
+    const livePendingRequest = activePendingIds.length
+      ? db.from("plaid_transactions")
+        .select("household_id,plaid_transaction_id")
+        .in("household_id", householdIds)
+        .in("plaid_transaction_id", activePendingIds)
+        .eq("pending", true)
+        .is("removed_at", null)
+      : Promise.resolve({ data: [], error: null });
+    const { data: livePendingTransactions, error: livePendingError } = await livePendingRequest;
+    if (livePendingError) throw livePendingError;
+
     const overdue = suppressPendingMatchedOccurrences(
       buildOverdueOccurrences({ bills, overrides, moves, today }),
       pendingMatches,
+      livePendingTransactions,
     );
     const householdRecipients = new Map();
     (memberships || []).forEach(membership => {

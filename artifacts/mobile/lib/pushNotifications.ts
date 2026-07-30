@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 
 import {
   LEGACY_PUSH_PREFERENCE_KEY,
+  parseNotificationJson,
   pushPreferenceStorageKey,
   shouldRestorePushNotifications,
 } from "@/lib/pushNotificationPreference";
@@ -110,7 +111,10 @@ export async function enablePushNotifications(accessToken: string, userId: strin
   if (!supported()) throw new Error("This browser or installed app does not support phone notifications.");
   const configResponse = await fetch("/api/notifications/config");
   if (!configResponse.ok) throw new Error(await apiMessage(configResponse, "Notifications are not configured yet."));
-  const { publicKey } = await configResponse.json() as { publicKey: string };
+  const { publicKey } = await parseNotificationJson<{ publicKey: string }>(
+    configResponse,
+    "Notifications are not configured yet.",
+  );
 
   const permission = await window.Notification.requestPermission();
   if (permission !== "granted") throw new Error("Allow notifications for FlowLedger in your phone settings, then try again.");
@@ -187,10 +191,10 @@ export async function getNotificationPreferences(accessToken: string) {
     headers: authorization(accessToken),
   });
   if (!response.ok) throw new Error(await apiMessage(response, "Could not load notification choices."));
-  return response.json() as Promise<{
+  return parseNotificationJson<{
     preferences: NotificationPreferences;
     isFeedbackAdmin: boolean;
-  }>;
+  }>(response, "Could not load notification choices.");
 }
 
 export async function updateNotificationPreference(
@@ -204,6 +208,9 @@ export async function updateNotificationPreference(
     body: JSON.stringify({ [key]: enabled }),
   });
   if (!response.ok) throw new Error(await apiMessage(response, "Could not update that notification choice."));
-  const payload = await response.json() as { preferences: NotificationPreferences };
+  const payload = await parseNotificationJson<{ preferences: NotificationPreferences }>(
+    response,
+    "Could not update that notification choice.",
+  );
   return payload.preferences;
 }

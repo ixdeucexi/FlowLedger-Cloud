@@ -35,6 +35,10 @@ const repairedVersions = {
   privatize_calendar_automation_rpcs: "20260727220645",
   add_quarterly_bill_frequency_and_remove_manual_matching: "20260727225110",
   fix_automatic_rollover_for_all_bill_cadences: "20260727225412",
+  stop_automatic_bill_rollover_preserve_due_dates: "20260730032252",
+  drop_retired_calendar_rollover_rpc: "20260730032332",
+  pending_plan_matches: "20260730063821",
+  optimize_pending_plan_matches: "20260730063922",
 };
 
 test("migration versions are unique and repaired names match production history", async () => {
@@ -160,5 +164,33 @@ test("partial scheduled Snowball reconciliation keeps one canonical remainder", 
   assert.match(
     migration,
     /security definer[\s\S]*set search_path = ''/i,
+  );
+});
+
+test("pending plan match updates preserve source identity and trusted lifecycle transitions", async () => {
+  const migration = await readFile(
+    path.join(migrationsDir, "20260730070515_harden_pending_plan_matches.sql"),
+    "utf8",
+  );
+
+  assert.match(
+    migration,
+    /before update on public\.pending_plan_matches[\s\S]*execute function public\.protect_pending_plan_match_identity\(\)/i,
+  );
+  assert.match(
+    migration,
+    /new\.household_id is distinct from old\.household_id[\s\S]*new\.pending_plaid_transaction_id is distinct from old\.pending_plaid_transaction_id/i,
+  );
+  assert.match(
+    migration,
+    /new\.pending_amount is distinct from old\.pending_amount[\s\S]*new\.created_by is distinct from old\.created_by/i,
+  );
+  assert.match(
+    migration,
+    /auth\.role\(\)[\s\S]*service_role[\s\S]*new\.posted_transaction_id is distinct from old\.posted_transaction_id[\s\S]*new\.posted_amount is distinct from old\.posted_amount/i,
+  );
+  assert.match(
+    migration,
+    /with check \([\s\S]*status in \('active', 'cancelled'\)[\s\S]*pt\.pending = true[\s\S]*pt\.removed_at is null/i,
   );
 });

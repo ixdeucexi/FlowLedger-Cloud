@@ -10,3 +10,16 @@ export function shouldRestorePushNotifications(
 ): boolean {
   return preferenceEnabled && permission === "granted";
 }
+
+export async function parseNotificationJson<T>(
+  response: Pick<Response, "headers" | "json">,
+  fallback: string,
+): Promise<T> {
+  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+  if (!contentType.includes("application/json")) throw new Error(fallback);
+  try {
+    return await response.json() as T;
+  } catch {
+    throw new Error(fallback);
+  }
+}

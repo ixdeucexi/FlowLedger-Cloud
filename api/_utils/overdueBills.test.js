@@ -20,10 +20,14 @@ test("a temporary pending match suppresses only its exact overdue occurrence", (
     { householdId: "home", billId: "rent", occurrenceDate: "2026-07-03", remainingAmount: 800 },
   ];
   const visible = suppressPendingMatchedOccurrences(overdue, [{
+    pending_plaid_transaction_id: "pending-1",
     target_id: "utility",
     occurrence_date: "2026-07-02",
     household_id: "home",
     status: "active",
+  }], [{
+    household_id: "home",
+    plaid_transaction_id: "pending-1",
   }]);
 
   assert.deepEqual(visible.map(alert => `${alert.billId}:${alert.occurrenceDate}`), [
@@ -42,6 +46,32 @@ test("expired pending matches do not hide overdue bills", () => {
   }]);
 
   assert.equal(visible.length, 1);
+});
+
+test("a vanished pending charge no longer hides an overdue notification", () => {
+  const overdue = [{ householdId: "home", billId: "utility", occurrenceDate: "2026-07-02", remainingAmount: 100 }];
+  const visible = suppressPendingMatchedOccurrences(overdue, [{
+    pending_plaid_transaction_id: "pending-gone",
+    target_id: "utility",
+    occurrence_date: "2026-07-02",
+    household_id: "home",
+    status: "active",
+  }], []);
+
+  assert.equal(visible.length, 1);
+});
+
+test("a posted replacement stays protected while it waits for review", () => {
+  const overdue = [{ householdId: "home", billId: "utility", occurrenceDate: "2026-07-02", remainingAmount: 100 }];
+  const visible = suppressPendingMatchedOccurrences(overdue, [{
+    pending_plaid_transaction_id: "pending-gone",
+    target_id: "utility",
+    occurrence_date: "2026-07-02",
+    household_id: "home",
+    status: "ready_review",
+  }], []);
+
+  assert.deepEqual(visible, []);
 });
 
 test("a bill due today is not past due", () => {
