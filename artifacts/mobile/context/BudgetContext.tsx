@@ -103,6 +103,7 @@ export interface BillDateMove {
   bill_id: string;
   from_date: string;
   to_date: string;
+  move_reason?: "manual" | "automatic";
   created_at: string;
   updated_at?: string;
 }
@@ -615,6 +616,7 @@ function readStoredBillDateMoves(userId?: string, householdId?: string | null): 
         bill_id: String(item.bill_id),
         from_date: String(item.from_date).slice(0, 10),
         to_date: String(item.to_date).slice(0, 10),
+        move_reason: item.move_reason === "automatic" ? "automatic" : "manual",
         created_at: String(item.created_at ?? new Date().toISOString()),
       }));
   } catch {
@@ -633,30 +635,10 @@ function normalizeBillDateMoveRow(row: any): BillDateMove {
     bill_id: String(row.bill_id),
     from_date: String(row.from_date).slice(0, 10),
     to_date: String(row.to_date).slice(0, 10),
+    move_reason: row.move_reason === "automatic" ? "automatic" : "manual",
     created_at: String(row.created_at ?? new Date().toISOString()),
     updated_at: row.updated_at ? String(row.updated_at) : undefined,
   };
-}
-
-function billDateMoveKey(move: Pick<BillDateMove, "bill_id" | "from_date">) {
-  return `${move.bill_id}::${move.from_date}`;
-}
-
-function billDateMoveFreshness(move: Pick<BillDateMove, "created_at" | "updated_at">) {
-  const parsed = Date.parse(move.updated_at ?? move.created_at ?? "");
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function mergeBillDateMoves(primary: BillDateMove[], fallback: BillDateMove[]) {
-  const byKey = new Map<string, BillDateMove>();
-  [...fallback, ...primary].forEach(move => {
-    const key = billDateMoveKey(move);
-    const existing = byKey.get(key);
-    if (!existing || billDateMoveFreshness(move) >= billDateMoveFreshness(existing)) {
-      byKey.set(key, move);
-    }
-  });
-  return Array.from(byKey.values()).sort((a, b) => a.from_date.localeCompare(b.from_date) || a.to_date.localeCompare(b.to_date));
 }
 
 function billDateMoveDbPayload(move: Pick<BillDateMove, "bill_id" | "from_date" | "to_date">, userId: string, scope?: HouseholdMembership | null) {
@@ -665,6 +647,7 @@ function billDateMoveDbPayload(move: Pick<BillDateMove, "bill_id" | "from_date" 
     bill_id: move.bill_id,
     from_date: move.from_date.slice(0, 10),
     to_date: move.to_date.slice(0, 10),
+    move_reason: "manual",
     updated_at: new Date().toISOString(),
     ...(scope ? { household_id: scope.householdId, budget_id: scope.budgetId } : {}),
   };
@@ -713,21 +696,11 @@ async function loadBillDateMoves(uid: string, scope?: HouseholdMembership | null
     return stored;
   }
 
-  let remoteMoves = (remote.data ?? []).map(normalizeBillDateMoveRow);
-  const remoteKeys = new Set(remoteMoves.map(billDateMoveKey));
-  const localOnly = stored.filter(move => !remoteKeys.has(billDateMoveKey(move)));
-
-  if (localOnly.length > 0) {
-    const synced = await Promise.all(localOnly.map(async move => {
-      const saved = await upsertBillDateMoveRow(move, uid, scope);
-      return saved.error ? move : normalizeBillDateMoveRow(saved.data);
-    }));
-    remoteMoves = mergeBillDateMoves(remoteMoves, synced);
-  }
-
-  const merged = mergeBillDateMoves(remoteMoves, stored);
-  writeStoredBillDateMoves(uid, merged, scope?.householdId);
-  return merged;
+  // Once the server responds, it is authoritative. Re-uploading stale local
+  // rows would recreate dates that were deliberately reset or deleted.
+  const remoteMoves = (remote.data ?? []).map(normalizeBillDateMoveRow);
+  writeStoredBillDateMoves(uid, remoteMoves, scope?.householdId);
+  return remoteMoves;
 }
 
 const markSnowballSourcesPending = (sources: SnowballFundingSource[]) =>
@@ -1918,8 +1891,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const previousOverrides = overridesRef.current;
     const existing = billDateMovesRef.current.find(move => move.bill_id === billId && move.from_date === cleanFrom);
     const nextMove: BillDateMove = existing
-      ? { ...existing, to_date: cleanTo }
-      : { id: genId(), bill_id: billId, from_date: cleanFrom, to_date: cleanTo, created_at: new Date().toISOString() };
+      ? { ...existing, to_date: cleanTo, move_reason: "manual" }
+      : { id: genId(), bill_id: billId, from_date: cleanFrom, to_date: cleanTo, move_reason: "manual", created_at: new Date().toISOString() };
     const next = existing
       ? billDateMovesRef.current.map(move => move.id === existing.id ? nextMove : move)
       : [...billDateMovesRef.current, nextMove];
