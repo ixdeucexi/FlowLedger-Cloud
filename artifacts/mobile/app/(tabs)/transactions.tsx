@@ -8,6 +8,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddTransactionModal } from "@/components/AddTransactionModal";
+import { AddBillModal, type AddBillInitialValues } from "@/components/AddBillModal";
 import { BillSurplusModal } from "@/components/BillSurplusModal";
 import { CommandPlusButton } from "@/components/CommandPlusButton";
 import { DebtPaymentAppliedModal, type DebtPaymentAppliedDetail } from "@/components/DebtPaymentAppliedModal";
@@ -17,6 +18,7 @@ import { GoalModal } from "@/components/GoalModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { PlanViewSelector } from "@/components/PlanViewSelector";
 import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
+import { UnplannedChargeModal } from "@/components/UnplannedChargeModal";
 import colors from "@/constants/colors";
 import type { Bill, ExtraPayment, PendingBankTransaction, SnowballFundingSource, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
@@ -30,7 +32,7 @@ import { isValidDateInMonth } from "@/lib/schedule";
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { resizeSnowballFundingSources } from "@/lib/snowballFunding";
 import { isOpenSpendingBucket, spendingBucketMatch, spendingBucketSummary } from "@/lib/spendingBuckets";
-import { buildReviewQueue, matchedOccurrenceAllocations, occurrenceKey, transactionDisplayName } from "@/lib/reviewCenter";
+import { buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, matchedOccurrenceAllocations, occurrenceKey, transactionDisplayName } from "@/lib/reviewCenter";
 import { activePendingPlanMatches, pendingMatchStatusLabel } from "@/lib/pendingPlanMatches";
 import { CategoryBudgetScreen } from "./category-budget";
 
@@ -146,11 +148,12 @@ export function ActivityScreen() {
   const { isFeatureLocked, bypassFeature } = useMembership();
   const {
     transactions, pendingBankTransactions, pendingPlanMatches, addTransaction, updateTransaction, deleteTransaction, deleteTransfer,
-    bills, incomes, goals, overrides, extraPayments, settings,
+    bills, incomes, goals, overrides, extraPayments, categories, settings,
     getIncomeOccurrencesInMonth, getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal,
     matchTransactionToBill, unmatchTransactionFromBill, matchPendingTransactionToBill, removePendingPlanMatch,
     reconcileTransaction, undoTransactionReconciliation, removeReviewSurplusFunding,
     getExtraPayment, previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, addGoal,
+    addBill, deleteBillMistake,
   } = useBudget();
 
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -166,6 +169,8 @@ export function ActivityScreen() {
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [weeklySummaryVisible, setWeeklySummaryVisible] = useState(false);
   const [matchTx, setMatchTx] = useState<Transaction | null>(null);
+  const [unplannedChargeTx, setUnplannedChargeTx] = useState<Transaction | null>(null);
+  const [forgottenBillVisible, setForgottenBillVisible] = useState(false);
   const [pendingMatchTx, setPendingMatchTx] = useState<PendingBankTransaction | null>(null);
   const [savingMatch, setSavingMatch] = useState(false);
   const [fullPaymentPrompt, setFullPaymentPrompt] = useState<MatchedPaymentPrompt | null>(null);
@@ -663,6 +668,14 @@ export function ActivityScreen() {
     : undefined;
   const matchedTargetName = matchedBillForModal?.name ?? matchedManualAllocation?.name ?? matchedBucketAllocation?.name;
   const matchingBankActivity = matchTx?.source === "plaid";
+  const forgottenBillDefaults = useMemo<AddBillInitialValues | undefined>(() => {
+    if (!unplannedChargeTx) return undefined;
+    const defaults = buildForgottenBillDefaults(unplannedChargeTx);
+    return {
+      ...defaults,
+      category: categories.includes(defaults.category) ? defaults.category : "Other",
+    };
+  }, [categories, unplannedChargeTx]);
 
   const surplusSnowballOffer = useMemo(() => {
     if (!surplusPrompt || !settings.debtPayoffEnabled) return null;
@@ -798,6 +811,50 @@ export function ActivityScreen() {
       Alert.alert("Could not update bucket", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSavingMatch(false);
+    }
+  };
+
+  const saveOneTimeCharge = async (category: string) => {
+    if (!unplannedChargeTx || savingMatch) return;
+    const transaction = unplannedChargeTx;
+    setSavingMatch(true);
+    try {
+      await reconcileTransaction({
+        transactionId: transaction.id,
+        resolution: "category",
+        targetId: category,
+      });
+      setUnplannedChargeTx(null);
+    } catch (error) {
+      Alert.alert("Could not save one-time charge", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSavingMatch(false);
+    }
+  };
+
+  const saveForgottenBill = async (data: Omit<Bill, "id" | "created_at"> | Bill) => {
+    if (!unplannedChargeTx) throw new Error("This bank charge is no longer available.");
+    const transaction = unplannedChargeTx;
+    const billData = data as Omit<Bill, "id" | "created_at">;
+    const billId = await addBill(billData);
+    try {
+      await reconcileTransaction({
+        transactionId: transaction.id,
+        resolution: "bill",
+        targetId: billId,
+        occurrenceDate: transaction.date,
+        plannedAmount: billData.amount,
+        settlement: forgottenBillSettlement(transaction.amount, billData.amount),
+      });
+      setForgottenBillVisible(false);
+      setUnplannedChargeTx(null);
+    } catch (error) {
+      try {
+        await deleteBillMistake(billId);
+      } catch {
+        // Preserve the reconciliation error; the new bill remains removable from Bills.
+      }
+      throw error;
     }
   };
 
@@ -1671,6 +1728,36 @@ export function ActivityScreen() {
               </>
             )}
 
+            {matchingBankActivity && !matchedTargetName ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Save this as a one-time charge"
+                disabled={savingMatch}
+                onPress={() => {
+                  const transaction = matchTx;
+                  setMatchTx(null);
+                  setUnplannedChargeTx(transaction);
+                }}
+                style={({ pressed }) => [
+                  styles.oneTimeButton,
+                  {
+                    backgroundColor: c.primary + "12",
+                    borderColor: c.primary + "55",
+                    opacity: savingMatch ? 0.55 : pressed ? 0.78 : 1,
+                  },
+                ]}
+              >
+                <View style={[styles.matchIcon, { backgroundColor: c.primary + "18" }]}>
+                  <Feather name="shopping-bag" size={17} color={c.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.matchRowTitle, { color: c.foreground }]}>One-time charge</Text>
+                  <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>Categorize it without creating a bill.</Text>
+                </View>
+                <Feather name="chevron-right" size={17} color={c.primary} />
+              </Pressable>
+            ) : null}
+
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={matchingBankActivity ? "Edit imported transaction details" : "Edit manual transaction details"}
@@ -1690,6 +1777,25 @@ export function ActivityScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <UnplannedChargeModal
+        visible={Boolean(unplannedChargeTx) && !forgottenBillVisible}
+        transaction={unplannedChargeTx}
+        categories={categories}
+        saving={savingMatch}
+        onClose={() => setUnplannedChargeTx(null)}
+        onSaveOneTime={category => void saveOneTimeCharge(category)}
+        onCreateBill={() => setForgottenBillVisible(true)}
+      />
+
+      <AddBillModal
+        visible={forgottenBillVisible && Boolean(unplannedChargeTx)}
+        onClose={() => setForgottenBillVisible(false)}
+        onSave={saveForgottenBill}
+        initialValues={forgottenBillDefaults}
+        title="Add forgotten bill"
+        saveLabel="Save bill and match payment"
+      />
 
       <FullPaymentPromptModal
         visible={!!fullPaymentPrompt}
@@ -2030,6 +2136,7 @@ const styles = StyleSheet.create({
   noMatchCard: { borderWidth: 1, borderRadius: 16, padding: 15 },
   unmatchButton: { minHeight: 46, borderWidth: 1, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   unmatchButtonText: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  oneTimeButton: { minHeight: 62, borderWidth: 1, borderRadius: 16, padding: 11, marginTop: 12, flexDirection: "row", alignItems: "center", gap: 10 },
   editImportedButton: { minHeight: 46, borderRadius: 13, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, marginTop: 12 },
   editImportedText: { fontSize: 13, fontFamily: "Inter_700Bold" },
 
