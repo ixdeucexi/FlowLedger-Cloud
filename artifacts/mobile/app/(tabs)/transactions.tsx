@@ -144,7 +144,12 @@ export function ActivityScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const params = useLocalSearchParams<{ editDebtPaymentId?: string; editDebtPaymentAt?: string }>();
+  const params = useLocalSearchParams<{
+    editDebtPaymentId?: string;
+    editDebtPaymentAt?: string;
+    pendingId?: string;
+    pendingAt?: string;
+  }>();
   const { isFeatureLocked, bypassFeature } = useMembership();
   const {
     transactions, pendingBankTransactions, pendingPlanMatches, addTransaction, updateTransaction, deleteTransaction, deleteTransfer,
@@ -189,6 +194,7 @@ export function ActivityScreen() {
     date: string;
   } | null>(null);
   const handledExtraPaymentRouteRef = useRef("");
+  const handledPendingRouteRef = useRef("");
   useBackDismiss(!!detailItem, () => setDetailItem(null));
   useBackDismiss(filterModalVisible, () => setFilterModalVisible(false));
   useBackDismiss(weeklySummaryVisible, () => setWeeklySummaryVisible(false));
@@ -379,6 +385,17 @@ export function ActivityScreen() {
 
     return items;
   }, [transactions, pendingBankTransactions, pendingPlanMatches, overrides, bills, incomes, extraPayments, getIncomeOccurrencesInMonth]);
+
+  useEffect(() => {
+    const pendingId = params.pendingId;
+    if (!pendingId) return;
+    const requestKey = `${pendingId}:${params.pendingAt ?? ""}`;
+    if (handledPendingRouteRef.current === requestKey) return;
+    const pendingItem = allActivity.find(item => item.rawPending?.plaid_transaction_id === pendingId);
+    if (!pendingItem) return;
+    handledPendingRouteRef.current = requestKey;
+    setDetailItem(pendingItem);
+  }, [allActivity, params.pendingAt, params.pendingId]);
 
   // ── Filter & sort ─────────────────────────────────────────────────────────
   const categoryOptions = useMemo(

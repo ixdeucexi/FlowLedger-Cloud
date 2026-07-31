@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { canonicalConnectedAccounts, pendingPlaidActivityWithBalanceHolds, visiblePendingPlaidActivity } from "./plaidActivity";
+import {
+  canonicalConnectedAccounts,
+  pendingPlaidActivityWithBalanceHolds,
+  summarizePendingCheckingActivity,
+  unplannedPendingExpenses,
+  visiblePendingPlaidActivity,
+} from "./plaidActivity";
 
 const duplicateAccounts = [
   { id: "account-old", name: "Checking", mask: "1234", account_type: "depository", account_subtype: "checking", is_active: true, updated_at: "2026-07-14T00:00:00Z", current_balance: 2171.13 },
@@ -112,4 +118,61 @@ test("inferred pending hold is not added when Plaid already supplied the pending
 
   assert.equal(pending.length, 1);
   assert.equal(pending[0].name, "Apple");
+});
+
+test("pending checking summary keeps the bank current and available balances separate", () => {
+  const summary = summarizePendingCheckingActivity([{
+    plaid_transaction_id: "pending-food",
+    plaid_account_id: "checking",
+    transaction_date: "2026-07-31",
+    amount: -42.75,
+    name: "Restaurant",
+  }], [{
+    id: "checking",
+    name: "Checking",
+    account_type: "depository",
+    account_subtype: "checking",
+    current_balance: 1000,
+    available_balance: 957.25,
+    is_active: true,
+  }]);
+
+  assert.deepEqual(summary, {
+    currentBalance: 1000,
+    availableBalance: 957.25,
+    pendingOutflow: 42.75,
+    pendingInflow: 0,
+    pendingCount: 1,
+  });
+});
+
+test("pending checking summary derives available money only when the bank omits it", () => {
+  const summary = summarizePendingCheckingActivity([
+    { plaid_transaction_id: "out", plaid_account_id: "checking", transaction_date: "2026-07-31", amount: -25, name: "Fuel" },
+    { plaid_transaction_id: "in", plaid_account_id: "checking", transaction_date: "2026-07-31", amount: 10, name: "Refund" },
+  ], [{
+    id: "checking",
+    name: "Checking",
+    account_type: "depository",
+    account_subtype: "checking",
+    current_balance: 1000,
+    available_balance: null,
+    is_active: true,
+  }]);
+
+  assert.equal(summary?.availableBalance, 985);
+});
+
+test("Flo only calls out real unmatched pending expenses", () => {
+  const pending = [
+    { plaid_transaction_id: "new-charge", transaction_date: "2026-07-31", amount: -21.43, name: "Drake's" },
+    { plaid_transaction_id: "matched-charge", transaction_date: "2026-07-30", amount: -30, name: "Amazon" },
+    { plaid_transaction_id: "pending-hold:checking:9.99", transaction_date: "2026-07-31", amount: -9.99, name: "Pending bank hold" },
+    { plaid_transaction_id: "refund", transaction_date: "2026-07-31", amount: 12, name: "Refund" },
+  ];
+
+  assert.deepEqual(
+    unplannedPendingExpenses(pending, ["matched-charge"]).map(row => row.plaid_transaction_id),
+    ["new-charge"],
+  );
 });

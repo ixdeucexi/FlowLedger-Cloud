@@ -18,7 +18,7 @@ import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { StabilityPathCard } from "@/components/StabilityPathCard";
 
 import colors from "@/constants/colors";
-import type { Bill, Goal } from "@/context/BudgetContext";
+import type { Bill, Goal, PendingBankTransaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useAuth } from "@/context/AuthContext";
 import { useMembership } from "@/context/MembershipContext";
@@ -40,6 +40,7 @@ import {
 import { transactionCategoryParts } from "@/lib/reviewCenter";
 import { buildAlgorithmSuite, type AlgorithmInsight } from "@/lib/algorithmSuite";
 import { activePendingPlanMatches } from "@/lib/pendingPlanMatches";
+import { summarizePendingCheckingActivity, unplannedPendingExpenses } from "@/lib/plaidActivity";
 import { effectiveDebtMinimum } from "@/lib/snowball";
 
 const MONTH_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -51,6 +52,11 @@ const CAT_COLORS: Record<string, string> = {
 };
 
 const FLOWLEDGER_LOGO = require("@/assets/brand/flowledger-dashboard-logo.jpg");
+const FLO_LOGO = require("@/assets/brand/flo-logo.jpg");
+
+function pendingInsightStorageKey(userId: string, householdId: string): string {
+  return `flowledger:pending-insights:${userId}:${householdId}`;
+}
 
 const DASHBOARD_THEMES = {
   dark: {
@@ -198,6 +204,7 @@ export default function DashboardScreen() {
   const flowmentumHouseholdId = activeHousehold?.householdId ?? activeHousehold?.budgetId ?? "personal";
   const flowmentumSeenKey = user?.id ? flowmentumSeenStorageKey(user.id, flowmentumHouseholdId) : null;
   const flowmentumPreviewKey = user?.id ? flowmentumPreviewStorageKey(user.id, flowmentumHouseholdId) : null;
+  const pendingInsightKey = user?.id ? pendingInsightStorageKey(user.id, flowmentumHouseholdId) : null;
 
   const [goalModalVisible, setGoalModalVisible]     = useState(false);
   const [editGoal, setEditGoal]                     = useState<Goal | null>(null);
@@ -219,7 +226,9 @@ export default function DashboardScreen() {
   const [startupAlertVisible, setStartupAlertVisible] = useState(false);
   const [flowmentumVisible, setFlowmentumVisible] = useState(false);
   const [flowmentumAdminPreview, setFlowmentumAdminPreview] = useState(false);
+  const [pendingFloCharge, setPendingFloCharge] = useState<PendingBankTransaction | null>(null);
   const startupAlertShownRef = useRef(false);
+  const checkedPendingSignatureRef = useRef("");
   const flowScoreSwipeResponder = useMemo(() => PanResponder.create({
     onMoveShouldSetPanResponder: (_event, gesture) => gesture.dy > 10 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
     onPanResponderRelease: (_event, gesture) => {
@@ -534,6 +543,26 @@ export default function DashboardScreen() {
       .filter(account => account.is_active && account.account_type === "checking")
       .reduce((sum, account) => sum + account.current_balance, 0);
   }, [accounts, connectedCheckingAccounts]);
+  const checkingPendingTransactions = useMemo(() => {
+    const checkingIds = new Set(connectedCheckingAccounts.map(account => account.id));
+    return pendingBankTransactions.filter(transaction =>
+      transaction.plaid_account_id
+        ? checkingIds.has(transaction.plaid_account_id)
+        : connectedCheckingAccounts.length === 1
+    );
+  }, [connectedCheckingAccounts, pendingBankTransactions]);
+  const pendingCheckingSummary = useMemo(
+    () => summarizePendingCheckingActivity(checkingPendingTransactions, connectedCheckingAccounts),
+    [checkingPendingTransactions, connectedCheckingAccounts],
+  );
+  const activePendingMatchIds = useMemo(() => new Set(
+    activePendingPlanMatches(pendingPlanMatches, pendingBankTransactions)
+      .map(match => match.pending_plaid_transaction_id),
+  ), [pendingBankTransactions, pendingPlanMatches]);
+  const unplannedCheckingPending = useMemo(
+    () => unplannedPendingExpenses(checkingPendingTransactions, activePendingMatchIds),
+    [activePendingMatchIds, checkingPendingTransactions],
+  );
   // The hero is a bank snapshot. Forecasted balances belong on Monthly only.
   const dashboardCheckingBalance = checkingAccountBalance;
 
@@ -718,6 +747,100 @@ export default function DashboardScreen() {
   const openFlo = useCallback(() => {
     router.push("/(tabs)/flo" as any);
   }, [router]);
+  const rememberPendingInsights = useCallback(async (transactionIds: string[]) => {
+    if (!pendingInsightKey || !transactionIds.length) return;
+    try {
+      const stored = await AsyncStorage.getItem(pendingInsightKey);
+      const parsed = stored ? JSON.parse(stored) : [];
+      const seen = new Set<string>(Array.isArray(parsed) ? parsed.filter(item => typeof item === "string") : []);
+      transactionIds.forEach(id => seen.add(id));
+      await AsyncStorage.setItem(pendingInsightKey, JSON.stringify([...seen].slice(-150)));
+    } catch {
+      // A dismissed insight is a convenience preference. Pending money remains visible in Activity.
+    }
+  }, [pendingInsightKey]);
+  const openPendingActivity = useCallback((charge?: PendingBankTransaction | null) => {
+    router.push({
+      pathname: "/(tabs)/transactions",
+      params: charge ? {
+        pendingId: charge.plaid_transaction_id,
+        pendingAt: String(Date.now()),
+      } : undefined,
+    } as any);
+  }, [router]);
+  const dismissPendingFlo = useCallback(() => {
+    setPendingFloCharge(null);
+    void rememberPendingInsights(unplannedCheckingPending.map(charge => charge.plaid_transaction_id));
+  }, [rememberPendingInsights, unplannedCheckingPending]);
+  const reviewPendingFloCharge = useCallback(() => {
+    const charge = pendingFloCharge;
+    if (!charge) return;
+    setPendingFloCharge(null);
+    void rememberPendingInsights([charge.plaid_transaction_id]);
+    openPendingActivity(charge);
+  }, [openPendingActivity, pendingFloCharge, rememberPendingInsights]);
+  useBackDismiss(Boolean(pendingFloCharge), dismissPendingFlo);
+  const pendingInsightSignature = useMemo(
+    () => unplannedCheckingPending.map(charge => charge.plaid_transaction_id).sort().join("|"),
+    [unplannedCheckingPending],
+  );
+  useEffect(() => {
+    const anotherModalIsOpen = startupAlertVisible
+      || flowmentumVisible
+      || actionModalVisible
+      || goalModalVisible
+      || addBillVisible
+      || flowScoreVisible
+      || safeCushionVisible
+      || categoryBudgetModalVisible
+      || moveMoneyVisible
+      || Boolean(selectedCategory);
+    if (!isFocused || anotherModalIsOpen || pendingFloCharge || !pendingInsightKey || !pendingInsightSignature) return;
+
+    const requestKey = `${pendingInsightKey}:${pendingInsightSignature}`;
+    if (checkedPendingSignatureRef.current === requestKey) return;
+    checkedPendingSignatureRef.current = requestKey;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    void AsyncStorage.getItem(pendingInsightKey).then(stored => {
+      if (cancelled) return;
+      let seenIds: string[] = [];
+      try {
+        const parsed = stored ? JSON.parse(stored) : [];
+        seenIds = Array.isArray(parsed) ? parsed.filter(item => typeof item === "string") : [];
+      } catch {
+        seenIds = [];
+      }
+      const seen = new Set(seenIds);
+      const unseenCharge = unplannedCheckingPending.find(charge => !seen.has(charge.plaid_transaction_id));
+      if (!unseenCharge) return;
+      timer = setTimeout(() => {
+        if (!cancelled) setPendingFloCharge(unseenCharge);
+      }, 1500);
+    }).catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [
+    actionModalVisible,
+    addBillVisible,
+    categoryBudgetModalVisible,
+    flowScoreVisible,
+    flowmentumVisible,
+    goalModalVisible,
+    isFocused,
+    moveMoneyVisible,
+    pendingFloCharge,
+    pendingInsightKey,
+    pendingInsightSignature,
+    safeCushionVisible,
+    selectedCategory,
+    startupAlertVisible,
+    unplannedCheckingPending,
+  ]);
   const openStabilityGuide = useCallback(() => {
     router.push({
       pathname: "/(tabs)/how-flowledger-works",
@@ -870,6 +993,75 @@ export default function DashboardScreen() {
         </View>
       </Modal>
 
+      <Modal
+        visible={Boolean(pendingFloCharge)}
+        transparent
+        animationType="fade"
+        onRequestClose={dismissPendingFlo}
+      >
+        <View style={styles.pendingFloBackdrop}>
+          <View style={[styles.pendingFloCard, { backgroundColor: c.card, borderColor: colors.brand.blue + "65" }]}>
+            <View style={styles.pendingFloHandle} />
+            <View style={styles.pendingFloHeader}>
+              <View style={[styles.pendingFloAvatarWrap, { borderColor: c.primary + "55" }]}>
+                <Image source={FLO_LOGO} style={styles.pendingFloAvatar} resizeMode="cover" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <AppText tone="label" style={[styles.pendingFloEyebrow, { color: c.primary }]}>Flo noticed this</AppText>
+                <AppText tone="title" style={[styles.pendingFloTitle, { color: c.foreground }]}>A charge is pending</AppText>
+              </View>
+              <Pressable accessibilityLabel="Dismiss pending charge message" onPress={dismissPendingFlo} hitSlop={10}>
+                <Feather name="x" size={21} color={c.mutedForeground} />
+              </Pressable>
+            </View>
+
+            <AppText style={[styles.pendingFloMessage, { color: c.foreground }]}>
+              {pendingFloCharge?.merchant_name || pendingFloCharge?.name || "This charge"} is pending for {formatDashboardCurrency(Math.abs(pendingFloCharge?.amount ?? 0))}. I don&apos;t see it in your plan yet.
+            </AppText>
+            {unplannedCheckingPending.length > 1 ? (
+              <AppText style={[styles.pendingFloSecondary, { color: c.mutedForeground }]}>
+                You also have {unplannedCheckingPending.length - 1} more unplanned pending charge{unplannedCheckingPending.length - 1 === 1 ? "" : "s"}.
+              </AppText>
+            ) : null}
+
+            <View style={[styles.pendingFloBalanceBox, { backgroundColor: colors.brand.blue + "10", borderColor: colors.brand.blue + "30" }]}>
+              <View>
+                <AppText tone="label" style={[styles.pendingFloBalanceLabel, { color: c.mutedForeground }]}>Bank balance</AppText>
+                <AppText tone="number" style={[styles.pendingFloBalanceValue, { color: c.foreground }]}>
+                  {formatDashboardCurrency(dashboardCheckingBalance)}
+                </AppText>
+              </View>
+              <Feather name="arrow-right" size={17} color={colors.brand.blue} />
+              <View style={styles.pendingFloAvailableColumn}>
+                <AppText tone="label" style={[styles.pendingFloBalanceLabel, { color: c.mutedForeground }]}>Available</AppText>
+                <AppText tone="number" style={[styles.pendingFloBalanceValue, { color: c.success }]}>
+                  {formatDashboardCurrency(pendingCheckingSummary?.availableBalance ?? dashboardCheckingBalance)}
+                </AppText>
+              </View>
+            </View>
+
+            <AppText style={[styles.pendingFloNote, { color: c.mutedForeground }]}>Pending amounts can change. FlowLedger will replace this preview when the final charge posts.</AppText>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Plan this pending charge"
+              onPress={reviewPendingFloCharge}
+              style={({ pressed }) => [styles.pendingFloPrimaryButton, { backgroundColor: c.primary, opacity: pressed ? 0.8 : 1 }]}
+            >
+              <Feather name="calendar" size={17} color={c.primaryForeground} />
+              <AppText tone="title" style={[styles.pendingFloPrimaryText, { color: c.primaryForeground }]}>Plan this charge</AppText>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Wait until this pending charge posts"
+              onPress={dismissPendingFlo}
+              style={({ pressed }) => [styles.pendingFloSecondaryButton, { borderColor: c.border, opacity: pressed ? 0.72 : 1 }]}
+            >
+              <AppText tone="title" style={[styles.pendingFloSecondaryText, { color: c.foreground }]}>Wait until it posts</AppText>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       <FlowmentumHandoffModal
         visible={flowmentumVisible}
         isAdminPreview={flowmentumAdminPreview}
@@ -905,6 +1097,33 @@ export default function DashboardScreen() {
               <View style={styles.referenceBalanceAmount}>
                 <AppText tone="label" style={[styles.referenceHeroLabel, { color: dashboardTheme.mutedText }]}>Checking balance</AppText>
                 <AppText tone="number" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={[styles.referenceHeroAmount, { color: dashboardTheme.amount, textShadowColor: c.isDark ? "rgba(34,211,238,0.25)" : "transparent" }]}>{formatDashboardCurrency(dashboardCheckingBalance)}</AppText>
+                {pendingCheckingSummary && pendingCheckingSummary.pendingCount > 0 ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${pendingCheckingSummary.pendingCount} pending bank transaction${pendingCheckingSummary.pendingCount === 1 ? "" : "s"}. ${formatDashboardCurrency(pendingCheckingSummary.availableBalance)} available after pending activity.`}
+                    onPress={() => openPendingActivity(unplannedCheckingPending[0] ?? checkingPendingTransactions[0])}
+                    style={({ pressed }) => [
+                      styles.pendingBalanceStrip,
+                      {
+                        backgroundColor: c.warning + "12",
+                        borderColor: c.warning + "38",
+                        opacity: pressed ? 0.76 : 1,
+                      },
+                    ]}
+                  >
+                    <Feather name="clock" size={12} color={c.warning} />
+                    <AppText style={[styles.pendingBalancePrimary, { color: c.warning }]} numberOfLines={1}>
+                      {pendingCheckingSummary.pendingOutflow > 0
+                        ? `−${formatDashboardCurrency(pendingCheckingSummary.pendingOutflow)} pending`
+                        : `+${formatDashboardCurrency(pendingCheckingSummary.pendingInflow)} pending`}
+                    </AppText>
+                    <View style={[styles.pendingBalanceDot, { backgroundColor: dashboardTheme.subtleText }]} />
+                    <AppText style={[styles.pendingBalanceAvailable, { color: dashboardTheme.mutedText }]} numberOfLines={1}>
+                      {formatDashboardCurrency(pendingCheckingSummary.availableBalance)} available
+                    </AppText>
+                    <Feather name="chevron-right" size={12} color={dashboardTheme.subtleText} />
+                  </Pressable>
+                ) : null}
               </View>
               <Pressable
                 accessibilityRole="button"
@@ -1653,6 +1872,25 @@ const styles = StyleSheet.create({
   startupAlertCard: { width: "100%", maxWidth: 480, borderRadius: 28, borderWidth: 1, backgroundColor: "rgba(15,23,42,0.96)", padding: 18, shadowColor: "#000", shadowOffset: { width: 0, height: 22 }, shadowOpacity: 0.38, shadowRadius: 34, elevation: 16 },
   startupAlertHandle: { alignSelf: "center", width: 44, height: 4, borderRadius: 999, backgroundColor: "rgba(148,163,184,0.45)", marginBottom: 16 },
   startupAlertHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  pendingFloBackdrop: { flex: 1, backgroundColor: "rgba(2,6,23,0.78)", alignItems: "center", justifyContent: "center", padding: 20 },
+  pendingFloCard: { width: "100%", maxWidth: 480, borderRadius: 28, borderWidth: 1, padding: 18, shadowColor: "#000", shadowOffset: { width: 0, height: 22 }, shadowOpacity: 0.42, shadowRadius: 34, elevation: 18 },
+  pendingFloHandle: { alignSelf: "center", width: 42, height: 4, borderRadius: 999, backgroundColor: "rgba(148,163,184,0.42)", marginBottom: 15 },
+  pendingFloHeader: { flexDirection: "row", alignItems: "center", gap: 11 },
+  pendingFloAvatarWrap: { width: 52, height: 52, borderRadius: 18, overflow: "hidden", borderWidth: 1, backgroundColor: "#020617" },
+  pendingFloAvatar: { width: "100%", height: "100%" },
+  pendingFloEyebrow: { fontSize: 9, letterSpacing: 1.4, textTransform: "uppercase" },
+  pendingFloTitle: { fontSize: 21, lineHeight: 25, letterSpacing: -0.5 },
+  pendingFloMessage: { fontSize: 17, lineHeight: 24, fontFamily: "Inter_700Bold", marginTop: 17 },
+  pendingFloSecondary: { fontSize: 12, lineHeight: 17, fontFamily: "Inter_500Medium", marginTop: 6 },
+  pendingFloBalanceBox: { borderWidth: 1, borderRadius: 17, paddingHorizontal: 13, paddingVertical: 11, marginTop: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  pendingFloAvailableColumn: { alignItems: "flex-end" },
+  pendingFloBalanceLabel: { fontSize: 9, letterSpacing: 0.8, textTransform: "uppercase" },
+  pendingFloBalanceValue: { fontSize: 18, lineHeight: 22, letterSpacing: -0.4 },
+  pendingFloNote: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_500Medium", marginTop: 11 },
+  pendingFloPrimaryButton: { minHeight: 50, borderRadius: 16, marginTop: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  pendingFloPrimaryText: { fontSize: 14 },
+  pendingFloSecondaryButton: { minHeight: 46, borderRadius: 16, borderWidth: 1, marginTop: 8, alignItems: "center", justifyContent: "center" },
+  pendingFloSecondaryText: { fontSize: 13 },
 
   referenceCommandHero: {
     borderRadius: 28,
@@ -1677,6 +1915,10 @@ const styles = StyleSheet.create({
   referenceMoneyHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   referenceBalanceRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   referenceBalanceAmount: { flex: 1, minWidth: 0 },
+  pendingBalanceStrip: { alignSelf: "flex-start", maxWidth: "100%", minHeight: 27, borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, marginTop: 3, flexDirection: "row", alignItems: "center", gap: 5 },
+  pendingBalancePrimary: { fontSize: 10, fontFamily: "Inter_800ExtraBold" },
+  pendingBalanceDot: { width: 3, height: 3, borderRadius: 2 },
+  pendingBalanceAvailable: { flexShrink: 1, fontSize: 10, fontFamily: "Inter_700Bold" },
   referenceHeroFloButton: { minHeight: 40, flexDirection: "row", alignItems: "center", gap: 7, borderWidth: 1, borderRadius: 999, paddingHorizontal: 9 },
   referenceHeroFloIcon: { width: 29, height: 29, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   referenceHeroFloText: { fontSize: 13, paddingRight: 3 },
