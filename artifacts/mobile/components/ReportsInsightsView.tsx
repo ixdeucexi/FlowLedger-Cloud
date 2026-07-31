@@ -1,18 +1,24 @@
 import { Feather } from "@expo/vector-icons";
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 import colors from "@/constants/colors";
 import { useColors } from "@/hooks/useColors";
-import type { ReminderItem, ReportsSummary } from "@/lib/competitiveGrowth";
+import type { MonthlyMoneyInsight, ReminderItem, ReportsSummary, SubscriptionCandidate } from "@/lib/competitiveGrowth";
+import type { CategoryPlanRow } from "@/lib/categoryPlanning";
 import { shouldExpandReportDetails, shouldStackSettingsMetrics } from "@/lib/settingsLayout";
 
 interface ReportsInsightsViewProps {
   monthLabel: string;
   summary: ReportsSummary;
   reminders: ReminderItem[];
+  categoryPlan: CategoryPlanRow[];
+  monthlyInsights: MonthlyMoneyInsight[];
+  recurringCandidates: SubscriptionCandidate[];
+  plannedMonthlyIncome: number;
   onOpenReview: () => void;
   onOpenBills: () => void;
+  onOpenSubscriptions: () => void;
 }
 
 const money = (value: number) => `$${Math.abs(value).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
@@ -21,19 +27,33 @@ export function ReportsInsightsView({
   monthLabel,
   summary,
   reminders,
+  categoryPlan,
+  monthlyInsights,
+  recurringCandidates,
+  plannedMonthlyIncome,
   onOpenReview,
   onOpenBills,
+  onOpenSubscriptions,
 }: ReportsInsightsViewProps) {
   const c = useColors();
   const { width: viewportWidth } = useWindowDimensions();
   const stackCompactContent = shouldStackSettingsMetrics(viewportWidth);
   const expandCompactDetails = shouldExpandReportDetails(viewportWidth);
+  const [insightRange, setInsightRange] = useState<"six" | "year">("six");
   const hasActivity = summary.income > 0 || summary.spending > 0;
   const moneyKept = summary.net >= 0;
   const spendingPercent = summary.income > 0
     ? Math.min(100, Math.round((summary.spending / summary.income) * 100))
     : summary.spending > 0 ? 100 : 0;
   const largestCategory = summary.categoryTotals[0]?.amount ?? 0;
+  const visibleInsights = insightRange === "six" ? monthlyInsights.slice(-6) : monthlyInsights;
+  const trendIncome = visibleInsights.reduce((sum, item) => sum + item.income, 0);
+  const trendSpending = visibleInsights.reduce((sum, item) => sum + item.spending, 0);
+  const trendNet = trendIncome - trendSpending;
+  const largestTrendValue = Math.max(1, ...visibleInsights.flatMap(item => [item.income, item.spending]));
+  const visibleCategoryPlan = categoryPlan
+    .filter(row => row.budgeted > 0.005 || row.spent > 0.005)
+    .slice(0, 6);
   const nextMove = useMemo(() => {
     if (reminders.length) return reminders[0].title;
     if (!hasActivity) return "Add activity to start your monthly report.";
@@ -88,6 +108,101 @@ export function ReportsInsightsView({
               },
             ]}
           />
+        </View>
+      </View>
+
+      <SectionTitle label="Flo starting plan" />
+      <View style={[styles.startingPlan, { backgroundColor: c.card, borderColor: c.primary + "44" }]}>
+        <View style={[styles.startingIcon, { backgroundColor: c.primary + "18" }]}>
+          <Feather name="zap" size={20} color={c.primary} />
+        </View>
+        <View style={styles.startingCopy}>
+          <Text style={[styles.startingTitle, { color: c.foreground }]}>
+            {recurringCandidates.length
+              ? `${recurringCandidates.length} repeating charge${recurringCandidates.length === 1 ? "" : "s"} found`
+              : "Your starting plan is ready"}
+          </Text>
+          <Text style={[styles.startingText, { color: c.mutedForeground }]}>
+            {money(plannedMonthlyIncome)} planned income · {money(recurringCandidates.reduce((sum, item) => sum + item.monthlyEquivalent, 0))} in possible recurring charges
+          </Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Review recurring charge drafts"
+          onPress={onOpenSubscriptions}
+          style={({ pressed }) => [styles.smallButton, { borderColor: c.primary + "66", opacity: pressed ? 0.7 : 1 }]}
+        >
+          <Text style={[styles.smallButtonText, { color: c.primary }]}>Review</Text>
+        </Pressable>
+      </View>
+
+      <SectionTitle label="Category pace" />
+      <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
+        {visibleCategoryPlan.length ? visibleCategoryPlan.map((row, index) => {
+          const statusColor = row.status === "over" ? c.destructive : row.status === "watch" ? c.warning : c.success;
+          return (
+            <View key={row.category} style={[styles.planPaceRow, index > 0 && { borderTopColor: c.border, borderTopWidth: 1 }]}>
+              <View style={styles.planPaceHeading}>
+                <Text style={[styles.planPaceName, { color: c.foreground }]} numberOfLines={1}>{row.category}</Text>
+                <Text style={[styles.planPaceStatus, { color: statusColor }]}>
+                  {row.status === "over" ? `${money(Math.abs(row.remaining))} over` : `${money(row.remaining)} left`}
+                </Text>
+              </View>
+              <Text style={[styles.planPaceMeta, { color: c.mutedForeground }]}>
+                {money(row.spent)} spent of {money(row.budgeted)} planned
+              </Text>
+              <View style={[styles.categoryPlanTrack, { backgroundColor: c.muted }]}>
+                <View style={[styles.categoryPlanFill, { backgroundColor: statusColor, width: `${Math.min(100, row.percentUsed)}%` }]} />
+              </View>
+            </View>
+          );
+        }) : <EmptyState icon="target" text="Add bills or category plans to see your pace." />}
+      </View>
+
+      <View style={styles.insightHeading}>
+        <SectionTitle label="Money over time" />
+        <View style={[styles.rangeToggle, { backgroundColor: c.muted }]}>
+          {(["six", "year"] as const).map(range => (
+            <Pressable
+              key={range}
+              accessibilityRole="button"
+              accessibilityLabel={range === "six" ? "Show six months" : "Show one year"}
+              onPress={() => setInsightRange(range)}
+              style={[styles.rangeButton, insightRange === range && { backgroundColor: c.card }]}
+            >
+              <Text style={[styles.rangeText, { color: insightRange === range ? c.foreground : c.mutedForeground }]}>
+                {range === "six" ? "6 months" : "Year"}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+      <View style={[styles.trendCard, { backgroundColor: c.card, borderColor: c.border }]}>
+        <View style={styles.trendSummary}>
+          <View>
+            <Text style={[styles.trendLabel, { color: c.mutedForeground }]}>NET</Text>
+            <Text style={[styles.trendNet, { color: trendNet >= 0 ? c.success : c.destructive }]}>
+              {trendNet >= 0 ? "+" : "−"}{money(trendNet)}
+            </Text>
+          </View>
+          <Text style={[styles.trendTotals, { color: c.mutedForeground }]}>
+            {money(trendIncome)} in · {money(trendSpending)} out
+          </Text>
+        </View>
+        <View style={styles.bars}>
+          {visibleInsights.map(item => (
+            <View key={item.key} style={styles.barColumn}>
+              <View style={styles.barPair}>
+                <View style={[styles.bar, { height: Math.max(3, Math.round((item.income / largestTrendValue) * 62)), backgroundColor: c.success }]} />
+                <View style={[styles.bar, { height: Math.max(3, Math.round((item.spending / largestTrendValue) * 62)), backgroundColor: c.primary }]} />
+              </View>
+              <Text style={[styles.barLabel, { color: c.mutedForeground }]}>{item.label}</Text>
+            </View>
+          ))}
+        </View>
+        <View style={styles.legend}>
+          <View style={[styles.legendDot, { backgroundColor: c.success }]} /><Text style={[styles.legendText, { color: c.mutedForeground }]}>In</Text>
+          <View style={[styles.legendDot, { backgroundColor: c.primary }]} /><Text style={[styles.legendText, { color: c.mutedForeground }]}>Out</Text>
         </View>
       </View>
 
@@ -278,6 +393,13 @@ const styles = StyleSheet.create({
   heroTitle: { fontFamily: "Inter_700Bold", fontSize: 22, marginTop: 3 },
   statusPill: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999 },
   statusText: { fontFamily: "Inter_700Bold", fontSize: 11 },
+  startingPlan: { borderWidth: 1, borderRadius: colors.radius, padding: 14, flexDirection: "row", alignItems: "center", gap: 11 },
+  startingIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  startingCopy: { flex: 1, minWidth: 0 },
+  startingTitle: { fontFamily: "Inter_700Bold", fontSize: 15 },
+  startingText: { fontFamily: "Inter_400Regular", fontSize: 12, lineHeight: 17, marginTop: 3 },
+  smallButton: { minHeight: 38, borderWidth: 1, borderRadius: 12, paddingHorizontal: 11, alignItems: "center", justifyContent: "center" },
+  smallButtonText: { fontFamily: "Inter_700Bold", fontSize: 12 },
   netValue: { fontFamily: "Inter_700Bold", fontSize: 42, letterSpacing: -1.2, marginTop: 22 },
   netCaption: { fontFamily: "Inter_400Regular", fontSize: 13, marginTop: 2 },
   metricRow: { flexDirection: "row", gap: 10, marginTop: 18 },
@@ -305,6 +427,30 @@ const styles = StyleSheet.create({
   categoryShare: { fontFamily: "Inter_400Regular", fontSize: 11, marginTop: 1 },
   categoryTrack: { height: 4, borderRadius: 99, overflow: "hidden", marginTop: 9, marginLeft: 35 },
   categoryFill: { height: "100%", borderRadius: 99 },
+  planPaceRow: { paddingVertical: 13 },
+  planPaceHeading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  planPaceName: { flex: 1, fontFamily: "Inter_700Bold", fontSize: 14 },
+  planPaceStatus: { fontFamily: "Inter_700Bold", fontSize: 12 },
+  planPaceMeta: { fontFamily: "Inter_400Regular", fontSize: 11, marginTop: 3 },
+  categoryPlanTrack: { height: 5, borderRadius: 99, overflow: "hidden", marginTop: 8 },
+  categoryPlanFill: { height: "100%", borderRadius: 99 },
+  insightHeading: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  rangeToggle: { flexDirection: "row", padding: 3, borderRadius: 11 },
+  rangeButton: { minHeight: 30, borderRadius: 8, paddingHorizontal: 10, alignItems: "center", justifyContent: "center" },
+  rangeText: { fontFamily: "Inter_700Bold", fontSize: 11 },
+  trendCard: { borderWidth: 1, borderRadius: colors.radius, padding: 15 },
+  trendSummary: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 10 },
+  trendLabel: { fontFamily: "Inter_700Bold", fontSize: 10, letterSpacing: 0.8 },
+  trendNet: { fontFamily: "Inter_700Bold", fontSize: 24, marginTop: 2 },
+  trendTotals: { fontFamily: "Inter_500Medium", fontSize: 11, textAlign: "right" },
+  bars: { minHeight: 88, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-around", gap: 3, marginTop: 16 },
+  barColumn: { flex: 1, alignItems: "center", justifyContent: "flex-end" },
+  barPair: { height: 64, flexDirection: "row", alignItems: "flex-end", gap: 2 },
+  bar: { width: 5, borderRadius: 3 },
+  barLabel: { fontFamily: "Inter_600SemiBold", fontSize: 9, marginTop: 5 },
+  legend: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, marginTop: 9 },
+  legendDot: { width: 7, height: 7, borderRadius: 4, marginLeft: 8 },
+  legendText: { fontFamily: "Inter_500Medium", fontSize: 10 },
   planRow: { minHeight: 70, flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 12 },
   planRowCompact: { flexWrap: "wrap" },
   planIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },

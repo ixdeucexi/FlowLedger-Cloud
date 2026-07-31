@@ -167,6 +167,45 @@ export function rankReviewTargets(transaction: Pick<ReviewTransactionLike, "amou
   }).sort((left, right) => right.score - left.score || left.daysApart - right.daysApart || left.amountDifference - right.amountDifference);
 }
 
+function normalizedMerchant(value: string) {
+  return normalizedTokens(value).join(" ");
+}
+
+function allocationMatchesTarget(allocation: ReviewAllocationLike, target: ReviewTarget) {
+  if (!allocation.targetId || allocation.targetId !== target.id) return false;
+  if (target.type === "bill") return allocation.type === "bill";
+  if (target.type === "income") return allocation.type === "income";
+  if (target.type === "snowball") return allocation.type === "extra_principal";
+  if (target.type === "goal" || target.type === "decision") {
+    return allocation.type === "planned_expense" && allocation.source === target.type;
+  }
+  return false;
+}
+
+export function applyMatchMemory(
+  current: Pick<ReviewTransactionLike, "id" | "note" | "merchant_name" | "category">,
+  rankedTargets: RankedReviewTarget[],
+  history: ReviewTransactionLike[],
+): RankedReviewTarget[] {
+  const currentMerchant = normalizedMerchant(current.merchant_name || current.note || current.category || "");
+  if (!currentMerchant) return rankedTargets;
+
+  return rankedTargets.map(target => {
+    const count = history.filter(transaction => {
+      if (transaction.id === current.id || transaction.review_status !== "matched") return false;
+      const merchant = normalizedMerchant(transaction.merchant_name || transaction.note || transaction.category || "");
+      return merchant === currentMerchant
+        && (transaction.review_allocations ?? []).some(allocation => allocationMatchesTarget(allocation, target));
+    }).length;
+    if (!count) return target;
+    return {
+      ...target,
+      score: target.score + 38 + Math.min(12, (count - 1) * 4),
+      reasons: [`Matched here ${count === 1 ? "before" : `${count} times`}`, ...target.reasons],
+    };
+  }).sort((left, right) => right.score - left.score || left.daysApart - right.daysApart || left.amountDifference - right.amountDifference);
+}
+
 export function allocationTotal(allocations: ReviewAllocationLike[] | undefined): number {
   return Math.round((allocations ?? []).reduce((sum, allocation) => sum + Math.max(0, Number(allocation.amount) || 0), 0) * 100) / 100;
 }

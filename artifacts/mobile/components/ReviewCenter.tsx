@@ -12,7 +12,7 @@ import type { Bill, Goal, ReconcileTransactionInput, Transaction } from "@/conte
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { confirmAction } from "@/lib/confirmAction";
-import { buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewQueueAfterSkips, scheduledSnowballReviewTargets, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
+import { applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewQueueAfterSkips, scheduledSnowballReviewTargets, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
 import { prioritizePendingPlanTarget } from "@/lib/pendingPlanMatches";
 import { isOpenSpendingBucket, spendingBucketSummary } from "@/lib/spendingBuckets";
 
@@ -77,7 +77,11 @@ export function ReviewCenter() {
   useEffect(() => {
     void refreshBankData();
   }, [refreshBankData]);
-  const queue = useMemo(() => buildReviewQueue(transactions, todayIso()), [transactions]);
+  const fullQueue = useMemo(() => buildReviewQueue(transactions, todayIso()), [transactions]);
+  const [reviewFilter, setReviewFilter] = useState<"all" | "expense" | "income">("all");
+  const queue = useMemo(() => fullQueue.filter(transaction =>
+    reviewFilter === "all" || (reviewFilter === "income" ? transaction.amount > 0 : transaction.amount < 0)
+  ), [fullQueue, reviewFilter]);
   const [saving, setSaving] = useState(false);
   const [variance, setVariance] = useState<VarianceChoice | null>(null);
   const [splitCategory, setSplitCategory] = useState<string | null>(null);
@@ -182,7 +186,8 @@ export function ReviewCenter() {
         });
       });
     }
-    return prioritizePendingPlanTarget(rankReviewTargets(current, candidates), current.id, pendingPlanMatches);
+    const learnedRanking = applyMatchMemory(current, rankReviewTargets(current, candidates), transactions);
+    return prioritizePendingPlanTarget(learnedRanking, current.id, pendingPlanMatches);
   }, [current, decisions, extraPayments, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getMonthlyBills, goals, pendingPlanMatches, transactions]);
   const groupedTargets = useMemo(() => groupReviewTargets(targets), [targets]);
   const spendingBuckets = useMemo(() => goals
@@ -562,6 +567,41 @@ export function ReviewCenter() {
         </View>
       </View>
 
+      <View style={styles.filterRow}>
+        {([
+          ["all", "All"],
+          ["expense", "Money out"],
+          ["income", "Money in"],
+        ] as const).map(([value, label]) => {
+          const selected = reviewFilter === value;
+          const count = value === "all"
+            ? fullQueue.length
+            : fullQueue.filter(transaction => value === "income" ? transaction.amount > 0 : transaction.amount < 0).length;
+          return (
+            <Pressable
+              key={value}
+              accessibilityRole="button"
+              accessibilityLabel={`Show ${label.toLowerCase()} transactions`}
+              onPress={() => {
+                setReviewFilter(value);
+                setSkippedIds([]);
+              }}
+              style={[
+                styles.filterButton,
+                {
+                  backgroundColor: selected ? c.primary : c.card,
+                  borderColor: selected ? c.primary : c.border,
+                },
+              ]}
+            >
+              <Text style={[styles.filterText, { color: selected ? c.primaryForeground : c.foreground }]}>
+                {label} {count}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
       {spendingBuckets.length || archivedBuckets.length ? (
         <View style={[styles.bucketManager, { backgroundColor: c.card, borderColor: c.border }]}>
           <View style={styles.bucketManagerHeader}>
@@ -726,6 +766,32 @@ export function ReviewCenter() {
             </View>
             <Text style={[styles.transactionAmount, { color: current.amount < 0 ? c.destructive : c.success }]}>{current.amount < 0 ? "−" : "+"}{money(current.amount)}</Text>
           </View>
+
+          {targets[0] && targets[0].score >= 78 ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Use Flo suggestion ${targets[0].name}`}
+              disabled={saving}
+              onPress={() => chooseTarget(targets[0])}
+              style={({ pressed }) => [
+                styles.floSuggestion,
+                {
+                  backgroundColor: c.success + "14",
+                  borderColor: c.success + "55",
+                  opacity: saving ? 0.55 : pressed ? 0.78 : 1,
+                },
+              ]}
+            >
+              <FloLogo size={34} />
+              <View style={styles.optionCopy}>
+                <Text style={[styles.optionTitle, { color: c.foreground }]}>Flo suggests {targets[0].name}</Text>
+                <Text style={[styles.optionDescription, { color: c.success }]}>
+                  {targets[0].reasons.slice(0, 2).join(" · ")}
+                </Text>
+              </View>
+              <Text style={[styles.useSuggestionText, { color: c.success }]}>Use</Text>
+            </Pressable>
+          ) : null}
 
           {current.amount > 0 ? <>
             <Text style={[styles.sectionTitle, { color: c.foreground }]}>Expected income</Text>
@@ -910,6 +976,9 @@ const styles = StyleSheet.create({
   eyebrow: { fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1 },
   heroTitle: { fontSize: 20, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
   heroCopy: { fontSize: 14, lineHeight: 21, fontFamily: "Inter_400Regular", marginTop: 5 },
+  filterRow: { flexDirection: "row", gap: 8, marginTop: 10 },
+  filterButton: { flex: 1, minHeight: 40, borderWidth: 1, borderRadius: 13, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
+  filterText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   bucketManager: { marginTop: 12, borderWidth: 1, borderRadius: 20, padding: 14 },
   bucketManagerHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   bucketManagerTitle: { marginTop: 0 },
@@ -938,6 +1007,8 @@ const styles = StyleSheet.create({
   transactionIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   transactionName: { fontSize: 17, fontFamily: "Inter_800ExtraBold" }, transactionMeta: { fontSize: 12, fontFamily: "Inter_500Medium", marginTop: 4 },
   transactionAmount: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
+  floSuggestion: { minHeight: 62, borderWidth: 1, borderRadius: 15, paddingHorizontal: 12, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
+  useSuggestionText: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   sectionTitle: { fontSize: 16, fontFamily: "Inter_800ExtraBold", marginTop: 4 },
   subsectionTitle: { fontSize: 15, fontFamily: "Inter_800ExtraBold", marginTop: 14 },
   sectionCopy: { fontSize: 13, lineHeight: 19, fontFamily: "Inter_400Regular", marginTop: 4, marginBottom: 10 },

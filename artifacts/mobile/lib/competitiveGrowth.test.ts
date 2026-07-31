@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   applyTransactionRules,
   buildGoalFundingPlans,
+  buildMonthlyMoneyInsights,
   buildReportsSummary,
   buildReviewQueue,
   buildSmartReminders,
@@ -98,6 +99,24 @@ test("summarizes reports without AI guessing", () => {
   assert.equal(report.net, report.income - report.spending);
   assert.equal(report.goalProgress[0].percent, 25);
   assert.ok(report.subscriptionTotal > 0);
+});
+
+test("builds six chronological monthly money insights", () => {
+  const insights = buildMonthlyMoneyInsights([
+    { id: "june-in", date: "2026-06-05", amount: 2000, description: "Payday" },
+    { id: "june-out", date: "2026-06-06", amount: -500, description: "Rent" },
+    { id: "july-in", date: "2026-07-05", amount: 2100, description: "Payday" },
+    { id: "july-out", date: "2026-07-06", amount: -600, description: "Rent" },
+  ], "2026-07", 3);
+
+  assert.deepEqual(insights.map(item => item.key), ["2026-05", "2026-06", "2026-07"]);
+  assert.deepEqual(insights.at(-1), {
+    key: "2026-07",
+    label: "Jul",
+    income: 2100,
+    spending: 600,
+    net: 1500,
+  });
 });
 
 test("builds reminders", () => {

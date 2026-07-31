@@ -94,12 +94,15 @@ import {
 import { manageFeedback, submitFeedback } from "@/lib/feedbackApi";
 import {
   buildGoalFundingPlans,
+  buildMonthlyMoneyInsights,
   buildReportsSummary,
   buildSmartReminders,
   detectSubscriptions,
   evaluateForecastReadiness,
+  normalizeMerchant,
   type SubscriptionCandidate,
 } from "@/lib/competitiveGrowth";
+import { buildCategoryPlan } from "@/lib/categoryPlanning";
 
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
 
@@ -815,8 +818,7 @@ export default function MoreScreen() {
       : "manual" as const,
     linkedBillId: transaction.linked_bill_id ?? transaction.debt_applied_bill_id ?? null,
   })), [transactions]);
-  const growthReportTransactions = useMemo(() => growthTransactions
-    .filter(transaction => transaction.date.startsWith(currentMonthPrefix))
+  const growthInsightTransactions = useMemo(() => growthTransactions
     .flatMap(transaction => {
     const source = transactions.find(item => item.id === transaction.id);
     if (!source) return [transaction];
@@ -830,7 +832,11 @@ export default function MoreScreen() {
       description: part.label,
       category: part.category,
     }));
-  }), [currentMonthPrefix, growthTransactions, transactions]);
+  }), [growthTransactions, transactions]);
+  const growthReportTransactions = useMemo(
+    () => growthInsightTransactions.filter(transaction => transaction.date.startsWith(currentMonthPrefix)),
+    [currentMonthPrefix, growthInsightTransactions],
+  );
   const growthBills = useMemo(() => bills.map(bill => ({
     id: bill.id,
     name: bill.name,
@@ -867,6 +873,14 @@ export default function MoreScreen() {
     () => detectSubscriptions(growthTransactions).filter(item => subscriptionDecisions[subscriptionKey(item)] !== "not_subscription"),
     [growthTransactions, subscriptionDecisions],
   );
+  const recurringPlanCandidates = useMemo(() => {
+    const billNames = bills.map(bill => normalizeMerchant(bill.name));
+    return subscriptions.filter(candidate =>
+      candidate.confidence !== "low"
+      && subscriptionDecisions[subscriptionKey(candidate)] !== "bill_created"
+      && !billNames.some(name => name && (name.includes(candidate.merchant) || candidate.merchant.includes(name))),
+    );
+  }, [bills, subscriptionDecisions, subscriptions]);
   const subscriptionBillHints = useMemo(
     () => bills
       .filter(bill => !(bill.end_date && bill.end_date < todayIso))
@@ -889,6 +903,20 @@ export default function MoreScreen() {
   const reportsSummary = useMemo(
     () => buildReportsSummary(growthReportTransactions, growthBills, growthDebts, growthGoals),
     [growthBills, growthDebts, growthGoals, growthReportTransactions],
+  );
+  const reportCategoryPlan = useMemo(() => buildCategoryPlan(
+    categories,
+    bills
+      .filter(bill => !(bill.end_date && bill.end_date < todayIso))
+      .map(bill => ({ category: bill.category || "Other", amount: bill.amount, is_debt: bill.is_debt })),
+    growthReportTransactions.map(transaction => ({
+      category: transaction.category || "Other",
+      amount: transaction.amount,
+    })),
+  ), [bills, categories, growthReportTransactions, todayIso]);
+  const monthlyMoneyInsights = useMemo(
+    () => buildMonthlyMoneyInsights(growthInsightTransactions, currentMonthPrefix, 12),
+    [currentMonthPrefix, growthInsightTransactions],
   );
   const forecastReadiness = useMemo(() => {
     const wantsDebt = onboardingPreferences.goals.includes("pay_off_debt") || bills.some(bill => bill.is_debt);
@@ -2299,8 +2327,13 @@ export default function MoreScreen() {
         monthLabel={new Date(`${currentMonthPrefix}-01T12:00:00`).toLocaleDateString(undefined, { month: "long", year: "numeric" })}
         summary={reportsSummary}
         reminders={smartReminders}
+        categoryPlan={reportCategoryPlan}
+        monthlyInsights={monthlyMoneyInsights}
+        recurringCandidates={recurringPlanCandidates}
+        plannedMonthlyIncome={totalMonthlyIncome}
         onOpenReview={() => openSettingsSection("review")}
         onOpenBills={() => router.push("/(tabs)/bills")}
+        onOpenSubscriptions={() => openSettingsSection("subscriptions")}
       />
       </>}
 

@@ -141,6 +141,14 @@ export interface ReportsSummary {
   insight: string;
 }
 
+export interface MonthlyMoneyInsight {
+  key: string;
+  label: string;
+  income: number;
+  spending: number;
+  net: number;
+}
+
 export interface ReminderItem {
   id: string;
   type:
@@ -404,6 +412,37 @@ export function buildReportsSummary(
       ? "Subscriptions are worth reviewing because recurring charges quietly reduce cushion."
       : "Your reports will get stronger as more activity is added.",
   };
+}
+
+export function buildMonthlyMoneyInsights(
+  transactions: GrowthTransaction[],
+  endMonth: string,
+  monthCount = 6,
+): MonthlyMoneyInsight[] {
+  const match = /^(\d{4})-(\d{2})$/.exec(endMonth);
+  if (!match || monthCount <= 0) return [];
+  const endYear = Number(match[1]);
+  const endMonthIndex = Number(match[2]) - 1;
+  if (!Number.isInteger(endYear) || endMonthIndex < 0 || endMonthIndex > 11) return [];
+
+  return Array.from({ length: monthCount }, (_, index) => {
+    const date = new Date(Date.UTC(endYear, endMonthIndex - (monthCount - index - 1), 1));
+    const key = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+    const monthTransactions = transactions.filter(transaction => transaction.date.startsWith(key));
+    const income = roundCurrency(monthTransactions
+      .filter(transaction => transaction.amount > 0)
+      .reduce((sum, transaction) => sum + transaction.amount, 0));
+    const spending = roundCurrency(Math.abs(monthTransactions
+      .filter(transaction => transaction.amount < 0)
+      .reduce((sum, transaction) => sum + transaction.amount, 0)));
+    return {
+      key,
+      label: date.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" }),
+      income,
+      spending,
+      net: roundCurrency(income - spending),
+    };
+  });
 }
 
 export function buildSmartReminders(input: {

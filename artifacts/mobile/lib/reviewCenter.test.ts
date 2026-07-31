@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { allocationLabel, allocationTotal, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupPlannedExpenseAllocations, groupReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewAllocationsAreBalanced, reviewedBillMonthSettlement, reviewQueueAfterSkips, reviewSettlementSummary, scheduledSnowballReviewTargets, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
+import { allocationLabel, allocationTotal, applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupPlannedExpenseAllocations, groupReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewAllocationsAreBalanced, reviewedBillMonthSettlement, reviewQueueAfterSkips, reviewSettlementSummary, scheduledSnowballReviewTargets, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
 
 test("queues active current-month and month-end rollover Plaid transactions oldest first", () => {
   const queue = buildReviewQueue([
@@ -87,6 +87,27 @@ test("uses the meaningful bank name to break equal amount and date ties", () => 
   );
   assert.equal(targets[0]?.id, "capital-one");
   assert.ok(targets[0]?.reasons.includes("Name strongly matches"));
+});
+
+test("learns a confirmed merchant match without changing anything automatically", () => {
+  const current = { id: "new", amount: -30, date: "2026-07-30", note: "NETFLIX.COM", merchant_name: "Netflix", category: "Other" };
+  const ranked = rankReviewTargets(current, [
+    { type: "bill", id: "streaming", name: "TV", category: "Entertainment", plannedAmount: 30, occurrenceDate: "2026-07-30" },
+    { type: "bill", id: "other", name: "Other bill", category: "Other", plannedAmount: 30, occurrenceDate: "2026-07-30" },
+  ]);
+  const learned = applyMatchMemory(current, ranked, [{
+    id: "old",
+    amount: -30,
+    date: "2026-06-30",
+    note: "NETFLIX.COM",
+    merchant_name: "Netflix",
+    category: "Entertainment",
+    review_status: "matched",
+    review_allocations: [{ type: "bill", targetId: "streaming", amount: 30 }],
+  }]);
+
+  assert.equal(learned[0]?.id, "streaming");
+  assert.match(learned[0]?.reasons[0] ?? "", /Matched here before/);
 });
 
 test("split allocations must equal the single bank transaction", () => {
