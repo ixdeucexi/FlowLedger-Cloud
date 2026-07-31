@@ -1,4 +1,4 @@
-const COMPACT_TAB_WIDTH = 300;
+const COMPACT_TAB_WIDTH = 340;
 
 export function tabBarLabelSize(viewportWidth: number) {
   return viewportWidth < COMPACT_TAB_WIDTH ? 8 : 10;
