@@ -29,6 +29,7 @@ import { buildOverdueBillOccurrences, groupOverdueBills } from "@/lib/overdueBil
 import { pendingOccurrenceKeySet } from "@/lib/pendingPlanMatches";
 import { planningTabPresentation } from "@/lib/planningMode";
 import { tabBarDisplayLabel, tabBarLabelSize } from "@/lib/mobileLayout";
+import { appNotificationCount, clearAppBadge, syncAppBadge } from "@/lib/appBadge";
 
 
 function todayIsoDate() {
@@ -382,6 +383,15 @@ function TabContent() {
     ).filter(occurrence => !protectedOccurrences.has(`${occurrence.billId}:${occurrence.occurrenceDate}`));
     return groupOverdueBills(occurrences).length;
   }, [getBillEffectiveMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, getPaidAmount, pendingBankTransactions, pendingPlanMatches]);
+  const notificationCount = appNotificationCount(activityAlertCount, overdueBillCount, newFeedbackCount);
+
+  React.useEffect(() => {
+    void syncAppBadge(notificationCount);
+  }, [notificationCount]);
+
+  React.useEffect(() => () => {
+    void clearAppBadge();
+  }, []);
 
   if (loadError) return <BudgetLoadErrorScreen message={loadError} onRetry={retryBudgetLoad} />;
 

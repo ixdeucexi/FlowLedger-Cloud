@@ -47,6 +47,7 @@ function feedbackNotificationPayload(feedbackId, feedbackType, sender) {
     body: `${typeLabel} from ${senderLabel}. Tap to review it.`,
     url: "/more?section=admin",
     tag: `feedback-${feedbackId}`,
+    badgeCount: 1,
   };
 }
 
@@ -89,6 +90,7 @@ function feedbackStatusNotificationPayload(feedbackId, outcome) {
     ...content,
     url: `/more?section=help&feedback=${encodeURIComponent(feedbackId)}`,
     tag: `feedback-${outcome}-${feedbackId}`,
+    badgeCount: 1,
   };
 }
 

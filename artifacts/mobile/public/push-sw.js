@@ -9,14 +9,23 @@ self.addEventListener("activate", event => {
 self.addEventListener("push", event => {
   let payload = {};
   try { payload = event.data ? event.data.json() : {}; } catch { payload = {}; }
-  event.waitUntil(self.registration.showNotification(payload.title || "FlowLedger", {
-    body: payload.body || "New activity is ready to review.",
-    icon: "/icon-192.png",
-    badge: "/icon-192.png",
-    tag: payload.tag || "flowledger-review",
-    renotify: false,
-    data: { url: payload.url || "/more?section=review" },
-  }));
+  const badgeCount = Number.isFinite(Number(payload.badgeCount))
+    ? Math.max(1, Math.trunc(Number(payload.badgeCount)))
+    : 1;
+  const updateBadge = self.navigator?.setAppBadge
+    ? self.navigator.setAppBadge(badgeCount).catch(() => undefined)
+    : Promise.resolve();
+  event.waitUntil(Promise.all([
+    self.registration.showNotification(payload.title || "FlowLedger", {
+      body: payload.body || "New activity is ready to review.",
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
+      tag: payload.tag || "flowledger-review",
+      renotify: false,
+      data: { url: payload.url || "/more?section=review" },
+    }),
+    updateBadge,
+  ]));
 });
 
 self.addEventListener("notificationclick", event => {

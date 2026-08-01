@@ -93,6 +93,8 @@
     ,"lib/flowledgerGuide.test.ts"
     ,"lib/tabBadge.ts"
     ,"lib/tabBadge.test.ts"
+    ,"lib/appBadge.ts"
+    ,"lib/appBadge.test.ts"
     ,"lib/settingsLayout.ts"
     ,"lib/settingsLayout.test.ts"
     ,"lib/mobileLayout.ts"

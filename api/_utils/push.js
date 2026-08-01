@@ -108,6 +108,7 @@ async function deliverPendingNotifications(userId) {
         : "Past-due bills still need action. Open FlowLedger to review them.",
       url: "/bills?attention=overdue",
       tag: "flowledger-overdue",
+      badgeCount: count,
     } : isPending ? {
       title: count === 1 ? "New pending transaction" : `${count} pending transactions`,
       body: count === 1
@@ -115,6 +116,7 @@ async function deliverPendingNotifications(userId) {
         : "New pending bank activity is visible and will not be counted until it posts.",
       url: "/transactions",
       tag: "flowledger-pending",
+      badgeCount: count,
     } : {
       title: count === 1 ? "New transaction ready" : `${count} new transactions ready`,
       body: count === 1
@@ -122,6 +124,7 @@ async function deliverPendingNotifications(userId) {
         : "Posted bank transactions are waiting in Review Center.",
       url: "/more?section=review",
       tag: "flowledger-review",
+      badgeCount: count,
     };
     const preferenceKey = isOverdueBill
       ? "overdue_bills"

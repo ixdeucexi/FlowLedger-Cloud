@@ -9,12 +9,13 @@ const workerSource = fs.readFileSync(
   "utf8",
 );
 
-function loadWorker(clients) {
+function loadWorker(clients, overrides = {}) {
   const handlers = {};
   const self = {
     clients,
+    navigator: overrides.navigator,
     location: { origin: "https://flowledger-algo.com" },
-    registration: { showNotification: async () => undefined },
+    registration: { showNotification: overrides.showNotification || (async () => undefined) },
     skipWaiting: async () => undefined,
     addEventListener(type, handler) {
       handlers[type] = handler;
@@ -23,6 +24,33 @@ function loadWorker(clients) {
   vm.runInNewContext(workerSource, { self, URL });
   return handlers;
 }
+
+test("a push updates the app badge with the supplied notification count", async () => {
+  let badgeCount = null;
+  let shown = null;
+  let completion;
+  const handler = loadWorker({}, {
+    navigator: {
+      async setAppBadge(count) {
+        badgeCount = count;
+      },
+    },
+    async showNotification(title, options) {
+      shown = { title, options };
+    },
+  }).push;
+
+  handler({
+    data: { json: () => ({ title: "3 new transactions", badgeCount: 3 }) },
+    waitUntil(promise) {
+      completion = promise;
+    },
+  });
+  await completion;
+
+  assert.equal(badgeCount, 3);
+  assert.equal(shown.title, "3 new transactions");
+});
 
 async function clickNotification(handler) {
   let completion;
