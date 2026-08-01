@@ -33,6 +33,22 @@ test("one pending charge from duplicate links is shown once", () => {
   assert.equal(visiblePendingPlaidActivity(pending, duplicateAccounts).length, 1);
 });
 
+test("a pending charge from an older duplicate link follows the canonical checking account", () => {
+  const canonicalAccounts = canonicalConnectedAccounts(duplicateAccounts);
+  const pending = pendingPlaidActivityWithBalanceHolds([{
+    plaid_transaction_id: "pending-old-link",
+    plaid_account_id: "account-old",
+    transaction_date: "2026-07-16",
+    amount: -51.38,
+    name: "CAPITAL ONE - MOBILE PMT.",
+  }], duplicateAccounts, "2026-07-16");
+
+  assert.equal(pending.length, 1);
+  assert.equal(pending[0].plaid_account_id, "account-new");
+  assert.equal(summarizePendingCheckingActivity(pending, canonicalAccounts)?.pendingCount, 1);
+  assert.equal(summarizePendingCheckingActivity(pending, canonicalAccounts)?.pendingOutflow, 51.38);
+});
+
 test("two identical charges from one real account remain two charges", () => {
   const account = duplicateAccounts[2];
   const pending = ["first", "second"].map(id => ({

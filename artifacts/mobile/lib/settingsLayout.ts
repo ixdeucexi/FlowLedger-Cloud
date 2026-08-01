@@ -1,6 +1,7 @@
 import type { TextStyle, ViewStyle } from "react-native";
 
 export const SETTINGS_STACK_BREAKPOINT = 480;
+export const SETTINGS_COMPACT_BREAKPOINT = 340;
 
 export type ForecastSafetyLayout = {
   stacked: boolean;
@@ -25,7 +26,7 @@ export function getForecastSafetyLayout(viewportWidth: number): ForecastSafetyLa
 }
 
 export function isCompactSettingsLayout(viewportWidth: number) {
-  return viewportWidth < 320;
+  return viewportWidth < SETTINGS_COMPACT_BREAKPOINT;
 }
 
 export function shouldStackSettingsMetrics(viewportWidth: number) {

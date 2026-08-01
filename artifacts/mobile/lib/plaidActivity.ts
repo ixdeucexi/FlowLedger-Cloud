@@ -163,12 +163,23 @@ export function pendingPlaidActivityWithBalanceHolds<
   T extends PendingPlaidActivityRow,
   A extends PlaidAccountIdentityRow,
 >(pendingRows: T[], accounts: A[], today: string): Array<PendingPlaidActivityRow & { category: string }> {
+  const accountIdentityById = new Map(
+    accounts.filter(account => account.is_active).map(account => [account.id, plaidAccountIdentity(account)]),
+  );
+  const canonicalAccountIdByIdentity = new Map(
+    canonicalConnectedAccounts(accounts).map(account => [plaidAccountIdentity(account), account.id]),
+  );
   const visibleRows = visiblePendingPlaidActivity(pendingRows, accounts)
-    .map(row => ({
-      ...row,
-      plaid_account_id: row.plaid_account_id || undefined,
-      category: String(row.category || "Pending"),
-    }));
+    .map(row => {
+      const identity = row.plaid_account_id ? accountIdentityById.get(row.plaid_account_id) : undefined;
+      return {
+        ...row,
+        plaid_account_id: identity
+          ? canonicalAccountIdByIdentity.get(identity)
+          : row.plaid_account_id || undefined,
+        category: String(row.category || "Pending"),
+      };
+    });
   const inferredRows = canonicalConnectedAccounts(accounts)
     .filter(isCheckingAccount)
     .flatMap(account => {

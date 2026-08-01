@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   getForecastSafetyLayout,
   isCompactSettingsLayout,
+  SETTINGS_COMPACT_BREAKPOINT,
   SETTINGS_STACK_BREAKPOINT,
   shouldExpandReportDetails,
   shouldStackAccountControls,
@@ -36,27 +37,28 @@ describe("Forecast Safety responsive layout", () => {
 });
 
 it("stacks Settings row status below long labels under zoom pressure", () => {
-  assert.equal(isCompactSettingsLayout(240), true);
-  assert.equal(isCompactSettingsLayout(275), true);
-  assert.equal(isCompactSettingsLayout(320), false);
+  for (const width of [240, 275, 288, 312, 330]) {
+    assert.equal(isCompactSettingsLayout(width), true);
+  }
+  assert.equal(isCompactSettingsLayout(SETTINGS_COMPACT_BREAKPOINT), false);
   assert.equal(isCompactSettingsLayout(360), false);
 });
 
 it("stacks Settings metrics instead of collapsing values under enlarged text", () => {
-  for (const width of [240, 260, 275]) {
+  for (const width of [240, 260, 275, 288, 312, 330]) {
     assert.equal(shouldStackSettingsMetrics(width), true);
   }
-  for (const width of [320, 360, 390, 412]) {
+  for (const width of [SETTINGS_COMPACT_BREAKPOINT, 360, 390, 412]) {
     assert.equal(shouldStackSettingsMetrics(width), false);
   }
 });
 
 it("stacks account controls and expands report details under enlarged text", () => {
-  for (const width of [240, 260, 275]) {
+  for (const width of [240, 260, 275, 288, 312, 330]) {
     assert.equal(shouldExpandReportDetails(width), true);
     assert.equal(shouldStackAccountControls(width), true);
   }
-  for (const width of [320, 360, 390, 412]) {
+  for (const width of [SETTINGS_COMPACT_BREAKPOINT, 360, 390, 412]) {
     assert.equal(shouldExpandReportDetails(width), false);
     assert.equal(shouldStackAccountControls(width), false);
   }
