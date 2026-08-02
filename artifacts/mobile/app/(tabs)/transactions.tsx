@@ -27,7 +27,7 @@ import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { debtPaymentStatusLabel } from "@/lib/forecastDisplay";
 import { canMatchExpenseToBill, confirmedBillMatchId, confirmedBillMatchOccurrenceDate, isCashFlowTransaction, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "@/lib/billMatching";
-import { summarizeActivityMonth } from "@/lib/monthlySummary";
+import { listActivityMonths, summarizeActivityMonth } from "@/lib/monthlySummary";
 import { isValidDateInMonth } from "@/lib/schedule";
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { resizeSnowballFundingSources } from "@/lib/snowballFunding";
@@ -41,7 +41,6 @@ import { CategoryBudgetScreen } from "./category-budget";
 type ActivitySource = "transaction" | "bank_transaction" | "bill_payment" | "income" | "extra_payment" | "transfer";
 type TypeFilter     = "all" | "expense" | "income";
 type SourceFilter   = "all" | ActivitySource;
-type DateFilter     = "all" | "this_month" | "last_month" | "this_year";
 type SortOrder      = "asc" | "desc";
 const MODAL_HANDOFF_DELAY_MS = 350;
 type MatchedPaymentPrompt = {
@@ -110,6 +109,11 @@ function formatDateLong(dateStr: string) {
   return `${MONTH_NAMES_LONG[m - 1]} ${d}, ${y}`;
 }
 
+function activityMonthLabel(monthKey: string) {
+  const [year, month] = monthKey.split("-").map(Number);
+  return `${MONTH_NAMES_LONG[month - 1]} ${year}`;
+}
+
 function todayIsoDate() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -154,7 +158,7 @@ export function ActivityScreen() {
   const {
     transactions, pendingBankTransactions, pendingPlanMatches, addTransaction, updateTransaction, deleteTransaction, deleteTransfer,
     bills, incomes, goals, overrides, extraPayments, categories, settings,
-    getIncomeOccurrencesInMonth, getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal,
+    getIncomeOccurrencesInMonth, getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal,
     matchTransactionToBill, unmatchTransactionFromBill, matchPendingTransactionToBill, removePendingPlanMatch,
     reconcileTransaction, undoTransactionReconciliation, removeReviewSurplusFunding,
     getExtraPayment, previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, addGoal,
@@ -167,9 +171,10 @@ export function ActivityScreen() {
   const [detailItem, setDetailItem]             = useState<ActivityItem | null>(null);
   const [typeFilter, setTypeFilter]             = useState<TypeFilter>("all");
   const [sourceFilter, setSourceFilter]         = useState<SourceFilter>("all");
-  const [dateFilter, setDateFilter]             = useState<DateFilter>("all");
   const [categoryFilter, setCategoryFilter]     = useState("all");
   const [sortOrder, setSortOrder]               = useState<SortOrder>("desc");
+  const [currentActivityMonth] = useState(() => todayIsoDate().slice(0, 7));
+  const [monthFilter, setMonthFilter] = useState(currentActivityMonth);
   const [search, setSearch]                     = useState("");
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [weeklySummaryVisible, setWeeklySummaryVisible] = useState(false);
@@ -403,10 +408,21 @@ export function ActivityScreen() {
     [allActivity]
   );
 
+  const availableActivityMonths = useMemo(() => listActivityMonths([
+    ...transactions.map(transaction => transaction.date),
+    ...pendingBankTransactions.map(transaction => transaction.transaction_date),
+    ...overrides
+      .filter(override => override.paid_amount > 0.005 || override.actual_amount !== undefined)
+      .map(override => override.paid_date
+        ?? `${override.year}-${String(override.month + 1).padStart(2, "0")}-01`),
+    ...extraPayments.map(payment => payment.payment_date
+      ?? `${payment.year}-${String(payment.month + 1).padStart(2, "0")}-01`),
+  ], currentActivityMonth), [currentActivityMonth, extraPayments, overrides, pendingBankTransactions, transactions]);
+
   const activeFilterCount = [
+    monthFilter !== currentActivityMonth,
     typeFilter !== "all",
     sourceFilter !== "all",
-    dateFilter !== "all",
     categoryFilter !== "all",
     sortOrder !== "desc",
   ].filter(Boolean).length;
@@ -414,9 +430,9 @@ export function ActivityScreen() {
   const hasActiveFilters = activeFilterCount > 0 || search.trim().length > 0;
 
   const clearFilterSelections = () => {
+    setMonthFilter(currentActivityMonth);
     setTypeFilter("all");
     setSourceFilter("all");
-    setDateFilter("all");
     setCategoryFilter("all");
     setSortOrder("desc");
   };
@@ -427,24 +443,11 @@ export function ActivityScreen() {
   };
 
   const filtered = useMemo(() => {
-    let list = [...allActivity];
+    let list = allActivity.filter(item => item.date.startsWith(`${monthFilter}-`));
     if (typeFilter === "expense") list = list.filter(t => t.amount < 0);
     if (typeFilter === "income")  list = list.filter(t => t.amount > 0);
     if (sourceFilter !== "all") list = list.filter(t => t.source === sourceFilter);
     if (categoryFilter !== "all") list = list.filter(t => t.category === categoryFilter);
-
-    if (dateFilter !== "all") {
-      const now = new Date();
-      const thisYear = now.getFullYear();
-      const thisMonth = now.getMonth() + 1;
-      const lastMonthDate = new Date(thisYear, now.getMonth() - 1, 1);
-      list = list.filter(t => {
-        const [year, month] = t.date.split("-").map(Number);
-        if (dateFilter === "this_month") return year === thisYear && month === thisMonth;
-        if (dateFilter === "last_month") return year === lastMonthDate.getFullYear() && month === lastMonthDate.getMonth() + 1;
-        return year === thisYear;
-      });
-    }
 
     if (search.trim()) {
       const q = search.trim().toLowerCase();
@@ -473,7 +476,7 @@ export function ActivityScreen() {
       );
     }
     return list;
-  }, [allActivity, typeFilter, sourceFilter, dateFilter, categoryFilter, search, sortOrder, hasActiveFilters]);
+  }, [allActivity, monthFilter, typeFilter, sourceFilter, categoryFilter, search, sortOrder, hasActiveFilters]);
 
   const sections = useMemo(() => groupByMonth(filtered), [filtered]);
 
@@ -485,22 +488,35 @@ export function ActivityScreen() {
 
   // ── Summary stats ─────────────────────────────────────────────────────────
   const monthlySummary = useMemo(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const monthIndex = now.getMonth();
+    const [year, monthNumber] = monthFilter.split("-").map(Number);
+    const monthIndex = monthNumber - 1;
+    const plannedBillEntries = getMonthlyBills(monthIndex, year).flatMap(bill => {
+      const occurrenceDays = getBillOccurrencesInMonth(bill, monthIndex, year);
+      const monthlyTotal = getBillEffectiveMonthlyTotal(bill, monthIndex, year);
+      if (occurrenceDays.length === 0 || monthlyTotal <= 0.005) return [];
+      const amountPerOccurrence = monthlyTotal / occurrenceDays.length;
+      return occurrenceDays.map(day => ({
+        date: `${monthFilter}-${String(day).padStart(2, "0")}`,
+        amount: -amountPerOccurrence,
+      }));
+    });
     const summary = summarizeActivityMonth(
-      allActivity.map(item => ({
-        date: item.date,
-        amount: item.amount,
-        pending: item.pending,
-        excludeFromCashFlow: item.source === "transfer"
+      [
+        ...allActivity.map(item => ({
+          date: item.date,
+          amount: item.amount,
+          pending: item.pending,
+          excludeFromCashFlow: item.source === "bill_payment"
+            || item.source === "transfer"
           || Boolean(item.rawTx && !isCashFlowTransaction(item.rawTx)),
-      })),
+        })),
+        ...plannedBillEntries,
+      ],
       year,
       monthIndex,
     );
     return {
-      title: `${MONTH_NAMES_LONG[monthIndex]} ${year}`,
+      title: activityMonthLabel(monthFilter),
       ...summary,
       weeks: summary.weeks.map(week => ({
         ...week,
@@ -509,7 +525,7 @@ export function ActivityScreen() {
           : `${MONTH_NAMES_LONG[monthIndex]} ${week.startDay}–${week.endDay}`,
       })),
     };
-  }, [allActivity]);
+  }, [allActivity, getBillEffectiveMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, monthFilter]);
 
   const feedOrderLabel = hasActiveFilters
     ? (sortOrder === "asc" ? "oldest first" : "newest first")
@@ -1923,20 +1939,19 @@ export function ActivityScreen() {
                 ))}
               </View>
 
-              <Text style={[styles.filterGroupLabel, { color: c.mutedForeground }]}>DATE</Text>
+              <Text style={[styles.filterGroupLabel, { color: c.mutedForeground }]}>MONTH</Text>
               <View style={styles.filterOptionGrid}>
-                {([
-                  { id: "all" as DateFilter, label: "All dates" },
-                  { id: "this_month" as DateFilter, label: "This month" },
-                  { id: "last_month" as DateFilter, label: "Last month" },
-                  { id: "this_year" as DateFilter, label: "This year" },
-                ]).map(option => (
+                {availableActivityMonths.map(month => (
                   <Pressable
-                    key={option.id}
-                    onPress={() => setDateFilter(option.id)}
-                    style={[styles.filterChip, { backgroundColor: dateFilter === option.id ? c.primary : c.card, borderColor: dateFilter === option.id ? c.primary : c.border }]}
+                    key={month}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: monthFilter === month }}
+                    onPress={() => setMonthFilter(month)}
+                    style={[styles.filterChip, { backgroundColor: monthFilter === month ? c.primary : c.card, borderColor: monthFilter === month ? c.primary : c.border }]}
                   >
-                    <Text style={[styles.filterText, { color: dateFilter === option.id ? c.primaryForeground : c.foreground }]}>{option.label}</Text>
+                    <Text style={[styles.filterText, { color: monthFilter === month ? c.primaryForeground : c.foreground }]}>
+                      {month === currentActivityMonth ? `This month · ${activityMonthLabel(month)}` : activityMonthLabel(month)}
+                    </Text>
                   </Pressable>
                 ))}
               </View>

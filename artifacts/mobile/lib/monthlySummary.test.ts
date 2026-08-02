@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { summarizeActivityMonth, summarizeMonthlyBills } from "./monthlySummary";
+import { listActivityMonths, summarizeActivityMonth, summarizeMonthlyBills } from "./monthlySummary";
 
 type TestBill = { id: string; amount: number; paid: number };
 
@@ -68,4 +68,27 @@ test("activity summary includes the full month's income without counting transfe
   assert.equal(summary.net, 6016);
   assert.equal(summary.weeks[1]?.total, 2208);
   assert.equal(summary.weeks[3]?.total, 2308);
+});
+
+test("activity month filter only offers the current month and earlier months with data", () => {
+  assert.deepEqual(listActivityMonths([
+    "2026-07-31",
+    "2026-05-10",
+    "2026-07-01",
+    "2026-09-01",
+    "not-a-date",
+  ], "2026-08"), ["2026-08", "2026-07", "2026-05"]);
+});
+
+test("activity summary can combine planned bills with non-bill spending without counting a matched payment twice", () => {
+  const summary = summarizeActivityMonth([
+    { date: "2026-08-03", amount: 1500 },
+    { date: "2026-08-07", amount: -180 },
+    { date: "2026-08-10", amount: -370 },
+    { date: "2026-08-10", amount: -370, excludeFromCashFlow: true },
+  ], 2026, 7);
+
+  assert.equal(summary.income, 1500);
+  assert.equal(summary.out, 550);
+  assert.equal(summary.net, 950);
 });

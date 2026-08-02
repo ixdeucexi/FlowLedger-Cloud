@@ -28,6 +28,15 @@ export interface MonthlyActivitySummary {
   weeks: ActivityWeekSummary[];
 }
 
+export function listActivityMonths(dates: string[], currentMonth: string): string[] {
+  const months = new Set<string>([currentMonth]);
+  dates.forEach(date => {
+    const month = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date.slice(0, 7) : "";
+    if (month && month <= currentMonth) months.add(month);
+  });
+  return [...months].sort((left, right) => right.localeCompare(left));
+}
+
 export function summarizeActivityMonth(
   entries: ActivitySummaryEntry[],
   year: number,
