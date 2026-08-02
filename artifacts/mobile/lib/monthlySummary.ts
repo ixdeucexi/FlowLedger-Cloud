@@ -28,6 +28,26 @@ export interface MonthlyActivitySummary {
   weeks: ActivityWeekSummary[];
 }
 
+export interface ActivityAllocationLike {
+  type?: string | null;
+  amount?: number | null;
+}
+
+export function activityAmountOutsidePlannedBill(
+  amount: number,
+  isConfirmedBillPayment: boolean,
+  allocations: ActivityAllocationLike[] | null | undefined,
+): number {
+  if (!isConfirmedBillPayment) return amount;
+  if (amount >= 0) return 0;
+
+  const nonBillOut = (allocations ?? []).reduce((sum, allocation) => {
+    if (allocation.type === "bill" || allocation.type === "income" || allocation.type === "transfer") return sum;
+    return sum + Math.max(0, Number(allocation.amount) || 0);
+  }, 0);
+  return nonBillOut > 0 ? -nonBillOut : 0;
+}
+
 export function listActivityMonths(dates: string[], currentMonth: string): string[] {
   const months = new Set<string>([currentMonth]);
   dates.forEach(date => {

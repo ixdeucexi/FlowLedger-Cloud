@@ -27,7 +27,7 @@ import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { debtPaymentStatusLabel } from "@/lib/forecastDisplay";
 import { canMatchExpenseToBill, confirmedBillMatchId, confirmedBillMatchOccurrenceDate, isCashFlowTransaction, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "@/lib/billMatching";
-import { listActivityMonths, summarizeActivityMonth } from "@/lib/monthlySummary";
+import { activityAmountOutsidePlannedBill, listActivityMonths, summarizeActivityMonth } from "@/lib/monthlySummary";
 import { isValidDateInMonth } from "@/lib/schedule";
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { resizeSnowballFundingSources } from "@/lib/snowballFunding";
@@ -504,11 +504,17 @@ export function ActivityScreen() {
       [
         ...allActivity.map(item => ({
           date: item.date,
-          amount: item.amount,
+          amount: item.rawTx
+            ? activityAmountOutsidePlannedBill(
+              item.amount,
+              isConfirmedBillMatch(item.rawTx),
+              item.rawTx.review_allocations,
+            )
+            : item.amount,
           pending: item.pending,
-          excludeFromCashFlow: item.source === "bill_payment"
+          excludeFromCashFlow: (item.source === "bill_payment" && !item.rawTx)
             || item.source === "transfer"
-          || Boolean(item.rawTx && !isCashFlowTransaction(item.rawTx)),
+            || Boolean(item.rawTx && !isCashFlowTransaction(item.rawTx)),
         })),
         ...plannedBillEntries,
       ],

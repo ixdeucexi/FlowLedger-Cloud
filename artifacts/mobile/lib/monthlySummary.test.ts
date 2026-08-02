@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { listActivityMonths, summarizeActivityMonth, summarizeMonthlyBills } from "./monthlySummary";
+import {
+  activityAmountOutsidePlannedBill,
+  listActivityMonths,
+  summarizeActivityMonth,
+  summarizeMonthlyBills,
+} from "./monthlySummary";
 
 type TestBill = { id: string; amount: number; paid: number };
 
@@ -91,4 +96,25 @@ test("activity summary can combine planned bills with non-bill spending without 
   assert.equal(summary.income, 1500);
   assert.equal(summary.out, 550);
   assert.equal(summary.net, 950);
+});
+
+test("activity summary keeps the category portion of a split bill payment", () => {
+  const splitRemainder = activityAmountOutsidePlannedBill(-390, true, [
+    { type: "bill", amount: 370 },
+    { type: "category", amount: 20 },
+  ]);
+  assert.equal(splitRemainder, -20);
+  assert.equal(activityAmountOutsidePlannedBill(-390, false, [
+    { type: "bill", amount: 370 },
+    { type: "category", amount: 20 },
+  ]), -390);
+  assert.equal(activityAmountOutsidePlannedBill(-370, true, [
+    { type: "bill", amount: 370 },
+  ]), 0);
+
+  const summary = summarizeActivityMonth([
+    { date: "2026-08-10", amount: -370 },
+    { date: "2026-08-10", amount: splitRemainder },
+  ], 2026, 7);
+  assert.equal(summary.out, 390);
 });
