@@ -192,6 +192,45 @@ export function getIncomeOccurrenceDays(income: ScheduledIncome, month: number, 
   return days.filter(day => onOrAfterStart(day) && isIncluded(day));
 }
 
+/**
+ * A bank deposit can post a few days before or after its planned payday. Keep
+ * the bank date as the cash date, but settle the nearest scheduled occurrence
+ * so the forecast does not leave a second copy of the same paycheck behind.
+ */
+export function resolveIncomeMatchOccurrenceDate(
+  income: ScheduledIncome,
+  transactionDate: string,
+  requestedOccurrenceDate?: string,
+): string | undefined {
+  const reference = /^\d{4}-\d{2}-\d{2}$/.test(transactionDate.slice(0, 10))
+    ? transactionDate.slice(0, 10)
+    : undefined;
+  const requested = requestedOccurrenceDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedOccurrenceDate.slice(0, 10))
+    ? requestedOccurrenceDate.slice(0, 10)
+    : undefined;
+  if (!reference) return requested;
+
+  const [referenceYear, referenceMonth] = reference.split("-").map(Number);
+  const candidates: string[] = [];
+  for (let offset = -1; offset <= 1; offset += 1) {
+    const cursor = new Date(referenceYear, referenceMonth - 1 + offset, 1);
+    const year = cursor.getFullYear();
+    const month = cursor.getMonth();
+    getIncomeOccurrenceDays(income, month, year).forEach(day => {
+      candidates.push(`${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
+    });
+  }
+
+  if (requested && candidates.includes(requested)) return requested;
+  const referenceTime = Date.parse(`${reference}T00:00:00Z`);
+  const nearest = candidates
+    .map(date => ({ date, distance: Math.abs(Date.parse(`${date}T00:00:00Z`) - referenceTime) / 86_400_000 }))
+    .filter(candidate => Number.isFinite(candidate.distance))
+    .sort((left, right) => left.distance - right.distance || left.date.localeCompare(right.date))[0];
+
+  return nearest && nearest.distance <= 14 ? nearest.date : requested ?? reference;
+}
+
 export function normalizeIncomeExcludedDates(dates: unknown): string[] {
   if (!Array.isArray(dates)) return [];
   return Array.from(new Set(

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, getLatestIncomeChange, getLatestRecordedIncomeAmount, incomeAmountToMonthly, isBillActiveForMonth, isValidDateInMonth, moveSettledBillOverrideDate, normalizeIncomeExcludedDates, resolveFinalizedBillOccurrenceDays } from "./schedule";
+import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, getLatestIncomeChange, getLatestRecordedIncomeAmount, incomeAmountToMonthly, isBillActiveForMonth, isValidDateInMonth, moveSettledBillOverrideDate, normalizeIncomeExcludedDates, resolveFinalizedBillOccurrenceDays, resolveIncomeMatchOccurrenceDate } from "./schedule";
 
 describe("bill scheduling", () => {
   it("validates a selected calendar date inside the intended month", () => {
@@ -154,6 +154,29 @@ describe("income scheduling", () => {
     const income = { amount: 500, frequency: "weekly" as const, start_date: "2026-07-29", next_payment_date: "2026-07-29" };
     assert.deepEqual(getIncomeOccurrenceDays(income, 6, 2026), [29]);
     assert.deepEqual(getIncomeOccurrenceDays(income, 7, 2026), [5, 12, 19, 26]);
+  });
+
+  it("settles an early bank deposit against its scheduled payday", () => {
+    const income = {
+      amount: 1_500,
+      frequency: "monthly" as const,
+      start_date: "2026-07-03",
+      next_payment_date: "2026-08-03",
+    };
+
+    assert.equal(resolveIncomeMatchOccurrenceDate(income, "2026-07-01", "2026-07-01"), "2026-07-03");
+    assert.equal(resolveIncomeMatchOccurrenceDate(income, "2026-07-01", "2026-07-03"), "2026-07-03");
+  });
+
+  it("can settle an early deposit against the next month's payday", () => {
+    const income = {
+      amount: 2_000,
+      frequency: "monthly" as const,
+      start_date: "2026-08-03",
+      next_payment_date: "2026-08-03",
+    };
+
+    assert.equal(resolveIncomeMatchOccurrenceDate(income, "2026-07-31", "2026-07-31"), "2026-08-03");
   });
 
   it("removes only the selected income occurrence", () => {

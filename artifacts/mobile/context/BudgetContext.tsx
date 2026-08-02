@@ -20,7 +20,7 @@ import { diagnosticErrorCode } from "@/lib/diagnosticPolicy";
 import { decisionDbPayload } from "@/lib/decisionPersistence";
 import { recordDiagnostic } from "@/lib/diagnostics";
 import { isDevDemoMode } from "@/lib/demoMode";
-import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, getLatestRecordedIncomeAmount, isBillActiveForMonth, isIncomeActiveForMonth, moveSettledBillOverrideDate, resolveFinalizedBillOccurrenceDays } from "@/lib/schedule";
+import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, getLatestRecordedIncomeAmount, isBillActiveForMonth, isIncomeActiveForMonth, moveSettledBillOverrideDate, resolveFinalizedBillOccurrenceDays, resolveIncomeMatchOccurrenceDate } from "@/lib/schedule";
 import { bankBalanceAdjustment, connectedCheckingAnchor, evaluateForecastConfidence, historicalMonthOpeningBalance, operatingAccountAnchor, type AccountSnapshot, type AccountType, type ForecastConfidence, type ImportedTransactionRow } from "@/lib/accounts";
 import { scenarioDates, type DecisionResult, type DecisionScenario, type DecisionType } from "@/lib/decisions";
 import {
@@ -2696,11 +2696,24 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, assertCanEditHousehold, pendingPlanMatches, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed]);
 
-  const reconcileTransaction = useCallback(async (input: ReconcileTransactionInput) => {
+  const reconcileTransaction = useCallback(async (rawInput: ReconcileTransactionInput) => {
     if (!user) throw new Error("Sign in to review transactions");
     assertCanEditHousehold("review transactions");
-    const transaction = transactions.find(item => item.id === input.transactionId);
+    const transaction = transactions.find(item => item.id === rawInput.transactionId);
     if (!transaction) throw new Error("Transaction not found");
+    const matchedIncome = rawInput.resolution === "income"
+      ? incomes.find(income => income.id === rawInput.targetId)
+      : undefined;
+    const input = matchedIncome
+      ? {
+          ...rawInput,
+          occurrenceDate: resolveIncomeMatchOccurrenceDate(
+            matchedIncome,
+            transaction.date,
+            rawInput.occurrenceDate,
+          ),
+        }
+      : rawInput;
 
     if (demoMode) {
       const manualTarget = input.resolution === "manual"
@@ -2819,7 +2832,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       markSaveFailed(error, () => reconcileTransaction(input));
       throw error;
     }
-  }, [user, assertCanEditHousehold, transactions, bills, extraPayments, demoMode, refreshBillMatchData, refreshDebtRows, syncDebtTransactionsAndRefresh, markSaveStarted, markSaveCompleted, markSaveFailed]);
+  }, [user, assertCanEditHousehold, transactions, incomes, bills, extraPayments, demoMode, refreshBillMatchData, refreshDebtRows, syncDebtTransactionsAndRefresh, markSaveStarted, markSaveCompleted, markSaveFailed]);
 
   const undoTransactionReconciliation = useCallback(async (transactionId: string) => {
     if (!user) throw new Error("Sign in to undo this review");
