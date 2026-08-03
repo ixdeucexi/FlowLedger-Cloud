@@ -1,4 +1,5 @@
 import { isScheduledSnowballPlanTransaction, snowballPaymentName } from "./debtPaymentPlan";
+import { getEffectiveIncomeAmount, getIncomeMatchOccurrenceDates, getIncomeOccurrenceDays, type ScheduledIncome } from "./schedule";
 
 export interface ReviewAllocationLike {
   type: "bill" | "income" | "planned_expense" | "category" | "transfer" | "extra_principal";
@@ -63,6 +64,11 @@ export interface ReviewTarget {
   plannedAmount: number;
   occurrenceDate: string;
   isDebt?: boolean;
+}
+
+export interface ReviewIncomeLike extends ScheduledIncome {
+  id: string;
+  name: string;
 }
 
 export interface RankedReviewTarget extends ReviewTarget {
@@ -165,6 +171,47 @@ export function rankReviewTargets(transaction: Pick<ReviewTransactionLike, "amou
 
     return { ...target, score, daysApart, amountDifference, reasons };
   }).sort((left, right) => right.score - left.score || left.daysApart - right.daysApart || left.amountDifference - right.amountDifference);
+}
+
+export function incomeReviewTargets(
+  incomes: ReviewIncomeLike[],
+  transactionDate: string,
+  matches: Map<string, ReviewAllocationLike>,
+): ReviewTarget[] {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(transactionDate.slice(0, 10))) return [];
+  const date = transactionDate.slice(0, 10);
+  const [currentYear, currentMonthNumber] = date.split("-").map(Number);
+  const currentMonth = currentMonthNumber - 1;
+  const currentPrefix = date.slice(0, 7);
+  const targets: ReviewTarget[] = [];
+
+  incomes.forEach(income => {
+    const occurrenceDates = new Set(
+      getIncomeOccurrenceDays(income, currentMonth, currentYear)
+        .map(day => `${currentPrefix}-${String(day).padStart(2, "0")}`),
+    );
+    getIncomeMatchOccurrenceDates(income, date)
+      .filter(occurrenceDate => !occurrenceDate.startsWith(currentPrefix))
+      .forEach(occurrenceDate => occurrenceDates.add(occurrenceDate));
+
+    occurrenceDates.forEach(occurrenceDate => {
+      const [year, monthNumber] = occurrenceDate.split("-").map(Number);
+      const plannedAmount = getEffectiveIncomeAmount(income, monthNumber - 1, year);
+      const previous = matches.get(occurrenceKey(income.id, occurrenceDate));
+      const remaining = Math.max(0, plannedAmount - Number(previous?.amount || 0));
+      if (remaining <= 0.005) return;
+      targets.push({
+        type: "income",
+        id: income.id,
+        name: income.name,
+        category: "Income",
+        plannedAmount: remaining,
+        occurrenceDate,
+      });
+    });
+  });
+
+  return targets;
 }
 
 function normalizedMerchant(value: string) {

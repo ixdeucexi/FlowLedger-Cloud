@@ -127,7 +127,7 @@ function StartupScreen({ style }: { style?: StyleProp<ViewStyle> } = {}) {
 function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSplash: () => void }) {
   const colors = useColors();
   const { session, loading: authLoading } = useAuth();
-  const { ready: biometricLockReady } = useBiometricLock();
+  const { ready: biometricLockReady, locked: biometricLocked } = useBiometricLock();
   const { loading: budgetLoading } = useBudget();
   const { ready: themeReady } = useThemeMode();
   const router = useRouter();
@@ -191,7 +191,11 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
 
   return (
     <View style={[styles.transitionRoot, { backgroundColor: colors.background }]}>
-      <Animated.View style={[styles.transitionContent, { opacity: appOpacity }]}>
+      <Animated.View
+        accessibilityElementsHidden={biometricLocked}
+        importantForAccessibility={biometricLocked ? "no-hide-descendants" : "auto"}
+        style={[styles.transitionContent, { opacity: appOpacity }]}
+      >
         {appReady ? (
           <>
             <AuthObserver />

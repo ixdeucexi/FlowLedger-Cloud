@@ -131,12 +131,21 @@ function normalizeDate(value: string): string | null {
   const trimmed = value.trim();
   const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(trimmed);
   const us = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/.exec(trimmed);
-  if (iso) return `${iso[1]}-${iso[2].padStart(2, "0")}-${iso[3].padStart(2, "0")}`;
-  if (us) {
-    const year = us[3].length === 2 ? `20${us[3]}` : us[3];
-    return `${year}-${us[1].padStart(2, "0")}-${us[2].padStart(2, "0")}`;
+  const parts = iso
+    ? { year: Number(iso[1]), month: Number(iso[2]), day: Number(iso[3]) }
+    : us
+      ? { year: Number(us[3].length === 2 ? `20${us[3]}` : us[3]), month: Number(us[1]), day: Number(us[2]) }
+      : null;
+  if (!parts) return null;
+  const parsed = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+  if (
+    parsed.getUTCFullYear() !== parts.year
+    || parsed.getUTCMonth() !== parts.month - 1
+    || parsed.getUTCDate() !== parts.day
+  ) {
+    return null;
   }
-  return null;
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
 }
 
 export function transactionImportHash(accountId: string, date: string, amount: number, description: string): string {

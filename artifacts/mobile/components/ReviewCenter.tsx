@@ -12,7 +12,7 @@ import type { Bill, Goal, ReconcileTransactionInput, Transaction } from "@/conte
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { confirmAction } from "@/lib/confirmAction";
-import { applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewQueueAfterSkips, scheduledSnowballReviewTargets, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
+import { applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupReviewTargets, incomeReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewQueueAfterSkips, scheduledSnowballReviewTargets, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
 import { prioritizePendingPlanTarget } from "@/lib/pendingPlanMatches";
 import { isOpenSpendingBucket, spendingBucketSummary } from "@/lib/spendingBuckets";
 
@@ -67,8 +67,8 @@ function isValidDateInMonth(value: string, month: number, year: number) {
 export function ReviewCenter() {
   const c = useColors();
   const {
-    transactions, goals, decisions, extraPayments, categories, canEditHousehold, settings, pendingPlanMatches,
-    getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getIncomeOccurrencesInMonth,
+    transactions, incomes, goals, decisions, extraPayments, categories, canEditHousehold, settings, pendingPlanMatches,
+    getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal,
     addBill, addGoal, updateGoal, deleteGoal, closeSpendingBucket, reopenSpendingBucket,
     archiveSpendingBucket, restoreArchivedSpendingBucket,
     deleteBillMistake, reconcileTransaction, undoTransactionReconciliation, refreshBankData,
@@ -176,19 +176,11 @@ export function ReviewCenter() {
           candidates.push({ type: "decision", id: decision.id, name: decision.name, category: "Calendar plan", plannedAmount, occurrenceDate: occurrenceDate.slice(0, 10) });
         });
     } else {
-      getIncomeOccurrencesInMonth(month, year).forEach(({ income, days, effectiveAmount }) => {
-        days.forEach(day => {
-          const occurrenceDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-          const previous = incomeMatches.get(occurrenceKey(income.id, occurrenceDate));
-          const remaining = Math.max(0, effectiveAmount - Number(previous?.amount || 0));
-          if (remaining <= 0.005) return;
-          candidates.push({ type: "income", id: income.id, name: income.name, category: "Income", plannedAmount: remaining, occurrenceDate });
-        });
-      });
+      candidates.push(...incomeReviewTargets(incomes, current.date, incomeMatches));
     }
     const learnedRanking = applyMatchMemory(current, rankReviewTargets(current, candidates), transactions);
     return prioritizePendingPlanTarget(learnedRanking, current.id, pendingPlanMatches);
-  }, [current, decisions, extraPayments, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getMonthlyBills, goals, pendingPlanMatches, transactions]);
+  }, [current, decisions, extraPayments, getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, goals, incomes, pendingPlanMatches, transactions]);
   const groupedTargets = useMemo(() => groupReviewTargets(targets), [targets]);
   const spendingBuckets = useMemo(() => goals
     .filter(goal => goal.goal_type === "planned_expense" && !goal.archived_at)

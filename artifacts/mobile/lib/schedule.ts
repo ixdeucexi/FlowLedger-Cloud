@@ -210,7 +210,25 @@ export function resolveIncomeMatchOccurrenceDate(
     : undefined;
   if (!reference) return requested;
 
+  const candidates = getIncomeMatchOccurrenceDates(income, reference);
+
+  if (requested && candidates.includes(requested)) return requested;
+  return candidates[0] ?? requested ?? reference;
+}
+
+export function getIncomeMatchOccurrenceDates(
+  income: ScheduledIncome,
+  transactionDate: string,
+  maxDistanceDays = 14,
+): string[] {
+  const reference = /^\d{4}-\d{2}-\d{2}$/.test(transactionDate.slice(0, 10))
+    ? transactionDate.slice(0, 10)
+    : undefined;
+  if (!reference) return [];
+
+  const referenceTime = Date.parse(`${reference}T00:00:00Z`);
   const [referenceYear, referenceMonth] = reference.split("-").map(Number);
+  const maximumDistance = Number.isFinite(maxDistanceDays) ? Math.max(0, maxDistanceDays) : 14;
   const candidates: string[] = [];
   for (let offset = -1; offset <= 1; offset += 1) {
     const cursor = new Date(referenceYear, referenceMonth - 1 + offset, 1);
@@ -221,14 +239,11 @@ export function resolveIncomeMatchOccurrenceDate(
     });
   }
 
-  if (requested && candidates.includes(requested)) return requested;
-  const referenceTime = Date.parse(`${reference}T00:00:00Z`);
-  const nearest = candidates
+  return candidates
     .map(date => ({ date, distance: Math.abs(Date.parse(`${date}T00:00:00Z`) - referenceTime) / 86_400_000 }))
-    .filter(candidate => Number.isFinite(candidate.distance))
-    .sort((left, right) => left.distance - right.distance || left.date.localeCompare(right.date))[0];
-
-  return nearest && nearest.distance <= 14 ? nearest.date : requested ?? reference;
+    .filter(candidate => Number.isFinite(candidate.distance) && candidate.distance <= maximumDistance)
+    .sort((left, right) => left.distance - right.distance || left.date.localeCompare(right.date))
+    .map(candidate => candidate.date);
 }
 
 export function normalizeIncomeExcludedDates(dates: unknown): string[] {

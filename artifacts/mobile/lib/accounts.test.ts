@@ -68,3 +68,14 @@ test("same statement row receives a stable duplicate key", () => {
   assert.equal(parseStatementCsv(csv, "a")[0].importHash, parseStatementCsv(csv, "a")[0].importHash);
   assert.notEqual(parseStatementCsv(csv, "a")[0].importHash, parseStatementCsv(csv, "b")[0].importHash);
 });
+
+test("statement import rejects impossible calendar dates", () => {
+  const csv = [
+    "Date,Description,Amount",
+    "2026-02-31,Impossible debit,-25.00",
+    "02/29/2025,Impossible deposit,100.00",
+    "02/29/2024,Leap day deposit,100.00",
+  ].join("\n");
+
+  assert.deepEqual(parseStatementCsv(csv, "checking-1").map(row => row.date), ["2024-02-29"]);
+});

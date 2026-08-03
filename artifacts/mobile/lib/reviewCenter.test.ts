@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { allocationLabel, allocationTotal, applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupPlannedExpenseAllocations, groupReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewAllocationsAreBalanced, reviewedBillMonthSettlement, reviewQueueAfterSkips, reviewSettlementSummary, scheduledSnowballReviewTargets, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
+import { allocationLabel, allocationTotal, applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupPlannedExpenseAllocations, groupReviewTargets, incomeReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewAllocationsAreBalanced, reviewedBillMonthSettlement, reviewQueueAfterSkips, reviewSettlementSummary, scheduledSnowballReviewTargets, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
 
 test("queues active current-month and month-end rollover Plaid transactions oldest first", () => {
   const queue = buildReviewQueue([
@@ -75,6 +75,26 @@ test("ranks exact same-day calendar matches first", () => {
   );
   assert.equal(targets[0]?.id, "utilities");
   assert.ok((targets[0]?.score ?? 0) > (targets[1]?.score ?? 0));
+});
+
+test("offers a next-month payday for an early month-end deposit", () => {
+  const targets = incomeReviewTargets([{
+    id: "paycheck",
+    name: "Paycheck",
+    amount: 2_000,
+    frequency: "monthly",
+    start_date: "2026-08-03",
+    next_payment_date: "2026-08-03",
+  }], "2026-07-31", new Map());
+
+  assert.deepEqual(targets, [{
+    type: "income",
+    id: "paycheck",
+    name: "Paycheck",
+    category: "Income",
+    plannedAmount: 2_000,
+    occurrenceDate: "2026-08-03",
+  }]);
 });
 
 test("uses the meaningful bank name to break equal amount and date ties", () => {

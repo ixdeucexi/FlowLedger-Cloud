@@ -53,6 +53,7 @@ export function BiometricLockGate() {
 
   return (
     <View
+      accessibilityLabel="Unlock FlowLedger"
       accessibilityViewIsModal
       style={[
         styles.root,

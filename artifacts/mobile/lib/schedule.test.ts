@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeOccurrenceDays, getLatestIncomeChange, getLatestRecordedIncomeAmount, incomeAmountToMonthly, isBillActiveForMonth, isValidDateInMonth, moveSettledBillOverrideDate, normalizeIncomeExcludedDates, resolveFinalizedBillOccurrenceDays, resolveIncomeMatchOccurrenceDate } from "./schedule";
+import { applyBillDateMovesToOccurrenceDays, getBillOccurrenceDays, getEffectiveIncomeAmount, getIncomeMatchOccurrenceDates, getIncomeOccurrenceDays, getLatestIncomeChange, getLatestRecordedIncomeAmount, incomeAmountToMonthly, isBillActiveForMonth, isValidDateInMonth, moveSettledBillOverrideDate, normalizeIncomeExcludedDates, resolveFinalizedBillOccurrenceDays, resolveIncomeMatchOccurrenceDate } from "./schedule";
 
 describe("bill scheduling", () => {
   it("validates a selected calendar date inside the intended month", () => {
@@ -177,6 +177,7 @@ describe("income scheduling", () => {
     };
 
     assert.equal(resolveIncomeMatchOccurrenceDate(income, "2026-07-31", "2026-07-31"), "2026-08-03");
+    assert.deepEqual(getIncomeMatchOccurrenceDates(income, "2026-07-31"), ["2026-08-03"]);
   });
 
   it("removes only the selected income occurrence", () => {
