@@ -33,7 +33,7 @@ import type { SnowballProjectionResult } from "@/lib/snowball";
 import { resizeSnowballFundingSources } from "@/lib/snowballFunding";
 import { isOpenSpendingBucket, spendingBucketMatch, spendingBucketSummary } from "@/lib/spendingBuckets";
 import { buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, matchedOccurrenceAllocations, occurrenceKey, transactionDisplayName } from "@/lib/reviewCenter";
-import { activePendingPlanMatches, pendingMatchStatusLabel } from "@/lib/pendingPlanMatches";
+import { activePendingPlanMatches, pendingMatchStatusLabel, unmatchedPendingTransactions } from "@/lib/pendingPlanMatches";
 import { CategoryBudgetScreen } from "./category-budget";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -484,7 +484,10 @@ export function ActivityScreen() {
     () => buildReviewQueue(transactions, todayIsoDate()).length,
     [transactions],
   );
-  const pendingActivityCount = pendingBankTransactions.length;
+  const pendingActivityCount = useMemo(
+    () => unmatchedPendingTransactions(pendingPlanMatches, pendingBankTransactions).length,
+    [pendingBankTransactions, pendingPlanMatches],
+  );
 
   // ── Summary stats ─────────────────────────────────────────────────────────
   const monthlySummary = useMemo(() => {

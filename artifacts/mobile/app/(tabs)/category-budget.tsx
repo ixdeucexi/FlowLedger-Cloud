@@ -14,6 +14,7 @@ import { isCashFlowTransaction } from "@/lib/billMatching";
 import { applyCategoryBudgetMove, buildCategoryPlan, buildZeroBudgetSummary, type CategoryPlanRow } from "@/lib/categoryPlanning";
 import { loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets } from "@/lib/categoryBudgetStore";
 import { buildReviewQueue } from "@/lib/reviewCenter";
+import { unmatchedPendingTransactions } from "@/lib/pendingPlanMatches";
 
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const CAT_COLORS: Record<string, string> = {
@@ -41,6 +42,7 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
     getTransactionsForMonth,
     transactions,
     pendingBankTransactions,
+    pendingPlanMatches,
     selectedYear,
     settings,
     updateSettings,
@@ -97,6 +99,10 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
     const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     return buildReviewQueue(transactions, todayIso).length;
   }, [transactions]);
+  const pendingReviewCount = useMemo(
+    () => unmatchedPendingTransactions(pendingPlanMatches, pendingBankTransactions).length,
+    [pendingBankTransactions, pendingPlanMatches],
+  );
 
   const persistBudgets = async (next: Record<string, number>) => {
     if (!canEditHousehold) return;
@@ -235,8 +241,8 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
           <Text style={[styles.reviewLinkTitle, { color: c.foreground }]}>Review bank activity</Text>
           <Text style={[styles.reviewLinkText, { color: c.mutedForeground }]}>Categorize posted transactions here, then this budget updates automatically.</Text>
         </View>
-        <View style={[styles.reviewCount, { backgroundColor: reviewCount + pendingBankTransactions.length > 0 ? c.destructive : c.success }]}>
-          <Text style={styles.reviewCountText}>{reviewCount + pendingBankTransactions.length}</Text>
+        <View style={[styles.reviewCount, { backgroundColor: reviewCount + pendingReviewCount > 0 ? c.destructive : c.success }]}>
+          <Text style={styles.reviewCountText}>{reviewCount + pendingReviewCount}</Text>
         </View>
       </Pressable>}
 

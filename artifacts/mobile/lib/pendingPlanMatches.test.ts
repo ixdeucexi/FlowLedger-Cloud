@@ -5,6 +5,7 @@ import {
   pendingPlanMatchForOccurrence,
   pendingMatchStatusLabel,
   prioritizePendingPlanTarget,
+  unmatchedPendingTransactions,
   type PendingPlanMatch,
 } from "./pendingPlanMatches";
 
@@ -35,6 +36,25 @@ test("a live pending match protects only its exact bill occurrence", () => {
 
 test("a vanished pending charge stops suppressing overdue", () => {
   assert.deepEqual(activePendingPlanMatches([match()], []), []);
+});
+
+test("a matched pending charge no longer needs an alert counter", () => {
+  const pending = [
+    { plaid_transaction_id: "pending-1" },
+    { plaid_transaction_id: "pending-2" },
+  ];
+  assert.deepEqual(
+    unmatchedPendingTransactions([match()], pending),
+    [{ plaid_transaction_id: "pending-2" }],
+  );
+});
+
+test("cancelled pending matches do not hide the alert counter", () => {
+  const pending = [{ plaid_transaction_id: "pending-1" }];
+  assert.deepEqual(
+    unmatchedPendingTransactions([match({ status: "cancelled" })], pending),
+    pending,
+  );
 });
 
 test("a posted replacement remains protected while waiting for review", () => {

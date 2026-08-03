@@ -26,7 +26,7 @@ import { FeedbackBadgeProvider, useFeedbackBadge } from "@/context/FeedbackBadge
 import { buildReviewQueue } from "@/lib/reviewCenter";
 import { tabBadgeValue } from "@/lib/tabBadge";
 import { buildOverdueBillOccurrences, groupOverdueBills } from "@/lib/overdueBills";
-import { pendingOccurrenceKeySet } from "@/lib/pendingPlanMatches";
+import { pendingOccurrenceKeySet, unmatchedPendingTransactions } from "@/lib/pendingPlanMatches";
 import { planningTabPresentation } from "@/lib/planningMode";
 import { tabBarDisplayLabel, tabBarLabelSize } from "@/lib/mobileLayout";
 import { appNotificationCount, clearAppBadge, syncAppBadge } from "@/lib/appBadge";
@@ -363,7 +363,11 @@ function TabContent() {
     () => buildReviewQueue(transactions, todayIsoDate()).length,
     [transactions],
   );
-  const activityAlertCount = activityReviewCount + pendingBankTransactions.length;
+  const pendingAlertCount = React.useMemo(
+    () => unmatchedPendingTransactions(pendingPlanMatches, pendingBankTransactions).length,
+    [pendingBankTransactions, pendingPlanMatches],
+  );
+  const activityAlertCount = activityReviewCount + pendingAlertCount;
   const overdueBillCount = React.useMemo(() => {
     const now = new Date();
     const month = now.getMonth();
@@ -492,7 +496,7 @@ function TabContent() {
                   tabBarBadge: badge,
                   tabBarBadgeStyle: badge ? styles.alertTabBadge : undefined,
                   tabBarAccessibilityLabel: reviewBadge
-                    ? `${tabTitle}, ${activityReviewCount} item${activityReviewCount === 1 ? "" : "s"} need review and ${pendingBankTransactions.length} transaction${pendingBankTransactions.length === 1 ? "" : "s"} pending`
+                    ? `${tabTitle}, ${activityReviewCount} item${activityReviewCount === 1 ? "" : "s"} need review and ${pendingAlertCount} unmatched transaction${pendingAlertCount === 1 ? "" : "s"} pending`
                     : billBadge
                       ? `Bills, ${overdueBillCount} past-due bill${overdueBillCount === 1 ? "" : "s"} need action`
                     : feedbackBadge

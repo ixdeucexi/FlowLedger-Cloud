@@ -1,11 +1,13 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/context/AuthContext";
 import { useBiometricLock } from "@/context/BiometricLockContext";
 import { useColors } from "@/hooks/useColors";
+
+const FLOWLEDGER_LOGO = require("../assets/images/startup_f_transparent.png");
 
 export function BiometricLockGate() {
   const colors = useColors();
@@ -47,7 +49,15 @@ export function BiometricLockGate() {
         accessibilityLabel="Unlocking FlowLedger"
         accessibilityViewIsModal
         style={[styles.root, { backgroundColor: colors.background }]}
-      />
+      >
+        <Image
+          accessibilityIgnoresInvertColors
+          accessibilityLabel="FlowLedger"
+          source={FLOWLEDGER_LOGO}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+      </View>
     );
   }
 
@@ -64,9 +74,13 @@ export function BiometricLockGate() {
         },
       ]}
     >
-      <View style={[styles.icon, { backgroundColor: colors.primary + "20", borderColor: colors.primary + "55" }]}>
-        <Feather name="shield" size={42} color={colors.primary} />
-      </View>
+      <Image
+        accessibilityIgnoresInvertColors
+        accessibilityLabel="FlowLedger"
+        source={FLOWLEDGER_LOGO}
+        style={styles.logo}
+        resizeMode="contain"
+      />
       <Text style={[styles.title, { color: colors.foreground }]}>Unlock FlowLedger</Text>
       <Text style={[styles.description, { color: colors.mutedForeground }]}>Your bank and plan are hidden.</Text>
 
@@ -99,14 +113,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 30,
   },
-  icon: {
-    width: 86,
-    height: 86,
+  logo: {
+    width: 118,
+    height: 118,
     borderRadius: 30,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
     marginBottom: 22,
+    shadowColor: "#38bdf8",
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
   },
   title: {
     fontFamily: "Inter_800ExtraBold",

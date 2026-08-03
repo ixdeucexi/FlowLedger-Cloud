@@ -33,6 +33,19 @@ export function activePendingPlanMatches(
     || (match.status === "active" && livePendingIds.has(match.pending_plaid_transaction_id)));
 }
 
+export function unmatchedPendingTransactions<T extends PendingTransactionIdentity>(
+  matches: PendingPlanMatch[],
+  pendingTransactions: T[],
+): T[] {
+  const matchedPendingIds = new Set(
+    activePendingPlanMatches(matches, pendingTransactions)
+      .map(match => match.pending_plaid_transaction_id),
+  );
+  return pendingTransactions.filter(
+    transaction => !matchedPendingIds.has(transaction.plaid_transaction_id),
+  );
+}
+
 export function pendingPlanMatchForOccurrence(
   matches: PendingPlanMatch[],
   pendingTransactions: PendingTransactionIdentity[],

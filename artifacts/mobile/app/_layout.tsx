@@ -31,7 +31,7 @@ import { WEB_VIEWPORT_CONTENT } from "@/lib/webViewport";
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
-const MIN_STARTUP_MS = 3200;
+const PLAN_LOADING_MS = 1000;
 
 function AuthObserver() {
   const { session, loading } = useAuth();
@@ -118,7 +118,6 @@ function StartupScreen({ style }: { style?: StyleProp<ViewStyle> } = {}) {
         style={styles.startupIcon}
         resizeMode="contain"
       />
-      <Text style={[styles.startupTitle, { color: colors.foreground }]}>FlowLedger Algo</Text>
       <Text style={[styles.startupStatus, { color: colors.mutedForeground }]}>Loading your plan…</Text>
     </Animated.View>
   );
@@ -135,13 +134,19 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
   const [showStartupOverlay, setShowStartupOverlay] = useState(true);
   const startupOpacity = useRef(new Animated.Value(1)).current;
   const appOpacity = useRef(new Animated.Value(0)).current;
-  const servicesReady = fontsReady && !authLoading && biometricLockReady && themeReady && (!session || !budgetLoading);
+  const coreReady = fontsReady && !authLoading && biometricLockReady && themeReady;
+  const servicesReady = coreReady && (!session || !budgetLoading);
   const appReady = servicesReady && minimumStartupReady;
 
   useEffect(() => {
-    const t = setTimeout(() => setMinimumStartupReady(true), MIN_STARTUP_MS);
+    if (!coreReady || biometricLocked) return;
+    const t = setTimeout(() => setMinimumStartupReady(true), PLAN_LOADING_MS);
     return () => clearTimeout(t);
-  }, []);
+  }, [biometricLocked, coreReady]);
+
+  useEffect(() => {
+    if (coreReady) hideSplash();
+  }, [coreReady, hideSplash]);
 
   useEffect(() => {
     if (!appReady) {
@@ -156,23 +161,18 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
     Animated.parallel([
       Animated.timing(startupOpacity, {
         toValue: 0,
-        duration: 520,
+        duration: 160,
         easing: Easing.inOut(Easing.cubic),
         useNativeDriver: Platform.OS !== "web",
       }),
       Animated.timing(appOpacity, {
         toValue: 1,
-        duration: 520,
+        duration: 160,
         easing: Easing.inOut(Easing.cubic),
         useNativeDriver: Platform.OS !== "web",
       }),
     ]).start(() => setShowStartupOverlay(false));
   }, [appReady, appOpacity, hideSplash, startupOpacity]);
-
-  useEffect(() => {
-    const t = setTimeout(hideSplash, 3000);
-    return () => clearTimeout(t);
-  }, [hideSplash]);
 
   useEffect(() => {
     if (!appReady || Platform.OS === "web") return;
@@ -219,13 +219,13 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
               <ConfirmActionModal />
             </GestureHandlerRootView>
             <LegalAcceptanceGate />
-            <BiometricLockGate />
           </>
         ) : null}
       </Animated.View>
       {showStartupOverlay ? (
         <StartupScreen style={[styles.startupOverlay, { opacity: startupOpacity }]} />
       ) : null}
+      {coreReady ? <BiometricLockGate /> : null}
     </View>
   );
 }
@@ -309,13 +309,8 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
   },
-  startupTitle: {
-    color: "#f8fafc",
-    fontSize: 20,
-    fontWeight: "800",
-  },
   startupStatus: {
-    marginTop: 8,
+    marginTop: 2,
     fontFamily: "Inter_600SemiBold",
     fontSize: 14,
     letterSpacing: 0.2,
