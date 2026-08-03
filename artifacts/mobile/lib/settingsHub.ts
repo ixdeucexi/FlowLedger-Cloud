@@ -52,7 +52,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
   { id: "backup", label: "Backup & data", description: "Import and export", icon: "download" },
   { id: "deleted", label: "Recently deleted", description: "Restore transactions", icon: "trash-2" },
   { id: "membership", label: "Membership", description: "Plan and pricing", icon: "award" },
-  { id: "security", label: "Account & security", description: "Account controls", icon: "user" },
+  { id: "security", label: "Account & security", description: "App lock and account controls", icon: "shield" },
   { id: "help", label: "Help & feedback", description: "Support and feedback", icon: "message-square" },
   { id: "legal", label: "Legal & privacy", description: "Terms and privacy", icon: "file-text" },
   { id: "admin", label: "Admin", description: "Testing and tester management", icon: "shield" },

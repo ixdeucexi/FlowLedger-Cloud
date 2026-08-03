@@ -14,10 +14,12 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { BiometricLockGate } from "@/components/BiometricLockGate";
 import { ConfirmActionModal } from "@/components/ConfirmActionModal";
 import { LegalAcceptanceGate } from "@/components/LegalAcceptanceGate";
 import { PwaInstallPrompt } from "@/components/PwaInstallPrompt";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { BiometricLockProvider, useBiometricLock } from "@/context/BiometricLockContext";
 import { BudgetProvider, useBudget } from "@/context/BudgetContext";
 import { MembershipProvider } from "@/context/MembershipContext";
 import { ThemeProvider, useThemeMode } from "@/context/ThemeContext";
@@ -125,6 +127,7 @@ function StartupScreen({ style }: { style?: StyleProp<ViewStyle> } = {}) {
 function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSplash: () => void }) {
   const colors = useColors();
   const { session, loading: authLoading } = useAuth();
+  const { ready: biometricLockReady } = useBiometricLock();
   const { loading: budgetLoading } = useBudget();
   const { ready: themeReady } = useThemeMode();
   const router = useRouter();
@@ -132,7 +135,7 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
   const [showStartupOverlay, setShowStartupOverlay] = useState(true);
   const startupOpacity = useRef(new Animated.Value(1)).current;
   const appOpacity = useRef(new Animated.Value(0)).current;
-  const servicesReady = fontsReady && !authLoading && themeReady && (!session || !budgetLoading);
+  const servicesReady = fontsReady && !authLoading && biometricLockReady && themeReady && (!session || !budgetLoading);
   const appReady = servicesReady && minimumStartupReady;
 
   useEffect(() => {
@@ -212,6 +215,7 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
               <ConfirmActionModal />
             </GestureHandlerRootView>
             <LegalAcceptanceGate />
+            <BiometricLockGate />
           </>
         ) : null}
       </Animated.View>
@@ -259,11 +263,13 @@ export default function RootLayout() {
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
             <AuthProvider>
-              <BudgetProvider>
-                <MembershipProvider>
-                  <RootNavigator fontsReady={fontsReady} hideSplash={hideSplash} />
-                </MembershipProvider>
-              </BudgetProvider>
+              <BiometricLockProvider>
+                <BudgetProvider>
+                  <MembershipProvider>
+                    <RootNavigator fontsReady={fontsReady} hideSplash={hideSplash} />
+                  </MembershipProvider>
+                </BudgetProvider>
+              </BiometricLockProvider>
             </AuthProvider>
           </QueryClientProvider>
         </ThemeProvider>

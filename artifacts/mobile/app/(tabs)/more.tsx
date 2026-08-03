@@ -18,6 +18,7 @@ import { AccountModal } from "@/components/AccountModal";
 import { AdminMembershipTools } from "@/components/AdminMembershipTools";
 import { AdminMoneyHealth } from "@/components/AdminMoneyHealth";
 import { AppText } from "@/components/AppText";
+import { BiometricLockSettings } from "@/components/BiometricLockSettings";
 import { FloLogo } from "@/components/FloLogo";
 import { FeedbackManageModal } from "@/components/FeedbackManageModal";
 import { IncomeModal } from "@/components/IncomeModal";
@@ -2721,6 +2722,7 @@ export default function MoreScreen() {
 
       {activeSettingsSection === "security" && <>
       <View style={{ marginTop: 8, marginBottom: 8 }}>
+        <BiometricLockSettings />
         <View style={[styles.card, { borderRadius: 14, backgroundColor: c.card }]}>
           <View style={{ flexDirection: "row", alignItems: "center", paddingBottom: 12, marginBottom: 12, borderBottomWidth: 1, borderBottomColor: c.border }}>
             <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: c.primary + "22", alignItems: "center", justifyContent: "center", marginRight: 12 }}>
