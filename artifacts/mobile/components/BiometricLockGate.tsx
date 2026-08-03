@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -12,8 +12,44 @@ export function BiometricLockGate() {
   const insets = useSafeAreaInsets();
   const { signOut } = useAuth();
   const { locked, busy, error, unlock } = useBiometricLock();
+  const unlockRef = useRef(unlock);
+  const [showFallback, setShowFallback] = useState(false);
+
+  useEffect(() => {
+    unlockRef.current = unlock;
+  }, [unlock]);
+
+  useEffect(() => {
+    if (!locked) {
+      setShowFallback(false);
+      return;
+    }
+
+    let active = true;
+    setShowFallback(false);
+    const timer = setTimeout(() => {
+      void unlockRef.current().then(unlocked => {
+        if (active && !unlocked) setShowFallback(true);
+      });
+    }, 50);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [locked]);
 
   if (!locked) return null;
+
+  if (!showFallback) {
+    return (
+      <View
+        accessibilityLabel="Unlocking FlowLedger"
+        accessibilityViewIsModal
+        style={[styles.root, { backgroundColor: colors.background }]}
+      />
+    );
+  }
 
   return (
     <View
