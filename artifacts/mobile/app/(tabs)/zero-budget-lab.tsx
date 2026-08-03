@@ -425,7 +425,7 @@ export default function ZeroBudgetLabScreen() {
     : null;
   const title =
     view === "dashboard"
-      ? "Command Center"
+      ? "FlowLedger Algo"
       : view === "bills"
         ? "Bills"
         : view === "budget"
