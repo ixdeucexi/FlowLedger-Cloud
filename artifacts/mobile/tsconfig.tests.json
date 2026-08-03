@@ -95,6 +95,8 @@
     ,"lib/tabBadge.test.ts"
     ,"lib/appBadge.ts"
     ,"lib/appBadge.test.ts"
+    ,"lib/biometricLock.ts"
+    ,"lib/biometricLock.test.ts"
     ,"lib/settingsLayout.ts"
     ,"lib/settingsLayout.test.ts"
     ,"lib/mobileLayout.ts"

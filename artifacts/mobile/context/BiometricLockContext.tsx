@@ -4,13 +4,15 @@ import { AppState, Platform } from "react-native";
 
 import { useAuth } from "@/context/AuthContext";
 import {
+  assertionHasUserVerification,
   biometricLockStorageKey,
+  credentialIdFromBase64Url,
+  credentialIdToBase64Url,
   friendlyBiometricError,
   parseStoredBiometricLock,
   shouldLockAfterBackground,
   type StoredBiometricLock,
 } from "@/lib/biometricLock";
-import { supabase } from "@/lib/supabase";
 
 interface BiometricLockContextValue {
   ready: boolean;
@@ -44,6 +46,57 @@ async function canUsePlatformPasskeys(): Promise<boolean> {
   }
 }
 
+function randomChallenge(): ArrayBuffer {
+  const challenge = new Uint8Array(32);
+  globalThis.crypto.getRandomValues(challenge);
+  return challenge.buffer as ArrayBuffer;
+}
+
+async function registerDeviceCredential(userId: string, userLabel: string): Promise<string> {
+  const credential = await navigator.credentials.create({
+    publicKey: {
+      challenge: randomChallenge(),
+      rp: { name: "FlowLedger" },
+      user: {
+        id: new TextEncoder().encode(userId).buffer as ArrayBuffer,
+        name: userLabel,
+        displayName: userLabel,
+      },
+      pubKeyCredParams: [
+        { type: "public-key", alg: -7 },
+        { type: "public-key", alg: -257 },
+      ],
+      authenticatorSelection: {
+        authenticatorAttachment: "platform",
+        residentKey: "preferred",
+        userVerification: "required",
+      },
+      timeout: 60_000,
+      attestation: "none",
+    },
+  });
+  if (!(credential instanceof PublicKeyCredential)) throw new Error("Credential not found");
+  return credentialIdToBase64Url(credential.rawId);
+}
+
+async function verifyDeviceCredential(credentialId: string): Promise<void> {
+  const credential = await navigator.credentials.get({
+    publicKey: {
+      challenge: randomChallenge(),
+      allowCredentials: [{
+        id: credentialIdFromBase64Url(credentialId),
+        type: "public-key",
+      }],
+      userVerification: "required",
+      timeout: 60_000,
+    },
+  });
+  if (!(credential instanceof PublicKeyCredential)) throw new Error("Credential not found");
+  if (credentialIdToBase64Url(credential.rawId) !== credentialId) throw new Error("Credential not found");
+  if (!(credential.response instanceof AuthenticatorAssertionResponse)) throw new Error("Credential not found");
+  if (!assertionHasUserVerification(credential.response)) throw new Error("Device verification was not completed");
+}
+
 export function BiometricLockProvider({ children }: { children: React.ReactNode }) {
   const { user, demoMode } = useAuth();
   const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
@@ -54,8 +107,9 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
   const [error, setError] = useState<string | null>(null);
   const backgroundedAt = useRef<number | null>(null);
   const userId = demoMode ? null : user?.id ?? null;
+  const userLabel = user?.email ?? "FlowLedger user";
   const ready = userId === null || loadedUserId === userId;
-  const enabled = ready && storedLock?.userId === userId;
+  const enabled = ready && storedLock?.userId === userId && storedLock.enabled;
 
   useEffect(() => {
     let active = true;
@@ -81,7 +135,7 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
       const parsed = parseStoredBiometricLock(saved, userId);
       setStoredLock(parsed);
       setSupported(deviceSupported);
-      setLocked(Boolean(parsed));
+      setLocked(Boolean(parsed?.enabled));
       setLoadedUserId(userId);
     }).catch(() => {
       if (!active) return;
@@ -95,6 +149,11 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
       active = false;
     };
   }, [userId]);
+
+  const saveLock = useCallback(async (next: StoredBiometricLock) => {
+    await AsyncStorage.setItem(biometricLockStorageKey(next.userId), JSON.stringify(next));
+    setStoredLock(next);
+  }, []);
 
   const noteBackgrounded = useCallback(() => {
     backgroundedAt.current = Date.now();
@@ -137,44 +196,27 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
     if (!userId || !supported || busy) return false;
     setBusy(true);
     setError(null);
-    let createdPasskeyId: string | null = null;
     try {
-      const { data, error: registrationError } = await supabase.auth.registerPasskey();
-      if (registrationError) throw registrationError;
-      if (!data?.id) throw new Error("Passkey registration did not finish");
-      createdPasskeyId = data.id;
-      const next: StoredBiometricLock = {
-        version: 1,
-        enabled: true,
-        userId,
-        passkeyId: data.id,
-      };
-      await AsyncStorage.setItem(biometricLockStorageKey(userId), JSON.stringify(next));
-      setStoredLock(next);
+      let credentialId = storedLock?.credentialId;
+      if (credentialId) await verifyDeviceCredential(credentialId);
+      else credentialId = await registerDeviceCredential(userId, userLabel);
+      await saveLock({ version: 2, enabled: true, userId, credentialId });
       setLocked(false);
       return true;
     } catch (caught) {
-      if (createdPasskeyId) {
-        await supabase.auth.passkey.delete({ passkeyId: createdPasskeyId }).catch(() => undefined);
-      }
       setError(friendlyBiometricError(caught));
       return false;
     } finally {
       setBusy(false);
     }
-  }, [busy, supported, userId]);
+  }, [busy, saveLock, storedLock?.credentialId, supported, userId, userLabel]);
 
   const disable = useCallback(async () => {
     if (!userId || !storedLock || busy) return false;
     setBusy(true);
     setError(null);
     try {
-      const { error: deletionError } = await supabase.auth.passkey.delete({ passkeyId: storedLock.passkeyId });
-      if (deletionError && !deletionError.message.toLowerCase().includes("credential_not_found")) {
-        throw deletionError;
-      }
-      await AsyncStorage.removeItem(biometricLockStorageKey(userId));
-      setStoredLock(null);
+      await saveLock({ ...storedLock, enabled: false });
       setLocked(false);
       return true;
     } catch (caught) {
@@ -183,20 +225,14 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
     } finally {
       setBusy(false);
     }
-  }, [busy, storedLock, userId]);
+  }, [busy, saveLock, storedLock, userId]);
 
   const unlock = useCallback(async () => {
-    if (!userId || !enabled || busy) return false;
+    if (!enabled || !storedLock || busy) return false;
     setBusy(true);
     setError(null);
     try {
-      const expectedUserId = userId;
-      const { data, error: authenticationError } = await supabase.auth.signInWithPasskey();
-      if (authenticationError) throw authenticationError;
-      if (data.user?.id !== expectedUserId) {
-        await supabase.auth.signOut();
-        throw new Error("This passkey belongs to a different FlowLedger account");
-      }
+      await verifyDeviceCredential(storedLock.credentialId);
       setLocked(false);
       backgroundedAt.current = null;
       return true;
@@ -206,7 +242,7 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
     } finally {
       setBusy(false);
     }
-  }, [busy, enabled, userId]);
+  }, [busy, enabled, storedLock]);
 
   const lockNow = useCallback(() => {
     if (!enabled) return;
@@ -214,6 +250,7 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
     setLocked(true);
   }, [enabled]);
 
+  const clearError = useCallback(() => setError(null), []);
   const value = useMemo<BiometricLockContextValue>(() => ({
     ready,
     supported,
@@ -225,8 +262,8 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
     disable,
     unlock,
     lockNow,
-    clearError: () => setError(null),
-  }), [busy, disable, enable, enabled, error, lockNow, locked, ready, supported, unlock]);
+    clearError,
+  }), [busy, clearError, disable, enable, enabled, error, lockNow, locked, ready, supported, unlock]);
 
   return <BiometricLockContext.Provider value={value}>{children}</BiometricLockContext.Provider>;
 }
