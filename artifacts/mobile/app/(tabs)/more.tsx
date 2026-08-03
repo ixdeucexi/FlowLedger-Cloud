@@ -297,7 +297,7 @@ export default function MoreScreen() {
   const stackCompactAccountControls = shouldStackAccountControls(viewportWidth);
   const forecastSafetyLayout = useMemo(() => getForecastSafetyLayout(viewportWidth), [viewportWidth]);
   const router = useRouter();
-  const routeParams = useLocalSearchParams<{ section?: string; feedback?: string; add?: string }>();
+  const routeParams = useLocalSearchParams<{ section?: string; feedback?: string; add?: string; reviewFilter?: string; reviewTransactionId?: string }>();
   const {
     themeMode,
     setThemeMode,
@@ -342,6 +342,11 @@ export default function MoreScreen() {
   const [legalDoc, setLegalDoc] = useState<"terms" | "privacy" | null>(null);
   useBackDismiss(Boolean(legalDoc), () => setLegalDoc(null));
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>(() => readStoredSettingsSection());
+  const requestedReviewTransactionId = Array.isArray(routeParams.reviewTransactionId) ? routeParams.reviewTransactionId[0] : routeParams.reviewTransactionId;
+  const requestedReviewFilterParam = Array.isArray(routeParams.reviewFilter) ? routeParams.reviewFilter[0] : routeParams.reviewFilter;
+  const requestedReviewFilter = requestedReviewFilterParam === "income" || requestedReviewFilterParam === "expense"
+    ? requestedReviewFilterParam
+    : "all";
   const settingsScrollRef = useRef<ScrollView>(null);
   const openSettingsSection = useCallback((sectionId: SettingsSectionId) => {
     setActiveSettingsSection(sectionId);
@@ -2217,7 +2222,11 @@ export default function MoreScreen() {
       {activeSettingsSection === "review" && <>
       <SLabel c={c} text="Transaction Reconciliation" />
       <PlanFeatureGate feature="transaction_matching" compact>
-        <ReviewCenter key={activeHousehold?.householdId ?? activeHousehold?.budgetId ?? "personal"} />
+        <ReviewCenter
+          key={`${activeHousehold?.householdId ?? activeHousehold?.budgetId ?? "personal"}:${requestedReviewFilter}:${requestedReviewTransactionId ?? "queue"}`}
+          focusTransactionId={requestedReviewTransactionId}
+          initialFilter={requestedReviewFilter}
+        />
       </PlanFeatureGate>
       </>}
 

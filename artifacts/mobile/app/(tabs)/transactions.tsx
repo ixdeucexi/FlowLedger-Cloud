@@ -1079,6 +1079,35 @@ export function ActivityScreen() {
       openExtraPaymentEditor(item.extraPayment);
       return;
     }
+    if (item.rawTx?.source === "plaid" && item.rawTx.amount > 0 && item.rawTx.review_status === "needs_review") {
+      const openIncomeReview = () => router.push({
+        pathname: "/(tabs)/more",
+        params: {
+          section: "review",
+          reviewFilter: "income",
+          reviewTransactionId: item.rawTx?.id,
+        },
+      } as any);
+      if (isFeatureLocked("transaction_matching")) {
+        Alert.alert(
+          "Income matching is a Pro feature",
+          "Upgrade to Pro to match posted deposits to planned paydays.",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Admin bypass",
+              onPress: () => {
+                bypassFeature("transaction_matching");
+                openIncomeReview();
+              },
+            },
+          ],
+        );
+        return;
+      }
+      openIncomeReview();
+      return;
+    }
     if (item.rawTx && canMatchExpenseToBill(item.rawTx)) {
       if (item.rawTx.source === "plaid" && isFeatureLocked("transaction_matching")) {
         Alert.alert(
@@ -1512,6 +1541,7 @@ export function ActivityScreen() {
           const isExpense  = item.amount < 0;
           const sourceMeta = SOURCE_META[item.source];
           const catColor   = CAT_COLORS[item.category] ?? c.primary;
+          const needsIncomeReview = item.rawTx?.source === "plaid" && item.rawTx.amount > 0 && item.rawTx.review_status === "needs_review";
 
           return (
             <Pressable
@@ -1567,7 +1597,7 @@ export function ActivityScreen() {
                   {isExpense ? "−" : "+"}${Math.abs(item.amount).toFixed(2)}
                 </Text>
                 <Feather
-                  name={item.editable ? "edit-2" : "chevron-right"}
+                  name={needsIncomeReview || !item.editable ? "chevron-right" : "edit-2"}
                   size={12}
                   color={c.mutedForeground}
                   style={{ marginTop: 3 }}

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { allocationLabel, allocationTotal, applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupPlannedExpenseAllocations, groupReviewTargets, incomeReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewAllocationsAreBalanced, reviewedBillMonthSettlement, reviewQueueAfterSkips, reviewSettlementSummary, scheduledSnowballReviewTargets, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
+import { allocationLabel, allocationTotal, applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupPlannedExpenseAllocations, groupReviewTargets, incomeReviewTargets, matchedOccurrenceAllocations, occurrenceKey, prioritizeReviewTransaction, rankReviewTargets, reviewAllocationsAreBalanced, reviewedBillMonthSettlement, reviewQueueAfterSkips, reviewSettlementSummary, scheduledSnowballReviewTargets, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
 
 test("queues active current-month and month-end rollover Plaid transactions oldest first", () => {
   const queue = buildReviewQueue([
@@ -42,6 +42,13 @@ test("skip moves an item aside without changing its review state", () => {
   assert.deepEqual(reviewQueueAfterSkips(queue, ["first"]).map(transaction => transaction.id), ["second"]);
   assert.equal(queue[0]?.review_status, "needs_review");
   assert.deepEqual(reviewQueueAfterSkips(queue, ["first", "second"]), []);
+});
+
+test("opens a selected review transaction first without dropping the rest of the queue", () => {
+  const queue = [{ id: "expense" }, { id: "income" }, { id: "other" }];
+  assert.deepEqual(prioritizeReviewTransaction(queue, "income").map(transaction => transaction.id), ["income", "expense", "other"]);
+  assert.deepEqual(prioritizeReviewTransaction(queue, "missing"), queue);
+  assert.deepEqual(prioritizeReviewTransaction(queue), queue);
 });
 
 test("prefills a forgotten recurring bill from the posted bank charge", () => {

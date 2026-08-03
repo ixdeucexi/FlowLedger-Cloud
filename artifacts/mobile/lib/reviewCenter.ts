@@ -140,6 +140,13 @@ export function reviewQueueAfterSkips<T extends Pick<ReviewTransactionLike, "id"
   return queue.filter(transaction => !skipped.has(transaction.id));
 }
 
+export function prioritizeReviewTransaction<T extends Pick<ReviewTransactionLike, "id">>(queue: T[], transactionId?: string): T[] {
+  if (!transactionId || queue[0]?.id === transactionId) return queue;
+  const focusedIndex = queue.findIndex(transaction => transaction.id === transactionId);
+  if (focusedIndex < 0) return queue;
+  return [queue[focusedIndex], ...queue.slice(0, focusedIndex), ...queue.slice(focusedIndex + 1)];
+}
+
 export function rankReviewTargets(transaction: Pick<ReviewTransactionLike, "amount" | "date" | "note" | "merchant_name" | "category">, targets: ReviewTarget[]): RankedReviewTarget[] {
   const actual = Math.abs(transaction.amount);
   const txDate = parseIsoDate(transaction.date);

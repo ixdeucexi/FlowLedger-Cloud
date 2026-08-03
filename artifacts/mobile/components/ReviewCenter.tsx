@@ -12,7 +12,7 @@ import type { Bill, Goal, ReconcileTransactionInput, Transaction } from "@/conte
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { confirmAction } from "@/lib/confirmAction";
-import { applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupReviewTargets, incomeReviewTargets, matchedOccurrenceAllocations, occurrenceKey, rankReviewTargets, reviewQueueAfterSkips, scheduledSnowballReviewTargets, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
+import { applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupReviewTargets, incomeReviewTargets, matchedOccurrenceAllocations, occurrenceKey, prioritizeReviewTransaction, rankReviewTargets, reviewQueueAfterSkips, scheduledSnowballReviewTargets, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
 import { prioritizePendingPlanTarget } from "@/lib/pendingPlanMatches";
 import { isOpenSpendingBucket, spendingBucketSummary } from "@/lib/spendingBuckets";
 
@@ -64,7 +64,12 @@ function isValidDateInMonth(value: string, month: number, year: number) {
   return dateYear === year && dateMonth === month + 1 && dateDay >= 1 && dateDay <= new Date(year, month + 1, 0).getDate();
 }
 
-export function ReviewCenter() {
+type ReviewCenterProps = {
+  focusTransactionId?: string;
+  initialFilter?: "all" | "expense" | "income";
+};
+
+export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: ReviewCenterProps = {}) {
   const c = useColors();
   const {
     transactions, incomes, goals, decisions, extraPayments, categories, canEditHousehold, settings, pendingPlanMatches,
@@ -78,10 +83,10 @@ export function ReviewCenter() {
     void refreshBankData();
   }, [refreshBankData]);
   const fullQueue = useMemo(() => buildReviewQueue(transactions, todayIso()), [transactions]);
-  const [reviewFilter, setReviewFilter] = useState<"all" | "expense" | "income">("all");
-  const queue = useMemo(() => fullQueue.filter(transaction =>
+  const [reviewFilter, setReviewFilter] = useState<"all" | "expense" | "income">(initialFilter);
+  const queue = useMemo(() => prioritizeReviewTransaction(fullQueue.filter(transaction =>
     reviewFilter === "all" || (reviewFilter === "income" ? transaction.amount > 0 : transaction.amount < 0)
-  ), [fullQueue, reviewFilter]);
+  ), focusTransactionId), [focusTransactionId, fullQueue, reviewFilter]);
   const [saving, setSaving] = useState(false);
   const [variance, setVariance] = useState<VarianceChoice | null>(null);
   const [splitCategory, setSplitCategory] = useState<string | null>(null);
