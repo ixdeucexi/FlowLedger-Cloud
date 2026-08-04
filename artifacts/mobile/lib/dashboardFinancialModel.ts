@@ -9,7 +9,7 @@ import {
   activePendingPlanMatches,
   type PendingPlanMatch,
 } from "./pendingPlanMatches";
-import { summarizePendingCheckingActivity } from "./plaidActivity";
+import { canonicalConnectedAccounts, summarizePendingCheckingActivity } from "./plaidActivity";
 import { transactionCategoryParts, type ReviewTransactionLike } from "./reviewCenter";
 import { effectiveDebtMinimum } from "./snowball";
 
@@ -221,11 +221,15 @@ export function buildDashboardFinancialModel(input: DashboardFinancialModelInput
       return left.target_date.localeCompare(right.target_date) || left.name.localeCompare(right.name);
     });
 
-  const connectedCheckingAccounts = connectedBankAccounts.filter(
-    (account) => account.is_active && account.account_subtype === "checking",
+  const connectedCheckingAccounts = canonicalConnectedAccounts(
+    connectedBankAccounts.filter(
+      (account) => account.is_active && account.account_subtype === "checking",
+    ),
   );
-  const connectedSavingsAccounts = connectedBankAccounts.filter(
-    (account) => account.is_active && account.account_subtype === "savings",
+  const connectedSavingsAccounts = canonicalConnectedAccounts(
+    connectedBankAccounts.filter(
+      (account) => account.is_active && account.account_subtype === "savings",
+    ),
   );
   const connectedBalance = connectedCheckingBalance(connectedCheckingAccounts);
   const checkingAccountBalance = connectedBalance ?? accounts
@@ -247,6 +251,10 @@ export function buildDashboardFinancialModel(input: DashboardFinancialModelInput
     checkingPendingTransactions,
     connectedCheckingAccounts,
   );
+  // Dashboard heroes are bank snapshots. Keep the number explicitly tied to
+  // Plaid's canonical current balance; pending/available money stays secondary.
+  const bankCurrentCheckingBalance = pendingCheckingSummary?.currentBalance
+    ?? checkingAccountBalance;
   const activePendingMatches = activePendingPlanMatches(
     pendingPlanMatches,
     pendingBankTransactions,
@@ -408,6 +416,7 @@ export function buildDashboardFinancialModel(input: DashboardFinancialModelInput
     connectedCheckingAccounts,
     connectedSavingsAccounts,
     checkingAccountBalance,
+    bankCurrentCheckingBalance,
     savingsAccountBalance,
     checkingPendingTransactions,
     pendingCheckingSummary,

@@ -106,12 +106,25 @@ test("builds the one financial model consumed by desktop and mobile dashboards",
   const connectedBankAccounts: ConnectedBankAccount[] = [
     {
       id: "connected-checking",
+      persistent_account_id: "bank-checking-1",
       name: "Primary checking",
       account_type: "depository",
       account_subtype: "checking",
       current_balance: 2_243,
       available_balance: 2_100,
       is_active: true,
+      updated_at: "2026-07-10T12:00:00.000Z",
+    },
+    {
+      id: "older-connected-checking",
+      persistent_account_id: "bank-checking-1",
+      name: "Primary checking",
+      account_type: "depository",
+      account_subtype: "checking",
+      current_balance: 1_800,
+      available_balance: 1_700,
+      is_active: true,
+      updated_at: "2026-07-09T12:00:00.000Z",
     },
     {
       id: "connected-savings",
@@ -163,6 +176,8 @@ test("builds the one financial model consumed by desktop and mobile dashboards",
   });
 
   assert.equal(model.checkingAccountBalance, 2_243);
+  assert.equal(model.bankCurrentCheckingBalance, 2_243);
+  assert.equal(model.connectedCheckingAccounts.length, 1);
   assert.equal(model.savingsAccountBalance, 900);
   assert.equal(model.pendingCheckingSummary?.availableBalance, 2_100);
   assert.equal(model.monthlyIncome, 3_000);
