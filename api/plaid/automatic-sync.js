@@ -30,6 +30,8 @@ module.exports = async function automaticPlaidSync(req, res) {
       added: 0,
       modified: 0,
       removed: 0,
+      creditCards: 0,
+      creditCardDebts: 0,
       webhookFailed: 0,
       failed: 0,
     };
@@ -52,6 +54,8 @@ module.exports = async function automaticPlaidSync(req, res) {
         totals.added += result.transactions.added;
         totals.modified += result.transactions.modified;
         totals.removed += result.transactions.removed;
+        totals.creditCards += result.liabilities.cards;
+        totals.creditCardDebts += result.liabilities.debts;
       } catch (error) {
         totals.failed += 1;
         console.error("[plaid:auto-sync] item failed", {

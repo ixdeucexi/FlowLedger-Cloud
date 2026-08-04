@@ -37,6 +37,88 @@ function isTransactionsPending(error) {
   return ["PRODUCT_NOT_READY", "PRODUCT_NOT_SUPPORTED"].includes(plaidErrorCode(error));
 }
 
+function isLiabilitiesUnavailable(error) {
+  return [
+    "ADDITIONAL_CONSENT_REQUIRED",
+    "PRODUCT_NOT_ENABLED",
+    "PRODUCT_NOT_READY",
+    "PRODUCT_NOT_SUPPORTED",
+    "PRODUCTS_NOT_SUPPORTED",
+  ].includes(plaidErrorCode(error));
+}
+
+function optionalNumber(value) {
+  if (value == null || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function optionalDate(value) {
+  if (!value) return null;
+  const date = String(value).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+}
+
+function isCreditAccount(account) {
+  const type = normalizedAccountText(account && (account.account_type || account.type));
+  return type === "credit";
+}
+
+function purchaseApr(liability) {
+  const aprs = liability && Array.isArray(liability.aprs) ? liability.aprs : [];
+  const purchase = aprs.find(apr => normalizedAccountText(apr && apr.apr_type) === "purchase_apr");
+  return optionalNumber(purchase && purchase.apr_percentage);
+}
+
+function cardDisplayName(account) {
+  const name = String((account && (account.official_name || account.name)) || "Credit card").trim();
+  const mask = String((account && account.mask) || "").trim();
+  return mask && !name.includes(mask) ? `${name} •••• ${mask}` : name;
+}
+
+function creditCardDebtValues({ account, liability, existingBill }) {
+  const balances = (account && account.balances) || {};
+  const currentBalance = optionalNumber(
+    balances.current == null ? account && account.current_balance : balances.current,
+  );
+  const reportedMinimum = optionalNumber(liability && liability.minimum_payment_amount);
+  const minimumPayment = reportedMinimum != null && reportedMinimum > 0.005
+    ? reportedMinimum
+    : optionalNumber(existingBill && existingBill.amount) || 0;
+  const nextPaymentDate = optionalDate(liability && liability.next_payment_due_date)
+    || optionalDate(existingBill && existingBill.next_payment_date);
+  const apr = purchaseApr(liability);
+
+  return {
+    name: existingBill && existingBill.name ? existingBill.name : cardDisplayName(account),
+    balance: currentBalance == null
+      ? Math.max(0, optionalNumber(existingBill && existingBill.balance) || 0)
+      : Math.max(0, currentBalance),
+    minimumPayment,
+    reportedMinimum,
+    nextPaymentDate,
+    dueDay: nextPaymentDate
+      ? Number(nextPaymentDate.slice(8, 10))
+      : Math.max(1, optionalNumber(existingBill && existingBill.due_day) || 1),
+    interestRate: apr == null
+      ? Math.max(0, optionalNumber(existingBill && existingBill.interest_rate) || 0)
+      : Math.max(0, apr),
+    purchaseApr: apr,
+    lastStatementBalance: optionalNumber(liability && liability.last_statement_balance),
+    lastStatementIssueDate: optionalDate(liability && liability.last_statement_issue_date),
+    isOverdue: liability && typeof liability.is_overdue === "boolean" ? liability.is_overdue : null,
+  };
+}
+
+function isCreditCardPaymentTransaction(account, transaction) {
+  if (!isCreditAccount(account)) return false;
+  if (plaidAmountToFlowLedger(transaction && transaction.amount) <= 0) return false;
+  const category = transaction && transaction.personal_finance_category || {};
+  const primary = normalizedAccountText(category.primary);
+  const detailed = normalizedAccountText(category.detailed);
+  return primary === "loan_payments" || detailed.includes("credit_card_payment");
+}
+
 function shouldImportPlaidTransaction(transaction) {
   return !transaction || transaction.pending !== true;
 }
@@ -250,6 +332,224 @@ async function syncAccounts({ client, userId, item, accessToken }) {
   return { accounts, duplicateItemIds: canonical.duplicateItemIds };
 }
 
+async function findConnectedCardDebt({ db, userId, householdId, accountRow }) {
+  const select = "id,name,amount,balance,interest_rate,due_day,next_payment_date";
+  const base = () => db
+    .from("bills")
+    .select(select)
+    .eq("user_id", userId)
+    .eq("household_id", householdId)
+    .limit(1);
+
+  let result = await base().eq("plaid_account_record_id", accountRow.id).maybeSingle();
+  if (result.error) throw result.error;
+  if (result.data) return result.data;
+
+  if (accountRow.persistent_account_id) {
+    result = await base().eq("plaid_persistent_account_id", accountRow.persistent_account_id).maybeSingle();
+    if (result.error) throw result.error;
+    if (result.data) return result.data;
+  }
+
+  result = await base().eq("plaid_account_id", accountRow.plaid_account_id).maybeSingle();
+  if (result.error) throw result.error;
+  return result.data || null;
+}
+
+async function defaultBudgetId(db, householdId) {
+  const result = await db
+    .from("budgets")
+    .select("id")
+    .eq("household_id", householdId)
+    .eq("is_default", true)
+    .limit(1)
+    .maybeSingle();
+  if (result.error) throw result.error;
+  if (!result.data) throw new Error("DEFAULT_BUDGET_NOT_FOUND");
+  return result.data.id;
+}
+
+function debtIsCurrentThisMonth(bill, monthStart, monthEnd) {
+  const start = optionalDate(bill.start_date);
+  const end = optionalDate(bill.end_date);
+  return (!start || start <= monthEnd) && (!end || end >= monthStart);
+}
+
+async function recalculateSnowballMinimums({ db, userId, householdId }) {
+  const [billResult, householdSettings, userSettings] = await Promise.all([
+    db.from("bills")
+      .select("id,amount,balance,interest_rate,include_in_snowball,start_date,end_date")
+      .eq("household_id", householdId)
+      .eq("is_debt", true),
+    db.from("household_settings").select("payment_method").eq("household_id", householdId).maybeSingle(),
+    db.from("settings").select("payment_method").eq("user_id", userId).maybeSingle(),
+  ]);
+  if (billResult.error) throw billResult.error;
+  if (householdSettings.error) throw householdSettings.error;
+  if (userSettings.error) throw userSettings.error;
+
+  const debts = billResult.data || [];
+  const now = new Date();
+  const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
+  const monthEndDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
+  const monthEnd = monthEndDate.toISOString().slice(0, 10);
+  const eligible = debts.filter(debt =>
+    debt.include_in_snowball !== false && debtIsCurrentThisMonth(debt, monthStart, monthEnd)
+  );
+  const freedMinimum = eligible
+    .filter(debt => Number(debt.balance || 0) <= 0.009)
+    .reduce((sum, debt) => sum + Math.max(0, Number(debt.amount || 0)), 0);
+  const method = householdSettings.data?.payment_method || userSettings.data?.payment_method || "snowball";
+  const active = eligible.filter(debt => Number(debt.balance || 0) > 0.009).sort((left, right) => {
+    if (method === "avalanche") {
+      const apr = Number(right.interest_rate || 0) - Number(left.interest_rate || 0);
+      if (Math.abs(apr) > 0.00001) return apr;
+    }
+    const balance = Number(left.balance || 0) - Number(right.balance || 0);
+    return Math.abs(balance) > 0.005 ? balance : String(left.id).localeCompare(String(right.id));
+  });
+
+  const reset = await db.from("bills").update({ snowball_minimum_boost: 0 }).eq("household_id", householdId).eq("is_debt", true);
+  if (reset.error) throw reset.error;
+  if (active[0] && freedMinimum > 0.005) {
+    const boosted = await db
+      .from("bills")
+      .update({ snowball_minimum_boost: freedMinimum })
+      .eq("id", active[0].id)
+      .eq("household_id", householdId);
+    if (boosted.error) throw boosted.error;
+  }
+}
+
+async function syncConnectedCardDebt({ db, userId, item, account, liability, liabilityFetched, budgetId }) {
+  const accountResult = await db
+    .from("plaid_accounts")
+    .select("id,plaid_account_id,persistent_account_id,name,official_name,mask,current_balance")
+    .eq("user_id", userId)
+    .eq("plaid_item_record_id", item.id)
+    .eq("plaid_account_id", account.account_id)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (accountResult.error) throw accountResult.error;
+  if (!accountResult.data) return false;
+
+  const accountRow = accountResult.data;
+  const existingBill = await findConnectedCardDebt({
+    db,
+    userId,
+    householdId: item.household_id,
+    accountRow,
+  });
+  const values = creditCardDebtValues({ account, liability, existingBill });
+  const syncedAt = new Date().toISOString();
+  const accountUpdate = { current_balance: values.balance, updated_at: syncedAt };
+  if (liabilityFetched) {
+    Object.assign(accountUpdate, {
+      minimum_payment_amount: values.reportedMinimum,
+      next_payment_due_date: optionalDate(liability && liability.next_payment_due_date),
+      last_statement_balance: values.lastStatementBalance,
+      last_statement_issue_date: values.lastStatementIssueDate,
+      is_overdue: values.isOverdue,
+      purchase_apr: values.purchaseApr,
+      liability_last_synced_at: syncedAt,
+    });
+  }
+  const accountUpdateResult = await db.from("plaid_accounts").update(accountUpdate).eq("id", accountRow.id);
+  if (accountUpdateResult.error) throw accountUpdateResult.error;
+
+  const sharedBillFields = {
+    is_debt: true,
+    category: "Debt",
+    balance: values.balance,
+    amount: values.minimumPayment,
+    interest_rate: values.interestRate,
+    due_day: values.dueDay,
+    next_payment_date: values.nextPaymentDate,
+    is_recurring: true,
+    frequency: "monthly",
+    plaid_account_record_id: accountRow.id,
+    plaid_account_id: accountRow.plaid_account_id,
+    plaid_persistent_account_id: accountRow.persistent_account_id || null,
+    plaid_last_synced_at: syncedAt,
+  };
+
+  if (existingBill) {
+    const updated = await db.from("bills").update(sharedBillFields).eq("id", existingBill.id).eq("household_id", item.household_id);
+    if (updated.error) throw updated.error;
+  } else {
+    const inserted = await db.from("bills").upsert({
+      id: `plaid-debt:${accountRow.id}`,
+      user_id: userId,
+      household_id: item.household_id,
+      budget_id: budgetId,
+      name: values.name,
+      priority: 0,
+      include_in_snowball: true,
+      created_at: syncedAt,
+      ...sharedBillFields,
+    }, { onConflict: "id" });
+    if (inserted.error) throw inserted.error;
+  }
+  return true;
+}
+
+async function syncLiabilities({ client, userId, item, accessToken, accounts }) {
+  const creditAccounts = (accounts || []).filter(isCreditAccount);
+  if (!creditAccounts.length) return { cards: 0, debts: 0, available: true, error_code: null };
+
+  let data = null;
+  let liabilityError = null;
+  try {
+    const response = await client.liabilitiesGet({ access_token: accessToken });
+    data = response.data || response;
+  } catch (error) {
+    liabilityError = plaidErrorCode(error);
+    const expected = isLiabilitiesUnavailable(error);
+    console[expected ? "info" : "error"]("[plaid:liabilities] using account balances without statement details", {
+      itemRecordId: item.id,
+      errorCode: liabilityError,
+    });
+  }
+
+  const liabilityByAccount = new Map(
+    (((data && data.liabilities) || {}).credit || [])
+      .filter(liability => liability && liability.account_id)
+      .map(liability => [liability.account_id, liability]),
+  );
+  const freshAccountById = new Map(
+    ((data && data.accounts) || [])
+      .filter(account => account && account.account_id)
+      .map(account => [account.account_id, account]),
+  );
+  const db = serviceSupabase();
+  const budgetId = await defaultBudgetId(db, item.household_id);
+  let debts = 0;
+  for (const account of creditAccounts) {
+    const freshAccount = freshAccountById.get(account.account_id);
+    const latestAccount = freshAccount ? {
+      ...account,
+      ...freshAccount,
+      balances: { ...(account.balances || {}), ...(freshAccount.balances || {}) },
+    } : account;
+    if (await syncConnectedCardDebt({
+      db,
+      userId,
+      item,
+      account: latestAccount,
+      liability: liabilityByAccount.get(account.account_id) || null,
+      liabilityFetched: Boolean(data),
+      budgetId,
+    })) debts += 1;
+  }
+  await recalculateSnowballMinimums({ db, userId, householdId: item.household_id });
+  return {
+    cards: creditAccounts.length,
+    debts,
+    available: Boolean(data),
+    error_code: liabilityError,
+  };
+}
+
 async function upsertPlaidTransaction({ userId, householdId, accountRow, transaction, removedAt }) {
   const db = serviceSupabase();
   const plaidTransactionId = transaction.transaction_id;
@@ -266,6 +566,7 @@ async function upsertPlaidTransaction({ userId, householdId, accountRow, transac
   const merchantName = transaction.merchant_name || transaction.name || "Imported transaction";
   const originalName = transaction.original_description || transaction.name || merchantName;
   const amount = plaidAmountToFlowLedger(transaction.amount);
+  const autoTransfer = isCreditCardPaymentTransaction(accountRow, transaction);
   const now = new Date().toISOString();
   const canonicalId = `plaid:${userId}:${plaidTransactionId}`;
 
@@ -340,7 +641,9 @@ async function upsertPlaidTransaction({ userId, householdId, accountRow, transac
   if (shouldImport && (!existing || existing.source === "plaid")) {
     const editableFields = editablePlaidFields(existing, {
       date: transactionDate,
-      category: existing && existing.match_reason === "confirmed_bill_match" ? existing.category : category,
+      category: existing && existing.match_reason === "confirmed_bill_match"
+        ? existing.category
+        : autoTransfer ? "Transfer" : category,
       note: transaction.name || originalName,
     });
     const canonicalRow = {
@@ -361,7 +664,9 @@ async function upsertPlaidTransaction({ userId, householdId, accountRow, transac
       plaid_category_detailed: personalCategory.detailed || null,
       iso_currency_code: transaction.iso_currency_code || "USD",
       removed_at: removedAt || null,
-      review_status: existing && existing.review_status ? existing.review_status : "needs_review",
+      review_status: existing && existing.review_status && existing.review_status !== "needs_review"
+        ? existing.review_status
+        : autoTransfer ? "transfer" : "needs_review",
     };
     await persistCanonicalPlaidTransaction({ db, existing, canonicalRow, userId });
     flowledgerId = canonicalRow.id;
@@ -646,11 +951,13 @@ async function syncItem({ userId, item }) {
     if (accountSync.duplicateItemIds.includes(item.id)) {
       return {
         accounts: accounts.length,
+        liabilities: { cards: 0, debts: 0, available: false, error_code: null },
         transactions: { cursor: item.transactions_cursor || item.cursor || null, added: 0, modified: 0, removed: 0 },
         transactions_pending: false,
         duplicate: true,
       };
     }
+    const liabilities = await syncLiabilities({ client, userId, item, accessToken, accounts });
     let transactions;
     try {
       transactions = await syncTransactions({ client, userId, item, accessToken });
@@ -669,6 +976,7 @@ async function syncItem({ userId, item }) {
         .eq("user_id", userId);
       return {
         accounts: accounts.length,
+        liabilities,
         transactions: { cursor: item.transactions_cursor || item.cursor || null, added: 0, modified: 0, removed: 0 },
         transactions_pending: true,
       };
@@ -690,7 +998,7 @@ async function syncItem({ userId, item }) {
       .eq("id", item.id)
       .eq("user_id", userId);
     if (error) throw error;
-    return { accounts: accounts.length, transactions, transactions_pending: false };
+    return { accounts: accounts.length, liabilities, transactions, transactions_pending: false };
   } catch (error) {
     await db
       .from("plaid_items")
@@ -709,12 +1017,17 @@ async function syncItem({ userId, item }) {
 module.exports = {
   syncItem,
   syncAccounts,
+  syncLiabilities,
   syncTransactions,
   canonicalizePlaidAccounts,
   duplicatePlaidAccountIds,
   plaidAccountIdentity,
   stablePlaidFingerprint,
   plaidAmountToFlowLedger,
+  creditCardDebtValues,
+  isCreditAccount,
+  isCreditCardPaymentTransaction,
+  isLiabilitiesUnavailable,
   shouldImportPlaidTransaction,
   shouldQueuePendingNotification,
   shouldQueuePostedNotification,

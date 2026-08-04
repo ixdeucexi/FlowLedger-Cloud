@@ -11,7 +11,7 @@ module.exports = async function plaidStatus(req, res) {
     const client = serviceSupabase();
     const items = await client.from("plaid_items").select("id,plaid_item_id,institution_id,institution_name,status,error_code,last_attempted_sync_at,last_successful_sync_at,created_at,updated_at").eq("user_id", auth.user.id).eq("household_id", access.householdId).neq("status", "removed").order("created_at", { ascending: false });
     if (items.error) throw items.error;
-    const accounts = await client.from("plaid_accounts").select("id,plaid_item_record_id,plaid_account_id,name,official_name,mask,account_type,account_subtype,current_balance,available_balance,currency_code,is_active").eq("user_id", auth.user.id).eq("household_id", access.householdId).eq("is_active", true);
+    const accounts = await client.from("plaid_accounts").select("id,plaid_item_record_id,plaid_account_id,name,official_name,mask,account_type,account_subtype,current_balance,available_balance,currency_code,is_active,minimum_payment_amount,next_payment_due_date,last_statement_balance,last_statement_issue_date,is_overdue,purchase_apr,liability_last_synced_at").eq("user_id", auth.user.id).eq("household_id", access.householdId).eq("is_active", true);
     if (accounts.error) throw accounts.error;
     return res.status(200).json({ items: items.data || [], accounts: accounts.data || [] });
   } catch (error) {

@@ -228,17 +228,20 @@ interface CheckingLedgerTransaction {
   review_status?: string | null;
 }
 
-function isCheckingSideOfTransfer(
+function connectedTransactionAccount(
   transaction: CheckingLedgerTransaction,
   connectedAccounts: ConnectedTransactionAccount[],
-): boolean {
-  if (transaction.source !== "plaid" || !transaction.plaid_account_id) return false;
-  const sourceAccount = connectedAccounts.find(account =>
+): ConnectedTransactionAccount | undefined {
+  if (transaction.source !== "plaid" || !transaction.plaid_account_id) return undefined;
+  return connectedAccounts.find(account =>
     account.is_active !== false && account.plaid_account_id === transaction.plaid_account_id
   );
+}
+
+function isCheckingConnectedAccount(sourceAccount?: ConnectedTransactionAccount): boolean {
   if (!sourceAccount) return false;
-  const type = String(sourceAccount.account_type || "").toLowerCase();
-  const subtype = String(sourceAccount.account_subtype || "").toLowerCase();
+  const type = String(sourceAccount.account_type || "").trim().toLowerCase();
+  const subtype = String(sourceAccount.account_subtype || "").trim().toLowerCase();
   return type === "depository" && subtype === "checking";
 }
 
@@ -253,8 +256,10 @@ export function isCheckingBalanceTransaction(
   connectedAccounts: ConnectedTransactionAccount[],
 ): boolean {
   if (!isActiveTransaction(transaction)) return false;
+  const sourceAccount = connectedTransactionAccount(transaction, connectedAccounts);
+  if (sourceAccount) return isCheckingConnectedAccount(sourceAccount);
   if (transaction.review_status !== "transfer") return true;
-  return isCheckingSideOfTransfer(transaction, connectedAccounts);
+  return false;
 }
 
 /**
@@ -270,6 +275,8 @@ export function isCheckingForecastLedgerTransaction(
     && !transaction.removed_at
     && transaction.pending !== true;
   if (!transaction.deleted_at || !isPostedBankRow) return false;
+  const sourceAccount = connectedTransactionAccount(transaction, connectedAccounts);
+  if (sourceAccount) return isCheckingConnectedAccount(sourceAccount);
   if (transaction.review_status !== "transfer") return true;
-  return isCheckingSideOfTransfer(transaction, connectedAccounts);
+  return false;
 }
