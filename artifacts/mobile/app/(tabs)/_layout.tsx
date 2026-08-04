@@ -13,6 +13,7 @@ import { FloLogo } from "@/components/FloLogo";
 import { PlanPreviewBanner } from "@/components/PlanPreviewBanner";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
+import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { useEffectiveThemeMode } from "@/hooks/useEffectiveThemeMode";
 import {
   clearLearningTour,
@@ -44,6 +45,12 @@ const TABS = [
   { name: "monthly",      title: "Monthly",      icon: "calendar"        },
   { name: "more",         title: "More",         icon: "more-horizontal" },
 ] as const;
+
+const DesktopChrome = React.lazy(() =>
+  import("@/components/desktop/DesktopChrome").then((module) => ({
+    default: module.DesktopChrome,
+  })),
+);
 
 const DEMO_TOUR_KEY = "flowledger_demo_tour_step";
 const DEMO_TOUR_STEPS = [
@@ -358,6 +365,7 @@ function TabContent() {
   const isDark = themeMode === "dark";
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
+  const isDesktop = useDesktopExperience();
   const isIosWeb = isWeb && typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent);
   const activityReviewCount = React.useMemo(
     () => buildReviewQueue(transactions, todayIsoDate()).length,
@@ -402,6 +410,7 @@ function TabContent() {
   return (
     <View style={[styles.tabTransitionRoot, { backgroundColor: colors.background }]}>
       <View style={styles.tabTransitionContent}>
+        <ResponsiveDesktopChrome enabled={isDesktop}>
             <Tabs
           backBehavior="history"
           detachInactiveScreens={false}
@@ -422,6 +431,7 @@ function TabContent() {
               borderRadius: 18,
             },
             tabBarStyle: {
+              display: isDesktop ? "none" : "flex",
               position: "absolute",
               left: 0,
               right: 0,
@@ -511,6 +521,7 @@ function TabContent() {
           <Tabs.Screen name="zero-budget-lab" options={{ href: null, tabBarStyle: { display: "none" } }} />
           <Tabs.Screen name="how-flowledger-works" options={{ href: null, tabBarStyle: { display: "none" } }} />
             </Tabs>
+        </ResponsiveDesktopChrome>
             {demoMode ? <DemoModeBanner /> : null}
             <PlanPreviewBanner />
             <SaveStatusBanner />
@@ -518,6 +529,27 @@ function TabContent() {
             <FloDemo />
       </View>
     </View>
+  );
+}
+
+function ResponsiveDesktopChrome({ enabled, children }: { enabled: boolean; children: React.ReactNode }) {
+  if (!enabled) return <>{children}</>;
+
+  return (
+    <React.Suspense
+      fallback={
+        <View style={styles.loadingScreen}>
+          <Image
+            source={require("../../assets/images/startup_f_transparent.png")}
+            style={styles.loadingLogo}
+            resizeMode="contain"
+          />
+          <Text style={styles.desktopLoadingText}>Opening desktop workspace...</Text>
+        </View>
+      }
+    >
+      <DesktopChrome>{children}</DesktopChrome>
+    </React.Suspense>
   );
 }
 
@@ -562,6 +594,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.22,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
+  },
+  desktopLoadingText: {
+    color: "#94a3b8",
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
   },
   loadErrorTitle: {
     fontSize: 24,
