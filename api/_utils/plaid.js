@@ -1,4 +1,4 @@
-const { Configuration, PlaidApi, PlaidEnvironments, Products } = require("plaid");
+const { Configuration, CreditAccountSubtype, PlaidApi, PlaidEnvironments, Products } = require("plaid");
 const { plaidConfig } = require("./env");
 
 let client;
@@ -18,4 +18,4 @@ function plaidOptions() {
   return plaidConfig();
 }
 
-module.exports = { plaid, plaidOptions, Products };
+module.exports = { plaid, plaidOptions, CreditAccountSubtype, Products };

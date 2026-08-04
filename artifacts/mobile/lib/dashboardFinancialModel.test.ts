@@ -204,3 +204,14 @@ test("keeps both dashboard presentations on the shared calculation model", () =>
     assert.doesNotMatch(source, /connectedCheckingBalance\(/);
   }
 });
+
+test("keeps adding a credit card separate from syncing existing Plaid accounts", () => {
+  const plaidConnections = readFileSync("components/PlaidLinkButton.web.tsx", "utf8");
+  const desktopDashboard = readFileSync("components/desktop/DesktopDashboard.tsx", "utf8");
+
+  assert.match(plaidConnections, /Add credit card/);
+  assert.match(plaidConnections, /connect\("credit_card"\)/);
+  assert.match(plaidConnections, /Sync existing accounts/);
+  assert.match(desktopDashboard, /Connect card/);
+  assert.match(desktopDashboard, /section: "plaid"/);
+});

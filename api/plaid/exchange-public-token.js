@@ -1,6 +1,7 @@
 const { plaid, plaidOptions } = require("../_utils/plaid");
 const { authenticatedUser, serviceSupabase, safeError } = require("../_utils/supabase");
 const { encryptAccessToken } = require("../_utils/crypto");
+const { PlaidItemConflictError, savePlaidItemConnection } = require("../_utils/plaidItemStore");
 const { syncItem } = require("../_utils/sync");
 const { authorizeProHousehold, requestedHouseholdId } = require("../_utils/plaidAccess");
 
@@ -23,10 +24,6 @@ module.exports = async function exchangePublicToken(req, res) {
     const accessToken = exchanged.access_token;
     const itemId = exchanged.item_id;
     const client = serviceSupabase();
-    const existing = await client.from("plaid_items").select("id,user_id,household_id,plaid_item_id,item_id").eq("plaid_item_id", itemId).maybeSingle();
-    if (existing.error) throw existing.error;
-    if (existing.data && existing.data.user_id !== auth.user.id) return res.status(409).json({ error: "PLAID_ITEM_ALREADY_CONNECTED", message: "That bank connection is already linked to another FlowLedger user." });
-    if (existing.data?.household_id && existing.data.household_id !== access.householdId) return res.status(409).json({ error: "PLAID_ITEM_ALREADY_CONNECTED", message: "That bank connection is already linked to another FlowLedger household." });
     let institutionId = null;
     let institutionName = "Connected bank";
     let consentExpiration = null;
@@ -55,10 +52,13 @@ module.exports = async function exchangePublicToken(req, res) {
       error_message: null,
       updated_at: new Date().toISOString(),
     };
-    const saved = existing.data
-      ? await client.from("plaid_items").update(row).eq("id", existing.data.id).eq("user_id", auth.user.id).select("id, household_id, status, institution_name").single()
-      : await client.from("plaid_items").insert(row).select("id, household_id, status, institution_name").single();
-    if (saved.error) throw saved.error;
+    const saved = await savePlaidItemConnection({
+      client,
+      userId: auth.user.id,
+      householdId: access.householdId,
+      plaidItemId: itemId,
+      row,
+    });
     const sync = await syncItem({ userId: auth.user.id, item: { id: saved.data.id, household_id: saved.data.household_id, encrypted_access_token: encrypted, transactions_cursor: null, cursor: null } });
     return res.status(200).json({
       ok: true,
@@ -74,6 +74,9 @@ module.exports = async function exchangePublicToken(req, res) {
       transactions_pending: Boolean(sync.transactions_pending),
     });
   } catch (error) {
+    if (error instanceof PlaidItemConflictError) {
+      return res.status(error.status).json({ error: error.code, message: error.message });
+    }
     const code = error && error.response && error.response.data && error.response.data.error_code || error.code || "PUBLIC_TOKEN_EXCHANGE_FAILED";
     return res.status(500).json({ error: code, message: safeError(error, "Could not finish connecting this bank.") });
   }
