@@ -15,6 +15,7 @@ export function BiometricLockGate() {
   const { signOut } = useAuth();
   const { locked, busy, error, unlock } = useBiometricLock();
   const unlockRef = useRef(unlock);
+  const autoUnlockStarted = useRef(false);
   const [showFallback, setShowFallback] = useState(false);
 
   useEffect(() => {
@@ -23,9 +24,12 @@ export function BiometricLockGate() {
 
   useEffect(() => {
     if (!locked) {
+      autoUnlockStarted.current = false;
       setShowFallback(false);
       return;
     }
+    if (autoUnlockStarted.current) return;
+    autoUnlockStarted.current = true;
 
     let active = true;
     setShowFallback(false);

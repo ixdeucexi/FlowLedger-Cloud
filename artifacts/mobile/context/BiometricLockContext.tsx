@@ -106,6 +106,7 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const backgroundedAt = useRef<number | null>(null);
+  const unlockAttempt = useRef<Promise<boolean> | null>(null);
   const userId = demoMode ? null : user?.id ?? null;
   const userLabel = user?.email ?? "FlowLedger user";
   const ready = userId === null || loadedUserId === userId;
@@ -227,22 +228,32 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
     }
   }, [busy, saveLock, storedLock, userId]);
 
-  const unlock = useCallback(async () => {
-    if (!enabled || !storedLock || busy) return false;
-    setBusy(true);
-    setError(null);
-    try {
-      await verifyDeviceCredential(storedLock.credentialId);
-      setLocked(false);
-      backgroundedAt.current = null;
-      return true;
-    } catch (caught) {
-      setError(friendlyBiometricError(caught));
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, enabled, storedLock]);
+  const unlock = useCallback((): Promise<boolean> => {
+    if (unlockAttempt.current) return unlockAttempt.current;
+    if (!enabled || !storedLock) return Promise.resolve(false);
+
+    const attempt = (async () => {
+      setBusy(true);
+      setError(null);
+      try {
+        await verifyDeviceCredential(storedLock.credentialId);
+        setLocked(false);
+        backgroundedAt.current = null;
+        return true;
+      } catch (caught) {
+        setError(friendlyBiometricError(caught));
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    })();
+
+    unlockAttempt.current = attempt;
+    void attempt.then(() => {
+      if (unlockAttempt.current === attempt) unlockAttempt.current = null;
+    });
+    return attempt;
+  }, [enabled, storedLock]);
 
   const lockNow = useCallback(() => {
     if (!enabled) return;
