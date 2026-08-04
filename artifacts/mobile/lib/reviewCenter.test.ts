@@ -26,6 +26,20 @@ test("carries an unmatched transaction from the previous month's last day into t
   assert.deepEqual(queue.map(transaction => transaction.id), ["rollover", "current"]);
 });
 
+test("includes an explicitly opened older transaction without widening the normal review queue", () => {
+  const transactions = [
+    { id: "current", date: "2026-08-01", amount: 1200, category: "Income", note: "Paycheck", source: "plaid", review_status: "needs_review" },
+    { id: "older-income", date: "2026-06-15", amount: 1200, category: "Income", note: "Older paycheck", source: "plaid", review_status: "needs_review" },
+    { id: "older-expense", date: "2026-06-14", amount: -40, category: "Other", note: "Older charge", source: "plaid", review_status: "needs_review" },
+  ];
+
+  assert.deepEqual(buildReviewQueue(transactions, "2026-08-04").map(transaction => transaction.id), ["current"]);
+  assert.deepEqual(
+    buildReviewQueue(transactions, "2026-08-04", "older-income").map(transaction => transaction.id),
+    ["older-income", "current"],
+  );
+});
+
 test("carries December 31 into January without changing the transaction date", () => {
   const queue = buildReviewQueue([
     { id: "year-end", date: "2026-12-31", amount: -25, category: "Other", note: "Year end", source: "plaid", review_status: "needs_review" },

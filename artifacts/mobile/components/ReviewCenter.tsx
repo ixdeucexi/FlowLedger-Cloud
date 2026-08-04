@@ -82,7 +82,10 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
   useEffect(() => {
     void refreshBankData();
   }, [refreshBankData]);
-  const fullQueue = useMemo(() => buildReviewQueue(transactions, todayIso()), [transactions]);
+  const fullQueue = useMemo(
+    () => buildReviewQueue(transactions, todayIso(), focusTransactionId),
+    [focusTransactionId, transactions],
+  );
   const [reviewFilter, setReviewFilter] = useState<"all" | "expense" | "income">(initialFilter);
   const queue = useMemo(() => prioritizeReviewTransaction(fullQueue.filter(transaction =>
     reviewFilter === "all" || (reviewFilter === "income" ? transaction.amount > 0 : transaction.amount < 0)
