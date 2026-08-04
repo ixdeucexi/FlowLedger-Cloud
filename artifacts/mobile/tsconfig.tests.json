@@ -111,5 +111,7 @@
     ,"lib/ledgerEngine.test.ts"
     ,"lib/desktopExperience.ts"
     ,"lib/desktopExperience.test.ts"
+    ,"lib/dashboardFinancialModel.ts"
+    ,"lib/dashboardFinancialModel.test.ts"
   ]
 }

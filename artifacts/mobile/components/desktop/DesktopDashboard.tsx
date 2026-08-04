@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Easing,
@@ -22,21 +22,89 @@ import Svg, {
 
 import { useAuth } from "@/context/AuthContext";
 import { useBudget } from "@/context/BudgetContext";
-import { buildAlgorithmSuite } from "@/lib/algorithmSuite";
+import { isActiveTransaction } from "@/lib/billMatching";
+import {
+  categoryBudgetStorageKey,
+  loadCategoryBudgets,
+  readCategoryBudgetCache,
+  subscribeCategoryBudgets,
+} from "@/lib/categoryBudgetStore";
+import { buildDashboardFinancialModel } from "@/lib/dashboardFinancialModel";
 import { WIDE_DESKTOP_BREAKPOINT } from "@/lib/desktopExperience";
-import { DEFAULT_DECISION_HUB_SETTINGS } from "@/lib/decisionHubSettings";
-import { transactionCategoryParts } from "@/lib/reviewCenter";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
+type Accent = "cyan" | "purple" | "green" | "amber" | "blue" | "neutral";
+
+type UpcomingBill = {
+  key: string;
+  id: string;
+  name: string;
+  category: string;
+  amount: number;
+  day: number;
+  month: number;
+  year: number;
+  isDebt: boolean;
+  pending: boolean;
+};
+
+const BRAND = {
+  background: "#03040b",
+  surface: "rgba(10, 16, 36, 0.92)",
+  surfaceStrong: "rgba(12, 20, 44, 0.96)",
+  text: "#f8fafc",
+  muted: "#94a3b8",
+  subtle: "#64748b",
+  purple: "#9f5cff",
+  blue: "#2f6fff",
+  cyan: "#22d3ee",
+  green: "#22c55e",
+  amber: "#fbbf24",
+  rose: "#fb7185",
+} as const;
+
+const ACCENTS: Record<Accent, { color: string; border: string; wash: string }> = {
+  cyan: {
+    color: BRAND.cyan,
+    border: "rgba(34,211,238,0.28)",
+    wash: "rgba(34,211,238,0.10)",
+  },
+  purple: {
+    color: BRAND.purple,
+    border: "rgba(159,92,255,0.28)",
+    wash: "rgba(159,92,255,0.10)",
+  },
+  green: {
+    color: BRAND.green,
+    border: "rgba(34,197,94,0.27)",
+    wash: "rgba(34,197,94,0.09)",
+  },
+  amber: {
+    color: BRAND.amber,
+    border: "rgba(251,191,36,0.26)",
+    wash: "rgba(251,191,36,0.09)",
+  },
+  blue: {
+    color: "#60a5fa",
+    border: "rgba(47,111,255,0.29)",
+    wash: "rgba(47,111,255,0.10)",
+  },
+  neutral: {
+    color: "#a8b7cf",
+    border: "rgba(148,163,184,0.16)",
+    wash: "rgba(148,163,184,0.05)",
+  },
+};
 
 const CATEGORY_COLORS = [
-  "#8b5cf6",
-  "#3b82f6",
-  "#06b6d4",
-  "#22c55e",
-  "#f59e0b",
-  "#ec4899",
+  BRAND.purple,
+  BRAND.blue,
+  BRAND.cyan,
+  BRAND.green,
+  BRAND.amber,
+  "#f472b6",
 ];
+
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 function currency(value: number, digits = 0) {
@@ -53,69 +121,61 @@ function displayName(user: ReturnType<typeof useAuth>["user"]) {
   const metadata = user?.user_metadata ?? {};
   const candidate =
     metadata.full_name ?? metadata.name ?? metadata.display_name;
-  if (typeof candidate === "string" && candidate.trim())
-    return candidate.trim();
+  if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
   if (user?.email) return user.email.split("@")[0].replace(/[._-]+/g, " ");
   return "John";
 }
 
 function greetingForHour(hour: number) {
-  if (hour < 5) return "Good evening";
+  if (hour < 5) return "Good night";
   if (hour < 12) return "Good morning";
   if (hour < 17) return "Good afternoon";
   return "Good evening";
 }
 
-function monthDay(month: number, day: number) {
-  return new Date(2024, month, day).toLocaleDateString("en-US", {
+function formatActivityDate(date: string) {
+  const today = new Date();
+  const local = new Date(`${date.slice(0, 10)}T12:00:00`);
+  const dateKey = (value: Date) =>
+    `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+  const todayKey = dateKey(today);
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (date.slice(0, 10) === todayKey) return "Today";
+  if (date.slice(0, 10) === dateKey(yesterday)) return "Yesterday";
+  return local.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function formatMonthDay(year: number, month: number, day: number) {
+  return new Date(year, month, day).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
   });
 }
 
-function formatActivityDate(date: string) {
-  const parsed = new Date(`${date}T12:00:00`);
-  if (Number.isNaN(parsed.getTime())) return date;
-  const today = new Date();
-  const todayKey = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
-  const parsedKey = `${parsed.getFullYear()}-${parsed.getMonth()}-${parsed.getDate()}`;
-  if (todayKey === parsedKey) return "Today";
-  return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function HoverCard({
+function SurfaceCard({
   children,
+  accent = "neutral",
   style,
   onPress,
   accessibilityLabel,
-  glow = "purple",
 }: {
   children: React.ReactNode;
+  accent?: Accent;
   style?: StyleProp<ViewStyle>;
   onPress?: () => void;
   accessibilityLabel?: string;
-  glow?: "purple" | "blue" | "green" | "amber" | "none";
 }) {
-  const hover = useRef(new Animated.Value(0)).current;
-
-  const animate = (toValue: number) => {
-    Animated.spring(hover, {
-      toValue,
-      friction: 9,
-      tension: 90,
+  const lift = useRef(new Animated.Value(0)).current;
+  const tone = ACCENTS[accent];
+  const animate = (value: number) => {
+    Animated.timing(lift, {
+      toValue: value,
+      duration: 170,
+      easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
   };
-  const glowStyle =
-    glow === "purple"
-      ? styles.cardGlowPurple
-      : glow === "blue"
-        ? styles.cardGlowBlue
-        : glow === "green"
-          ? styles.cardGlowGreen
-          : glow === "amber"
-            ? styles.cardGlowAmber
-            : undefined;
 
   return (
     <Pressable
@@ -124,53 +184,49 @@ function HoverCard({
       onPress={onPress}
       onHoverIn={() => animate(1)}
       onHoverOut={() => animate(0)}
-      style={style}
+      style={[styles.cardPressable, style]}
     >
       <Animated.View
         style={[
           styles.card,
-          glowStyle,
           {
+            borderColor: tone.border,
+            shadowColor: tone.color,
             transform: [
               {
-                translateY: hover.interpolate({
+                translateY: lift.interpolate({
                   inputRange: [0, 1],
                   outputRange: [0, -3],
-                }),
-              },
-              {
-                scale: hover.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [1, 1.006],
                 }),
               },
             ],
           },
         ]}
       >
+        <View pointerEvents="none" style={[styles.cardAccent, { backgroundColor: tone.wash }]} />
         {children}
       </Animated.View>
     </Pressable>
   );
 }
 
-function AnimatedProgress({
+function ProgressBar({
   percent,
-  color = "#8b5cf6",
-  height = 7,
+  color = BRAND.purple,
+  height = 6,
 }: {
   percent: number;
   color?: string;
   height?: number;
 }) {
   const progress = useRef(new Animated.Value(0)).current;
-  const clamped = Math.max(0, Math.min(100, percent));
+  const clamped = Math.max(0, Math.min(100, Number(percent) || 0));
 
   useEffect(() => {
     Animated.timing(progress, {
       toValue: clamped,
-      duration: 900,
-      delay: 140,
+      duration: 850,
+      delay: 100,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
@@ -195,43 +251,43 @@ function AnimatedProgress({
   );
 }
 
-function FlowScoreGauge({ score }: { score: number }) {
-  const size = 174;
-  const strokeWidth = 12;
+function FlowScoreRing({ score }: { score: number }) {
+  const size = 142;
+  const strokeWidth = 10;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const animatedScore = useRef(new Animated.Value(0)).current;
-  const clamped = Math.max(0, Math.min(100, score));
+  const animated = useRef(new Animated.Value(0)).current;
+  const clamped = Math.max(0, Math.min(100, Number(score) || 0));
 
   useEffect(() => {
-    Animated.timing(animatedScore, {
+    Animated.timing(animated, {
       toValue: clamped,
-      duration: 1200,
+      duration: 1100,
       delay: 120,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
-  }, [animatedScore, clamped]);
+  }, [animated, clamped]);
 
   return (
     <View
-      style={styles.gaugeWrap}
+      style={styles.scoreRingWrap}
       accessibilityLabel={`Flow Score ${Math.round(clamped)} out of 100`}
     >
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         <Defs>
-          <SvgLinearGradient id="desktopFlowScore" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor="#8b5cf6" stopOpacity="1" />
-            <Stop offset="0.55" stopColor="#3b82f6" stopOpacity="1" />
-            <Stop offset="1" stopColor="#22d3ee" stopOpacity="1" />
+          <SvgLinearGradient id="desktopScoreGradient" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor={BRAND.purple} stopOpacity="1" />
+            <Stop offset="0.52" stopColor={BRAND.cyan} stopOpacity="1" />
+            <Stop offset="1" stopColor={BRAND.green} stopOpacity="1" />
           </SvgLinearGradient>
         </Defs>
         <Circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          fill="rgba(2,6,23,0.42)"
-          stroke="rgba(148,163,184,0.13)"
+          fill="rgba(2,6,23,0.62)"
+          stroke="rgba(148,163,184,0.15)"
           strokeWidth={strokeWidth}
         />
         <AnimatedCircle
@@ -239,11 +295,11 @@ function FlowScoreGauge({ score }: { score: number }) {
           cy={size / 2}
           r={radius}
           fill="transparent"
-          stroke="url(#desktopFlowScore)"
+          stroke="url(#desktopScoreGradient)"
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           strokeDasharray={`${circumference} ${circumference}`}
-          strokeDashoffset={animatedScore.interpolate({
+          strokeDashoffset={animated.interpolate({
             inputRange: [0, 100],
             outputRange: [circumference, 0],
           })}
@@ -252,9 +308,9 @@ function FlowScoreGauge({ score }: { score: number }) {
           originY={size / 2}
         />
       </Svg>
-      <View style={styles.gaugeCenter}>
-        <Text style={styles.gaugeScore}>{Math.round(clamped)}</Text>
-        <Text style={styles.gaugeLabel}>FLOW SCORE</Text>
+      <View style={styles.scoreRingCenter}>
+        <Text style={styles.scoreValue}>{Math.round(clamped)}</Text>
+        <Text style={styles.scoreLabel}>FLOW SCORE</Text>
       </View>
     </View>
   );
@@ -273,22 +329,18 @@ function SectionHeader({
 }) {
   return (
     <View style={styles.sectionHeader}>
-      <View style={{ flex: 1 }}>
+      <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={styles.sectionTitle}>{title}</Text>
-        {subtitle ? (
-          <Text style={styles.sectionSubtitle}>{subtitle}</Text>
-        ) : null}
+        {subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}
       </View>
       {action && onAction ? (
         <Pressable
+          accessibilityRole="button"
           onPress={onAction}
-          style={({ pressed }) => [
-            styles.sectionAction,
-            { opacity: pressed ? 0.7 : 1 },
-          ]}
+          style={({ pressed }) => [styles.sectionAction, { opacity: pressed ? 0.7 : 1 }]}
         >
           <Text style={styles.sectionActionText}>{action}</Text>
-          <Feather name="arrow-up-right" size={13} color="#9caeff" />
+          <Feather name="arrow-up-right" size={13} color="#91a7c6" />
         </Pressable>
       ) : null}
     </View>
@@ -300,7 +352,7 @@ function MetricCard({
   value,
   detail,
   icon,
-  tone,
+  accent,
   width,
   percent,
   onPress,
@@ -309,55 +361,46 @@ function MetricCard({
   value: string;
   detail: string;
   icon: FeatherName;
-  tone: "purple" | "blue" | "green" | "amber";
+  accent: Accent;
   width: string;
   percent?: number;
-  onPress?: () => void;
+  onPress: () => void;
 }) {
-  const toneMap = {
-    purple: { color: "#b794ff", background: "rgba(124,58,237,0.16)" },
-    blue: { color: "#70a5ff", background: "rgba(37,99,235,0.16)" },
-    green: { color: "#45d6a0", background: "rgba(16,185,129,0.14)" },
-    amber: { color: "#fbbf55", background: "rgba(245,158,11,0.14)" },
-  }[tone];
-
+  const tone = ACCENTS[accent];
   return (
-    <HoverCard
+    <SurfaceCard
+      accent={accent}
       style={{ flexBasis: width as never, flexGrow: 1, minWidth: 0 }}
       onPress={onPress}
       accessibilityLabel={`${label}: ${value}`}
-      glow={tone}
     >
-      <View style={styles.metricTop}>
-        <View
-          style={[styles.metricIcon, { backgroundColor: toneMap.background }]}
-        >
-          <Feather name={icon} size={17} color={toneMap.color} />
+      <View style={styles.metricCard}>
+        <View style={styles.metricHeader}>
+          <Text style={styles.metricLabel}>{label.toUpperCase()}</Text>
+          <View style={[styles.metricIcon, { backgroundColor: tone.wash, borderColor: tone.border }]}>
+            <Feather name={icon} size={15} color={tone.color} />
+          </View>
         </View>
-        <View
-          style={[styles.metricStatus, { backgroundColor: toneMap.background }]}
-        >
-          <View
-            style={[styles.metricStatusDot, { backgroundColor: toneMap.color }]}
-          />
-          <Text style={[styles.metricStatusText, { color: toneMap.color }]}>
-            LIVE
-          </Text>
-        </View>
+        <Text style={styles.metricValue}>{value}</Text>
+        {percent !== undefined ? (
+          <View style={styles.metricProgress}>
+            <ProgressBar percent={percent} color={tone.color} height={4} />
+          </View>
+        ) : null}
+        <Text style={styles.metricDetail} numberOfLines={1}>{detail}</Text>
       </View>
-      <Text style={styles.metricLabel}>{label}</Text>
-      <Text style={styles.metricValue}>{value}</Text>
-      {percent !== undefined ? (
-        <View style={styles.metricProgressWrap}>
-          <AnimatedProgress
-            percent={percent}
-            color={toneMap.color}
-            height={5}
-          />
-        </View>
-      ) : null}
-      <Text style={styles.metricDetail}>{detail}</Text>
-    </HoverCard>
+    </SurfaceCard>
+  );
+}
+
+function EmptyState({ icon, text }: { icon: FeatherName; text: string }) {
+  return (
+    <View style={styles.emptyState}>
+      <View style={styles.emptyIcon}>
+        <Feather name={icon} size={16} color="#7f91ad" />
+      </View>
+      <Text style={styles.emptyText}>{text}</Text>
+    </View>
   );
 }
 
@@ -367,303 +410,225 @@ export function DesktopDashboard() {
   const { user } = useAuth();
   const {
     accounts,
+    activeHousehold,
     categories,
-    goals,
-    incomes,
-    selectedYear,
-    settings,
+    connectedBankAccounts,
     forecastConfidence,
     getBillMonthlyTotal,
+    getBillOccurrencesInMonth,
+    getCashFlow,
     getDailyBalances,
     getMonthlyBills,
     getMonthlyIncome,
     getPaidAmount,
-    getCashFlow,
     getTransactionsForMonth,
+    goals,
+    incomes,
+    pendingBankTransactions,
+    pendingPlanMatches,
+    selectedYear,
     setDashboardFilter,
+    settings,
   } = useBudget();
 
   const now = new Date();
   const currentMonth = now.getMonth();
   const today = now.getDate();
   const isWide = width >= WIDE_DESKTOP_BREAKPOINT;
-  const metricWidth = isWide ? "23%" : "47%";
-  const lowerWidth = isWide ? "31%" : "47%";
+  const isPrimaryRow = width >= 1180;
+  const metricWidth = isWide ? "23.5%" : "48%";
+  const detailWidth = isWide ? "31.5%" : width >= 1100 ? "48%" : "100%";
   const name = displayName(user);
   const firstName = name.split(/\s+/)[0] || name;
+
   const dailyBalances = useMemo(
     () => getDailyBalances(currentMonth, selectedYear),
     [currentMonth, getDailyBalances, selectedYear],
-  );
-  const monthlyBills = useMemo(
-    () => getMonthlyBills(currentMonth, selectedYear),
-    [currentMonth, getMonthlyBills, selectedYear],
-  );
-  const monthTransactions = useMemo(
-    () => getTransactionsForMonth(currentMonth, selectedYear),
-    [currentMonth, getTransactionsForMonth, selectedYear],
   );
   const cashFlow = useMemo(
     () => getCashFlow(currentMonth, selectedYear),
     [currentMonth, getCashFlow, selectedYear],
   );
-  const decisionSettings = DEFAULT_DECISION_HUB_SETTINGS;
 
-  const categoryRows = useMemo(() => {
-    const spending = new Map<string, number>();
-    monthTransactions.forEach((transaction) => {
-      const parts = transactionCategoryParts(transaction);
-      if (parts.length) {
-        parts.forEach((part) =>
-          spending.set(
-            part.category || "Other",
-            (spending.get(part.category || "Other") ?? 0) +
-              Math.abs(part.amount),
-          ),
-        );
-      } else if (transaction.amount < 0) {
-        const category = transaction.category || "Other";
-        spending.set(
-          category,
-          (spending.get(category) ?? 0) + Math.abs(transaction.amount),
-        );
-      }
-    });
-    const planned = new Map<string, number>();
-    monthlyBills.forEach((bill) => {
-      const category = bill.category || "Other";
-      planned.set(
-        category,
-        (planned.get(category) ?? 0) +
-          getBillMonthlyTotal(bill, currentMonth, selectedYear),
+  const categoryBudgetScope = useMemo(
+    () => ({
+      userId: user?.id,
+      householdId: activeHousehold?.householdId,
+      budgetId: activeHousehold?.budgetId,
+    }),
+    [activeHousehold?.budgetId, activeHousehold?.householdId, user?.id],
+  );
+  const categoryBudgetKey = useMemo(
+    () => categoryBudgetStorageKey(currentMonth, selectedYear, categoryBudgetScope),
+    [categoryBudgetScope, currentMonth, selectedYear],
+  );
+  const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = () => {
+      setCategoryBudgets(
+        readCategoryBudgetCache(currentMonth, selectedYear, categoryBudgetScope),
       );
-    });
-    const keys = new Set([
-      ...categories,
-      ...spending.keys(),
-      ...planned.keys(),
-    ]);
-    return [...keys]
-      .map((category) => {
-        const spent = spending.get(category) ?? 0;
-        const committed = planned.get(category) ?? 0;
-        const budgeted = Math.max(committed, spent * 1.18, 1);
-        return {
-          category,
-          spent,
-          budgeted,
-          percent: Math.min(100, (spent / budgeted) * 100),
-        };
-      })
-      .filter((row) => row.spent > 0.005 || row.budgeted > 1)
-      .sort((a, b) => b.spent - a.spent)
-      .slice(0, 5);
-  }, [
-    categories,
-    currentMonth,
-    getBillMonthlyTotal,
-    monthTransactions,
-    monthlyBills,
-    selectedYear,
-  ]);
+      void loadCategoryBudgets(categoryBudgetScope, currentMonth, selectedYear).then((next) => {
+        if (!cancelled) setCategoryBudgets(next);
+      });
+    };
+    refresh();
+    const unsubscribe = subscribeCategoryBudgets(refresh);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [categoryBudgetKey, categoryBudgetScope, currentMonth, selectedYear]);
 
-  const algorithmSuite = useMemo(
-    () =>
-      buildAlgorithmSuite({
-        month: currentMonth,
-        year: selectedYear,
-        todayDay: today,
-        safetyFloor: settings.safety_floor,
-        cashFlow,
-        dailyBalances: dailyBalances.map((day) => ({
-          day: day.day,
-          income: day.income,
-          bills: day.bills,
-          expense: day.expense,
-          net: day.net,
-          balance: day.balance,
-        })),
-        bills: monthlyBills.map((bill) => ({
-          id: bill.id,
-          name: bill.name,
-          amount: getBillMonthlyTotal(bill, currentMonth, selectedYear),
-          paidAmount: getPaidAmount(bill.id, currentMonth, selectedYear),
-          category: bill.category || "Other",
-          due_day: bill.due_day,
-          is_debt: bill.is_debt,
-          is_recurring: bill.is_recurring,
-          balance: bill.balance,
-          interest_rate: bill.interest_rate,
-          snowball_minimum_boost: bill.snowball_minimum_boost,
-        })),
-        transactions: monthTransactions.flatMap((transaction) => {
-          const parts = transactionCategoryParts(transaction);
-          if (parts.length)
-            return parts.map((part, index) => ({
-              id: `${transaction.id}:${index}`,
-              date: transaction.date,
-              amount: part.amount,
-              category: part.category,
-              note: part.label,
-            }));
-          return [
-            {
-              id: transaction.id,
-              date: transaction.date,
-              amount: transaction.amount,
-              category: transaction.category || "Other",
-              note: transaction.note,
-            },
-          ];
-        }),
-        incomes: incomes.map((income) => ({
-          id: income.id,
-          name: income.name,
-          amount: income.amount,
-          frequency: income.frequency,
-        })),
-        goals: goals.map((goal) => ({
-          id: goal.id,
-          name: goal.name,
-          target_amount: goal.target_amount,
-          current_amount: goal.current_amount,
-          target_date: goal.target_date,
-          goal_type: goal.goal_type,
-        })),
-        categoryPlan: categoryRows.map((row) => ({
-          category: row.category,
-          budgeted: row.budgeted,
-          spent: row.spent,
-          remaining: row.budgeted - row.spent,
-          status:
-            row.spent > row.budgeted
-              ? ("over" as const)
-              : row.percent >= 80
-                ? ("watch" as const)
-                : ("available" as const),
-        })),
-        forecastConfidence,
-        settings: decisionSettings,
-      }),
-    [
-      cashFlow,
-      categoryRows,
-      currentMonth,
-      dailyBalances,
-      decisionSettings,
+  const dashboardModel = useMemo(
+    () => buildDashboardFinancialModel({
+      now,
+      selectedYear,
+      settings,
       forecastConfidence,
-      getBillMonthlyTotal,
-      getPaidAmount,
+      accounts,
+      connectedBankAccounts,
+      pendingBankTransactions,
+      pendingPlanMatches,
+      categories,
+      categoryBudgets,
       goals,
       incomes,
-      monthTransactions,
-      monthlyBills,
+      cashFlow,
+      currentMonthBalances: dailyBalances,
+      getMonthlyBills,
+      getMonthlyIncome,
+      getTransactionsForMonth,
+      getDailyBalances,
+      getBillMonthlyTotal,
+      getPaidAmount,
+      getBillOccurrencesInMonth,
+    }),
+    [
+      accounts,
+      cashFlow,
+      categories,
+      categoryBudgets,
+      connectedBankAccounts,
+      currentMonth,
+      dailyBalances,
+      forecastConfidence,
+      getBillMonthlyTotal,
+      getBillOccurrencesInMonth,
+      getDailyBalances,
+      getMonthlyBills,
+      getMonthlyIncome,
+      getPaidAmount,
+      getTransactionsForMonth,
+      goals,
+      incomes,
+      pendingBankTransactions,
+      pendingPlanMatches,
       selectedYear,
-      settings.safety_floor,
+      settings,
       today,
     ],
   );
-
-  const checkingBalance = useMemo(() => {
-    const operating = accounts.filter(
-      (account) => account.is_active && account.account_type !== "savings",
-    );
-    const total = operating.reduce(
-      (sum, account) => sum + account.current_balance,
-      0,
-    );
-    if (operating.length) return total;
-    return (
-      dailyBalances.find((day) => day.day === today)?.balance ??
-      dailyBalances[0]?.balance ??
-      0
-    );
-  }, [accounts, dailyBalances, today]);
+  const {
+    activeAccountCount,
+    activePendingMatches,
+    algorithmSuite,
+    categoryPlan,
+    checkingAccountBalance: checkingBalance,
+    currentGoals: activeGoals,
+    goalPercent,
+    goalTotals,
+    monthTransactions,
+    monthlyIncome,
+    pendingCheckingSummary,
+    savingsAccountBalance: savingsBalance,
+    unpaidCount,
+    unpaidTotal,
+  } = dashboardModel;
 
   const upcoming = useMemo(() => {
-    const current = monthlyBills
-      .map((bill) => ({
-        ...bill,
-        displayMonth: currentMonth,
-        displayYear: selectedYear,
-        remaining: Math.max(
-          0,
-          getBillMonthlyTotal(bill, currentMonth, selectedYear) -
-            getPaidAmount(bill.id, currentMonth, selectedYear),
-        ),
-      }))
-      .filter((bill) => bill.remaining > 0.005 && bill.due_day >= today)
-      .sort((a, b) => a.due_day - b.due_day);
+    const candidates: UpcomingBill[] = [];
+    const appendMonth = (month: number, year: number, minimumDay: number) => {
+      getMonthlyBills(month, year).forEach((bill) => {
+        const days = getBillOccurrencesInMonth(bill, month, year).sort((a, b) => a - b);
+        if (!days.length) return;
+        const monthlyTotal = getBillMonthlyTotal(bill, month, year);
+        const occurrenceAmount = monthlyTotal / days.length;
+        let paidRemaining = getPaidAmount(bill.id, month, year);
+        days.forEach((day) => {
+          const paid = Math.min(occurrenceAmount, Math.max(0, paidRemaining));
+          paidRemaining = Math.max(0, paidRemaining - paid);
+          const remaining = Math.max(0, occurrenceAmount - paid);
+          if (remaining <= 0.005 || day < minimumDay) return;
+          const occurrenceDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+          candidates.push({
+            key: `${bill.id}:${occurrenceDate}`,
+            id: bill.id,
+            name: bill.name,
+            category: bill.is_debt ? "Debt payment" : bill.category || "Bill",
+            amount: remaining,
+            day,
+            month,
+            year,
+            isDebt: bill.is_debt,
+            pending: activePendingMatches.some(
+              (match) =>
+                match.target_id === bill.id && match.occurrence_date === occurrenceDate,
+            ),
+          });
+        });
+      });
+    };
 
-    if (current.length >= 5) return current.slice(0, 5);
-    const nextMonth = (currentMonth + 1) % 12;
-    const nextYear = selectedYear + (currentMonth === 11 ? 1 : 0);
-    const next = getMonthlyBills(nextMonth, nextYear)
-      .map((bill) => ({
-        ...bill,
-        displayMonth: nextMonth,
-        displayYear: nextYear,
-        remaining: Math.max(
-          0,
-          getBillMonthlyTotal(bill, nextMonth, nextYear) -
-            getPaidAmount(bill.id, nextMonth, nextYear),
-        ),
-      }))
-      .filter((bill) => bill.remaining > 0.005)
-      .sort((a, b) => a.due_day - b.due_day);
-    return [...current, ...next].slice(0, 5);
+    appendMonth(currentMonth, selectedYear, today);
+    if (candidates.length < 5) {
+      const nextMonth = (currentMonth + 1) % 12;
+      const nextYear = selectedYear + (currentMonth === 11 ? 1 : 0);
+      appendMonth(nextMonth, nextYear, 1);
+    }
+    return candidates
+      .sort(
+        (left, right) =>
+          left.year - right.year || left.month - right.month || left.day - right.day,
+      )
+      .slice(0, 5);
   }, [
+    activePendingMatches,
     currentMonth,
     getBillMonthlyTotal,
+    getBillOccurrencesInMonth,
     getMonthlyBills,
     getPaidAmount,
-    monthlyBills,
     selectedYear,
     today,
   ]);
 
   const recentActivity = useMemo(
     () =>
-      [...monthTransactions]
-        .sort((a, b) => b.date.localeCompare(a.date))
+      monthTransactions
+        .filter(isActiveTransaction)
+        .sort((left, right) => right.date.localeCompare(left.date))
         .slice(0, 5),
     [monthTransactions],
   );
-  const goalTotals = useMemo(
-    () =>
-      goals.reduce(
-        (total, goal) => ({
-          current: total.current + Math.max(0, goal.current_amount),
-          target: total.target + Math.max(0, goal.target_amount),
-        }),
-        { current: 0, target: 0 },
-      ),
-    [goals],
-  );
-  const goalPercent =
-    goalTotals.target > 0
-      ? Math.min(100, (goalTotals.current / goalTotals.target) * 100)
-      : 0;
-  const unpaidTotal = monthlyBills.reduce(
-    (sum, bill) =>
-      sum +
-      Math.max(
-        0,
-        getBillMonthlyTotal(bill, currentMonth, selectedYear) -
-          getPaidAmount(bill.id, currentMonth, selectedYear),
-      ),
-    0,
-  );
-  const unpaidCount = monthlyBills.filter(
-    (bill) =>
-      getPaidAmount(bill.id, currentMonth, selectedYear) + 0.005 <
-      getBillMonthlyTotal(bill, currentMonth, selectedYear),
-  ).length;
-  const monthlyIncome = getMonthlyIncome(currentMonth, selectedYear);
   const available = algorithmSuite.safeCushion.amount;
   const progress = algorithmSuite.stability;
   const nextMilestone =
     [7, 30, 60, 90, 180].find((day) => day > progress.protectedDays) ?? 180;
+
+  const chartBars = useMemo(() => {
+    const values = dailyBalances
+      .filter((day) => day.day <= today)
+      .slice(-14)
+      .map((day) => day.balance);
+    if (!values.length) return Array.from({ length: 14 }, () => 26);
+    const minimum = Math.min(...values);
+    const maximum = Math.max(...values);
+    const range = Math.max(1, maximum - minimum);
+    return values.map((value) => 20 + ((value - minimum) / range) * 52);
+  }, [dailyBalances, today]);
 
   const go = (pathname: string, params?: Record<string, string>) =>
     router.push({ pathname: pathname as never, params } as never);
@@ -679,33 +644,26 @@ export function DesktopDashboard() {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      <View pointerEvents="none" style={styles.dashboardAmbient}>
-        <View style={styles.dashboardGlowOne} />
-        <View style={styles.dashboardGlowTwo} />
+      <View pointerEvents="none" style={styles.ambientLayer}>
+        <View style={styles.ambientPurple} />
+        <View style={styles.ambientBlue} />
+        <View style={styles.ambientCyan} />
+        <View style={styles.ambientGrid} />
       </View>
 
       <View style={styles.pageHeader}>
-        <View style={{ flex: 1 }}>
-          <View style={styles.eyebrowRow}>
-            <View style={styles.livePulse} />
-            <Text style={styles.pageEyebrow}>FINANCIAL COMMAND CENTER</Text>
-          </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.greeting}>
             {greetingForHour(now.getHours())}, {firstName}
           </Text>
-          <Text style={styles.greetingSub}>
-            Here’s your financial overview for today.
-          </Text>
+          <Text style={styles.greetingSub}>Here&apos;s your financial overview for today.</Text>
         </View>
-        <View style={styles.monthPill}>
-          <Feather name="calendar" size={14} color="#a8b7cf" />
-          <Text style={styles.monthPillText}>
-            {now.toLocaleDateString("en-US", {
-              month: "long",
-              year: "numeric",
-            })}
-          </Text>
-          <Feather name="chevron-down" size={13} color="#64748b" />
+        <View style={styles.planStatus}>
+          <View style={styles.planStatusDot} />
+          <View>
+            <Text style={styles.planStatusLabel}>LIVE PLAN</Text>
+            <Text style={styles.planStatusValue}>{forecastConfidence.label} confidence</Text>
+          </View>
         </View>
       </View>
 
@@ -715,24 +673,20 @@ export function DesktopDashboard() {
           value={currency(available, 2)}
           detail={
             algorithmSuite.safeCushion.status === "safe"
-              ? "Protected above your safety floor"
-              : "Keep an eye on your lowest balance"
+              ? "Safe above your protection floor"
+              : "Review the lowest projected balance"
           }
           icon="dollar-sign"
-          tone="green"
+          accent="green"
           width={metricWidth}
-          onPress={() =>
-            askFlo(
-              `Explain why I have ${currency(available)} available to spend.`,
-            )
-          }
+          onPress={() => askFlo(`Explain why I have ${currency(available)} available to spend.`)}
         />
         <MetricCard
           label="Upcoming Bills"
           value={currency(unpaidTotal, 2)}
-          detail={`${unpaidCount} unpaid ${unpaidCount === 1 ? "bill" : "bills"} this month`}
+          detail={`${unpaidCount} ${unpaidCount === 1 ? "bill" : "bills"} remaining this month`}
           icon="file-text"
-          tone="amber"
+          accent="amber"
           width={metricWidth}
           onPress={() => openBills("bills")}
         />
@@ -741,7 +695,7 @@ export function DesktopDashboard() {
           value={currency(monthlyIncome, 2)}
           detail={`${incomes.length} active income ${incomes.length === 1 ? "source" : "sources"}`}
           icon="trending-up"
-          tone="purple"
+          accent="purple"
           width={metricWidth}
           onPress={() => go("/(tabs)/more", { section: "money" })}
         />
@@ -750,606 +704,519 @@ export function DesktopDashboard() {
           value={`${Math.round(goalPercent)}%`}
           detail={`${currency(goalTotals.current)} of ${currency(goalTotals.target)} funded`}
           icon="target"
-          tone="blue"
+          accent="cyan"
           width={metricWidth}
           percent={goalPercent}
           onPress={() => go("/(tabs)/more", { section: "goals" })}
         />
       </View>
 
-      <View style={styles.balanceScoreGrid}>
-        <HoverCard
-          style={styles.balanceCardWrap}
-          glow="blue"
-          onPress={() => go("/(tabs)/more", { section: "accounts" })}
-          accessibilityLabel={`Checking balance ${currency(checkingBalance, 2)}`}
-        >
-          <View style={styles.balanceCardContent}>
-            <View style={styles.balanceHeader}>
-              <View>
-                <Text style={styles.cardEyebrow}>CHECKING BALANCE</Text>
-                <Text style={styles.balanceValue}>
-                  {currency(checkingBalance, 2)}
-                </Text>
+      <View style={[styles.primaryGrid, !isPrimaryRow && styles.primaryGridStacked]}>
+        <View style={styles.primaryColumn}>
+          <SurfaceCard
+            accent="blue"
+            style={styles.accountCardWrap}
+            accessibilityLabel={`Checking balance ${currency(checkingBalance, 2)}. Flow Score ${algorithmSuite.flowScore.score}.`}
+          >
+            <View style={styles.accountCard}>
+              <View style={styles.accountHeader}>
+                <View>
+                  <Text style={styles.cardEyebrow}>CHECKING BALANCE</Text>
+                  <Text style={styles.checkingValue}>{currency(checkingBalance, 2)}</Text>
+                  <Text style={styles.accountMeta}>
+                    {pendingCheckingSummary && pendingCheckingSummary.pendingCount > 0
+                      ? `${currency(pendingCheckingSummary.availableBalance, 2)} available after ${pendingCheckingSummary.pendingCount} pending`
+                      : `${activeAccountCount} active ${activeAccountCount === 1 ? "account" : "accounts"}`}
+                  </Text>
+                </View>
+                <View style={styles.accountPills}>
+                  <Pressable
+                    onPress={() => go("/(tabs)/more", { section: "accounts" })}
+                    style={({ pressed }) => [styles.accountPill, { opacity: pressed ? 0.7 : 1 }]}
+                  >
+                    <Feather name="refresh-cw" size={12} color="#a7b8d2" />
+                    <Text style={styles.accountPillText}>Accounts</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => askFlo("Explain my checking balance and what is safe to spend.")}
+                    style={({ pressed }) => [styles.accountPill, styles.floPill, { opacity: pressed ? 0.7 : 1 }]}
+                  >
+                    <Feather name="message-circle" size={12} color="#d8b4fe" />
+                    <Text style={[styles.accountPillText, { color: "#e9ddff" }]}>Flo</Text>
+                  </Pressable>
+                </View>
               </View>
-              <View style={styles.bankIcon}>
-                <Feather name="briefcase" size={18} color="#8db8ff" />
+
+              <View style={styles.accountBody}>
+                <View style={styles.balancePathWrap}>
+                  <View style={styles.balancePathHeader}>
+                    <Text style={styles.balancePathLabel}>14-DAY BALANCE PATH</Text>
+                    <Text style={styles.savingsText}>{currency(savingsBalance)} saved</Text>
+                  </View>
+                  <View style={styles.balanceBars}>
+                    {chartBars.map((height, index) => (
+                      <View
+                        key={`${index}:${Math.round(height)}`}
+                        style={[
+                          styles.balanceBar,
+                          {
+                            height,
+                            opacity: 0.42 + (index / Math.max(1, chartBars.length - 1)) * 0.5,
+                          },
+                        ]}
+                      />
+                    ))}
+                  </View>
+                  <View style={styles.balancePathFooter}>
+                    <View style={styles.balanceSignal}>
+                      <Feather
+                        name={cashFlow.remaining >= 0 ? "arrow-up-right" : "arrow-down-right"}
+                        size={14}
+                        color={cashFlow.remaining >= 0 ? BRAND.green : BRAND.rose}
+                      />
+                      <Text
+                        style={[
+                          styles.balanceSignalText,
+                          { color: cashFlow.remaining >= 0 ? "#86efac" : "#fda4af" },
+                        ]}
+                      >
+                        {currency(Math.abs(cashFlow.remaining))} {cashFlow.remaining >= 0 ? "left" : "short"} this month
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Flow Score ${algorithmSuite.flowScore.score}. ${algorithmSuite.flowScore.label}.`}
+                  onPress={() => askFlo(`Why is my Flow Score ${algorithmSuite.flowScore.score}?`)}
+                  style={({ pressed }) => [styles.scoreSummary, { opacity: pressed ? 0.76 : 1 }]}
+                >
+                  <FlowScoreRing score={algorithmSuite.flowScore.score} />
+                  <Text style={styles.scoreStatus}>{algorithmSuite.flowScore.label}</Text>
+                  <Text style={styles.scoreReason} numberOfLines={2}>
+                    {algorithmSuite.flowScore.topReason}
+                  </Text>
+                </Pressable>
               </View>
             </View>
-            <View style={styles.balanceFooter}>
-              <View style={styles.balanceDelta}>
-                <Feather
-                  name={
-                    cashFlow.remaining >= 0
-                      ? "arrow-up-right"
-                      : "arrow-down-right"
-                  }
-                  size={14}
-                  color={cashFlow.remaining >= 0 ? "#4ade80" : "#fb7185"}
-                />
-                <Text
+          </SurfaceCard>
+
+          <SurfaceCard accent="neutral" style={styles.recentCardWrap} accessibilityLabel="Recent activity">
+            <View style={styles.sectionCardContent}>
+              <SectionHeader
+                title="Recent Activity"
+                subtitle="The latest activity shown in your PWA"
+                action="View all"
+                onAction={() => go("/(tabs)/transactions")}
+              />
+              <View style={styles.activityList}>
+                {recentActivity.length ? (
+                  recentActivity.map((transaction, index) => {
+                    const positive = transaction.amount >= 0;
+                    return (
+                      <View
+                        key={transaction.id}
+                        style={[styles.activityRow, index > 0 && styles.rowDivider]}
+                      >
+                        <View
+                          style={[
+                            styles.activityIcon,
+                            {
+                              backgroundColor: positive
+                                ? "rgba(34,197,94,0.12)"
+                                : "rgba(47,111,255,0.12)",
+                              borderColor: positive
+                                ? "rgba(34,197,94,0.18)"
+                                : "rgba(47,111,255,0.18)",
+                            },
+                          ]}
+                        >
+                          <Feather
+                            name={positive ? "arrow-down-left" : "shopping-bag"}
+                            size={15}
+                            color={positive ? "#4ade80" : "#7cb2ff"}
+                          />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={styles.activityName} numberOfLines={1}>
+                            {transaction.merchant_name ||
+                              transaction.note ||
+                              transaction.category ||
+                              "Transaction"}
+                          </Text>
+                          <Text style={styles.activityMeta} numberOfLines={1}>
+                            {transaction.review_status === "needs_review"
+                              ? "Needs review"
+                              : transaction.category || (positive ? "Income" : "Spending")}
+                          </Text>
+                        </View>
+                        <View style={styles.activityAmountWrap}>
+                          <Text
+                            style={[
+                              styles.activityAmount,
+                              { color: positive ? "#4ade80" : BRAND.text },
+                            ]}
+                          >
+                            {positive ? "+" : "−"}{currency(Math.abs(transaction.amount), 2)}
+                          </Text>
+                          <Text style={styles.activityDate}>{formatActivityDate(transaction.date)}</Text>
+                        </View>
+                      </View>
+                    );
+                  })
+                ) : (
+                  <EmptyState icon="activity" text="Your recent activity will appear here." />
+                )}
+              </View>
+            </View>
+          </SurfaceCard>
+        </View>
+
+        <View style={styles.primaryColumn}>
+          <SurfaceCard accent="purple" style={styles.stabilityWrap} accessibilityLabel={`Stability path: ${progress.stageLabel}`}>
+            <View style={styles.stabilityCard}>
+              <View style={styles.stabilityHeader}>
+                <View style={styles.stabilityIcon}>
+                  <Feather name="shield" size={18} color="#d8b4fe" />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.stabilityEyebrow}>STABILITY PATH</Text>
+                  <Text style={styles.stabilityTitle}>{progress.stageLabel}</Text>
+                </View>
+                <View
                   style={[
-                    styles.balanceDeltaText,
-                    { color: cashFlow.remaining >= 0 ? "#4ade80" : "#fb7185" },
+                    styles.statusBadge,
+                    progress.status === "risk"
+                      ? styles.statusRisk
+                      : progress.status === "watch"
+                        ? styles.statusWatch
+                        : styles.statusSafe,
                   ]}
                 >
-                  {currency(Math.abs(cashFlow.remaining))} projected this month
-                </Text>
-              </View>
-              <Text style={styles.balanceUpdated}>
-                Updated from{" "}
-                {accounts.filter((account) => account.is_active).length} active{" "}
-                {accounts.filter((account) => account.is_active).length === 1
-                  ? "account"
-                  : "accounts"}
-              </Text>
-            </View>
-            <View pointerEvents="none" style={styles.balanceChart}>
-              {[22, 31, 27, 46, 40, 58, 52, 72, 66, 82, 76, 92].map(
-                (height, index) => (
                   <View
-                    key={index}
                     style={[
-                      styles.balanceChartBar,
+                      styles.statusDot,
                       {
-                        height: `${height}%` as never,
-                        opacity: 0.26 + index * 0.045,
+                        backgroundColor:
+                          progress.status === "risk"
+                            ? BRAND.rose
+                            : progress.status === "watch"
+                              ? BRAND.amber
+                              : BRAND.green,
                       },
                     ]}
                   />
-                ),
-              )}
-            </View>
-          </View>
-        </HoverCard>
+                  <Text style={styles.statusText}>
+                    {progress.status === "risk"
+                      ? "ACT NOW"
+                      : progress.status === "watch"
+                        ? "BUILDING"
+                        : "ON TRACK"}
+                  </Text>
+                </View>
+              </View>
 
-        <HoverCard
-          style={styles.scoreCardWrap}
-          glow="purple"
-          onPress={() =>
-            askFlo(`Why is my Flow Score ${algorithmSuite.flowScore.score}?`)
-          }
-          accessibilityLabel={`Flow Score ${algorithmSuite.flowScore.score}`}
-        >
-          <View style={styles.scoreCardContent}>
-            <View style={styles.scoreCopy}>
-              <Text style={styles.cardEyebrow}>FINANCIAL MOMENTUM</Text>
-              <Text style={styles.scoreTitle}>Flow Score</Text>
-              <Text style={styles.scoreDescription}>
-                {algorithmSuite.flowScore.topReason}
-              </Text>
-              <View style={styles.scoreStatusRow}>
-                <View style={styles.scoreStatusDot} />
-                <Text style={styles.scoreStatus}>
-                  {algorithmSuite.flowScore.label}
+              <View style={styles.stabilitySummary}>
+                <View style={styles.protectedMetric}>
+                  <Text style={styles.protectedValue}>{progress.protectedDays}</Text>
+                  <View>
+                    <Text style={styles.protectedUnit}>days</Text>
+                    <Text style={styles.protectedSub}>backed up</Text>
+                  </View>
+                </View>
+                <View style={styles.summaryDivider} />
+                <View style={styles.summaryMetric}>
+                  <Text style={styles.summaryLabel}>NEXT GOAL</Text>
+                  <Text style={styles.summaryValue}>{nextMilestone} protected days</Text>
+                </View>
+                <View style={styles.summaryDivider} />
+                <View style={styles.summaryMetric}>
+                  <Text style={styles.summaryLabel}>PROTECTED AMOUNT</Text>
+                  <Text style={styles.summaryValue}>{currency(progress.protectedAmount)}</Text>
+                </View>
+              </View>
+
+              <View style={styles.stabilityCallout}>
+                <View style={styles.calloutIcon}>
+                  <Feather name="check" size={13} color="#5ee6b5" />
+                </View>
+                <Text style={styles.stabilityCalloutText} numberOfLines={2}>
+                  {progress.explanation}
                 </Text>
               </View>
-              <Text style={styles.scoreHint}>
-                Select to see what’s shaping your score
-              </Text>
-            </View>
-            <FlowScoreGauge score={algorithmSuite.flowScore.score} />
-          </View>
-        </HoverCard>
-      </View>
 
-      <HoverCard
-        style={styles.stabilityWrap}
-        glow="purple"
-        accessibilityLabel={`Stability path: ${progress.stageLabel}`}
-      >
-        <View style={styles.stabilityCard}>
-          <View style={styles.stabilityHeader}>
-            <View style={styles.stabilityIcon}>
-              <Feather name="shield" size={20} color="#b7a6ff" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.stabilityEyebrow}>STABILITY PATH</Text>
-              <Text style={styles.stabilityTitle}>{progress.stageLabel}</Text>
-            </View>
-            <View style={styles.stabilityStatus}>
-              <View style={styles.stabilityStatusDot} />
-              <Text style={styles.stabilityStatusText}>
-                {progress.status === "risk"
-                  ? "ACT NOW"
-                  : progress.status === "watch"
-                    ? "BUILDING"
-                    : "ON TRACK"}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.stabilitySummary}>
-            <View style={styles.protectedMetric}>
-              <Text style={styles.protectedValue}>
-                {progress.protectedDays}
-              </Text>
-              <View>
-                <Text style={styles.protectedLabel}>days</Text>
-                <Text style={styles.protectedSub}>currently protected</Text>
+              <View style={styles.pathHeader}>
+                <Text style={styles.pathLabel}>180-day path</Text>
+                <Text style={styles.pathPercent}>{Math.round(progress.reserveProgress * 100)}%</Text>
               </View>
-            </View>
-            <View style={styles.stabilityDivider} />
-            <View style={styles.stabilityMiniMetric}>
-              <Text style={styles.stabilityMiniLabel}>NEXT MILESTONE</Text>
-              <Text style={styles.stabilityMiniValue}>
-                {nextMilestone} protected days
-              </Text>
-            </View>
-            <View style={styles.stabilityDivider} />
-            <View style={styles.stabilityMiniMetric}>
-              <Text style={styles.stabilityMiniLabel}>BREATHING ROOM</Text>
-              <Text style={styles.stabilityMiniValue}>
-                {currency(progress.protectedAmount)}
-              </Text>
-            </View>
-          </View>
+              <ProgressBar percent={progress.reserveProgress * 100} color={BRAND.purple} height={7} />
+              <View style={styles.pathMilestones}>
+                {[7, 30, 60, 90, 180].map((day) => (
+                  <Text key={day} style={styles.pathMilestone}>{day}d</Text>
+                ))}
+              </View>
 
-          <View style={styles.stabilityCallout}>
-            <View style={styles.safeCheck}>
-              <Feather name="check" size={14} color="#44d7a4" />
-            </View>
-            <Text style={styles.stabilityCalloutText}>
-              {progress.explanation}
-            </Text>
-          </View>
+              <View style={styles.nextAction}>
+                <View style={styles.nextActionIcon}>
+                  <Feather name="arrow-up-right" size={16} color="#e2c6ff" />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.nextActionLabel}>NEXT</Text>
+                  <Text style={styles.nextActionText} numberOfLines={2}>{progress.nextAction}</Text>
+                </View>
+                <Pressable
+                  onPress={() => askFlo(`Explain my stability path and why ${progress.nextAction}`)}
+                  style={({ pressed }) => [styles.floButton, { opacity: pressed ? 0.72 : 1 }]}
+                >
+                  <Feather name="message-circle" size={13} color="#ffffff" />
+                  <Text style={styles.floButtonText}>Ask Flo</Text>
+                </Pressable>
+              </View>
 
-          <View style={styles.pathHeader}>
-            <Text style={styles.pathLabel}>180-day backup path</Text>
-            <Text style={styles.pathPercent}>
-              {Math.round(progress.reserveProgress * 100)}%
-            </Text>
-          </View>
-          <AnimatedProgress
-            percent={progress.reserveProgress * 100}
-            color="#8b5cf6"
-            height={8}
-          />
-          <View style={styles.pathMilestones}>
-            {[7, 30, 60, 90, 180].map((day) => (
-              <Text key={day} style={styles.pathMilestone}>
-                {day}d
-              </Text>
-            ))}
-          </View>
-
-          <View style={styles.nextActionRow}>
-            <View style={styles.nextActionIcon}>
-              <Feather name="arrow-up-right" size={17} color="#d8b4fe" />
+              <Pressable
+                onPress={() => go("/(tabs)/how-flowledger-works", { section: "stability" })}
+                style={({ pressed }) => [styles.howItWorks, { opacity: pressed ? 0.7 : 1 }]}
+              >
+                <Feather name="book-open" size={14} color="#9db2d0" />
+                <Text style={styles.howItWorksText}>How Stability Path works</Text>
+              </Pressable>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.nextActionLabel}>YOUR NEXT BEST MOVE</Text>
-              <Text style={styles.nextActionText}>{progress.nextAction}</Text>
-            </View>
-            <Pressable
-              onPress={() =>
-                askFlo(
-                  `Explain my stability path and why ${progress.nextAction}`,
-                )
-              }
-              style={({ pressed }) => [
-                styles.askFloButton,
-                { opacity: pressed ? 0.76 : 1 },
-              ]}
-            >
-              <Feather name="message-circle" size={14} color="#ffffff" />
-              <Text style={styles.askFloText}>Ask Flo</Text>
-            </Pressable>
-          </View>
-        </View>
-      </HoverCard>
+          </SurfaceCard>
 
-      <View style={styles.operationalGrid}>
-        <HoverCard
-          style={styles.operationalCardWrap}
-          glow="blue"
-          accessibilityLabel="Recent activity"
-        >
-          <View style={styles.sectionCardContent}>
-            <SectionHeader
-              title="Recent Activity"
-              subtitle="Your latest money movement"
-              action="View all"
-              onAction={() => go("/(tabs)/transactions")}
-            />
-            <View style={styles.activityList}>
-              {recentActivity.length ? (
-                recentActivity.map((transaction, index) => {
-                  const positive = transaction.amount >= 0;
-                  return (
+          <SurfaceCard accent="neutral" style={styles.quickCardWrap} accessibilityLabel="Quick actions">
+            <View style={styles.sectionCardContent}>
+              <SectionHeader title="Quick Actions" subtitle="Keep your plan current" />
+              <View style={styles.quickGrid}>
+                {[
+                  {
+                    label: "Add Income",
+                    icon: "arrow-down-left" as const,
+                    color: BRAND.green,
+                    onPress: () => go("/(tabs)/more", { section: "money", add: "income" }),
+                  },
+                  {
+                    label: "Add Bill",
+                    icon: "file-plus" as const,
+                    color: "#60a5fa",
+                    onPress: () => openBills("bills"),
+                  },
+                  {
+                    label: "Add Debt",
+                    icon: "credit-card" as const,
+                    color: BRAND.purple,
+                    onPress: () => openBills("debt"),
+                  },
+                  {
+                    label: "Add Goal",
+                    icon: "target" as const,
+                    color: "#f472b6",
+                    onPress: () => go("/(tabs)/more", { section: "goals" }),
+                  },
+                ].map((action) => (
+                  <Pressable
+                    key={action.label}
+                    accessibilityRole="button"
+                    accessibilityLabel={action.label}
+                    onPress={action.onPress}
+                    style={({ pressed }) => [
+                      styles.quickAction,
+                      { opacity: pressed ? 0.72 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] },
+                    ]}
+                  >
                     <View
-                      key={transaction.id}
                       style={[
-                        styles.activityRow,
-                        index > 0 && styles.listDivider,
+                        styles.quickIcon,
+                        {
+                          backgroundColor: `${action.color}16`,
+                          borderColor: `${action.color}36`,
+                        },
                       ]}
                     >
-                      <View
-                        style={[
-                          styles.activityIcon,
-                          {
-                            backgroundColor: positive
-                              ? "rgba(16,185,129,0.12)"
-                              : "rgba(59,130,246,0.12)",
-                          },
-                        ]}
-                      >
-                        <Feather
-                          name={positive ? "arrow-down-left" : "shopping-bag"}
-                          size={15}
-                          color={positive ? "#45d6a0" : "#79a9ff"}
-                        />
-                      </View>
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={styles.activityName} numberOfLines={1}>
-                          {transaction.merchant_name ||
-                            transaction.note ||
-                            transaction.category ||
-                            "Transaction"}
-                        </Text>
-                        <Text style={styles.activityMeta}>
-                          {transaction.category ||
-                            (positive ? "Income" : "Spending")}
-                        </Text>
-                      </View>
-                      <View style={styles.activityAmountWrap}>
-                        <Text
-                          style={[
-                            styles.activityAmount,
-                            { color: positive ? "#4ade80" : "#eef4fc" },
-                          ]}
-                        >
-                          {positive ? "+" : "−"}
-                          {currency(Math.abs(transaction.amount), 2)}
-                        </Text>
-                        <Text style={styles.activityDate}>
-                          {formatActivityDate(transaction.date)}
-                        </Text>
-                      </View>
+                      <Feather name={action.icon} size={19} color={action.color} />
                     </View>
-                  );
-                })
-              ) : (
-                <EmptyState
-                  icon="activity"
-                  text="Your recent activity will appear here."
-                />
-              )}
+                    <Text style={styles.quickLabel}>{action.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={styles.quickFooter}>
+                <Pressable
+                  onPress={() => askFlo("Can I afford a purchase? Help me choose a safe amount and date.")}
+                  style={({ pressed }) => [styles.quickFooterButton, { opacity: pressed ? 0.7 : 1 }]}
+                >
+                  <Feather name="help-circle" size={14} color={BRAND.amber} />
+                  <Text style={styles.quickFooterText}>Can I afford it?</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => go("/(tabs)/flo")}
+                  style={({ pressed }) => [styles.quickFooterButton, { opacity: pressed ? 0.7 : 1 }]}
+                >
+                  <Feather name="message-circle" size={14} color={BRAND.cyan} />
+                  <Text style={styles.quickFooterText}>Ask Flo</Text>
+                </Pressable>
+              </View>
             </View>
-          </View>
-        </HoverCard>
+          </SurfaceCard>
+        </View>
+      </View>
 
-        <HoverCard
-          style={styles.operationalCardWrap}
-          glow="amber"
+      <View style={styles.detailGrid}>
+        <SurfaceCard
+          accent="amber"
+          style={{ flexBasis: detailWidth as never, flexGrow: 1, minWidth: 0 }}
           accessibilityLabel="Upcoming bills timeline"
         >
           <View style={styles.sectionCardContent}>
             <SectionHeader
-              title="Upcoming Bills Timeline"
-              subtitle="What’s due next"
+              title="Upcoming Bills"
+              subtitle="The next unpaid occurrences"
               action="Manage"
               onAction={() => openBills("bills")}
             />
             <View style={styles.timelineList}>
               {upcoming.length ? (
                 upcoming.map((bill, index) => (
-                  <View
-                    key={`${bill.id}:${bill.displayMonth}`}
-                    style={styles.timelineRow}
-                  >
-                    <View style={styles.timelineRail}>
-                      <View
-                        style={[
-                          styles.timelineDot,
-                          index === 0 && styles.timelineDotActive,
-                        ]}
-                      />
-                      {index < upcoming.length - 1 ? (
-                        <View style={styles.timelineLine} />
-                      ) : null}
-                    </View>
-                    <View style={styles.timelineDateBlock}>
+                  <View key={bill.key} style={[styles.timelineRow, index > 0 && styles.rowDivider]}>
+                    <View style={styles.timelineDate}>
                       <Text style={styles.timelineMonth}>
-                        {new Date(bill.displayYear, bill.displayMonth, 1)
+                        {new Date(bill.year, bill.month, 1)
                           .toLocaleDateString("en-US", { month: "short" })
                           .toUpperCase()}
                       </Text>
-                      <Text style={styles.timelineDay}>{bill.due_day}</Text>
+                      <Text style={styles.timelineDay}>{bill.day}</Text>
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={styles.timelineName} numberOfLines={1}>
-                        {bill.name}
-                      </Text>
-                      <Text style={styles.timelineMeta}>
-                        {bill.is_debt
-                          ? "Debt payment"
-                          : bill.category || "Bill"}{" "}
-                        · {monthDay(bill.displayMonth, bill.due_day)}
+                      <Text style={styles.timelineName} numberOfLines={1}>{bill.name}</Text>
+                      <Text style={styles.timelineMeta} numberOfLines={1}>
+                        {bill.category} · {formatMonthDay(bill.year, bill.month, bill.day)}
+                        {bill.pending ? " · pending at bank" : ""}
                       </Text>
                     </View>
-                    <Text style={styles.timelineAmount}>
-                      {currency(bill.remaining, 2)}
-                    </Text>
+                    <Text style={styles.timelineAmount}>{currency(bill.amount, 2)}</Text>
                   </View>
                 ))
               ) : (
-                <EmptyState
-                  icon="calendar"
-                  text="No upcoming bills are waiting."
-                />
+                <EmptyState icon="calendar" text="No upcoming bills are waiting." />
               )}
             </View>
           </View>
-        </HoverCard>
-      </View>
+        </SurfaceCard>
 
-      <View style={styles.lowerGrid}>
-        <HoverCard
-          style={{ flexBasis: lowerWidth as never, flexGrow: 1, minWidth: 0 }}
-          glow="blue"
+        <SurfaceCard
+          accent="blue"
+          style={{ flexBasis: detailWidth as never, flexGrow: 1, minWidth: 0 }}
           accessibilityLabel="Budget categories"
         >
           <View style={styles.sectionCardContent}>
             <SectionHeader
               title="Budget Categories"
-              subtitle="This month’s spending pace"
+              subtitle={
+                settings.zeroBasedBudgetEnabled
+                  ? "The same category plan shown in your PWA"
+                  : "Zero-based budgeting is currently off"
+              }
               action="Open budget"
               onAction={() => go("/(tabs)/category-budget")}
             />
             <View style={styles.categoryList}>
-              {categoryRows.length ? (
-                categoryRows.map((row, index) => (
-                  <View key={row.category} style={styles.categoryRow}>
-                    <View style={styles.categoryLabelRow}>
-                      <View
-                        style={[
-                          styles.categoryDot,
-                          {
-                            backgroundColor:
-                              CATEGORY_COLORS[index % CATEGORY_COLORS.length],
-                          },
-                        ]}
-                      />
-                      <Text style={styles.categoryName} numberOfLines={1}>
-                        {row.category}
-                      </Text>
-                      <Text style={styles.categoryAmount}>
-                        {currency(row.spent)}{" "}
-                        <Text style={styles.categoryBudget}>
-                          / {currency(row.budgeted)}
-                        </Text>
-                      </Text>
-                    </View>
-                    <AnimatedProgress
-                      percent={row.percent}
-                      color={CATEGORY_COLORS[index % CATEGORY_COLORS.length]}
-                      height={5}
-                    />
-                  </View>
-                ))
-              ) : (
-                <EmptyState
-                  icon="pie-chart"
-                  text="Budget categories will fill in as activity arrives."
-                />
-              )}
-            </View>
-          </View>
-        </HoverCard>
-
-        <HoverCard
-          style={{ flexBasis: lowerWidth as never, flexGrow: 1, minWidth: 0 }}
-          glow="green"
-          accessibilityLabel="Goal progress"
-        >
-          <View style={styles.sectionCardContent}>
-            <SectionHeader
-              title="Goal Progress"
-              subtitle="Momentum toward what matters"
-              action="View goals"
-              onAction={() => go("/(tabs)/more", { section: "goals" })}
-            />
-            <View style={styles.goalSummary}>
-              <View>
-                <Text style={styles.goalSummaryValue}>
-                  {Math.round(goalPercent)}%
-                </Text>
-                <Text style={styles.goalSummaryLabel}>overall funded</Text>
-              </View>
-              <View style={styles.goalSummaryMoney}>
-                <Text style={styles.goalFunded}>
-                  {currency(goalTotals.current)}
-                </Text>
-                <Text style={styles.goalTarget}>
-                  of {currency(goalTotals.target)}
-                </Text>
-              </View>
-            </View>
-            <AnimatedProgress
-              percent={goalPercent}
-              color="#38d39f"
-              height={7}
-            />
-            <View style={styles.goalList}>
-              {goals.length ? (
-                goals.slice(0, 3).map((goal, index) => {
-                  const percent =
-                    goal.target_amount > 0
-                      ? Math.min(
-                          100,
-                          (goal.current_amount / goal.target_amount) * 100,
-                        )
-                      : 0;
+              {categoryPlan.length ? (
+                categoryPlan.slice(0, 5).map((row, index) => {
+                  const color =
+                    row.status === "over"
+                      ? BRAND.rose
+                      : row.status === "watch"
+                        ? BRAND.amber
+                        : CATEGORY_COLORS[index % CATEGORY_COLORS.length];
                   return (
-                    <View
-                      key={goal.id}
-                      style={[styles.goalRow, index > 0 && styles.listDivider]}
-                    >
-                      <View style={styles.goalIcon}>
-                        <Feather
-                          name={
-                            goal.goal_type === "savings" ? "shield" : "star"
-                          }
-                          size={14}
-                          color="#77e0b6"
-                        />
-                      </View>
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={styles.goalName} numberOfLines={1}>
-                          {goal.name}
-                        </Text>
-                        <Text style={styles.goalMeta}>
-                          {Math.round(percent)}% funded
+                    <View key={row.category} style={styles.categoryRow}>
+                      <View style={styles.categoryLabelRow}>
+                        <View style={[styles.categoryDot, { backgroundColor: color }]} />
+                        <Text style={styles.categoryName} numberOfLines={1}>{row.category}</Text>
+                        <Text style={styles.categoryAmount}>
+                          {currency(row.spent)} <Text style={styles.categoryBudget}>/ {currency(row.budgeted)}</Text>
                         </Text>
                       </View>
-                      <Text style={styles.goalAmount}>
-                        {currency(goal.current_amount)}
-                      </Text>
+                      <ProgressBar percent={row.percentUsed} color={color} height={5} />
                     </View>
                   );
                 })
               ) : (
                 <EmptyState
-                  icon="target"
-                  text="Add a goal to start tracking progress."
+                  icon="pie-chart"
+                  text={
+                    settings.zeroBasedBudgetEnabled
+                      ? "Your category plan will appear as budgets and activity are added."
+                      : "Turn on Zero-Based Budgeting to see category progress here."
+                  }
                 />
               )}
             </View>
           </View>
-        </HoverCard>
+        </SurfaceCard>
 
-        <HoverCard
-          style={{ flexBasis: lowerWidth as never, flexGrow: 1, minWidth: 0 }}
-          glow="purple"
-          accessibilityLabel="Quick actions"
+        <SurfaceCard
+          accent="green"
+          style={{ flexBasis: detailWidth as never, flexGrow: 1, minWidth: 0 }}
+          accessibilityLabel="Goal progress"
         >
           <View style={styles.sectionCardContent}>
             <SectionHeader
-              title="Quick Actions"
-              subtitle="Keep your plan up to date"
+              title="Goal Progress"
+              subtitle="Active goals from your shared plan"
+              action="View goals"
+              onAction={() => go("/(tabs)/more", { section: "goals" })}
             />
-            <View style={styles.quickGrid}>
-              {[
-                {
-                  label: "Add income",
-                  icon: "arrow-down-left" as const,
-                  color: "#45d6a0",
-                  onPress: () => go("/(tabs)/more", { section: "money" }),
-                },
-                {
-                  label: "Add bill",
-                  icon: "file-plus" as const,
-                  color: "#79a9ff",
-                  onPress: () => openBills("bills"),
-                },
-                {
-                  label: "Add debt",
-                  icon: "credit-card" as const,
-                  color: "#b794ff",
-                  onPress: () => openBills("debt"),
-                },
-                {
-                  label: "Add goal",
-                  icon: "target" as const,
-                  color: "#f27fc0",
-                  onPress: () => go("/(tabs)/more", { section: "goals" }),
-                },
-                {
-                  label: "Can I afford it?",
-                  icon: "help-circle" as const,
-                  color: "#fbbf55",
-                  onPress: () =>
-                    askFlo(
-                      "Can I afford a purchase? Help me choose a safe amount and date.",
-                    ),
-                },
-                {
-                  label: "Ask Flo",
-                  icon: "message-circle" as const,
-                  color: "#67e8f9",
-                  onPress: () => go("/(tabs)/flo"),
-                },
-              ].map((action) => (
-                <Pressable
-                  key={action.label}
-                  accessibilityRole="button"
-                  onPress={action.onPress}
-                  style={({ pressed }) => [
-                    styles.quickAction,
-                    {
-                      opacity: pressed ? 0.74 : 1,
-                      transform: [{ scale: pressed ? 0.98 : 1 }],
-                    },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.quickIcon,
-                      {
-                        backgroundColor: `${action.color}18`,
-                        borderColor: `${action.color}32`,
-                      },
-                    ]}
-                  >
-                    <Feather
-                      name={action.icon}
-                      size={16}
-                      color={action.color}
-                    />
-                  </View>
-                  <Text style={styles.quickLabel}>{action.label}</Text>
-                  <Feather name="chevron-right" size={13} color="#56637a" />
-                </Pressable>
-              ))}
+            <View style={styles.goalSummary}>
+              <View>
+                <Text style={styles.goalSummaryValue}>{Math.round(goalPercent)}%</Text>
+                <Text style={styles.goalSummaryLabel}>overall funded</Text>
+              </View>
+              <View style={styles.goalSummaryMoney}>
+                <Text style={styles.goalFunded}>{currency(goalTotals.current)}</Text>
+                <Text style={styles.goalTarget}>of {currency(goalTotals.target)}</Text>
+              </View>
+            </View>
+            <ProgressBar percent={goalPercent} color={BRAND.green} height={7} />
+            <View style={styles.goalList}>
+              {activeGoals.length ? (
+                activeGoals.slice(0, 3).map((goal, index) => {
+                  const percent =
+                    goal.target_amount > 0
+                      ? Math.min(100, (goal.current_amount / goal.target_amount) * 100)
+                      : 0;
+                  return (
+                    <View key={goal.id} style={[styles.goalRow, index > 0 && styles.rowDivider]}>
+                      <View style={styles.goalIcon}>
+                        <Feather
+                          name={goal.goal_type === "savings" ? "shield" : "star"}
+                          size={14}
+                          color="#6ee7b7"
+                        />
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.goalName} numberOfLines={1}>{goal.name}</Text>
+                        <Text style={styles.goalMeta}>{Math.round(percent)}% funded</Text>
+                      </View>
+                      <Text style={styles.goalAmount}>{currency(goal.current_amount)}</Text>
+                    </View>
+                  );
+                })
+              ) : (
+                <EmptyState icon="target" text="Add a goal to start tracking progress." />
+              )}
             </View>
           </View>
-        </HoverCard>
+        </SurfaceCard>
       </View>
 
       <View style={styles.footer}>
         <View style={styles.footerBrand}>
           <View style={styles.footerDot} />
-          <Text style={styles.footerText}>
-            FlowLedger Algo · Your plan updates with every change
-          </Text>
+          <Text style={styles.footerText}>FlowLedger Algo · one plan across web and PWA</Text>
         </View>
-        <Text style={styles.footerMeta}>
-          Forecast confidence: {forecastConfidence.label}
-        </Text>
+        <Text style={styles.footerMeta}>Forecast confidence: {forecastConfidence.label}</Text>
       </View>
     </ScrollView>
-  );
-}
-
-function EmptyState({ icon, text }: { icon: FeatherName; text: string }) {
-  return (
-    <View style={styles.emptyState}>
-      <View style={styles.emptyIcon}>
-        <Feather name={icon} size={16} color="#7786a0" />
-      </View>
-      <Text style={styles.emptyText}>{text}</Text>
-    </View>
   );
 }
 
@@ -1357,794 +1224,506 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "transparent" },
   content: {
     width: "100%",
-    maxWidth: 1680,
+    maxWidth: 1580,
     alignSelf: "center",
-    paddingHorizontal: 30,
+    paddingHorizontal: 26,
     paddingTop: 28,
-    paddingBottom: 44,
+    paddingBottom: 34,
+    gap: 16,
     position: "relative",
   },
-  dashboardAmbient: { ...StyleSheet.absoluteFillObject, overflow: "hidden" },
-  dashboardGlowOne: {
+  ambientLayer: { ...StyleSheet.absoluteFillObject, overflow: "hidden" },
+  ambientPurple: {
     position: "absolute",
-    width: 420,
-    height: 420,
-    borderRadius: 210,
-    top: 160,
-    left: -280,
-    backgroundColor: "rgba(59,130,246,0.07)",
-    shadowColor: "#2563eb",
-    shadowOpacity: 0.24,
+    width: 520,
+    height: 520,
+    borderRadius: 260,
+    top: -310,
+    right: 30,
+    backgroundColor: "rgba(124,58,237,0.08)",
+    shadowColor: BRAND.purple,
+    shadowOpacity: 0.22,
+    shadowRadius: 105,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  ambientBlue: {
+    position: "absolute",
+    width: 520,
+    height: 520,
+    borderRadius: 260,
+    top: 420,
+    left: -390,
+    backgroundColor: "rgba(37,99,235,0.07)",
+    shadowColor: BRAND.blue,
+    shadowOpacity: 0.2,
     shadowRadius: 110,
     shadowOffset: { width: 0, height: 0 },
   },
-  dashboardGlowTwo: {
+  ambientCyan: {
     position: "absolute",
-    width: 500,
-    height: 500,
-    borderRadius: 250,
-    top: 620,
-    right: -330,
-    backgroundColor: "rgba(124,58,237,0.08)",
-    shadowColor: "#7c3aed",
-    shadowOpacity: 0.24,
-    shadowRadius: 120,
+    width: 380,
+    height: 380,
+    borderRadius: 190,
+    bottom: 40,
+    right: -240,
+    backgroundColor: "rgba(34,211,238,0.05)",
+    shadowColor: BRAND.cyan,
+    shadowOpacity: 0.18,
+    shadowRadius: 100,
     shadowOffset: { width: 0, height: 0 },
   },
+  ambientGrid: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: "rgba(148,163,184,0.03)",
+  },
   pageHeader: {
-    minHeight: 78,
+    minHeight: 70,
     flexDirection: "row",
     alignItems: "center",
     gap: 20,
-    marginBottom: 24,
   },
-  eyebrowRow: {
+  greeting: {
+    color: BRAND.text,
+    fontSize: 27,
+    lineHeight: 34,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.8,
+  },
+  greetingSub: {
+    color: BRAND.muted,
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "Inter_500Medium",
+    marginTop: 4,
+  },
+  planStatus: {
+    minHeight: 44,
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
-    marginBottom: 7,
+    gap: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(34,197,94,0.18)",
+    backgroundColor: "rgba(34,197,94,0.06)",
   },
-  livePulse: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#22d3ee",
-    shadowColor: "#22d3ee",
-    shadowOpacity: 0.9,
+  planStatusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: BRAND.green,
+    shadowColor: BRAND.green,
+    shadowOpacity: 0.7,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 0 },
   },
-  pageEyebrow: {
-    color: "#7886a0",
-    fontSize: 9,
+  planStatusLabel: {
+    color: "#73dba6",
+    fontSize: 8,
     fontFamily: "Inter_800ExtraBold",
-    letterSpacing: 1.5,
+    letterSpacing: 1.1,
   },
-  greeting: {
-    color: "#f5f8fc",
-    fontSize: 28,
-    lineHeight: 33,
-    fontFamily: "Inter_800ExtraBold",
-    letterSpacing: -0.85,
+  planStatusValue: {
+    color: "#b5c3d8",
+    fontSize: 10,
+    fontFamily: "Inter_600SemiBold",
+    marginTop: 2,
   },
-  greetingSub: {
-    color: "#7d8aa2",
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    marginTop: 5,
-  },
-  monthPill: {
-    height: 40,
-    borderRadius: 13,
-    borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.14)",
-    backgroundColor: "rgba(15,23,42,0.58)",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 12,
-  },
-  monthPillText: {
-    color: "#b7c2d4",
-    fontSize: 11,
-    fontFamily: "Inter_700Bold",
-  },
-  metricGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 15,
-    marginBottom: 16,
-  },
+  cardPressable: { minWidth: 0 },
   card: {
     flex: 1,
-    minHeight: "100%",
-    borderRadius: 22,
+    minWidth: 0,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.13)",
-    backgroundColor: "rgba(10,16,35,0.80)",
-    padding: 18,
+    backgroundColor: BRAND.surface,
     overflow: "hidden",
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.12,
-    shadowRadius: 28,
+    shadowOpacity: 0.09,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 12 },
   },
-  cardGlowPurple: { shadowColor: "#7c3aed" },
-  cardGlowBlue: { shadowColor: "#2563eb" },
-  cardGlowGreen: { shadowColor: "#059669" },
-  cardGlowAmber: { shadowColor: "#d97706" },
-  metricTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 20,
+  cardAccent: {
+    position: "absolute",
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    top: -112,
+    right: -72,
+    shadowColor: "#ffffff",
+    shadowOpacity: 0.03,
+    shadowRadius: 45,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  metricCard: { minHeight: 126, padding: 16 },
+  metricHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  metricLabel: {
+    flex: 1,
+    color: "#a9b5c8",
+    fontSize: 9,
+    fontFamily: "Inter_800ExtraBold",
+    letterSpacing: 0.72,
   },
   metricIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  metricStatus: {
-    borderRadius: 999,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-  },
-  metricStatusDot: { width: 4, height: 4, borderRadius: 2 },
-  metricStatusText: {
-    fontSize: 7,
-    fontFamily: "Inter_800ExtraBold",
-    letterSpacing: 0.8,
-  },
-  metricLabel: {
-    color: "#8794aa",
-    fontSize: 9,
-    fontFamily: "Inter_800ExtraBold",
-    textTransform: "uppercase",
-    letterSpacing: 1.05,
-  },
   metricValue: {
-    color: "#f8fafc",
-    fontSize: 27,
-    lineHeight: 32,
+    color: "#ffffff",
+    fontSize: 23,
+    lineHeight: 29,
     fontFamily: "Inter_800ExtraBold",
-    letterSpacing: -0.75,
-    marginTop: 6,
+    letterSpacing: -0.7,
+    marginTop: 10,
   },
-  metricProgressWrap: { marginTop: 9, marginBottom: 1 },
+  metricProgress: { marginTop: 8 },
   metricDetail: {
-    color: "#6e7b92",
-    fontSize: 10,
-    lineHeight: 14,
+    color: "#8190a7",
+    fontSize: 9,
     fontFamily: "Inter_500Medium",
     marginTop: 7,
   },
   progressTrack: {
     width: "100%",
     borderRadius: 999,
-    backgroundColor: "rgba(148,163,184,0.13)",
+    backgroundColor: "rgba(148,163,184,0.14)",
     overflow: "hidden",
   },
   progressFill: {
     borderRadius: 999,
-    shadowColor: "#8b5cf6",
-    shadowOpacity: 0.7,
-    shadowRadius: 7,
+    shadowColor: "#ffffff",
+    shadowOpacity: 0.18,
+    shadowRadius: 5,
     shadowOffset: { width: 0, height: 0 },
   },
-  balanceScoreGrid: { flexDirection: "row", gap: 16, marginBottom: 16 },
-  balanceCardWrap: { flex: 1.25, minWidth: 0 },
-  scoreCardWrap: { flex: 1, minWidth: 0 },
-  balanceCardContent: { minHeight: 250, position: "relative" },
-  balanceHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-  },
+  primaryGrid: { flexDirection: "row", alignItems: "stretch", gap: 14 },
+  primaryGridStacked: { flexDirection: "column" },
+  primaryColumn: { flex: 1, minWidth: 0, gap: 14 },
+  accountCardWrap: { minHeight: 338 },
+  accountCard: { flex: 1, padding: 20 },
+  accountHeader: { flexDirection: "row", alignItems: "flex-start", gap: 14 },
   cardEyebrow: {
-    color: "#7e8da6",
+    color: "#a8b5ca",
     fontSize: 9,
     fontFamily: "Inter_800ExtraBold",
-    letterSpacing: 1.3,
-  },
-  balanceValue: {
-    color: "#ffffff",
-    fontSize: 43,
-    lineHeight: 50,
-    fontFamily: "Inter_800ExtraBold",
-    letterSpacing: -1.9,
-    marginTop: 9,
-  },
-  bankIcon: {
-    width: 39,
-    height: 39,
-    borderRadius: 13,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(59,130,246,0.13)",
-    borderWidth: 1,
-    borderColor: "rgba(96,165,250,0.17)",
-  },
-  balanceFooter: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 2,
-  },
-  balanceDelta: { flexDirection: "row", alignItems: "center", gap: 6 },
-  balanceDeltaText: { fontSize: 10, fontFamily: "Inter_700Bold" },
-  balanceUpdated: {
-    color: "#5f6d84",
-    fontSize: 9,
-    fontFamily: "Inter_500Medium",
-    marginTop: 6,
-  },
-  balanceChart: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 42,
-    height: 90,
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 7,
-    opacity: 0.9,
-  },
-  balanceChartBar: {
-    flex: 1,
-    borderTopLeftRadius: 4,
-    borderTopRightRadius: 4,
-    backgroundColor: "#4f7cff",
-  },
-  scoreCardContent: {
-    minHeight: 250,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  scoreCopy: { flex: 1, minWidth: 0 },
-  scoreTitle: {
-    color: "#f5f8fc",
-    fontSize: 24,
-    fontFamily: "Inter_800ExtraBold",
-    letterSpacing: -0.55,
-    marginTop: 7,
-  },
-  scoreDescription: {
-    color: "#8592a8",
-    fontSize: 10,
-    lineHeight: 15,
-    fontFamily: "Inter_500Medium",
-    marginTop: 8,
-    maxWidth: 230,
-  },
-  scoreStatusRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 13,
-  },
-  scoreStatusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#4ade80",
-    shadowColor: "#22c55e",
-    shadowOpacity: 0.9,
-    shadowRadius: 7,
-    shadowOffset: { width: 0, height: 0 },
-  },
-  scoreStatus: {
-    color: "#4ade80",
-    fontSize: 10,
-    fontFamily: "Inter_800ExtraBold",
-    textTransform: "uppercase",
     letterSpacing: 0.8,
   },
-  scoreHint: {
-    color: "#56647b",
-    fontSize: 8,
-    fontFamily: "Inter_600SemiBold",
-    marginTop: 7,
-  },
-  gaugeWrap: {
-    width: 174,
-    height: 174,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  gaugeCenter: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  gaugeScore: {
+  checkingValue: {
     color: "#ffffff",
-    fontSize: 42,
-    lineHeight: 47,
+    fontSize: 32,
+    lineHeight: 39,
     fontFamily: "Inter_800ExtraBold",
-    letterSpacing: -1.6,
+    letterSpacing: -1.1,
+    marginTop: 4,
   },
-  gaugeLabel: {
-    color: "#75839a",
-    fontSize: 8,
-    fontFamily: "Inter_800ExtraBold",
-    letterSpacing: 1,
+  accountMeta: {
+    color: "#8292aa",
+    fontSize: 10,
+    fontFamily: "Inter_500Medium",
+    marginTop: 4,
   },
-  stabilityWrap: { width: "100%", marginBottom: 16 },
-  stabilityCard: { minHeight: 350 },
-  stabilityHeader: { flexDirection: "row", alignItems: "center", gap: 11 },
-  stabilityIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(124,58,237,0.16)",
+  accountPills: { marginLeft: "auto", flexDirection: "row", gap: 7 },
+  accountPill: {
+    height: 30,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: "rgba(167,139,250,0.20)",
-  },
-  stabilityEyebrow: {
-    color: "#8b7ae0",
-    fontSize: 8,
-    fontFamily: "Inter_800ExtraBold",
-    letterSpacing: 1.3,
-  },
-  stabilityTitle: {
-    color: "#f4f7fb",
-    fontSize: 17,
-    fontFamily: "Inter_800ExtraBold",
-    marginTop: 3,
-  },
-  stabilityStatus: {
-    borderRadius: 999,
+    borderColor: "rgba(148,163,184,0.15)",
+    backgroundColor: "rgba(15,23,42,0.7)",
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    backgroundColor: "rgba(245,158,11,0.10)",
+    paddingHorizontal: 9,
+  },
+  floPill: {
+    borderColor: "rgba(159,92,255,0.25)",
+    backgroundColor: "rgba(124,58,237,0.12)",
+  },
+  accountPillText: { color: "#aab8cd", fontSize: 9, fontFamily: "Inter_700Bold" },
+  accountBody: { flex: 1, flexDirection: "row", alignItems: "stretch", gap: 18, marginTop: 18 },
+  balancePathWrap: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "rgba(245,158,11,0.18)",
+    borderColor: "rgba(47,111,255,0.15)",
+    backgroundColor: "rgba(2,6,23,0.36)",
+    padding: 14,
   },
-  stabilityStatusDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: "#fbbf24",
-  },
-  stabilityStatusText: {
-    color: "#fbbf55",
+  balancePathHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  balancePathLabel: {
+    flex: 1,
+    color: "#71829e",
     fontSize: 8,
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: 0.7,
   },
-  stabilitySummary: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 22,
-    marginTop: 24,
-  },
-  protectedMetric: {
+  savingsText: { color: "#76deb3", fontSize: 9, fontFamily: "Inter_700Bold" },
+  balanceBars: {
+    height: 82,
     flexDirection: "row",
     alignItems: "flex-end",
-    gap: 9,
-    minWidth: 180,
+    gap: 5,
+    paddingTop: 10,
   },
-  protectedValue: {
-    color: "#ffffff",
-    fontSize: 42,
-    lineHeight: 46,
-    fontFamily: "Inter_800ExtraBold",
-    letterSpacing: -1.8,
-  },
-  protectedLabel: {
-    color: "#d9e3f0",
-    fontSize: 14,
-    fontFamily: "Inter_800ExtraBold",
-    marginBottom: 2,
-  },
-  protectedSub: {
-    color: "#69778f",
-    fontSize: 9,
-    fontFamily: "Inter_600SemiBold",
-    marginBottom: 3,
-  },
-  stabilityDivider: {
-    width: 1,
-    height: 43,
-    backgroundColor: "rgba(148,163,184,0.13)",
-  },
-  stabilityMiniMetric: { flex: 1 },
-  stabilityMiniLabel: {
-    color: "#64728a",
-    fontSize: 8,
-    fontFamily: "Inter_800ExtraBold",
-    letterSpacing: 0.9,
-  },
-  stabilityMiniValue: {
-    color: "#dfe7f2",
-    fontSize: 14,
-    fontFamily: "Inter_800ExtraBold",
-    marginTop: 7,
-  },
-  stabilityCallout: {
-    minHeight: 42,
-    borderRadius: 13,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-    paddingHorizontal: 11,
-    marginTop: 18,
-    backgroundColor: "rgba(16,185,129,0.07)",
-    borderWidth: 1,
-    borderColor: "rgba(52,211,153,0.12)",
-  },
-  safeCheck: {
-    width: 24,
-    height: 24,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(16,185,129,0.13)",
-  },
-  stabilityCalloutText: {
+  balanceBar: {
     flex: 1,
-    color: "#9ed9c4",
-    fontSize: 10,
-    lineHeight: 14,
-    fontFamily: "Inter_600SemiBold",
+    minWidth: 3,
+    maxWidth: 14,
+    borderRadius: 999,
+    backgroundColor: BRAND.cyan,
+    shadowColor: BRAND.cyan,
+    shadowOpacity: 0.26,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 0 },
   },
-  pathHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 18,
-    marginBottom: 8,
-  },
-  pathLabel: { color: "#9ba8bc", fontSize: 10, fontFamily: "Inter_700Bold" },
-  pathPercent: {
-    color: "#d8d2ff",
-    fontSize: 10,
-    fontFamily: "Inter_800ExtraBold",
-  },
-  pathMilestones: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 7,
-  },
-  pathMilestone: { color: "#536078", fontSize: 8, fontFamily: "Inter_700Bold" },
-  nextActionRow: {
-    minHeight: 65,
-    borderRadius: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 11,
-    padding: 11,
-    marginTop: 16,
-    backgroundColor: "rgba(91,33,182,0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(139,92,246,0.18)",
-  },
-  nextActionIcon: {
-    width: 35,
-    height: 35,
-    borderRadius: 11,
+  balancePathFooter: { marginTop: 8 },
+  balanceSignal: { flexDirection: "row", alignItems: "center", gap: 6 },
+  balanceSignalText: { fontSize: 9, fontFamily: "Inter_700Bold" },
+  scoreSummary: {
+    width: 178,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(124,58,237,0.23)",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(159,92,255,0.16)",
+    backgroundColor: "rgba(2,6,23,0.3)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
   },
-  nextActionLabel: {
-    color: "#9988e9",
+  scoreRingWrap: { width: 142, height: 142, alignItems: "center", justifyContent: "center" },
+  scoreRingCenter: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
+  scoreValue: {
+    color: "#ffffff",
+    fontSize: 30,
+    lineHeight: 34,
+    fontFamily: "Inter_800ExtraBold",
+    letterSpacing: -1,
+  },
+  scoreLabel: {
+    color: "#aab6cb",
     fontSize: 7,
     fontFamily: "Inter_800ExtraBold",
-    letterSpacing: 1.1,
+    letterSpacing: 0.9,
+    marginTop: 1,
   },
-  nextActionText: {
-    color: "#e7e3ff",
-    fontSize: 11,
-    lineHeight: 15,
-    fontFamily: "Inter_700Bold",
-    marginTop: 4,
-  },
-  askFloButton: {
-    minHeight: 36,
-    borderRadius: 11,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 11,
-    backgroundColor: "#6d3bd1",
-    borderWidth: 1,
-    borderColor: "rgba(216,180,254,0.22)",
-  },
-  askFloText: {
-    color: "#ffffff",
-    fontSize: 9,
-    fontFamily: "Inter_800ExtraBold",
-  },
-  operationalGrid: { flexDirection: "row", gap: 16, marginBottom: 16 },
-  operationalCardWrap: { flex: 1, minWidth: 0 },
-  sectionCardContent: { minHeight: 286 },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    marginBottom: 13,
-  },
-  sectionTitle: {
-    color: "#edf3fb",
-    fontSize: 15,
-    fontFamily: "Inter_800ExtraBold",
-    letterSpacing: -0.25,
-  },
-  sectionSubtitle: {
-    color: "#68768d",
-    fontSize: 9,
+  scoreStatus: { color: "#63e6b1", fontSize: 11, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
+  scoreReason: {
+    color: "#7e8ca3",
+    fontSize: 8,
+    lineHeight: 12,
+    textAlign: "center",
     fontFamily: "Inter_500Medium",
     marginTop: 4,
   },
-  sectionAction: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingTop: 2,
-  },
-  sectionActionText: {
-    color: "#9caeff",
-    fontSize: 9,
-    fontFamily: "Inter_800ExtraBold",
-  },
+  recentCardWrap: { minHeight: 310 },
+  sectionCardContent: { flex: 1, padding: 18 },
+  sectionHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 12 },
+  sectionTitle: { color: BRAND.text, fontSize: 14, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.25 },
+  sectionSubtitle: { color: "#77879f", fontSize: 9, fontFamily: "Inter_500Medium", marginTop: 3 },
+  sectionAction: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 4 },
+  sectionActionText: { color: "#91a7c6", fontSize: 9, fontFamily: "Inter_700Bold" },
   activityList: { flex: 1 },
-  activityRow: {
-    minHeight: 47,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  listDivider: { borderTopWidth: 1, borderTopColor: "rgba(148,163,184,0.09)" },
+  activityRow: { minHeight: 49, flexDirection: "row", alignItems: "center", gap: 10 },
+  rowDivider: { borderTopWidth: 1, borderTopColor: "rgba(148,163,184,0.09)" },
   activityIcon: {
     width: 31,
     height: 31,
     borderRadius: 10,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  activityName: { color: "#dfe7f2", fontSize: 10, fontFamily: "Inter_700Bold" },
-  activityMeta: {
-    color: "#647188",
-    fontSize: 8,
-    fontFamily: "Inter_500Medium",
-    marginTop: 3,
-  },
+  activityName: { color: "#e8eef8", fontSize: 10, fontFamily: "Inter_700Bold" },
+  activityMeta: { color: "#6f7d94", fontSize: 8, fontFamily: "Inter_500Medium", marginTop: 2 },
   activityAmountWrap: { alignItems: "flex-end" },
   activityAmount: { fontSize: 10, fontFamily: "Inter_800ExtraBold" },
-  activityDate: {
-    color: "#5e6b82",
-    fontSize: 8,
-    fontFamily: "Inter_500Medium",
-    marginTop: 3,
-  },
-  timelineList: { flex: 1 },
-  timelineRow: {
-    minHeight: 47,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-  },
-  timelineRail: { width: 10, height: 47, alignItems: "center" },
-  timelineDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    marginTop: 20,
-    backgroundColor: "#56637a",
-    zIndex: 2,
-  },
-  timelineDotActive: {
-    backgroundColor: "#8b5cf6",
-    shadowColor: "#8b5cf6",
-    shadowOpacity: 0.9,
-    shadowRadius: 7,
-    shadowOffset: { width: 0, height: 0 },
-  },
-  timelineLine: {
-    position: "absolute",
-    top: 27,
-    bottom: -20,
-    width: 1,
-    backgroundColor: "rgba(148,163,184,0.13)",
-  },
-  timelineDateBlock: { width: 37, alignItems: "center" },
-  timelineMonth: {
-    color: "#66748b",
-    fontSize: 7,
-    fontFamily: "Inter_800ExtraBold",
-    letterSpacing: 0.6,
-  },
-  timelineDay: {
-    color: "#dce5f1",
-    fontSize: 14,
-    fontFamily: "Inter_800ExtraBold",
-    marginTop: 1,
-  },
-  timelineName: { color: "#dfe7f2", fontSize: 10, fontFamily: "Inter_700Bold" },
-  timelineMeta: {
-    color: "#647188",
-    fontSize: 8,
-    fontFamily: "Inter_500Medium",
-    marginTop: 3,
-  },
-  timelineAmount: {
-    color: "#eef4fc",
-    fontSize: 10,
-    fontFamily: "Inter_800ExtraBold",
-  },
-  lowerGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 16,
-    marginBottom: 16,
-  },
-  categoryList: { flex: 1, gap: 12, paddingTop: 2 },
-  categoryRow: { gap: 7 },
-  categoryLabelRow: { flexDirection: "row", alignItems: "center", gap: 7 },
-  categoryDot: { width: 6, height: 6, borderRadius: 3 },
-  categoryName: {
-    flex: 1,
-    color: "#ced8e6",
-    fontSize: 9,
-    fontFamily: "Inter_700Bold",
-  },
-  categoryAmount: {
-    color: "#dfe7f2",
-    fontSize: 9,
-    fontFamily: "Inter_800ExtraBold",
-  },
-  categoryBudget: { color: "#59667d", fontFamily: "Inter_600SemiBold" },
-  goalSummary: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    marginBottom: 11,
-  },
-  goalSummaryValue: {
-    color: "#ffffff",
-    fontSize: 28,
-    fontFamily: "Inter_800ExtraBold",
-    letterSpacing: -0.8,
-  },
-  goalSummaryLabel: {
-    color: "#66748b",
-    fontSize: 8,
-    fontFamily: "Inter_600SemiBold",
-    marginTop: 1,
-  },
-  goalSummaryMoney: { alignItems: "flex-end", paddingBottom: 2 },
-  goalFunded: {
-    color: "#5bd8aa",
-    fontSize: 11,
-    fontFamily: "Inter_800ExtraBold",
-  },
-  goalTarget: {
-    color: "#59667c",
-    fontSize: 8,
-    fontFamily: "Inter_600SemiBold",
-    marginTop: 2,
-  },
-  goalList: { marginTop: 10 },
-  goalRow: {
-    minHeight: 45,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-  },
-  goalIcon: {
-    width: 29,
-    height: 29,
-    borderRadius: 9,
+  activityDate: { color: "#627087", fontSize: 8, fontFamily: "Inter_500Medium", marginTop: 2 },
+  stabilityWrap: { minHeight: 458 },
+  stabilityCard: { flex: 1, padding: 20 },
+  stabilityHeader: { flexDirection: "row", alignItems: "center", gap: 11 },
+  stabilityIcon: {
+    width: 37,
+    height: 37,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(16,185,129,0.11)",
-  },
-  goalName: { color: "#d9e3f0", fontSize: 9, fontFamily: "Inter_700Bold" },
-  goalMeta: {
-    color: "#627087",
-    fontSize: 8,
-    fontFamily: "Inter_500Medium",
-    marginTop: 2,
-  },
-  goalAmount: {
-    color: "#c9d3e0",
-    fontSize: 9,
-    fontFamily: "Inter_800ExtraBold",
-  },
-  quickGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  quickAction: {
-    width: "48%",
-    minHeight: 54,
-    borderRadius: 13,
     borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.10)",
-    backgroundColor: "rgba(2,6,23,0.28)",
+    borderColor: "rgba(159,92,255,0.24)",
+    backgroundColor: "rgba(124,58,237,0.14)",
+  },
+  stabilityEyebrow: { color: "#55d7e8", fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.9 },
+  stabilityTitle: { color: "#f3f6fb", fontSize: 17, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
+  statusBadge: {
+    height: 26,
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 9,
+  },
+  statusRisk: { borderColor: "rgba(251,113,133,0.27)", backgroundColor: "rgba(251,113,133,0.08)" },
+  statusWatch: { borderColor: "rgba(251,191,36,0.25)", backgroundColor: "rgba(251,191,36,0.07)" },
+  statusSafe: { borderColor: "rgba(34,197,94,0.24)", backgroundColor: "rgba(34,197,94,0.07)" },
+  statusDot: { width: 5, height: 5, borderRadius: 3 },
+  statusText: { color: "#d5deea", fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.5 },
+  stabilitySummary: {
+    minHeight: 76,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 18,
+    marginTop: 16,
+  },
+  protectedMetric: { flexDirection: "row", alignItems: "flex-end", gap: 8 },
+  protectedValue: { color: "#ffffff", fontSize: 34, lineHeight: 38, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.2 },
+  protectedUnit: { color: "#dbe5f3", fontSize: 12, fontFamily: "Inter_700Bold" },
+  protectedSub: { color: "#718097", fontSize: 8, fontFamily: "Inter_500Medium", marginTop: 2 },
+  summaryDivider: { width: 1, height: 40, backgroundColor: "rgba(148,163,184,0.12)" },
+  summaryMetric: { flex: 1, minWidth: 0 },
+  summaryLabel: { color: "#49cae1", fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7 },
+  summaryValue: { color: "#e7edf7", fontSize: 11, fontFamily: "Inter_700Bold", marginTop: 5 },
+  stabilityCallout: {
+    minHeight: 38,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: "rgba(34,197,94,0.14)",
+    backgroundColor: "rgba(16,185,129,0.06)",
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 9,
+    paddingHorizontal: 10,
+    marginTop: 4,
   },
-  quickIcon: {
-    width: 29,
-    height: 29,
-    borderRadius: 9,
+  calloutIcon: { width: 22, height: 22, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(34,197,94,0.1)" },
+  stabilityCalloutText: { flex: 1, color: "#7be2b7", fontSize: 9, lineHeight: 13, fontFamily: "Inter_600SemiBold" },
+  pathHeader: { flexDirection: "row", alignItems: "center", marginTop: 15, marginBottom: 7 },
+  pathLabel: { flex: 1, color: "#9aa9bf", fontSize: 9, fontFamily: "Inter_700Bold" },
+  pathPercent: { color: "#d9e1ee", fontSize: 9, fontFamily: "Inter_800ExtraBold" },
+  pathMilestones: { flexDirection: "row", justifyContent: "space-between", marginTop: 6 },
+  pathMilestone: { color: "#65758e", fontSize: 8, fontFamily: "Inter_600SemiBold" },
+  nextAction: {
+    minHeight: 58,
+    borderRadius: 14,
     borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  quickLabel: {
-    flex: 1,
-    color: "#cdd7e5",
-    fontSize: 8,
-    lineHeight: 11,
-    fontFamily: "Inter_700Bold",
-  },
-  emptyState: {
-    minHeight: 130,
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 9,
-    borderRadius: 15,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: "rgba(148,163,184,0.12)",
-    backgroundColor: "rgba(2,6,23,0.18)",
-    padding: 16,
-  },
-  emptyIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 11,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(148,163,184,0.08)",
-  },
-  emptyText: {
-    color: "#66748b",
-    textAlign: "center",
-    fontSize: 9,
-    lineHeight: 13,
-    fontFamily: "Inter_600SemiBold",
-  },
-  footer: {
-    minHeight: 52,
+    borderColor: "rgba(159,92,255,0.22)",
+    backgroundColor: "rgba(124,58,237,0.11)",
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 16,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(148,163,184,0.08)",
-    marginTop: 5,
+    gap: 10,
+    padding: 10,
+    marginTop: 13,
   },
-  footerBrand: { flexDirection: "row", alignItems: "center", gap: 7 },
-  footerDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: "#8b5cf6",
+  nextActionIcon: { width: 31, height: 31, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(159,92,255,0.16)" },
+  nextActionLabel: { color: "#c8a8ff", fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7 },
+  nextActionText: { color: "#e9ddff", fontSize: 10, lineHeight: 14, fontFamily: "Inter_700Bold", marginTop: 2 },
+  floButton: {
+    height: 31,
+    borderRadius: 10,
+    backgroundColor: "#9f5cff",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
   },
-  footerText: {
-    color: "#56637a",
-    fontSize: 8,
-    fontFamily: "Inter_600SemiBold",
+  floButtonText: { color: "#ffffff", fontSize: 9, fontFamily: "Inter_800ExtraBold" },
+  howItWorks: {
+    minHeight: 32,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(47,111,255,0.17)",
+    backgroundColor: "rgba(47,111,255,0.05)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    marginTop: 9,
   },
-  footerMeta: {
-    color: "#56637a",
-    fontSize: 8,
-    fontFamily: "Inter_600SemiBold",
-    textTransform: "capitalize",
+  howItWorksText: { color: "#9db2d0", fontSize: 9, fontFamily: "Inter_700Bold" },
+  quickCardWrap: { minHeight: 190 },
+  quickGrid: { flexDirection: "row", gap: 9 },
+  quickAction: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 78,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.11)",
+    backgroundColor: "rgba(2,6,23,0.28)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
   },
+  quickIcon: { width: 34, height: 34, borderRadius: 11, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  quickLabel: { color: "#cbd5e1", fontSize: 8, fontFamily: "Inter_700Bold", marginTop: 7, textAlign: "center" },
+  quickFooter: { flexDirection: "row", gap: 8, marginTop: 10 },
+  quickFooterButton: {
+    flex: 1,
+    height: 31,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.1)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  quickFooterText: { color: "#9aa9be", fontSize: 8, fontFamily: "Inter_700Bold" },
+  detailGrid: { flexDirection: "row", flexWrap: "wrap", alignItems: "stretch", gap: 14 },
+  timelineList: { flex: 1 },
+  timelineRow: { minHeight: 55, flexDirection: "row", alignItems: "center", gap: 10 },
+  timelineDate: {
+    width: 39,
+    height: 39,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(251,191,36,0.18)",
+    backgroundColor: "rgba(251,191,36,0.07)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  timelineMonth: { color: "#d6a92d", fontSize: 6, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.5 },
+  timelineDay: { color: "#f5f7fb", fontSize: 14, lineHeight: 16, fontFamily: "Inter_800ExtraBold" },
+  timelineName: { color: "#e5ecf6", fontSize: 10, fontFamily: "Inter_700Bold" },
+  timelineMeta: { color: "#6f7d94", fontSize: 8, fontFamily: "Inter_500Medium", marginTop: 2 },
+  timelineAmount: { color: "#f2f5fa", fontSize: 10, fontFamily: "Inter_800ExtraBold" },
+  categoryList: { flex: 1, gap: 12 },
+  categoryRow: { gap: 6 },
+  categoryLabelRow: { flexDirection: "row", alignItems: "center", gap: 7 },
+  categoryDot: { width: 7, height: 7, borderRadius: 4 },
+  categoryName: { flex: 1, color: "#dce5f2", fontSize: 9, fontFamily: "Inter_700Bold" },
+  categoryAmount: { color: "#dce5f2", fontSize: 8, fontFamily: "Inter_700Bold" },
+  categoryBudget: { color: "#65758d", fontFamily: "Inter_500Medium" },
+  goalSummary: { flexDirection: "row", alignItems: "flex-end", marginBottom: 10 },
+  goalSummaryValue: { color: "#ffffff", fontSize: 28, lineHeight: 31, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.9 },
+  goalSummaryLabel: { color: "#718198", fontSize: 8, fontFamily: "Inter_500Medium", marginTop: 2 },
+  goalSummaryMoney: { marginLeft: "auto", alignItems: "flex-end" },
+  goalFunded: { color: "#72dfb0", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  goalTarget: { color: "#6f7d94", fontSize: 8, fontFamily: "Inter_500Medium", marginTop: 2 },
+  goalList: { marginTop: 9 },
+  goalRow: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 9 },
+  goalIcon: { width: 29, height: 29, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(34,197,94,0.1)" },
+  goalName: { color: "#e2eaf5", fontSize: 9, fontFamily: "Inter_700Bold" },
+  goalMeta: { color: "#718097", fontSize: 8, fontFamily: "Inter_500Medium", marginTop: 2 },
+  goalAmount: { color: "#cdd7e6", fontSize: 9, fontFamily: "Inter_800ExtraBold" },
+  emptyState: { flex: 1, minHeight: 126, alignItems: "center", justifyContent: "center", padding: 18 },
+  emptyIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(148,163,184,0.08)", marginBottom: 8 },
+  emptyText: { maxWidth: 260, color: "#718097", fontSize: 9, lineHeight: 14, textAlign: "center", fontFamily: "Inter_500Medium" },
+  footer: {
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 3,
+    marginTop: 2,
+  },
+  footerBrand: { flex: 1, flexDirection: "row", alignItems: "center", gap: 7 },
+  footerDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: BRAND.cyan },
+  footerText: { color: "#5f6d82", fontSize: 8, fontFamily: "Inter_600SemiBold" },
+  footerMeta: { color: "#5f6d82", fontSize: 8, fontFamily: "Inter_600SemiBold" },
 });
