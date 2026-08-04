@@ -216,7 +216,11 @@ test("keeps adding a credit card separate from syncing existing Plaid accounts",
   assert.match(plaidConnections, /Attach to an existing debt/);
   assert.match(plaidConnections, /Create new Debt &amp; Snowball account/);
   assert.match(plaidConnections, /api\/plaid\/attach-credit-card/);
+  assert.match(plaidConnections, /OPEN_OAUTH/);
+  assert.match(plaidConnections, /markPlaidOAuthAwaitingReturn/);
   assert.match(plaidOAuthResume, /receivedRedirectUri/);
+  assert.match(plaidOAuthResume, /readPendingPlaidOAuthSession/);
+  assert.match(plaidOAuthResume, /addEventListener\("focus"/);
   assert.match(plaidOAuthResume, /exchange-public-token/);
   assert.match(desktopDashboard, /Connect card/);
   assert.match(desktopDashboard, /section: "plaid"/);

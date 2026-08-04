@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase";
 import { useBudget } from "@/context/BudgetContext";
 import {
   clearPlaidOAuthSession,
+  markPlaidOAuthAwaitingReturn,
   savePlaidOAuthSession,
   takePlaidConnectionResult,
 } from "@/lib/plaidOAuth";
@@ -74,6 +75,7 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
     return takePlaidConnectionResult(window.localStorage);
   });
   const opened = useRef(false);
+  const linkUserId = useRef<string | null>(null);
   const busy = activeAction !== null;
 
   const loadStatus = useCallback(async () => {
@@ -96,6 +98,7 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
     setLinkToken(null);
     setActiveAction(null);
     opened.current = false;
+    linkUserId.current = null;
     setMessage(text);
   }, []);
 
@@ -135,7 +138,11 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
     if (typeof window !== "undefined") clearPlaidOAuthSession(window.localStorage);
     finish("Bank connection canceled. You can try again whenever you are ready.");
   }, [finish]);
-  const { ready, error, open } = usePlaidLink({ token: linkToken, onSuccess, onExit });
+  const onEvent = useCallback((eventName: string) => {
+    if (eventName !== "OPEN_OAUTH" || typeof window === "undefined" || !linkUserId.current) return;
+    markPlaidOAuthAwaitingReturn(window.localStorage, linkUserId.current);
+  }, []);
+  const { ready, error, open } = usePlaidLink({ token: linkToken, onSuccess, onExit, onEvent });
 
   useEffect(() => {
     if (!linkToken || !ready || opened.current) return;
@@ -176,7 +183,9 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
           householdId,
           userId: session.user.id,
           createdAt: Date.now(),
+          awaitingReturn: false,
         });
+        linkUserId.current = session.user.id;
       }
       setLinkToken(result.link_token);
     } catch (error) {

@@ -8,6 +8,7 @@ import { usePlaidLink } from "react-plaid-link";
 import { useAuth } from "@/context/AuthContext";
 import {
   clearPlaidOAuthSession,
+  readPendingPlaidOAuthSession,
   readPlaidOAuthSession,
   savePlaidConnectionResult,
 } from "@/lib/plaidOAuth";
@@ -15,10 +16,28 @@ import {
 export function PlaidOAuthResume() {
   const { session } = useAuth();
   const router = useRouter();
-  const [resume, setResume] = useState(() => {
+  const readResume = useCallback(() => {
     if (!session?.user.id || typeof window === "undefined") return null;
-    return readPlaidOAuthSession(window.localStorage, window.location.href, session.user.id);
-  });
+    const redirected = readPlaidOAuthSession(window.localStorage, window.location.href, session.user.id);
+    if (redirected) return redirected;
+    const pending = readPendingPlaidOAuthSession(window.localStorage, session.user.id);
+    return pending ? { ...pending, receivedRedirectUri: undefined } : null;
+  }, [session?.user.id]);
+  const [resume, setResume] = useState(readResume);
+
+  useEffect(() => {
+    const detectReturn = () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      setResume(current => current ?? readResume());
+    };
+    detectReturn();
+    window.addEventListener("focus", detectReturn);
+    document.addEventListener("visibilitychange", detectReturn);
+    return () => {
+      window.removeEventListener("focus", detectReturn);
+      document.removeEventListener("visibilitychange", detectReturn);
+    };
+  }, [readResume]);
 
   const finish = useCallback((message: string) => {
     if (typeof window !== "undefined") {
