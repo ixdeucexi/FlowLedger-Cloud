@@ -30,6 +30,10 @@ interface BiometricLockContextValue {
 
 const BiometricLockContext = createContext<BiometricLockContextValue | null>(null);
 
+const RECENT_UNLOCK_REUSE_MS = 15_000;
+let sharedUnlockAttempt: { credentialId: string; promise: Promise<boolean> } | null = null;
+let recentSuccessfulUnlock: { credentialId: string; completedAt: number } | null = null;
+
 async function canUsePlatformPasskeys(): Promise<boolean> {
   if (
     Platform.OS !== "web"
@@ -106,7 +110,6 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const backgroundedAt = useRef<number | null>(null);
-  const unlockAttempt = useRef<Promise<boolean> | null>(null);
   const userId = demoMode ? null : user?.id ?? null;
   const userLabel = user?.email ?? "FlowLedger user";
   const ready = userId === null || loadedUserId === userId;
@@ -229,14 +232,33 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
   }, [busy, saveLock, storedLock, userId]);
 
   const unlock = useCallback((): Promise<boolean> => {
-    if (unlockAttempt.current) return unlockAttempt.current;
     if (!enabled || !storedLock) return Promise.resolve(false);
+    const credentialId = storedLock.credentialId;
+    if (
+      recentSuccessfulUnlock?.credentialId === credentialId
+      && Date.now() - recentSuccessfulUnlock.completedAt < RECENT_UNLOCK_REUSE_MS
+    ) {
+      setLocked(false);
+      backgroundedAt.current = null;
+      return Promise.resolve(true);
+    }
+    if (sharedUnlockAttempt?.credentialId === credentialId) {
+      setBusy(true);
+      return sharedUnlockAttempt.promise.then(unlocked => {
+        if (unlocked) {
+          setLocked(false);
+          backgroundedAt.current = null;
+        }
+        return unlocked;
+      }).finally(() => setBusy(false));
+    }
 
     const attempt = (async () => {
       setBusy(true);
       setError(null);
       try {
-        await verifyDeviceCredential(storedLock.credentialId);
+        await verifyDeviceCredential(credentialId);
+        recentSuccessfulUnlock = { credentialId, completedAt: Date.now() };
         setLocked(false);
         backgroundedAt.current = null;
         return true;
@@ -248,15 +270,16 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
       }
     })();
 
-    unlockAttempt.current = attempt;
+    sharedUnlockAttempt = { credentialId, promise: attempt };
     void attempt.then(() => {
-      if (unlockAttempt.current === attempt) unlockAttempt.current = null;
+      if (sharedUnlockAttempt?.promise === attempt) sharedUnlockAttempt = null;
     });
     return attempt;
   }, [enabled, storedLock]);
 
   const lockNow = useCallback(() => {
     if (!enabled) return;
+    recentSuccessfulUnlock = null;
     setError(null);
     setLocked(true);
   }, [enabled]);
