@@ -85,6 +85,22 @@ test("Plaid OAuth can recover a fresh legacy handoff session from before return 
   );
 });
 
+test("Hosted Link completion is detected immediately when Plaid returns to the PWA", () => {
+  const storage = memoryStorage();
+  const now = Date.UTC(2026, 7, 4, 21, 30);
+  savePlaidOAuthSession(storage, {
+    linkToken: "hosted-link-token",
+    hostedSession: "encrypted-hosted-session",
+    intent: "credit_card",
+    householdId: "house-1",
+    userId: "user-1",
+    createdAt: now,
+    awaitingReturn: true,
+  });
+
+  assert.equal(readPendingPlaidOAuthSession(storage, "user-1", now)?.hostedSession, "encrypted-hosted-session");
+});
+
 test("Plaid connection result is shown once after the OAuth return", () => {
   const storage = memoryStorage();
   const now = Date.UTC(2026, 7, 4, 21, 30);
