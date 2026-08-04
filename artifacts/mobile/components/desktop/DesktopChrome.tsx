@@ -6,12 +6,14 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
 
 import { useAuth } from "@/context/AuthContext";
 import { useBudget, type DashboardFilter } from "@/context/BudgetContext";
+import { DesktopWorkspacePage } from "@/components/desktop/DesktopWorkspacePage";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 
@@ -76,13 +78,15 @@ function userInitials(name: string) {
 export function DesktopChrome({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const params = useGlobalSearchParams<{ section?: string }>();
+  const params = useGlobalSearchParams<{ section?: string; mode?: string }>();
   const { width } = useWindowDimensions();
   const { user, signOut } = useAuth();
   const { dashboardFilter, setDashboardFilter } = useBudget();
   const [collapsed, setCollapsed] = useState(width < 1180);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
     if (width < 1180) setCollapsed(true);
@@ -93,8 +97,15 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
   const section = Array.isArray(params.section)
     ? params.section[0]
     : params.section;
-  const sidebarWidth = collapsed ? 74 : 228;
+  const mode = Array.isArray(params.mode) ? params.mode[0] : params.mode;
+  const sidebarWidth = collapsed ? 76 : 244;
   const compactActions = width < 1120;
+  const websitePage = ["/bills", "/transactions", "/monthly", "/more"].includes(pathname);
+  const searchResults = searchQuery.trim()
+    ? NAVIGATION.filter((item) =>
+        item.label.toLowerCase().includes(searchQuery.trim().toLowerCase()),
+      ).slice(0, 5)
+    : NAVIGATION.slice(0, 5);
 
   const navigateTo = (item: NavigationItem) => {
     if (item.filter !== undefined) setDashboardFilter(item.filter);
@@ -111,6 +122,8 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
     }
     setNotificationsOpen(false);
     setProfileOpen(false);
+    setSearchOpen(false);
+    setSearchQuery("");
   };
 
   const isActive = (item: NavigationItem) => {
@@ -160,9 +173,80 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
           ) : null}
         </View>
 
-        <View style={styles.topbarCenter} />
+        <View style={styles.topbarCenter}>
+          <View style={styles.searchWrap}>
+            <Feather name="search" size={16} color="#69758d" />
+            <TextInput
+              accessibilityLabel="Search FlowLedger"
+              onFocus={() => setSearchOpen(true)}
+              onChangeText={setSearchQuery}
+              onSubmitEditing={() => {
+                if (searchResults[0]) navigateTo(searchResults[0]);
+              }}
+              placeholder="Search bills, goals, reports..."
+              placeholderTextColor="#66738a"
+              returnKeyType="go"
+              style={styles.searchInput}
+              value={searchQuery}
+            />
+            <View style={styles.searchShortcut}>
+              <Text style={styles.searchShortcutText}>⌘ K</Text>
+            </View>
+            {searchOpen ? (
+              <View style={styles.searchResults}>
+                <Text style={styles.searchResultEyebrow}>
+                  {searchQuery.trim() ? "Search results" : "Quick navigation"}
+                </Text>
+                {searchResults.length ? (
+                  searchResults.map((item) => (
+                    <Pressable
+                      key={`${item.label}-${item.pathname}`}
+                      onPress={() => navigateTo(item)}
+                      style={({ pressed }) => [
+                        styles.searchResult,
+                        { opacity: pressed ? 0.7 : 1 },
+                      ]}
+                    >
+                      <View style={styles.searchResultIcon}>
+                        <Feather name={item.icon} size={15} color="#b9a7ff" />
+                      </View>
+                      <Text style={styles.searchResultText}>{item.label}</Text>
+                      <Feather name="arrow-up-right" size={14} color="#65738b" />
+                    </Pressable>
+                  ))
+                ) : (
+                  <Text style={styles.searchEmpty}>No matching workspace page.</Text>
+                )}
+              </View>
+            ) : null}
+          </View>
+        </View>
 
         <View style={styles.topbarActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Add to your plan"
+            onPress={() =>
+              router.push({
+                pathname: "/(tabs)/more",
+                params: { section: "money" },
+              } as never)
+            }
+            style={({ pressed }) => [styles.addButton, { opacity: pressed ? 0.78 : 1 }]}
+          >
+            <Feather name="plus" size={17} color="#ffffff" />
+            {!compactActions ? <Text style={styles.addButtonText}>Add</Text> : null}
+          </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
+            onPress={() => navigateTo(NAVIGATION[NAVIGATION.length - 1])}
+            style={({ pressed }) => [styles.iconButton, { opacity: pressed ? 0.72 : 1 }]}
+          >
+            <Feather name="settings" size={18} color="#c7d2e6" />
+          </Pressable>
+
           <View style={styles.actionAnchor}>
             <Pressable
               accessibilityRole="button"
@@ -373,7 +457,33 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
           </View>
         </View>
 
-        <View style={styles.main}>{children}</View>
+        <View style={styles.main}>
+          {websitePage && mode !== "planner" ? (
+            <DesktopWorkspacePage
+              pathname={pathname}
+              section={section}
+              onOpenPlanner={() => router.setParams({ mode: "planner" } as never)}
+            />
+          ) : websitePage ? (
+            <View style={styles.plannerShell}>
+              <View style={styles.plannerToolbar}>
+                <View style={styles.plannerToolbarCopy}>
+                  <Text style={styles.plannerEyebrow}>PLANNER MODE</Text>
+                  <Text style={styles.plannerTitle}>Detailed editing workspace</Text>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => router.setParams({ mode: "" } as never)}
+                  style={({ pressed }) => [styles.returnButton, { opacity: pressed ? 0.72 : 1 }]}
+                >
+                  <Feather name="arrow-left" size={14} color="#b9c7da" />
+                  <Text style={styles.returnButtonText}>Return to website view</Text>
+                </Pressable>
+              </View>
+              <View style={styles.plannerContent}>{children}</View>
+            </View>
+          ) : children}
+        </View>
       </View>
     </View>
   );
@@ -428,7 +538,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
   },
   topbar: {
-    height: 64,
+    height: 72,
     flexDirection: "row",
     alignItems: "center",
     borderBottomWidth: 1,
@@ -460,7 +570,13 @@ const styles = StyleSheet.create({
     letterSpacing: -0.45,
   },
   brandAlgo: { color: "#bca7ff", fontFamily: "Inter_700Bold" },
-  topbarCenter: { flex: 1, minWidth: 80 },
+  topbarCenter: {
+    flex: 1,
+    minWidth: 80,
+    maxWidth: 720,
+    paddingHorizontal: 24,
+    zIndex: 80,
+  },
   searchWrap: {
     width: "100%",
     maxWidth: 620,
@@ -531,11 +647,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_700Bold",
   },
+  searchResultEyebrow: {
+    color: "#68758d",
+    fontSize: 9,
+    fontFamily: "Inter_800ExtraBold",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    paddingHorizontal: 10,
+    paddingTop: 7,
+    paddingBottom: 5,
+  },
+  searchEmpty: {
+    color: "#77859d",
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    paddingHorizontal: 10,
+    paddingVertical: 14,
+  },
   topbarActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingRight: 24,
+    paddingRight: 20,
     zIndex: 60,
   },
   actionAnchor: { position: "relative" },
@@ -687,6 +820,43 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(5,8,20,0.86)",
     overflow: "hidden",
   },
+  plannerShell: { flex: 1, backgroundColor: "#050816" },
+  plannerToolbar: {
+    minHeight: 64,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 18,
+    paddingHorizontal: 28,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(148,163,184,0.12)",
+    backgroundColor: "rgba(7,12,27,0.94)",
+  },
+  plannerToolbarCopy: { flex: 1, minWidth: 0 },
+  plannerEyebrow: {
+    color: "#8f7ae8",
+    fontSize: 8,
+    fontFamily: "Inter_800ExtraBold",
+    letterSpacing: 1.15,
+  },
+  plannerTitle: {
+    color: "#dce5f2",
+    fontSize: 12,
+    fontFamily: "Inter_700Bold",
+    marginTop: 2,
+  },
+  returnButton: {
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.14)",
+    backgroundColor: "rgba(15,23,42,0.72)",
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  returnButtonText: { color: "#b9c7da", fontSize: 9, fontFamily: "Inter_700Bold" },
+  plannerContent: { flex: 1 },
   sidebarNav: { flex: 1 },
   sidebarScroll: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 12 },
   sidebarLabel: {
