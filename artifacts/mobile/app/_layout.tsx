@@ -18,6 +18,7 @@ import { BiometricLockGate } from "@/components/BiometricLockGate";
 import { ConfirmActionModal } from "@/components/ConfirmActionModal";
 import { LegalAcceptanceGate } from "@/components/LegalAcceptanceGate";
 import { PwaInstallPrompt } from "@/components/PwaInstallPrompt";
+import { PlaidOAuthResume } from "@/components/PlaidOAuthResume";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { BiometricLockProvider, useBiometricLock } from "@/context/BiometricLockContext";
 import { BudgetProvider, useBudget } from "@/context/BudgetContext";
@@ -216,6 +217,7 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
                 <Stack.Screen name="(tabs)" />
               </Stack>
               <PwaInstallPrompt />
+              <PlaidOAuthResume />
               <ConfirmActionModal />
             </GestureHandlerRootView>
             <LegalAcceptanceGate />

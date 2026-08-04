@@ -7,6 +7,11 @@ import { usePlaidLink } from "react-plaid-link";
 
 import { supabase } from "@/lib/supabase";
 import { useBudget } from "@/context/BudgetContext";
+import {
+  clearPlaidOAuthSession,
+  savePlaidOAuthSession,
+  takePlaidConnectionResult,
+} from "@/lib/plaidOAuth";
 
 type Colors = {
   primary: string;
@@ -21,17 +26,22 @@ type Colors = {
 
 type Props = { colors: Colors; onConnected?: () => void };
 type LinkIntent = "bank" | "credit_card";
-type ActiveAction = LinkIntent | "sync" | null;
+type ActiveAction = LinkIntent | "sync" | `attach:${string}` | null;
 
 type Status = {
   items?: Array<{ institution_name?: string | null; status?: string | null; error_code?: string | null }>;
+  debt_options?: Array<{ id: string; name: string }>;
   accounts?: Array<{
+    id: string;
     name?: string | null;
     mask?: string | null;
     account_type?: string | null;
     current_balance?: number | null;
     minimum_payment_amount?: number | null;
     next_payment_due_date?: string | null;
+    linked_debt_id?: string | null;
+    linked_debt_name?: string | null;
+    include_in_snowball?: boolean;
   }>;
 };
 
@@ -59,7 +69,10 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>({});
   const [activeAction, setActiveAction] = useState<ActiveAction>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return takePlaidConnectionResult(window.localStorage);
+  });
   const opened = useRef(false);
   const busy = activeAction !== null;
 
@@ -102,6 +115,7 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.message || "Could not finish connecting this bank.");
+      if (typeof window !== "undefined") clearPlaidOAuthSession(window.localStorage);
       const connectedCreditCard = activeAction === "credit_card";
       finish(result.already_connected
         ? "That account is already connected. FlowLedger kept the existing secure connection."
@@ -117,7 +131,10 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
     }
   }, [activeAction, finish, householdId, loadStatus, onConnected]);
 
-  const onExit = useCallback(() => finish("Bank connection canceled. You can try again whenever you are ready."), [finish]);
+  const onExit = useCallback(() => {
+    if (typeof window !== "undefined") clearPlaidOAuthSession(window.localStorage);
+    finish("Bank connection canceled. You can try again whenever you are ready.");
+  }, [finish]);
   const { ready, error, open } = usePlaidLink({ token: linkToken, onSuccess, onExit });
 
   useEffect(() => {
@@ -128,6 +145,7 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
 
   useEffect(() => {
     if (!linkToken || !error) return;
+    if (typeof window !== "undefined") clearPlaidOAuthSession(window.localStorage);
     finish("Plaid could not open this connection. Please try again.");
   }, [error, finish, linkToken]);
 
@@ -151,12 +169,50 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.link_token) throw new Error(result.message || "Could not start secure bank linking.");
+      if (typeof window !== "undefined") {
+        savePlaidOAuthSession(window.localStorage, {
+          linkToken: result.link_token,
+          intent,
+          householdId,
+          userId: session.user.id,
+          createdAt: Date.now(),
+        });
+      }
       setLinkToken(result.link_token);
     } catch (error) {
       setActiveAction(null);
       setMessage(error instanceof Error ? error.message : "Could not start secure bank linking.");
     }
   }, [busy, householdId, linkToken]);
+
+  const attachCard = useCallback(async (accountRecordId: string, debtId?: string) => {
+    if (busy) return;
+    setActiveAction(`attach:${accountRecordId}`);
+    setMessage(null);
+    try {
+      const session = await getFreshSession();
+      if (!session) throw new Error("Please sign in again before attaching this card.");
+      const response = await fetch("/api/plaid/attach-credit-card", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+          "X-FlowLedger-Household-Id": householdId,
+        },
+        body: JSON.stringify({ plaid_account_record_id: accountRecordId, debt_id: debtId || undefined }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.message || "Could not add this card to Debt and Snowball.");
+      setMessage(`${result.debt_name || "Credit card"} is now included in Debt and Snowball.`);
+      await loadStatus();
+      onConnected?.();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not add this card to Debt and Snowball.");
+    } finally {
+      setActiveAction(null);
+    }
+  }, [busy, householdId, loadStatus, onConnected]);
 
   const sync = useCallback(async () => {
     if (busy) return;
@@ -189,15 +245,60 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
         {connected && <View style={[styles.status, { backgroundColor: `${colors.success}22` }]}><Text style={[styles.statusText, { color: colors.success }]}>Connected</Text></View>}
       </View>
       <Text style={[styles.note, { color: colors.mutedForeground }]}>Plaid keeps credentials with your bank. FlowLedger receives only the account and transaction data you approve.</Text>
-      {(status.accounts || []).filter(account => account.account_type === "credit").map((account, index) => (
-        <View key={`${account.name || "card"}-${account.mask || index}`} style={[styles.cardAccount, { borderColor: colors.border }]}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.cardAccountName, { color: colors.foreground }]}>{account.name || "Credit card"}{account.mask ? ` •••• ${account.mask}` : ""}</Text>
-            <Text style={[styles.cardAccountMeta, { color: colors.mutedForeground }]}>Minimum {account.minimum_payment_amount == null ? "pending bank update" : dollars(account.minimum_payment_amount)}{account.next_payment_due_date ? ` · due ${account.next_payment_due_date}` : ""}</Text>
+      {(status.accounts || []).filter(account => account.account_type === "credit").map((account, index) => {
+        const attached = Boolean(account.linked_debt_id && account.include_in_snowball);
+        const attaching = activeAction === `attach:${account.id}`;
+        return (
+          <View key={account.id || `${account.name || "card"}-${account.mask || index}`} style={[styles.cardAccount, { borderColor: colors.border }]}>
+            <View style={styles.cardAccountTop}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.cardAccountName, { color: colors.foreground }]}>{account.name || "Credit card"}{account.mask ? ` •••• ${account.mask}` : ""}</Text>
+                <Text style={[styles.cardAccountMeta, { color: colors.mutedForeground }]}>Minimum {account.minimum_payment_amount == null ? "pending bank update" : dollars(account.minimum_payment_amount)}{account.next_payment_due_date ? ` · due ${account.next_payment_due_date}` : ""}</Text>
+              </View>
+              <Text style={[styles.cardAccountBalance, { color: colors.foreground }]}>{dollars(account.current_balance)}</Text>
+            </View>
+            {attached ? (
+              <View style={[styles.debtStatus, { backgroundColor: `${colors.success}18`, borderColor: `${colors.success}33` }]}>
+                <Feather name="check-circle" size={14} color={colors.success} />
+                <Text style={[styles.debtStatusText, { color: colors.success }]}>{account.linked_debt_name || "Card"} is in Debt and Snowball</Text>
+              </View>
+            ) : (
+              <View style={styles.attachChoices}>
+                {(status.debt_options || []).length > 0 ? (
+                  <>
+                    <Text style={[styles.attachLabel, { color: colors.mutedForeground }]}>Attach to an existing debt</Text>
+                    <View style={styles.debtOptions}>
+                      {(status.debt_options || []).map(debt => (
+                        <Pressable
+                          key={debt.id}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Attach card to ${debt.name} and include it in Snowball`}
+                          disabled={busy}
+                          onPress={() => void attachCard(account.id, debt.id)}
+                          style={({ pressed }) => [styles.debtOption, { borderColor: colors.border, opacity: pressed || busy ? 0.7 : 1 }]}
+                        >
+                          {attaching ? <ActivityIndicator size="small" color={colors.primary} /> : <Feather name="link-2" size={14} color={colors.primary} />}
+                          <Text style={[styles.debtOptionText, { color: colors.foreground }]}>{debt.name}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </>
+                ) : null}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Create a Debt and Snowball account for ${account.name || "credit card"}`}
+                  disabled={busy}
+                  onPress={() => void attachCard(account.id)}
+                  style={({ pressed }) => [styles.attachButton, { borderColor: `${colors.primary}55`, backgroundColor: `${colors.primary}12`, opacity: pressed || busy ? 0.7 : 1 }]}
+                >
+                  {attaching ? <ActivityIndicator size="small" color={colors.primary} /> : <Feather name="plus-circle" size={15} color={colors.primary} />}
+                  <Text style={[styles.attachButtonText, { color: colors.primary }]}>Create new Debt &amp; Snowball account</Text>
+                </Pressable>
+              </View>
+            )}
           </View>
-          <Text style={[styles.cardAccountBalance, { color: colors.foreground }]}>{dollars(account.current_balance)}</Text>
-        </View>
-      ))}
+        );
+      })}
       {connected && <Text style={[styles.note, { color: colors.mutedForeground }]}>Connected credit cards update Debt and Snowball. Card purchases stay in category activity but do not reduce checking cash.</Text>}
       <View style={styles.connectHeading}>
         <Text style={[styles.connectTitle, { color: colors.foreground }]}>Add a new connection</Text>
@@ -252,10 +353,20 @@ const styles = StyleSheet.create({
   status: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
   statusText: { fontSize: 11, fontWeight: "700" },
   note: { fontSize: 13, lineHeight: 19 },
-  cardAccount: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 12, flexDirection: "row", alignItems: "center", gap: 12 },
+  cardAccount: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 12, gap: 10 },
+  cardAccountTop: { flexDirection: "row", alignItems: "center", gap: 12 },
   cardAccountName: { fontSize: 14, fontWeight: "700" },
   cardAccountMeta: { fontSize: 12, marginTop: 3 },
   cardAccountBalance: { fontSize: 14, fontWeight: "800" },
+  debtStatus: { minHeight: 36, borderRadius: 10, borderWidth: 1, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", gap: 7 },
+  debtStatusText: { fontSize: 12, fontWeight: "700" },
+  attachChoices: { gap: 8 },
+  attachLabel: { fontSize: 11, fontWeight: "700" },
+  debtOptions: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
+  debtOption: { minHeight: 36, borderRadius: 9, borderWidth: 1, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 6 },
+  debtOptionText: { fontSize: 12, fontWeight: "700" },
+  attachButton: { minHeight: 40, borderRadius: 10, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
+  attachButtonText: { fontSize: 13, fontWeight: "800" },
   connectHeading: { gap: 4 },
   connectTitle: { fontSize: 14, fontWeight: "800" },
   connectCopy: { fontSize: 12, lineHeight: 18 },

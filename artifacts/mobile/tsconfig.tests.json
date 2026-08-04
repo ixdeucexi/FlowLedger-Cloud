@@ -85,6 +85,8 @@
     ,"lib/settingsHub.test.ts"
     ,"lib/plaidActivity.ts"
     ,"lib/plaidActivity.test.ts"
+    ,"lib/plaidOAuth.ts"
+    ,"lib/plaidOAuth.test.ts"
     ,"lib/flowmentumHandoff.ts"
     ,"lib/flowmentumHandoff.test.ts"
     ,"lib/pushNotificationPreference.ts"
