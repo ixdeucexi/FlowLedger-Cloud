@@ -5,6 +5,7 @@ import { AppState, Platform } from "react-native";
 import { useAuth } from "@/context/AuthContext";
 import {
   assertionHasUserVerification,
+  biometricRpIdForHostname,
   biometricLockStorageKey,
   BIOMETRIC_UNLOCK_REUSE_MS,
   credentialIdFromBase64Url,
@@ -97,11 +98,17 @@ function randomChallenge(): ArrayBuffer {
   return challenge.buffer as ArrayBuffer;
 }
 
+function currentBiometricRpId(): string | undefined {
+  if (Platform.OS !== "web" || typeof window === "undefined") return undefined;
+  return biometricRpIdForHostname(window.location.hostname);
+}
+
 async function registerDeviceCredential(userId: string, userLabel: string): Promise<string> {
+  const rpId = currentBiometricRpId();
   const credential = await navigator.credentials.create({
     publicKey: {
       challenge: randomChallenge(),
-      rp: { name: "FlowLedger" },
+      rp: { name: "FlowLedger", ...(rpId ? { id: rpId } : {}) },
       user: {
         id: new TextEncoder().encode(userId).buffer as ArrayBuffer,
         name: userLabel,
@@ -125,9 +132,11 @@ async function registerDeviceCredential(userId: string, userLabel: string): Prom
 }
 
 async function verifyDeviceCredential(credentialId: string): Promise<void> {
+  const rpId = currentBiometricRpId();
   const credential = await navigator.credentials.get({
     publicKey: {
       challenge: randomChallenge(),
+      ...(rpId ? { rpId } : {}),
       allowCredentials: [{
         id: credentialIdFromBase64Url(credentialId),
         type: "public-key",
