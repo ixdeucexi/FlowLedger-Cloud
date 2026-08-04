@@ -859,9 +859,11 @@ export default function DashboardScreen() {
         lowestBalance: String(algorithmSuite.safeCushion.lowestBalance),
         safetyFloor: String(settings.safety_floor),
         confidence: forecastConfidence.label,
+        flowScore: String(algorithmSuite.flowScore.score),
+        flowScoreLabel: algorithmSuite.flowScore.label,
       },
     } as any);
-  }, [algorithmSuite.safeCushion.lowestBalance, algorithmSuite.stability, forecastConfidence.label, router, settings.safety_floor]);
+  }, [algorithmSuite.flowScore.label, algorithmSuite.flowScore.score, algorithmSuite.safeCushion.lowestBalance, algorithmSuite.stability, forecastConfidence.label, router, settings.safety_floor]);
   return (
     <ScrollView
       style={[styles.screen, styles.dashboardStage, { backgroundColor: dashboardTheme.screen }]}

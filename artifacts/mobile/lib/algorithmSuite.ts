@@ -1,6 +1,12 @@
 import { ALGORITHM_CATALOG, type AlgorithmId, type AlgorithmSettingsShape } from "./algorithmCatalog";
 import { buildStabilityProgress, STABILITY_POLICY, type StabilityProgress } from "./stability";
 import { isRequiredBill, normalizeBillImportance, type BillImportance } from "./billImportance";
+import {
+  FLOW_SCORE_CONFIDENCE_POINTS,
+  FLOW_SCORE_OVERDUE_BILL_PENALTY,
+  FLOW_SCORE_SPENDING_POINTS,
+  FLOW_SCORE_WEIGHTS,
+} from "./flowScorePolicy";
 
 export interface AlgorithmDailyBalance {
   day: number;
@@ -274,18 +280,22 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     },
     { safe: 0, watch: 0, risk: 0 },
   );
-  const safetyPoints = riskDayCounts.risk === 0 ? 30 : 0;
+  const safetyPoints = riskDayCounts.risk === 0 ? FLOW_SCORE_WEIGHTS.balanceSafety : 0;
   const billStandingPoints = overdueBills.length > 0
-    ? Math.max(0, 20 - overdueBills.length * 10)
-    : Math.round(billReadiness * 20);
+    ? Math.max(0, FLOW_SCORE_WEIGHTS.requiredBills - overdueBills.length * FLOW_SCORE_OVERDUE_BILL_PENALTY)
+    : Math.round(billReadiness * FLOW_SCORE_WEIGHTS.requiredBills);
   const reservePoints = stability.reserveTarget > 0
-    ? (stability.reserveProgress * 0.5 + stability.backupProgress * 0.5) * 20
+    ? (stability.reserveProgress * 0.5 + stability.backupProgress * 0.5) * FLOW_SCORE_WEIGHTS.backupProgress
     : 0;
   const forecastCoveragePoints = remainingBalances.length
-    ? Math.min(15, (stability.safeForecastDays / remainingBalances.length) * 15)
+    ? Math.min(FLOW_SCORE_WEIGHTS.safeForecastDays, (stability.safeForecastDays / remainingBalances.length) * FLOW_SCORE_WEIGHTS.safeForecastDays)
     : 0;
-  const confidencePoints = input.forecastConfidence.level === "high" ? 10 : input.forecastConfidence.level === "medium" ? 6 : 2;
-  const spendingPoints = categoryPressure.some(row => row.status === "over") ? 0 : categoryPressure.length ? 2 : 5;
+  const confidencePoints = FLOW_SCORE_CONFIDENCE_POINTS[input.forecastConfidence.level];
+  const spendingPoints = categoryPressure.some(row => row.status === "over")
+    ? FLOW_SCORE_SPENDING_POINTS.over
+    : categoryPressure.length
+      ? FLOW_SCORE_SPENDING_POINTS.pressure
+      : FLOW_SCORE_SPENDING_POINTS.clear;
   const flowScore = clamp(Math.round(
     safetyPoints + billStandingPoints + reservePoints + forecastCoveragePoints + confidencePoints + spendingPoints
   ), 0, 100);
@@ -1384,7 +1394,7 @@ function buildFlowScoreDetails(
 
   breakdownItems.push({
     label: "Safe Forecast Days",
-    value: `${Math.max(0, facts.remainingDays - facts.riskDays)}/${facts.remainingDays}`,
+    value: `${Math.min(facts.remainingDays, facts.stability.safeForecastDays)}/${facts.remainingDays}`,
     tone: facts.riskDays > 0 ? "risk" : "safe",
   });
   breakdownItems.push({

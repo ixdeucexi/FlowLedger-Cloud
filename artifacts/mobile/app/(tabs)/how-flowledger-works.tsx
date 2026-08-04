@@ -8,6 +8,7 @@ import { AppText } from "@/components/AppText";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { useColors } from "@/hooks/useColors";
 import { ALGORITHM_GUIDE, FLOWLEDGER_MONEY_RULES, STABILITY_PATH_GUIDE } from "@/lib/flowledgerGuide";
+import { FLOW_SCORE_GUIDE, FLOW_SCORE_MAX_POINTS } from "@/lib/flowScorePolicy";
 import type { StabilityStage } from "@/lib/stability";
 
 function param(value: string | string[] | undefined, fallback: string): string {
@@ -42,6 +43,8 @@ export default function HowFlowLedgerWorksScreen() {
     lowestBalance?: string;
     safetyFloor?: string;
     confidence?: string;
+    flowScore?: string;
+    flowScoreLabel?: string;
   }>();
 
   const stage = param(params.stage, "next_paycheck") as StabilityStage;
@@ -145,6 +148,27 @@ export default function HowFlowLedgerWorksScreen() {
         <CalculationRow label="Forecast confidence" value={param(params.confidence, "Building")} />
       </View>
 
+      <SectionHeader title="How the Flow Score is calculated" description="Six parts add up to 100. Your score changes when your real or planned money changes." />
+      <View style={[styles.sectionCard, { backgroundColor: c.card, borderColor: c.border }]}>
+        <View style={[styles.scoreSummary, { backgroundColor: c.primary + "12", borderColor: c.primary + "33" }]}>
+          <View>
+            <AppText tone="label" style={[styles.scoreSummaryLabel, { color: c.primary }]}>YOUR FLOW SCORE</AppText>
+            <AppText tone="number" style={[styles.scoreSummaryValue, { color: c.foreground }]}>{amount(params.flowScore)}/{FLOW_SCORE_MAX_POINTS}</AppText>
+          </View>
+          <AppText tone="title" style={[styles.scoreSummaryStatus, { color: c.primary }]}>{param(params.flowScoreLabel, "Building")}</AppText>
+        </View>
+        {FLOW_SCORE_GUIDE.map(item => (
+          <View key={item.id} style={[styles.scoreRow, { borderBottomColor: c.border }]}>
+            <View style={styles.scoreRowCopy}>
+              <AppText tone="title" style={[styles.scoreRowTitle, { color: c.foreground }]}>{item.label}</AppText>
+              <AppText style={[styles.scoreRowDescription, { color: c.mutedForeground }]}>{item.description}</AppText>
+            </View>
+            <AppText tone="number" style={[styles.scoreRowPoints, { color: c.primary }]}>up to {item.points}</AppText>
+          </View>
+        ))}
+        <AppText style={[styles.scoreFootnote, { color: c.mutedForeground }]}>Tap the Flow Score on Dashboard to see what is helping or lowering today&apos;s score.</AppText>
+      </View>
+
       <SectionHeader title="Money rules" description="These rules keep the same dollars from being mixed together or counted twice." />
       <View style={[styles.sectionCard, { backgroundColor: c.card, borderColor: c.border }]}>
         {FLOWLEDGER_MONEY_RULES.map(rule => (
@@ -241,6 +265,16 @@ const styles = StyleSheet.create({
   calculationRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
   calculationLabel: { flex: 1, fontSize: 11, lineHeight: 15, fontFamily: "Inter_600SemiBold" },
   calculationValue: { fontSize: 12, fontFamily: "Inter_700Bold", textAlign: "right" },
+  scoreSummary: { borderWidth: 1, borderRadius: 16, padding: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 4 },
+  scoreSummaryLabel: { fontSize: 8, fontFamily: "Inter_700Bold", letterSpacing: 0.8 },
+  scoreSummaryValue: { fontSize: 24, lineHeight: 29, fontFamily: "Inter_700Bold", marginTop: 2 },
+  scoreSummaryStatus: { fontSize: 13, fontFamily: "Inter_700Bold", textAlign: "right" },
+  scoreRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
+  scoreRowCopy: { flex: 1 },
+  scoreRowTitle: { fontSize: 12, lineHeight: 16, fontFamily: "Inter_700Bold" },
+  scoreRowDescription: { fontSize: 10, lineHeight: 15, marginTop: 2 },
+  scoreRowPoints: { minWidth: 50, fontSize: 10, lineHeight: 15, fontFamily: "Inter_700Bold", textAlign: "right" },
+  scoreFootnote: { fontSize: 10, lineHeight: 15, marginTop: 10 },
   ruleRow: { flexDirection: "row", alignItems: "flex-start", gap: 9, paddingVertical: 8 },
   ruleText: { flex: 1, fontSize: 12, lineHeight: 18, fontFamily: "Inter_600SemiBold" },
   algorithmGrid: { gap: 9 },
