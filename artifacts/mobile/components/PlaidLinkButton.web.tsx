@@ -20,6 +20,8 @@ type Colors = {
 };
 
 type Props = { colors: Colors; onConnected?: () => void };
+type LinkIntent = "bank" | "credit_card";
+type ActiveAction = LinkIntent | "sync" | null;
 
 type Status = {
   items?: Array<{ institution_name?: string | null; status?: string | null; error_code?: string | null }>;
@@ -56,9 +58,10 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
   const householdId = activeHousehold?.householdId ?? "";
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>({});
-  const [busy, setBusy] = useState(false);
+  const [activeAction, setActiveAction] = useState<ActiveAction>(null);
   const [message, setMessage] = useState<string | null>(null);
   const opened = useRef(false);
+  const busy = activeAction !== null;
 
   const loadStatus = useCallback(async () => {
     const session = await getFreshSession();
@@ -78,7 +81,7 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
 
   const finish = useCallback((text: string) => {
     setLinkToken(null);
-    setBusy(false);
+    setActiveAction(null);
     opened.current = false;
     setMessage(text);
   }, []);
@@ -99,18 +102,20 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.message || "Could not finish connecting this bank.");
-      setStatus((current) => ({ ...current, items: [{ institution_name: result.institution_name, status: result.status }] }));
+      const connectedCreditCard = activeAction === "credit_card";
       finish(result.already_connected
         ? "That account is already connected. FlowLedger kept the existing secure connection."
         : result.credit_card_debts_count > 0
           ? `${result.credit_card_debts_count} credit card${result.credit_card_debts_count === 1 ? "" : "s"} added to Debt and Snowball with live balances.`
-          : "Bank connected. Recent activity is syncing now.");
+          : connectedCreditCard
+            ? "Credit card connected. FlowLedger is syncing its balance, minimum payment, due date, and activity now."
+            : "Bank connected. Recent activity is syncing now.");
       onConnected?.();
-      void loadStatus();
+      await loadStatus();
     } catch (error) {
       finish(error instanceof Error ? error.message : "Could not finish connecting this bank.");
     }
-  }, [finish, householdId, loadStatus, onConnected]);
+  }, [activeAction, finish, householdId, loadStatus, onConnected]);
 
   const onExit = useCallback(() => finish("Bank connection canceled. You can try again whenever you are ready."), [finish]);
   const { ready, error, open } = usePlaidLink({ token: linkToken, onSuccess, onExit });
@@ -121,14 +126,19 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
     open();
   }, [linkToken, ready, open]);
 
-  const connect = useCallback(async () => {
+  useEffect(() => {
+    if (!linkToken || !error) return;
+    finish("Plaid could not open this connection. Please try again.");
+  }, [error, finish, linkToken]);
+
+  const connect = useCallback(async (intent: LinkIntent) => {
     if (busy || linkToken) return;
-    setBusy(true);
+    setActiveAction(intent);
     setMessage(null);
     opened.current = false;
     const session = await getFreshSession();
     if (!session) {
-      setBusy(false);
+      setActiveAction(null);
       setMessage("Please sign in again before connecting a bank.");
       return;
     }
@@ -137,19 +147,20 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}`, "X-FlowLedger-Household-Id": householdId },
-        body: "{}",
+        body: JSON.stringify({ intent }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.link_token) throw new Error(result.message || "Could not start secure bank linking.");
       setLinkToken(result.link_token);
     } catch (error) {
-      setBusy(false);
+      setActiveAction(null);
       setMessage(error instanceof Error ? error.message : "Could not start secure bank linking.");
     }
   }, [busy, householdId, linkToken]);
 
   const sync = useCallback(async () => {
-    setBusy(true);
+    if (busy) return;
+    setActiveAction("sync");
     setMessage(null);
     try {
       const session = await getFreshSession();
@@ -162,8 +173,8 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
       void loadStatus();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not sync bank activity.");
-    } finally { setBusy(false); }
-  }, [householdId, loadStatus, onConnected]);
+    } finally { setActiveAction(null); }
+  }, [busy, householdId, loadStatus, onConnected]);
 
   const item = status.items?.[0];
   const connected = Boolean(item);
@@ -188,12 +199,44 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
         </View>
       ))}
       {connected && <Text style={[styles.note, { color: colors.mutedForeground }]}>Connected credit cards update Debt and Snowball. Card purchases stay in category activity but do not reduce checking cash.</Text>}
+      <View style={styles.connectHeading}>
+        <Text style={[styles.connectTitle, { color: colors.foreground }]}>Add a new connection</Text>
+        <Text style={[styles.connectCopy, { color: colors.mutedForeground }]}>Choose what you want Plaid to connect. This does not replace or merely refresh your existing accounts.</Text>
+      </View>
       <View style={styles.actions}>
-        <Pressable disabled={busy} onPress={connect} style={({ pressed }) => [styles.button, { backgroundColor: colors.primary, opacity: pressed || busy ? 0.7 : 1 }]}>
-          {busy && !connected ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Feather name="link" size={16} color={colors.primaryForeground} />}
-          <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>{connected ? "Connect another bank" : "Connect bank"}</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Add a credit card through Plaid"
+          disabled={busy}
+          onPress={() => void connect("credit_card")}
+          style={({ pressed }) => [styles.button, { backgroundColor: colors.primary, opacity: pressed || busy ? 0.7 : 1 }]}
+        >
+          {activeAction === "credit_card" ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Feather name="credit-card" size={16} color={colors.primaryForeground} />}
+          <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Add credit card</Text>
         </Pressable>
-        {connected && <Pressable disabled={busy} onPress={sync} style={({ pressed }) => [styles.secondary, { borderColor: colors.border, opacity: pressed || busy ? 0.7 : 1 }]}><Feather name="refresh-cw" size={15} color={colors.primary} /><Text style={[styles.secondaryText, { color: colors.primary }]}>Sync now</Text></Pressable>}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Add a bank account through Plaid"
+          disabled={busy}
+          onPress={() => void connect("bank")}
+          style={({ pressed }) => [styles.secondary, { borderColor: colors.border, opacity: pressed || busy ? 0.7 : 1 }]}
+        >
+          {activeAction === "bank" ? <ActivityIndicator size="small" color={colors.primary} /> : <Feather name="plus-circle" size={15} color={colors.primary} />}
+          <Text style={[styles.secondaryText, { color: colors.primary }]}>Add bank account</Text>
+        </Pressable>
+        {connected && (
+          <Pressable
+            accessibilityRole="button"
+            disabled={busy}
+            onPress={() => void sync()}
+            style={({ pressed }) => [styles.syncButton, { borderColor: colors.border, opacity: pressed || busy ? 0.7 : 1 }]}
+          >
+            {activeAction === "sync"
+              ? <ActivityIndicator size="small" color={colors.mutedForeground} />
+              : <Feather name="refresh-cw" size={15} color={colors.mutedForeground} />}
+            <Text style={[styles.syncText, { color: colors.mutedForeground }]}>Sync existing accounts</Text>
+          </Pressable>
+        )}
       </View>
       {(message || error) && <Text style={[styles.message, { color: error ? colors.warning : colors.mutedForeground }]}>{error ? "Plaid could not open. Please try again." : message}</Text>}
     </View>
@@ -213,10 +256,15 @@ const styles = StyleSheet.create({
   cardAccountName: { fontSize: 14, fontWeight: "700" },
   cardAccountMeta: { fontSize: 12, marginTop: 3 },
   cardAccountBalance: { fontSize: 14, fontWeight: "800" },
+  connectHeading: { gap: 4 },
+  connectTitle: { fontSize: 14, fontWeight: "800" },
+  connectCopy: { fontSize: 12, lineHeight: 18 },
   actions: { gap: 10 },
   button: { minHeight: 48, borderRadius: 11, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
   buttonText: { fontSize: 15, fontWeight: "700" },
   secondary: { minHeight: 44, borderWidth: 1, borderRadius: 11, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7 },
   secondaryText: { fontSize: 14, fontWeight: "700" },
+  syncButton: { minHeight: 42, borderTopWidth: StyleSheet.hairlineWidth, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7 },
+  syncText: { fontSize: 13, fontWeight: "700" },
   message: { fontSize: 13, lineHeight: 19 },
 });

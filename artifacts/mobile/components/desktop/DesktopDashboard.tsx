@@ -792,6 +792,15 @@ export function DesktopDashboard() {
                 </View>
                 <View style={styles.accountPills}>
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Add a credit card"
+                    onPress={() => go("/(tabs)/more", { section: "plaid" })}
+                    style={({ pressed }) => [styles.accountPill, styles.connectPill, { opacity: pressed ? 0.7 : 1 }]}
+                  >
+                    <Feather name="credit-card" size={12} color="#8ddcff" />
+                    <Text style={[styles.accountPillText, { color: "#ccefff" }]}>Connect card</Text>
+                  </Pressable>
+                  <Pressable
                     onPress={() => go("/(tabs)/more", { section: "accounts" })}
                     style={({ pressed }) => [styles.accountPill, { opacity: pressed ? 0.7 : 1 }]}
                   >
@@ -1461,6 +1470,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(124,58,237,0.12)",
   },
   accountPillText: { color: "#aab8cd", fontSize: 9, fontFamily: "Inter_700Bold" },
+  connectPill: { borderColor: "rgba(56, 189, 248, 0.28)", backgroundColor: "rgba(14, 165, 233, 0.12)" },
   accountBody: { flex: 1, flexDirection: "row", alignItems: "center", gap: 16, marginTop: 5, overflow: "hidden" },
   accountGlow: {
     position: "absolute",
