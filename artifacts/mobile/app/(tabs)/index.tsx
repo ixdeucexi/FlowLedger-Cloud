@@ -580,7 +580,7 @@ function MobileDashboardScreen() {
   const {
     activePendingMatchIds,
     algorithmSuite,
-    checkingAccountBalance,
+    bankCurrentCheckingBalance,
     checkingPendingTransactions,
     currentGoals,
     decisionForecastDays,
@@ -592,7 +592,7 @@ function MobileDashboardScreen() {
     [activePendingMatchIds, checkingPendingTransactions],
   );
   // The hero is a bank snapshot. Forecasted balances belong on Monthly only.
-  const dashboardCheckingBalance = checkingAccountBalance;
+  const dashboardCheckingBalance = bankCurrentCheckingBalance;
 
   // ── Savings summary for back of hero card ──────────────────────────────────
   // ── Affordability check (real calendar projection) ──────────────────────────
