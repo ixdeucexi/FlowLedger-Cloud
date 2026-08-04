@@ -1,7 +1,7 @@
 import { connectedCheckingBalance, type ForecastConfidence } from "./accounts";
 import { buildAlgorithmSuite } from "./algorithmSuite";
 import type { BillImportance } from "./billImportance";
-import { isCashFlowTransaction } from "./billMatching";
+import { isCashFlowTransaction, isCheckingBalanceTransaction } from "./billMatching";
 import { buildCategoryPlan } from "./categoryPlanning";
 import { dateOnlyToLocalDate } from "./dateLabels";
 import { DEFAULT_DECISION_HUB_SETTINGS } from "./decisionHubSettings";
@@ -328,7 +328,10 @@ export function buildDashboardFinancialModel(input: DashboardFinancialModelInput
       interest_rate: bill.interest_rate,
     })),
     transactions: monthTransactions
-      .filter(isCashFlowTransaction)
+      .filter(transaction => isCashFlowTransaction(transaction) && (
+        transaction.amount < 0
+        || isCheckingBalanceTransaction(transaction, connectedBankAccounts)
+      ))
       .flatMap((transaction) => {
         const parts = transactionCategoryParts(transaction);
         if (parts.length === 0) {

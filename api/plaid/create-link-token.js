@@ -14,6 +14,7 @@ module.exports = async function createLinkToken(req, res) {
       user: { client_user_id: auth.user.id },
       client_name: "FlowLedger",
       products: [Products.Transactions],
+      additional_consented_products: [Products.Liabilities],
       country_codes: ["US"],
       language: "en",
       transactions: { days_requested: 90 },

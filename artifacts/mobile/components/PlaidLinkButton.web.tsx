@@ -23,8 +23,19 @@ type Props = { colors: Colors; onConnected?: () => void };
 
 type Status = {
   items?: Array<{ institution_name?: string | null; status?: string | null; error_code?: string | null }>;
-  accounts?: Array<{ name?: string | null; mask?: string | null }>;
+  accounts?: Array<{
+    name?: string | null;
+    mask?: string | null;
+    account_type?: string | null;
+    current_balance?: number | null;
+    minimum_payment_amount?: number | null;
+    next_payment_due_date?: string | null;
+  }>;
 };
+
+function dollars(value?: number | null) {
+  return `$${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
 
 async function getFreshSession() {
   const current = await supabase.auth.getSession();
@@ -91,7 +102,9 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
       setStatus((current) => ({ ...current, items: [{ institution_name: result.institution_name, status: result.status }] }));
       finish(result.already_connected
         ? "That account is already connected. FlowLedger kept the existing secure connection."
-        : "Bank connected. Recent activity is syncing now.");
+        : result.credit_card_debts_count > 0
+          ? `${result.credit_card_debts_count} credit card${result.credit_card_debts_count === 1 ? "" : "s"} added to Debt and Snowball with live balances.`
+          : "Bank connected. Recent activity is syncing now.");
       onConnected?.();
       void loadStatus();
     } catch (error) {
@@ -165,6 +178,16 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
         {connected && <View style={[styles.status, { backgroundColor: `${colors.success}22` }]}><Text style={[styles.statusText, { color: colors.success }]}>Connected</Text></View>}
       </View>
       <Text style={[styles.note, { color: colors.mutedForeground }]}>Plaid keeps credentials with your bank. FlowLedger receives only the account and transaction data you approve.</Text>
+      {(status.accounts || []).filter(account => account.account_type === "credit").map((account, index) => (
+        <View key={`${account.name || "card"}-${account.mask || index}`} style={[styles.cardAccount, { borderColor: colors.border }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.cardAccountName, { color: colors.foreground }]}>{account.name || "Credit card"}{account.mask ? ` •••• ${account.mask}` : ""}</Text>
+            <Text style={[styles.cardAccountMeta, { color: colors.mutedForeground }]}>Minimum {account.minimum_payment_amount == null ? "pending bank update" : dollars(account.minimum_payment_amount)}{account.next_payment_due_date ? ` · due ${account.next_payment_due_date}` : ""}</Text>
+          </View>
+          <Text style={[styles.cardAccountBalance, { color: colors.foreground }]}>{dollars(account.current_balance)}</Text>
+        </View>
+      ))}
+      {connected && <Text style={[styles.note, { color: colors.mutedForeground }]}>Connected credit cards update Debt and Snowball. Card purchases stay in category activity but do not reduce checking cash.</Text>}
       <View style={styles.actions}>
         <Pressable disabled={busy} onPress={connect} style={({ pressed }) => [styles.button, { backgroundColor: colors.primary, opacity: pressed || busy ? 0.7 : 1 }]}>
           {busy && !connected ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Feather name="link" size={16} color={colors.primaryForeground} />}
@@ -186,6 +209,10 @@ const styles = StyleSheet.create({
   status: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
   statusText: { fontSize: 11, fontWeight: "700" },
   note: { fontSize: 13, lineHeight: 19 },
+  cardAccount: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 12, flexDirection: "row", alignItems: "center", gap: 12 },
+  cardAccountName: { fontSize: 14, fontWeight: "700" },
+  cardAccountMeta: { fontSize: 12, marginTop: 3 },
+  cardAccountBalance: { fontSize: 14, fontWeight: "800" },
   actions: { gap: 10 },
   button: { minHeight: 48, borderRadius: 11, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
   buttonText: { fontSize: 15, fontWeight: "700" },

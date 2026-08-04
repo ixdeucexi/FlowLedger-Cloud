@@ -18,6 +18,9 @@ module.exports = async function plaidSync(req, res) {
     return res.status(200).json({
       ok: true,
       accounts_count: results.reduce((total, result) => total + result.accounts, 0),
+      credit_cards_count: results.reduce((total, result) => total + result.liabilities.cards, 0),
+      credit_card_debts_count: results.reduce((total, result) => total + result.liabilities.debts, 0),
+      liability_details_available: results.every(result => result.liabilities.available),
       transactions: results.reduce((totals, result) => ({
         added: totals.added + result.transactions.added,
         modified: totals.modified + result.transactions.modified,

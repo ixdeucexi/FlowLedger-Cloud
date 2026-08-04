@@ -197,6 +197,13 @@ export interface ConnectedBankAccount {
   account_subtype?: string;
   current_balance: number;
   available_balance?: number;
+  minimum_payment_amount?: number;
+  next_payment_due_date?: string;
+  last_statement_balance?: number;
+  last_statement_issue_date?: string;
+  is_overdue?: boolean;
+  purchase_apr?: number;
+  liability_last_synced_at?: string;
   is_active: boolean;
   updated_at?: string;
 }
@@ -864,6 +871,9 @@ function normalizeConnectedBankRows(rows: any[]): ConnectedBankAccount[] {
     ...account,
     current_balance: Number(account.current_balance || 0),
     available_balance: account.available_balance == null ? undefined : Number(account.available_balance),
+    minimum_payment_amount: account.minimum_payment_amount == null ? undefined : Number(account.minimum_payment_amount),
+    last_statement_balance: account.last_statement_balance == null ? undefined : Number(account.last_statement_balance),
+    purchase_apr: account.purchase_apr == null ? undefined : Number(account.purchase_apr),
     is_active: account.is_active !== false,
   }));
 }
@@ -1265,7 +1275,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
                 applyHouseholdSelect(supabase.from("accounts").select("*"), uid).order("created_at"),
                 applyHouseholdSelect(
                   supabase.from("plaid_accounts")
-                    .select("id,name,official_name,mask,persistent_account_id,account_type,account_subtype,current_balance,available_balance,is_active,updated_at")
+                    .select("id,name,official_name,mask,persistent_account_id,account_type,account_subtype,current_balance,available_balance,minimum_payment_amount,next_payment_due_date,last_statement_balance,last_statement_issue_date,is_overdue,purchase_apr,liability_last_synced_at,is_active,updated_at")
                     .eq("is_active", true)
                     .order("name"),
                   uid,
@@ -1378,7 +1388,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const requestId = ++bankRefreshRequestRef.current;
     const uid = user.id;
     const scope = householdScopeRef.current;
-    const [transactionResult, pendingResult, pendingPlanResult, accountResult, connectedAccountResult, settingsResult] = await Promise.all([
+    const [billResult, transactionResult, pendingResult, pendingPlanResult, accountResult, connectedAccountResult, settingsResult] = await Promise.all([
+      applyHouseholdSelect(supabase.from("bills").select("*"), uid),
       applyHouseholdSelect(supabase.from("transactions").select("*"), uid),
       applyHouseholdSelect(
         supabase.from("plaid_transactions")
@@ -1398,7 +1409,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       applyHouseholdSelect(supabase.from("accounts").select("*"), uid).order("created_at"),
       applyHouseholdSelect(
         supabase.from("plaid_accounts")
-          .select("id,name,official_name,mask,persistent_account_id,account_type,account_subtype,current_balance,available_balance,is_active,updated_at")
+          .select("id,name,official_name,mask,persistent_account_id,account_type,account_subtype,current_balance,available_balance,minimum_payment_amount,next_payment_due_date,last_statement_balance,last_statement_issue_date,is_overdue,purchase_apr,liability_last_synced_at,is_active,updated_at")
           .eq("is_active", true)
           .order("name"),
         uid,
@@ -1406,6 +1417,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       loadScopedSettings(uid, scope),
     ]);
     if (requestId !== bankRefreshRequestRef.current || scope?.householdId !== householdScopeRef.current?.householdId) return;
+    if (!billResult.error) {
+      setBills(reorderDebtPriorities((billResult.data ?? []).map(normalizeBillRow)));
+    }
     if (!transactionResult.error) {
       const transactionCollections = splitTransactionRows(transactionResult.data ?? []);
       setTransactions(transactionCollections.active);

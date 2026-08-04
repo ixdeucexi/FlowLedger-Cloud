@@ -78,6 +78,27 @@ test("transfer counts only on the checking side", () => {
   assert.equal(ledger.cashByDate.get("2026-07-28"), -100);
 });
 
+test("credit-card purchases remain visible spending without changing checking cash", () => {
+  const purchase = {
+    id: "card-purchase",
+    date: "2026-08-04",
+    amount: -72.15,
+    source: "plaid",
+    plaid_account_id: "card-1",
+    review_status: "categorized",
+  };
+  const ledger = buildTransactionLedger([purchase], [purchase], [...checking, {
+    plaid_account_id: "card-1",
+    account_type: "credit",
+    account_subtype: "credit card",
+    is_active: true,
+  }]);
+  assert.deepEqual(ledger.visibleTransactions.map(transaction => transaction.id), ["card-purchase"]);
+  assert.equal(ledger.visibleCheckingTransactions.length, 0);
+  assert.equal(ledger.cashTransactions.length, 0);
+  assert.equal(ledger.cashByDate.size, 0);
+});
+
 test("matched plans are replaced and partial matches leave only the open amount", () => {
   assert.equal(remainingPlannedAmount(100), 100);
   assert.equal(remainingPlannedAmount(100, { amount: 100, settlement: "exact" }), 0);

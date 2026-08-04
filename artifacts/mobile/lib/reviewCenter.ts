@@ -21,6 +21,7 @@ export interface ReviewTransactionLike {
   category: string;
   merchant_name?: string;
   source?: string;
+  plaid_account_id?: string;
   review_status?: string;
   review_resolution?: string;
   review_allocations?: ReviewAllocationLike[];

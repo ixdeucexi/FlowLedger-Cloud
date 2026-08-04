@@ -67,6 +67,9 @@ module.exports = async function exchangePublicToken(req, res) {
       status: sync.duplicate ? "already_connected" : "connected",
       already_connected: Boolean(sync.duplicate),
       accounts_count: sync.accounts,
+      credit_cards_count: sync.liabilities.cards,
+      credit_card_debts_count: sync.liabilities.debts,
+      liability_details_available: sync.liabilities.available,
       transactions_count: sync.transactions.added + sync.transactions.modified,
       transactions_pending: Boolean(sync.transactions_pending),
     });

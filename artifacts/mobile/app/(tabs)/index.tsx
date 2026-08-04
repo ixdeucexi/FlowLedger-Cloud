@@ -28,6 +28,7 @@ import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { applyCategoryBudgetMove, buildZeroBudgetSummary } from "@/lib/categoryPlanning";
 import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets as saveCategoryBudgetsRemote, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
 import { buildDashboardFinancialModel } from "@/lib/dashboardFinancialModel";
+import { isCheckingBalanceTransaction } from "@/lib/billMatching";
 import { dateOnlyToLocalDate } from "@/lib/dateLabels";
 import {
   FLOWMENTUM_URL,
@@ -499,7 +500,9 @@ function MobileDashboardScreen() {
   const zeroBudgetLeftToAssign = zeroBudgetSummary.leftToAssign;
   const postedIncome = settings.zeroBasedBudgetEnabled
     ? getTransactionsForMonth(currentMonth, selectedYear)
-      .filter(transaction => transaction.amount > 0 && transaction.review_status !== "transfer")
+      .filter(transaction => transaction.amount > 0
+        && transaction.review_status !== "transfer"
+        && isCheckingBalanceTransaction(transaction, connectedBankAccounts))
       .reduce((sum, transaction) => sum + transaction.amount, 0)
     : 0;
   const persistCategoryBudgets = (next: Record<string, number>) => {

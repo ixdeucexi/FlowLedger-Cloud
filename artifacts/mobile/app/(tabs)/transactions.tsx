@@ -26,7 +26,7 @@ import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { debtPaymentStatusLabel } from "@/lib/forecastDisplay";
-import { canMatchExpenseToBill, confirmedBillMatchId, confirmedBillMatchOccurrenceDate, isCashFlowTransaction, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "@/lib/billMatching";
+import { canMatchExpenseToBill, confirmedBillMatchId, confirmedBillMatchOccurrenceDate, isCashFlowTransaction, isCheckingBalanceTransaction, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "@/lib/billMatching";
 import { activityAmountOutsidePlannedBill, listActivityMonths, summarizeActivityMonth } from "@/lib/monthlySummary";
 import { isValidDateInMonth } from "@/lib/schedule";
 import type { SnowballProjectionResult } from "@/lib/snowball";
@@ -157,7 +157,7 @@ export function ActivityScreen() {
   const { isFeatureLocked, bypassFeature } = useMembership();
   const {
     transactions, pendingBankTransactions, pendingPlanMatches, addTransaction, updateTransaction, deleteTransaction, deleteTransfer,
-    bills, incomes, goals, overrides, extraPayments, categories, settings,
+    bills, incomes, goals, overrides, extraPayments, categories, settings, connectedBankAccounts,
     getIncomeOccurrencesInMonth, getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal,
     matchTransactionToBill, unmatchTransactionFromBill, matchPendingTransactionToBill, removePendingPlanMatch,
     reconcileTransaction, undoTransactionReconciliation, removeReviewSurplusFunding,
@@ -517,7 +517,8 @@ export function ActivityScreen() {
           pending: item.pending,
           excludeFromCashFlow: (item.source === "bill_payment" && !item.rawTx)
             || item.source === "transfer"
-            || Boolean(item.rawTx && !isCashFlowTransaction(item.rawTx)),
+            || Boolean(item.rawTx && !isCashFlowTransaction(item.rawTx))
+            || Boolean(item.rawTx && item.rawTx.amount > 0 && !isCheckingBalanceTransaction(item.rawTx, connectedBankAccounts)),
         })),
         ...plannedBillEntries,
       ],
@@ -534,7 +535,7 @@ export function ActivityScreen() {
           : `${MONTH_NAMES_LONG[monthIndex]} ${week.startDay}–${week.endDay}`,
       })),
     };
-  }, [allActivity, getBillEffectiveMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, monthFilter]);
+  }, [allActivity, connectedBankAccounts, getBillEffectiveMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, monthFilter]);
 
   const feedOrderLabel = hasActiveFilters
     ? (sortOrder === "asc" ? "oldest first" : "newest first")

@@ -6,6 +6,10 @@ function shouldSyncTransactionWebhook(type, code) {
   return type === "TRANSACTIONS" && code === "SYNC_UPDATES_AVAILABLE";
 }
 
+function shouldSyncLiabilityWebhook(type, code) {
+  return type === "LIABILITIES" && code === "DEFAULT_UPDATE";
+}
+
 async function plaidWebhook(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "METHOD_NOT_ALLOWED" });
   const payload = typeof req.body === "string" ? (() => { try { return JSON.parse(req.body); } catch { return {}; } })() : (req.body || {});
@@ -28,7 +32,7 @@ async function plaidWebhook(req, res) {
     // Transactions Sync emits SYNC_UPDATES_AVAILABLE alongside legacy
     // DEFAULT_UPDATE / TRANSACTIONS_REMOVED webhooks. Sync once for the
     // cursor-based event so the same update cannot start overlapping imports.
-    if (shouldSyncTransactionWebhook(type, code)) {
+    if (shouldSyncTransactionWebhook(type, code) || shouldSyncLiabilityWebhook(type, code)) {
       const result = await syncItem({ userId: item.user_id, item });
       console.log("[plaid:webhook] sync completed", {
         type,
@@ -51,3 +55,4 @@ async function plaidWebhook(req, res) {
 
 module.exports = plaidWebhook;
 module.exports.shouldSyncTransactionWebhook = shouldSyncTransactionWebhook;
+module.exports.shouldSyncLiabilityWebhook = shouldSyncLiabilityWebhook;

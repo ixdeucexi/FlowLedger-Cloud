@@ -61,6 +61,18 @@ test("only the checking side of a reviewed transfer changes the checking forecas
   assert.equal(isCheckingBalanceTransaction({ source: "plaid", plaid_account_id: "checking-1", review_status: "needs_review", pending: true }, accounts), false);
 });
 
+test("credit-card and savings activity stays out of checking cash", () => {
+  const accounts = [
+    { plaid_account_id: "checking-1", account_type: "depository", account_subtype: "checking", is_active: true },
+    { plaid_account_id: "savings-1", account_type: "depository", account_subtype: "savings", is_active: true },
+    { plaid_account_id: "card-1", account_type: "credit", account_subtype: "credit card", is_active: true },
+  ];
+  assert.equal(isCheckingBalanceTransaction({ source: "plaid", plaid_account_id: "checking-1", review_status: "categorized" }, accounts), true);
+  assert.equal(isCheckingBalanceTransaction({ source: "plaid", plaid_account_id: "savings-1", review_status: "categorized" }, accounts), false);
+  assert.equal(isCheckingBalanceTransaction({ source: "plaid", plaid_account_id: "card-1", review_status: "needs_review" }, accounts), false);
+  assert.equal(isCheckingForecastLedgerTransaction({ source: "plaid", plaid_account_id: "card-1", review_status: "categorized" }, accounts), false);
+});
+
 test("forecast ledger keeps hidden posted bank money without reviving manual or pending rows", () => {
   const accounts = [
     { plaid_account_id: "checking-1", account_type: "depository", account_subtype: "checking", is_active: true },

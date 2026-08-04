@@ -2,15 +2,98 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 const {
+  creditCardDebtValues,
   duplicatePlaidAccountIds,
   editablePlaidFields,
   plaidAccountIdentity,
+  isCreditAccount,
+  isCreditCardPaymentTransaction,
+  isLiabilitiesUnavailable,
   persistCanonicalPlaidTransaction,
   stablePlaidFingerprint,
   shouldImportPlaidTransaction,
   shouldQueuePendingNotification,
   shouldQueuePostedNotification,
 } = require("./sync");
+
+test("Plaid credit liabilities become the live Snowball debt values", () => {
+  const values = creditCardDebtValues({
+    account: {
+      name: "Freedom Unlimited",
+      mask: "4242",
+      balances: { current: 3842.19 },
+    },
+    liability: {
+      minimum_payment_amount: 117,
+      next_payment_due_date: "2026-08-27",
+      last_statement_balance: 3650.12,
+      last_statement_issue_date: "2026-08-02",
+      is_overdue: false,
+      aprs: [{ apr_type: "purchase_apr", apr_percentage: 24.49 }],
+    },
+    existingBill: null,
+  });
+
+  assert.deepEqual(values, {
+    name: "Freedom Unlimited •••• 4242",
+    balance: 3842.19,
+    minimumPayment: 117,
+    reportedMinimum: 117,
+    nextPaymentDate: "2026-08-27",
+    dueDay: 27,
+    interestRate: 24.49,
+    purchaseApr: 24.49,
+    lastStatementBalance: 3650.12,
+    lastStatementIssueDate: "2026-08-02",
+    isOverdue: false,
+  });
+});
+
+test("missing or zero liability fields preserve the user's Snowball minimum and APR", () => {
+  const values = creditCardDebtValues({
+    account: { current_balance: 900 },
+    liability: { minimum_payment_amount: 0, next_payment_due_date: null, aprs: [] },
+    existingBill: {
+      name: "My card",
+      amount: 45,
+      balance: 1000,
+      interest_rate: 19.9,
+      due_day: 12,
+      next_payment_date: "2026-08-12",
+    },
+  });
+
+  assert.equal(values.balance, 900);
+  assert.equal(values.minimumPayment, 45);
+  assert.equal(values.reportedMinimum, 0);
+  assert.equal(values.interestRate, 19.9);
+  assert.equal(values.nextPaymentDate, "2026-08-12");
+});
+
+test("credit accounts and nonfatal liability availability errors are recognized", () => {
+  assert.equal(isCreditAccount({ type: "credit", subtype: "credit card" }), true);
+  assert.equal(isCreditAccount({ account_type: "depository", account_subtype: "checking" }), false);
+  assert.equal(isLiabilitiesUnavailable({ response: { data: { error_code: "ADDITIONAL_CONSENT_REQUIRED" } } }), true);
+  assert.equal(isLiabilitiesUnavailable({ response: { data: { error_code: "INSTITUTION_DOWN" } } }), false);
+});
+
+test("only the card-side loan payment is automatically treated as a transfer", () => {
+  const card = { account_type: "credit", account_subtype: "credit card" };
+  const payment = {
+    amount: -125,
+    personal_finance_category: {
+      primary: "LOAN_PAYMENTS",
+      detailed: "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT",
+    },
+  };
+  assert.equal(isCreditCardPaymentTransaction(card, payment), true);
+  assert.equal(isCreditCardPaymentTransaction({ account_type: "depository" }, payment), false);
+  assert.equal(isCreditCardPaymentTransaction(card, { ...payment, amount: 125 }), false);
+  assert.equal(isCreditCardPaymentTransaction(card, {
+    amount: -35,
+    personal_finance_category: { primary: "GENERAL_MERCHANDISE" },
+  }), false);
+});
 
 test("overlapping Plaid webhook inserts are idempotent", async () => {
   const calls = [];
