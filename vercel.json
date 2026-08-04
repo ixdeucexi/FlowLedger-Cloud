@@ -13,6 +13,30 @@
       "schedule": "10 8 * * *"
     }
   ],
+  "redirects": [
+    {
+      "source": "/:path((?!api/).*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.flowledger-algo.com"
+        }
+      ],
+      "destination": "https://flowledger-algo.com/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path((?!api/).*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "flow-ledger-cloud.vercel.app"
+        }
+      ],
+      "destination": "https://flowledger-algo.com/:path*",
+      "permanent": true
+    }
+  ],
   "headers": [
     {
       "source": "/",

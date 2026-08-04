@@ -1,5 +1,17 @@
 export const BIOMETRIC_LOCK_TIMEOUT_MS = 2 * 60 * 1000;
 export const BIOMETRIC_UNLOCK_REUSE_MS = 15_000;
+export const FLOWLEDGER_BIOMETRIC_RP_ID = "flowledger-algo.com";
+
+export function biometricRpIdForHostname(hostname: string): string | undefined {
+  const normalizedHostname = hostname.trim().toLowerCase().replace(/\.$/, "");
+  if (
+    normalizedHostname === FLOWLEDGER_BIOMETRIC_RP_ID
+    || normalizedHostname.endsWith(`.${FLOWLEDGER_BIOMETRIC_RP_ID}`)
+  ) {
+    return FLOWLEDGER_BIOMETRIC_RP_ID;
+  }
+  return undefined;
+}
 
 export interface StoredBiometricLock {
   version: 2;

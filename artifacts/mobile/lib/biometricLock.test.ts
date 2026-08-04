@@ -5,6 +5,7 @@ import {
   BIOMETRIC_LOCK_TIMEOUT_MS,
   BIOMETRIC_UNLOCK_REUSE_MS,
   assertionHasUserVerification,
+  biometricRpIdForHostname,
   biometricLockStorageKey,
   credentialIdFromBase64Url,
   credentialIdToBase64Url,
@@ -19,6 +20,15 @@ describe("biometric app lock", () => {
   it("keeps device settings isolated by user", () => {
     assert.equal(biometricLockStorageKey("user-a"), "flowledger_biometric_lock:v2:user-a");
     assert.notEqual(biometricLockStorageKey("user-a"), biometricLockStorageKey("user-b"));
+  });
+
+  it("binds production biometrics to the canonical FlowLedger domain", () => {
+    assert.equal(biometricRpIdForHostname("flowledger-algo.com"), "flowledger-algo.com");
+    assert.equal(biometricRpIdForHostname("www.flowledger-algo.com"), "flowledger-algo.com");
+    assert.equal(biometricRpIdForHostname("LOGIN.FLOWLEDGER-ALGO.COM."), "flowledger-algo.com");
+    assert.equal(biometricRpIdForHostname("flow-ledger-cloud.vercel.app"), undefined);
+    assert.equal(biometricRpIdForHostname("localhost"), undefined);
+    assert.equal(biometricRpIdForHostname("notflowledger-algo.com"), undefined);
   });
 
   it("reuses only a fresh unlock for the same user and credential", () => {
