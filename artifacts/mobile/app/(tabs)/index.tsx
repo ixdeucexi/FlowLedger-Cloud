@@ -23,6 +23,7 @@ import { useBudget } from "@/context/BudgetContext";
 import { useAuth } from "@/context/AuthContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
+import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { isCashFlowTransaction } from "@/lib/billMatching";
 import { connectedCheckingBalance } from "@/lib/accounts";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
@@ -53,6 +54,11 @@ const CAT_COLORS: Record<string, string> = {
 
 const FLOWLEDGER_LOGO = require("@/assets/brand/flowledger-dashboard-logo.jpg");
 const FLO_LOGO = require("@/assets/brand/flo-logo.jpg");
+const DesktopDashboard = React.lazy(() =>
+  import("@/components/desktop/DesktopDashboard").then((module) => ({
+    default: module.DesktopDashboard,
+  })),
+);
 
 function pendingInsightStorageKey(userId: string, householdId: string): string {
   return `flowledger:pending-insights:${userId}:${householdId}`;
@@ -175,6 +181,29 @@ function FlowScoreGauge({ score, theme }: { score: number; theme: DashboardTheme
 }
 
 export default function DashboardScreen() {
+  const showDesktopDashboard = useDesktopExperience();
+
+  if (!showDesktopDashboard) return <MobileDashboardScreen />;
+
+  return (
+    <React.Suspense
+      fallback={
+        <View style={styles.desktopLoadingScreen}>
+          <Image
+            source={FLOWLEDGER_LOGO}
+            style={styles.desktopLoadingLogo}
+            resizeMode="cover"
+          />
+          <Text style={styles.desktopLoadingText}>Opening your desktop workspace...</Text>
+        </View>
+      }
+    >
+      <DesktopDashboard />
+    </React.Suspense>
+  );
+}
+
+function MobileDashboardScreen() {
   const c = useColors();
   const dashboardTheme = DASHBOARD_THEMES[c.mode];
   const [isFocused, setIsFocused] = useState(true);
@@ -1820,6 +1849,23 @@ function ZeroBudgetStat({ label, value, color }: { label: string; value: number;
 }
 
 const styles = StyleSheet.create({
+  desktopLoadingScreen: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 14,
+    backgroundColor: "#050816",
+  },
+  desktopLoadingLogo: {
+    width: 54,
+    height: 54,
+    borderRadius: 16,
+  },
+  desktopLoadingText: {
+    color: "#94a3b8",
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
   screen:  { flex: 1 },
   dashboardStage: { backgroundColor: "#030712" },
   content: { paddingHorizontal: 16, position: "relative" },

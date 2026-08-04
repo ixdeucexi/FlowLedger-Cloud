@@ -109,5 +109,7 @@
     ,"lib/legalDocuments.test.ts"
     ,"lib/ledgerEngine.ts"
     ,"lib/ledgerEngine.test.ts"
+    ,"lib/desktopExperience.ts"
+    ,"lib/desktopExperience.test.ts"
   ]
 }
