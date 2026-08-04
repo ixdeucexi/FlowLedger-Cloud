@@ -17,6 +17,7 @@ import Svg, {
   Circle,
   Defs,
   LinearGradient as SvgLinearGradient,
+  Path,
   Stop,
 } from "react-native-svg";
 
@@ -252,8 +253,8 @@ function ProgressBar({
 }
 
 function FlowScoreRing({ score }: { score: number }) {
-  const size = 142;
-  const strokeWidth = 10;
+  const size = 120;
+  const strokeWidth = 9;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const animated = useRef(new Animated.Value(0)).current;
@@ -316,6 +317,71 @@ function FlowScoreRing({ score }: { score: number }) {
   );
 }
 
+function MetricSparkline({ accent, variant = 0 }: { accent: Accent; variant?: number }) {
+  const tone = ACCENTS[accent];
+  const paths = [
+    "M2 29 C12 28 15 17 24 21 S36 34 45 22 S57 14 65 23 S77 32 90 12",
+    "M2 31 C13 30 18 27 25 28 S39 12 48 23 S63 31 70 18 S81 22 90 10",
+    "M2 27 C14 32 18 19 28 24 S40 30 50 16 S64 25 72 13 S83 20 90 8",
+  ];
+  return (
+    <Svg width={92} height={38} viewBox="0 0 92 38">
+      <Defs>
+        <SvgLinearGradient id={`metric-${accent}-${variant}`} x1="0" y1="0" x2="1" y2="0">
+          <Stop offset="0" stopColor={tone.color} stopOpacity="0.22" />
+          <Stop offset="1" stopColor={tone.color} stopOpacity="1" />
+        </SvgLinearGradient>
+      </Defs>
+      <Path
+        d={paths[variant % paths.length]}
+        fill="none"
+        stroke={`url(#metric-${accent}-${variant})`}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+function MiniProgressRing({ percent }: { percent: number }) {
+  const size = 52;
+  const strokeWidth = 6;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const animated = useRef(new Animated.Value(0)).current;
+  const clamped = Math.max(0, Math.min(100, Number(percent) || 0));
+
+  useEffect(() => {
+    Animated.timing(animated, {
+      toValue: clamped,
+      duration: 900,
+      delay: 80,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [animated, clamped]);
+
+  return (
+    <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <Circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(148,163,184,0.17)" strokeWidth={strokeWidth} />
+      <AnimatedCircle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke={BRAND.cyan}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeDasharray={`${circumference} ${circumference}`}
+        strokeDashoffset={animated.interpolate({ inputRange: [0, 100], outputRange: [circumference, 0] })}
+        rotation="-90"
+        originX={size / 2}
+        originY={size / 2}
+      />
+    </Svg>
+  );
+}
+
 function SectionHeader({
   title,
   subtitle,
@@ -351,19 +417,19 @@ function MetricCard({
   label,
   value,
   detail,
-  icon,
   accent,
   width,
   percent,
+  variant = 0,
   onPress,
 }: {
   label: string;
   value: string;
   detail: string;
-  icon: FeatherName;
   accent: Accent;
   width: string;
   percent?: number;
+  variant?: number;
   onPress: () => void;
 }) {
   const tone = ACCENTS[accent];
@@ -375,19 +441,14 @@ function MetricCard({
       accessibilityLabel={`${label}: ${value}`}
     >
       <View style={styles.metricCard}>
-        <View style={styles.metricHeader}>
-          <Text style={styles.metricLabel}>{label.toUpperCase()}</Text>
-          <View style={[styles.metricIcon, { backgroundColor: tone.wash, borderColor: tone.border }]}>
-            <Feather name={icon} size={15} color={tone.color} />
+        <Text style={styles.metricLabel}>{label.toUpperCase()}</Text>
+        <Text style={styles.metricValue}>{value}</Text>
+        <View style={styles.metricFooter}>
+          <Text style={[styles.metricDetail, { color: tone.color }]} numberOfLines={1}>{detail}</Text>
+          <View style={styles.metricVisual}>
+            {percent !== undefined ? <MiniProgressRing percent={percent} /> : <MetricSparkline accent={accent} variant={variant} />}
           </View>
         </View>
-        <Text style={styles.metricValue}>{value}</Text>
-        {percent !== undefined ? (
-          <View style={styles.metricProgress}>
-            <ProgressBar percent={percent} color={tone.color} height={4} />
-          </View>
-        ) : null}
-        <Text style={styles.metricDetail} numberOfLines={1}>{detail}</Text>
       </View>
     </SurfaceCard>
   );
@@ -610,25 +671,13 @@ export function DesktopDashboard() {
       monthTransactions
         .filter(isActiveTransaction)
         .sort((left, right) => right.date.localeCompare(left.date))
-        .slice(0, 5),
+        .slice(0, 4),
     [monthTransactions],
   );
   const available = algorithmSuite.safeCushion.amount;
   const progress = algorithmSuite.stability;
   const nextMilestone =
     [7, 30, 60, 90, 180].find((day) => day > progress.protectedDays) ?? 180;
-
-  const chartBars = useMemo(() => {
-    const values = dailyBalances
-      .filter((day) => day.day <= today)
-      .slice(-14)
-      .map((day) => day.balance);
-    if (!values.length) return Array.from({ length: 14 }, () => 26);
-    const minimum = Math.min(...values);
-    const maximum = Math.max(...values);
-    const range = Math.max(1, maximum - minimum);
-    return values.map((value) => 20 + ((value - minimum) / range) * 52);
-  }, [dailyBalances, today]);
 
   const go = (pathname: string, params?: Record<string, string>) =>
     router.push({ pathname: pathname as never, params } as never);
@@ -658,12 +707,25 @@ export function DesktopDashboard() {
           </Text>
           <Text style={styles.greetingSub}>Here&apos;s your financial overview for today.</Text>
         </View>
-        <View style={styles.planStatus}>
-          <View style={styles.planStatusDot} />
-          <View>
-            <Text style={styles.planStatusLabel}>LIVE PLAN</Text>
-            <Text style={styles.planStatusValue}>{forecastConfidence.label} confidence</Text>
-          </View>
+        <View style={styles.pageActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Add to your plan"
+            onPress={() => go("/(tabs)/more", { section: "money" })}
+            style={({ pressed }) => [styles.pageAddButton, { opacity: pressed ? 0.78 : 1 }]}
+          >
+            <Feather name="plus" size={17} color="#ffffff" />
+            <Text style={styles.pageAddText}>Add</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open settings"
+            onPress={() => go("/(tabs)/more", { section: "settings" })}
+            style={({ pressed }) => [styles.pageSettingsButton, { opacity: pressed ? 0.72 : 1 }]}
+          >
+            <Feather name="settings" size={15} color="#b7c3d7" />
+            <Text style={styles.pageSettingsText}>Settings</Text>
+          </Pressable>
         </View>
       </View>
 
@@ -676,34 +738,33 @@ export function DesktopDashboard() {
               ? "Safe above your protection floor"
               : "Review the lowest projected balance"
           }
-          icon="dollar-sign"
           accent="green"
           width={metricWidth}
+          variant={0}
           onPress={() => askFlo(`Explain why I have ${currency(available)} available to spend.`)}
         />
         <MetricCard
           label="Upcoming Bills"
           value={currency(unpaidTotal, 2)}
           detail={`${unpaidCount} ${unpaidCount === 1 ? "bill" : "bills"} remaining this month`}
-          icon="file-text"
           accent="amber"
           width={metricWidth}
+          variant={1}
           onPress={() => openBills("bills")}
         />
         <MetricCard
           label="Monthly Income"
           value={currency(monthlyIncome, 2)}
           detail={`${incomes.length} active income ${incomes.length === 1 ? "source" : "sources"}`}
-          icon="trending-up"
           accent="purple"
           width={metricWidth}
+          variant={2}
           onPress={() => go("/(tabs)/more", { section: "money" })}
         />
         <MetricCard
           label="Goal Progress"
           value={`${Math.round(goalPercent)}%`}
           detail={`${currency(goalTotals.current)} of ${currency(goalTotals.target)} funded`}
-          icon="target"
           accent="cyan"
           width={metricWidth}
           percent={goalPercent}
@@ -748,42 +809,21 @@ export function DesktopDashboard() {
               </View>
 
               <View style={styles.accountBody}>
-                <View style={styles.balancePathWrap}>
-                  <View style={styles.balancePathHeader}>
-                    <Text style={styles.balancePathLabel}>14-DAY BALANCE PATH</Text>
-                    <Text style={styles.savingsText}>{currency(savingsBalance)} saved</Text>
+                <View pointerEvents="none" style={styles.accountGlow} />
+                <View pointerEvents="none" style={styles.accountGlowSecondary} />
+                <View style={styles.accountInsight}>
+                  <Text style={styles.accountInsightLabel}>MONTHLY OUTLOOK</Text>
+                  <View style={styles.balanceSignal}>
+                    <Feather
+                      name={cashFlow.remaining >= 0 ? "arrow-up-right" : "arrow-down-right"}
+                      size={14}
+                      color={cashFlow.remaining >= 0 ? BRAND.green : BRAND.rose}
+                    />
+                    <Text style={[styles.balanceSignalText, { color: cashFlow.remaining >= 0 ? "#86efac" : "#fda4af" }]}>
+                      {currency(Math.abs(cashFlow.remaining))} {cashFlow.remaining >= 0 ? "left" : "short"} this month
+                    </Text>
                   </View>
-                  <View style={styles.balanceBars}>
-                    {chartBars.map((height, index) => (
-                      <View
-                        key={`${index}:${Math.round(height)}`}
-                        style={[
-                          styles.balanceBar,
-                          {
-                            height,
-                            opacity: 0.42 + (index / Math.max(1, chartBars.length - 1)) * 0.5,
-                          },
-                        ]}
-                      />
-                    ))}
-                  </View>
-                  <View style={styles.balancePathFooter}>
-                    <View style={styles.balanceSignal}>
-                      <Feather
-                        name={cashFlow.remaining >= 0 ? "arrow-up-right" : "arrow-down-right"}
-                        size={14}
-                        color={cashFlow.remaining >= 0 ? BRAND.green : BRAND.rose}
-                      />
-                      <Text
-                        style={[
-                          styles.balanceSignalText,
-                          { color: cashFlow.remaining >= 0 ? "#86efac" : "#fda4af" },
-                        ]}
-                      >
-                        {currency(Math.abs(cashFlow.remaining))} {cashFlow.remaining >= 0 ? "left" : "short"} this month
-                      </Text>
-                    </View>
-                  </View>
+                  <Text style={styles.savingsText}>{currency(savingsBalance)} in savings</Text>
                 </View>
 
                 <Pressable
@@ -794,9 +834,7 @@ export function DesktopDashboard() {
                 >
                   <FlowScoreRing score={algorithmSuite.flowScore.score} />
                   <Text style={styles.scoreStatus}>{algorithmSuite.flowScore.label}</Text>
-                  <Text style={styles.scoreReason} numberOfLines={2}>
-                    {algorithmSuite.flowScore.topReason}
-                  </Text>
+                  <View style={styles.scoreUnderline} />
                 </Pressable>
               </View>
             </View>
@@ -930,11 +968,6 @@ export function DesktopDashboard() {
                   <Text style={styles.summaryLabel}>NEXT GOAL</Text>
                   <Text style={styles.summaryValue}>{nextMilestone} protected days</Text>
                 </View>
-                <View style={styles.summaryDivider} />
-                <View style={styles.summaryMetric}>
-                  <Text style={styles.summaryLabel}>PROTECTED AMOUNT</Text>
-                  <Text style={styles.summaryValue}>{currency(progress.protectedAmount)}</Text>
-                </View>
               </View>
 
               <View style={styles.stabilityCallout}>
@@ -965,13 +998,6 @@ export function DesktopDashboard() {
                   <Text style={styles.nextActionLabel}>NEXT</Text>
                   <Text style={styles.nextActionText} numberOfLines={2}>{progress.nextAction}</Text>
                 </View>
-                <Pressable
-                  onPress={() => askFlo(`Explain my stability path and why ${progress.nextAction}`)}
-                  style={({ pressed }) => [styles.floButton, { opacity: pressed ? 0.72 : 1 }]}
-                >
-                  <Feather name="message-circle" size={13} color="#ffffff" />
-                  <Text style={styles.floButtonText}>Ask Flo</Text>
-                </Pressable>
               </View>
 
               <Pressable
@@ -986,7 +1012,7 @@ export function DesktopDashboard() {
 
           <SurfaceCard accent="neutral" style={styles.quickCardWrap} accessibilityLabel="Quick actions">
             <View style={styles.sectionCardContent}>
-              <SectionHeader title="Quick Actions" subtitle="Keep your plan current" />
+              <SectionHeader title="Quick Actions" />
               <View style={styles.quickGrid}>
                 {[
                   {
@@ -1038,22 +1064,6 @@ export function DesktopDashboard() {
                     <Text style={styles.quickLabel}>{action.label}</Text>
                   </Pressable>
                 ))}
-              </View>
-              <View style={styles.quickFooter}>
-                <Pressable
-                  onPress={() => askFlo("Can I afford a purchase? Help me choose a safe amount and date.")}
-                  style={({ pressed }) => [styles.quickFooterButton, { opacity: pressed ? 0.7 : 1 }]}
-                >
-                  <Feather name="help-circle" size={14} color={BRAND.amber} />
-                  <Text style={styles.quickFooterText}>Can I afford it?</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => go("/(tabs)/flo")}
-                  style={({ pressed }) => [styles.quickFooterButton, { opacity: pressed ? 0.7 : 1 }]}
-                >
-                  <Feather name="message-circle" size={14} color={BRAND.cyan} />
-                  <Text style={styles.quickFooterText}>Ask Flo</Text>
-                </Pressable>
               </View>
             </View>
           </SurfaceCard>
@@ -1210,37 +1220,38 @@ export function DesktopDashboard() {
       </View>
 
       <View style={styles.footer}>
-        <View style={styles.footerBrand}>
-          <View style={styles.footerDot} />
-          <Text style={styles.footerText}>FlowLedger Algo · one plan across web and PWA</Text>
+        <Text style={styles.footerText}>© {now.getFullYear()} FlowLedger Algo. All rights reserved.</Text>
+        <View style={styles.footerLinks}>
+          <Text style={styles.footerMeta}>Privacy Policy</Text>
+          <Text style={styles.footerMeta}>Terms of Service</Text>
+          <Text style={styles.footerMeta}>Help</Text>
         </View>
-        <Text style={styles.footerMeta}>Forecast confidence: {forecastConfidence.label}</Text>
       </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "transparent" },
+  screen: { flex: 1, backgroundColor: BRAND.background },
   content: {
     width: "100%",
-    maxWidth: 1580,
+    maxWidth: 1100,
     alignSelf: "center",
-    paddingHorizontal: 26,
-    paddingTop: 28,
-    paddingBottom: 34,
-    gap: 16,
+    paddingHorizontal: 34,
+    paddingTop: 22,
+    paddingBottom: 24,
+    gap: 12,
     position: "relative",
   },
   ambientLayer: { ...StyleSheet.absoluteFillObject, overflow: "hidden" },
   ambientPurple: {
     position: "absolute",
-    width: 520,
-    height: 520,
-    borderRadius: 260,
-    top: -310,
-    right: 30,
-    backgroundColor: "rgba(124,58,237,0.08)",
+    width: 600,
+    height: 600,
+    borderRadius: 300,
+    top: -410,
+    right: -10,
+    backgroundColor: "rgba(124,58,237,0.12)",
     shadowColor: BRAND.purple,
     shadowOpacity: 0.22,
     shadowRadius: 105,
@@ -1251,9 +1262,9 @@ const styles = StyleSheet.create({
     width: 520,
     height: 520,
     borderRadius: 260,
-    top: 420,
-    left: -390,
-    backgroundColor: "rgba(37,99,235,0.07)",
+    top: 370,
+    left: -360,
+    backgroundColor: "rgba(37,99,235,0.11)",
     shadowColor: BRAND.blue,
     shadowOpacity: 0.2,
     shadowRadius: 110,
@@ -1264,9 +1275,9 @@ const styles = StyleSheet.create({
     width: 380,
     height: 380,
     borderRadius: 190,
-    bottom: 40,
-    right: -240,
-    backgroundColor: "rgba(34,211,238,0.05)",
+    bottom: -40,
+    right: -200,
+    backgroundColor: "rgba(34,211,238,0.07)",
     shadowColor: BRAND.cyan,
     shadowOpacity: 0.18,
     shadowRadius: 100,
@@ -1281,15 +1292,15 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(148,163,184,0.03)",
   },
   pageHeader: {
-    minHeight: 70,
+    minHeight: 82,
     flexDirection: "row",
     alignItems: "center",
     gap: 20,
   },
   greeting: {
     color: BRAND.text,
-    fontSize: 27,
-    lineHeight: 34,
+    fontSize: 25,
+    lineHeight: 31,
     fontFamily: "Inter_700Bold",
     letterSpacing: -0.8,
   },
@@ -1300,46 +1311,48 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     marginTop: 4,
   },
-  planStatus: {
-    minHeight: 44,
+  pageActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 14,
-    borderRadius: 14,
+    gap: 8,
+  },
+  pageAddButton: {
+    height: 40,
+    borderRadius: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    paddingHorizontal: 17,
     borderWidth: 1,
-    borderColor: "rgba(34,197,94,0.18)",
-    backgroundColor: "rgba(34,197,94,0.06)",
+    borderColor: "rgba(216,180,254,0.34)",
+    backgroundColor: "#8b35ed",
+    shadowColor: "#8b35ed",
+    shadowOpacity: 0.48,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
   },
-  planStatusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: BRAND.green,
-    shadowColor: BRAND.green,
-    shadowOpacity: 0.7,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 0 },
+  pageAddText: { color: "#ffffff", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
+  pageSettingsButton: {
+    height: 40,
+    borderRadius: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    paddingHorizontal: 15,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.13)",
+    backgroundColor: "rgba(15,23,42,0.72)",
   },
-  planStatusLabel: {
-    color: "#73dba6",
-    fontSize: 8,
-    fontFamily: "Inter_800ExtraBold",
-    letterSpacing: 1.1,
-  },
-  planStatusValue: {
-    color: "#b5c3d8",
-    fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
-    marginTop: 2,
-  },
+  pageSettingsText: { color: "#cbd5e1", fontSize: 10, fontFamily: "Inter_700Bold" },
   cardPressable: { minWidth: 0 },
   card: {
     flex: 1,
     minWidth: 0,
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 1,
-    backgroundColor: BRAND.surface,
+    backgroundColor: "rgba(7,13,30,0.94)",
     overflow: "hidden",
     shadowOpacity: 0.09,
     shadowRadius: 22,
@@ -1358,12 +1371,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
   },
   metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  metricCard: { minHeight: 126, padding: 16 },
-  metricHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  metricCard: { minHeight: 124, paddingHorizontal: 15, paddingTop: 15, paddingBottom: 10 },
   metricLabel: {
     flex: 1,
-    color: "#a9b5c8",
-    fontSize: 9,
+    color: "#c5cfdd",
+    fontSize: 8,
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: 0.72,
   },
@@ -1377,18 +1389,21 @@ const styles = StyleSheet.create({
   },
   metricValue: {
     color: "#ffffff",
-    fontSize: 23,
-    lineHeight: 29,
+    fontSize: 22,
+    lineHeight: 27,
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: -0.7,
-    marginTop: 10,
+    marginTop: 6,
   },
-  metricProgress: { marginTop: 8 },
+  metricFooter: { flex: 1, minHeight: 25, flexDirection: "row", alignItems: "flex-end", marginTop: 2, position: "relative" },
+  metricVisual: { position: "absolute", right: -2, bottom: -3 },
   metricDetail: {
-    color: "#8190a7",
+    flex: 1,
     fontSize: 9,
-    fontFamily: "Inter_500Medium",
-    marginTop: 7,
+    lineHeight: 13,
+    fontFamily: "Inter_600SemiBold",
+    paddingBottom: 4,
+    paddingRight: 76,
   },
   progressTrack: {
     width: "100%",
@@ -1403,11 +1418,11 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     shadowOffset: { width: 0, height: 0 },
   },
-  primaryGrid: { flexDirection: "row", alignItems: "stretch", gap: 14 },
+  primaryGrid: { flexDirection: "row", alignItems: "stretch", gap: 12 },
   primaryGridStacked: { flexDirection: "column" },
-  primaryColumn: { flex: 1, minWidth: 0, gap: 14 },
-  accountCardWrap: { minHeight: 338 },
-  accountCard: { flex: 1, padding: 20 },
+  primaryColumn: { flex: 1, minWidth: 0, gap: 12 },
+  accountCardWrap: { minHeight: 238 },
+  accountCard: { flex: 1, padding: 18 },
   accountHeader: { flexDirection: "row", alignItems: "flex-start", gap: 14 },
   cardEyebrow: {
     color: "#a8b5ca",
@@ -1417,8 +1432,8 @@ const styles = StyleSheet.create({
   },
   checkingValue: {
     color: "#ffffff",
-    fontSize: 32,
-    lineHeight: 39,
+    fontSize: 30,
+    lineHeight: 36,
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: -1.1,
     marginTop: 4,
@@ -1446,7 +1461,37 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(124,58,237,0.12)",
   },
   accountPillText: { color: "#aab8cd", fontSize: 9, fontFamily: "Inter_700Bold" },
-  accountBody: { flex: 1, flexDirection: "row", alignItems: "stretch", gap: 18, marginTop: 18 },
+  accountBody: { flex: 1, flexDirection: "row", alignItems: "center", gap: 16, marginTop: 5, overflow: "hidden" },
+  accountGlow: {
+    position: "absolute",
+    width: 340,
+    height: 80,
+    borderRadius: 170,
+    left: -76,
+    bottom: -42,
+    transform: [{ rotate: "-12deg" }],
+    backgroundColor: "rgba(37,99,235,0.2)",
+    shadowColor: "#2563eb",
+    shadowOpacity: 0.75,
+    shadowRadius: 42,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  accountGlowSecondary: {
+    position: "absolute",
+    width: 260,
+    height: 68,
+    borderRadius: 130,
+    left: 80,
+    bottom: -48,
+    transform: [{ rotate: "8deg" }],
+    backgroundColor: "rgba(124,58,237,0.18)",
+    shadowColor: "#7c3aed",
+    shadowOpacity: 0.65,
+    shadowRadius: 38,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  accountInsight: { flex: 1, alignSelf: "flex-end", paddingBottom: 5 },
+  accountInsightLabel: { color: "#71829e", fontSize: 7, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.8, marginBottom: 6 },
   balancePathWrap: {
     flex: 1,
     minWidth: 0,
@@ -1487,22 +1532,19 @@ const styles = StyleSheet.create({
   balanceSignal: { flexDirection: "row", alignItems: "center", gap: 6 },
   balanceSignalText: { fontSize: 9, fontFamily: "Inter_700Bold" },
   scoreSummary: {
-    width: 178,
+    width: 170,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(159,92,255,0.16)",
-    backgroundColor: "rgba(2,6,23,0.3)",
-    paddingVertical: 10,
+    borderRadius: 14,
+    paddingVertical: 5,
     paddingHorizontal: 12,
   },
-  scoreRingWrap: { width: 142, height: 142, alignItems: "center", justifyContent: "center" },
+  scoreRingWrap: { width: 120, height: 120, alignItems: "center", justifyContent: "center" },
   scoreRingCenter: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
   scoreValue: {
     color: "#ffffff",
-    fontSize: 30,
-    lineHeight: 34,
+    fontSize: 27,
+    lineHeight: 31,
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: -1,
   },
@@ -1513,7 +1555,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.9,
     marginTop: 1,
   },
-  scoreStatus: { color: "#63e6b1", fontSize: 11, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
+  scoreStatus: { color: "#63e6b1", fontSize: 10, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
+  scoreUnderline: { width: 58, height: 3, borderRadius: 2, backgroundColor: "#2dd4bf", marginTop: 5 },
   scoreReason: {
     color: "#7e8ca3",
     fontSize: 8,
@@ -1522,20 +1565,20 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     marginTop: 4,
   },
-  recentCardWrap: { minHeight: 310 },
-  sectionCardContent: { flex: 1, padding: 18 },
+  recentCardWrap: { minHeight: 253 },
+  sectionCardContent: { flex: 1, padding: 15 },
   sectionHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 12 },
   sectionTitle: { color: BRAND.text, fontSize: 14, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.25 },
-  sectionSubtitle: { color: "#77879f", fontSize: 9, fontFamily: "Inter_500Medium", marginTop: 3 },
+  sectionSubtitle: { color: "#77879f", fontSize: 8, fontFamily: "Inter_500Medium", marginTop: 2 },
   sectionAction: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 4 },
   sectionActionText: { color: "#91a7c6", fontSize: 9, fontFamily: "Inter_700Bold" },
   activityList: { flex: 1 },
-  activityRow: { minHeight: 49, flexDirection: "row", alignItems: "center", gap: 10 },
+  activityRow: { minHeight: 42, flexDirection: "row", alignItems: "center", gap: 9 },
   rowDivider: { borderTopWidth: 1, borderTopColor: "rgba(148,163,184,0.09)" },
   activityIcon: {
-    width: 31,
-    height: 31,
-    borderRadius: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 9,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -1545,13 +1588,13 @@ const styles = StyleSheet.create({
   activityAmountWrap: { alignItems: "flex-end" },
   activityAmount: { fontSize: 10, fontFamily: "Inter_800ExtraBold" },
   activityDate: { color: "#627087", fontSize: 8, fontFamily: "Inter_500Medium", marginTop: 2 },
-  stabilityWrap: { minHeight: 458 },
-  stabilityCard: { flex: 1, padding: 20 },
+  stabilityWrap: { minHeight: 362 },
+  stabilityCard: { flex: 1, padding: 16 },
   stabilityHeader: { flexDirection: "row", alignItems: "center", gap: 11 },
   stabilityIcon: {
-    width: 37,
-    height: 37,
-    borderRadius: 12,
+    width: 33,
+    height: 33,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -1559,7 +1602,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(124,58,237,0.14)",
   },
   stabilityEyebrow: { color: "#55d7e8", fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.9 },
-  stabilityTitle: { color: "#f3f6fb", fontSize: 17, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
+  stabilityTitle: { color: "#f3f6fb", fontSize: 15, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
   statusBadge: {
     height: 26,
     borderRadius: 999,
@@ -1575,14 +1618,14 @@ const styles = StyleSheet.create({
   statusDot: { width: 5, height: 5, borderRadius: 3 },
   statusText: { color: "#d5deea", fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.5 },
   stabilitySummary: {
-    minHeight: 76,
+    minHeight: 60,
     flexDirection: "row",
     alignItems: "center",
-    gap: 18,
-    marginTop: 16,
+    gap: 22,
+    marginTop: 10,
   },
   protectedMetric: { flexDirection: "row", alignItems: "flex-end", gap: 8 },
-  protectedValue: { color: "#ffffff", fontSize: 34, lineHeight: 38, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.2 },
+  protectedValue: { color: "#ffffff", fontSize: 29, lineHeight: 33, fontFamily: "Inter_800ExtraBold", letterSpacing: -1 },
   protectedUnit: { color: "#dbe5f3", fontSize: 12, fontFamily: "Inter_700Bold" },
   protectedSub: { color: "#718097", fontSize: 8, fontFamily: "Inter_500Medium", marginTop: 2 },
   summaryDivider: { width: 1, height: 40, backgroundColor: "rgba(148,163,184,0.12)" },
@@ -1590,7 +1633,7 @@ const styles = StyleSheet.create({
   summaryLabel: { color: "#49cae1", fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7 },
   summaryValue: { color: "#e7edf7", fontSize: 11, fontFamily: "Inter_700Bold", marginTop: 5 },
   stabilityCallout: {
-    minHeight: 38,
+    minHeight: 34,
     borderRadius: 11,
     borderWidth: 1,
     borderColor: "rgba(34,197,94,0.14)",
@@ -1599,18 +1642,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     paddingHorizontal: 10,
-    marginTop: 4,
+    marginTop: 2,
   },
   calloutIcon: { width: 22, height: 22, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(34,197,94,0.1)" },
   stabilityCalloutText: { flex: 1, color: "#7be2b7", fontSize: 9, lineHeight: 13, fontFamily: "Inter_600SemiBold" },
-  pathHeader: { flexDirection: "row", alignItems: "center", marginTop: 15, marginBottom: 7 },
+  pathHeader: { flexDirection: "row", alignItems: "center", marginTop: 11, marginBottom: 6 },
   pathLabel: { flex: 1, color: "#9aa9bf", fontSize: 9, fontFamily: "Inter_700Bold" },
   pathPercent: { color: "#d9e1ee", fontSize: 9, fontFamily: "Inter_800ExtraBold" },
   pathMilestones: { flexDirection: "row", justifyContent: "space-between", marginTop: 6 },
   pathMilestone: { color: "#65758e", fontSize: 8, fontFamily: "Inter_600SemiBold" },
   nextAction: {
-    minHeight: 58,
-    borderRadius: 14,
+    minHeight: 53,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(159,92,255,0.22)",
     backgroundColor: "rgba(124,58,237,0.11)",
@@ -1618,7 +1661,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     padding: 10,
-    marginTop: 13,
+    marginTop: 10,
   },
   nextActionIcon: { width: 31, height: 31, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(159,92,255,0.16)" },
   nextActionLabel: { color: "#c8a8ff", fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7 },
@@ -1634,7 +1677,7 @@ const styles = StyleSheet.create({
   },
   floButtonText: { color: "#ffffff", fontSize: 9, fontFamily: "Inter_800ExtraBold" },
   howItWorks: {
-    minHeight: 32,
+    minHeight: 30,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "rgba(47,111,255,0.17)",
@@ -1643,25 +1686,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 7,
-    marginTop: 9,
+    marginTop: 7,
   },
   howItWorksText: { color: "#9db2d0", fontSize: 9, fontFamily: "Inter_700Bold" },
-  quickCardWrap: { minHeight: 190 },
+  quickCardWrap: { minHeight: 153 },
   quickGrid: { flexDirection: "row", gap: 9 },
   quickAction: {
     flex: 1,
     minWidth: 0,
-    minHeight: 78,
-    borderRadius: 13,
-    borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.11)",
-    backgroundColor: "rgba(2,6,23,0.28)",
+    minHeight: 68,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 6,
   },
-  quickIcon: { width: 34, height: 34, borderRadius: 11, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  quickLabel: { color: "#cbd5e1", fontSize: 8, fontFamily: "Inter_700Bold", marginTop: 7, textAlign: "center" },
+  quickIcon: { width: 33, height: 33, borderRadius: 11, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  quickLabel: { color: "#d3dbea", fontSize: 8, fontFamily: "Inter_700Bold", marginTop: 6, textAlign: "center" },
   quickFooter: { flexDirection: "row", gap: 8, marginTop: 10 },
   quickFooterButton: {
     flex: 1,
@@ -1675,7 +1715,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   quickFooterText: { color: "#9aa9be", fontSize: 8, fontFamily: "Inter_700Bold" },
-  detailGrid: { flexDirection: "row", flexWrap: "wrap", alignItems: "stretch", gap: 14 },
+  detailGrid: { flexDirection: "row", flexWrap: "wrap", alignItems: "stretch", gap: 12 },
   timelineList: { flex: 1 },
   timelineRow: { minHeight: 55, flexDirection: "row", alignItems: "center", gap: 10 },
   timelineDate: {
@@ -1716,14 +1756,13 @@ const styles = StyleSheet.create({
   emptyIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(148,163,184,0.08)", marginBottom: 8 },
   emptyText: { maxWidth: 260, color: "#718097", fontSize: 9, lineHeight: 14, textAlign: "center", fontFamily: "Inter_500Medium" },
   footer: {
-    minHeight: 42,
+    minHeight: 38,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 3,
     marginTop: 2,
   },
-  footerBrand: { flex: 1, flexDirection: "row", alignItems: "center", gap: 7 },
-  footerDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: BRAND.cyan },
+  footerLinks: { marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 28 },
   footerText: { color: "#5f6d82", fontSize: 8, fontFamily: "Inter_600SemiBold" },
   footerMeta: { color: "#5f6d82", fontSize: 8, fontFamily: "Inter_600SemiBold" },
 });

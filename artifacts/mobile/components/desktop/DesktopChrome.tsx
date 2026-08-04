@@ -1,13 +1,11 @@
 import { Feather } from "@expo/vector-icons";
 import { useGlobalSearchParams, usePathname, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -83,7 +81,6 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
   const { user, signOut } = useAuth();
   const { dashboardFilter, setDashboardFilter } = useBudget();
   const [collapsed, setCollapsed] = useState(width < 1180);
-  const [query, setQuery] = useState("");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
@@ -98,13 +95,6 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
     : params.section;
   const sidebarWidth = collapsed ? 74 : 228;
   const compactActions = width < 1120;
-  const matches = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    if (!normalized) return [];
-    return NAVIGATION.filter((item) =>
-      item.label.toLowerCase().includes(normalized),
-    ).slice(0, 5);
-  }, [query]);
 
   const navigateTo = (item: NavigationItem) => {
     if (item.filter !== undefined) setDashboardFilter(item.filter);
@@ -119,7 +109,6 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
         params: nextParams,
       } as never);
     }
-    setQuery("");
     setNotificationsOpen(false);
     setProfileOpen(false);
   };
@@ -157,11 +146,11 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
         <View
           style={[styles.brandArea, { width: sidebarWidth }, desktopTransition]}
         >
-          <Image
-            source={require("../../assets/brand/flowledger-dashboard-logo.jpg")}
-            style={styles.logo}
-            resizeMode="cover"
-          />
+          <View style={styles.logoMark} accessibilityLabel="FlowLedger Algo logo">
+            <View style={[styles.logoStroke, styles.logoStrokeTop]} />
+            <View style={[styles.logoStroke, styles.logoStrokeMiddle]} />
+            <View style={[styles.logoStroke, styles.logoStrokeBottom]} />
+          </View>
           {!collapsed ? (
             <View style={styles.brandCopy}>
               <Text style={styles.brandName}>
@@ -171,44 +160,7 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
           ) : null}
         </View>
 
-        <View style={styles.topbarCenter}>
-          <View style={styles.searchWrap}>
-            <Feather name="search" size={17} color="#71809d" />
-            <TextInput
-              accessibilityLabel="Search FlowLedger"
-              value={query}
-              onChangeText={setQuery}
-              onSubmitEditing={() => matches[0] && navigateTo(matches[0])}
-              placeholder="Search bills, goals, reports..."
-              placeholderTextColor="#65718a"
-              style={styles.searchInput}
-            />
-            <View style={styles.searchShortcut}>
-              <Text style={styles.searchShortcutText}>Ctrl K</Text>
-            </View>
-            {matches.length > 0 ? (
-              <View style={styles.searchResults}>
-                {matches.map((item) => (
-                  <Pressable
-                    key={item.label}
-                    accessibilityRole="button"
-                    onPress={() => navigateTo(item)}
-                    style={({ pressed }) => [
-                      styles.searchResult,
-                      { opacity: pressed ? 0.72 : 1 },
-                    ]}
-                  >
-                    <View style={styles.searchResultIcon}>
-                      <Feather name={item.icon} size={15} color="#b7a6ff" />
-                    </View>
-                    <Text style={styles.searchResultText}>{item.label}</Text>
-                    <Feather name="arrow-up-right" size={14} color="#64748b" />
-                  </Pressable>
-                ))}
-              </View>
-            ) : null}
-          </View>
-        </View>
+        <View style={styles.topbarCenter} />
 
         <View style={styles.topbarActions}>
           <View style={styles.actionAnchor}>
@@ -251,37 +203,6 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
               </View>
             ) : null}
           </View>
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Open settings"
-            onPress={() => navigateTo(NAVIGATION[NAVIGATION.length - 1])}
-            style={({ pressed }) => [
-              styles.iconButton,
-              compactActions && styles.compactOnly,
-              { opacity: pressed ? 0.72 : 1 },
-            ]}
-          >
-            <Feather name="settings" size={18} color="#c7d2e6" />
-          </Pressable>
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Add a bill"
-            onPress={() => navigateTo(NAVIGATION[1])}
-            style={({ pressed }) => [
-              styles.addButton,
-              {
-                opacity: pressed ? 0.78 : 1,
-                transform: [{ scale: pressed ? 0.98 : 1 }],
-              },
-            ]}
-          >
-            <Feather name="plus" size={18} color="#ffffff" />
-            {!compactActions ? (
-              <Text style={styles.addButtonText}>Add</Text>
-            ) : null}
-          </Pressable>
 
           <View style={styles.actionAnchor}>
             <Pressable
@@ -402,18 +323,32 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
             {!collapsed ? (
               <Pressable
                 onPress={() => router.push("/(tabs)/flo" as never)}
-                style={({ pressed }) => [styles.floCard, { opacity: pressed ? 0.72 : 1 }]}
+                style={({ pressed }) => [styles.brandPromo, { opacity: pressed ? 0.76 : 1 }]}
               >
-                <View style={styles.floOrb}>
-                  <Feather name="message-circle" size={16} color="#d8b4fe" />
+                <View pointerEvents="none" style={styles.brandPromoGlow} />
+                <Text style={styles.brandPromoTitle}>FlowLedger Algo</Text>
+                <Text style={styles.brandPromoText}>
+                  Take control. Build wealth.{"\n"}Make every decision count.
+                </Text>
+                <View style={styles.brandPromoLink}>
+                  <Text style={styles.brandPromoLinkText}>Ask Flo</Text>
+                  <Feather name="arrow-up-right" size={13} color="#c4b5fd" />
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.floTitle}>Ask Flo</Text>
-                  <Text style={styles.floSub}>Your decision co-pilot</Text>
-                </View>
-                <Feather name="arrow-up-right" size={14} color="#8b9ab3" />
               </Pressable>
             ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Sign out"
+              onPress={() => void signOut()}
+              style={({ pressed }) => [
+                styles.signOutButton,
+                collapsed && styles.collapseButtonCentered,
+                { opacity: pressed ? 0.72 : 1 },
+              ]}
+            >
+              <Feather name="log-out" size={16} color="#8b9ab3" />
+              {!collapsed ? <Text style={styles.signOutText}>Sign Out</Text> : null}
+            </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={
@@ -493,7 +428,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
   },
   topbar: {
-    height: 76,
+    height: 64,
     flexDirection: "row",
     alignItems: "center",
     borderBottomWidth: 1,
@@ -511,29 +446,21 @@ const styles = StyleSheet.create({
     borderRightColor: "rgba(148,163,184,0.10)",
     overflow: "hidden",
   },
-  logo: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "rgba(96,165,250,0.26)",
-  },
+  logoMark: { width: 36, height: 36, justifyContent: "center", gap: 3, transform: [{ rotate: "-9deg" }] },
+  logoStroke: { height: 6, borderRadius: 4, shadowOpacity: 0.55, shadowRadius: 7, shadowOffset: { width: 0, height: 0 } },
+  logoStrokeTop: { width: 31, backgroundColor: "#2dd4bf", shadowColor: "#2dd4bf" },
+  logoStrokeMiddle: { width: 25, marginLeft: 3, backgroundColor: "#3b82f6", shadowColor: "#3b82f6" },
+  logoStrokeBottom: { width: 18, marginLeft: 6, backgroundColor: "#8b5cf6", shadowColor: "#8b5cf6" },
   brandCopy: { minWidth: 150 },
   brandName: {
     color: "#f8fafc",
-    fontSize: 16,
+    fontSize: 17,
     lineHeight: 21,
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: -0.45,
   },
   brandAlgo: { color: "#bca7ff", fontFamily: "Inter_700Bold" },
-  topbarCenter: {
-    flex: 1,
-    minWidth: 230,
-    paddingHorizontal: 24,
-    alignItems: "center",
-    zIndex: 50,
-  },
+  topbarCenter: { flex: 1, minWidth: 80 },
   searchWrap: {
     width: "100%",
     maxWidth: 620,
@@ -608,7 +535,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingRight: 18,
+    paddingRight: 24,
     zIndex: 60,
   },
   actionAnchor: { position: "relative" },
@@ -761,7 +688,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   sidebarNav: { flex: 1 },
-  sidebarScroll: { paddingHorizontal: 12, paddingTop: 18, paddingBottom: 12 },
+  sidebarScroll: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 12 },
   sidebarLabel: {
     height: 24,
     color: "#526078",
@@ -828,17 +755,65 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "rgba(148,163,184,0.08)",
   },
-  floCard: {
-    minHeight: 64,
-    borderRadius: 16,
+  brandPromo: {
+    minHeight: 142,
+    borderRadius: 17,
     borderWidth: 1,
-    borderColor: "rgba(139,92,246,0.20)",
-    backgroundColor: "rgba(91,33,182,0.10)",
+    borderColor: "rgba(139,92,246,0.24)",
+    backgroundColor: "rgba(28,18,64,0.36)",
+    justifyContent: "flex-end",
+    padding: 14,
+    marginBottom: 10,
+    overflow: "hidden",
+  },
+  brandPromoGlow: {
+    position: "absolute",
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    right: -76,
+    bottom: -82,
+    backgroundColor: "rgba(124,58,237,0.2)",
+    shadowColor: "#7c3aed",
+    shadowOpacity: 0.7,
+    shadowRadius: 48,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  brandPromoTitle: {
+    color: "#c4b5fd",
+    fontSize: 11,
+    fontFamily: "Inter_800ExtraBold",
+    marginBottom: 10,
+  },
+  brandPromoText: {
+    color: "#e5e7eb",
+    fontSize: 9,
+    lineHeight: 15,
+    fontFamily: "Inter_500Medium",
+  },
+  brandPromoLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginTop: 10,
+  },
+  brandPromoLinkText: {
+    color: "#c4b5fd",
+    fontSize: 9,
+    fontFamily: "Inter_700Bold",
+  },
+  signOutButton: {
+    minHeight: 38,
+    borderRadius: 11,
     flexDirection: "row",
     alignItems: "center",
     gap: 9,
-    padding: 10,
-    marginBottom: 9,
+    paddingHorizontal: 10,
+  },
+  signOutText: {
+    color: "#a5b1c4",
+    fontSize: 10,
+    fontFamily: "Inter_600SemiBold",
   },
   floOrb: {
     width: 33,
@@ -873,5 +848,10 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: "Inter_600SemiBold",
   },
-  main: { flex: 1, minWidth: 0, overflow: "hidden" },
+  main: {
+    flex: 1,
+    minWidth: 0,
+    overflow: "hidden",
+    backgroundColor: "#03040b",
+  },
 });
