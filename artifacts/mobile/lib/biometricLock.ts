@@ -1,4 +1,5 @@
 export const BIOMETRIC_LOCK_TIMEOUT_MS = 2 * 60 * 1000;
+export const BIOMETRIC_UNLOCK_REUSE_MS = 15_000;
 
 export interface StoredBiometricLock {
   version: 2;
@@ -7,8 +8,46 @@ export interface StoredBiometricLock {
   credentialId: string;
 }
 
+export interface RecentBiometricUnlock {
+  version: 1;
+  userId: string;
+  credentialId: string;
+  completedAt: number;
+}
+
 export function biometricLockStorageKey(userId: string): string {
   return `flowledger_biometric_lock:v2:${userId}`;
+}
+
+export function recentBiometricUnlockStorageKey(userId: string): string {
+  return `flowledger_biometric_unlock:v1:${userId}`;
+}
+
+export function parseRecentBiometricUnlock(
+  value: string | null,
+  userId: string,
+  credentialId: string,
+  now = Date.now(),
+  reuseMs = BIOMETRIC_UNLOCK_REUSE_MS,
+): RecentBiometricUnlock | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as Partial<RecentBiometricUnlock>;
+    if (
+      parsed.version !== 1
+      || parsed.userId !== userId
+      || parsed.credentialId !== credentialId
+      || typeof parsed.completedAt !== "number"
+      || !Number.isFinite(parsed.completedAt)
+      || parsed.completedAt > now
+      || now - parsed.completedAt >= Math.max(0, reuseMs)
+    ) {
+      return null;
+    }
+    return parsed as RecentBiometricUnlock;
+  } catch {
+    return null;
+  }
 }
 
 export function parseStoredBiometricLock(value: string | null, userId: string): StoredBiometricLock | null {

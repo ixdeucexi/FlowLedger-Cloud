@@ -3,12 +3,15 @@ import { describe, it } from "node:test";
 
 import {
   BIOMETRIC_LOCK_TIMEOUT_MS,
+  BIOMETRIC_UNLOCK_REUSE_MS,
   assertionHasUserVerification,
   biometricLockStorageKey,
   credentialIdFromBase64Url,
   credentialIdToBase64Url,
   friendlyBiometricError,
+  parseRecentBiometricUnlock,
   parseStoredBiometricLock,
+  recentBiometricUnlockStorageKey,
   shouldLockAfterBackground,
 } from "./biometricLock";
 
@@ -16,6 +19,24 @@ describe("biometric app lock", () => {
   it("keeps device settings isolated by user", () => {
     assert.equal(biometricLockStorageKey("user-a"), "flowledger_biometric_lock:v2:user-a");
     assert.notEqual(biometricLockStorageKey("user-a"), biometricLockStorageKey("user-b"));
+  });
+
+  it("reuses only a fresh unlock for the same user and credential", () => {
+    const completedAt = 10_000;
+    const saved = JSON.stringify({
+      version: 1,
+      userId: "user-a",
+      credentialId: "credential-1",
+      completedAt,
+    });
+    assert.equal(recentBiometricUnlockStorageKey("user-a"), "flowledger_biometric_unlock:v1:user-a");
+    assert.ok(parseRecentBiometricUnlock(saved, "user-a", "credential-1", completedAt + 1));
+    assert.equal(parseRecentBiometricUnlock(saved, "user-b", "credential-1", completedAt + 1), null);
+    assert.equal(parseRecentBiometricUnlock(saved, "user-a", "credential-2", completedAt + 1), null);
+    assert.equal(
+      parseRecentBiometricUnlock(saved, "user-a", "credential-1", completedAt + BIOMETRIC_UNLOCK_REUSE_MS),
+      null,
+    );
   });
 
   it("accepts only the current user's complete saved enrollment", () => {

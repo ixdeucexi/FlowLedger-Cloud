@@ -6,10 +6,13 @@ import { useAuth } from "@/context/AuthContext";
 import {
   assertionHasUserVerification,
   biometricLockStorageKey,
+  BIOMETRIC_UNLOCK_REUSE_MS,
   credentialIdFromBase64Url,
   credentialIdToBase64Url,
   friendlyBiometricError,
+  parseRecentBiometricUnlock,
   parseStoredBiometricLock,
+  recentBiometricUnlockStorageKey,
   shouldLockAfterBackground,
   type StoredBiometricLock,
 } from "@/lib/biometricLock";
@@ -30,9 +33,47 @@ interface BiometricLockContextValue {
 
 const BiometricLockContext = createContext<BiometricLockContextValue | null>(null);
 
-const RECENT_UNLOCK_REUSE_MS = 15_000;
 let sharedUnlockAttempt: { credentialId: string; promise: Promise<boolean> } | null = null;
 let recentSuccessfulUnlock: { credentialId: string; completedAt: number } | null = null;
+
+function readRecentBrowserUnlock(userId: string, credentialId: string): boolean {
+  if (Platform.OS !== "web" || typeof window === "undefined") return false;
+  try {
+    return Boolean(parseRecentBiometricUnlock(
+      window.localStorage.getItem(recentBiometricUnlockStorageKey(userId)),
+      userId,
+      credentialId,
+    ));
+  } catch {
+    return false;
+  }
+}
+
+function rememberRecentBrowserUnlock(userId: string, credentialId: string, completedAt: number): void {
+  if (Platform.OS !== "web" || typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(recentBiometricUnlockStorageKey(userId), JSON.stringify({
+      version: 1,
+      userId,
+      credentialId,
+      completedAt,
+    }));
+  } catch {}
+}
+
+function clearRecentBrowserUnlock(userId: string): void {
+  if (Platform.OS !== "web" || typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(recentBiometricUnlockStorageKey(userId));
+  } catch {}
+}
+
+async function withCrossDocumentBiometricLock<T>(credentialId: string, task: () => Promise<T>): Promise<T> {
+  if (Platform.OS !== "web" || typeof navigator === "undefined" || !navigator.locks) {
+    return task();
+  }
+  return navigator.locks.request(`flowledger-biometric:${credentialId}`, task);
+}
 
 async function canUsePlatformPasskeys(): Promise<boolean> {
   if (
@@ -139,7 +180,8 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
       const parsed = parseStoredBiometricLock(saved, userId);
       setStoredLock(parsed);
       setSupported(deviceSupported);
-      setLocked(Boolean(parsed?.enabled));
+      const recentlyUnlocked = Boolean(parsed?.enabled && readRecentBrowserUnlock(userId, parsed.credentialId));
+      setLocked(Boolean(parsed?.enabled && !recentlyUnlocked));
       setLoadedUserId(userId);
     }).catch(() => {
       if (!active) return;
@@ -160,16 +202,23 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
   }, []);
 
   const noteBackgrounded = useCallback(() => {
+    if (sharedUnlockAttempt) return;
     backgroundedAt.current = Date.now();
   }, []);
 
   const lockIfNeeded = useCallback(() => {
+    if (sharedUnlockAttempt) {
+      backgroundedAt.current = null;
+      return;
+    }
     if (enabled && shouldLockAfterBackground(backgroundedAt.current, Date.now())) {
+      if (userId) clearRecentBrowserUnlock(userId);
+      recentSuccessfulUnlock = null;
       setLocked(true);
       setError(null);
     }
     backgroundedAt.current = null;
-  }, [enabled]);
+  }, [enabled, userId]);
 
   useEffect(() => {
     const appStateSubscription = AppState.addEventListener("change", state => {
@@ -205,6 +254,9 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
       if (credentialId) await verifyDeviceCredential(credentialId);
       else credentialId = await registerDeviceCredential(userId, userLabel);
       await saveLock({ version: 2, enabled: true, userId, credentialId });
+      const completedAt = Date.now();
+      recentSuccessfulUnlock = { credentialId, completedAt };
+      rememberRecentBrowserUnlock(userId, credentialId, completedAt);
       setLocked(false);
       return true;
     } catch (caught) {
@@ -221,6 +273,8 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
     setError(null);
     try {
       await saveLock({ ...storedLock, enabled: false });
+      clearRecentBrowserUnlock(userId);
+      recentSuccessfulUnlock = null;
       setLocked(false);
       return true;
     } catch (caught) {
@@ -236,8 +290,14 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
     const credentialId = storedLock.credentialId;
     if (
       recentSuccessfulUnlock?.credentialId === credentialId
-      && Date.now() - recentSuccessfulUnlock.completedAt < RECENT_UNLOCK_REUSE_MS
+      && Date.now() - recentSuccessfulUnlock.completedAt < BIOMETRIC_UNLOCK_REUSE_MS
     ) {
+      setLocked(false);
+      backgroundedAt.current = null;
+      return Promise.resolve(true);
+    }
+    if (userId && readRecentBrowserUnlock(userId, credentialId)) {
+      recentSuccessfulUnlock = { credentialId, completedAt: Date.now() };
       setLocked(false);
       backgroundedAt.current = null;
       return Promise.resolve(true);
@@ -257,8 +317,13 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
       setBusy(true);
       setError(null);
       try {
-        await verifyDeviceCredential(credentialId);
-        recentSuccessfulUnlock = { credentialId, completedAt: Date.now() };
+        await withCrossDocumentBiometricLock(credentialId, async () => {
+          if (userId && readRecentBrowserUnlock(userId, credentialId)) return;
+          await verifyDeviceCredential(credentialId);
+          const completedAt = Date.now();
+          recentSuccessfulUnlock = { credentialId, completedAt };
+          if (userId) rememberRecentBrowserUnlock(userId, credentialId, completedAt);
+        });
         setLocked(false);
         backgroundedAt.current = null;
         return true;
@@ -275,14 +340,15 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
       if (sharedUnlockAttempt?.promise === attempt) sharedUnlockAttempt = null;
     });
     return attempt;
-  }, [enabled, storedLock]);
+  }, [enabled, storedLock, userId]);
 
   const lockNow = useCallback(() => {
     if (!enabled) return;
+    if (userId) clearRecentBrowserUnlock(userId);
     recentSuccessfulUnlock = null;
     setError(null);
     setLocked(true);
-  }, [enabled]);
+  }, [enabled, userId]);
 
   const clearError = useCallback(() => setError(null), []);
   const value = useMemo<BiometricLockContextValue>(() => ({
