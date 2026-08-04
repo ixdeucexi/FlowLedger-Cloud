@@ -421,7 +421,7 @@ async function recalculateSnowballMinimums({ db, userId, householdId }) {
   }
 }
 
-async function syncConnectedCardDebt({ db, userId, item, account, liability, liabilityFetched, budgetId }) {
+async function syncConnectedCardDebt({ db, userId, item, account, liability, liabilityFetched }) {
   const accountResult = await db
     .from("plaid_accounts")
     .select("id,plaid_account_id,persistent_account_id,name,official_name,mask,current_balance")
@@ -476,21 +476,13 @@ async function syncConnectedCardDebt({ db, userId, item, account, liability, lia
   if (existingBill) {
     const updated = await db.from("bills").update(sharedBillFields).eq("id", existingBill.id).eq("household_id", item.household_id);
     if (updated.error) throw updated.error;
-  } else {
-    const inserted = await db.from("bills").upsert({
-      id: `plaid-debt:${accountRow.id}`,
-      user_id: userId,
-      household_id: item.household_id,
-      budget_id: budgetId,
-      name: values.name,
-      priority: 0,
-      include_in_snowball: true,
-      created_at: syncedAt,
-      ...sharedBillFields,
-    }, { onConflict: "id" });
-    if (inserted.error) throw inserted.error;
+    return true;
   }
-  return true;
+
+  // Keep a newly connected card available for an explicit user attachment.
+  // This prevents creating a duplicate when the same card already exists as a
+  // manual Debt/Snowball entry.
+  return false;
 }
 
 async function syncLiabilities({ client, userId, item, accessToken, accounts }) {
@@ -522,7 +514,6 @@ async function syncLiabilities({ client, userId, item, accessToken, accounts }) 
       .map(account => [account.account_id, account]),
   );
   const db = serviceSupabase();
-  const budgetId = await defaultBudgetId(db, item.household_id);
   let debts = 0;
   for (const account of creditAccounts) {
     const freshAccount = freshAccountById.get(account.account_id);
@@ -538,7 +529,6 @@ async function syncLiabilities({ client, userId, item, accessToken, accounts }) 
       account: latestAccount,
       liability: liabilityByAccount.get(account.account_id) || null,
       liabilityFetched: Boolean(data),
-      budgetId,
     })) debts += 1;
   }
   await recalculateSnowballMinimums({ db, userId, householdId: item.household_id });
@@ -1019,6 +1009,9 @@ module.exports = {
   syncAccounts,
   syncLiabilities,
   syncTransactions,
+  findConnectedCardDebt,
+  defaultBudgetId,
+  recalculateSnowballMinimums,
   canonicalizePlaidAccounts,
   duplicatePlaidAccountIds,
   plaidAccountIdentity,

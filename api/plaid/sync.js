@@ -1,8 +1,15 @@
 const { authenticatedUser, serviceSupabase, safeError } = require("../_utils/supabase");
 const { syncItem } = require("../_utils/sync");
 const { authorizeProHousehold, requestedHouseholdId } = require("../_utils/plaidAccess");
+const attachCreditCard = require("../_utils/plaidAttachCreditCard");
+
+function plaidAction(req) {
+  const value = Array.isArray(req.query?.plaidAction) ? req.query.plaidAction[0] : req.query?.plaidAction;
+  return typeof value === "string" ? value : "";
+}
 
 module.exports = async function plaidSync(req, res) {
+  if (plaidAction(req) === "attach-credit-card") return attachCreditCard(req, res);
   if (req.method !== "POST") return res.status(405).json({ error: "METHOD_NOT_ALLOWED" });
   const auth = await authenticatedUser(req);
   if (!auth.user) return res.status(401).json({ error: auth.error, message: "Please sign in again." });
@@ -33,3 +40,5 @@ module.exports = async function plaidSync(req, res) {
     return res.status(500).json({ error: code, message: safeError(error, "Could not sync bank activity.") });
   }
 };
+
+module.exports.plaidAction = plaidAction;

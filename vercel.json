@@ -95,6 +95,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/plaid/attach-credit-card",
+      "destination": "/api/plaid/sync?plaidAction=attach-credit-card"
+    },
+    {
       "source": "/api/notifications/:notificationAction(config|overdue-bills|preferences|subscription|test)",
       "destination": "/api/notifications?notificationAction=:notificationAction"
     },

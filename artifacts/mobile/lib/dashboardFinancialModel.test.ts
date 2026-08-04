@@ -207,11 +207,17 @@ test("keeps both dashboard presentations on the shared calculation model", () =>
 
 test("keeps adding a credit card separate from syncing existing Plaid accounts", () => {
   const plaidConnections = readFileSync("components/PlaidLinkButton.web.tsx", "utf8");
+  const plaidOAuthResume = readFileSync("components/PlaidOAuthResume.web.tsx", "utf8");
   const desktopDashboard = readFileSync("components/desktop/DesktopDashboard.tsx", "utf8");
 
   assert.match(plaidConnections, /Add credit card/);
   assert.match(plaidConnections, /connect\("credit_card"\)/);
   assert.match(plaidConnections, /Sync existing accounts/);
+  assert.match(plaidConnections, /Attach to an existing debt/);
+  assert.match(plaidConnections, /Create new Debt &amp; Snowball account/);
+  assert.match(plaidConnections, /api\/plaid\/attach-credit-card/);
+  assert.match(plaidOAuthResume, /receivedRedirectUri/);
+  assert.match(plaidOAuthResume, /exchange-public-token/);
   assert.match(desktopDashboard, /Connect card/);
   assert.match(desktopDashboard, /section: "plaid"/);
 });
