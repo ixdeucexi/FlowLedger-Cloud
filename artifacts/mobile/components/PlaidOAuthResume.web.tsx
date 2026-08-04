@@ -1,17 +1,44 @@
 "use client";
 
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { usePlaidLink } from "react-plaid-link";
 
 import { useAuth } from "@/context/AuthContext";
 import {
   clearPlaidOAuthSession,
+  type PlaidOAuthSession,
   readPendingPlaidOAuthSession,
   readPlaidOAuthSession,
   savePlaidConnectionResult,
 } from "@/lib/plaidOAuth";
+
+type LegacyResumeProps = {
+  resume: PlaidOAuthSession & { receivedRedirectUri?: string };
+  onSuccess: (publicToken: string) => Promise<void>;
+  onExit: () => void;
+  onError: () => void;
+};
+
+function LegacyPlaidOAuthResume({ resume, onSuccess, onExit, onError }: LegacyResumeProps) {
+  const { ready, error, open } = usePlaidLink({
+    token: resume.linkToken,
+    receivedRedirectUri: resume.receivedRedirectUri,
+    onSuccess,
+    onExit,
+  });
+
+  useEffect(() => {
+    if (ready) open();
+  }, [open, ready]);
+
+  useEffect(() => {
+    if (error) onError();
+  }, [error, onError]);
+
+  return null;
+}
 
 export function PlaidOAuthResume() {
   const { session } = useAuth();
@@ -24,6 +51,7 @@ export function PlaidOAuthResume() {
     return pending ? { ...pending, receivedRedirectUri: undefined } : null;
   }, [session?.user.id]);
   const [resume, setResume] = useState(readResume);
+  const hostedCompletionSession = useRef<string | null>(null);
 
   useEffect(() => {
     const detectReturn = () => {
@@ -77,33 +105,68 @@ export function PlaidOAuthResume() {
   const onExit = useCallback(() => {
     finish("Card connection was not completed. You can try again below.");
   }, [finish]);
-
-  const { ready, error, open } = usePlaidLink({
-    token: resume?.linkToken ?? null,
-    receivedRedirectUri: resume?.receivedRedirectUri,
-    onSuccess,
-    onExit,
-  });
-
-  useEffect(() => {
-    if (!resume || !ready) return;
-    open();
-  }, [open, ready, resume]);
-
-  useEffect(() => {
-    if (!resume || !error) return;
+  const onLegacyError = useCallback(() => {
     finish("Plaid could not resume the card connection. Please try again.");
-  }, [error, finish, resume]);
+  }, [finish]);
+
+  useEffect(() => {
+    if (!resume?.hostedSession
+      || !session?.access_token
+      || resume.userId !== session.user.id
+      || hostedCompletionSession.current === resume.hostedSession) return;
+    hostedCompletionSession.current = resume.hostedSession;
+    const controller = new AbortController();
+
+    const complete = async () => {
+      try {
+        for (let attempt = 0; attempt < 20 && !controller.signal.aborted; attempt += 1) {
+          const response = await fetch("/api/plaid/exchange-public-token", {
+            method: "POST",
+            credentials: "include",
+            signal: controller.signal,
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+              "X-FlowLedger-Household-Id": resume.householdId,
+            },
+            body: JSON.stringify({ hosted_session: resume.hostedSession }),
+          });
+          const result = await response.json().catch(() => ({}));
+          if (response.status === 202) {
+            await new Promise(resolve => window.setTimeout(resolve, 1_500));
+            continue;
+          }
+          if (!response.ok) throw new Error(result.message || "Could not finish connecting this card.");
+          finish(result.credit_card_debts_count > 0
+            ? `${result.credit_card_debts_count} credit card${result.credit_card_debts_count === 1 ? " is" : "s are"} now in Debt and Snowball.`
+            : "Card connected. Attach it to Debt and Snowball below.");
+          return;
+        }
+        if (!controller.signal.aborted) finish("Plaid is still finishing this connection. Open Bank connections again in a moment.");
+      } catch (completionError) {
+        if (!controller.signal.aborted) {
+          finish(completionError instanceof Error ? completionError.message : "Could not finish connecting this card.");
+        }
+      }
+    };
+    void complete();
+    return () => controller.abort();
+  }, [finish, resume, session?.access_token, session?.user.id]);
 
   if (!resume) return null;
   return (
-    <View accessibilityLiveRegion="polite" style={styles.overlay}>
-      <View style={styles.card}>
-        <ActivityIndicator color="#9f7aea" />
-        <Text style={styles.title}>Finishing your secure card connection…</Text>
-        <Text style={styles.copy}>Keep this page open while FlowLedger attaches the card to your plan.</Text>
+    <>
+      {!resume.hostedSession ? (
+        <LegacyPlaidOAuthResume resume={resume} onSuccess={onSuccess} onExit={onExit} onError={onLegacyError} />
+      ) : null}
+      <View accessibilityLiveRegion="polite" style={styles.overlay}>
+        <View style={styles.card}>
+          <ActivityIndicator color="#9f7aea" />
+          <Text style={styles.title}>Finishing your secure card connection…</Text>
+          <Text style={styles.copy}>Keep this page open while FlowLedger attaches the card to your plan.</Text>
+        </View>
       </View>
-    </View>
+    </>
   );
 }
 

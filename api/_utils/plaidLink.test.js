@@ -18,6 +18,34 @@ test("credit-card linking opens a new Plaid session limited to credit accounts",
   assert.equal(request.webhook, "https://flowledger-algo.com/api/plaid/webhook");
 });
 
+test("hosted credit-card linking returns to the canonical FlowLedger URL", () => {
+  const request = buildLinkTokenRequest({
+    userId: "user-1",
+    config: {
+      redirectUri: "https://flowledger-algo.com/plaid/oauth",
+      webhookUrl: "https://flowledger-algo.com/api/plaid/webhook",
+    },
+    intent: LINK_INTENTS.creditCard,
+    hosted: true,
+  });
+
+  assert.deepEqual(request.hosted_link, {
+    completion_redirect_uri: "https://flowledger-algo.com/plaid/oauth",
+    is_mobile_app: false,
+    url_lifetime_seconds: 1800,
+  });
+  assert.equal(request.redirect_uri, "https://flowledger-algo.com/plaid/oauth");
+});
+
+test("hosted linking fails closed without a canonical redirect URL", () => {
+  assert.throws(() => buildLinkTokenRequest({
+    userId: "user-1",
+    config: {},
+    intent: LINK_INTENTS.creditCard,
+    hosted: true,
+  }), error => error.code === "PLAID_REDIRECT_URI_MISSING");
+});
+
 test("general bank linking remains available without hiding non-credit accounts", () => {
   const request = buildLinkTokenRequest({
     userId: "user-1",

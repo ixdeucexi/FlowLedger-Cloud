@@ -32,4 +32,25 @@ function decryptAccessToken(value) {
   return Buffer.concat([decipher.update(Buffer.from(parts[3], "base64url")), decipher.final()]).toString("utf8");
 }
 
-module.exports = { encryptAccessToken, decryptAccessToken };
+function sealPlaidLinkSession(payload) {
+  return encryptAccessToken(JSON.stringify(payload));
+}
+
+function openPlaidLinkSession(value) {
+  let payload;
+  try {
+    payload = JSON.parse(decryptAccessToken(value));
+  } catch {
+    const error = new Error("Plaid connection session is invalid. Please start again.");
+    error.code = "PLAID_LINK_SESSION_INVALID";
+    throw error;
+  }
+  if (!payload || typeof payload !== "object") {
+    const error = new Error("Plaid connection session is invalid. Please start again.");
+    error.code = "PLAID_LINK_SESSION_INVALID";
+    throw error;
+  }
+  return payload;
+}
+
+module.exports = { encryptAccessToken, decryptAccessToken, sealPlaidLinkSession, openPlaidLinkSession };

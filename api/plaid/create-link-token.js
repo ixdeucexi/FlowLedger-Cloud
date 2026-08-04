@@ -1,5 +1,6 @@
 const { plaid, plaidOptions } = require("../_utils/plaid");
-const { buildLinkTokenRequest, normalizeLinkIntent } = require("../_utils/plaidLink");
+const { buildLinkTokenRequest, LINK_INTENTS, normalizeLinkIntent } = require("../_utils/plaidLink");
+const { sealPlaidLinkSession } = require("../_utils/crypto");
 const { authenticatedUser, safeError } = require("../_utils/supabase");
 const { authorizeProHousehold, requestedHouseholdId } = require("../_utils/plaidAccess");
 
@@ -19,10 +20,30 @@ module.exports = async function createLinkToken(req, res) {
     const access = await authorizeProHousehold(auth.user.id, requestedHouseholdId(req));
     if (!access.ok) return res.status(access.status).json({ error: access.error, message: access.message });
     const config = plaidOptions();
-    const request = buildLinkTokenRequest({ userId: auth.user.id, config, intent });
+    const hosted = intent === LINK_INTENTS.creditCard;
+    const request = buildLinkTokenRequest({ userId: auth.user.id, config, intent, hosted });
     const response = await plaid().linkTokenCreate(request);
     const data = response.data || response;
-    return res.status(200).json({ link_token: data.link_token, expiration: data.expiration, intent });
+    if (hosted && !data.hosted_link_url) {
+      const error = new Error("Plaid did not return a secure mobile connection URL.");
+      error.code = "PLAID_HOSTED_LINK_UNAVAILABLE";
+      throw error;
+    }
+    const hostedSession = hosted ? sealPlaidLinkSession({
+      version: 1,
+      linkToken: data.link_token,
+      userId: auth.user.id,
+      householdId: access.householdId,
+      intent,
+      expiresAt: data.expiration,
+    }) : null;
+    return res.status(200).json({
+      link_token: data.link_token,
+      expiration: data.expiration,
+      intent,
+      hosted_link_url: data.hosted_link_url || null,
+      hosted_session: hostedSession,
+    });
   } catch (error) {
     const code = error && error.response && error.response.data && error.response.data.error_code;
     return res.status(500).json({ error: code || error.code || "LINK_TOKEN_FAILED", message: safeError(error, "Could not start secure bank linking.") });

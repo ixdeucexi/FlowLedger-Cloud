@@ -179,13 +179,18 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
       if (typeof window !== "undefined") {
         savePlaidOAuthSession(window.localStorage, {
           linkToken: result.link_token,
+          hostedSession: typeof result.hosted_session === "string" ? result.hosted_session : undefined,
           intent,
           householdId,
           userId: session.user.id,
           createdAt: Date.now(),
-          awaitingReturn: false,
+          awaitingReturn: Boolean(result.hosted_link_url),
         });
         linkUserId.current = session.user.id;
+        if (intent === "credit_card" && result.hosted_link_url && result.hosted_session) {
+          window.location.assign(result.hosted_link_url);
+          return;
+        }
       }
       setLinkToken(result.link_token);
     } catch (error) {

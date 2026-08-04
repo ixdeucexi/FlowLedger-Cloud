@@ -8,6 +8,7 @@ type BrowserStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 export type PlaidOAuthSession = {
   linkToken: string;
+  hostedSession?: string;
   intent: "bank" | "credit_card";
   householdId: string;
   userId: string;
@@ -24,6 +25,7 @@ function storedPlaidOAuthSession(
     const stored = JSON.parse(storage.getItem(PLAID_OAUTH_SESSION_KEY) || "null") as Partial<PlaidOAuthSession> | null;
     if (!stored
       || typeof stored.linkToken !== "string"
+      || (stored.hostedSession != null && typeof stored.hostedSession !== "string")
       || !["bank", "credit_card"].includes(String(stored.intent))
       || typeof stored.householdId !== "string"
       || stored.userId !== userId
@@ -74,7 +76,7 @@ export function readPendingPlaidOAuthSession(
   const stored = storedPlaidOAuthSession(storage, userId, now);
   if (!stored
     || stored.awaitingReturn === false
-    || now - stored.createdAt < PLAID_BACKGROUND_RETURN_DELAY_MS) return null;
+    || (!stored.hostedSession && now - stored.createdAt < PLAID_BACKGROUND_RETURN_DELAY_MS)) return null;
   return stored;
 }
 
