@@ -408,7 +408,12 @@ function TabContent() {
   if (loadError) return <BudgetLoadErrorScreen message={loadError} onRetry={retryBudgetLoad} />;
 
   return (
-    <View style={[styles.tabTransitionRoot, { backgroundColor: colors.background }]}>
+    <View
+      style={[
+        styles.tabTransitionRoot,
+        { backgroundColor: isDesktop ? "#03040b" : colors.background },
+      ]}
+    >
       <View style={styles.tabTransitionContent}>
         <ResponsiveDesktopChrome enabled={isDesktop}>
             <Tabs
@@ -418,6 +423,9 @@ function TabContent() {
             animation: "none",
             freezeOnBlur: !isWeb,
             lazy: true,
+            sceneStyle: {
+              backgroundColor: isDesktop ? "#03040b" : colors.background,
+            },
             tabBarActiveTintColor: isDark ? "#8b5cf6" : colors.primary,
             tabBarInactiveTintColor: colors.mutedForeground,
             headerShown: false,
