@@ -96,7 +96,7 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
   const section = Array.isArray(params.section)
     ? params.section[0]
     : params.section;
-  const sidebarWidth = collapsed ? 82 : 246;
+  const sidebarWidth = collapsed ? 74 : 228;
   const compactActions = width < 1120;
   const matches = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -164,8 +164,9 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
           />
           {!collapsed ? (
             <View style={styles.brandCopy}>
-              <Text style={styles.brandName}>FlowLedger</Text>
-              <Text style={styles.brandAlgo}>ALGO</Text>
+              <Text style={styles.brandName}>
+                FlowLedger <Text style={styles.brandAlgo}>Algo</Text>
+              </Text>
             </View>
           ) : null}
         </View>
@@ -183,7 +184,7 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
               style={styles.searchInput}
             />
             <View style={styles.searchShortcut}>
-              <Text style={styles.searchShortcutText}>⌘ K</Text>
+              <Text style={styles.searchShortcutText}>Ctrl K</Text>
             </View>
             {matches.length > 0 ? (
               <View style={styles.searchResults}>
@@ -224,18 +225,29 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
               ]}
             >
               <Feather name="bell" size={18} color="#c7d2e6" />
-              <View style={styles.notificationDot} />
             </Pressable>
             {notificationsOpen ? (
               <View style={[styles.popover, styles.notificationPopover]}>
                 <Text style={styles.popoverEyebrow}>Notifications</Text>
-                <Text style={styles.popoverTitle}>
-                  Your plan is looking steady
-                </Text>
+                <Text style={styles.popoverTitle}>Notification center</Text>
                 <Text style={styles.popoverBody}>
-                  We’ll alert you here when a bill, balance, or goal needs
-                  attention.
+                  Your alert preferences are shared with the PWA, so you see
+                  the same plan on every device.
                 </Text>
+                <Pressable
+                  onPress={() => {
+                    router.push({
+                      pathname: "/(tabs)/more",
+                      params: { section: "notifications" },
+                    } as never);
+                    setNotificationsOpen(false);
+                  }}
+                  style={styles.notificationSettingsRow}
+                >
+                  <Feather name="settings" size={14} color="#9db2d0" />
+                  <Text style={styles.notificationSettingsText}>Notification settings</Text>
+                  <Feather name="arrow-up-right" size={13} color="#64748b" />
+                </Pressable>
               </View>
             ) : null}
           </View>
@@ -388,7 +400,10 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
 
           <View style={styles.sidebarFooter}>
             {!collapsed ? (
-              <View style={styles.floCard}>
+              <Pressable
+                onPress={() => router.push("/(tabs)/flo" as never)}
+                style={({ pressed }) => [styles.floCard, { opacity: pressed ? 0.72 : 1 }]}
+              >
                 <View style={styles.floOrb}>
                   <Feather name="message-circle" size={16} color="#d8b4fe" />
                 </View>
@@ -397,7 +412,7 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
                   <Text style={styles.floSub}>Your decision co-pilot</Text>
                 </View>
                 <Feather name="arrow-up-right" size={14} color="#8b9ab3" />
-              </View>
+              </Pressable>
             ) : null}
             <Pressable
               accessibilityRole="button"
@@ -436,7 +451,7 @@ const glassSurface = {
 } as const;
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#050816", overflow: "hidden" },
+  root: { flex: 1, backgroundColor: "#03040b", overflow: "hidden" },
   ambientBackdrop: { ...StyleSheet.absoluteFillObject, overflow: "hidden" },
   ambientPurple: {
     position: "absolute",
@@ -445,7 +460,7 @@ const styles = StyleSheet.create({
     borderRadius: 340,
     top: -390,
     right: 60,
-    backgroundColor: "rgba(112, 52, 255, 0.12)",
+    backgroundColor: "rgba(159, 92, 255, 0.08)",
     shadowColor: "#6d28d9",
     shadowOpacity: 0.35,
     shadowRadius: 120,
@@ -458,7 +473,7 @@ const styles = StyleSheet.create({
     borderRadius: 270,
     bottom: -310,
     left: 170,
-    backgroundColor: "rgba(37, 99, 235, 0.10)",
+    backgroundColor: "rgba(47, 111, 255, 0.07)",
     shadowColor: "#2563eb",
     shadowOpacity: 0.32,
     shadowRadius: 120,
@@ -471,7 +486,7 @@ const styles = StyleSheet.create({
     borderRadius: 170,
     top: 240,
     right: -230,
-    backgroundColor: "rgba(6, 182, 212, 0.07)",
+    backgroundColor: "rgba(34, 211, 238, 0.05)",
     shadowColor: "#0891b2",
     shadowOpacity: 0.25,
     shadowRadius: 100,
@@ -483,41 +498,35 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderBottomWidth: 1,
     borderBottomColor: "rgba(148,163,184,0.12)",
-    backgroundColor: "rgba(4,8,22,0.94)",
+    backgroundColor: "rgba(3,4,11,0.96)",
     zIndex: 40,
   },
   brandArea: {
     height: "100%",
     flexDirection: "row",
     alignItems: "center",
-    gap: 11,
-    paddingHorizontal: 18,
+    gap: 10,
+    paddingHorizontal: 16,
     borderRightWidth: 1,
     borderRightColor: "rgba(148,163,184,0.10)",
     overflow: "hidden",
   },
   logo: {
-    width: 39,
-    height: 39,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: "rgba(96,165,250,0.26)",
   },
-  brandCopy: { minWidth: 138 },
+  brandCopy: { minWidth: 150 },
   brandName: {
     color: "#f8fafc",
-    fontSize: 17,
-    lineHeight: 20,
+    fontSize: 16,
+    lineHeight: 21,
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: -0.45,
   },
-  brandAlgo: {
-    color: "#9f8cff",
-    fontSize: 8,
-    fontFamily: "Inter_800ExtraBold",
-    letterSpacing: 5.2,
-    marginTop: 1,
-  },
+  brandAlgo: { color: "#bca7ff", fontFamily: "Inter_700Bold" },
   topbarCenter: {
     flex: 1,
     minWidth: 230,
@@ -614,17 +623,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(15,23,42,0.58)",
   },
   compactOnly: { display: "none" },
-  notificationDot: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#a855f7",
-    borderWidth: 1,
-    borderColor: "#070b18",
-  },
   addButton: {
     minWidth: 44,
     height: 40,
@@ -634,10 +632,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 7,
-    backgroundColor: "#7c3aed",
+    backgroundColor: "#9f5cff",
     borderWidth: 1,
     borderColor: "rgba(216,180,254,0.36)",
-    shadowColor: "#7c3aed",
+    shadowColor: "#9f5cff",
     shadowOpacity: 0.46,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
@@ -694,6 +692,24 @@ const styles = StyleSheet.create({
     zIndex: 110,
   },
   notificationPopover: { width: 310 },
+  notificationSettingsRow: {
+    minHeight: 38,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.12)",
+    backgroundColor: "rgba(15,23,42,0.48)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 10,
+    marginTop: 12,
+  },
+  notificationSettingsText: {
+    flex: 1,
+    color: "#b9c6d9",
+    fontSize: 10,
+    fontFamily: "Inter_700Bold",
+  },
   profilePopover: { width: 240 },
   popoverEyebrow: {
     color: "#9180e8",
@@ -741,7 +757,7 @@ const styles = StyleSheet.create({
   sidebar: {
     borderRightWidth: 1,
     borderRightColor: "rgba(148,163,184,0.10)",
-    backgroundColor: "rgba(5,9,24,0.78)",
+    backgroundColor: "rgba(5,8,20,0.86)",
     overflow: "hidden",
   },
   sidebarNav: { flex: 1 },
@@ -769,9 +785,9 @@ const styles = StyleSheet.create({
   },
   navItemCollapsed: { justifyContent: "center", paddingHorizontal: 0 },
   navItemActive: {
-    backgroundColor: "rgba(90, 63, 186, 0.24)",
+    backgroundColor: "rgba(124,58,237,0.17)",
     borderWidth: 1,
-    borderColor: "rgba(139,92,246,0.24)",
+    borderColor: "rgba(159,92,255,0.22)",
   },
   activeRail: {
     position: "absolute",

@@ -24,12 +24,10 @@ import { useAuth } from "@/context/AuthContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
-import { isCashFlowTransaction } from "@/lib/billMatching";
-import { connectedCheckingBalance } from "@/lib/accounts";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
-import { applyCategoryBudgetMove, buildCategoryPlan, buildZeroBudgetSummary } from "@/lib/categoryPlanning";
+import { applyCategoryBudgetMove, buildZeroBudgetSummary } from "@/lib/categoryPlanning";
 import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets as saveCategoryBudgetsRemote, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
-import { DEFAULT_DECISION_HUB_SETTINGS } from "@/lib/decisionHubSettings";
+import { buildDashboardFinancialModel } from "@/lib/dashboardFinancialModel";
 import { dateOnlyToLocalDate } from "@/lib/dateLabels";
 import {
   FLOWMENTUM_URL,
@@ -39,10 +37,8 @@ import {
   shouldShowFlowmentumHandoff,
 } from "@/lib/flowmentumHandoff";
 import { transactionCategoryParts } from "@/lib/reviewCenter";
-import { buildAlgorithmSuite, type AlgorithmInsight } from "@/lib/algorithmSuite";
-import { activePendingPlanMatches } from "@/lib/pendingPlanMatches";
-import { summarizePendingCheckingActivity, unplannedPendingExpenses } from "@/lib/plaidActivity";
-import { effectiveDebtMinimum } from "@/lib/snowball";
+import type { AlgorithmInsight } from "@/lib/algorithmSuite";
+import { unplannedPendingExpenses } from "@/lib/plaidActivity";
 
 const MONTH_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
@@ -244,7 +240,6 @@ function MobileDashboardScreen() {
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
   const [categoryBudgetDrafts, setCategoryBudgetDrafts] = useState<Record<string, string>>({});
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const decisionHubSettings = DEFAULT_DECISION_HUB_SETTINGS;
   const [moveMoneyVisible, setMoveMoneyVisible] = useState(false);
   const [moveTargetCategory, setMoveTargetCategory] = useState<string | null>(null);
   const [moveSourceCategory, setMoveSourceCategory] = useState("");
@@ -389,19 +384,53 @@ function MobileDashboardScreen() {
     };
   }, [categoryBudgetKey, categoryBudgetScope, currentMonth, selectedYear]);
 
-  const categoryPlan = useMemo(() => {
-    if (!settings.zeroBasedBudgetEnabled) return [];
-    const monthBills = getMonthlyBills(currentMonth, selectedYear)
-      .map(bill => ({
-        category: bill.is_debt ? "Debt" : bill.category || "Other",
-        amount: getBillMonthlyTotal(bill, currentMonth, selectedYear),
-      }));
-    const monthTransactions = getTransactionsForMonth(currentMonth, selectedYear)
-      .flatMap(transaction => transactionCategoryParts(transaction))
-      .filter(transaction => transaction.category !== "Income");
-    const budgetLimits = Object.entries(categoryBudgets).map(([category, amount]) => ({ category, amount }));
-    return buildCategoryPlan(categories, monthBills, monthTransactions, budgetLimits);
-  }, [categories, categoryBudgets, getMonthlyBills, getBillMonthlyTotal, getTransactionsForMonth, currentMonth, selectedYear, settings.zeroBasedBudgetEnabled]);
+  const dashboardModel = useMemo(() => buildDashboardFinancialModel({
+    now,
+    selectedYear,
+    settings,
+    forecastConfidence,
+    accounts,
+    connectedBankAccounts,
+    pendingBankTransactions,
+    pendingPlanMatches,
+    categories,
+    categoryBudgets,
+    goals,
+    incomes,
+    cashFlow,
+    currentMonthBalances,
+    getMonthlyBills,
+    getMonthlyIncome,
+    getTransactionsForMonth,
+    getDailyBalances,
+    getBillMonthlyTotal,
+    getPaidAmount,
+    getBillOccurrencesInMonth,
+  }), [
+    accounts,
+    cashFlow,
+    categories,
+    categoryBudgets,
+    connectedBankAccounts,
+    currentMonth,
+    currentMonthBalances,
+    forecastConfidence,
+    getBillMonthlyTotal,
+    getBillOccurrencesInMonth,
+    getDailyBalances,
+    getMonthlyBills,
+    getMonthlyIncome,
+    getPaidAmount,
+    getTransactionsForMonth,
+    goals,
+    incomes,
+    pendingBankTransactions,
+    pendingPlanMatches,
+    selectedYear,
+    settings,
+    today,
+  ]);
+  const { categoryPlan } = dashboardModel;
 
   const categoryDetail = useMemo(() => {
     if (!selectedCategory) return null;
@@ -545,49 +574,16 @@ function MobileDashboardScreen() {
     setCategoryBudgetModalVisible(false);
   };
 
-  const currentGoals = useMemo(() => goals.filter(goal => !goal.closed_at).sort((left, right) => {
-    const leftComplete = left.target_amount > 0 && left.current_amount >= left.target_amount;
-    const rightComplete = right.target_amount > 0 && right.current_amount >= right.target_amount;
-    if (leftComplete !== rightComplete) return leftComplete ? 1 : -1;
-    return left.target_date.localeCompare(right.target_date) || left.name.localeCompare(right.name);
-  }), [goals]);
-  const connectedCheckingAccounts = useMemo(() => connectedBankAccounts.filter(account =>
-    account.is_active && account.account_subtype === "checking"
-  ), [connectedBankAccounts]);
-  const connectedSavingsAccounts = useMemo(() => connectedBankAccounts.filter(account =>
-    account.is_active && account.account_subtype === "savings"
-  ), [connectedBankAccounts]);
-  const savingsAccountBalance = useMemo(() => {
-    if (connectedSavingsAccounts.length) {
-      return connectedSavingsAccounts.reduce((sum, account) => sum + account.current_balance, 0);
-    }
-    return accounts
-      .filter(account => account.is_active && account.account_type === "savings")
-      .reduce((sum, account) => sum + account.current_balance, 0);
-  }, [accounts, connectedSavingsAccounts]);
-  const checkingAccountBalance = useMemo(() => {
-    const connectedBalance = connectedCheckingBalance(connectedCheckingAccounts);
-    if (connectedBalance !== null) return connectedBalance;
-    return accounts
-      .filter(account => account.is_active && account.account_type === "checking")
-      .reduce((sum, account) => sum + account.current_balance, 0);
-  }, [accounts, connectedCheckingAccounts]);
-  const checkingPendingTransactions = useMemo(() => {
-    const checkingIds = new Set(connectedCheckingAccounts.map(account => account.id));
-    return pendingBankTransactions.filter(transaction =>
-      transaction.plaid_account_id
-        ? checkingIds.has(transaction.plaid_account_id)
-        : connectedCheckingAccounts.length === 1
-    );
-  }, [connectedCheckingAccounts, pendingBankTransactions]);
-  const pendingCheckingSummary = useMemo(
-    () => summarizePendingCheckingActivity(checkingPendingTransactions, connectedCheckingAccounts),
-    [checkingPendingTransactions, connectedCheckingAccounts],
-  );
-  const activePendingMatchIds = useMemo(() => new Set(
-    activePendingPlanMatches(pendingPlanMatches, pendingBankTransactions)
-      .map(match => match.pending_plaid_transaction_id),
-  ), [pendingBankTransactions, pendingPlanMatches]);
+  const {
+    activePendingMatchIds,
+    algorithmSuite,
+    checkingAccountBalance,
+    checkingPendingTransactions,
+    currentGoals,
+    decisionForecastDays,
+    pendingCheckingSummary,
+    savingsAccountBalance,
+  } = dashboardModel;
   const unplannedCheckingPending = useMemo(
     () => unplannedPendingExpenses(checkingPendingTransactions, activePendingMatchIds),
     [activePendingMatchIds, checkingPendingTransactions],
@@ -609,110 +605,6 @@ function MobileDashboardScreen() {
     }, 250);
   };
 
-  const decisionForecastDays = useMemo(() => {
-    const days = [];
-    for (let i = 0; i < Math.max(2, settings.forecast_horizon_months); i += 1) {
-      const month = (currentMonth + i) % 12;
-      const year = selectedYear + Math.floor((currentMonth + i) / 12);
-      const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
-      days.push(...getDailyBalances(month, year).map(day => ({
-        date: `${monthPrefix}-${String(day.day).padStart(2, "0")}`,
-        balance: day.balance,
-        income: day.income,
-      })));
-    }
-    return days.filter(day => day.date >= todayIso);
-  }, [getDailyBalances, currentMonth, selectedYear, settings.forecast_horizon_months, todayIso]);
-  const nextPaycheckForecast = useMemo(() => {
-    const nextPaycheck = decisionForecastDays.find(day => day.date > todayIso && day.income > 0.005);
-    if (!nextPaycheck) return null;
-    const throughPayday = decisionForecastDays.filter(day => day.date <= nextPaycheck.date);
-    return {
-      label: formatShortDate(nextPaycheck.date),
-      lowestBalance: throughPayday.reduce((lowest, day) => Math.min(lowest, day.balance), throughPayday[0]?.balance ?? nextPaycheck.balance),
-    };
-  }, [decisionForecastDays, todayIso]);
-  const algorithmSuite = useMemo(() => buildAlgorithmSuite({
-    month: currentMonth,
-    year: selectedYear,
-    todayDay: today,
-    safetyFloor: settings.safety_floor,
-    cashFlow,
-    dailyBalances: currentMonthBalances.map(day => ({
-      day: day.day,
-      income: day.income,
-      bills: day.bills,
-      expense: day.expense,
-      net: day.net,
-      balance: day.balance,
-    })),
-    nextPaycheckForecast,
-    bills: getMonthlyBills(currentMonth, selectedYear).map(bill => ({
-      id: bill.id,
-      name: bill.name,
-      amount: getBillMonthlyTotal(bill, currentMonth, selectedYear),
-      monthlyMinimum: bill.is_debt ? effectiveDebtMinimum(bill.amount, Number(bill.snowball_minimum_boost ?? 0)) : undefined,
-      frequency: bill.frequency,
-      paidAmount: getPaidAmount(bill.id, currentMonth, selectedYear),
-      occurrenceDays: getBillOccurrencesInMonth(bill, currentMonth, selectedYear),
-      pendingDays: activePendingPlanMatches(pendingPlanMatches, pendingBankTransactions)
-        .filter(match =>
-          match.target_id === bill.id
-          && match.occurrence_date.startsWith(`${selectedYear}-${String(currentMonth + 1).padStart(2, "0")}-`))
-        .map(match => Number(match.occurrence_date.slice(8, 10)))
-        .filter(Number.isFinite),
-      importance: bill.smart_priority,
-      category: bill.category || "Other",
-      due_day: bill.due_day,
-      is_debt: bill.is_debt,
-      is_recurring: bill.is_recurring,
-      includeInSnowball: bill.include_in_snowball !== false,
-      balance: bill.balance,
-      interest_rate: bill.interest_rate,
-    })),
-    transactions: getTransactionsForMonth(currentMonth, selectedYear).filter(isCashFlowTransaction).flatMap(transaction => {
-      const parts = transactionCategoryParts(transaction);
-      if (parts.length === 0) return transaction.amount > 0 ? [{ id: transaction.id, date: transaction.date, amount: transaction.amount, category: "Income", note: transaction.note }] : [];
-      return parts.map((part, index) => ({ id: `${transaction.id}:${index}`, date: transaction.date, amount: part.amount, category: part.category, note: part.label }));
-    }),
-    incomes: incomes.map(income => ({
-      id: income.id,
-      name: income.name,
-      amount: income.amount,
-      frequency: income.frequency,
-    })),
-    goals: goals.map(goal => ({
-      id: goal.id,
-      name: goal.name,
-      target_amount: goal.target_amount,
-      current_amount: goal.current_amount,
-      target_date: goal.target_date,
-      goal_type: goal.goal_type,
-    })),
-    categoryPlan,
-    forecastConfidence,
-    settings: decisionHubSettings,
-  }), [
-    cashFlow,
-    categoryPlan,
-    currentMonth,
-    currentMonthBalances,
-    decisionHubSettings,
-    forecastConfidence,
-    getBillMonthlyTotal,
-    getBillOccurrencesInMonth,
-    getMonthlyBills,
-    getPaidAmount,
-    getTransactionsForMonth,
-    goals,
-    incomes,
-    nextPaycheckForecast,
-    pendingBankTransactions,
-    pendingPlanMatches,
-    selectedYear,
-    settings.safety_floor,
-    today,
-  ]);
   const flowmentumEligible = isFlowmentumHandoffEligible({
     protectedDays: algorithmSuite.stability.protectedDays,
     stage: algorithmSuite.stability.stage,

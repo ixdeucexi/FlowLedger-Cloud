@@ -1,7 +1,7 @@
 import {
   defaultAlgorithmToggles,
   type AlgorithmId,
-} from "@/lib/algorithmCatalog";
+} from "./algorithmCatalog";
 
 export interface DecisionHubSettings {
   algorithmSuiteEnabled: boolean;
