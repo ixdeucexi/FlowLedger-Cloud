@@ -429,7 +429,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
               minDate={billStartDate || undefined}
             />
 
-            {(billStartDate.trim() || billEndDate.trim()) && (
+            {Boolean(billStartDate.trim() || billEndDate.trim()) && (
               <View style={[styles.infoBox, { backgroundColor: c.success + "12" }]}>
                 <Feather name="calendar" size={12} color={c.success} />
                 <Text style={[styles.infoText, { color: c.mutedForeground }]}>

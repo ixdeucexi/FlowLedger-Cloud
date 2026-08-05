@@ -1,0 +1,679 @@
+import { Feather } from "@expo/vector-icons";
+import React, { useMemo, useState } from "react";
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+
+import {
+  CardHeader,
+  DesktopCard,
+  DesktopPage,
+  DesktopSearch,
+  EmptyState,
+  FilterButton,
+  PageHeader,
+  PrimaryButton,
+  SecondaryButton,
+  StatusBadge,
+  SummaryMetricCard,
+  desktopPalette as palette,
+  desktopTableStyles as table,
+} from "@/components/desktop/DesktopUI";
+
+export type DesktopActivityRow = {
+  id: string;
+  date: string;
+  amount: number;
+  label: string;
+  category: string;
+  source:
+    | "transaction"
+    | "bank_transaction"
+    | "bill_payment"
+    | "income"
+    | "extra_payment"
+    | "transfer";
+  editable: boolean;
+  pending?: boolean;
+  detail?: string;
+  accountName?: string;
+  note?: string;
+};
+
+type Summary = { title: string; income: number; out: number; net: number };
+type ActivityTab =
+  | "All Activity"
+  | "Transactions"
+  | "Transfers"
+  | "Adjustments"
+  | "Notes";
+
+function money(value: number, signed = false) {
+  const prefix = signed ? (value > 0 ? "+" : value < 0 ? "−" : "") : "";
+  return `${prefix}${Math.abs(value).toLocaleString(undefined, { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function dateLabel(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day, 12).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function sourceLabel(source: DesktopActivityRow["source"]) {
+  if (source === "bank_transaction") return "Bank";
+  if (source === "bill_payment") return "Bill";
+  if (source === "extra_payment") return "Adjustment";
+  return source.charAt(0).toUpperCase() + source.slice(1);
+}
+
+function exportRows(rows: DesktopActivityRow[]) {
+  if (Platform.OS !== "web" || typeof document === "undefined") return;
+  const escape = (value: unknown) =>
+    `"${String(value ?? "").replace(/"/g, '""')}"`;
+  const csv = [
+    ["Date", "Description", "Category", "Account", "Amount", "Type", "Note"]
+      .map(escape)
+      .join(","),
+    ...rows.map((row) =>
+      [
+        row.date,
+        row.label,
+        row.category,
+        row.accountName ?? "",
+        row.amount,
+        sourceLabel(row.source),
+        row.note ?? "",
+      ]
+        .map(escape)
+        .join(","),
+    ),
+  ].join("\n");
+  const url = URL.createObjectURL(
+    new Blob([csv], { type: "text/csv;charset=utf-8" }),
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `flowledger-activity-${Date.now()}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+export function DesktopActivityPage({
+  rows,
+  summary,
+  onAdd,
+  onOpen,
+}: {
+  rows: DesktopActivityRow[];
+  summary: Summary;
+  onAdd: () => void;
+  onOpen: (id: string) => void;
+}) {
+  const [tab, setTab] = useState<ActivityTab>("All Activity");
+  const [search, setSearch] = useState("");
+  const [account, setAccount] = useState("All Accounts");
+  const [category, setCategory] = useState("All Categories");
+  const [type, setType] = useState("All Types");
+
+  const accounts = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          rows
+            .map((row) => row.accountName)
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ).sort(),
+    [rows],
+  );
+  const categories = useMemo(
+    () => Array.from(new Set(rows.map((row) => row.category))).sort(),
+    [rows],
+  );
+  const cycle = (
+    current: string,
+    values: string[],
+    update: (value: string) => void,
+  ) => update(values[(values.indexOf(current) + 1) % values.length]);
+  const monthRows = useMemo(
+    () =>
+      rows.filter((row) =>
+        row.date.startsWith(
+          `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`,
+        ),
+      ),
+    [rows],
+  );
+  const filtered = useMemo(
+    () =>
+      rows
+        .filter((row) => {
+          const query = search.trim().toLowerCase();
+          const tabMatch =
+            tab === "All Activity" ||
+            (tab === "Transactions" &&
+              !["transfer", "extra_payment"].includes(row.source)) ||
+            (tab === "Transfers" && row.source === "transfer") ||
+            (tab === "Adjustments" && row.source === "extra_payment") ||
+            (tab === "Notes" && Boolean(row.note));
+          return (
+            tabMatch &&
+            (!query ||
+              row.label.toLowerCase().includes(query) ||
+              row.category.toLowerCase().includes(query) ||
+              row.note?.toLowerCase().includes(query)) &&
+            (account === "All Accounts" || row.accountName === account) &&
+            (category === "All Categories" || row.category === category) &&
+            (type === "All Types" ||
+              (type === "Inflows" && row.amount > 0) ||
+              (type === "Outflows" && row.amount < 0))
+          );
+        })
+        .sort((left, right) => right.date.localeCompare(left.date)),
+    [account, category, rows, search, tab, type],
+  );
+
+  const spending = useMemo(() => {
+    const totals = new Map<string, number>();
+    monthRows
+      .filter(
+        (row) => row.amount < 0 && row.source !== "transfer" && !row.pending,
+      )
+      .forEach((row) =>
+        totals.set(
+          row.category,
+          (totals.get(row.category) ?? 0) + Math.abs(row.amount),
+        ),
+      );
+    const grandTotal = Array.from(totals.values()).reduce(
+      (sum, value) => sum + value,
+      0,
+    );
+    return Array.from(totals.entries())
+      .map(([label, amount], index) => ({
+        label,
+        amount,
+        percent: grandTotal ? Math.round((amount / grandTotal) * 100) : 0,
+        color: [
+          "#6d3bea",
+          "#1570ef",
+          "#039855",
+          "#dc6803",
+          "#d92d20",
+          "#0e9384",
+        ][index % 6],
+      }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 6);
+  }, [monthRows]);
+  const notes = monthRows
+    .filter((row) => row.note?.trim())
+    .slice()
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 3);
+
+  return (
+    <DesktopPage>
+      <ScrollView
+        style={styles.pageScroll}
+        contentContainerStyle={styles.pageContent}
+        showsVerticalScrollIndicator
+      >
+        <PageHeader
+          title="Activity"
+          description="See all of your financial activity in one place."
+          actions={
+            <>
+              <SecondaryButton
+                label="Export"
+                icon="upload"
+                onPress={() => exportRows(filtered)}
+              />
+              <PrimaryButton label="Add Transaction" onPress={onAdd} />
+            </>
+          }
+        />
+        <View style={styles.metrics}>
+          <SummaryMetricCard
+            label="Total Inflows"
+            value={money(summary.income, true)}
+            detail={summary.title}
+            icon="arrow-down"
+            tone="green"
+          />
+          <SummaryMetricCard
+            label="Total Outflows"
+            value={money(-summary.out, true)}
+            detail={summary.title}
+            icon="arrow-up"
+            tone="red"
+          />
+          <SummaryMetricCard
+            label="Net Flow"
+            value={money(summary.net, true)}
+            detail={summary.title}
+            icon="trending-up"
+          />
+          <SummaryMetricCard
+            label="Transactions"
+            value={String(monthRows.filter((row) => !row.pending).length)}
+            detail="This period"
+            icon="file-text"
+            tone="blue"
+          />
+        </View>
+        <View style={styles.tabs}>
+          {(
+            [
+              "All Activity",
+              "Transactions",
+              "Transfers",
+              "Adjustments",
+              "Notes",
+            ] as ActivityTab[]
+          ).map((item) => (
+            <Pressable
+              key={item}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: tab === item }}
+              onPress={() => setTab(item)}
+              style={[styles.tab, tab === item && styles.tabActive]}
+            >
+              <Text
+                style={[styles.tabText, tab === item && styles.tabTextActive]}
+              >
+                {item}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        <View style={styles.mainRow}>
+          <DesktopCard style={styles.activityCard}>
+            <View style={styles.filters}>
+              <DesktopSearch
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Search transactions..."
+              />
+              <FilterButton
+                label={account}
+                onPress={() =>
+                  cycle(account, ["All Accounts", ...accounts], setAccount)
+                }
+                active={account !== "All Accounts"}
+              />
+              <FilterButton
+                label={category}
+                onPress={() =>
+                  cycle(
+                    category,
+                    ["All Categories", ...categories],
+                    setCategory,
+                  )
+                }
+                active={category !== "All Categories"}
+              />
+              <FilterButton
+                label={type}
+                onPress={() =>
+                  cycle(type, ["All Types", "Inflows", "Outflows"], setType)
+                }
+                active={type !== "All Types"}
+              />
+            </View>
+            <View style={table.header}>
+              <Text style={[table.headerText, styles.colDate]}>Date</Text>
+              <Text style={[table.headerText, styles.colDescription]}>
+                Description
+              </Text>
+              <Text style={[table.headerText, styles.colCategory]}>
+                Category
+              </Text>
+              <Text style={[table.headerText, styles.colAccount]}>Account</Text>
+              <Text style={[table.headerText, styles.colAmount]}>Amount</Text>
+              <Text style={[table.headerText, styles.colType]}>Type</Text>
+              <Text style={[table.headerText, styles.colAction]} />
+            </View>
+            {filtered.length ? (
+              filtered.slice(0, 80).map((row) => (
+                <Pressable
+                  key={row.id}
+                  onPress={() => onOpen(row.id)}
+                  style={({ pressed }) => [
+                    table.row,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={[table.cellText, styles.colDate]}>
+                    {dateLabel(row.date)}
+                  </Text>
+                  <View style={[styles.colDescription, styles.descriptionCell]}>
+                    <View
+                      style={[
+                        styles.activityIcon,
+                        {
+                          backgroundColor:
+                            row.amount >= 0
+                              ? palette.greenSoft
+                              : palette.purpleSoft,
+                        },
+                      ]}
+                    >
+                      <Feather
+                        name={
+                          row.source === "transfer"
+                            ? "repeat"
+                            : row.amount >= 0
+                              ? "trending-up"
+                              : "shopping-bag"
+                        }
+                        size={14}
+                        color={row.amount >= 0 ? palette.green : palette.purple}
+                      />
+                    </View>
+                    <View style={styles.descriptionCopy}>
+                      <Text style={table.cellStrong} numberOfLines={1}>
+                        {row.label}
+                      </Text>
+                      {row.note ? (
+                        <Text style={styles.rowMuted} numberOfLines={1}>
+                          {row.note}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                  <View style={styles.colCategory}>
+                    <StatusBadge label={row.category} tone="gray" />
+                  </View>
+                  <Text
+                    style={[table.cellText, styles.colAccount]}
+                    numberOfLines={1}
+                  >
+                    {row.accountName ?? "—"}
+                  </Text>
+                  <Text
+                    style={[
+                      table.cellStrong,
+                      styles.colAmount,
+                      { color: row.amount >= 0 ? palette.green : palette.red },
+                    ]}
+                  >
+                    {money(row.amount, true)}
+                  </Text>
+                  <View style={styles.colType}>
+                    <StatusBadge
+                      label={row.pending ? "Pending" : sourceLabel(row.source)}
+                      tone={
+                        row.pending
+                          ? "amber"
+                          : row.source === "transfer"
+                            ? "blue"
+                            : row.amount >= 0
+                              ? "green"
+                              : "red"
+                      }
+                    />
+                  </View>
+                  <View style={styles.colAction}>
+                    <Feather
+                      name={row.editable ? "edit-2" : "chevron-right"}
+                      size={14}
+                      color={palette.muted}
+                    />
+                  </View>
+                </Pressable>
+              ))
+            ) : (
+              <EmptyState
+                title="No activity found"
+                message="Try changing your filters or add a transaction."
+                action={
+                  <PrimaryButton label="Add Transaction" onPress={onAdd} />
+                }
+              />
+            )}
+          </DesktopCard>
+          <View style={styles.insightsColumn}>
+            <DesktopCard>
+              <CardHeader title="Activity Summary" />
+              <View style={styles.summaryBody}>
+                <SummaryRow
+                  label="Inflows"
+                  value={money(summary.income, true)}
+                  color={palette.green}
+                />
+                <SummaryRow
+                  label="Outflows"
+                  value={money(-summary.out, true)}
+                  color={palette.red}
+                />
+                <View style={styles.summaryDivider} />
+                <SummaryRow
+                  label="Net Flow"
+                  value={money(summary.net, true)}
+                  color={palette.purple}
+                />
+              </View>
+            </DesktopCard>
+            <DesktopCard>
+              <CardHeader title="Spending by Category" />
+              <View style={styles.spendingBody}>
+                {spending.length ? (
+                  spending.map((item) => (
+                    <View key={item.label} style={styles.spendingRow}>
+                      <View
+                        style={[styles.dot, { backgroundColor: item.color }]}
+                      />
+                      <Text style={styles.spendingLabel} numberOfLines={1}>
+                        {item.label}
+                      </Text>
+                      <Text style={styles.spendingAmount}>
+                        {money(item.amount)}
+                      </Text>
+                      <Text style={styles.spendingPercent}>
+                        {item.percent}%
+                      </Text>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.emptyTiny}>
+                    No spending in this period.
+                  </Text>
+                )}
+              </View>
+            </DesktopCard>
+            <DesktopCard>
+              <CardHeader title="Recent Activity Notes" />
+              <View style={styles.notesBody}>
+                {notes.length ? (
+                  notes.map((row) => (
+                    <Pressable
+                      key={row.id}
+                      onPress={() => onOpen(row.id)}
+                      style={({ pressed }) => [
+                        styles.noteRow,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <View style={styles.noteIcon}>
+                        <Feather
+                          name="edit-3"
+                          size={13}
+                          color={palette.purple}
+                        />
+                      </View>
+                      <View style={styles.noteCopy}>
+                        <Text style={styles.noteTitle}>{row.label}</Text>
+                        <Text style={styles.noteText} numberOfLines={2}>
+                          {row.note}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  ))
+                ) : (
+                  <Text style={styles.emptyTiny}>No recent notes.</Text>
+                )}
+              </View>
+            </DesktopCard>
+          </View>
+        </View>
+      </ScrollView>
+    </DesktopPage>
+  );
+}
+
+function SummaryRow({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: string;
+  color: string;
+}) {
+  return (
+    <View style={styles.summaryRow}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={[styles.summaryValue, { color }]}>{value}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  pageScroll: { flex: 1, margin: -22 },
+  pageContent: { padding: 22 },
+  metrics: { flexDirection: "row", gap: 12, marginBottom: 14 },
+  tabs: {
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 28,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
+    marginBottom: 12,
+    paddingHorizontal: 8,
+  },
+  tab: {
+    height: 42,
+    justifyContent: "center",
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
+  },
+  tabActive: { borderBottomColor: palette.purple },
+  tabText: {
+    color: palette.muted,
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+  },
+  tabTextActive: { color: palette.purpleDark, fontFamily: "Inter_700Bold" },
+  mainRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  activityCard: { flex: 2.2, minWidth: 0, overflow: "hidden" },
+  insightsColumn: { flex: 1, minWidth: 240, gap: 12 },
+  filters: {
+    minHeight: 58,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    padding: 10,
+  },
+  colDate: { flex: 0.82, minWidth: 60 },
+  colDescription: { flex: 1.7, minWidth: 90 },
+  colCategory: { flex: 1.05, minWidth: 70 },
+  colAccount: { flex: 1, minWidth: 62 },
+  colAmount: { flex: 0.92, minWidth: 70 },
+  colType: { flex: 0.88, minWidth: 65 },
+  colAction: { width: 24, alignItems: "flex-end" },
+  descriptionCell: { flexDirection: "row", alignItems: "center", gap: 7 },
+  descriptionCopy: { flex: 1, minWidth: 0 },
+  activityIcon: {
+    width: 27,
+    height: 27,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rowMuted: {
+    color: palette.muted,
+    fontSize: 8,
+    fontFamily: "Inter_400Regular",
+    marginTop: 2,
+  },
+  summaryBody: { padding: 14 },
+  summaryRow: {
+    minHeight: 28,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  summaryLabel: {
+    color: palette.textSecondary,
+    fontSize: 10,
+    fontFamily: "Inter_500Medium",
+  },
+  summaryValue: { fontSize: 10, fontFamily: "Inter_700Bold" },
+  summaryDivider: {
+    height: 1,
+    backgroundColor: palette.borderSoft,
+    marginVertical: 5,
+  },
+  spendingBody: { padding: 14 },
+  spendingRow: {
+    minHeight: 25,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  dot: { width: 7, height: 7, borderRadius: 4 },
+  spendingLabel: {
+    flex: 1,
+    color: palette.textSecondary,
+    fontSize: 9,
+    fontFamily: "Inter_500Medium",
+  },
+  spendingAmount: {
+    color: palette.text,
+    fontSize: 9,
+    fontFamily: "Inter_700Bold",
+  },
+  spendingPercent: {
+    width: 28,
+    textAlign: "right",
+    color: palette.muted,
+    fontSize: 8,
+  },
+  notesBody: { paddingHorizontal: 12, paddingVertical: 6 },
+  noteRow: {
+    minHeight: 52,
+    flexDirection: "row",
+    gap: 9,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.borderSoft,
+  },
+  noteIcon: {
+    width: 27,
+    height: 27,
+    borderRadius: 8,
+    backgroundColor: palette.purpleSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  noteCopy: { flex: 1, minWidth: 0 },
+  noteTitle: { color: palette.text, fontSize: 9, fontFamily: "Inter_700Bold" },
+  noteText: { color: palette.muted, fontSize: 8, lineHeight: 12, marginTop: 2 },
+  emptyTiny: {
+    color: palette.muted,
+    fontSize: 10,
+    textAlign: "center",
+    paddingVertical: 18,
+  },
+  pressed: { opacity: 0.68 },
+});

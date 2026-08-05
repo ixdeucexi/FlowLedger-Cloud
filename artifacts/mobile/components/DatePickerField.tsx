@@ -172,7 +172,7 @@ export function DatePickerField({ value, onChange, placeholder = "Pick a date…
           </View>
 
           {/* Clear button (optional fields) */}
-          {optional && value && (
+          {Boolean(optional && value) && (
             <Pressable
               onPress={() => { onChange(""); setOpen(false); }}
               style={[styles.clearBtn, { borderTopColor: c.border }]}

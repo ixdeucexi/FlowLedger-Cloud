@@ -2,7 +2,16 @@ import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Tabs, useRouter, useSegments } from "expo-router";
 import React from "react";
-import { Image, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View, ViewStyle } from "react-native";
+import {
+  Image,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+  ViewStyle,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/context/AuthContext";
@@ -23,15 +32,27 @@ import {
   writeLearningTourState,
 } from "@/lib/learningTour";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
-import { FeedbackBadgeProvider, useFeedbackBadge } from "@/context/FeedbackBadgeContext";
+import {
+  FeedbackBadgeProvider,
+  useFeedbackBadge,
+} from "@/context/FeedbackBadgeContext";
 import { buildReviewQueue } from "@/lib/reviewCenter";
 import { tabBadgeValue } from "@/lib/tabBadge";
-import { buildOverdueBillOccurrences, groupOverdueBills } from "@/lib/overdueBills";
-import { pendingOccurrenceKeySet, unmatchedPendingTransactions } from "@/lib/pendingPlanMatches";
+import {
+  buildOverdueBillOccurrences,
+  groupOverdueBills,
+} from "@/lib/overdueBills";
+import {
+  pendingOccurrenceKeySet,
+  unmatchedPendingTransactions,
+} from "@/lib/pendingPlanMatches";
 import { tabBarDisplayLabel, tabBarLabelSize } from "@/lib/mobileLayout";
-import { appNotificationCount, clearAppBadge, syncAppBadge } from "@/lib/appBadge";
+import {
+  appNotificationCount,
+  clearAppBadge,
+  syncAppBadge,
+} from "@/lib/appBadge";
 import { appTabsForPlanning } from "@/lib/appTabs";
-
 
 function todayIsoDate() {
   const now = new Date();
@@ -96,19 +117,38 @@ const DEMO_TOUR_STEPS = [
   },
 ] as const;
 
-function BudgetLoadErrorScreen({ message, onRetry }: { message: string; onRetry: () => void }) {
+function BudgetLoadErrorScreen({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
   const colors = useColors();
   return (
-    <View style={[styles.loadingScreen, { backgroundColor: colors.background }]}>
+    <View
+      style={[styles.loadingScreen, { backgroundColor: colors.background }]}
+    >
       <Image
         source={require("../../assets/images/startup_f_transparent.png")}
         style={styles.loadingLogo}
         resizeMode="contain"
       />
-      <Text style={[styles.loadErrorTitle, { color: colors.foreground }]}>Couldn’t load your plan</Text>
-      <Text style={[styles.loadErrorBody, { color: colors.mutedForeground }]}>{message}</Text>
-      <Pressable onPress={onRetry} style={[styles.loadRetryButton, { backgroundColor: colors.primary }]}>
-        <Text style={[styles.loadRetryText, { color: colors.primaryForeground }]}>Try again</Text>
+      <Text style={[styles.loadErrorTitle, { color: colors.foreground }]}>
+        Couldn’t load your plan
+      </Text>
+      <Text style={[styles.loadErrorBody, { color: colors.mutedForeground }]}>
+        {message}
+      </Text>
+      <Pressable
+        onPress={onRetry}
+        style={[styles.loadRetryButton, { backgroundColor: colors.primary }]}
+      >
+        <Text
+          style={[styles.loadRetryText, { color: colors.primaryForeground }]}
+        >
+          Try again
+        </Text>
       </Pressable>
     </View>
   );
@@ -118,7 +158,9 @@ function readDemoTourStep() {
   if (Platform.OS !== "web") return 0;
   try {
     const stored = Number(globalThis.localStorage?.getItem(DEMO_TOUR_KEY) ?? 0);
-    return Number.isFinite(stored) ? Math.max(0, Math.min(DEMO_TOUR_STEPS.length - 1, stored)) : 0;
+    return Number.isFinite(stored)
+      ? Math.max(0, Math.min(DEMO_TOUR_STEPS.length - 1, stored))
+      : 0;
   } catch {
     return 0;
   }
@@ -127,12 +169,15 @@ function readDemoTourStep() {
 function writeDemoTourStep(step: number) {
   if (Platform.OS !== "web") return;
   try {
-    globalThis.localStorage?.setItem(DEMO_TOUR_KEY, String(Math.max(0, Math.min(DEMO_TOUR_STEPS.length - 1, step))));
+    globalThis.localStorage?.setItem(
+      DEMO_TOUR_KEY,
+      String(Math.max(0, Math.min(DEMO_TOUR_STEPS.length - 1, step))),
+    );
   } catch {}
 }
 
 function routeKeyFromSegments(segments: string[]) {
-  const known = DEMO_TOUR_STEPS.find(step => segments.includes(step.route));
+  const known = DEMO_TOUR_STEPS.find((step) => segments.includes(step.route));
   return known?.route ?? "index";
 }
 
@@ -145,7 +190,9 @@ function DemoModeBanner() {
   const [tourStepIndex, setTourStepIndex] = React.useState(readDemoTourStep);
   const [showDetails, setShowDetails] = React.useState(true);
   const routeName = routeKeyFromSegments(segments.map(String));
-  const routeStepIndex = DEMO_TOUR_STEPS.findIndex(step => step.route === routeName);
+  const routeStepIndex = DEMO_TOUR_STEPS.findIndex(
+    (step) => step.route === routeName,
+  );
   const activeStepIndex = routeStepIndex >= 0 ? routeStepIndex : tourStepIndex;
   const activeStep = DEMO_TOUR_STEPS[activeStepIndex] ?? DEMO_TOUR_STEPS[0];
   const nextStep = DEMO_TOUR_STEPS[activeStepIndex + 1];
@@ -172,7 +219,10 @@ function DemoModeBanner() {
   };
 
   const askSampleQuestion = () => {
-    router.push({ pathname: "/(tabs)/flo", params: { prompt: "Can I afford $500 on July 15?" } } as any);
+    router.push({
+      pathname: "/(tabs)/flo",
+      params: { prompt: "Can I afford $500 on July 15?" },
+    } as any);
   };
 
   const openNextTourStep = () => {
@@ -189,29 +239,55 @@ function DemoModeBanner() {
 
   return (
     <View style={[styles.demoBanner, { borderColor: colors.primary + "55" }]}>
-      <Pressable onPress={() => setExpanded(value => !value)} style={styles.demoBannerHeader}>
+      <Pressable
+        onPress={() => setExpanded((value) => !value)}
+        style={styles.demoBannerHeader}
+      >
         <View style={styles.demoBadge}>
           <Feather name="play" size={13} color="#bae6fd" />
           <Text style={styles.demoBadgeText}>Live demo</Text>
         </View>
-        <Text style={styles.demoBannerTitle}>{expanded ? `${activeStep.title} · ${activeStepIndex + 1} of ${DEMO_TOUR_STEPS.length}` : "Sample budget tour"}</Text>
-        <Feather name={expanded ? "chevron-up" : "chevron-down"} size={18} color="#93c5fd" />
+        <Text style={styles.demoBannerTitle}>
+          {expanded
+            ? `${activeStep.title} · ${activeStepIndex + 1} of ${DEMO_TOUR_STEPS.length}`
+            : "Sample budget tour"}
+        </Text>
+        <Feather
+          name={expanded ? "chevron-up" : "chevron-down"}
+          size={18}
+          color="#93c5fd"
+        />
       </Pressable>
       {expanded ? (
         <>
-          <Pressable onPress={() => setShowDetails(value => !value)} style={styles.demoExplainCard}>
+          <Pressable
+            onPress={() => setShowDetails((value) => !value)}
+            style={styles.demoExplainCard}
+          >
             <View style={styles.demoExplainHeader}>
               <Feather name="info" size={15} color="#38bdf8" />
               <Text style={styles.demoExplainTitle}>{activeStep.short}</Text>
             </View>
-            {showDetails ? <Text style={styles.demoBannerBody}>{activeStep.detail}</Text> : null}
-            <Text style={styles.demoTapHint}>{showDetails ? "Hide" : "Explain"}</Text>
+            {showDetails ? (
+              <Text style={styles.demoBannerBody}>{activeStep.detail}</Text>
+            ) : null}
+            <Text style={styles.demoTapHint}>
+              {showDetails ? "Hide" : "Explain"}
+            </Text>
           </Pressable>
           <View style={styles.demoButtonRow}>
-            <Pressable onPress={openNextTourStep} style={[styles.demoSmallButton, styles.demoPrimaryButton]}>
-              <Text style={styles.demoPrimaryButtonText}>{nextStep ? activeStep.nextLabel : "Finish tour"}</Text>
+            <Pressable
+              onPress={openNextTourStep}
+              style={[styles.demoSmallButton, styles.demoPrimaryButton]}
+            >
+              <Text style={styles.demoPrimaryButtonText}>
+                {nextStep ? activeStep.nextLabel : "Finish tour"}
+              </Text>
             </Pressable>
-            <Pressable onPress={askSampleQuestion} style={styles.demoSmallButton}>
+            <Pressable
+              onPress={askSampleQuestion}
+              style={styles.demoSmallButton}
+            >
               <Text style={styles.demoSmallButtonText}>Ask Flo</Text>
             </Pressable>
           </View>
@@ -219,8 +295,13 @@ function DemoModeBanner() {
             <Pressable onPress={resetDemo} style={styles.demoSmallButton}>
               <Text style={styles.demoSmallButtonText}>Reset demo</Text>
             </Pressable>
-            <Pressable onPress={startRealSetup} style={[styles.demoSmallButton, styles.demoPrimaryButton]}>
-              <Text style={styles.demoPrimaryButtonText}>Start my real setup</Text>
+            <Pressable
+              onPress={startRealSetup}
+              style={[styles.demoSmallButton, styles.demoPrimaryButton]}
+            >
+              <Text style={styles.demoPrimaryButtonText}>
+                Start my real setup
+              </Text>
             </Pressable>
           </View>
         </>
@@ -236,7 +317,8 @@ function FloDemo() {
   const insets = useSafeAreaInsets();
   const [state, setState] = React.useState(readLearningTourState);
   const [collapsed, setCollapsed] = React.useState(false);
-  const activeStep = LEARNING_TOUR_STEPS[state.stepIndex] ?? LEARNING_TOUR_STEPS[0];
+  const activeStep =
+    LEARNING_TOUR_STEPS[state.stepIndex] ?? LEARNING_TOUR_STEPS[0];
   const currentRoute = routeKeyFromSegments(segments.map(String));
   const isOnStepRoute = currentRoute === activeStep.route;
 
@@ -252,7 +334,8 @@ function FloDemo() {
     const onStart = () => {
       const next = readLearningTourState();
       setState(next);
-      const step = LEARNING_TOUR_STEPS[next.stepIndex] ?? LEARNING_TOUR_STEPS[0];
+      const step =
+        LEARNING_TOUR_STEPS[next.stepIndex] ?? LEARNING_TOUR_STEPS[0];
       router.push(step.path as any);
     };
     window.addEventListener(LEARNING_TOUR_EVENT, onStart);
@@ -267,10 +350,15 @@ function FloDemo() {
   React.useEffect(() => setCollapsed(false), [state.stepIndex]);
 
   const goToStep = (stepIndex: number) => {
-    const bounded = Math.max(0, Math.min(LEARNING_TOUR_STEPS.length - 1, stepIndex));
+    const bounded = Math.max(
+      0,
+      Math.min(LEARNING_TOUR_STEPS.length - 1, stepIndex),
+    );
     writeLearningTourState(true, bounded);
     setState({ active: true, stepIndex: bounded });
-    router.push((LEARNING_TOUR_STEPS[bounded] ?? LEARNING_TOUR_STEPS[0]).path as any);
+    router.push(
+      (LEARNING_TOUR_STEPS[bounded] ?? LEARNING_TOUR_STEPS[0]).path as any,
+    );
   };
 
   const next = () => {
@@ -283,65 +371,116 @@ function FloDemo() {
 
   if (!state.active) return null;
 
-  const targetPosition: ViewStyle = activeStep.route === "index"
-    ? { top: "48%", right: 34 }
-    : activeStep.route === "monthly"
-      ? { top: "40%", left: "44%" }
-      : activeStep.route === "bills"
-        ? { top: "34%", left: "66%" }
-        : activeStep.route === "transactions"
-          ? { top: 286, right: 28 }
-          : activeStep.route === "flo"
-            ? { bottom: 116, left: 32 }
-            : { top: 176, left: "42%" };
+  const targetPosition: ViewStyle =
+    activeStep.route === "index"
+      ? { top: "48%", right: 34 }
+      : activeStep.route === "monthly"
+        ? { top: "40%", left: "44%" }
+        : activeStep.route === "bills"
+          ? { top: "34%", left: "66%" }
+          : activeStep.route === "transactions"
+            ? { top: 286, right: 28 }
+            : activeStep.route === "flo"
+              ? { bottom: 116, left: 32 }
+              : { top: 176, left: "42%" };
 
   return (
-      <View pointerEvents="box-none" style={styles.learningLayer}>
-        <View pointerEvents="none" style={[styles.learningTarget, targetPosition]}>
-          <View style={styles.learningTargetRing} />
-          <Feather name="mouse-pointer" size={24} color="#f8fafc" style={styles.learningCursor} />
-          <Text style={styles.learningTargetText}>Tap here</Text>
-        </View>
-        <View style={[styles.learningSheet, collapsed && styles.learningSheetCollapsed, { top: insets.top + 10, borderColor: colors.primary + "55" }]}>
-          <View style={styles.learningHeader}>
-            <FloLogo size={36} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.learningEyebrow}>Flo Demo · {state.stepIndex + 1} of {LEARNING_TOUR_STEPS.length}</Text>
-              <Text style={styles.learningTitle}>{activeStep.title} - {activeStep.focus}</Text>
-            </View>
-            <Pressable onPress={() => setCollapsed(value => !value)} style={styles.learningClose} hitSlop={8} accessibilityLabel={collapsed ? "Expand Flo Demo" : "Minimize Flo Demo"}>
-              <Feather name={collapsed ? "chevron-down" : "chevron-up"} size={18} color="#cbd5e1" />
-            </Pressable>
-            <Pressable onPress={closeTour} style={styles.learningClose} hitSlop={8} accessibilityLabel="Close Flo Demo">
-              <Feather name="x" size={18} color="#cbd5e1" />
-            </Pressable>
-          </View>
-
-          {!collapsed ? (
-            <>
-              <Text style={styles.learningBody}>{activeStep.floSays}</Text>
-              <View style={styles.learningTryRow}>
-                <Feather name="mouse-pointer" size={15} color="#38bdf8" />
-                <Text style={styles.learningTryText}>{activeStep.tryThis}</Text>
-              </View>
-              <View style={styles.learningActions}>
-                <Pressable
-                  onPress={() => goToStep(state.stepIndex - 1)}
-                  disabled={state.stepIndex === 0}
-                  style={[styles.learningSecondary, { opacity: state.stepIndex === 0 ? 0.42 : 1 }]}
-                >
-                  <Text style={styles.learningSecondaryText}>Back</Text>
-                </Pressable>
-                <Pressable onPress={next} style={[styles.learningPrimary, { backgroundColor: colors.primary }]}>
-                  <Text style={[styles.learningPrimaryText, { color: colors.primaryForeground }]}>
-                    {state.stepIndex >= LEARNING_TOUR_STEPS.length - 1 ? "Finish" : "Next"}
-                  </Text>
-                </Pressable>
-              </View>
-            </>
-          ) : null}
-        </View>
+    <View pointerEvents="box-none" style={styles.learningLayer}>
+      <View
+        pointerEvents="none"
+        style={[styles.learningTarget, targetPosition]}
+      >
+        <View style={styles.learningTargetRing} />
+        <Feather
+          name="mouse-pointer"
+          size={24}
+          color="#f8fafc"
+          style={styles.learningCursor}
+        />
+        <Text style={styles.learningTargetText}>Tap here</Text>
       </View>
+      <View
+        style={[
+          styles.learningSheet,
+          collapsed && styles.learningSheetCollapsed,
+          { top: insets.top + 10, borderColor: colors.primary + "55" },
+        ]}
+      >
+        <View style={styles.learningHeader}>
+          <FloLogo size={36} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.learningEyebrow}>
+              Flo Demo · {state.stepIndex + 1} of {LEARNING_TOUR_STEPS.length}
+            </Text>
+            <Text style={styles.learningTitle}>
+              {activeStep.title} - {activeStep.focus}
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => setCollapsed((value) => !value)}
+            style={styles.learningClose}
+            hitSlop={8}
+            accessibilityLabel={
+              collapsed ? "Expand Flo Demo" : "Minimize Flo Demo"
+            }
+          >
+            <Feather
+              name={collapsed ? "chevron-down" : "chevron-up"}
+              size={18}
+              color="#cbd5e1"
+            />
+          </Pressable>
+          <Pressable
+            onPress={closeTour}
+            style={styles.learningClose}
+            hitSlop={8}
+            accessibilityLabel="Close Flo Demo"
+          >
+            <Feather name="x" size={18} color="#cbd5e1" />
+          </Pressable>
+        </View>
+
+        {!collapsed ? (
+          <>
+            <Text style={styles.learningBody}>{activeStep.floSays}</Text>
+            <View style={styles.learningTryRow}>
+              <Feather name="mouse-pointer" size={15} color="#38bdf8" />
+              <Text style={styles.learningTryText}>{activeStep.tryThis}</Text>
+            </View>
+            <View style={styles.learningActions}>
+              <Pressable
+                onPress={() => goToStep(state.stepIndex - 1)}
+                disabled={state.stepIndex === 0}
+                style={[
+                  styles.learningSecondary,
+                  { opacity: state.stepIndex === 0 ? 0.42 : 1 },
+                ]}
+              >
+                <Text style={styles.learningSecondaryText}>Back</Text>
+              </Pressable>
+              <Pressable
+                onPress={next}
+                style={[
+                  styles.learningPrimary,
+                  { backgroundColor: colors.primary },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.learningPrimaryText,
+                    { color: colors.primaryForeground },
+                  ]}
+                >
+                  {state.stepIndex >= LEARNING_TOUR_STEPS.length - 1
+                    ? "Finish"
+                    : "Next"}
+                </Text>
+              </Pressable>
+            </View>
+          </>
+        ) : null}
+      </View>
+    </View>
   );
 }
 
@@ -349,8 +488,17 @@ function TabContent() {
   const { width: viewportWidth } = useWindowDimensions();
   const colors = useColors();
   const {
-    loadError, retryBudgetLoad, demoMode, transactions, pendingBankTransactions, pendingPlanMatches, settings,
-    getMonthlyBills, getBillOccurrencesInMonth, getBillEffectiveMonthlyTotal, getPaidAmount,
+    loadError,
+    retryBudgetLoad,
+    demoMode,
+    transactions,
+    pendingBankTransactions,
+    pendingPlanMatches,
+    settings,
+    getMonthlyBills,
+    getBillOccurrencesInMonth,
+    getBillEffectiveMonthlyTotal,
+    getPaidAmount,
   } = useBudget();
   const { newFeedbackCount } = useFeedbackBadge();
   const themeMode = useEffectiveThemeMode();
@@ -358,13 +506,18 @@ function TabContent() {
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
   const isDesktop = useDesktopExperience();
-  const isIosWeb = isWeb && typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const isIosWeb =
+    isWeb &&
+    typeof navigator !== "undefined" &&
+    /iPhone|iPad|iPod/i.test(navigator.userAgent);
   const activityReviewCount = React.useMemo(
     () => buildReviewQueue(transactions, todayIsoDate()).length,
     [transactions],
   );
   const pendingAlertCount = React.useMemo(
-    () => unmatchedPendingTransactions(pendingPlanMatches, pendingBankTransactions).length,
+    () =>
+      unmatchedPendingTransactions(pendingPlanMatches, pendingBankTransactions)
+        .length,
     [pendingBankTransactions, pendingPlanMatches],
   );
   const activityAlertCount = activityReviewCount + pendingAlertCount;
@@ -372,9 +525,12 @@ function TabContent() {
     const now = new Date();
     const month = now.getMonth();
     const year = now.getFullYear();
-    const protectedOccurrences = pendingOccurrenceKeySet(pendingPlanMatches, pendingBankTransactions);
+    const protectedOccurrences = pendingOccurrenceKeySet(
+      pendingPlanMatches,
+      pendingBankTransactions,
+    );
     const occurrences = buildOverdueBillOccurrences(
-      getMonthlyBills(month, year).map(bill => ({
+      getMonthlyBills(month, year).map((bill) => ({
         billId: bill.id,
         name: bill.name,
         occurrenceDays: getBillOccurrencesInMonth(bill, month, year),
@@ -384,152 +540,204 @@ function TabContent() {
       month,
       year,
       now.getDate(),
-    ).filter(occurrence => !protectedOccurrences.has(`${occurrence.billId}:${occurrence.occurrenceDate}`));
+    ).filter(
+      (occurrence) =>
+        !protectedOccurrences.has(
+          `${occurrence.billId}:${occurrence.occurrenceDate}`,
+        ),
+    );
     return groupOverdueBills(occurrences).length;
-  }, [getBillEffectiveMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, getPaidAmount, pendingBankTransactions, pendingPlanMatches]);
-  const notificationCount = appNotificationCount(activityAlertCount, overdueBillCount, newFeedbackCount);
+  }, [
+    getBillEffectiveMonthlyTotal,
+    getBillOccurrencesInMonth,
+    getMonthlyBills,
+    getPaidAmount,
+    pendingBankTransactions,
+    pendingPlanMatches,
+  ]);
+  const notificationCount = appNotificationCount(
+    activityAlertCount,
+    overdueBillCount,
+    newFeedbackCount,
+  );
 
   React.useEffect(() => {
     void syncAppBadge(notificationCount);
   }, [notificationCount]);
 
-  React.useEffect(() => () => {
-    void clearAppBadge();
-  }, []);
+  React.useEffect(
+    () => () => {
+      void clearAppBadge();
+    },
+    [],
+  );
 
-  if (loadError) return <BudgetLoadErrorScreen message={loadError} onRetry={retryBudgetLoad} />;
+  if (loadError)
+    return (
+      <BudgetLoadErrorScreen message={loadError} onRetry={retryBudgetLoad} />
+    );
 
   return (
     <View
       style={[
         styles.tabTransitionRoot,
-        { backgroundColor: isDesktop ? "#03040b" : colors.background },
+        { backgroundColor: isDesktop ? "#f8fafc" : colors.background },
       ]}
     >
       <View style={styles.tabTransitionContent}>
         <ResponsiveDesktopChrome enabled={isDesktop}>
-            <Tabs
-          backBehavior="history"
-          detachInactiveScreens={false}
-          screenOptions={{
-            animation: "none",
-            freezeOnBlur: !isWeb,
-            lazy: true,
-            sceneStyle: {
-              backgroundColor: isDesktop ? "#03040b" : colors.background,
-            },
-            tabBarActiveTintColor: isDark ? "#8b5cf6" : colors.primary,
-            tabBarInactiveTintColor: colors.mutedForeground,
-            headerShown: false,
-            tabBarLabelStyle: {
-              fontFamily: "Inter_600SemiBold",
-              fontSize: tabBarLabelSize(viewportWidth),
-              marginTop: 1,
-            },
-            tabBarItemStyle: {
-              paddingVertical: 6,
-              borderRadius: 18,
-            },
-            tabBarStyle: {
-              display: isDesktop ? "none" : "flex",
-              position: "absolute",
-              left: 0,
-              right: 0,
-              bottom: 0,
-              borderTopLeftRadius: 28,
-              borderTopRightRadius: 28,
-              borderBottomLeftRadius: 0,
-              borderBottomRightRadius: 0,
-              backgroundColor: isIOS ? "transparent" : isDark ? "rgba(2,6,23,0.90)" : "rgba(255,255,255,0.96)",
-              borderWidth: 1,
-              borderTopWidth: 1,
-              borderBottomWidth: 0,
-              borderLeftWidth: 0,
-              borderRightWidth: 0,
-              borderColor: isDark ? "rgba(148,163,184,0.18)" : "rgba(15,23,42,0.10)",
-              shadowColor: isDark ? "#7c3aed" : "#94a3b8",
-              shadowOffset: { width: 0, height: 14 },
-              shadowOpacity: 0.22,
-              shadowRadius: 26,
-              elevation: 14,
-              paddingHorizontal: 6,
-              ...(isWeb ? {
-                height: isIosWeb ? 72 : 82,
-                paddingTop: isIosWeb ? 6 : 8,
-                paddingBottom: isIosWeb ? 12 : 10,
-              } : {
-                height: 86,
-                paddingTop: 6,
-                paddingBottom: 14,
-              }),
-            },
-            tabBarBackground: () =>
-              isIOS ? (
-                <BlurView
-                  intensity={100}
-                  tint={isDark ? "dark" : "light"}
-                  style={StyleSheet.absoluteFill}
+          <Tabs
+            backBehavior="history"
+            detachInactiveScreens={false}
+            screenOptions={{
+              animation: "none",
+              freezeOnBlur: !isWeb,
+              lazy: true,
+              sceneStyle: {
+                backgroundColor: isDesktop ? "#f8fafc" : colors.background,
+              },
+              tabBarActiveTintColor: isDark ? "#8b5cf6" : colors.primary,
+              tabBarInactiveTintColor: colors.mutedForeground,
+              headerShown: false,
+              tabBarLabelStyle: {
+                fontFamily: "Inter_600SemiBold",
+                fontSize: tabBarLabelSize(viewportWidth),
+                marginTop: 1,
+              },
+              tabBarItemStyle: {
+                paddingVertical: 6,
+                borderRadius: 18,
+              },
+              tabBarStyle: {
+                display: isDesktop ? "none" : "flex",
+                position: "absolute",
+                left: 0,
+                right: 0,
+                bottom: 0,
+                borderTopLeftRadius: 28,
+                borderTopRightRadius: 28,
+                borderBottomLeftRadius: 0,
+                borderBottomRightRadius: 0,
+                backgroundColor: isIOS
+                  ? "transparent"
+                  : isDark
+                    ? "rgba(2,6,23,0.90)"
+                    : "rgba(255,255,255,0.96)",
+                borderWidth: 1,
+                borderTopWidth: 1,
+                borderBottomWidth: 0,
+                borderLeftWidth: 0,
+                borderRightWidth: 0,
+                borderColor: isDark
+                  ? "rgba(148,163,184,0.18)"
+                  : "rgba(15,23,42,0.10)",
+                shadowColor: isDark ? "#7c3aed" : "#94a3b8",
+                shadowOffset: { width: 0, height: 14 },
+                shadowOpacity: 0.22,
+                shadowRadius: 26,
+                elevation: 14,
+                paddingHorizontal: 6,
+                ...(isWeb
+                  ? {
+                      height: isIosWeb ? 72 : 82,
+                      paddingTop: isIosWeb ? 6 : 8,
+                      paddingBottom: isIosWeb ? 12 : 10,
+                    }
+                  : {
+                      height: 86,
+                      paddingTop: 6,
+                      paddingBottom: 14,
+                    }),
+              },
+              tabBarBackground: () =>
+                isIOS ? (
+                  <BlurView
+                    intensity={100}
+                    tint={isDark ? "dark" : "light"}
+                    style={StyleSheet.absoluteFill}
+                  />
+                ) : isWeb ? (
+                  <View
+                    style={[
+                      StyleSheet.absoluteFill,
+                      {
+                        backgroundColor: isDark
+                          ? "rgba(2,6,23,0.96)"
+                          : "rgba(255,255,255,0.96)",
+                        borderTopLeftRadius: 28,
+                        borderTopRightRadius: 28,
+                      },
+                    ]}
+                  />
+                ) : null,
+            }}
+          >
+            {appTabsForPlanning(settings.zeroBasedBudgetEnabled).map((tab) => {
+              const isActivity = tab.name === "transactions";
+              const isBills = tab.name === "bills";
+              const isMore = tab.name === "more";
+              const reviewBadge = isActivity
+                ? tabBadgeValue(activityAlertCount)
+                : undefined;
+              const billBadge = isBills
+                ? tabBadgeValue(overdueBillCount)
+                : undefined;
+              const feedbackBadge = isMore
+                ? tabBadgeValue(newFeedbackCount)
+                : undefined;
+              const badge = reviewBadge ?? billBadge ?? feedbackBadge;
+              return (
+                <Tabs.Screen
+                  key={tab.name}
+                  name={tab.name}
+                  options={{
+                    title: tab.title,
+                    tabBarLabel: tabBarDisplayLabel(tab.title, viewportWidth),
+                    tabBarIcon: ({ color }) => (
+                      <Feather name={tab.icon} size={22} color={color} />
+                    ),
+                    tabBarBadge: badge,
+                    tabBarBadgeStyle: badge ? styles.alertTabBadge : undefined,
+                    tabBarAccessibilityLabel: reviewBadge
+                      ? `${tab.title}, ${activityReviewCount} item${activityReviewCount === 1 ? "" : "s"} need review and ${pendingAlertCount} unmatched transaction${pendingAlertCount === 1 ? "" : "s"} pending`
+                      : billBadge
+                        ? `Bills, ${overdueBillCount} past-due bill${overdueBillCount === 1 ? "" : "s"} need action`
+                        : feedbackBadge
+                          ? `More, ${newFeedbackCount} new feedback item${newFeedbackCount === 1 ? "" : "s"}`
+                          : tab.title,
+                  }}
                 />
-              ) : isWeb ? (
-                <View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    {
-                      backgroundColor: isDark ? "rgba(2,6,23,0.96)" : "rgba(255,255,255,0.96)",
-                      borderTopLeftRadius: 28,
-                      borderTopRightRadius: 28,
-                    },
-                  ]}
-                />
-              ) : null,
-          }}
-        >
-          {appTabsForPlanning(settings.zeroBasedBudgetEnabled).map(tab => {
-            const isActivity = tab.name === "transactions";
-            const isBills = tab.name === "bills";
-            const isMore = tab.name === "more";
-            const reviewBadge = isActivity ? tabBadgeValue(activityAlertCount) : undefined;
-            const billBadge = isBills ? tabBadgeValue(overdueBillCount) : undefined;
-            const feedbackBadge = isMore ? tabBadgeValue(newFeedbackCount) : undefined;
-            const badge = reviewBadge ?? billBadge ?? feedbackBadge;
-            return (
-              <Tabs.Screen
-                key={tab.name}
-                name={tab.name}
-                options={{
-                  title: tab.title,
-                  tabBarLabel: tabBarDisplayLabel(tab.title, viewportWidth),
-                  tabBarIcon: ({ color }) => <Feather name={tab.icon} size={22} color={color} />,
-                  tabBarBadge: badge,
-                  tabBarBadgeStyle: badge ? styles.alertTabBadge : undefined,
-                  tabBarAccessibilityLabel: reviewBadge
-                    ? `${tab.title}, ${activityReviewCount} item${activityReviewCount === 1 ? "" : "s"} need review and ${pendingAlertCount} unmatched transaction${pendingAlertCount === 1 ? "" : "s"} pending`
-                    : billBadge
-                      ? `Bills, ${overdueBillCount} past-due bill${overdueBillCount === 1 ? "" : "s"} need action`
-                    : feedbackBadge
-                      ? `More, ${newFeedbackCount} new feedback item${newFeedbackCount === 1 ? "" : "s"}`
-                    : tab.title,
-                }}
-              />
-            );
-          })}
-          <Tabs.Screen name="flo" options={{ href: null }} />
-          <Tabs.Screen name="category-budget" options={{ href: null }} />
-          <Tabs.Screen name="zero-budget-lab" options={{ href: null, tabBarStyle: { display: "none" } }} />
-          <Tabs.Screen name="how-flowledger-works" options={{ href: null, tabBarStyle: { display: "none" } }} />
-            </Tabs>
+              );
+            })}
+            <Tabs.Screen name="flo" options={{ href: null }} />
+            <Tabs.Screen name="category-budget" options={{ href: null }} />
+            <Tabs.Screen
+              name="zero-budget-lab"
+              options={{ href: null, tabBarStyle: { display: "none" } }}
+            />
+            <Tabs.Screen
+              name="how-flowledger-works"
+              options={{ href: null, tabBarStyle: { display: "none" } }}
+            />
+          </Tabs>
         </ResponsiveDesktopChrome>
             {demoMode ? <DemoModeBanner /> : null}
-            <PlanPreviewBanner />
-            <SaveStatusBanner />
-            <DecisionDueModal />
+        <PlanPreviewBanner />
+        <SaveStatusBanner />
+        <DecisionDueModal />
             <FloDemo />
       </View>
     </View>
   );
 }
 
-function ResponsiveDesktopChrome({ enabled, children }: { enabled: boolean; children: React.ReactNode }) {
+function ResponsiveDesktopChrome({
+  enabled,
+  children,
+}: {
+  enabled: boolean;
+  children: React.ReactNode;
+}) {
   if (!enabled) return <>{children}</>;
 
   return (
@@ -541,7 +749,9 @@ function ResponsiveDesktopChrome({ enabled, children }: { enabled: boolean; chil
             style={styles.loadingLogo}
             resizeMode="contain"
           />
-          <Text style={styles.desktopLoadingText}>Opening desktop workspace...</Text>
+          <Text style={styles.desktopLoadingText}>
+            Opening desktop workspace...
+          </Text>
         </View>
       }
     >
@@ -751,8 +961,24 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     elevation: 12,
   },
-  learningCursor: { position: "absolute", top: 34, right: 2, textShadowColor: "#020617", textShadowRadius: 5 },
-  learningTargetText: { position: "absolute", bottom: 0, color: "#e0f2fe", backgroundColor: "rgba(2,6,23,0.88)", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, fontSize: 10, fontWeight: "900" },
+  learningCursor: {
+    position: "absolute",
+    top: 34,
+    right: 2,
+    textShadowColor: "#020617",
+    textShadowRadius: 5,
+  },
+  learningTargetText: {
+    position: "absolute",
+    bottom: 0,
+    color: "#e0f2fe",
+    backgroundColor: "rgba(2,6,23,0.88)",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    fontSize: 10,
+    fontWeight: "900",
+  },
   learningSheet: {
     position: "absolute",
     left: 12,
@@ -812,7 +1038,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(56,189,248,0.22)",
   },
-  learningTryText: { flex: 1, color: "#bae6fd", fontSize: 11, lineHeight: 15, fontWeight: "800" },
+  learningTryText: {
+    flex: 1,
+    color: "#bae6fd",
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "800",
+  },
   learningActions: {
     flexDirection: "row",
     gap: 10,

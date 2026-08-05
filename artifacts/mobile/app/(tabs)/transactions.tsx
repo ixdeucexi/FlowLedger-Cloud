@@ -1,17 +1,38 @@
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
-  Alert, Modal, Platform, Pressable, ScrollView, SectionList,
-  StyleSheet, Text, TextInput, View,
+  Alert,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  SectionList,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddTransactionModal } from "@/components/AddTransactionModal";
-import { AddBillModal, type AddBillInitialValues } from "@/components/AddBillModal";
+import {
+  AddBillModal,
+  type AddBillInitialValues,
+} from "@/components/AddBillModal";
 import { BillSurplusModal } from "@/components/BillSurplusModal";
 import { CommandPlusButton } from "@/components/CommandPlusButton";
-import { DebtPaymentAppliedModal, type DebtPaymentAppliedDetail } from "@/components/DebtPaymentAppliedModal";
+import {
+  DebtPaymentAppliedModal,
+  type DebtPaymentAppliedDetail,
+} from "@/components/DebtPaymentAppliedModal";
+import { DesktopActivityPage } from "@/components/desktop/DesktopActivityPage";
 import { EmptyState } from "@/components/EmptyState";
 import { FullPaymentPromptModal } from "@/components/FullPaymentPromptModal";
 import { GoalModal } from "@/components/GoalModal";
@@ -20,30 +41,76 @@ import { PlanViewSelector } from "@/components/PlanViewSelector";
 import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
 import { UnplannedChargeModal } from "@/components/UnplannedChargeModal";
 import colors from "@/constants/colors";
-import type { Bill, ExtraPayment, PendingBankTransaction, SnowballFundingSource, Transaction } from "@/context/BudgetContext";
+import type {
+  Bill,
+  ExtraPayment,
+  PendingBankTransaction,
+  SnowballFundingSource,
+  Transaction,
+} from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
-import { DESKTOP_MODAL_HANDLE, DESKTOP_MODAL_MATCH, DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR } from "@/lib/desktopModal";
+import {
+  DESKTOP_MODAL_HANDLE,
+  DESKTOP_MODAL_MATCH,
+  DESKTOP_MODAL_OVERLAY,
+  DESKTOP_MODAL_REGULAR,
+} from "@/lib/desktopModal";
 import { debtPaymentStatusLabel } from "@/lib/forecastDisplay";
-import { canMatchExpenseToBill, confirmedBillMatchId, confirmedBillMatchOccurrenceDate, isCashFlowTransaction, isCheckingBalanceTransaction, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "@/lib/billMatching";
-import { activityAmountOutsidePlannedBill, listActivityMonths, summarizeActivityMonth } from "@/lib/monthlySummary";
+import {
+  canMatchExpenseToBill,
+  confirmedBillMatchId,
+  confirmedBillMatchOccurrenceDate,
+  isCashFlowTransaction,
+  isCheckingBalanceTransaction,
+  isConfirmedBillMatch,
+  isMatchedPaymentLowerThanPlanned,
+  rankBillMatches,
+  resolveMatchedBillBudget,
+} from "@/lib/billMatching";
+import {
+  activityAmountOutsidePlannedBill,
+  listActivityMonths,
+  summarizeActivityMonth,
+} from "@/lib/monthlySummary";
 import { isValidDateInMonth } from "@/lib/schedule";
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { resizeSnowballFundingSources } from "@/lib/snowballFunding";
-import { isOpenSpendingBucket, spendingBucketMatch, spendingBucketSummary } from "@/lib/spendingBuckets";
-import { buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, matchedOccurrenceAllocations, occurrenceKey, transactionDisplayName } from "@/lib/reviewCenter";
-import { activePendingPlanMatches, pendingMatchStatusLabel, unmatchedPendingTransactions } from "@/lib/pendingPlanMatches";
+import {
+  isOpenSpendingBucket,
+  spendingBucketMatch,
+  spendingBucketSummary,
+} from "@/lib/spendingBuckets";
+import {
+  buildForgottenBillDefaults,
+  buildReviewQueue,
+  forgottenBillSettlement,
+  matchedOccurrenceAllocations,
+  occurrenceKey,
+  transactionDisplayName,
+} from "@/lib/reviewCenter";
+import {
+  activePendingPlanMatches,
+  pendingMatchStatusLabel,
+  unmatchedPendingTransactions,
+} from "@/lib/pendingPlanMatches";
 import { CategoryBudgetScreen } from "./category-budget";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type ActivitySource = "transaction" | "bank_transaction" | "bill_payment" | "income" | "extra_payment" | "transfer";
-type TypeFilter     = "all" | "expense" | "income";
-type SourceFilter   = "all" | ActivitySource;
-type SortOrder      = "asc" | "desc";
+type ActivitySource =
+  | "transaction"
+  | "bank_transaction"
+  | "bill_payment"
+  | "income"
+  | "extra_payment"
+  | "transfer";
+type TypeFilter = "all" | "expense" | "income";
+type SourceFilter = "all" | ActivitySource;
+type SortOrder = "asc" | "desc";
 const MODAL_HANDOFF_DELAY_MS = 350;
 type MatchedPaymentPrompt = {
   transaction: Transaction;
@@ -65,7 +132,7 @@ interface ActivityItem {
   editable: boolean;
   rawTx?: Transaction;
   extraPayment?: ExtraPayment;
-  detail?: string;          // human-readable explanation shown in detail sheet
+  detail?: string; // human-readable explanation shown in detail sheet
   pending?: boolean;
   rawPending?: PendingBankTransaction;
   pendingMatchLabel?: string;
@@ -74,29 +141,80 @@ interface ActivityItem {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const MONTH_NAMES_LONG = [
-  "January","February","March","April","May","June",
-  "July","August","September","October","November","December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 const CAT_COLORS: Record<string, string> = {
-  Housing: "#0f9b8e", Utilities: "#f0b429", Insurance: "#6366f1",
-  Transportation: "#ec4899", Food: "#f97316", Entertainment: "#8b5cf6",
-  Health: "#ef4444", Education: "#3b82f6", Savings: "#22c55e",
-  Debt: "#e11d48", Income: "#22c55e", Other: "#94a3b8",
+  Housing: "#0f9b8e",
+  Utilities: "#f0b429",
+  Insurance: "#6366f1",
+  Transportation: "#ec4899",
+  Food: "#f97316",
+  Entertainment: "#8b5cf6",
+  Health: "#ef4444",
+  Education: "#3b82f6",
+  Savings: "#22c55e",
+  Debt: "#e11d48",
+  Income: "#22c55e",
+  Other: "#94a3b8",
 };
 
-const SOURCE_META: Record<ActivitySource, {
-  label: string;
-  icon: React.ComponentProps<typeof Feather>["name"];
-  color: string;
-  description: string;
-}> = {
-  transaction:   { label: "Manual",   icon: "edit-3",      color: "#6366f1", description: "Manually recorded transaction" },
-  bank_transaction: { label: "Bank", icon: "credit-card", color: "#0f9b8e", description: "Imported securely from your connected bank" },
-  bill_payment:  { label: "Bill",     icon: "file-text",   color: "#f0b429", description: "Bill marked as paid in Monthly view" },
-  income:        { label: "Income",   icon: "trending-up", color: "#22c55e", description: "Scheduled income occurrence" },
-  extra_payment: { label: "Debt plan", icon: "zap",        color: "#3b82f6", description: "Planned extra payment toward debt" },
-  transfer:      { label: "Transfer", icon: "repeat",      color: "#64748b", description: "Reviewed movement between your accounts" },
+const SOURCE_META: Record<
+  ActivitySource,
+  {
+    label: string;
+    icon: React.ComponentProps<typeof Feather>["name"];
+    color: string;
+    description: string;
+  }
+> = {
+  transaction: {
+    label: "Manual",
+    icon: "edit-3",
+    color: "#6366f1",
+    description: "Manually recorded transaction",
+  },
+  bank_transaction: {
+    label: "Bank",
+    icon: "credit-card",
+    color: "#0f9b8e",
+    description: "Imported securely from your connected bank",
+  },
+  bill_payment: {
+    label: "Bill",
+    icon: "file-text",
+    color: "#f0b429",
+    description: "Bill marked as paid in Monthly view",
+  },
+  income: {
+    label: "Income",
+    icon: "trending-up",
+    color: "#22c55e",
+    description: "Scheduled income occurrence",
+  },
+  extra_payment: {
+    label: "Debt plan",
+    icon: "zap",
+    color: "#3b82f6",
+    description: "Planned extra payment toward debt",
+  },
+  transfer: {
+    label: "Transfer",
+    icon: "repeat",
+    color: "#64748b",
+    description: "Reviewed movement between your accounts",
+  },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -121,14 +239,27 @@ function todayIsoDate() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
-function nextDebtNameAfterPayment(debts: Bill[], debt: Bill, balanceAfter?: number) {
+function nextDebtNameAfterPayment(
+  debts: Bill[],
+  debt: Bill,
+  balanceAfter?: number,
+) {
   if (balanceAfter === undefined || balanceAfter > 0.005) return undefined;
   return debts
-    .filter(item => item.is_debt && item.id !== debt.id && Number(item.balance) > 0.005)
-    .sort((left, right) => Number(left.balance) - Number(right.balance) || left.name.localeCompare(right.name))[0]?.name;
+    .filter(
+      (item) =>
+        item.is_debt && item.id !== debt.id && Number(item.balance) > 0.005,
+    )
+    .sort(
+      (left, right) =>
+        Number(left.balance) - Number(right.balance) ||
+        left.name.localeCompare(right.name),
+    )[0]?.name;
 }
 
-function groupByMonth(items: ActivityItem[]): { title: string; data: ActivityItem[] }[] {
+function groupByMonth(
+  items: ActivityItem[],
+): { title: string; data: ActivityItem[] }[] {
   const map = new Map<string, ActivityItem[]>();
   for (const item of items) {
     const [y, m] = item.date.split("-");
@@ -143,7 +274,11 @@ function groupByMonth(items: ActivityItem[]): { title: string; data: ActivityIte
 
 export default function TransactionsScreen() {
   const { settings } = useBudget();
-  return settings.zeroBasedBudgetEnabled ? <CategoryBudgetScreen embedded /> : <ActivityScreen />;
+  return settings.zeroBasedBudgetEnabled ? (
+    <CategoryBudgetScreen embedded />
+  ) : (
+    <ActivityScreen />
+  );
 }
 
 export function ActivityScreen() {
@@ -161,42 +296,80 @@ export function ActivityScreen() {
   }>();
   const { isFeatureLocked, bypassFeature } = useMembership();
   const {
-    transactions, pendingBankTransactions, pendingPlanMatches, addTransaction, updateTransaction, deleteTransaction, deleteTransfer,
-    bills, incomes, goals, overrides, extraPayments, categories, settings, connectedBankAccounts,
-    getIncomeOccurrencesInMonth, getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal,
-    matchTransactionToBill, unmatchTransactionFromBill, matchPendingTransactionToBill, removePendingPlanMatch,
-    reconcileTransaction, undoTransactionReconciliation, removeReviewSurplusFunding,
-    getExtraPayment, previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, addGoal,
-    addBill, deleteBillMistake,
+    transactions,
+    pendingBankTransactions,
+    pendingPlanMatches,
+    addTransaction,
+    updateTransaction,
+    deleteTransaction,
+    deleteTransfer,
+    bills,
+    incomes,
+    goals,
+    overrides,
+    extraPayments,
+    categories,
+    settings,
+    accounts,
+    connectedBankAccounts,
+    getIncomeOccurrencesInMonth,
+    getMonthlyBills,
+    getBillOccurrencesInMonth,
+    getBillMonthlyTotal,
+    getBillEffectiveMonthlyTotal,
+    matchTransactionToBill,
+    unmatchTransactionFromBill,
+    matchPendingTransactionToBill,
+    removePendingPlanMatch,
+    reconcileTransaction,
+    undoTransactionReconciliation,
+    removeReviewSurplusFunding,
+    getExtraPayment,
+    previewDebtSnowball,
+    applyDebtSnowballPayment,
+    removeDebtSnowballPayment,
+    addGoal,
+    addBill,
+    deleteBillMistake,
   } = useBudget();
 
   const [editModalVisible, setEditModalVisible] = useState(false);
-  const [editTx, setEditTx]                     = useState<Transaction | null>(null);
-  const [debtPaymentNotice, setDebtPaymentNotice] = useState<DebtPaymentAppliedDetail | null>(null);
-  const [detailItem, setDetailItem]             = useState<ActivityItem | null>(null);
-  const [typeFilter, setTypeFilter]             = useState<TypeFilter>("all");
-  const [sourceFilter, setSourceFilter]         = useState<SourceFilter>("all");
-  const [categoryFilter, setCategoryFilter]     = useState("all");
-  const [sortOrder, setSortOrder]               = useState<SortOrder>("desc");
+  const [editTx, setEditTx] = useState<Transaction | null>(null);
+  const [debtPaymentNotice, setDebtPaymentNotice] =
+    useState<DebtPaymentAppliedDetail | null>(null);
+  const [detailItem, setDetailItem] = useState<ActivityItem | null>(null);
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [currentActivityMonth] = useState(() => todayIsoDate().slice(0, 7));
   const [monthFilter, setMonthFilter] = useState(currentActivityMonth);
-  const [search, setSearch]                     = useState("");
+  const [search, setSearch] = useState("");
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [weeklySummaryVisible, setWeeklySummaryVisible] = useState(false);
   const [matchTx, setMatchTx] = useState<Transaction | null>(null);
-  const [unplannedChargeTx, setUnplannedChargeTx] = useState<Transaction | null>(null);
+  const [unplannedChargeTx, setUnplannedChargeTx] =
+    useState<Transaction | null>(null);
   const [forgottenBillVisible, setForgottenBillVisible] = useState(false);
-  const [pendingMatchTx, setPendingMatchTx] = useState<PendingBankTransaction | null>(null);
+  const [pendingMatchTx, setPendingMatchTx] =
+    useState<PendingBankTransaction | null>(null);
   const [savingMatch, setSavingMatch] = useState(false);
-  const [fullPaymentPrompt, setFullPaymentPrompt] = useState<MatchedPaymentPrompt | null>(null);
-  const [queuedFullPaymentPrompt, setQueuedFullPaymentPrompt] = useState<MatchedPaymentPrompt | null>(null);
-  const [surplusPrompt, setSurplusPrompt] = useState<MatchedPaymentPrompt | null>(null);
-  const [queuedSurplusPrompt, setQueuedSurplusPrompt] = useState<MatchedPaymentPrompt | null>(null);
+  const [fullPaymentPrompt, setFullPaymentPrompt] =
+    useState<MatchedPaymentPrompt | null>(null);
+  const [queuedFullPaymentPrompt, setQueuedFullPaymentPrompt] =
+    useState<MatchedPaymentPrompt | null>(null);
+  const [surplusPrompt, setSurplusPrompt] =
+    useState<MatchedPaymentPrompt | null>(null);
+  const [queuedSurplusPrompt, setQueuedSurplusPrompt] =
+    useState<MatchedPaymentPrompt | null>(null);
   const [surplusPaymentDate, setSurplusPaymentDate] = useState(todayIsoDate());
-  const [editExtraPayment, setEditExtraPayment] = useState<ExtraPayment | null>(null);
+  const [editExtraPayment, setEditExtraPayment] = useState<ExtraPayment | null>(
+    null,
+  );
   const [editExtraAmount, setEditExtraAmount] = useState("");
   const [editExtraDate, setEditExtraDate] = useState("");
-  const [editExtraPreview, setEditExtraPreview] = useState<SnowballProjectionResult | null>(null);
+  const [editExtraPreview, setEditExtraPreview] =
+    useState<SnowballProjectionResult | null>(null);
   const [savingExtraPayment, setSavingExtraPayment] = useState(false);
   const [pendingBucketDraft, setPendingBucketDraft] = useState<{
     name: string;
@@ -236,28 +409,38 @@ export function ActivityScreen() {
   // ── Build unified activity feed ───────────────────────────────────────────
   const allActivity = useMemo((): ActivityItem[] => {
     const items: ActivityItem[] = [];
-    const today        = new Date();
+    const today = new Date();
     const currentMonth = today.getMonth();
-    const currentYear  = today.getFullYear();
+    const currentYear = today.getFullYear();
     const snowballMatches = matchedOccurrenceAllocations(
       transactions,
       "extra_principal",
       "snowball",
     );
-    const confirmedBillMatchKeys = new Set(transactions
-      .filter(isConfirmedBillMatch)
-      .flatMap(transaction => {
+    const confirmedBillMatchKeys = new Set(
+      transactions.filter(isConfirmedBillMatch).flatMap((transaction) => {
         const billId = confirmedBillMatchId(transaction);
         if (!billId) return [];
-        const [year, month] = (confirmedBillMatchOccurrenceDate(transaction) ?? transaction.date).split("-").map(Number);
+        const [year, month] = (
+          confirmedBillMatchOccurrenceDate(transaction) ?? transaction.date
+        )
+          .split("-")
+          .map(Number);
         return [`${billId}:${year}:${month - 1}`];
-      }));
+      }),
+    );
 
     // Pending Plaid rows are previews only. They stay outside the authoritative
     // transaction list so forecasts, reports, matching, and totals cannot count them.
-    const livePendingMatches = activePendingPlanMatches(pendingPlanMatches, pendingBankTransactions);
+    const livePendingMatches = activePendingPlanMatches(
+      pendingPlanMatches,
+      pendingBankTransactions,
+    );
     for (const pending of pendingBankTransactions) {
-      const pendingMatch = livePendingMatches.find(match => match.pending_plaid_transaction_id === pending.plaid_transaction_id);
+      const pendingMatch = livePendingMatches.find(
+        (match) =>
+          match.pending_plaid_transaction_id === pending.plaid_transaction_id,
+      );
       items.push({
         id: `pending-${pending.plaid_transaction_id}`,
         date: pending.transaction_date,
@@ -268,7 +451,9 @@ export function ActivityScreen() {
         editable: false,
         pending: true,
         rawPending: pending,
-        pendingMatchLabel: pendingMatch ? pendingMatchStatusLabel(pendingMatch) : undefined,
+        pendingMatchLabel: pendingMatch
+          ? pendingMatchStatusLabel(pendingMatch)
+          : undefined,
         detail: pendingMatch
           ? `${pendingMatchStatusLabel(pendingMatch)} for ${pendingMatch.target_name}. It is not paid or counted until the bank posts it.`
           : "Pending at your bank. FlowLedger is showing this as a preview and will not count it until it posts.",
@@ -279,64 +464,106 @@ export function ActivityScreen() {
     // the actual bill payment instead of a second, separate expense.
     for (const tx of transactions) {
       const matchedBillId = confirmedBillMatchId(tx);
-      const matchedBill = matchedBillId ? bills.find(bill => bill.id === matchedBillId) : undefined;
+      const matchedBill = matchedBillId
+        ? bills.find((bill) => bill.id === matchedBillId)
+        : undefined;
       const confirmedMatch = Boolean(matchedBill && isConfirmedBillMatch(tx));
-      const matchedIncome = tx.linked_income_id ? incomes.find(income => income.id === tx.linked_income_id) : undefined;
-      const allocationDetail = (tx.review_allocations ?? []).map(allocation => {
-        if (allocation.type === "bill" || allocation.type === "income" || allocation.type === "planned_expense") return `${allocation.name ?? allocation.type} $${allocation.amount.toFixed(2)}`;
-        if (allocation.type === "extra_principal") return `Extra principal $${allocation.amount.toFixed(2)}`;
-        if (allocation.type === "category") return `${allocation.category ?? "Other"} $${allocation.amount.toFixed(2)}`;
-        return `Transfer $${allocation.amount.toFixed(2)}`;
-      }).join(" · ");
+      const matchedIncome = tx.linked_income_id
+        ? incomes.find((income) => income.id === tx.linked_income_id)
+        : undefined;
+      const allocationDetail = (tx.review_allocations ?? [])
+        .map((allocation) => {
+          if (
+            allocation.type === "bill" ||
+            allocation.type === "income" ||
+            allocation.type === "planned_expense"
+          )
+            return `${allocation.name ?? allocation.type} $${allocation.amount.toFixed(2)}`;
+          if (allocation.type === "extra_principal")
+            return `Extra principal $${allocation.amount.toFixed(2)}`;
+          if (allocation.type === "category")
+            return `${allocation.category ?? "Other"} $${allocation.amount.toFixed(2)}`;
+          return `Transfer $${allocation.amount.toFixed(2)}`;
+        })
+        .join(" · ");
       const source: ActivitySource = confirmedMatch
         ? "bill_payment"
-        : matchedIncome ? "income"
-        : tx.review_status === "transfer" ? "transfer"
-        : tx.source === "plaid" ? "bank_transaction" : "transaction";
+        : matchedIncome
+          ? "income"
+          : tx.review_status === "transfer"
+            ? "transfer"
+            : tx.source === "plaid"
+              ? "bank_transaction"
+              : "transaction";
       items.push({
-        id:       `tx-${tx.id}`,
-        date:     tx.date,
-        amount:   tx.amount,
-        label:    transactionDisplayName(tx, confirmedMatch ? matchedBill!.name : matchedIncome?.name),
-        category: confirmedMatch ? matchedBill!.category : matchedIncome ? "Income" : tx.category,
+        id: `tx-${tx.id}`,
+        date: tx.date,
+        amount: tx.amount,
+        label: transactionDisplayName(
+          tx,
+          confirmedMatch ? matchedBill!.name : matchedIncome?.name,
+        ),
+        category: confirmedMatch
+          ? matchedBill!.category
+          : matchedIncome
+            ? "Income"
+            : tx.category,
         source,
         editable: true,
-        rawTx:    tx,
-        detail:   allocationDetail || (tx.note ? `${tx.note} · ${tx.category}` : tx.category),
+        rawTx: tx,
+        detail:
+          allocationDetail ||
+          (tx.note ? `${tx.note} · ${tx.category}` : tx.category),
       });
     }
 
     // 2. Bill payments — overrides where paid_amount > 0
     for (const override of overrides) {
-      const bill = bills.find(b => b.id === override.bill_id);
+      const bill = bills.find((b) => b.id === override.bill_id);
       if (!bill) continue;
-      if (confirmedBillMatchKeys.has(`${override.bill_id}:${override.year}:${override.month}`)) continue;
+      if (
+        confirmedBillMatchKeys.has(
+          `${override.bill_id}:${override.year}:${override.month}`,
+        )
+      )
+        continue;
       const extraApplied = extraPayments
-        .filter(ep => ep.month === override.month && ep.year === override.year)
-        .flatMap(ep => ep.allocations)
-        .filter(allocation => allocation.billId === override.bill_id)
+        .filter(
+          (ep) => ep.month === override.month && ep.year === override.year,
+        )
+        .flatMap((ep) => ep.allocations)
+        .filter((allocation) => allocation.billId === override.bill_id)
         .reduce((sum, allocation) => sum + allocation.payment, 0);
       const regularPaid = Math.max(0, override.paid_amount - extraApplied);
       if (regularPaid <= 0) continue;
-      const dueDay      = override.custom_due_day ?? bill.due_day;
-      const daysInMonth = new Date(override.year, override.month + 1, 0).getDate();
-      const day         = Math.min(dueDay, daysInMonth);
-      const date        = override.paid_date ?? `${override.year}-${String(override.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const dueDay = override.custom_due_day ?? bill.due_day;
+      const daysInMonth = new Date(
+        override.year,
+        override.month + 1,
+        0,
+      ).getDate();
+      const day = Math.min(dueDay, daysInMonth);
+      const date =
+        override.paid_date ??
+        `${override.year}-${String(override.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
       items.push({
-        id:       `bill-${override.id}`,
+        id: `bill-${override.id}`,
         date,
-        amount:   -regularPaid,
-        label:    bill.name,
+        amount: -regularPaid,
+        label: bill.name,
         category: bill.category,
-        source:   "bill_payment",
+        source: "bill_payment",
         editable: false,
-        detail:   `${regularPaid.toFixed(2)} paid on ${MONTH_NAMES_LONG[override.month]} ${day}, ${override.year}`,
+        detail: `${regularPaid.toFixed(2)} paid on ${MONTH_NAMES_LONG[override.month]} ${day}, ${override.year}`,
       });
     }
 
     // 3. Income occurrences — past 24 months plus every occurrence in the current month.
     // Matched deposits replace their planned occurrence instead of being added twice.
-    const incomeOccurrenceMatches = matchedOccurrenceAllocations(transactions, "income");
+    const incomeOccurrenceMatches = matchedOccurrenceAllocations(
+      transactions,
+      "income",
+    );
     for (let i = 24; i >= 0; i--) {
       const totalMonths = currentYear * 12 + currentMonth - i;
       const m = totalMonths % 12;
@@ -345,20 +572,28 @@ export function ActivityScreen() {
       for (const { income, days, effectiveAmount } of occurrences) {
         for (const day of days) {
           const date = `${y}-${String(m + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-          const match = incomeOccurrenceMatches.get(occurrenceKey(income.id, date));
-          const remaining = !match ? effectiveAmount : match.settlement === "partial"
-            ? Math.max(0, Number(match.plannedAmount ?? effectiveAmount) - Number(match.amount || 0))
-            : 0;
+          const match = incomeOccurrenceMatches.get(
+            occurrenceKey(income.id, date),
+          );
+          const remaining = !match
+            ? effectiveAmount
+            : match.settlement === "partial"
+              ? Math.max(
+                  0,
+                  Number(match.plannedAmount ?? effectiveAmount) -
+                    Number(match.amount || 0),
+                )
+              : 0;
           if (remaining <= 0.005) continue;
           items.push({
-            id:       `income-${income.id}-${date}`,
+            id: `income-${income.id}-${date}`,
             date,
-            amount:   remaining,
-            label:    income.name,
+            amount: remaining,
+            label: income.name,
             category: "Income",
-            source:   "income",
+            source: "income",
             editable: false,
-            detail:   `${income.frequency.charAt(0).toUpperCase() + income.frequency.slice(1)} income — $${remaining.toFixed(2)} on ${formatDateLong(date)}`,
+            detail: `${income.frequency.charAt(0).toUpperCase() + income.frequency.slice(1)} income — $${remaining.toFixed(2)} on ${formatDateLong(date)}`,
           });
         }
       }
@@ -366,43 +601,76 @@ export function ActivityScreen() {
 
     // 4. Extra debt payments
     for (const ep of extraPayments) {
-      const date  = ep.payment_date ?? `${ep.year}-${String(ep.month + 1).padStart(2, "0")}-01`;
-      const remainingAllocations = ep.allocations.map(allocation => {
-        const match = snowballMatches.get(occurrenceKey(allocation.billId, date));
-        const remaining = !match
-          ? allocation.payment
-          : match.settlement === "partial"
-            ? Math.max(0, Number(match.plannedAmount ?? allocation.payment) - Number(match.amount || 0))
-            : 0;
-        return { ...allocation, payment: remaining };
-      }).filter(allocation => allocation.payment > 0.005);
-      const remainingAmount = remainingAllocations.reduce((sum, allocation) => sum + allocation.payment, 0);
+      const date =
+        ep.payment_date ??
+        `${ep.year}-${String(ep.month + 1).padStart(2, "0")}-01`;
+      const remainingAllocations = ep.allocations
+        .map((allocation) => {
+          const match = snowballMatches.get(
+            occurrenceKey(allocation.billId, date),
+          );
+          const remaining = !match
+            ? allocation.payment
+            : match.settlement === "partial"
+              ? Math.max(
+                  0,
+                  Number(match.plannedAmount ?? allocation.payment) -
+                    Number(match.amount || 0),
+                )
+              : 0;
+          return { ...allocation, payment: remaining };
+        })
+        .filter((allocation) => allocation.payment > 0.005);
+      const remainingAmount = remainingAllocations.reduce(
+        (sum, allocation) => sum + allocation.payment,
+        0,
+      );
       if (remainingAmount <= 0.005) continue;
-      const names = remainingAllocations.map(a => a.billName).join(", ");
-      const funding = (ep.sources ?? []).map(source => source.type === "bill_surplus" ? `${source.billName ?? "bill"} surplus` : "manual safe extra").join(", ");
-      const status = debtPaymentStatusLabel(date, (ep.sources ?? []).some(source => source.pendingBalanceApply));
-      items.push({
-        id:       `extra-${ep.id}`,
+      const names = remainingAllocations.map((a) => a.billName).join(", ");
+      const funding = (ep.sources ?? [])
+        .map((source) =>
+          source.type === "bill_surplus"
+            ? `${source.billName ?? "bill"} surplus`
+            : "manual safe extra",
+        )
+        .join(", ");
+      const status = debtPaymentStatusLabel(
         date,
-        amount:   -remainingAmount,
-        label:    names || "Extra debt payment",
+        (ep.sources ?? []).some((source) => source.pendingBalanceApply),
+      );
+      items.push({
+        id: `extra-${ep.id}`,
+        date,
+        amount: -remainingAmount,
+        label: names || "Extra debt payment",
         category: "Debt",
-        source:   "extra_payment",
+        source: "extra_payment",
         editable: true,
         extraPayment: ep,
-        detail:   `$${remainingAmount.toFixed(2)} ${status} ${status === "scheduled" ? "for" : "to"} ${names || "debt accounts"} on ${formatDateLong(date)}${funding ? ` · Funded by ${funding}` : ""}`,
+        detail: `$${remainingAmount.toFixed(2)} ${status} ${status === "scheduled" ? "for" : "to"} ${names || "debt accounts"} on ${formatDateLong(date)}${funding ? ` · Funded by ${funding}` : ""}`,
       });
     }
 
     return items;
-  }, [transactions, pendingBankTransactions, pendingPlanMatches, overrides, bills, incomes, extraPayments, getIncomeOccurrencesInMonth]);
+  }, [
+    transactions,
+    pendingBankTransactions,
+    pendingPlanMatches,
+    overrides,
+    bills,
+    incomes,
+    extraPayments,
+    getIncomeOccurrencesInMonth,
+  ]);
 
   useEffect(() => {
     const pendingId = params.pendingId;
     if (!pendingId) return;
     const requestKey = `${pendingId}:${params.pendingAt ?? ""}`;
     if (handledPendingRouteRef.current === requestKey) return;
-    const pendingItem = allActivity.find(item => item.rawPending?.plaid_transaction_id === pendingId);
+    const pendingItem = allActivity.find(
+      (item) => item.rawPending?.plaid_transaction_id === pendingId,
+    );
     if (!pendingItem) return;
     handledPendingRouteRef.current = requestKey;
     setDetailItem(pendingItem);
@@ -410,20 +678,48 @@ export function ActivityScreen() {
 
   // ── Filter & sort ─────────────────────────────────────────────────────────
   const categoryOptions = useMemo(
-    () => Array.from(new Set(allActivity.map(t => t.category))).sort((a, b) => a.localeCompare(b)),
-    [allActivity]
+    () =>
+      Array.from(new Set(allActivity.map((t) => t.category))).sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    [allActivity],
   );
 
-  const availableActivityMonths = useMemo(() => listActivityMonths([
-    ...transactions.map(transaction => transaction.date),
-    ...pendingBankTransactions.map(transaction => transaction.transaction_date),
-    ...overrides
-      .filter(override => override.paid_amount > 0.005 || override.actual_amount !== undefined)
-      .map(override => override.paid_date
-        ?? `${override.year}-${String(override.month + 1).padStart(2, "0")}-01`),
-    ...extraPayments.map(payment => payment.payment_date
-      ?? `${payment.year}-${String(payment.month + 1).padStart(2, "0")}-01`),
-  ], currentActivityMonth), [currentActivityMonth, extraPayments, overrides, pendingBankTransactions, transactions]);
+  const availableActivityMonths = useMemo(
+    () =>
+      listActivityMonths(
+        [
+          ...transactions.map((transaction) => transaction.date),
+          ...pendingBankTransactions.map(
+            (transaction) => transaction.transaction_date,
+          ),
+          ...overrides
+            .filter(
+              (override) =>
+                override.paid_amount > 0.005 ||
+                override.actual_amount !== undefined,
+            )
+            .map(
+              (override) =>
+                override.paid_date ??
+                `${override.year}-${String(override.month + 1).padStart(2, "0")}-01`,
+            ),
+          ...extraPayments.map(
+            (payment) =>
+              payment.payment_date ??
+              `${payment.year}-${String(payment.month + 1).padStart(2, "0")}-01`,
+          ),
+        ],
+        currentActivityMonth,
+      ),
+    [
+      currentActivityMonth,
+      extraPayments,
+      overrides,
+      pendingBankTransactions,
+      transactions,
+    ],
+  );
 
   const activeFilterCount = [
     monthFilter !== currentActivityMonth,
@@ -449,25 +745,30 @@ export function ActivityScreen() {
   };
 
   const filtered = useMemo(() => {
-    let list = allActivity.filter(item => item.date.startsWith(`${monthFilter}-`));
-    if (typeFilter === "expense") list = list.filter(t => t.amount < 0);
-    if (typeFilter === "income")  list = list.filter(t => t.amount > 0);
-    if (sourceFilter !== "all") list = list.filter(t => t.source === sourceFilter);
-    if (categoryFilter !== "all") list = list.filter(t => t.category === categoryFilter);
+    let list = allActivity.filter((item) =>
+      item.date.startsWith(`${monthFilter}-`),
+    );
+    if (typeFilter === "expense") list = list.filter((t) => t.amount < 0);
+    if (typeFilter === "income") list = list.filter((t) => t.amount > 0);
+    if (sourceFilter !== "all")
+      list = list.filter((t) => t.source === sourceFilter);
+    if (categoryFilter !== "all")
+      list = list.filter((t) => t.category === categoryFilter);
 
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      list = list.filter(t =>
-        t.label.toLowerCase().includes(q) ||
-        t.category.toLowerCase().includes(q) ||
-        SOURCE_META[t.source].label.toLowerCase().includes(q)
+      list = list.filter(
+        (t) =>
+          t.label.toLowerCase().includes(q) ||
+          t.category.toLowerCase().includes(q) ||
+          SOURCE_META[t.source].label.toLowerCase().includes(q),
       );
     }
     if (!hasActiveFilters) {
       const now = new Date();
       const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
       const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-      list = list.filter(t => t.date >= monthStart);
+      list = list.filter((t) => t.date >= monthStart);
       list.sort((a, b) => {
         const aUpcoming = a.date >= today;
         const bUpcoming = b.date >= today;
@@ -476,13 +777,23 @@ export function ActivityScreen() {
         return b.date.localeCompare(a.date);
       });
     } else {
-      list.sort((a, b) => sortOrder === "asc"
-        ? a.date.localeCompare(b.date)
-        : b.date.localeCompare(a.date)
+      list.sort((a, b) =>
+        sortOrder === "asc"
+          ? a.date.localeCompare(b.date)
+          : b.date.localeCompare(a.date),
       );
     }
     return list;
-  }, [allActivity, monthFilter, typeFilter, sourceFilter, categoryFilter, search, sortOrder, hasActiveFilters]);
+  }, [
+    allActivity,
+    monthFilter,
+    typeFilter,
+    sourceFilter,
+    categoryFilter,
+    search,
+    sortOrder,
+    hasActiveFilters,
+  ]);
 
   const sections = useMemo(() => groupByMonth(filtered), [filtered]);
 
@@ -491,7 +802,9 @@ export function ActivityScreen() {
     [transactions],
   );
   const pendingActivityCount = useMemo(
-    () => unmatchedPendingTransactions(pendingPlanMatches, pendingBankTransactions).length,
+    () =>
+      unmatchedPendingTransactions(pendingPlanMatches, pendingBankTransactions)
+        .length,
     [pendingBankTransactions, pendingPlanMatches],
   );
 
@@ -499,32 +812,47 @@ export function ActivityScreen() {
   const monthlySummary = useMemo(() => {
     const [year, monthNumber] = monthFilter.split("-").map(Number);
     const monthIndex = monthNumber - 1;
-    const plannedBillEntries = getMonthlyBills(monthIndex, year).flatMap(bill => {
-      const occurrenceDays = getBillOccurrencesInMonth(bill, monthIndex, year);
-      const monthlyTotal = getBillEffectiveMonthlyTotal(bill, monthIndex, year);
-      if (occurrenceDays.length === 0 || monthlyTotal <= 0.005) return [];
-      const amountPerOccurrence = monthlyTotal / occurrenceDays.length;
-      return occurrenceDays.map(day => ({
-        date: `${monthFilter}-${String(day).padStart(2, "0")}`,
-        amount: -amountPerOccurrence,
-      }));
-    });
+    const plannedBillEntries = getMonthlyBills(monthIndex, year).flatMap(
+      (bill) => {
+        const occurrenceDays = getBillOccurrencesInMonth(
+          bill,
+          monthIndex,
+          year,
+        );
+        const monthlyTotal = getBillEffectiveMonthlyTotal(
+          bill,
+          monthIndex,
+          year,
+        );
+        if (occurrenceDays.length === 0 || monthlyTotal <= 0.005) return [];
+        const amountPerOccurrence = monthlyTotal / occurrenceDays.length;
+        return occurrenceDays.map((day) => ({
+          date: `${monthFilter}-${String(day).padStart(2, "0")}`,
+          amount: -amountPerOccurrence,
+        }));
+      },
+    );
     const summary = summarizeActivityMonth(
       [
-        ...allActivity.map(item => ({
+        ...allActivity.map((item) => ({
           date: item.date,
           amount: item.rawTx
             ? activityAmountOutsidePlannedBill(
-              item.amount,
-              isConfirmedBillMatch(item.rawTx),
-              item.rawTx.review_allocations,
-            )
+                item.amount,
+                isConfirmedBillMatch(item.rawTx),
+                item.rawTx.review_allocations,
+              )
             : item.amount,
           pending: item.pending,
-          excludeFromCashFlow: (item.source === "bill_payment" && !item.rawTx)
-            || item.source === "transfer"
-            || Boolean(item.rawTx && !isCashFlowTransaction(item.rawTx))
-            || Boolean(item.rawTx && item.rawTx.amount > 0 && !isCheckingBalanceTransaction(item.rawTx, connectedBankAccounts)),
+          excludeFromCashFlow:
+            (item.source === "bill_payment" && !item.rawTx) ||
+            item.source === "transfer" ||
+            Boolean(item.rawTx && !isCashFlowTransaction(item.rawTx)) ||
+            Boolean(
+              item.rawTx &&
+              item.rawTx.amount > 0 &&
+              !isCheckingBalanceTransaction(item.rawTx, connectedBankAccounts),
+            ),
         })),
         ...plannedBillEntries,
       ],
@@ -534,39 +862,109 @@ export function ActivityScreen() {
     return {
       title: activityMonthLabel(monthFilter),
       ...summary,
-      weeks: summary.weeks.map(week => ({
+      weeks: summary.weeks.map((week) => ({
         ...week,
-        label: week.startDay === week.endDay
-          ? `${MONTH_NAMES_LONG[monthIndex]} ${week.startDay}`
-          : `${MONTH_NAMES_LONG[monthIndex]} ${week.startDay}–${week.endDay}`,
+        label:
+          week.startDay === week.endDay
+            ? `${MONTH_NAMES_LONG[monthIndex]} ${week.startDay}`
+            : `${MONTH_NAMES_LONG[monthIndex]} ${week.startDay}–${week.endDay}`,
       })),
     };
-  }, [allActivity, connectedBankAccounts, getBillEffectiveMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, monthFilter]);
+  }, [
+    allActivity,
+    connectedBankAccounts,
+    getBillEffectiveMonthlyTotal,
+    getBillOccurrencesInMonth,
+    getMonthlyBills,
+    monthFilter,
+  ]);
 
   const feedOrderLabel = hasActiveFilters
-    ? (sortOrder === "asc" ? "oldest first" : "newest first")
+    ? sortOrder === "asc"
+      ? "oldest first"
+      : "newest first"
     : "upcoming first";
 
   const quickChips = [
-    { key: "all", label: "All", active: typeFilter === "all" && sourceFilter === "all", onPress: () => { setTypeFilter("all"); setSourceFilter("all"); } },
-    { key: "out", label: "Money out", active: typeFilter === "expense" && sourceFilter === "all", onPress: () => { setTypeFilter("expense"); setSourceFilter("all"); } },
-    { key: "in", label: "Money in", active: typeFilter === "income" && sourceFilter === "all", onPress: () => { setTypeFilter("income"); setSourceFilter("all"); } },
-    { key: "bills", label: "Bills", active: sourceFilter === "bill_payment", onPress: () => { setTypeFilter("all"); setSourceFilter("bill_payment"); } },
-    { key: "manual", label: "Manual", active: sourceFilter === "transaction", onPress: () => { setTypeFilter("all"); setSourceFilter("transaction"); } },
-    { key: "bank", label: "Bank", active: sourceFilter === "bank_transaction", onPress: () => { setTypeFilter("all"); setSourceFilter("bank_transaction"); } },
-    { key: "debt", label: "Debt pay", active: sourceFilter === "extra_payment", onPress: () => { setTypeFilter("all"); setSourceFilter("extra_payment"); } },
+    {
+      key: "all",
+      label: "All",
+      active: typeFilter === "all" && sourceFilter === "all",
+      onPress: () => {
+        setTypeFilter("all");
+        setSourceFilter("all");
+      },
+    },
+    {
+      key: "out",
+      label: "Money out",
+      active: typeFilter === "expense" && sourceFilter === "all",
+      onPress: () => {
+        setTypeFilter("expense");
+        setSourceFilter("all");
+      },
+    },
+    {
+      key: "in",
+      label: "Money in",
+      active: typeFilter === "income" && sourceFilter === "all",
+      onPress: () => {
+        setTypeFilter("income");
+        setSourceFilter("all");
+      },
+    },
+    {
+      key: "bills",
+      label: "Bills",
+      active: sourceFilter === "bill_payment",
+      onPress: () => {
+        setTypeFilter("all");
+        setSourceFilter("bill_payment");
+      },
+    },
+    {
+      key: "manual",
+      label: "Manual",
+      active: sourceFilter === "transaction",
+      onPress: () => {
+        setTypeFilter("all");
+        setSourceFilter("transaction");
+      },
+    },
+    {
+      key: "bank",
+      label: "Bank",
+      active: sourceFilter === "bank_transaction",
+      onPress: () => {
+        setTypeFilter("all");
+        setSourceFilter("bank_transaction");
+      },
+    },
+    {
+      key: "debt",
+      label: "Debt pay",
+      active: sourceFilter === "extra_payment",
+      onPress: () => {
+        setTypeFilter("all");
+        setSourceFilter("extra_payment");
+      },
+    },
   ];
 
-  const showTransactionDebtNotice = (tx: Omit<Transaction, "id"> | Transaction) => {
+  const showTransactionDebtNotice = (
+    tx: Omit<Transaction, "id"> | Transaction,
+  ) => {
     const linkedDebtId = tx.linked_bill_id ?? tx.debt_applied_bill_id;
     if (!linkedDebtId) return;
-    const debt = bills.find(item => item.id === linkedDebtId);
+    const debt = bills.find((item) => item.id === linkedDebtId);
     if (!debt?.is_debt) return;
     const amount = Math.abs(Number(tx.debt_applied_amount ?? tx.amount) || 0);
     if (amount <= 0.005 || Number(tx.amount) > 0) return;
     const scheduled = tx.date > todayIsoDate();
     const balanceBefore = Math.max(0, Number(debt.balance) || 0);
-    const balanceAfter = scheduled ? undefined : Math.max(0, balanceBefore - amount);
+    const balanceAfter = scheduled
+      ? undefined
+      : Math.max(0, balanceBefore - amount);
     setDebtPaymentNotice({
       debtName: debt.name,
       amount,
@@ -600,129 +998,223 @@ export function ActivityScreen() {
     if (!matchTx) return [];
     const [year, monthNumber] = matchTx.date.split("-").map(Number);
     const month = monthNumber - 1;
-    const candidates = getMonthlyBills(month, year).flatMap(bill => {
+    const candidates = getMonthlyBills(month, year).flatMap((bill) => {
       const days = getBillOccurrencesInMonth(bill, month, year);
       if (days.length === 0) return [];
       const monthTotal = getBillMonthlyTotal(bill, month, year);
-      const occurrenceBudget = resolveMatchedBillBudget(monthTotal / days.length, bill.amount);
-      return [{
-        billId: bill.id,
-        name: bill.name,
-        category: bill.category,
-        plannedAmount: occurrenceBudget,
-        occurrenceDates: days.map(day => `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`),
-      }];
+      const occurrenceBudget = resolveMatchedBillBudget(
+        monthTotal / days.length,
+        bill.amount,
+      );
+      return [
+        {
+          billId: bill.id,
+          name: bill.name,
+          category: bill.category,
+          plannedAmount: occurrenceBudget,
+          occurrenceDates: days.map(
+            (day) =>
+              `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+          ),
+        },
+      ];
     });
-    return rankBillMatches({
-      date: matchTx.date,
-      amount: matchTx.amount,
-      description: matchTx.merchant_name || matchTx.note || matchTx.category,
-      category: matchTx.category,
-    }, candidates);
-  }, [matchTx, getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal]);
+    return rankBillMatches(
+      {
+        date: matchTx.date,
+        amount: matchTx.amount,
+        description: matchTx.merchant_name || matchTx.note || matchTx.category,
+        category: matchTx.category,
+      },
+      candidates,
+    );
+  }, [
+    matchTx,
+    getMonthlyBills,
+    getBillOccurrencesInMonth,
+    getBillMonthlyTotal,
+  ]);
   const pendingBillMatchOptions = useMemo(() => {
     if (!pendingMatchTx || pendingMatchTx.amount >= 0) return [];
-    const [year, monthNumber] = pendingMatchTx.transaction_date.split("-").map(Number);
+    const [year, monthNumber] = pendingMatchTx.transaction_date
+      .split("-")
+      .map(Number);
     const month = monthNumber - 1;
-    const candidates = getMonthlyBills(month, year).flatMap(bill => {
+    const candidates = getMonthlyBills(month, year).flatMap((bill) => {
       const days = getBillOccurrencesInMonth(bill, month, year);
       if (days.length === 0) return [];
       const occurrenceBudget = resolveMatchedBillBudget(
         getBillMonthlyTotal(bill, month, year) / days.length,
         bill.amount,
       );
-      return [{
-        billId: bill.id,
-        name: bill.name,
-        category: bill.category,
-        plannedAmount: occurrenceBudget,
-        occurrenceDates: days.map(day =>
-          `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`),
-      }];
+      return [
+        {
+          billId: bill.id,
+          name: bill.name,
+          category: bill.category,
+          plannedAmount: occurrenceBudget,
+          occurrenceDates: days.map(
+            (day) =>
+              `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+          ),
+        },
+      ];
     });
-    return rankBillMatches({
-      date: pendingMatchTx.transaction_date,
-      amount: pendingMatchTx.amount,
-      description: pendingMatchTx.merchant_name || pendingMatchTx.name || pendingMatchTx.category,
-      category: pendingMatchTx.category,
-    }, candidates);
-  }, [pendingMatchTx, getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal]);
-  const selectedPendingPlanMatch = useMemo(() => pendingMatchTx
-    ? activePendingPlanMatches(pendingPlanMatches, pendingBankTransactions)
-      .find(match => match.pending_plaid_transaction_id === pendingMatchTx.plaid_transaction_id)
-    : undefined, [pendingBankTransactions, pendingMatchTx, pendingPlanMatches]);
+    return rankBillMatches(
+      {
+        date: pendingMatchTx.transaction_date,
+        amount: pendingMatchTx.amount,
+        description:
+          pendingMatchTx.merchant_name ||
+          pendingMatchTx.name ||
+          pendingMatchTx.category,
+        category: pendingMatchTx.category,
+      },
+      candidates,
+    );
+  }, [
+    pendingMatchTx,
+    getMonthlyBills,
+    getBillOccurrencesInMonth,
+    getBillMonthlyTotal,
+  ]);
+  const selectedPendingPlanMatch = useMemo(
+    () =>
+      pendingMatchTx
+        ? activePendingPlanMatches(
+            pendingPlanMatches,
+            pendingBankTransactions,
+          ).find(
+            (match) =>
+              match.pending_plaid_transaction_id ===
+              pendingMatchTx.plaid_transaction_id,
+          )
+        : undefined,
+    [pendingBankTransactions, pendingMatchTx, pendingPlanMatches],
+  );
   const manualMatchOptions = useMemo(() => {
-    if (!matchTx || matchTx.source !== "plaid" || matchTx.amount >= 0) return [];
+    if (!matchTx || matchTx.source !== "plaid" || matchTx.amount >= 0)
+      return [];
     const monthPrefix = matchTx.date.slice(0, 7);
     const candidates = transactions
-      .filter(transaction =>
-        transaction.id !== matchTx.id
-        && transaction.source !== "plaid"
-        && transaction.amount < 0
-        && transaction.date.startsWith(monthPrefix)
-        && !transaction.pending
-        && !transaction.removed_at
-        && !transaction.deleted_at
-        && !transaction.linked_bill_id
-        && !transaction.debt_applied_bill_id
-        && !transaction.linked_plan_id
-        && transaction.review_status !== "matched"
-        && transaction.category !== "Transfer")
-      .map(transaction => ({
+      .filter(
+        (transaction) =>
+          transaction.id !== matchTx.id &&
+          transaction.source !== "plaid" &&
+          transaction.amount < 0 &&
+          transaction.date.startsWith(monthPrefix) &&
+          !transaction.pending &&
+          !transaction.removed_at &&
+          !transaction.deleted_at &&
+          !transaction.linked_bill_id &&
+          !transaction.debt_applied_bill_id &&
+          !transaction.linked_plan_id &&
+          transaction.review_status !== "matched" &&
+          transaction.category !== "Transfer",
+      )
+      .map((transaction) => ({
         billId: transaction.id,
-        name: transaction.note?.trim() || transaction.category || "Manual transaction",
+        name:
+          transaction.note?.trim() ||
+          transaction.category ||
+          "Manual transaction",
         category: transaction.category,
         plannedAmount: Math.abs(transaction.amount),
         occurrenceDates: [transaction.date],
       }));
-    return rankBillMatches({
-      date: matchTx.date,
-      amount: matchTx.amount,
-      description: matchTx.merchant_name || matchTx.note || matchTx.category,
-      category: matchTx.category,
-    }, candidates);
+    return rankBillMatches(
+      {
+        date: matchTx.date,
+        amount: matchTx.amount,
+        description: matchTx.merchant_name || matchTx.note || matchTx.category,
+        category: matchTx.category,
+      },
+      candidates,
+    );
   }, [matchTx, transactions]);
   const bucketMatchOptions = useMemo(() => {
     if (!matchTx || matchTx.amount >= 0) return [];
     const candidates = goals
-      .filter(goal => goal.goal_type === "planned_expense" && !goal.archived_at && isOpenSpendingBucket(goal))
-      .map(goal => ({
+      .filter(
+        (goal) =>
+          goal.goal_type === "planned_expense" &&
+          !goal.archived_at &&
+          isOpenSpendingBucket(goal),
+      )
+      .map((goal) => ({
         billId: goal.id,
         name: goal.name,
         category: "Planned spending",
         plannedAmount: spendingBucketSummary(goal).remaining,
         occurrenceDates: [goal.target_date.slice(0, 10)],
       }));
-    return rankBillMatches({
-      date: matchTx.date,
-      amount: matchTx.amount,
-      description: matchTx.merchant_name || matchTx.note || matchTx.category,
-      category: matchTx.category,
-    }, candidates);
+    return rankBillMatches(
+      {
+        date: matchTx.date,
+        amount: matchTx.amount,
+        description: matchTx.merchant_name || matchTx.note || matchTx.category,
+        category: matchTx.category,
+      },
+      candidates,
+    );
   }, [goals, matchTx]);
-  const combinedMatchOptions = useMemo(() => [
-    ...billMatchOptions.map(option => ({ ...option, targetType: "bill" as const })),
-    ...bucketMatchOptions.map(option => ({ ...option, targetType: "bucket" as const })),
-    ...manualMatchOptions.map(option => ({ ...option, targetType: "manual" as const })),
-  ].sort((left, right) => right.score - left.score || (left.daysApart ?? 999) - (right.daysApart ?? 999)), [billMatchOptions, bucketMatchOptions, manualMatchOptions]);
+  const combinedMatchOptions = useMemo(
+    () =>
+      [
+        ...billMatchOptions.map((option) => ({
+          ...option,
+          targetType: "bill" as const,
+        })),
+        ...bucketMatchOptions.map((option) => ({
+          ...option,
+          targetType: "bucket" as const,
+        })),
+        ...manualMatchOptions.map((option) => ({
+          ...option,
+          targetType: "manual" as const,
+        })),
+      ].sort(
+        (left, right) =>
+          right.score - left.score ||
+          (left.daysApart ?? 999) - (right.daysApart ?? 999),
+      ),
+    [billMatchOptions, bucketMatchOptions, manualMatchOptions],
+  );
   const matchedBillIdForModal = matchTx ? confirmedBillMatchId(matchTx) : null;
   const matchedBillForModal = matchedBillIdForModal
-    ? bills.find(bill => bill.id === matchedBillIdForModal)
+    ? bills.find((bill) => bill.id === matchedBillIdForModal)
     : undefined;
-  const matchedManualAllocation = matchTx?.review_resolution === "manual"
-    ? matchTx.review_allocations?.find(allocation => allocation.type === "planned_expense" && allocation.source === "transaction")
-    : undefined;
-  const matchedBucketAllocation = matchTx?.review_resolution === "goal"
-    ? matchTx.review_allocations?.find(allocation => allocation.type === "planned_expense" && allocation.source === "goal")
-    : undefined;
-  const matchedTargetName = matchedBillForModal?.name ?? matchedManualAllocation?.name ?? matchedBucketAllocation?.name;
+  const matchedManualAllocation =
+    matchTx?.review_resolution === "manual"
+      ? matchTx.review_allocations?.find(
+          (allocation) =>
+            allocation.type === "planned_expense" &&
+            allocation.source === "transaction",
+        )
+      : undefined;
+  const matchedBucketAllocation =
+    matchTx?.review_resolution === "goal"
+      ? matchTx.review_allocations?.find(
+          (allocation) =>
+            allocation.type === "planned_expense" &&
+            allocation.source === "goal",
+        )
+      : undefined;
+  const matchedTargetName =
+    matchedBillForModal?.name ??
+    matchedManualAllocation?.name ??
+    matchedBucketAllocation?.name;
   const matchingBankActivity = matchTx?.source === "plaid";
-  const forgottenBillDefaults = useMemo<AddBillInitialValues | undefined>(() => {
+  const forgottenBillDefaults = useMemo<
+    AddBillInitialValues | undefined
+  >(() => {
     if (!unplannedChargeTx) return undefined;
     const defaults = buildForgottenBillDefaults(unplannedChargeTx);
     return {
       ...defaults,
-      category: categories.includes(defaults.category) ? defaults.category : "Other",
+      category: categories.includes(defaults.category)
+        ? defaults.category
+        : "Other",
     };
   }, [categories, unplannedChargeTx]);
 
@@ -730,9 +1222,21 @@ export function ActivityScreen() {
     if (!surplusPrompt || !settings.debtPayoffEnabled) return null;
     const surplus = Math.max(0, surplusPrompt.budgeted - surplusPrompt.actual);
     const existing = getExtraPayment(surplusPrompt.month, surplusPrompt.year);
-    const previousSource = existing?.sources?.find(source => source.type === "bill_surplus" && source.billId === surplusPrompt.bill.id)?.amount ?? 0;
-    const total = Math.max(0, (existing?.amount ?? 0) - previousSource + surplus);
-    const dateValid = isValidDateInMonth(surplusPaymentDate, surplusPrompt.month, surplusPrompt.year);
+    const previousSource =
+      existing?.sources?.find(
+        (source) =>
+          source.type === "bill_surplus" &&
+          source.billId === surplusPrompt.bill.id,
+      )?.amount ?? 0;
+    const total = Math.max(
+      0,
+      (existing?.amount ?? 0) - previousSource + surplus,
+    );
+    const dateValid = isValidDateInMonth(
+      surplusPaymentDate,
+      surplusPrompt.month,
+      surplusPrompt.year,
+    );
     const preview = previewDebtSnowball(
       surplusPrompt.month,
       surplusPrompt.year,
@@ -742,34 +1246,62 @@ export function ActivityScreen() {
     );
     return {
       preview,
-      targetDebt: preview.months[0]?.targetName ?? preview.allocations[0]?.billName,
+      targetDebt:
+        preview.months[0]?.targetName ?? preview.allocations[0]?.billName,
       dateValid,
       safe: dateValid && preview.selectedExtra + 0.005 >= total,
     };
-  }, [getExtraPayment, previewDebtSnowball, settings.debtPayoffEnabled, surplusPaymentDate, surplusPrompt]);
+  }, [
+    getExtraPayment,
+    previewDebtSnowball,
+    settings.debtPayoffEnabled,
+    surplusPaymentDate,
+    surplusPrompt,
+  ]);
   const surplusMonth = surplusPrompt?.month ?? new Date().getMonth();
   const surplusYear = surplusPrompt?.year ?? new Date().getFullYear();
   const surplusMonthText = String(surplusMonth + 1).padStart(2, "0");
-  const surplusMonthLastDay = String(new Date(surplusYear, surplusMonth + 1, 0).getDate()).padStart(2, "0");
+  const surplusMonthLastDay = String(
+    new Date(surplusYear, surplusMonth + 1, 0).getDate(),
+  ).padStart(2, "0");
 
   const handleMatchBill = async (billId: string) => {
     if (!matchTx || savingMatch) return;
     const transaction = matchTx;
-    const bill = bills.find(item => item.id === billId);
-    const option = billMatchOptions.find(item => item.billId === billId);
+    const bill = bills.find((item) => item.id === billId);
+    const option = billMatchOptions.find((item) => item.billId === billId);
     const [year, monthNumber] = transaction.date.split("-").map(Number);
     const actual = Math.abs(transaction.amount);
     const occurrenceDate = option?.nearestOccurrenceDate ?? transaction.date;
-    const nextFullPaymentPrompt = bill && option && isMatchedPaymentLowerThanPlanned(transaction.amount, option.plannedAmount)
-      ? { transaction, bill, budgeted: option.plannedAmount, actual, occurrenceDate, month: monthNumber - 1, year }
-      : null;
+    const nextFullPaymentPrompt =
+      bill &&
+      option &&
+      isMatchedPaymentLowerThanPlanned(transaction.amount, option.plannedAmount)
+        ? {
+            transaction,
+            bill,
+            budgeted: option.plannedAmount,
+            actual,
+            occurrenceDate,
+            month: monthNumber - 1,
+            year,
+          }
+        : null;
     setSavingMatch(true);
     try {
-      await matchTransactionToBill(transaction.id, billId, occurrenceDate, option?.plannedAmount);
+      await matchTransactionToBill(
+        transaction.id,
+        billId,
+        occurrenceDate,
+        option?.plannedAmount,
+      );
       setQueuedFullPaymentPrompt(nextFullPaymentPrompt);
       setMatchTx(null);
     } catch (error) {
-      Alert.alert("Could not match bill", error instanceof Error ? error.message : "Please try again.");
+      Alert.alert(
+        "Could not match bill",
+        error instanceof Error ? error.message : "Please try again.",
+      );
     } finally {
       setSavingMatch(false);
     }
@@ -777,7 +1309,9 @@ export function ActivityScreen() {
 
   const handleMatchPendingBill = async (billId: string) => {
     if (!pendingMatchTx || savingMatch) return;
-    const option = pendingBillMatchOptions.find(item => item.billId === billId);
+    const option = pendingBillMatchOptions.find(
+      (item) => item.billId === billId,
+    );
     if (!option) return;
     setSavingMatch(true);
     try {
@@ -794,7 +1328,10 @@ export function ActivityScreen() {
         `${option.name} will not show overdue while this bank charge is pending. Confirm it after it posts.`,
       );
     } catch (error) {
-      Alert.alert("Could not match pending payment", error instanceof Error ? error.message : "Please try again.");
+      Alert.alert(
+        "Could not match pending payment",
+        error instanceof Error ? error.message : "Please try again.",
+      );
     } finally {
       setSavingMatch(false);
     }
@@ -807,7 +1344,10 @@ export function ActivityScreen() {
       await removePendingPlanMatch(selectedPendingPlanMatch.id);
       setPendingMatchTx(null);
     } catch (error) {
-      Alert.alert("Could not remove pending match", error instanceof Error ? error.message : "Please try again.");
+      Alert.alert(
+        "Could not remove pending match",
+        error instanceof Error ? error.message : "Please try again.",
+      );
     } finally {
       setSavingMatch(false);
     }
@@ -815,7 +1355,9 @@ export function ActivityScreen() {
 
   const handleMatchManual = async (transactionId: string) => {
     if (!matchTx || savingMatch) return;
-    const option = manualMatchOptions.find(item => item.billId === transactionId);
+    const option = manualMatchOptions.find(
+      (item) => item.billId === transactionId,
+    );
     if (!option) return;
     const actual = Math.abs(matchTx.amount);
     setSavingMatch(true);
@@ -828,11 +1370,15 @@ export function ActivityScreen() {
         // the manually planned item.
         occurrenceDate: matchTx.date,
         plannedAmount: option.plannedAmount,
-        settlement: Math.abs(actual - option.plannedAmount) < 0.005 ? "exact" : "full",
+        settlement:
+          Math.abs(actual - option.plannedAmount) < 0.005 ? "exact" : "full",
       });
       setMatchTx(null);
     } catch (error) {
-      Alert.alert("Could not match transaction", error instanceof Error ? error.message : "Please try again.");
+      Alert.alert(
+        "Could not match transaction",
+        error instanceof Error ? error.message : "Please try again.",
+      );
     } finally {
       setSavingMatch(false);
     }
@@ -840,7 +1386,7 @@ export function ActivityScreen() {
 
   const handleMatchBucket = async (goalId: string) => {
     if (!matchTx || savingMatch) return;
-    const option = bucketMatchOptions.find(item => item.billId === goalId);
+    const option = bucketMatchOptions.find((item) => item.billId === goalId);
     if (!option) return;
     const actual = Math.abs(matchTx.amount);
     const match = spendingBucketMatch(actual, option.plannedAmount);
@@ -853,11 +1399,15 @@ export function ActivityScreen() {
         occurrenceDate: option.nearestOccurrenceDate ?? matchTx.date,
         plannedAmount: option.plannedAmount,
         settlement: match.settlement,
-        extraCategory: match.extra > 0.005 ? matchTx.category || "Other" : undefined,
+        extraCategory:
+          match.extra > 0.005 ? matchTx.category || "Other" : undefined,
       });
       setMatchTx(null);
     } catch (error) {
-      Alert.alert("Could not update bucket", error instanceof Error ? error.message : "Please try again.");
+      Alert.alert(
+        "Could not update bucket",
+        error instanceof Error ? error.message : "Please try again.",
+      );
     } finally {
       setSavingMatch(false);
     }
@@ -875,14 +1425,20 @@ export function ActivityScreen() {
       });
       setUnplannedChargeTx(null);
     } catch (error) {
-      Alert.alert("Could not save one-time charge", error instanceof Error ? error.message : "Please try again.");
+      Alert.alert(
+        "Could not save one-time charge",
+        error instanceof Error ? error.message : "Please try again.",
+      );
     } finally {
       setSavingMatch(false);
     }
   };
 
-  const saveForgottenBill = async (data: Omit<Bill, "id" | "created_at"> | Bill) => {
-    if (!unplannedChargeTx) throw new Error("This bank charge is no longer available.");
+  const saveForgottenBill = async (
+    data: Omit<Bill, "id" | "created_at"> | Bill,
+  ) => {
+    if (!unplannedChargeTx)
+      throw new Error("This bank charge is no longer available.");
     const transaction = unplannedChargeTx;
     const billData = data as Omit<Bill, "id" | "created_at">;
     const billId = await addBill(billData);
@@ -893,7 +1449,10 @@ export function ActivityScreen() {
         targetId: billId,
         occurrenceDate: transaction.date,
         plannedAmount: billData.amount,
-        settlement: forgottenBillSettlement(transaction.amount, billData.amount),
+        settlement: forgottenBillSettlement(
+          transaction.amount,
+          billData.amount,
+        ),
       });
       setForgottenBillVisible(false);
       setUnplannedChargeTx(null);
@@ -924,7 +1483,10 @@ export function ActivityScreen() {
       setQueuedSurplusPrompt(prompt);
       setFullPaymentPrompt(null);
     } catch (error) {
-      Alert.alert("Could not close bill", error instanceof Error ? error.message : "Please try again.");
+      Alert.alert(
+        "Could not close bill",
+        error instanceof Error ? error.message : "Please try again.",
+      );
     } finally {
       setSavingMatch(false);
     }
@@ -938,7 +1500,13 @@ export function ActivityScreen() {
         return;
       }
       const existing = getExtraPayment(surplusPrompt.month, surplusPrompt.year);
-      const sources = (existing?.sources ?? []).filter(source => !(source.type === "bill_surplus" && source.billId === surplusPrompt.bill.id));
+      const sources = (existing?.sources ?? []).filter(
+        (source) =>
+          !(
+            source.type === "bill_surplus" &&
+            source.billId === surplusPrompt.bill.id
+          ),
+      );
       if ((existing?.sources?.length ?? 0) !== sources.length) {
         const total = sources.reduce((sum, source) => sum + source.amount, 0);
         if (total > 0.005) {
@@ -947,21 +1515,41 @@ export function ActivityScreen() {
             sources,
           );
         } else {
-          await removeDebtSnowballPayment(surplusPrompt.month, surplusPrompt.year);
+          await removeDebtSnowballPayment(
+            surplusPrompt.month,
+            surplusPrompt.year,
+          );
         }
       }
       setSurplusPrompt(null);
     } catch (error) {
-      Alert.alert("Could not finish bill", error instanceof Error ? error.message : "Please try again.");
+      Alert.alert(
+        "Could not finish bill",
+        error instanceof Error ? error.message : "Please try again.",
+      );
     }
   };
 
   const addMatchedSurplusToSnowball = async () => {
-    if (!surplusPrompt || !surplusSnowballOffer?.safe || !surplusSnowballOffer.preview.allocations.length) return;
+    if (
+      !surplusPrompt ||
+      !surplusSnowballOffer?.safe ||
+      !surplusSnowballOffer.preview.allocations.length
+    )
+      return;
     const surplus = surplusPrompt.budgeted - surplusPrompt.actual;
     const existing = getExtraPayment(surplusPrompt.month, surplusPrompt.year);
-    const otherSources = (existing?.sources ?? [{ type: "manual" as const, amount: existing?.amount ?? 0 }])
-      .filter(source => !(source.type === "bill_surplus" && source.billId === surplusPrompt.bill.id));
+    const otherSources = (
+      existing?.sources ?? [
+        { type: "manual" as const, amount: existing?.amount ?? 0 },
+      ]
+    ).filter(
+      (source) =>
+        !(
+          source.type === "bill_surplus" &&
+          source.billId === surplusPrompt.bill.id
+        ),
+    );
     const sources = [
       ...otherSources,
       {
@@ -971,12 +1559,17 @@ export function ActivityScreen() {
         billName: surplusPrompt.bill.name,
         reviewTransactionId: surplusPrompt.transaction.id,
       },
-    ].filter(source => source.amount > 0.005);
+    ].filter((source) => source.amount > 0.005);
     try {
       await applyDebtSnowballPayment(surplusSnowballOffer.preview, sources);
       setSurplusPrompt(null);
     } catch (error) {
-      Alert.alert("Could not route extra money", error instanceof Error ? error.message : "The matched payment is safe; please try the snowball again.");
+      Alert.alert(
+        "Could not route extra money",
+        error instanceof Error
+          ? error.message
+          : "The matched payment is safe; please try the snowball again.",
+      );
     }
   };
 
@@ -984,27 +1577,50 @@ export function ActivityScreen() {
     if (!matchTx || savingMatch) return;
     setSavingMatch(true);
     try {
-      if (matchTx.review_status === "matched" && (matchTx.review_resolution === "bill" || matchTx.review_resolution === "manual" || matchTx.review_resolution === "goal")) {
-        if (matchTx.review_resolution === "bill") await removeReviewSurplusFunding(matchTx.id);
+      if (
+        matchTx.review_status === "matched" &&
+        (matchTx.review_resolution === "bill" ||
+          matchTx.review_resolution === "manual" ||
+          matchTx.review_resolution === "goal")
+      ) {
+        if (matchTx.review_resolution === "bill")
+          await removeReviewSurplusFunding(matchTx.id);
         await undoTransactionReconciliation(matchTx.id);
       } else {
         await unmatchTransactionFromBill(matchTx.id);
       }
       setMatchTx(null);
     } catch (error) {
-      Alert.alert("Could not undo match", error instanceof Error ? error.message : "Please try again.");
+      Alert.alert(
+        "Could not undo match",
+        error instanceof Error ? error.message : "Please try again.",
+      );
     } finally {
       setSavingMatch(false);
     }
   };
 
-  const openExtraPaymentEditor = useCallback((payment: ExtraPayment) => {
-    const paymentDate = payment.payment_date ?? `${payment.year}-${String(payment.month + 1).padStart(2, "0")}-01`;
-    setEditExtraPayment(payment);
-    setEditExtraAmount(payment.amount.toFixed(2));
-    setEditExtraDate(paymentDate);
-    setEditExtraPreview(previewDebtSnowball(payment.month, payment.year, payment.amount, 0, paymentDate, payment.id));
-  }, [previewDebtSnowball]);
+  const openExtraPaymentEditor = useCallback(
+    (payment: ExtraPayment) => {
+      const paymentDate =
+        payment.payment_date ??
+        `${payment.year}-${String(payment.month + 1).padStart(2, "0")}-01`;
+      setEditExtraPayment(payment);
+      setEditExtraAmount(payment.amount.toFixed(2));
+      setEditExtraDate(paymentDate);
+      setEditExtraPreview(
+        previewDebtSnowball(
+          payment.month,
+          payment.year,
+          payment.amount,
+          0,
+          paymentDate,
+          payment.id,
+        ),
+      );
+    },
+    [previewDebtSnowball],
+  );
 
   const editExtraDateLimits = useMemo(() => {
     if (!editExtraPayment) return { min: undefined, max: undefined };
@@ -1013,27 +1629,54 @@ export function ActivityScreen() {
     return { min: monthStart, max: monthEnd };
   }, [editExtraPayment]);
 
-  const updateExtraPaymentAmount = useCallback((value: string) => {
-    setEditExtraAmount(value);
-    if (!editExtraPayment) return;
-    const amount = Number.parseFloat(value);
-    setEditExtraPreview(Number.isFinite(amount) && amount > 0
-      ? previewDebtSnowball(editExtraPayment.month, editExtraPayment.year, amount, 0, editExtraDate, editExtraPayment.id)
-      : null);
-  }, [editExtraDate, editExtraPayment, previewDebtSnowball]);
+  const updateExtraPaymentAmount = useCallback(
+    (value: string) => {
+      setEditExtraAmount(value);
+      if (!editExtraPayment) return;
+      const amount = Number.parseFloat(value);
+      setEditExtraPreview(
+        Number.isFinite(amount) && amount > 0
+          ? previewDebtSnowball(
+              editExtraPayment.month,
+              editExtraPayment.year,
+              amount,
+              0,
+              editExtraDate,
+              editExtraPayment.id,
+            )
+          : null,
+      );
+    },
+    [editExtraDate, editExtraPayment, previewDebtSnowball],
+  );
 
-  const updateExtraPaymentDate = useCallback((value: string) => {
-    setEditExtraDate(value);
-    if (!editExtraPayment) return;
-    const amount = Number.parseFloat(editExtraAmount);
-    setEditExtraPreview(Number.isFinite(amount) && amount > 0
-      ? previewDebtSnowball(editExtraPayment.month, editExtraPayment.year, amount, 0, value, editExtraPayment.id)
-      : null);
-  }, [editExtraAmount, editExtraPayment, previewDebtSnowball]);
+  const updateExtraPaymentDate = useCallback(
+    (value: string) => {
+      setEditExtraDate(value);
+      if (!editExtraPayment) return;
+      const amount = Number.parseFloat(editExtraAmount);
+      setEditExtraPreview(
+        Number.isFinite(amount) && amount > 0
+          ? previewDebtSnowball(
+              editExtraPayment.month,
+              editExtraPayment.year,
+              amount,
+              0,
+              value,
+              editExtraPayment.id,
+            )
+          : null,
+      );
+    },
+    [editExtraAmount, editExtraPayment, previewDebtSnowball],
+  );
 
   const saveEditedExtraPayment = useCallback(async () => {
     if (!editExtraPayment || !editExtraPreview || savingExtraPayment) return;
-    if ((editExtraDateLimits.min && editExtraDate < editExtraDateLimits.min) || (editExtraDateLimits.max && editExtraDate > editExtraDateLimits.max)) {
+    if (
+      (editExtraDateLimits.min && editExtraDate < editExtraDateLimits.min) ||
+      (editExtraDateLimits.max && editExtraDate > editExtraDateLimits.max)
+    ) {
       Alert.alert(
         "Choose a valid payment date",
         "Choose any day within this Snowball payment’s month.",
@@ -1041,32 +1684,59 @@ export function ActivityScreen() {
       return;
     }
     const amount = Number.parseFloat(editExtraAmount);
-    if (!Number.isFinite(amount) || amount <= 0 || Math.abs(editExtraPreview.selectedExtra - amount) > 0.005) {
-      Alert.alert("Check the payment amount", "Use an amount that stays within the safe maximum shown above.");
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      Math.abs(editExtraPreview.selectedExtra - amount) > 0.005
+    ) {
+      Alert.alert(
+        "Check the payment amount",
+        "Use an amount that stays within the safe maximum shown above.",
+      );
       return;
     }
     setSavingExtraPayment(true);
     try {
-      const resizedSources = resizeSnowballFundingSources(editExtraPayment.sources, amount) as SnowballFundingSource[];
+      const resizedSources = resizeSnowballFundingSources(
+        editExtraPayment.sources,
+        amount,
+      ) as SnowballFundingSource[];
       await applyDebtSnowballPayment(editExtraPreview, resizedSources);
       setEditExtraPayment(null);
       setEditExtraPreview(null);
     } catch (error) {
-      Alert.alert("Could not update payment", error instanceof Error ? error.message : "Please try again.");
+      Alert.alert(
+        "Could not update payment",
+        error instanceof Error ? error.message : "Please try again.",
+      );
     } finally {
       setSavingExtraPayment(false);
     }
-  }, [applyDebtSnowballPayment, editExtraAmount, editExtraDate, editExtraDateLimits, editExtraPayment, editExtraPreview, savingExtraPayment]);
+  }, [
+    applyDebtSnowballPayment,
+    editExtraAmount,
+    editExtraDate,
+    editExtraDateLimits,
+    editExtraPayment,
+    editExtraPreview,
+    savingExtraPayment,
+  ]);
 
   const removeEditedExtraPayment = useCallback(async () => {
     if (!editExtraPayment || savingExtraPayment) return;
     setSavingExtraPayment(true);
     try {
-      await removeDebtSnowballPayment(editExtraPayment.month, editExtraPayment.year);
+      await removeDebtSnowballPayment(
+        editExtraPayment.month,
+        editExtraPayment.year,
+      );
       setEditExtraPayment(null);
       setEditExtraPreview(null);
     } catch (error) {
-      Alert.alert("Could not remove payment", error instanceof Error ? error.message : "Please try again.");
+      Alert.alert(
+        "Could not remove payment",
+        error instanceof Error ? error.message : "Please try again.",
+      );
       throw error;
     } finally {
       setSavingExtraPayment(false);
@@ -1074,30 +1744,42 @@ export function ActivityScreen() {
   }, [editExtraPayment, removeDebtSnowballPayment, savingExtraPayment]);
 
   useEffect(() => {
-    const routeId = Array.isArray(params.editDebtPaymentId) ? params.editDebtPaymentId[0] : params.editDebtPaymentId;
+    const routeId = Array.isArray(params.editDebtPaymentId)
+      ? params.editDebtPaymentId[0]
+      : params.editDebtPaymentId;
     if (!routeId) return;
-    const routeToken = `${routeId}:${Array.isArray(params.editDebtPaymentAt) ? params.editDebtPaymentAt[0] : params.editDebtPaymentAt ?? ""}`;
+    const routeToken = `${routeId}:${Array.isArray(params.editDebtPaymentAt) ? params.editDebtPaymentAt[0] : (params.editDebtPaymentAt ?? "")}`;
     if (handledExtraPaymentRouteRef.current === routeToken) return;
-    const payment = extraPayments.find(item => item.id === routeId);
+    const payment = extraPayments.find((item) => item.id === routeId);
     if (!payment) return;
     handledExtraPaymentRouteRef.current = routeToken;
     openExtraPaymentEditor(payment);
-  }, [extraPayments, openExtraPaymentEditor, params.editDebtPaymentAt, params.editDebtPaymentId]);
+  }, [
+    extraPayments,
+    openExtraPaymentEditor,
+    params.editDebtPaymentAt,
+    params.editDebtPaymentId,
+  ]);
 
   const openItem = (item: ActivityItem) => {
     if (item.extraPayment) {
       openExtraPaymentEditor(item.extraPayment);
       return;
     }
-    if (item.rawTx?.source === "plaid" && item.rawTx.amount > 0 && item.rawTx.review_status === "needs_review") {
-      const openIncomeReview = () => router.push({
-        pathname: "/(tabs)/more",
-        params: {
-          section: "review",
-          reviewFilter: "income",
-          reviewTransactionId: item.rawTx?.id,
-        },
-      } as any);
+    if (
+      item.rawTx?.source === "plaid" &&
+      item.rawTx.amount > 0 &&
+      item.rawTx.review_status === "needs_review"
+    ) {
+      const openIncomeReview = () =>
+        router.push({
+          pathname: "/(tabs)/more",
+          params: {
+            section: "review",
+            reviewFilter: "income",
+            reviewTransactionId: item.rawTx?.id,
+          },
+        } as any);
       if (isFeatureLocked("transaction_matching")) {
         Alert.alert(
           "Income matching is a Pro feature",
@@ -1119,7 +1801,10 @@ export function ActivityScreen() {
       return;
     }
     if (item.rawTx && canMatchExpenseToBill(item.rawTx)) {
-      if (item.rawTx.source === "plaid" && isFeatureLocked("transaction_matching")) {
+      if (
+        item.rawTx.source === "plaid" &&
+        isFeatureLocked("transaction_matching")
+      ) {
         Alert.alert(
           "Bill matching is a Pro feature",
           "Basic plan preview keeps imported transaction matching locked. This test does not change your real household plan.",
@@ -1148,11 +1833,15 @@ export function ActivityScreen() {
   };
 
   useEffect(() => {
-    const activityId = Array.isArray(params.activityId) ? params.activityId[0] : params.activityId;
+    const activityId = Array.isArray(params.activityId)
+      ? params.activityId[0]
+      : params.activityId;
     if (!activityId) return;
-    const routeToken = `${activityId}:${Array.isArray(params.activityAt) ? params.activityAt[0] : params.activityAt ?? ""}`;
+    const routeToken = `${activityId}:${Array.isArray(params.activityAt) ? params.activityAt[0] : (params.activityAt ?? "")}`;
     if (handledActivityRouteRef.current === routeToken) return;
-    const activityItem = allActivity.find(item => item.rawTx?.id === activityId);
+    const activityItem = allActivity.find(
+      (item) => item.rawTx?.id === activityId,
+    );
     if (!activityItem) return;
     handledActivityRouteRef.current = routeToken;
     openItem(activityItem);
@@ -1166,42 +1855,90 @@ export function ActivityScreen() {
       animationType="fade"
       onRequestClose={() => setWeeklySummaryVisible(false)}
     >
-      <Pressable style={styles.summaryOverlay} onPress={() => setWeeklySummaryVisible(false)}>
+      <Pressable
+        style={styles.summaryOverlay}
+        onPress={() => setWeeklySummaryVisible(false)}
+      >
         <Pressable
-          style={[styles.summarySheet, { backgroundColor: c.card, borderColor: c.border }]}
-          onPress={event => event.stopPropagation()}
+          style={[
+            styles.summarySheet,
+            { backgroundColor: c.card, borderColor: c.border },
+          ]}
+          onPress={(event) => event.stopPropagation()}
         >
           <View style={styles.summarySheetHeader}>
             <View>
-              <Text style={[styles.activityHeroLabel, { color: c.mutedForeground }]}>Weekly breakdown</Text>
-              <Text style={[styles.summarySheetTitle, { color: c.foreground }]}>{monthlySummary.title}</Text>
+              <Text
+                style={[styles.activityHeroLabel, { color: c.mutedForeground }]}
+              >
+                Weekly breakdown
+              </Text>
+              <Text style={[styles.summarySheetTitle, { color: c.foreground }]}>
+                {monthlySummary.title}
+              </Text>
             </View>
-            <Pressable accessibilityLabel="Close weekly summary" onPress={() => setWeeklySummaryVisible(false)} hitSlop={10}>
+            <Pressable
+              accessibilityLabel="Close weekly summary"
+              onPress={() => setWeeklySummaryVisible(false)}
+              hitSlop={10}
+            >
               <Feather name="x" size={22} color={c.mutedForeground} />
             </Pressable>
           </View>
 
           <View style={[styles.summaryTotalRow, { borderColor: c.border }]}>
             <View>
-              <Text style={[styles.summaryTinyLabel, { color: c.mutedForeground }]}>Month net</Text>
-              <Text style={[styles.summaryLargeNet, { color: monthlySummary.net >= 0 ? c.success : c.destructive }]}>
-                {monthlySummary.net >= 0 ? "+" : "-"}${Math.abs(monthlySummary.net).toFixed(0)}
+              <Text
+                style={[styles.summaryTinyLabel, { color: c.mutedForeground }]}
+              >
+                Month net
+              </Text>
+              <Text
+                style={[
+                  styles.summaryLargeNet,
+                  {
+                    color: monthlySummary.net >= 0 ? c.success : c.destructive,
+                  },
+                ]}
+              >
+                {monthlySummary.net >= 0 ? "+" : "-"}$
+                {Math.abs(monthlySummary.net).toFixed(0)}
               </Text>
             </View>
             <View style={styles.summaryTotalRight}>
-              <Text style={[styles.summaryMiniValue, { color: c.success }]}>+${monthlySummary.income.toFixed(0)} in</Text>
-              <Text style={[styles.summaryMiniValue, { color: c.destructive }]}>-${monthlySummary.out.toFixed(0)} out</Text>
+              <Text style={[styles.summaryMiniValue, { color: c.success }]}>
+                +${monthlySummary.income.toFixed(0)} in
+              </Text>
+              <Text style={[styles.summaryMiniValue, { color: c.destructive }]}>
+                -${monthlySummary.out.toFixed(0)} out
+              </Text>
             </View>
           </View>
 
           <View style={styles.summaryWeekList}>
-            {monthlySummary.weeks.map(week => (
-              <View key={week.label} style={[styles.summaryWeekCard, { backgroundColor: c.background, borderColor: c.border }]}>
+            {monthlySummary.weeks.map((week) => (
+              <View
+                key={week.label}
+                style={[
+                  styles.summaryWeekCard,
+                  { backgroundColor: c.background, borderColor: c.border },
+                ]}
+              >
                 <View style={styles.summaryWeekMiddle}>
-                  <Text style={[styles.summaryWeekLabel, { color: c.foreground }]}>{week.label}</Text>
+                  <Text
+                    style={[styles.summaryWeekLabel, { color: c.foreground }]}
+                  >
+                    {week.label}
+                  </Text>
                 </View>
-                <Text style={[styles.summaryWeekValue, { color: week.total >= 0 ? c.success : c.destructive }]}>
-                  {week.total >= 0 ? "+" : "-"}${Math.abs(week.total).toFixed(0)}
+                <Text
+                  style={[
+                    styles.summaryWeekValue,
+                    { color: week.total >= 0 ? c.success : c.destructive },
+                  ]}
+                >
+                  {week.total >= 0 ? "+" : "-"}$
+                  {Math.abs(week.total).toFixed(0)}
                 </Text>
               </View>
             ))}
@@ -1209,9 +1946,16 @@ export function ActivityScreen() {
 
           <Pressable
             onPress={() => setWeeklySummaryVisible(false)}
-            style={({ pressed }) => [styles.sheetClose, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
+            style={({ pressed }) => [
+              styles.sheetClose,
+              { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 },
+            ]}
           >
-            <Text style={[styles.sheetCloseText, { color: c.primaryForeground }]}>Done</Text>
+            <Text
+              style={[styles.sheetCloseText, { color: c.primaryForeground }]}
+            >
+              Done
+            </Text>
           </Pressable>
         </Pressable>
       </Pressable>
@@ -1220,7 +1964,7 @@ export function ActivityScreen() {
 
   const renderDetailSheet = () => {
     if (!detailItem) return null;
-    const meta      = SOURCE_META[detailItem.source];
+    const meta = SOURCE_META[detailItem.source];
     const isExpense = detailItem.amount < 0;
 
     return (
@@ -1230,142 +1974,293 @@ export function ActivityScreen() {
         animationType={isDesktop ? "fade" : "slide"}
         onRequestClose={() => setDetailItem(null)}
       >
-        <Pressable style={[styles.sheetOverlay, isDesktop && DESKTOP_MODAL_OVERLAY]} onPress={() => setDetailItem(null)}>
-          <Pressable style={[styles.sheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_REGULAR]} onPress={event => event.stopPropagation()}>
+        <Pressable
+          style={[styles.sheetOverlay, isDesktop && DESKTOP_MODAL_OVERLAY]}
+          onPress={() => setDetailItem(null)}
+        >
+          <Pressable
+            style={[
+              styles.sheet,
+              { backgroundColor: c.background },
+              isDesktop && DESKTOP_MODAL_REGULAR,
+            ]}
+            onPress={(event) => event.stopPropagation()}
+          >
             {/* Handle */}
-            <View style={[styles.sheetHandle, { backgroundColor: c.border }, isDesktop && DESKTOP_MODAL_HANDLE]} />
+            <View
+              style={[
+                styles.sheetHandle,
+                { backgroundColor: c.border },
+                isDesktop && DESKTOP_MODAL_HANDLE,
+              ]}
+            />
 
-            <ScrollView showsVerticalScrollIndicator={isDesktop} contentContainerStyle={styles.sheetScrollContent}>
-
-            {/* Icon + title */}
-            <View style={styles.sheetHeader}>
-              <View style={[styles.sheetIconWrap, { backgroundColor: meta.color + "20" }]}>
-                <Feather name={meta.icon} size={26} color={meta.color} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.sheetName, { color: c.foreground }]} numberOfLines={2}>
-                  {detailItem.label}
-                </Text>
-                <View style={[styles.sourcePill, { backgroundColor: meta.color + "18" }]}>
-                  <Text style={[styles.sourcePillText, { color: meta.color }]}>{meta.label}</Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Amount hero */}
-            <View style={[styles.sheetAmtBox, { backgroundColor: c.card, borderRadius: colors.radius }]}>
-              <Text style={[styles.sheetAmt, { color: isExpense ? c.destructive : c.success }]}>
-                {isExpense ? "−" : "+"}${Math.abs(detailItem.amount).toFixed(2)}
-              </Text>
-              <Text style={[styles.sheetAmtLabel, { color: c.mutedForeground }]}>
-                {isExpense ? "Expense" : "Income"}
-              </Text>
-            </View>
-
-            {/* Detail rows */}
-            {[
-              { icon: "calendar" as const,   label: "Date",        value: formatDateLong(detailItem.date) },
-              { icon: "tag"      as const,   label: "Category",    value: detailItem.category },
-              { icon: "info"     as const,   label: "Source",      value: meta.description },
-              ...(detailItem.detail ? [{ icon: "file-text" as const, label: "Details", value: detailItem.detail }] : []),
-            ].map(row => (
-              <View key={row.label} style={[styles.sheetRow, { borderBottomColor: c.border }]}>
-                <View style={[styles.sheetRowIcon, { backgroundColor: c.muted }]}>
-                  <Feather name={row.icon} size={14} color={c.mutedForeground} />
+            <ScrollView
+              showsVerticalScrollIndicator={isDesktop}
+              contentContainerStyle={styles.sheetScrollContent}
+            >
+              {/* Icon + title */}
+              <View style={styles.sheetHeader}>
+                <View
+                  style={[
+                    styles.sheetIconWrap,
+                    { backgroundColor: meta.color + "20" },
+                  ]}
+                >
+                  <Feather name={meta.icon} size={26} color={meta.color} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.sheetRowLabel, { color: c.mutedForeground }]}>{row.label}</Text>
-                  <Text style={[styles.sheetRowValue, { color: c.foreground }]}>{row.value}</Text>
+                  <Text
+                    style={[styles.sheetName, { color: c.foreground }]}
+                    numberOfLines={2}
+                  >
+                    {detailItem.label}
+                  </Text>
+                  <View
+                    style={[
+                      styles.sourcePill,
+                      { backgroundColor: meta.color + "18" },
+                    ]}
+                  >
+                    <Text
+                      style={[styles.sourcePillText, { color: meta.color }]}
+                    >
+                      {meta.label}
+                    </Text>
+                  </View>
                 </View>
               </View>
-            ))}
 
-            {/* Source note */}
-            <View style={[styles.sheetNote, { backgroundColor: c.muted, borderRadius: colors.radius }]}>
-              <Feather name="lock" size={13} color={c.mutedForeground} />
-              <Text style={[styles.sheetNoteText, { color: c.mutedForeground }]}>
-                {detailItem.source === "bill_payment"
-                  ? "Edit this entry by adjusting the paid amount in Monthly view."
-                  : detailItem.pending
-                  ? "This is a bank preview. A temporary bill match prevents a false overdue warning, but nothing is paid until it posts."
-                  : detailItem.source === "income"
-                  ? "Edit this entry by updating your income in More → Income Sources."
-                  : "Edit this entry from the Bills → Debt tab."}
-              </Text>
-            </View>
+              {/* Amount hero */}
+              <View
+                style={[
+                  styles.sheetAmtBox,
+                  { backgroundColor: c.card, borderRadius: colors.radius },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.sheetAmt,
+                    { color: isExpense ? c.destructive : c.success },
+                  ]}
+                >
+                  {isExpense ? "−" : "+"}$
+                  {Math.abs(detailItem.amount).toFixed(2)}
+                </Text>
+                <Text
+                  style={[styles.sheetAmtLabel, { color: c.mutedForeground }]}
+                >
+                  {isExpense ? "Expense" : "Income"}
+                </Text>
+              </View>
 
-            {detailItem.pending && isExpense ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Match pending ${detailItem.label} to a planned bill`}
-                onPress={() => {
-                  if (!detailItem.rawPending) return;
-                  if (isFeatureLocked("transaction_matching")) {
-                    Alert.alert(
-                      "Pending matching is a Pro feature",
-                      "Upgrade to Pro to connect pending bank charges to planned bills.",
+              {/* Detail rows */}
+              {[
+                {
+                  icon: "calendar" as const,
+                  label: "Date",
+                  value: formatDateLong(detailItem.date),
+                },
+                {
+                  icon: "tag" as const,
+                  label: "Category",
+                  value: detailItem.category,
+                },
+                {
+                  icon: "info" as const,
+                  label: "Source",
+                  value: meta.description,
+                },
+                ...(detailItem.detail
+                  ? [
+                      {
+                        icon: "file-text" as const,
+                        label: "Details",
+                        value: detailItem.detail,
+                      },
+                    ]
+                  : []),
+              ].map((row) => (
+                <View
+                  key={row.label}
+                  style={[styles.sheetRow, { borderBottomColor: c.border }]}
+                >
+                  <View
+                    style={[styles.sheetRowIcon, { backgroundColor: c.muted }]}
+                  >
+                    <Feather
+                      name={row.icon}
+                      size={14}
+                      color={c.mutedForeground}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[
+                        styles.sheetRowLabel,
+                        { color: c.mutedForeground },
+                      ]}
+                    >
+                      {row.label}
+                    </Text>
+                    <Text
+                      style={[styles.sheetRowValue, { color: c.foreground }]}
+                    >
+                      {row.value}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+
+              {/* Source note */}
+              <View
+                style={[
+                  styles.sheetNote,
+                  { backgroundColor: c.muted, borderRadius: colors.radius },
+                ]}
+              >
+                <Feather name="lock" size={13} color={c.mutedForeground} />
+                <Text
+                  style={[styles.sheetNoteText, { color: c.mutedForeground }]}
+                >
+                  {detailItem.source === "bill_payment"
+                    ? "Edit this entry by adjusting the paid amount in Monthly view."
+                    : detailItem.pending
+                      ? "This is a bank preview. A temporary bill match prevents a false overdue warning, but nothing is paid until it posts."
+                      : detailItem.source === "income"
+                        ? "Edit this entry by updating your income in More → Income Sources."
+                        : "Edit this entry from the Bills → Debt tab."}
+                </Text>
+              </View>
+
+              {detailItem.pending && isExpense ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Match pending ${detailItem.label} to a planned bill`}
+                  onPress={() => {
+                    if (!detailItem.rawPending) return;
+                    if (isFeatureLocked("transaction_matching")) {
+                      Alert.alert(
+                        "Pending matching is a Pro feature",
+                        "Upgrade to Pro to connect pending bank charges to planned bills.",
+                      );
+                      return;
+                    }
+                    const pending = detailItem.rawPending;
+                    setDetailItem(null);
+                    setTimeout(
+                      () => setPendingMatchTx(pending),
+                      MODAL_HANDOFF_DELAY_MS,
                     );
-                    return;
-                  }
-                  const pending = detailItem.rawPending;
-                  setDetailItem(null);
-                  setTimeout(() => setPendingMatchTx(pending), MODAL_HANDOFF_DELAY_MS);
-                }}
-                style={({ pressed }) => [
-                  styles.pendingMatchButton,
-                  { borderColor: colors.brand.blue + "70", backgroundColor: colors.brand.blue + "16", opacity: pressed ? 0.8 : 1 },
-                ]}
-              >
-                <Feather name="link-2" size={17} color={colors.brand.blue} />
-                <View style={styles.pendingBucketButtonCopy}>
-                  <Text style={[styles.pendingBucketButtonTitle, { color: c.foreground }]}>
-                    Match to a planned bill
-                  </Text>
-                  <Text style={[styles.pendingBucketButtonBody, { color: c.mutedForeground }]}>
-                    Show Payment pending instead of overdue
-                  </Text>
-                </View>
-                <Feather name="chevron-right" size={18} color={colors.brand.blue} />
-              </Pressable>
-            ) : null}
+                  }}
+                  style={({ pressed }) => [
+                    styles.pendingMatchButton,
+                    {
+                      borderColor: colors.brand.blue + "70",
+                      backgroundColor: colors.brand.blue + "16",
+                      opacity: pressed ? 0.8 : 1,
+                    },
+                  ]}
+                >
+                  <Feather name="link-2" size={17} color={colors.brand.blue} />
+                  <View style={styles.pendingBucketButtonCopy}>
+                    <Text
+                      style={[
+                        styles.pendingBucketButtonTitle,
+                        { color: c.foreground },
+                      ]}
+                    >
+                      Match to a planned bill
+                    </Text>
+                    <Text
+                      style={[
+                        styles.pendingBucketButtonBody,
+                        { color: c.mutedForeground },
+                      ]}
+                    >
+                      Show Payment pending instead of overdue
+                    </Text>
+                  </View>
+                  <Feather
+                    name="chevron-right"
+                    size={18}
+                    color={colors.brand.blue}
+                  />
+                </Pressable>
+              ) : null}
 
-            {detailItem.pending && isExpense ? (
+              {detailItem.pending && isExpense ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Set aside ${Math.abs(detailItem.amount).toFixed(2)} dollars for ${detailItem.label}`}
+                  onPress={() => {
+                    const draft = {
+                      name: detailItem.label,
+                      amount: Math.abs(detailItem.amount),
+                      date:
+                        detailItem.date < todayIsoDate()
+                          ? todayIsoDate()
+                          : detailItem.date,
+                    };
+                    setDetailItem(null);
+                    setTimeout(
+                      () => setPendingBucketDraft(draft),
+                      MODAL_HANDOFF_DELAY_MS,
+                    );
+                  }}
+                  style={({ pressed }) => [
+                    styles.pendingBucketButton,
+                    { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 },
+                  ]}
+                >
+                  <Feather
+                    name="calendar"
+                    size={17}
+                    color={c.primaryForeground}
+                  />
+                  <View style={styles.pendingBucketButtonCopy}>
+                    <Text
+                      style={[
+                        styles.pendingBucketButtonTitle,
+                        { color: c.primaryForeground },
+                      ]}
+                    >
+                      Set aside for this charge
+                    </Text>
+                    <Text
+                      style={[
+                        styles.pendingBucketButtonBody,
+                        { color: c.primaryForeground },
+                      ]}
+                    >
+                      Create a ${Math.abs(detailItem.amount).toFixed(2)}{" "}
+                      spending bucket
+                    </Text>
+                  </View>
+                  <Feather
+                    name="chevron-right"
+                    size={18}
+                    color={c.primaryForeground}
+                  />
+                </Pressable>
+              ) : null}
+
               <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Set aside ${Math.abs(detailItem.amount).toFixed(2)} dollars for ${detailItem.label}`}
-                onPress={() => {
-                  const draft = {
-                    name: detailItem.label,
-                    amount: Math.abs(detailItem.amount),
-                    date: detailItem.date < todayIsoDate() ? todayIsoDate() : detailItem.date,
-                  };
-                  setDetailItem(null);
-                  setTimeout(() => setPendingBucketDraft(draft), MODAL_HANDOFF_DELAY_MS);
-                }}
+                onPress={() => setDetailItem(null)}
                 style={({ pressed }) => [
-                  styles.pendingBucketButton,
-                  { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 },
+                  styles.sheetClose,
+                  { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 },
                 ]}
               >
-                <Feather name="calendar" size={17} color={c.primaryForeground} />
-                <View style={styles.pendingBucketButtonCopy}>
-                  <Text style={[styles.pendingBucketButtonTitle, { color: c.primaryForeground }]}>
-                    Set aside for this charge
-                  </Text>
-                  <Text style={[styles.pendingBucketButtonBody, { color: c.primaryForeground }]}>
-                    Create a ${Math.abs(detailItem.amount).toFixed(2)} spending bucket
-                  </Text>
-                </View>
-                <Feather name="chevron-right" size={18} color={c.primaryForeground} />
+                <Text
+                  style={[
+                    styles.sheetCloseText,
+                    { color: c.primaryForeground },
+                  ]}
+                >
+                  Done
+                </Text>
               </Pressable>
-            ) : null}
-
-            <Pressable
-              onPress={() => setDetailItem(null)}
-              style={({ pressed }) => [styles.sheetClose, { backgroundColor: c.primary, opacity: pressed ? 0.85 : 1 }]}
-            >
-              <Text style={[styles.sheetCloseText, { color: c.primaryForeground }]}>Done</Text>
-            </Pressable>
             </ScrollView>
           </Pressable>
         </Pressable>
@@ -1375,7 +2270,9 @@ export function ActivityScreen() {
 
   const renderListHeader = () => (
     <>
-      <View style={[styles.header, { paddingTop: insets.top + 12 + webTopPad }]}>
+      <View
+        style={[styles.header, { paddingTop: insets.top + 12 + webTopPad }]}
+      >
         <View>
           <PlanViewSelector textStyle={styles.title} />
           <Text style={[styles.subtitle, { color: c.mutedForeground }]}>
@@ -1386,9 +2283,17 @@ export function ActivityScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`${activityReviewCount} item${activityReviewCount === 1 ? "" : "s"} need review and ${pendingActivityCount} transaction${pendingActivityCount === 1 ? "" : "s"} are pending`}
-            onPress={() => activityReviewCount > 0
-              ? router.push({ pathname: "/(tabs)/more", params: { section: "review" } } as any)
-              : Alert.alert("Pending bank activity", "Pending transactions are shown at the top of Activity and are not counted until they post.")}
+            onPress={() =>
+              activityReviewCount > 0
+                ? router.push({
+                    pathname: "/(tabs)/more",
+                    params: { section: "review" },
+                  } as any)
+                : Alert.alert(
+                    "Pending bank activity",
+                    "Pending transactions are shown at the top of Activity and are not counted until they post.",
+                  )
+            }
             style={({ pressed }) => [
               styles.reviewAlertButton,
               {
@@ -1398,27 +2303,54 @@ export function ActivityScreen() {
               },
             ]}
           >
-            <Feather name={activityReviewCount > 0 ? "alert-triangle" : "clock"} size={23} color={c.warning} />
-            <View style={[styles.reviewAlertBadge, { backgroundColor: c.destructive }]}>
-              <Text style={styles.reviewAlertBadgeText}>{activityReviewCount + pendingActivityCount}</Text>
+            <Feather
+              name={activityReviewCount > 0 ? "alert-triangle" : "clock"}
+              size={23}
+              color={c.warning}
+            />
+            <View
+              style={[
+                styles.reviewAlertBadge,
+                { backgroundColor: c.destructive },
+              ]}
+            >
+              <Text style={styles.reviewAlertBadgeText}>
+                {activityReviewCount + pendingActivityCount}
+              </Text>
             </View>
           </Pressable>
         ) : (
           <CommandPlusButton
-            onPress={() => { setEditTx(null); setEditModalVisible(true); }}
+            onPress={() => {
+              setEditTx(null);
+              setEditModalVisible(true);
+            }}
             accessibilityLabel="Add activity"
           />
         )}
       </View>
 
       {pendingActivityCount > 0 ? (
-        <View style={[styles.pendingNotice, { borderColor: c.warning + "55", backgroundColor: c.warning + "12" }]}>
+        <View
+          style={[
+            styles.pendingNotice,
+            {
+              borderColor: c.warning + "55",
+              backgroundColor: c.warning + "12",
+            },
+          ]}
+        >
           <Feather name="clock" size={17} color={c.warning} />
           <View style={styles.pendingNoticeCopy}>
             <Text style={[styles.pendingNoticeTitle, { color: c.foreground }]}>
-              {pendingActivityCount} pending bank transaction{pendingActivityCount === 1 ? "" : "s"}
+              {pendingActivityCount} pending bank transaction
+              {pendingActivityCount === 1 ? "" : "s"}
             </Text>
-            <Text style={[styles.pendingNoticeBody, { color: c.mutedForeground }]}>Visible below, but not counted until posted.</Text>
+            <Text
+              style={[styles.pendingNoticeBody, { color: c.mutedForeground }]}
+            >
+              Visible below, but not counted until posted.
+            </Text>
           </View>
         </View>
       ) : null}
@@ -1427,16 +2359,41 @@ export function ActivityScreen() {
         onPress={() => setWeeklySummaryVisible(true)}
         style={({ pressed }) => [
           styles.monthlySummaryCard,
-          { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.88 : 1 },
+          {
+            backgroundColor: c.card,
+            borderColor: c.border,
+            opacity: pressed ? 0.88 : 1,
+          },
         ]}
       >
         <View style={styles.monthlySummaryHeader}>
           <View>
-            <Text style={[styles.activityHeroLabel, { color: c.mutedForeground }]}>Activity snapshot</Text>
-            <Text style={[styles.monthlySummaryTitle, { color: c.foreground }]}>{monthlySummary.title}</Text>
+            <Text
+              style={[styles.activityHeroLabel, { color: c.mutedForeground }]}
+            >
+              Activity snapshot
+            </Text>
+            <Text style={[styles.monthlySummaryTitle, { color: c.foreground }]}>
+              {monthlySummary.title}
+            </Text>
           </View>
-          <View style={[styles.activityHeroBadge, { backgroundColor: monthlySummary.net >= 0 ? c.success + "18" : c.destructive + "18" }]}>
-            <Text style={[styles.activityHeroBadgeText, { color: monthlySummary.net >= 0 ? c.success : c.destructive }]}>
+          <View
+            style={[
+              styles.activityHeroBadge,
+              {
+                backgroundColor:
+                  monthlySummary.net >= 0
+                    ? c.success + "18"
+                    : c.destructive + "18",
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.activityHeroBadgeText,
+                { color: monthlySummary.net >= 0 ? c.success : c.destructive },
+              ]}
+            >
               {monthlySummary.net >= 0 ? "Positive" : "Negative"}
             </Text>
           </View>
@@ -1446,45 +2403,86 @@ export function ActivityScreen() {
             style={[
               styles.monthlySummaryStat,
               {
-                backgroundColor: c.isDark ? "rgba(15,23,42,0.42)" : "rgba(248,250,252,0.96)",
-                borderColor: c.isDark ? "rgba(148,163,184,0.10)" : "rgba(15,23,42,0.08)",
+                backgroundColor: c.isDark
+                  ? "rgba(15,23,42,0.42)"
+                  : "rgba(248,250,252,0.96)",
+                borderColor: c.isDark
+                  ? "rgba(148,163,184,0.10)"
+                  : "rgba(15,23,42,0.08)",
               },
             ]}
           >
-            <Text style={[styles.monthlySummaryValue, { color: monthlySummary.net >= 0 ? c.success : c.destructive }]}>
-              {monthlySummary.net >= 0 ? "+" : "-"}${Math.abs(monthlySummary.net).toFixed(0)}
+            <Text
+              style={[
+                styles.monthlySummaryValue,
+                { color: monthlySummary.net >= 0 ? c.success : c.destructive },
+              ]}
+            >
+              {monthlySummary.net >= 0 ? "+" : "-"}$
+              {Math.abs(monthlySummary.net).toFixed(0)}
             </Text>
-            <Text style={[styles.monthlySummaryLabel, { color: c.mutedForeground }]}>Net</Text>
+            <Text
+              style={[styles.monthlySummaryLabel, { color: c.mutedForeground }]}
+            >
+              Net
+            </Text>
           </View>
           <View
             style={[
               styles.monthlySummaryStat,
               {
-                backgroundColor: c.isDark ? "rgba(15,23,42,0.42)" : "rgba(248,250,252,0.96)",
-                borderColor: c.isDark ? "rgba(148,163,184,0.10)" : "rgba(15,23,42,0.08)",
+                backgroundColor: c.isDark
+                  ? "rgba(15,23,42,0.42)"
+                  : "rgba(248,250,252,0.96)",
+                borderColor: c.isDark
+                  ? "rgba(148,163,184,0.10)"
+                  : "rgba(15,23,42,0.08)",
               },
             ]}
           >
-            <Text style={[styles.monthlySummaryValue, { color: c.success }]}>${monthlySummary.income.toFixed(0)}</Text>
-            <Text style={[styles.monthlySummaryLabel, { color: c.mutedForeground }]}>Income</Text>
+            <Text style={[styles.monthlySummaryValue, { color: c.success }]}>
+              ${monthlySummary.income.toFixed(0)}
+            </Text>
+            <Text
+              style={[styles.monthlySummaryLabel, { color: c.mutedForeground }]}
+            >
+              Income
+            </Text>
           </View>
           <View
             style={[
               styles.monthlySummaryStat,
               {
-                backgroundColor: c.isDark ? "rgba(15,23,42,0.42)" : "rgba(248,250,252,0.96)",
-                borderColor: c.isDark ? "rgba(148,163,184,0.10)" : "rgba(15,23,42,0.08)",
+                backgroundColor: c.isDark
+                  ? "rgba(15,23,42,0.42)"
+                  : "rgba(248,250,252,0.96)",
+                borderColor: c.isDark
+                  ? "rgba(148,163,184,0.10)"
+                  : "rgba(15,23,42,0.08)",
               },
             ]}
           >
-            <Text style={[styles.monthlySummaryValue, { color: c.destructive }]}>${monthlySummary.out.toFixed(0)}</Text>
-            <Text style={[styles.monthlySummaryLabel, { color: c.mutedForeground }]}>Bills & spending</Text>
+            <Text
+              style={[styles.monthlySummaryValue, { color: c.destructive }]}
+            >
+              ${monthlySummary.out.toFixed(0)}
+            </Text>
+            <Text
+              style={[styles.monthlySummaryLabel, { color: c.mutedForeground }]}
+            >
+              Bills & spending
+            </Text>
           </View>
         </View>
         <View style={[styles.weekSummaryTrigger, { borderTopColor: c.border }]}>
           <View>
-            <Text style={[styles.weekSummaryTitle, { color: c.foreground }]}>Weekly breakdown</Text>
-            <Text style={[styles.weekSummarySub, { color: c.mutedForeground }]} numberOfLines={1}>
+            <Text style={[styles.weekSummaryTitle, { color: c.foreground }]}>
+              Weekly breakdown
+            </Text>
+            <Text
+              style={[styles.weekSummarySub, { color: c.mutedForeground }]}
+              numberOfLines={1}
+            >
               See weekly net by date range.
             </Text>
           </View>
@@ -1493,7 +2491,12 @@ export function ActivityScreen() {
       </Pressable>
 
       <View style={[styles.searchWrap, { marginBottom: 8 }]}>
-        <View style={[styles.searchBox, { backgroundColor: c.card, borderColor: c.border }]}>
+        <View
+          style={[
+            styles.searchBox,
+            { backgroundColor: c.card, borderColor: c.border },
+          ]}
+        >
           <Feather name="search" size={15} color={c.mutedForeground} />
           <TextInput
             style={[styles.searchInput, { color: c.foreground }]}
@@ -1521,9 +2524,15 @@ export function ActivityScreen() {
             },
           ]}
         >
-          <Feather name="filter" size={20} color={activeFilterCount > 0 ? c.primaryForeground : c.foreground} />
+          <Feather
+            name="filter"
+            size={20}
+            color={activeFilterCount > 0 ? c.primaryForeground : c.foreground}
+          />
           {activeFilterCount > 0 && (
-            <View style={[styles.filterCount, { backgroundColor: c.destructive }]}>
+            <View
+              style={[styles.filterCount, { backgroundColor: c.destructive }]}
+            >
               <Text style={styles.filterCountText}>{activeFilterCount}</Text>
             </View>
           )}
@@ -1534,103 +2543,224 @@ export function ActivityScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: c.background }]}>
-      <PremiumBackdrop variant="green" />
-      <SectionList
-        sections={sections}
-        keyExtractor={item => item.id}
-        contentContainerStyle={[styles.list, { paddingBottom: listBottomPadding }]}
-        scrollIndicatorInsets={{ bottom: listBottomPadding }}
-        stickySectionHeadersEnabled
-        ListHeaderComponent={renderListHeader()}
-        ListEmptyComponent={
-          <EmptyState
-            icon="repeat"
-            title="No Activity"
-            message={
-              hasActiveFilters
-                ? "Nothing matches your filters."
-                : "Mark bills paid or add income sources to see your activity here."
-            }
-            actionLabel={hasActiveFilters ? "Clear filters" : "Add Activity"}
-            onAction={hasActiveFilters ? clearFilters : () => { setEditTx(null); setEditModalVisible(true); }}
-          />
-        }
-        renderSectionHeader={({ section: { title } }) => (
-          <View style={[styles.sectionHeader, { backgroundColor: c.background }]}>
-            <Text style={[styles.sectionTitle, { color: c.foreground }]}>{title}</Text>
-          </View>
-        )}
-        renderItem={({ item, index, section }) => {
-          const isLast     = index === section.data.length - 1;
-          const isExpense  = item.amount < 0;
-          const sourceMeta = SOURCE_META[item.source];
-          const catColor   = CAT_COLORS[item.category] ?? c.primary;
-          const needsIncomeReview = item.rawTx?.source === "plaid" && item.rawTx.amount > 0 && item.rawTx.review_status === "needs_review";
-
-          return (
-            <Pressable
-              onPress={() => openItem(item)}
-              style={({ pressed }) => [
-                styles.txRow,
-                {
-                  backgroundColor: c.card,
-                  borderRadius: colors.radius,
-                  opacity: pressed ? 0.85 : 1,
-                  marginBottom: isLast ? 10 : 7,
-                },
-              ]}
+      {!isDesktop ? <PremiumBackdrop variant="green" /> : null}
+      {isDesktop ? (
+        <DesktopActivityPage
+          rows={allActivity.map((item) => ({
+            id: item.id,
+            date: item.date,
+            amount: item.amount,
+            label: item.label,
+            category: item.category,
+            source: item.source,
+            editable: item.editable,
+            pending: item.pending,
+            detail: item.detail,
+            note: item.rawTx?.note,
+            accountName: item.rawTx?.account_id
+              ? accounts.find(
+                  (account) => account.id === item.rawTx?.account_id,
+                )?.name
+              : item.rawTx?.plaid_account_id
+                ? connectedBankAccounts.find(
+                    (account) =>
+                      account.plaid_account_id ===
+                        item.rawTx?.plaid_account_id ||
+                      account.id === item.rawTx?.plaid_account_id,
+                  )?.name
+                : undefined,
+          }))}
+          summary={monthlySummary}
+          onAdd={() => {
+            setEditTx(null);
+            setEditModalVisible(true);
+          }}
+          onOpen={(id) => {
+            const item = allActivity.find((activity) => activity.id === id);
+            if (item) openItem(item);
+          }}
+        />
+      ) : (
+        <SectionList
+          sections={sections}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={[
+            styles.list,
+            { paddingBottom: listBottomPadding },
+          ]}
+          scrollIndicatorInsets={{ bottom: listBottomPadding }}
+          stickySectionHeadersEnabled
+          ListHeaderComponent={renderListHeader()}
+          ListEmptyComponent={
+            <EmptyState
+              icon="repeat"
+              title="No Activity"
+              message={
+                hasActiveFilters
+                  ? "Nothing matches your filters."
+                  : "Mark bills paid or add income sources to see your activity here."
+              }
+              actionLabel={hasActiveFilters ? "Clear filters" : "Add Activity"}
+              onAction={
+                hasActiveFilters
+                  ? clearFilters
+                  : () => {
+                      setEditTx(null);
+                      setEditModalVisible(true);
+                    }
+              }
+            />
+          }
+          renderSectionHeader={({ section: { title } }) => (
+            <View
+              style={[styles.sectionHeader, { backgroundColor: c.background }]}
             >
-              <View style={[styles.rowAccent, { backgroundColor: sourceMeta.color }]} />
-              {/* Source icon */}
-              <View style={[styles.sourceIcon, { backgroundColor: sourceMeta.color + "20" }]}>
-                <Feather name={sourceMeta.icon} size={15} color={sourceMeta.color} />
-              </View>
+              <Text style={[styles.sectionTitle, { color: c.foreground }]}>
+                {title}
+              </Text>
+            </View>
+          )}
+          renderItem={({ item, index, section }) => {
+            const isLast = index === section.data.length - 1;
+            const isExpense = item.amount < 0;
+            const sourceMeta = SOURCE_META[item.source];
+            const catColor = CAT_COLORS[item.category] ?? c.primary;
+            const needsIncomeReview =
+              item.rawTx?.source === "plaid" &&
+              item.rawTx.amount > 0 &&
+              item.rawTx.review_status === "needs_review";
 
-              {/* Middle */}
-              <View style={styles.txMid}>
-                <Text style={[styles.txNote, { color: c.foreground }]} numberOfLines={1}>
-                  {item.label}
-                </Text>
-                <View style={styles.txMeta}>
-                  <View style={[styles.sourceBadge, { backgroundColor: sourceMeta.color + "18" }]}>
-                    <Text style={[styles.sourceBadgeText, { color: sourceMeta.color }]}>
-                      {sourceMeta.label}
-                    </Text>
-                  </View>
-                  {item.category !== "Income" && (
-                    <View style={[styles.catBadge, { backgroundColor: catColor + "18" }]}>
-                      <Text style={[styles.catBadgeText, { color: catColor }]}>{item.category}</Text>
-                    </View>
-                  )}
-                  {item.pending ? (
-                    <View style={[styles.sourceBadge, { backgroundColor: (item.pendingMatchLabel ? colors.brand.blue : c.warning) + "18" }]}>
-                      <Text style={[styles.sourceBadgeText, { color: item.pendingMatchLabel ? colors.brand.blue : c.warning }]}>
-                        {item.pendingMatchLabel ? "Payment pending" : "Pending"}
+            return (
+              <Pressable
+                onPress={() => openItem(item)}
+                style={({ pressed }) => [
+                  styles.txRow,
+                  {
+                    backgroundColor: c.card,
+                    borderRadius: colors.radius,
+                    opacity: pressed ? 0.85 : 1,
+                    marginBottom: isLast ? 10 : 7,
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.rowAccent,
+                    { backgroundColor: sourceMeta.color },
+                  ]}
+                />
+                {/* Source icon */}
+                <View
+                  style={[
+                    styles.sourceIcon,
+                    { backgroundColor: sourceMeta.color + "20" },
+                  ]}
+                >
+                  <Feather
+                    name={sourceMeta.icon}
+                    size={15}
+                    color={sourceMeta.color}
+                  />
+                </View>
+
+                {/* Middle */}
+                <View style={styles.txMid}>
+                  <Text
+                    style={[styles.txNote, { color: c.foreground }]}
+                    numberOfLines={1}
+                  >
+                    {item.label}
+                  </Text>
+                  <View style={styles.txMeta}>
+                    <View
+                      style={[
+                        styles.sourceBadge,
+                        { backgroundColor: sourceMeta.color + "18" },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.sourceBadgeText,
+                          { color: sourceMeta.color },
+                        ]}
+                      >
+                        {sourceMeta.label}
                       </Text>
                     </View>
-                  ) : null}
-                  <Text style={[styles.txDate, { color: c.mutedForeground }]}>
-                    {formatDate(item.date)}
-                  </Text>
+                    {item.category !== "Income" && (
+                      <View
+                        style={[
+                          styles.catBadge,
+                          { backgroundColor: catColor + "18" },
+                        ]}
+                      >
+                        <Text
+                          style={[styles.catBadgeText, { color: catColor }]}
+                        >
+                          {item.category}
+                        </Text>
+                      </View>
+                    )}
+                    {item.pending ? (
+                      <View
+                        style={[
+                          styles.sourceBadge,
+                          {
+                            backgroundColor:
+                              (item.pendingMatchLabel
+                                ? colors.brand.blue
+                                : c.warning) + "18",
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.sourceBadgeText,
+                            {
+                              color: item.pendingMatchLabel
+                                ? colors.brand.blue
+                                : c.warning,
+                            },
+                          ]}
+                        >
+                          {item.pendingMatchLabel
+                            ? "Payment pending"
+                            : "Pending"}
+                        </Text>
+                      </View>
+                    ) : null}
+                    <Text style={[styles.txDate, { color: c.mutedForeground }]}>
+                      {formatDate(item.date)}
+                    </Text>
+                  </View>
                 </View>
-              </View>
 
-              {/* Amount + action hint */}
-              <View style={styles.txRight}>
-                <Text style={[styles.txAmount, { color: isExpense ? c.destructive : c.success }]}>
-                  {isExpense ? "−" : "+"}${Math.abs(item.amount).toFixed(2)}
-                </Text>
-                <Feather
-                  name={needsIncomeReview || !item.editable ? "chevron-right" : "edit-2"}
-                  size={12}
-                  color={c.mutedForeground}
-                  style={{ marginTop: 3 }}
-                />
-              </View>
-            </Pressable>
-          );
-        }}
-      />
+                {/* Amount + action hint */}
+                <View style={styles.txRight}>
+                  <Text
+                    style={[
+                      styles.txAmount,
+                      { color: isExpense ? c.destructive : c.success },
+                    ]}
+                  >
+                    {isExpense ? "−" : "+"}${Math.abs(item.amount).toFixed(2)}
+                  </Text>
+                  <Feather
+                    name={
+                      needsIncomeReview || !item.editable
+                        ? "chevron-right"
+                        : "edit-2"
+                    }
+                    size={12}
+                    color={c.mutedForeground}
+                    style={{ marginTop: 3 }}
+                  />
+                </View>
+              </Pressable>
+            );
+          }}
+        />
+      )}
 
       {/* ── Filter sheet ── */}
       <Modal
@@ -1639,34 +2769,80 @@ export function ActivityScreen() {
         animationType={isDesktop ? "fade" : "slide"}
         onRequestClose={() => setPendingMatchTx(null)}
       >
-        <Pressable style={[styles.matchOverlay, isDesktop && DESKTOP_MODAL_OVERLAY]} onPress={() => setPendingMatchTx(null)}>
-          <Pressable style={[styles.matchSheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_MATCH]} onPress={event => event.stopPropagation()}>
-            <View style={[styles.filterHandle, { backgroundColor: c.border }, isDesktop && DESKTOP_MODAL_HANDLE]} />
+        <Pressable
+          style={[styles.matchOverlay, isDesktop && DESKTOP_MODAL_OVERLAY]}
+          onPress={() => setPendingMatchTx(null)}
+        >
+          <Pressable
+            style={[
+              styles.matchSheet,
+              { backgroundColor: c.background },
+              isDesktop && DESKTOP_MODAL_MATCH,
+            ]}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <View
+              style={[
+                styles.filterHandle,
+                { backgroundColor: c.border },
+                isDesktop && DESKTOP_MODAL_HANDLE,
+              ]}
+            />
             <View style={styles.matchHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.matchEyebrow, { color: c.warning }]}>PENDING BANK PAYMENT</Text>
-                <Text style={[styles.matchTitle, { color: c.foreground }]} numberOfLines={2}>
-                  {pendingMatchTx?.merchant_name || pendingMatchTx?.name || "Pending payment"}
+                <Text style={[styles.matchEyebrow, { color: c.warning }]}>
+                  PENDING BANK PAYMENT
+                </Text>
+                <Text
+                  style={[styles.matchTitle, { color: c.foreground }]}
+                  numberOfLines={2}
+                >
+                  {pendingMatchTx?.merchant_name ||
+                    pendingMatchTx?.name ||
+                    "Pending payment"}
                 </Text>
                 <Text style={[styles.matchAmount, { color: c.destructive }]}>
-                  −${Math.abs(pendingMatchTx?.amount ?? 0).toFixed(2)} · {pendingMatchTx ? formatDate(pendingMatchTx.transaction_date) : ""}
+                  −${Math.abs(pendingMatchTx?.amount ?? 0).toFixed(2)} ·{" "}
+                  {pendingMatchTx
+                    ? formatDate(pendingMatchTx.transaction_date)
+                    : ""}
                 </Text>
               </View>
-              <Pressable accessibilityLabel="Close pending bill matching" onPress={() => setPendingMatchTx(null)} hitSlop={10}>
+              <Pressable
+                accessibilityLabel="Close pending bill matching"
+                onPress={() => setPendingMatchTx(null)}
+                hitSlop={10}
+              >
                 <Feather name="x" size={22} color={c.mutedForeground} />
               </Pressable>
             </View>
 
             {selectedPendingPlanMatch ? (
               <View style={styles.matchBody}>
-                <View style={[styles.matchedCard, { backgroundColor: colors.brand.blue + "16", borderColor: colors.brand.blue + "55" }]}>
+                <View
+                  style={[
+                    styles.matchedCard,
+                    {
+                      backgroundColor: colors.brand.blue + "16",
+                      borderColor: colors.brand.blue + "55",
+                    },
+                  ]}
+                >
                   <Feather name="clock" size={22} color={colors.brand.blue} />
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.matchRowTitle, { color: c.foreground }]}>
+                    <Text
+                      style={[styles.matchRowTitle, { color: c.foreground }]}
+                    >
                       Payment pending for {selectedPendingPlanMatch.target_name}
                     </Text>
-                    <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>
-                      Not paid or counted yet. FlowLedger will ask you to confirm when it posts.
+                    <Text
+                      style={[
+                        styles.matchRowMeta,
+                        { color: c.mutedForeground },
+                      ]}
+                    >
+                      Not paid or counted yet. FlowLedger will ask you to
+                      confirm when it posts.
                     </Text>
                   </View>
                 </View>
@@ -1675,9 +2851,17 @@ export function ActivityScreen() {
                   accessibilityLabel={`Remove pending match to ${selectedPendingPlanMatch.target_name}`}
                   disabled={savingMatch}
                   onPress={() => void handleRemovePendingMatch()}
-                  style={[styles.unmatchButton, { borderColor: c.destructive, opacity: savingMatch ? 0.55 : 1 }]}
+                  style={[
+                    styles.unmatchButton,
+                    {
+                      borderColor: c.destructive,
+                      opacity: savingMatch ? 0.55 : 1,
+                    },
+                  ]}
                 >
-                  <Text style={[styles.unmatchButtonText, { color: c.destructive }]}>
+                  <Text
+                    style={[styles.unmatchButtonText, { color: c.destructive }]}
+                  >
                     {savingMatch ? "Updating…" : "Remove pending match"}
                   </Text>
                 </Pressable>
@@ -1687,48 +2871,133 @@ export function ActivityScreen() {
                 <Text style={[styles.matchIntro, { color: c.mutedForeground }]}>
                   Choose the bill this pending payment is expected to cover.
                 </Text>
-                <ScrollView style={[styles.matchList, isDesktop && styles.desktopMatchList]} showsVerticalScrollIndicator={isDesktop}>
-                  {pendingBillMatchOptions.length > 0 ? pendingBillMatchOptions.map((option, index) => (
-                    <Pressable
-                      key={`${option.billId}-${option.nearestOccurrenceDate}`}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Temporarily match pending payment to ${option.name}`}
-                      disabled={savingMatch}
-                      onPress={() => void handleMatchPendingBill(option.billId)}
-                      style={({ pressed }) => [
-                        styles.matchRow,
-                        {
-                          backgroundColor: c.card,
-                          borderColor: index === 0 && option.score >= 48 ? c.success + "66" : c.border,
-                          opacity: savingMatch ? 0.55 : pressed ? 0.82 : 1,
-                        },
-                      ]}
-                    >
-                      <View style={[styles.matchIcon, { backgroundColor: (index === 0 && option.score >= 48 ? c.success : colors.brand.blue) + "18" }]}>
-                        <Feather name="file-text" size={17} color={index === 0 && option.score >= 48 ? c.success : colors.brand.blue} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <View style={styles.matchRowHeading}>
-                          <Text style={[styles.matchRowTitle, { color: c.foreground }]} numberOfLines={1}>{option.name}</Text>
-                          {index === 0 && option.score >= 48 ? (
-                            <View style={[styles.suggestedBadge, { backgroundColor: c.success + "20" }]}>
-                              <Text style={[styles.suggestedBadgeText, { color: c.success }]}>Suggested</Text>
-                            </View>
+                <ScrollView
+                  style={[
+                    styles.matchList,
+                    isDesktop && styles.desktopMatchList,
+                  ]}
+                  showsVerticalScrollIndicator={isDesktop}
+                >
+                  {pendingBillMatchOptions.length > 0 ? (
+                    pendingBillMatchOptions.map((option, index) => (
+                      <Pressable
+                        key={`${option.billId}-${option.nearestOccurrenceDate}`}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Temporarily match pending payment to ${option.name}`}
+                        disabled={savingMatch}
+                        onPress={() =>
+                          void handleMatchPendingBill(option.billId)
+                        }
+                        style={({ pressed }) => [
+                          styles.matchRow,
+                          {
+                            backgroundColor: c.card,
+                            borderColor:
+                              index === 0 && option.score >= 48
+                                ? c.success + "66"
+                                : c.border,
+                            opacity: savingMatch ? 0.55 : pressed ? 0.82 : 1,
+                          },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.matchIcon,
+                            {
+                              backgroundColor:
+                                (index === 0 && option.score >= 48
+                                  ? c.success
+                                  : colors.brand.blue) + "18",
+                            },
+                          ]}
+                        >
+                          <Feather
+                            name="file-text"
+                            size={17}
+                            color={
+                              index === 0 && option.score >= 48
+                                ? c.success
+                                : colors.brand.blue
+                            }
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <View style={styles.matchRowHeading}>
+                            <Text
+                              style={[
+                                styles.matchRowTitle,
+                                { color: c.foreground },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {option.name}
+                            </Text>
+                            {index === 0 && option.score >= 48 ? (
+                              <View
+                                style={[
+                                  styles.suggestedBadge,
+                                  { backgroundColor: c.success + "20" },
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.suggestedBadgeText,
+                                    { color: c.success },
+                                  ]}
+                                >
+                                  Suggested
+                                </Text>
+                              </View>
+                            ) : null}
+                          </View>
+                          <Text
+                            style={[
+                              styles.matchRowMeta,
+                              { color: c.mutedForeground },
+                            ]}
+                          >
+                            Planned ${option.plannedAmount.toFixed(2)} ·{" "}
+                            {option.daysApart === 0
+                              ? "same day"
+                              : option.daysApart === 1
+                                ? "1 day away"
+                                : `${option.daysApart ?? 0} days away`}
+                          </Text>
+                          {option.reasons.length > 0 ? (
+                            <Text
+                              style={[styles.matchReason, { color: c.success }]}
+                            >
+                              {option.reasons.slice(0, 2).join(" · ")}
+                            </Text>
                           ) : null}
                         </View>
-                        <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>
-                          Planned ${option.plannedAmount.toFixed(2)} · {option.daysApart === 0 ? "same day" : option.daysApart === 1 ? "1 day away" : `${option.daysApart ?? 0} days away`}
-                        </Text>
-                        {option.reasons.length > 0 ? (
-                          <Text style={[styles.matchReason, { color: c.success }]}>{option.reasons.slice(0, 2).join(" · ")}</Text>
-                        ) : null}
-                      </View>
-                      <Feather name="chevron-right" size={17} color={c.mutedForeground} />
-                    </Pressable>
-                  )) : (
-                    <View style={[styles.noMatchCard, { backgroundColor: c.card, borderColor: c.border }]}>
-                      <Text style={[styles.matchRowTitle, { color: c.foreground }]}>No bill found</Text>
-                      <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>Add the bill first, then return to this pending charge.</Text>
+                        <Feather
+                          name="chevron-right"
+                          size={17}
+                          color={c.mutedForeground}
+                        />
+                      </Pressable>
+                    ))
+                  ) : (
+                    <View
+                      style={[
+                        styles.noMatchCard,
+                        { backgroundColor: c.card, borderColor: c.border },
+                      ]}
+                    >
+                      <Text
+                        style={[styles.matchRowTitle, { color: c.foreground }]}
+                      >
+                        No bill found
+                      </Text>
+                      <Text
+                        style={[
+                          styles.matchRowMeta,
+                          { color: c.mutedForeground },
+                        ]}
+                      >
+                        Add the bill first, then return to this pending charge.
+                      </Text>
                     </View>
                   )}
                 </ScrollView>
@@ -1744,77 +3013,255 @@ export function ActivityScreen() {
         animationType={isDesktop ? "fade" : "slide"}
         onRequestClose={() => setMatchTx(null)}
       >
-        <Pressable style={[styles.matchOverlay, isDesktop && DESKTOP_MODAL_OVERLAY]} onPress={() => setMatchTx(null)}>
-          <Pressable style={[styles.matchSheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_MATCH]} onPress={event => event.stopPropagation()}>
-            <View style={[styles.filterHandle, { backgroundColor: c.border }, isDesktop && DESKTOP_MODAL_HANDLE]} />
+        <Pressable
+          style={[styles.matchOverlay, isDesktop && DESKTOP_MODAL_OVERLAY]}
+          onPress={() => setMatchTx(null)}
+        >
+          <Pressable
+            style={[
+              styles.matchSheet,
+              { backgroundColor: c.background },
+              isDesktop && DESKTOP_MODAL_MATCH,
+            ]}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <View
+              style={[
+                styles.filterHandle,
+                { backgroundColor: c.border },
+                isDesktop && DESKTOP_MODAL_HANDLE,
+              ]}
+            />
             <View style={styles.matchHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.matchEyebrow, { color: c.mutedForeground }]}>{matchingBankActivity ? "BANK ACTIVITY" : "MANUAL EXPENSE"}</Text>
-                <Text style={[styles.matchTitle, { color: c.foreground }]} numberOfLines={2}>
-                  {matchTx?.merchant_name || matchTx?.note || "Imported transaction"}
+                <Text
+                  style={[styles.matchEyebrow, { color: c.mutedForeground }]}
+                >
+                  {matchingBankActivity ? "BANK ACTIVITY" : "MANUAL EXPENSE"}
                 </Text>
-                <Text style={[styles.matchAmount, { color: c.destructive }]}>−${Math.abs(matchTx?.amount ?? 0).toFixed(2)} · {matchTx ? formatDate(matchTx.date) : ""}</Text>
+                <Text
+                  style={[styles.matchTitle, { color: c.foreground }]}
+                  numberOfLines={2}
+                >
+                  {matchTx?.merchant_name ||
+                    matchTx?.note ||
+                    "Imported transaction"}
+                </Text>
+                <Text style={[styles.matchAmount, { color: c.destructive }]}>
+                  −${Math.abs(matchTx?.amount ?? 0).toFixed(2)} ·{" "}
+                  {matchTx ? formatDate(matchTx.date) : ""}
+                </Text>
               </View>
-              <Pressable accessibilityLabel="Close bill matching" onPress={() => setMatchTx(null)} hitSlop={10}>
+              <Pressable
+                accessibilityLabel="Close bill matching"
+                onPress={() => setMatchTx(null)}
+                hitSlop={10}
+              >
                 <Feather name="x" size={22} color={c.mutedForeground} />
               </Pressable>
             </View>
 
             {matchedTargetName ? (
               <View style={styles.matchBody}>
-                <View style={[styles.matchedCard, { backgroundColor: c.success + "16", borderColor: c.success + "55" }]}>
+                <View
+                  style={[
+                    styles.matchedCard,
+                    {
+                      backgroundColor: c.success + "16",
+                      borderColor: c.success + "55",
+                    },
+                  ]}
+                >
                   <Feather name="check-circle" size={22} color={c.success} />
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.matchRowTitle, { color: c.foreground }]}>Matched to {matchedTargetName}</Text>
-                    <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>Replaces the planned item.</Text>
+                    <Text
+                      style={[styles.matchRowTitle, { color: c.foreground }]}
+                    >
+                      Matched to {matchedTargetName}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.matchRowMeta,
+                        { color: c.mutedForeground },
+                      ]}
+                    >
+                      Replaces the planned item.
+                    </Text>
                   </View>
                 </View>
-                <Pressable accessibilityRole="button" accessibilityLabel={`Undo match to ${matchedTargetName}`} disabled={savingMatch} onPress={() => void handleUnmatchBill()} style={[styles.unmatchButton, { borderColor: c.destructive, opacity: savingMatch ? 0.55 : 1 }]}>
-                  <Text style={[styles.unmatchButtonText, { color: c.destructive }]}>{savingMatch ? "Updating…" : "Undo match"}</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Undo match to ${matchedTargetName}`}
+                  disabled={savingMatch}
+                  onPress={() => void handleUnmatchBill()}
+                  style={[
+                    styles.unmatchButton,
+                    {
+                      borderColor: c.destructive,
+                      opacity: savingMatch ? 0.55 : 1,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[styles.unmatchButtonText, { color: c.destructive }]}
+                  >
+                    {savingMatch ? "Updating…" : "Undo match"}
+                  </Text>
                 </Pressable>
               </View>
             ) : (
               <>
-                <Text style={[styles.matchIntro, { color: c.mutedForeground }]}>Choose what this payment covered.</Text>
-                <ScrollView style={[styles.matchList, isDesktop && styles.desktopMatchList]} showsVerticalScrollIndicator={isDesktop}>
-                  {combinedMatchOptions.length > 0 ? combinedMatchOptions.map((option, index) => (
-                    <Pressable
-                      key={`${option.targetType}-${option.billId}`}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Match transaction to ${option.name}, planned ${option.plannedAmount.toFixed(2)}`}
-                      disabled={savingMatch}
-                      onPress={() => void (
-                        option.targetType === "manual"
-                          ? handleMatchManual(option.billId)
-                          : option.targetType === "bucket"
-                            ? handleMatchBucket(option.billId)
-                            : handleMatchBill(option.billId)
-                      )}
-                      style={({ pressed }) => [styles.matchRow, { backgroundColor: c.card, borderColor: index === 0 && option.score >= 48 ? c.success + "66" : c.border, opacity: savingMatch ? 0.55 : pressed ? 0.82 : 1 }]}
-                    >
-                      <View style={[styles.matchIcon, { backgroundColor: (index === 0 && option.score >= 48 ? c.success : c.primary) + "18" }]}>
-                        <Feather name={option.targetType === "manual" ? "edit-3" : option.targetType === "bucket" ? "archive" : "file-text"} size={17} color={index === 0 && option.score >= 48 ? c.success : c.primary} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <View style={styles.matchRowHeading}>
-                          <Text style={[styles.matchRowTitle, { color: c.foreground }]} numberOfLines={1}>{option.name}</Text>
-                          {index === 0 && option.score >= 48 && (
-                            <View style={[styles.suggestedBadge, { backgroundColor: c.success + "20" }]}>
-                              <Text style={[styles.suggestedBadgeText, { color: c.success }]}>Suggested</Text>
-                            </View>
+                <Text style={[styles.matchIntro, { color: c.mutedForeground }]}>
+                  Choose what this payment covered.
+                </Text>
+                <ScrollView
+                  style={[
+                    styles.matchList,
+                    isDesktop && styles.desktopMatchList,
+                  ]}
+                  showsVerticalScrollIndicator={isDesktop}
+                >
+                  {combinedMatchOptions.length > 0 ? (
+                    combinedMatchOptions.map((option, index) => (
+                      <Pressable
+                        key={`${option.targetType}-${option.billId}`}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Match transaction to ${option.name}, planned ${option.plannedAmount.toFixed(2)}`}
+                        disabled={savingMatch}
+                        onPress={() =>
+                          void (option.targetType === "manual"
+                            ? handleMatchManual(option.billId)
+                            : option.targetType === "bucket"
+                              ? handleMatchBucket(option.billId)
+                              : handleMatchBill(option.billId))
+                        }
+                        style={({ pressed }) => [
+                          styles.matchRow,
+                          {
+                            backgroundColor: c.card,
+                            borderColor:
+                              index === 0 && option.score >= 48
+                                ? c.success + "66"
+                                : c.border,
+                            opacity: savingMatch ? 0.55 : pressed ? 0.82 : 1,
+                          },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.matchIcon,
+                            {
+                              backgroundColor:
+                                (index === 0 && option.score >= 48
+                                  ? c.success
+                                  : c.primary) + "18",
+                            },
+                          ]}
+                        >
+                          <Feather
+                            name={
+                              option.targetType === "manual"
+                                ? "edit-3"
+                                : option.targetType === "bucket"
+                                  ? "archive"
+                                  : "file-text"
+                            }
+                            size={17}
+                            color={
+                              index === 0 && option.score >= 48
+                                ? c.success
+                                : c.primary
+                            }
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <View style={styles.matchRowHeading}>
+                            <Text
+                              style={[
+                                styles.matchRowTitle,
+                                { color: c.foreground },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {option.name}
+                            </Text>
+                            {index === 0 && option.score >= 48 && (
+                              <View
+                                style={[
+                                  styles.suggestedBadge,
+                                  { backgroundColor: c.success + "20" },
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.suggestedBadgeText,
+                                    { color: c.success },
+                                  ]}
+                                >
+                                  Suggested
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text
+                            style={[
+                              styles.matchRowMeta,
+                              { color: c.mutedForeground },
+                            ]}
+                          >
+                            {option.targetType === "manual"
+                              ? "Manual plan"
+                              : option.targetType === "bucket"
+                                ? "Spending bucket"
+                                : "Bill"}{" "}
+                            · ${option.plannedAmount.toFixed(2)}
+                            {option.targetType === "bucket"
+                              ? " left"
+                              : ""} ·{" "}
+                            {option.daysApart === 0
+                              ? "same day"
+                              : option.daysApart === 1
+                                ? "1 day away"
+                                : option.daysApart !== null
+                                  ? `${option.daysApart} days away`
+                                  : option.category}
+                          </Text>
+                          {option.reasons.length > 0 && (
+                            <Text
+                              style={[styles.matchReason, { color: c.success }]}
+                            >
+                              {option.reasons.slice(0, 2).join(" · ")}
+                            </Text>
                           )}
                         </View>
-                        <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>
-                          {option.targetType === "manual" ? "Manual plan" : option.targetType === "bucket" ? "Spending bucket" : "Bill"} · ${option.plannedAmount.toFixed(2)}{option.targetType === "bucket" ? " left" : ""} · {option.daysApart === 0 ? "same day" : option.daysApart === 1 ? "1 day away" : option.daysApart !== null ? `${option.daysApart} days away` : option.category}
-                        </Text>
-                        {option.reasons.length > 0 && <Text style={[styles.matchReason, { color: c.success }]}>{option.reasons.slice(0, 2).join(" · ")}</Text>}
-                      </View>
-                      <Feather name="chevron-right" size={17} color={c.mutedForeground} />
-                    </Pressable>
-                  )) : (
-                    <View style={[styles.noMatchCard, { backgroundColor: c.card, borderColor: c.border }]}>
-                      <Text style={[styles.matchRowTitle, { color: c.foreground }]}>Nothing available to match</Text>
-                      <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>Add a bill, manual plan, or spending bucket, then return here.</Text>
+                        <Feather
+                          name="chevron-right"
+                          size={17}
+                          color={c.mutedForeground}
+                        />
+                      </Pressable>
+                    ))
+                  ) : (
+                    <View
+                      style={[
+                        styles.noMatchCard,
+                        { backgroundColor: c.card, borderColor: c.border },
+                      ]}
+                    >
+                      <Text
+                        style={[styles.matchRowTitle, { color: c.foreground }]}
+                      >
+                        Nothing available to match
+                      </Text>
+                      <Text
+                        style={[
+                          styles.matchRowMeta,
+                          { color: c.mutedForeground },
+                        ]}
+                      >
+                        Add a bill, manual plan, or spending bucket, then return
+                        here.
+                      </Text>
                     </View>
                   )}
                 </ScrollView>
@@ -1840,12 +3287,23 @@ export function ActivityScreen() {
                   },
                 ]}
               >
-                <View style={[styles.matchIcon, { backgroundColor: c.primary + "18" }]}>
+                <View
+                  style={[
+                    styles.matchIcon,
+                    { backgroundColor: c.primary + "18" },
+                  ]}
+                >
                   <Feather name="shopping-bag" size={17} color={c.primary} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.matchRowTitle, { color: c.foreground }]}>One-time charge</Text>
-                  <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>Categorize it without creating a bill.</Text>
+                  <Text style={[styles.matchRowTitle, { color: c.foreground }]}>
+                    One-time charge
+                  </Text>
+                  <Text
+                    style={[styles.matchRowMeta, { color: c.mutedForeground }]}
+                  >
+                    Categorize it without creating a bill.
+                  </Text>
                 </View>
                 <Feather name="chevron-right" size={17} color={c.primary} />
               </Pressable>
@@ -1853,7 +3311,11 @@ export function ActivityScreen() {
 
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={matchingBankActivity ? "Edit imported transaction details" : "Edit manual transaction details"}
+              accessibilityLabel={
+                matchingBankActivity
+                  ? "Edit imported transaction details"
+                  : "Edit manual transaction details"
+              }
               onPress={() => {
                 const transaction = matchTx;
                 setMatchTx(null);
@@ -1865,7 +3327,11 @@ export function ActivityScreen() {
               style={[styles.editImportedButton, { backgroundColor: c.muted }]}
             >
               <Feather name="edit-2" size={14} color={c.mutedForeground} />
-              <Text style={[styles.editImportedText, { color: c.foreground }]}>{matchingBankActivity ? "Edit imported transaction details" : "Edit manual transaction details"}</Text>
+              <Text style={[styles.editImportedText, { color: c.foreground }]}>
+                {matchingBankActivity
+                  ? "Edit imported transaction details"
+                  : "Edit manual transaction details"}
+              </Text>
             </Pressable>
           </Pressable>
         </Pressable>
@@ -1877,7 +3343,7 @@ export function ActivityScreen() {
         categories={categories}
         saving={savingMatch}
         onClose={() => setUnplannedChargeTx(null)}
-        onSaveOneTime={category => void saveOneTimeCharge(category)}
+        onSaveOneTime={(category) => void saveOneTimeCharge(category)}
         onCreateBill={() => setForgottenBillVisible(true)}
       />
 
@@ -1892,11 +3358,15 @@ export function ActivityScreen() {
 
       <FullPaymentPromptModal
         visible={!!fullPaymentPrompt}
-        prompt={fullPaymentPrompt ? {
-          billName: fullPaymentPrompt.bill.name,
-          budgeted: fullPaymentPrompt.budgeted,
-          actual: fullPaymentPrompt.actual,
-        } : null}
+        prompt={
+          fullPaymentPrompt
+            ? {
+                billName: fullPaymentPrompt.bill.name,
+                budgeted: fullPaymentPrompt.budgeted,
+                actual: fullPaymentPrompt.actual,
+              }
+            : null
+        }
         onClose={() => setFullPaymentPrompt(null)}
         onKeepPartial={() => setFullPaymentPrompt(null)}
         onFullPayment={() => void confirmMatchedFullPayment()}
@@ -1929,23 +3399,61 @@ export function ActivityScreen() {
         animationType={isDesktop ? "fade" : "slide"}
         onRequestClose={() => setFilterModalVisible(false)}
       >
-        <Pressable style={[styles.filterOverlay, isDesktop && DESKTOP_MODAL_OVERLAY]} onPress={() => setFilterModalVisible(false)}>
-          <Pressable style={[styles.filterSheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_REGULAR]} onPress={event => event.stopPropagation()}>
-            <View style={[styles.filterHandle, { backgroundColor: c.border }, isDesktop && DESKTOP_MODAL_HANDLE]} />
+        <Pressable
+          style={[styles.filterOverlay, isDesktop && DESKTOP_MODAL_OVERLAY]}
+          onPress={() => setFilterModalVisible(false)}
+        >
+          <Pressable
+            style={[
+              styles.filterSheet,
+              { backgroundColor: c.background },
+              isDesktop && DESKTOP_MODAL_REGULAR,
+            ]}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <View
+              style={[
+                styles.filterHandle,
+                { backgroundColor: c.border },
+                isDesktop && DESKTOP_MODAL_HANDLE,
+              ]}
+            />
             <View style={styles.filterSheetHeader}>
               <View>
-                <Text style={[styles.filterSheetTitle, { color: c.foreground }]}>Filter activity</Text>
-                <Text style={[styles.filterSheetSub, { color: c.mutedForeground }]}>Choose any combination</Text>
+                <Text
+                  style={[styles.filterSheetTitle, { color: c.foreground }]}
+                >
+                  Filter activity
+                </Text>
+                <Text
+                  style={[styles.filterSheetSub, { color: c.mutedForeground }]}
+                >
+                  Choose any combination
+                </Text>
               </View>
-              <Pressable accessibilityLabel="Close filters" onPress={() => setFilterModalVisible(false)} hitSlop={8}>
+              <Pressable
+                accessibilityLabel="Close filters"
+                onPress={() => setFilterModalVisible(false)}
+                hitSlop={8}
+              >
                 <Feather name="x" size={21} color={c.mutedForeground} />
               </Pressable>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={isDesktop} style={styles.filterSheetScroll}>
-              <Text style={[styles.filterGroupLabel, { color: c.mutedForeground, marginTop: 2 }]}>QUICK FILTERS</Text>
+            <ScrollView
+              showsVerticalScrollIndicator={isDesktop}
+              style={styles.filterSheetScroll}
+            >
+              <Text
+                style={[
+                  styles.filterGroupLabel,
+                  { color: c.mutedForeground, marginTop: 2 },
+                ]}
+              >
+                QUICK FILTERS
+              </Text>
               <View style={styles.filterOptionGrid}>
-                {quickChips.map(chip => (
+                {quickChips.map((chip) => (
                   <Pressable
                     key={chip.key}
                     onPress={chip.onPress}
@@ -1958,59 +3466,145 @@ export function ActivityScreen() {
                       },
                     ]}
                   >
-                    <Text style={[styles.filterText, { color: chip.active ? c.primaryForeground : c.foreground }]}>{chip.label}</Text>
+                    <Text
+                      style={[
+                        styles.filterText,
+                        {
+                          color: chip.active
+                            ? c.primaryForeground
+                            : c.foreground,
+                        },
+                      ]}
+                    >
+                      {chip.label}
+                    </Text>
                   </Pressable>
                 ))}
               </View>
 
-              <Text style={[styles.filterGroupLabel, { color: c.mutedForeground }]}>AMOUNT</Text>
+              <Text
+                style={[styles.filterGroupLabel, { color: c.mutedForeground }]}
+              >
+                AMOUNT
+              </Text>
               <View style={styles.filterOptionGrid}>
-                {([
+                {[
                   { id: "all" as TypeFilter, label: "All amounts" },
                   { id: "expense" as TypeFilter, label: "Expenses" },
                   { id: "income" as TypeFilter, label: "Income" },
-                ]).map(option => (
+                ].map((option) => (
                   <Pressable
                     key={option.id}
                     onPress={() => setTypeFilter(option.id)}
-                    style={[styles.filterChip, { backgroundColor: typeFilter === option.id ? c.primary : c.card, borderColor: typeFilter === option.id ? c.primary : c.border }]}
+                    style={[
+                      styles.filterChip,
+                      {
+                        backgroundColor:
+                          typeFilter === option.id ? c.primary : c.card,
+                        borderColor:
+                          typeFilter === option.id ? c.primary : c.border,
+                      },
+                    ]}
                   >
-                    <Text style={[styles.filterText, { color: typeFilter === option.id ? c.primaryForeground : c.foreground }]}>{option.label}</Text>
+                    <Text
+                      style={[
+                        styles.filterText,
+                        {
+                          color:
+                            typeFilter === option.id
+                              ? c.primaryForeground
+                              : c.foreground,
+                        },
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
                   </Pressable>
                 ))}
               </View>
 
-              <Text style={[styles.filterGroupLabel, { color: c.mutedForeground }]}>SOURCE</Text>
+              <Text
+                style={[styles.filterGroupLabel, { color: c.mutedForeground }]}
+              >
+                SOURCE
+              </Text>
               <View style={styles.filterOptionGrid}>
-                {([
+                {[
                   { id: "all" as SourceFilter, label: "All sources" },
                   { id: "transaction" as SourceFilter, label: "Manual" },
                   { id: "bill_payment" as SourceFilter, label: "Bills" },
                   { id: "income" as SourceFilter, label: "Scheduled income" },
-                  { id: "extra_payment" as SourceFilter, label: "Debt payments" },
-                ]).map(option => (
+                  {
+                    id: "extra_payment" as SourceFilter,
+                    label: "Debt payments",
+                  },
+                ].map((option) => (
                   <Pressable
                     key={option.id}
                     onPress={() => setSourceFilter(option.id)}
-                    style={[styles.filterChip, { backgroundColor: sourceFilter === option.id ? c.primary : c.card, borderColor: sourceFilter === option.id ? c.primary : c.border }]}
+                    style={[
+                      styles.filterChip,
+                      {
+                        backgroundColor:
+                          sourceFilter === option.id ? c.primary : c.card,
+                        borderColor:
+                          sourceFilter === option.id ? c.primary : c.border,
+                      },
+                    ]}
                   >
-                    <Text style={[styles.filterText, { color: sourceFilter === option.id ? c.primaryForeground : c.foreground }]}>{option.label}</Text>
+                    <Text
+                      style={[
+                        styles.filterText,
+                        {
+                          color:
+                            sourceFilter === option.id
+                              ? c.primaryForeground
+                              : c.foreground,
+                        },
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
                   </Pressable>
                 ))}
               </View>
 
-              <Text style={[styles.filterGroupLabel, { color: c.mutedForeground }]}>MONTH</Text>
+              <Text
+                style={[styles.filterGroupLabel, { color: c.mutedForeground }]}
+              >
+                MONTH
+              </Text>
               <View style={styles.filterOptionGrid}>
-                {availableActivityMonths.map(month => (
+                {availableActivityMonths.map((month) => (
                   <Pressable
                     key={month}
                     accessibilityRole="button"
                     accessibilityState={{ selected: monthFilter === month }}
                     onPress={() => setMonthFilter(month)}
-                    style={[styles.filterChip, { backgroundColor: monthFilter === month ? c.primary : c.card, borderColor: monthFilter === month ? c.primary : c.border }]}
+                    style={[
+                      styles.filterChip,
+                      {
+                        backgroundColor:
+                          monthFilter === month ? c.primary : c.card,
+                        borderColor:
+                          monthFilter === month ? c.primary : c.border,
+                      },
+                    ]}
                   >
-                    <Text style={[styles.filterText, { color: monthFilter === month ? c.primaryForeground : c.foreground }]}>
-                      {month === currentActivityMonth ? `This month · ${activityMonthLabel(month)}` : activityMonthLabel(month)}
+                    <Text
+                      style={[
+                        styles.filterText,
+                        {
+                          color:
+                            monthFilter === month
+                              ? c.primaryForeground
+                              : c.foreground,
+                        },
+                      ]}
+                    >
+                      {month === currentActivityMonth
+                        ? `This month · ${activityMonthLabel(month)}`
+                        : activityMonthLabel(month)}
                     </Text>
                   </Pressable>
                 ))}
@@ -2018,15 +3612,42 @@ export function ActivityScreen() {
 
               {categoryOptions.length > 0 && (
                 <>
-                  <Text style={[styles.filterGroupLabel, { color: c.mutedForeground }]}>CATEGORY</Text>
+                  <Text
+                    style={[
+                      styles.filterGroupLabel,
+                      { color: c.mutedForeground },
+                    ]}
+                  >
+                    CATEGORY
+                  </Text>
                   <View style={styles.filterOptionGrid}>
-                    {["all", ...categoryOptions].map(category => (
+                    {["all", ...categoryOptions].map((category) => (
                       <Pressable
                         key={category}
                         onPress={() => setCategoryFilter(category)}
-                        style={[styles.filterChip, { backgroundColor: categoryFilter === category ? c.primary : c.card, borderColor: categoryFilter === category ? c.primary : c.border }]}
+                        style={[
+                          styles.filterChip,
+                          {
+                            backgroundColor:
+                              categoryFilter === category ? c.primary : c.card,
+                            borderColor:
+                              categoryFilter === category
+                                ? c.primary
+                                : c.border,
+                          },
+                        ]}
                       >
-                        <Text style={[styles.filterText, { color: categoryFilter === category ? c.primaryForeground : c.foreground }]}>
+                        <Text
+                          style={[
+                            styles.filterText,
+                            {
+                              color:
+                                categoryFilter === category
+                                  ? c.primaryForeground
+                                  : c.foreground,
+                            },
+                          ]}
+                        >
                           {category === "all" ? "All categories" : category}
                         </Text>
                       </Pressable>
@@ -2035,30 +3656,96 @@ export function ActivityScreen() {
                 </>
               )}
 
-              <Text style={[styles.filterGroupLabel, { color: c.mutedForeground }]}>SORT</Text>
+              <Text
+                style={[styles.filterGroupLabel, { color: c.mutedForeground }]}
+              >
+                SORT
+              </Text>
               <View style={styles.filterOptionGrid}>
-                {([
-                  { id: "desc" as SortOrder, label: "Newest first", icon: "arrow-down" as const },
-                  { id: "asc" as SortOrder, label: "Oldest first", icon: "arrow-up" as const },
-                ]).map(option => (
+                {[
+                  {
+                    id: "desc" as SortOrder,
+                    label: "Newest first",
+                    icon: "arrow-down" as const,
+                  },
+                  {
+                    id: "asc" as SortOrder,
+                    label: "Oldest first",
+                    icon: "arrow-up" as const,
+                  },
+                ].map((option) => (
                   <Pressable
                     key={option.id}
                     onPress={() => setSortOrder(option.id)}
-                    style={[styles.filterChip, { backgroundColor: sortOrder === option.id ? c.primary : c.card, borderColor: sortOrder === option.id ? c.primary : c.border }]}
+                    style={[
+                      styles.filterChip,
+                      {
+                        backgroundColor:
+                          sortOrder === option.id ? c.primary : c.card,
+                        borderColor:
+                          sortOrder === option.id ? c.primary : c.border,
+                      },
+                    ]}
                   >
-                    <Feather name={option.icon} size={13} color={sortOrder === option.id ? c.primaryForeground : c.foreground} />
-                    <Text style={[styles.filterText, { color: sortOrder === option.id ? c.primaryForeground : c.foreground }]}>{option.label}</Text>
+                    <Feather
+                      name={option.icon}
+                      size={13}
+                      color={
+                        sortOrder === option.id
+                          ? c.primaryForeground
+                          : c.foreground
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.filterText,
+                        {
+                          color:
+                            sortOrder === option.id
+                              ? c.primaryForeground
+                              : c.foreground,
+                        },
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
                   </Pressable>
                 ))}
               </View>
             </ScrollView>
 
             <View style={styles.filterActions}>
-              <Pressable onPress={clearFilterSelections} style={[styles.filterActionButton, { backgroundColor: c.card, borderColor: c.border }]}>
-                <Text style={[styles.filterActionText, { color: c.mutedForeground }]}>Clear</Text>
+              <Pressable
+                onPress={clearFilterSelections}
+                style={[
+                  styles.filterActionButton,
+                  { backgroundColor: c.card, borderColor: c.border },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.filterActionText,
+                    { color: c.mutedForeground },
+                  ]}
+                >
+                  Clear
+                </Text>
               </Pressable>
-              <Pressable onPress={() => setFilterModalVisible(false)} style={[styles.filterActionButton, { backgroundColor: c.primary, borderColor: c.primary }]}>
-                <Text style={[styles.filterActionText, { color: c.primaryForeground }]}>Show {filtered.length} results</Text>
+              <Pressable
+                onPress={() => setFilterModalVisible(false)}
+                style={[
+                  styles.filterActionButton,
+                  { backgroundColor: c.primary, borderColor: c.primary },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.filterActionText,
+                    { color: c.primaryForeground },
+                  ]}
+                >
+                  Show {filtered.length} results
+                </Text>
               </Pressable>
             </View>
           </Pressable>
@@ -2067,7 +3754,10 @@ export function ActivityScreen() {
       {/* ── Edit modal (manual transactions) ── */}
       <AddTransactionModal
         visible={editModalVisible}
-        onClose={() => { setEditModalVisible(false); setEditTx(null); }}
+        onClose={() => {
+          setEditModalVisible(false);
+          setEditTx(null);
+        }}
         onSave={handleSave}
         onDelete={handleDelete}
         onDeleteTransfer={handleDeleteTransfer}
@@ -2091,14 +3781,19 @@ export function ActivityScreen() {
         forecastHorizonMonths={settings.forecast_horizon_months}
         onAmountChange={updateExtraPaymentAmount}
         onPaymentDateChange={updateExtraPaymentDate}
-        onClose={() => { setEditExtraPayment(null); setEditExtraPreview(null); }}
-        onConfirm={() => { void saveEditedExtraPayment(); }}
+        onClose={() => {
+          setEditExtraPayment(null);
+          setEditExtraPreview(null);
+        }}
+        onConfirm={() => {
+          void saveEditedExtraPayment();
+        }}
         onRemove={removeEditedExtraPayment}
       />
       <GoalModal
         visible={Boolean(pendingBucketDraft)}
         onClose={() => setPendingBucketDraft(null)}
-        onSave={async goal => {
+        onSave={async (goal) => {
           if ("id" in goal) return;
           await addGoal(goal);
           Alert.alert(
@@ -2120,10 +3815,25 @@ export function ActivityScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen:   { flex: 1 },
-  header:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 18, paddingBottom: 10 },
-  title:    { fontSize: 30, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.9 },
-  subtitle: { fontSize: 12, fontFamily: "Inter_500Medium", marginTop: 2, letterSpacing: 0.1 },
+  screen: { flex: 1 },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 18,
+    paddingBottom: 10,
+  },
+  title: {
+    fontSize: 30,
+    fontFamily: "Inter_800ExtraBold",
+    letterSpacing: -0.9,
+  },
+  subtitle: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    marginTop: 2,
+    letterSpacing: 0.1,
+  },
   reviewAlertButton: {
     width: 54,
     height: 54,
@@ -2150,131 +3860,566 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#020617",
   },
-  reviewAlertBadgeText: { color: "#fff", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
-  pendingNotice: { marginHorizontal: 16, marginBottom: 10, borderWidth: 1, borderRadius: 16, paddingHorizontal: 13, paddingVertical: 11, flexDirection: "row", alignItems: "center", gap: 10 },
+  reviewAlertBadgeText: {
+    color: "#fff",
+    fontSize: 11,
+    fontFamily: "Inter_800ExtraBold",
+  },
+  pendingNotice: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
   pendingNoticeCopy: { flex: 1 },
   pendingNoticeTitle: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
-  pendingNoticeBody: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_500Medium", marginTop: 2 },
+  pendingNoticeBody: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontFamily: "Inter_500Medium",
+    marginTop: 2,
+  },
 
-  activityHeroLabel: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 1, textTransform: "uppercase" },
-  activityHeroBadge: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999 },
+  activityHeroLabel: {
+    fontSize: 9,
+    fontFamily: "Inter_800ExtraBold",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  activityHeroBadge: {
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
   activityHeroBadgeText: { fontSize: 10, fontFamily: "Inter_800ExtraBold" },
-  monthlySummaryCard: { marginHorizontal: 16, marginBottom: 10, borderWidth: 1, borderRadius: 20, padding: 12 },
-  monthlySummaryHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 10 },
-  monthlySummaryTitle: { fontSize: 17, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
+  monthlySummaryCard: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderRadius: 20,
+    padding: 12,
+  },
+  monthlySummaryHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 10,
+  },
+  monthlySummaryTitle: {
+    fontSize: 17,
+    fontFamily: "Inter_800ExtraBold",
+    marginTop: 2,
+  },
   monthlySummaryStats: { flexDirection: "row", gap: 10, marginBottom: 10 },
-  monthlySummaryStat: { flex: 1, borderRadius: 14, backgroundColor: "rgba(15,23,42,0.42)", borderWidth: 1, paddingHorizontal: 10, paddingVertical: 9 },
+  monthlySummaryStat: {
+    flex: 1,
+    borderRadius: 14,
+    backgroundColor: "rgba(15,23,42,0.42)",
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
   monthlySummaryValue: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
-  monthlySummaryLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.5, marginTop: 2 },
-  weekSummaryTrigger: { borderTopWidth: 1, paddingTop: 10, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  monthlySummaryLabel: {
+    fontSize: 10,
+    fontFamily: "Inter_700Bold",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: 2,
+  },
+  weekSummaryTrigger: {
+    borderTopWidth: 1,
+    paddingTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
   weekSummaryTitle: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
-  weekSummarySub: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2, lineHeight: 15 },
+  weekSummarySub: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    marginTop: 2,
+    lineHeight: 15,
+  },
 
-  summaryOverlay: { flex: 1, justifyContent: "center", paddingHorizontal: 16, backgroundColor: "rgba(2,6,23,0.72)" },
-  summarySheet: { width: "100%", maxWidth: 520, maxHeight: "92%", alignSelf: "center", borderWidth: 1, borderRadius: 24, padding: 16, shadowColor: "#7c3aed", shadowOpacity: 0.22, shadowRadius: 24, shadowOffset: { width: 0, height: 12 }, elevation: 8 },
-  summarySheetHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 14 },
-  summarySheetTitle: { fontSize: 24, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.7, marginTop: 3 },
-  summaryTotalRow: { borderWidth: 1, borderRadius: 18, padding: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14 },
-  summaryTinyLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8 },
-  summaryLargeNet: { fontSize: 30, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.8, marginTop: 2 },
+  summaryOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    backgroundColor: "rgba(2,6,23,0.72)",
+  },
+  summarySheet: {
+    width: "100%",
+    maxWidth: 520,
+    maxHeight: "92%",
+    alignSelf: "center",
+    borderWidth: 1,
+    borderRadius: 24,
+    padding: 16,
+    shadowColor: "#7c3aed",
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 8,
+  },
+  summarySheetHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 14,
+  },
+  summarySheetTitle: {
+    fontSize: 24,
+    fontFamily: "Inter_800ExtraBold",
+    letterSpacing: -0.7,
+    marginTop: 3,
+  },
+  summaryTotalRow: {
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 14,
+  },
+  summaryTinyLabel: {
+    fontSize: 10,
+    fontFamily: "Inter_800ExtraBold",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  summaryLargeNet: {
+    fontSize: 30,
+    fontFamily: "Inter_800ExtraBold",
+    letterSpacing: -0.8,
+    marginTop: 2,
+  },
   summaryTotalRight: { alignItems: "flex-end", gap: 3 },
   summaryMiniValue: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   summaryWeekList: { gap: 8 },
-  summaryWeekCard: { minHeight: 52, borderWidth: 1, borderRadius: 15, paddingHorizontal: 14, paddingVertical: 11, flexDirection: "row", alignItems: "center", gap: 12 },
+  summaryWeekCard: {
+    minHeight: 52,
+    borderWidth: 1,
+    borderRadius: 15,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
   summaryWeekMiddle: { flex: 1 },
-  summaryWeekLabel: { fontSize: 13, fontFamily: "Inter_700Bold", lineHeight: 18 },
+  summaryWeekLabel: {
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
+    lineHeight: 18,
+  },
   summaryWeekValue: { fontSize: 15, fontFamily: "Inter_800ExtraBold" },
 
-  searchWrap:  { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16 },
-  searchBox:   { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 16, paddingHorizontal: 13, paddingVertical: 10 },
-  searchInput: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", padding: 0 },
-  filterIconButton: { width: 44, height: 44, borderRadius: 15, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  filterCount: { position: "absolute", top: -5, right: -5, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, alignItems: "center", justifyContent: "center" },
+  searchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+  },
+  searchBox: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    padding: 0,
+  },
+  filterIconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 15,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterCount: {
+    position: "absolute",
+    top: -5,
+    right: -5,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   filterCountText: { color: "#fff", fontSize: 10, fontFamily: "Inter_700Bold" },
 
-  filterOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.55)" },
-  filterSheet: { borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32, maxHeight: "88%" },
-  filterHandle: { width: 38, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 16 },
-  filterSheetHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 },
+  filterOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  filterSheet: {
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 32,
+    maxHeight: "88%",
+  },
+  filterHandle: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 16,
+  },
+  filterSheetHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
   filterSheetTitle: { fontSize: 20, fontFamily: "Inter_700Bold" },
-  filterSheetSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 3 },
+  filterSheetSub: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    marginTop: 3,
+  },
   filterSheetScroll: { flexGrow: 0 },
-  filterGroupLabel: { fontSize: 10, fontFamily: "Inter_700Bold", letterSpacing: 0.7, marginTop: 12, marginBottom: 8 },
+  filterGroupLabel: {
+    fontSize: 10,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.7,
+    marginTop: 12,
+    marginBottom: 8,
+  },
   filterOptionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  filterChip: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 13, paddingVertical: 9, borderWidth: 1, borderRadius: 10 },
+  filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderRadius: 10,
+  },
   filterText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   filterActions: { flexDirection: "row", gap: 10, marginTop: 18 },
-  filterActionButton: { flex: 1, minHeight: 48, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 10 },
+  filterActionButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
   filterActionText: { fontSize: 14, fontFamily: "Inter_700Bold" },
 
-  matchOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.62)" },
-  matchSheet: { borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 28, maxHeight: "88%" },
-  matchHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 14 },
-  matchEyebrow: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.1, marginBottom: 4 },
-  matchTitle: { fontSize: 20, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.3 },
+  matchOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.62)",
+  },
+  matchSheet: {
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 28,
+    maxHeight: "88%",
+  },
+  matchHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 14,
+  },
+  matchEyebrow: {
+    fontSize: 9,
+    fontFamily: "Inter_800ExtraBold",
+    letterSpacing: 1.1,
+    marginBottom: 4,
+  },
+  matchTitle: {
+    fontSize: 20,
+    fontFamily: "Inter_800ExtraBold",
+    letterSpacing: -0.3,
+  },
   matchAmount: { fontSize: 13, fontFamily: "Inter_700Bold", marginTop: 5 },
-  matchIntro: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 18, marginBottom: 12 },
+  matchIntro: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    lineHeight: 18,
+    marginBottom: 12,
+  },
   matchList: { flexGrow: 0, maxHeight: 420 },
   desktopMatchList: { maxHeight: 360 },
   matchBody: { gap: 12 },
-  matchRow: { borderWidth: 1, borderRadius: 16, padding: 12, marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 10 },
-  matchIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  matchRow: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  matchIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   matchRowHeading: { flexDirection: "row", alignItems: "center", gap: 7 },
   matchRowTitle: { flexShrink: 1, fontSize: 14, fontFamily: "Inter_700Bold" },
-  matchRowMeta: { fontSize: 11, fontFamily: "Inter_500Medium", lineHeight: 16, marginTop: 2 },
-  matchReason: { fontSize: 10, fontFamily: "Inter_700Bold", marginTop: 3, textTransform: "capitalize" },
-  suggestedBadge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999 },
-  suggestedBadgeText: { fontSize: 9, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase" },
-  matchedCard: { borderWidth: 1, borderRadius: 16, padding: 14, flexDirection: "row", alignItems: "flex-start", gap: 11 },
+  matchRowMeta: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  matchReason: {
+    fontSize: 10,
+    fontFamily: "Inter_700Bold",
+    marginTop: 3,
+    textTransform: "capitalize",
+  },
+  suggestedBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  suggestedBadgeText: {
+    fontSize: 9,
+    fontFamily: "Inter_800ExtraBold",
+    textTransform: "uppercase",
+  },
+  matchedCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 11,
+  },
   noMatchCard: { borderWidth: 1, borderRadius: 16, padding: 15 },
-  unmatchButton: { minHeight: 46, borderWidth: 1, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  unmatchButton: {
+    minHeight: 46,
+    borderWidth: 1,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   unmatchButtonText: { fontSize: 14, fontFamily: "Inter_700Bold" },
-  oneTimeButton: { minHeight: 62, borderWidth: 1, borderRadius: 16, padding: 11, marginTop: 12, flexDirection: "row", alignItems: "center", gap: 10 },
-  editImportedButton: { minHeight: 46, borderRadius: 13, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, marginTop: 12 },
+  oneTimeButton: {
+    minHeight: 62,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 11,
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  editImportedButton: {
+    minHeight: 46,
+    borderRadius: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    marginTop: 12,
+  },
   editImportedText: { fontSize: 13, fontFamily: "Inter_700Bold" },
 
-  list:          {},
+  list: {},
   sectionHeader: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6 },
-  sectionTitle:  { fontSize: 12, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.7 },
+  sectionTitle: {
+    fontSize: 12,
+    fontFamily: "Inter_800ExtraBold",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
 
-  txRow:          { flexDirection: "row", alignItems: "center", marginHorizontal: 16, padding: 11, gap: 10, borderWidth: 1, borderColor: "rgba(148,163,184,0.10)", overflow: "hidden", shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 2 },
-  rowAccent:      { position: "absolute", left: 0, top: 0, bottom: 0, width: 3 },
-  sourceIcon:     { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
-  txMid:          { flex: 1 },
-  txNote:         { fontSize: 13, fontFamily: "Inter_700Bold", marginBottom: 3 },
-  txMeta:         { flexDirection: "row", gap: 5, alignItems: "center", flexWrap: "wrap" },
-  sourceBadge:    { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5 },
-  sourceBadgeText:{ fontSize: 9, fontFamily: "Inter_700Bold" },
-  catBadge:       { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5 },
-  catBadgeText:   { fontSize: 9, fontFamily: "Inter_600SemiBold" },
-  txDate:         { fontSize: 9, fontFamily: "Inter_400Regular" },
-  txRight:        { alignItems: "flex-end" },
-  txAmount:       { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
+  txRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 16,
+    padding: 11,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.10)",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
+  rowAccent: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3 },
+  sourceIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  txMid: { flex: 1 },
+  txNote: { fontSize: 13, fontFamily: "Inter_700Bold", marginBottom: 3 },
+  txMeta: {
+    flexDirection: "row",
+    gap: 5,
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+  sourceBadge: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5 },
+  sourceBadgeText: { fontSize: 9, fontFamily: "Inter_700Bold" },
+  catBadge: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5 },
+  catBadgeText: { fontSize: 9, fontFamily: "Inter_600SemiBold" },
+  txDate: { fontSize: 9, fontFamily: "Inter_400Regular" },
+  txRight: { alignItems: "flex-end" },
+  txAmount: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
 
   // Detail bottom sheet
-  sheetOverlay:    { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.55)" },
-  sheet:           { borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 20, paddingBottom: 36, paddingTop: 12 },
+  sheetOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  sheet: {
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    paddingHorizontal: 20,
+    paddingBottom: 36,
+    paddingTop: 12,
+  },
   sheetScrollContent: { paddingBottom: 2 },
-  sheetHandle:     { width: 38, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 18 },
-  sheetHeader:     { flexDirection: "row", alignItems: "flex-start", gap: 14, marginBottom: 18 },
-  sheetIconWrap:   { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
-  sheetName:       { fontSize: 20, fontFamily: "Inter_700Bold", marginBottom: 6, lineHeight: 26 },
-  sourcePill:      { alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  sourcePillText:  { fontSize: 11, fontFamily: "Inter_700Bold" },
-  sheetAmtBox:     { alignItems: "center", paddingVertical: 20, marginBottom: 16 },
-  sheetAmt:        { fontSize: 40, fontFamily: "Inter_700Bold" },
-  sheetAmtLabel:   { fontSize: 13, fontFamily: "Inter_500Medium", marginTop: 4 },
-  sheetRow:        { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
-  sheetRowIcon:    { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", marginTop: 1 },
-  sheetRowLabel:   { fontSize: 11, fontFamily: "Inter_500Medium", marginBottom: 2, textTransform: "uppercase", letterSpacing: 0.4 },
-  sheetRowValue:   { fontSize: 14, fontFamily: "Inter_400Regular" },
-  sheetNote:       { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, marginTop: 16, marginBottom: 4 },
-  sheetNoteText:   { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
-  pendingBucketButton: { minHeight: 62, borderRadius: colors.radius, paddingHorizontal: 15, paddingVertical: 11, marginTop: 12, flexDirection: "row", alignItems: "center", gap: 11 },
-  pendingMatchButton: { minHeight: 62, borderWidth: 1, borderRadius: colors.radius, paddingHorizontal: 15, paddingVertical: 11, marginTop: 12, flexDirection: "row", alignItems: "center", gap: 11 },
+  sheetHandle: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 18,
+  },
+  sheetHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 14,
+    marginBottom: 18,
+  },
+  sheetIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sheetName: {
+    fontSize: 20,
+    fontFamily: "Inter_700Bold",
+    marginBottom: 6,
+    lineHeight: 26,
+  },
+  sourcePill: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  sourcePillText: { fontSize: 11, fontFamily: "Inter_700Bold" },
+  sheetAmtBox: { alignItems: "center", paddingVertical: 20, marginBottom: 16 },
+  sheetAmt: { fontSize: 40, fontFamily: "Inter_700Bold" },
+  sheetAmtLabel: { fontSize: 13, fontFamily: "Inter_500Medium", marginTop: 4 },
+  sheetRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  sheetRowIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  sheetRowLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    marginBottom: 2,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  sheetRowValue: { fontSize: 14, fontFamily: "Inter_400Regular" },
+  sheetNote: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    padding: 12,
+    marginTop: 16,
+    marginBottom: 4,
+  },
+  sheetNoteText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 17,
+  },
+  pendingBucketButton: {
+    minHeight: 62,
+    borderRadius: colors.radius,
+    paddingHorizontal: 15,
+    paddingVertical: 11,
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+  },
+  pendingMatchButton: {
+    minHeight: 62,
+    borderWidth: 1,
+    borderRadius: colors.radius,
+    paddingHorizontal: 15,
+    paddingVertical: 11,
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+  },
   pendingBucketButtonCopy: { flex: 1 },
   pendingBucketButtonTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
-  pendingBucketButtonBody: { fontSize: 11, lineHeight: 15, fontFamily: "Inter_500Medium", marginTop: 2, opacity: 0.82 },
-  sheetClose:      { height: 50, borderRadius: 14, alignItems: "center", justifyContent: "center", marginTop: 14 },
-  sheetCloseText:  { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  pendingBucketButtonBody: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontFamily: "Inter_500Medium",
+    marginTop: 2,
+    opacity: 0.82,
+  },
+  sheetClose: {
+    height: 50,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 14,
+  },
+  sheetCloseText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
 });

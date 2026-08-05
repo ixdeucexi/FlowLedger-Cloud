@@ -1,4 +1,4 @@
-export const DESKTOP_BREAKPOINT = 900;
+export const DESKTOP_BREAKPOINT = 1024;
 export const WIDE_DESKTOP_BREAKPOINT = 1400;
 
 export type DesktopExperienceEnvironment = {
