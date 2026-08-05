@@ -585,52 +585,52 @@ export default function BillsScreen() {
                 <Pressable
                   key={item.id}
                   onPress={() => { setEditBill(item); setModalVisible(true); }}
-                  style={({ pressed }) => [styles.card, isDesktop && styles.desktopCard, { backgroundColor: c.card, borderRadius: colors.radius, opacity: pressed ? 0.88 : 1 }]}
+                  style={({ pressed }) => [styles.card, isDesktop && styles.desktopBillCard, { backgroundColor: c.card, borderRadius: colors.radius, opacity: pressed ? 0.88 : 1 }]}
                 >
                   <View style={[styles.catBar, { backgroundColor: catColor }]} />
-                  <View style={styles.cardBody}>
-                    <View style={styles.cardTop}>
+                  <View style={[styles.cardBody, isDesktop && styles.desktopBillCardBody]}>
+                    <View style={[styles.cardTop, isDesktop && styles.desktopBillCardTop]}>
                       <View style={styles.cardLeft}>
-                        <Text style={[styles.billName, { color: c.foreground }]}>{item.name}</Text>
-                        <View style={styles.metaRow}>
-                          <View style={[styles.tag, { backgroundColor: catColor + "18" }]}>
-                            <Text style={[styles.tagText, { color: catColor }]}>{item.category}</Text>
+                        <Text style={[styles.billName, isDesktop && styles.desktopBillName, { color: c.foreground }]} numberOfLines={1}>{item.name}</Text>
+                        <View style={[styles.metaRow, isDesktop && styles.desktopBillMetaRow]}>
+                          <View style={[styles.tag, isDesktop && styles.desktopBillTag, { backgroundColor: catColor + "18" }]}>
+                            <Text style={[styles.tagText, isDesktop && styles.desktopBillTagText, { color: catColor }]}>{item.category}</Text>
                           </View>
-                          <Text style={[styles.metaText, { color: c.mutedForeground }]}>
+                          <Text style={[styles.metaText, isDesktop && styles.desktopBillMetaText, { color: c.mutedForeground }]}>
                             {stopped ? formatStoppedText(item) : formatBillDueText(item)}
                           </Text>
                           {stopped ? (
-                            <View style={[styles.tag, { backgroundColor: c.muted }]}>
-                              <Text style={[styles.tagText, { color: c.mutedForeground }]}>Stopped</Text>
+                            <View style={[styles.tag, isDesktop && styles.desktopBillTag, { backgroundColor: c.muted }]}>
+                              <Text style={[styles.tagText, isDesktop && styles.desktopBillTagText, { color: c.mutedForeground }]}>Stopped</Text>
                             </View>
                           ) : null}
                           {overdue ? (
-                            <View style={[styles.tag, { backgroundColor: c.destructive + "18" }]}>
-                              <Text style={[styles.tagText, { color: c.destructive }]}>Past due · ${overdue.remainingAmount.toFixed(2)}</Text>
+                            <View style={[styles.tag, isDesktop && styles.desktopBillTag, { backgroundColor: c.destructive + "18" }]}>
+                              <Text style={[styles.tagText, isDesktop && styles.desktopBillTagText, { color: c.destructive }]}>Past due · ${overdue.remainingAmount.toFixed(2)}</Text>
                             </View>
                           ) : null}
                           {pending ? (
-                            <View style={[styles.tag, { backgroundColor: colors.brand.blue + "18" }]}>
-                              <Text style={[styles.tagText, { color: colors.brand.blue }]}>
+                            <View style={[styles.tag, isDesktop && styles.desktopBillTag, { backgroundColor: colors.brand.blue + "18" }]}>
+                              <Text style={[styles.tagText, isDesktop && styles.desktopBillTagText, { color: colors.brand.blue }]}>
                                 {pending.status === "ready_review" ? "Ready to review" : "Payment pending"}
                               </Text>
                             </View>
                           ) : null}
                           {!stopped && beforePayday ? (
-                            <View style={[styles.tag, { backgroundColor: c.warning + "18" }]}>
-                              <Text style={[styles.tagText, { color: c.warning }]}>Before payday</Text>
+                            <View style={[styles.tag, isDesktop && styles.desktopBillTag, { backgroundColor: c.warning + "18" }]}>
+                              <Text style={[styles.tagText, isDesktop && styles.desktopBillTagText, { color: c.warning }]}>Before payday</Text>
                             </View>
                           ) : null}
                           {!item.is_recurring && (
-                            <View style={[styles.tag, { backgroundColor: c.muted }]}>
-                              <Text style={[styles.tagText, { color: c.mutedForeground }]}>One-time</Text>
+                            <View style={[styles.tag, isDesktop && styles.desktopBillTag, { backgroundColor: c.muted }]}>
+                              <Text style={[styles.tagText, isDesktop && styles.desktopBillTagText, { color: c.mutedForeground }]}>One-time</Text>
                             </View>
                           )}
                         </View>
                       </View>
-                      <View style={styles.cardRight}>
-                        <Text style={[styles.amount, { color: c.foreground }]}>${item.amount.toFixed(2)}</Text>
-                        <Text style={[styles.amountSub, { color: c.mutedForeground }]}>{frequencyText(item)}</Text>
+                      <View style={[styles.cardRight, isDesktop && styles.desktopBillCardRight]}>
+                        <Text style={[styles.amount, isDesktop && styles.desktopBillAmount, { color: c.foreground }]}>${item.amount.toFixed(2)}</Text>
+                        <Text style={[styles.amountSub, isDesktop && styles.desktopBillAmountSub, { color: c.mutedForeground }]}>{frequencyText(item)}</Text>
                       </View>
                     </View>
                   </View>
@@ -650,7 +650,7 @@ export default function BillsScreen() {
                       <Feather name="refresh-cw" size={17} color={c.primary} />
                     </Pressable>
                   ) : (
-                    <View style={styles.editHint}>
+                    <View style={[styles.editHint, isDesktop && styles.desktopBillEditHint]}>
                       <Feather name="edit-2" size={13} color={c.mutedForeground} />
                     </View>
                   )}
@@ -980,6 +980,18 @@ const styles = StyleSheet.create({
   desktopSegmentWrap: { alignSelf: "stretch" },
   desktopToolbar: { alignSelf: "stretch" },
   desktopList: { alignSelf: "stretch", paddingTop: 8 },
+  desktopBillCard: { minHeight: 58, marginBottom: 7, alignItems: "center", shadowOpacity: 0.1, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 2 },
+  desktopBillCardBody: { padding: 11 },
+  desktopBillCardTop: { alignItems: "center", marginBottom: 0 },
+  desktopBillName: { fontSize: 13, marginBottom: 3, letterSpacing: 0 },
+  desktopBillMetaRow: { gap: 5 },
+  desktopBillMetaText: { fontSize: 9 },
+  desktopBillTag: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5 },
+  desktopBillTagText: { fontSize: 9 },
+  desktopBillCardRight: { marginLeft: 10 },
+  desktopBillAmount: { fontSize: 14 },
+  desktopBillAmountSub: { fontSize: 9 },
+  desktopBillEditHint: { paddingHorizontal: 11, paddingVertical: 10 },
   desktopCard: { minHeight: 82, borderRadius: 16, shadowOpacity: 0.12, shadowRadius: 16 },
   header:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingBottom: 14 },
   title:    { fontSize: 34, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.1 },
