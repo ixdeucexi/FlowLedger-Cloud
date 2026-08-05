@@ -14,6 +14,8 @@ import { useBudget } from "@/context/BudgetContext";
 import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
+import { useDesktopExperience } from "@/hooks/useDesktopExperience";
+import { DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_WIDE } from "@/lib/desktopModal";
 import type { ConfirmActionOptions } from "@/lib/confirmAction";
 import { MONTH_NAMES } from "@/lib/dateLabels";
 import { BILL_IMPORTANCE_OPTIONS, normalizeBillImportance, type BillImportance } from "@/lib/billImportance";
@@ -48,6 +50,7 @@ interface AddBillModalProps {
 
 export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture, onDeleteMistake, editBill, forceDebt, initialValues, title, saveLabel }: AddBillModalProps) {
   const c = useColors();
+  const isDesktop = useDesktopExperience();
   useBackDismiss(visible, onClose);
   const { categories, settings } = useBudget();
 
@@ -239,12 +242,12 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType={isDesktop ? "fade" : "slide"}
       transparent
       onRequestClose={() => confirmation ? setConfirmation(null) : onClose()}
     >
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
-        <View style={[styles.container, { backgroundColor: c.background }]}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.overlay, isDesktop && DESKTOP_MODAL_OVERLAY]}>
+        <View style={[styles.container, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_WIDE]}>
           <View style={styles.handle} />
           <View style={styles.header}>
             <Text style={[styles.title, { color: c.foreground }]}>

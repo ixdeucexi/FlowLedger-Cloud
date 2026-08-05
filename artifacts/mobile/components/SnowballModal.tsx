@@ -17,6 +17,8 @@ import colors from "@/constants/colors";
 import type { SnowballAllocation } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
+import { useDesktopExperience } from "@/hooks/useDesktopExperience";
+import { DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR } from "@/lib/desktopModal";
 
 interface Props {
   visible: boolean;
@@ -27,6 +29,7 @@ interface Props {
 
 export function SnowballModal({ visible, onClose, method, onRun }: Props) {
   const c = useColors();
+  const isDesktop = useDesktopExperience();
   useBackDismiss(visible, onClose);
   const [amount, setAmount] = useState("");
   const [results, setResults] = useState<SnowballAllocation[]>([]);
@@ -49,9 +52,9 @@ export function SnowballModal({ visible, onClose, method, onRun }: Props) {
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
-        <View style={[styles.container, { backgroundColor: c.background }]}>
+    <Modal visible={visible} animationType={isDesktop ? "fade" : "slide"} transparent onRequestClose={onClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.overlay, isDesktop && DESKTOP_MODAL_OVERLAY]}>
+        <View style={[styles.container, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_REGULAR]}>
           <View style={styles.header}>
             <View>
               <Text style={[styles.title, { color: c.foreground }]}>

@@ -322,6 +322,22 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
         <View
           style={[styles.sidebar, { width: sidebarWidth }, desktopTransition]}
         >
+          <View style={[styles.sidebarBrand, collapsed && styles.sidebarBrandCollapsed]}>
+            <Image
+              accessibilityLabel="FlowLedger Algo logo"
+              resizeMode="contain"
+              source={require("../../assets/images/startup_f_transparent.png")}
+              style={styles.sidebarLogo}
+            />
+            {!collapsed ? (
+              <View style={styles.sidebarBrandCopy}>
+                <Text style={styles.brandName} numberOfLines={1}>
+                  FlowLedger <Text style={styles.brandAlgo}>Algo</Text>
+                </Text>
+                <Text style={styles.sidebarBrandSub}>Financial workspace</Text>
+              </View>
+            ) : null}
+          </View>
           <ScrollView
             style={styles.sidebarNav}
             showsVerticalScrollIndicator={false}
@@ -486,6 +502,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
   },
   topbar: {
+    display: "none",
     height: 72,
     flexDirection: "row",
     alignItems: "center",
@@ -771,6 +788,34 @@ const styles = StyleSheet.create({
     borderRightColor: "rgba(148,163,184,0.10)",
     backgroundColor: "rgba(5,8,20,0.86)",
     overflow: "hidden",
+  },
+  sidebarBrand: {
+    minHeight: 82,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(148,163,184,0.10)",
+    backgroundColor: "rgba(3,6,16,0.78)",
+  },
+  sidebarBrandCollapsed: { justifyContent: "center", paddingHorizontal: 0 },
+  sidebarLogo: {
+    width: 44,
+    height: 44,
+    shadowColor: "#38bdf8",
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  sidebarBrandCopy: { flex: 1, minWidth: 0 },
+  sidebarBrandSub: {
+    color: "#69758d",
+    fontSize: 8,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.8,
+    marginTop: 2,
+    textTransform: "uppercase",
   },
   sidebarNav: { flex: 1 },
   sidebarScroll: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 12 },

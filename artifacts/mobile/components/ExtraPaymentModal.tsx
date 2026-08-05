@@ -14,6 +14,8 @@ import {
 
 import colors from "@/constants/colors";
 import { useColors } from "@/hooks/useColors";
+import { useDesktopExperience } from "@/hooks/useDesktopExperience";
+import { DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_COMPACT } from "@/lib/desktopModal";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 
 interface ExtraPaymentModalProps {
@@ -24,6 +26,7 @@ interface ExtraPaymentModalProps {
 
 export function ExtraPaymentModal({ visible, onClose, onApply }: ExtraPaymentModalProps) {
   const c = useColors();
+  const isDesktop = useDesktopExperience();
   useBackDismiss(visible, onClose);
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<"smallest" | "priority">("smallest");
@@ -38,12 +41,12 @@ export function ExtraPaymentModal({ visible, onClose, onApply }: ExtraPaymentMod
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType={isDesktop ? "fade" : "slide"} transparent onRequestClose={onClose}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.overlay}
+        style={[styles.overlay, isDesktop && DESKTOP_MODAL_OVERLAY]}
       >
-        <View style={[styles.container, { backgroundColor: c.background }]}>
+        <View style={[styles.container, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_COMPACT]}>
           <View style={styles.header}>
             <Text style={[styles.title, { color: c.foreground }]}>Extra Payment</Text>
             <Pressable onPress={onClose} hitSlop={8}>

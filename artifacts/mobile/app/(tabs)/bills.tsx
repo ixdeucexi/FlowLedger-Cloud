@@ -17,6 +17,7 @@ import type { Bill } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { confirmAction } from "@/lib/confirmAction";
 import { effectiveDebtMinimum } from "@/lib/snowball";
 import { buildDebtPaymentPlanSummary } from "@/lib/debtPaymentPlan";
@@ -53,6 +54,7 @@ function debtRequiredMinimum(debt: Pick<Bill, "amount">): number {
 
 export default function BillsScreen() {
   const c = useColors();
+  const isDesktop = useDesktopExperience();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
@@ -391,7 +393,7 @@ export default function BillsScreen() {
   const subtitle = activeTab === "bills"
     ? `${totalCount} bill${totalCount !== 1 ? "s" : ""} · $${totalAmount.toFixed(0)}/mo recurring`
     : `${debts.length} debt${debts.length !== 1 ? "s" : ""} · $${totalDebt.toLocaleString(undefined, { maximumFractionDigits: 0 })} total`;
-  const listBottomPadding = insets.bottom + (Platform.OS === "web" ? 128 : 118);
+  const listBottomPadding = isDesktop ? 48 : insets.bottom + (Platform.OS === "web" ? 128 : 118);
 
   return (
     <View style={[styles.screen, { backgroundColor: c.background }]}>
@@ -401,10 +403,11 @@ export default function BillsScreen() {
         contentContainerStyle={{ paddingBottom: listBottomPadding }}
         scrollIndicatorInsets={{ bottom: listBottomPadding }}
       >
+      <View style={isDesktop ? styles.desktopCanvas : undefined}>
       {/* ── Header ── */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 + webTopPad }]}>
+      <View style={[styles.header, isDesktop && styles.desktopHeader, { paddingTop: isDesktop ? 8 : insets.top + 12 + webTopPad }]}>
         <View>
-          <Text style={[styles.title, { color: c.foreground }]}>Bills</Text>
+          <Text style={[styles.title, isDesktop && styles.desktopTitle, { color: c.foreground }]}>Bills</Text>
           <Text style={[styles.subtitle, { color: c.mutedForeground }]}>{subtitle}</Text>
         </View>
         <CommandPlusButton
@@ -423,6 +426,7 @@ export default function BillsScreen() {
           } as any)}
           style={({ pressed }) => [
             styles.overdueCard,
+            isDesktop && styles.desktopSection,
             { backgroundColor: c.destructive + "12", borderColor: c.destructive + "70", opacity: pressed ? 0.82 : 1 },
           ]}
         >
@@ -442,7 +446,7 @@ export default function BillsScreen() {
       ) : null}
 
       {activeTab === "bills" ? (
-        <View style={[styles.billSnapshotCard, { backgroundColor: c.card, borderColor: c.border }]}>
+        <View style={[styles.billSnapshotCard, isDesktop && styles.desktopSection, { backgroundColor: c.card, borderColor: c.border }]}>
           <View style={styles.billSnapshotHeader}>
             <View>
               <Text style={[styles.billSnapshotLabel, { color: c.mutedForeground }]}>Bill snapshot</Text>
@@ -475,6 +479,7 @@ export default function BillsScreen() {
           onPress={() => router.push({ pathname: "/(tabs)/flo", params: { prompt: `Move ${billOptimizationPrompt.bill.name} to after payday` } } as any)}
           style={({ pressed }) => [
             styles.billPromptCard,
+            isDesktop && styles.desktopSection,
             { backgroundColor: c.warning + "12", borderColor: c.warning + "70", opacity: pressed ? 0.82 : 1 },
           ]}
         >
@@ -503,7 +508,7 @@ export default function BillsScreen() {
         </Pressable>
       ) : null}
 
-      <View style={[styles.segmentWrap, { paddingHorizontal: 16, marginBottom: 12 }]}>
+      <View style={[styles.segmentWrap, isDesktop && styles.desktopSegmentWrap, { paddingHorizontal: isDesktop ? 0 : 16, marginBottom: 12 }]}>
         <View style={[styles.segment, { backgroundColor: c.muted }]}>
           {(["bills", "debt"] as Tab[]).map(t => (
             <Pressable
@@ -532,6 +537,7 @@ export default function BillsScreen() {
               onPress={() => router.push({ pathname: "/(tabs)/flo", params: { prompt: "Which bill should I pay first?" } } as any)}
               style={({ pressed }) => [
                 styles.billPromptCard,
+                isDesktop && styles.desktopSection,
                 { backgroundColor: c.card, borderColor: c.primary + "45", opacity: pressed ? 0.84 : 1 },
               ]}
             >
@@ -546,7 +552,7 @@ export default function BillsScreen() {
             </Pressable>
           ) : null}
 
-          <View style={styles.filterRow}>
+          <View style={[styles.filterRow, isDesktop && styles.desktopToolbar]}>
             {(["all", "recurring", "one-time", "stopped"] as Filter[]).map(f => (
               <Pressable
                 key={f}
@@ -560,7 +566,7 @@ export default function BillsScreen() {
             ))}
           </View>
 
-          <View style={styles.list}>
+          <View style={[styles.list, isDesktop && styles.desktopList]}>
             {filteredBills.length === 0 ? (
               <EmptyState
                 icon="file-text"
@@ -579,7 +585,7 @@ export default function BillsScreen() {
                 <Pressable
                   key={item.id}
                   onPress={() => { setEditBill(item); setModalVisible(true); }}
-                  style={({ pressed }) => [styles.card, { backgroundColor: c.card, borderRadius: colors.radius, opacity: pressed ? 0.88 : 1 }]}
+                  style={({ pressed }) => [styles.card, isDesktop && styles.desktopCard, { backgroundColor: c.card, borderRadius: colors.radius, opacity: pressed ? 0.88 : 1 }]}
                 >
                   <View style={[styles.catBar, { backgroundColor: catColor }]} />
                   <View style={styles.cardBody}>
@@ -657,7 +663,7 @@ export default function BillsScreen() {
 
       {/* ════════════════════ DEBT VIEW ════════════════════ */}
       {activeTab === "debt" && (
-        <View style={styles.list}>
+        <View style={[styles.list, isDesktop && styles.desktopList]}>
           <>
             <PlanFeatureGate feature="debt_payoff" compact>
             {debts.length > 0 && (
@@ -801,7 +807,7 @@ export default function BillsScreen() {
                 <Pressable
                   key={item.id}
                   onPress={() => { setEditBill(item); setModalVisible(true); }}
-                  style={({ pressed }) => [styles.card, { backgroundColor: c.card, borderRadius: colors.radius, opacity: pressed ? 0.88 : 1 }]}
+                  style={({ pressed }) => [styles.card, isDesktop && styles.desktopCard, { backgroundColor: c.card, borderRadius: colors.radius, opacity: pressed ? 0.88 : 1 }]}
                 >
                   <View style={[styles.priorityStrip, { backgroundColor: priorityColor }]}>
                     <Text style={styles.priorityNum}>{isPaidOff ? "PAID" : isExcluded ? "OFF" : isUnranked ? "WAIT" : `#${strategyRank}`}</Text>
@@ -885,6 +891,7 @@ export default function BillsScreen() {
         </View>
       )}
 
+      </View>
       </ScrollView>
 
       <Modal
@@ -966,6 +973,14 @@ export default function BillsScreen() {
 
 const styles = StyleSheet.create({
   screen:   { flex: 1 },
+  desktopCanvas: { width: "100%", maxWidth: 1120, alignSelf: "center", paddingHorizontal: 24, paddingTop: 16 },
+  desktopHeader: { width: "100%", maxWidth: 900, alignSelf: "center", paddingHorizontal: 0, paddingBottom: 18 },
+  desktopTitle: { fontSize: 30, letterSpacing: -0.8 },
+  desktopSection: { width: "100%", maxWidth: 900, alignSelf: "center", marginHorizontal: 0 },
+  desktopSegmentWrap: { width: "100%", maxWidth: 900, alignSelf: "center" },
+  desktopToolbar: { width: "100%", maxWidth: 900, alignSelf: "center", paddingHorizontal: 0 },
+  desktopList: { width: "100%", maxWidth: 900, alignSelf: "center", paddingHorizontal: 0, paddingTop: 8 },
+  desktopCard: { minHeight: 82, borderRadius: 16, shadowOpacity: 0.12, shadowRadius: 16 },
   header:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingBottom: 14 },
   title:    { fontSize: 34, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.1 },
   subtitle: { fontSize: 13, fontFamily: "Inter_500Medium", marginTop: 3, letterSpacing: 0.2 },

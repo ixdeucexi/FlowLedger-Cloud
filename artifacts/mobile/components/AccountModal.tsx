@@ -6,6 +6,8 @@ import { DatePickerField } from "@/components/DatePickerField";
 import type { Account } from "@/context/BudgetContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
+import { useDesktopExperience } from "@/hooks/useDesktopExperience";
+import { DESKTOP_MODAL_COMPACT, DESKTOP_MODAL_OVERLAY } from "@/lib/desktopModal";
 import type { AccountType } from "@/lib/accounts";
 
 const TYPES: { value: AccountType; label: string }[] = [
@@ -35,6 +37,7 @@ export function AccountModal({
   onReconcile: (balance: number, asOfDate: string) => void | Promise<void>;
 }) {
   const c = useColors();
+  const isDesktop = useDesktopExperience();
   useBackDismiss(visible, onClose);
 
   const [name, setName] = useState("");
@@ -75,9 +78,9 @@ export function AccountModal({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
-        <View style={[styles.sheet, { backgroundColor: c.background }]}>
+    <Modal visible={visible} animationType={isDesktop ? "fade" : "slide"} transparent onRequestClose={onClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.overlay, isDesktop && DESKTOP_MODAL_OVERLAY]}>
+        <View style={[styles.sheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_COMPACT]}>
           <View style={styles.header}>
             <Text style={[styles.title, { color: c.foreground }]}>
               {mode === "reconcile" ? `Reconcile ${account?.name ?? "Account"}` : account ? "Edit Account" : "Add Account"}

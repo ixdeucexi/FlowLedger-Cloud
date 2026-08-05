@@ -6,6 +6,8 @@ import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
 import { DatePickerField } from "@/components/DatePickerField";
 import type { DebtMethod, SnowballProjectionResult } from "@/lib/snowball";
 import { useColors } from "@/hooks/useColors";
+import { useDesktopExperience } from "@/hooks/useDesktopExperience";
+import { DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_WIDE } from "@/lib/desktopModal";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import type { ConfirmActionOptions } from "@/lib/confirmAction";
 import { MONTH_NAMES } from "@/lib/dateLabels";
@@ -30,6 +32,7 @@ interface Props {
 
 export function SnowballPreviewModal({ visible, method, preview, amount, existingPayment, paymentDate, paymentDateMin, paymentDateMax, safetyFloor = 200, forecastHorizonMonths = 6, onAmountChange, onPaymentDateChange, onClose, onConfirm, onRemove }: Props) {
   const c = useColors();
+  const isDesktop = useDesktopExperience();
   const [confirmation, setConfirmation] = useState<ConfirmActionOptions | null>(null);
   useBackDismiss(visible, () => confirmation ? setConfirmation(null) : onClose());
   const requested = Number.parseFloat(amount) || 0;
@@ -45,9 +48,9 @@ export function SnowballPreviewModal({ visible, method, preview, amount, existin
   const canMoveForward = Boolean(preview && monthOffset + forecastHorizonMonths < preview.months.length);
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={() => confirmation ? setConfirmation(null) : onClose()}>
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable style={[styles.sheet, { backgroundColor: c.background }]} onPress={() => {}}>
+    <Modal visible={visible} transparent animationType={isDesktop ? "fade" : "slide"} onRequestClose={() => confirmation ? setConfirmation(null) : onClose()}>
+      <Pressable style={[styles.overlay, isDesktop && DESKTOP_MODAL_OVERLAY]} onPress={onClose}>
+        <Pressable style={[styles.sheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_WIDE]} onPress={() => {}}>
           <View style={[styles.handle, { backgroundColor: c.border }]} />
           <View style={styles.header}>
             <View style={{ flex: 1 }}>

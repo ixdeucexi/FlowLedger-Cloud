@@ -13,6 +13,8 @@ import { DatePickerField } from "@/components/DatePickerField";
 import { useBudget, type Goal, type GoalAffordability } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
+import { useDesktopExperience } from "@/hooks/useDesktopExperience";
+import { DESKTOP_MODAL_COMPACT, DESKTOP_MODAL_OVERLAY } from "@/lib/desktopModal";
 import type { ConfirmActionOptions } from "@/lib/confirmAction";
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
@@ -35,6 +37,7 @@ interface Props {
 
 export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initialMode = "savings", initialName = "", initialTargetAmount, initialTargetDate }: Props) {
   const c = useColors();
+  const isDesktop = useDesktopExperience();
   const { checkGoalAffordability, settings } = useBudget();
   useBackDismiss(visible, onClose);
 
@@ -147,12 +150,12 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
     <>
       <Modal
         visible={visible}
-        animationType="slide"
+        animationType={isDesktop ? "fade" : "slide"}
         transparent
         onRequestClose={() => confirmation ? setConfirmation(null) : onClose()}
       >
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
-        <View style={[styles.container, { backgroundColor: c.background }]}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.overlay, isDesktop && DESKTOP_MODAL_OVERLAY]}>
+        <View style={[styles.container, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_COMPACT]}>
           <View style={styles.handle} />
           <View style={styles.header}>
             <Text style={[styles.title, { color: c.foreground }]}>
