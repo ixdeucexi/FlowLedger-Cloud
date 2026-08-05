@@ -1,7 +1,8 @@
 import { Feather } from "@expo/vector-icons";
-import { useGlobalSearchParams, usePathname, useRouter } from "expo-router";
+import { usePathname, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,14 +13,14 @@ import {
 } from "react-native";
 
 import { useAuth } from "@/context/AuthContext";
-import { useBudget, type DashboardFilter } from "@/context/BudgetContext";
+import { useBudget } from "@/context/BudgetContext";
 import { DesktopAddMenu } from "@/components/desktop/DesktopAddMenu";
-import { DesktopWorkspacePage } from "@/components/desktop/DesktopWorkspacePage";
 import {
   desktopAddDestination,
   desktopPlannerDestination,
   type DesktopAddAction,
 } from "@/lib/desktopActions";
+import { appTabsForPlanning, isAppTabActive, type AppTabName } from "@/lib/appTabs";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 
@@ -27,38 +28,8 @@ type NavigationItem = {
   label: string;
   icon: FeatherName;
   pathname: string;
-  section?: string;
-  filter?: DashboardFilter;
-  prompt?: string;
+  tab: AppTabName;
 };
-
-const NAVIGATION: NavigationItem[] = [
-  { label: "Dashboard", icon: "grid", pathname: "/" },
-  { label: "Bills", icon: "file-text", pathname: "/bills", filter: "bills" },
-  {
-    label: "Income",
-    icon: "arrow-down-left",
-    pathname: "/more",
-    section: "money",
-  },
-  { label: "Debt", icon: "credit-card", pathname: "/bills", filter: "debt" },
-  { label: "Goals", icon: "target", pathname: "/more", section: "goals" },
-  {
-    label: "Can I Afford It?",
-    icon: "help-circle",
-    pathname: "/flo",
-    prompt: "Can I afford a purchase? Help me choose a safe amount and date.",
-  },
-  { label: "Calendar", icon: "calendar", pathname: "/monthly" },
-  { label: "Activity", icon: "activity", pathname: "/transactions" },
-  {
-    label: "Reports",
-    icon: "bar-chart-2",
-    pathname: "/more",
-    section: "reports",
-  },
-  { label: "Settings", icon: "settings", pathname: "/more" },
-];
 
 function userDisplayName(user: ReturnType<typeof useAuth>["user"]) {
   const metadata = user?.user_metadata ?? {};
@@ -84,10 +55,9 @@ function userInitials(name: string) {
 export function DesktopChrome({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const params = useGlobalSearchParams<{ section?: string; mode?: string }>();
   const { width } = useWindowDimensions();
   const { user, signOut } = useAuth();
-  const { dashboardFilter, setDashboardFilter } = useBudget();
+  const { settings } = useBudget();
   const [collapsed, setCollapsed] = useState(width < 1180);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -101,32 +71,25 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
 
   const displayName = userDisplayName(user);
   const firstName = displayName.split(/\s+/)[0] || displayName;
-  const section = Array.isArray(params.section)
-    ? params.section[0]
-    : params.section;
-  const mode = Array.isArray(params.mode) ? params.mode[0] : params.mode;
   const sidebarWidth = collapsed ? 76 : 244;
   const compactActions = width < 1120;
-  const websitePage = ["/bills", "/transactions", "/monthly", "/more"].includes(pathname);
+  const navigation = React.useMemo<NavigationItem[]>(
+    () => appTabsForPlanning(settings.zeroBasedBudgetEnabled).map((tab) => ({
+      label: tab.title,
+      icon: tab.icon as FeatherName,
+      pathname: tab.pathname,
+      tab: tab.name,
+    })),
+    [settings.zeroBasedBudgetEnabled],
+  );
   const searchResults = searchQuery.trim()
-    ? NAVIGATION.filter((item) =>
+    ? navigation.filter((item) =>
         item.label.toLowerCase().includes(searchQuery.trim().toLowerCase()),
       ).slice(0, 5)
-    : NAVIGATION.slice(0, 5);
+    : navigation.slice(0, 5);
 
   const navigateTo = (item: NavigationItem) => {
-    if (item.filter !== undefined) setDashboardFilter(item.filter);
-    if (item.pathname === "/") {
-      router.push("/(tabs)" as never);
-    } else {
-      const nextParams: Record<string, string> = {};
-      if (item.section) nextParams.section = item.section;
-      if (item.prompt) nextParams.prompt = item.prompt;
-      router.push({
-        pathname: `/(tabs)${item.pathname}` as never,
-        params: nextParams,
-      } as never);
-    }
+    router.push(item.pathname as never);
     setNotificationsOpen(false);
     setProfileOpen(false);
     setAddOpen(false);
@@ -141,20 +104,7 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
     setProfileOpen(false);
   };
 
-  const isActive = (item: NavigationItem) => {
-    const normalizedPath =
-      pathname === "/" || pathname === "/(tabs)" ? "/" : pathname;
-    if (item.pathname === "/") return normalizedPath === "/";
-    if (item.pathname === "/more") {
-      if (normalizedPath !== "/more") return false;
-      if (item.section) return section === item.section;
-      return !section;
-    }
-    if (item.pathname === "/bills" && item.filter) {
-      return normalizedPath === "/bills" && dashboardFilter === item.filter;
-    }
-    return normalizedPath === item.pathname;
-  };
+  const isActive = (item: NavigationItem) => isAppTabActive(item.tab, pathname);
 
   const desktopTransition = {
     transitionProperty: "width",
@@ -174,11 +124,12 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
         <View
           style={[styles.brandArea, { width: sidebarWidth }, desktopTransition]}
         >
-          <View style={styles.logoMark} accessibilityLabel="FlowLedger Algo logo">
-            <View style={[styles.logoStroke, styles.logoStrokeTop]} />
-            <View style={[styles.logoStroke, styles.logoStrokeMiddle]} />
-            <View style={[styles.logoStroke, styles.logoStrokeBottom]} />
-          </View>
+          <Image
+            accessibilityLabel="FlowLedger Algo logo"
+            resizeMode="contain"
+            source={require("../../assets/images/startup_f_transparent.png")}
+            style={styles.logoImage}
+          />
           {!collapsed ? (
             <View style={styles.brandCopy}>
               <Text style={styles.brandName}>
@@ -201,7 +152,7 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
               onSubmitEditing={() => {
                 if (searchResults[0]) navigateTo(searchResults[0]);
               }}
-              placeholder="Search bills, goals, reports..."
+              placeholder={`Search ${navigation.map((item) => item.label).join(", ")}...`}
               placeholderTextColor="#66738a"
               returnKeyType="go"
               style={styles.searchInput}
@@ -262,7 +213,7 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Settings"
-            onPress={() => navigateTo(NAVIGATION[NAVIGATION.length - 1])}
+            onPress={() => navigateTo(navigation[navigation.length - 1])}
             style={({ pressed }) => [styles.iconButton, { opacity: pressed ? 0.72 : 1 }]}
           >
             <Feather name="settings" size={18} color="#c7d2e6" />
@@ -384,7 +335,7 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
             >
               {collapsed ? "" : "Workspace"}
             </Text>
-            {NAVIGATION.map((item) => {
+            {navigation.map((item) => {
               const active = isActive(item);
               return (
                 <Pressable
@@ -480,33 +431,7 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
           </View>
         </View>
 
-        <View style={styles.main}>
-          {websitePage && mode !== "planner" ? (
-            <DesktopWorkspacePage
-              pathname={pathname}
-              section={section}
-              onOpenPlanner={() => router.setParams({ mode: "planner" } as never)}
-            />
-          ) : websitePage ? (
-            <View style={styles.plannerShell}>
-              <View style={styles.plannerToolbar}>
-                <View style={styles.plannerToolbarCopy}>
-                  <Text style={styles.plannerEyebrow}>PLANNER MODE</Text>
-                  <Text style={styles.plannerTitle}>Detailed editing workspace</Text>
-                </View>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => router.setParams({ mode: "" } as never)}
-                  style={({ pressed }) => [styles.returnButton, { opacity: pressed ? 0.72 : 1 }]}
-                >
-                  <Feather name="arrow-left" size={14} color="#b9c7da" />
-                  <Text style={styles.returnButtonText}>Return to website view</Text>
-                </Pressable>
-              </View>
-              <View style={styles.plannerContent}>{children}</View>
-            </View>
-          ) : children}
-        </View>
+        <View style={styles.main}>{children}</View>
       </View>
     </View>
   );
@@ -579,11 +504,14 @@ const styles = StyleSheet.create({
     borderRightColor: "rgba(148,163,184,0.10)",
     overflow: "hidden",
   },
-  logoMark: { width: 36, height: 36, justifyContent: "center", gap: 3, transform: [{ rotate: "-9deg" }] },
-  logoStroke: { height: 6, borderRadius: 4, shadowOpacity: 0.55, shadowRadius: 7, shadowOffset: { width: 0, height: 0 } },
-  logoStrokeTop: { width: 31, backgroundColor: "#2dd4bf", shadowColor: "#2dd4bf" },
-  logoStrokeMiddle: { width: 25, marginLeft: 3, backgroundColor: "#3b82f6", shadowColor: "#3b82f6" },
-  logoStrokeBottom: { width: 18, marginLeft: 6, backgroundColor: "#8b5cf6", shadowColor: "#8b5cf6" },
+  logoImage: {
+    width: 42,
+    height: 42,
+    shadowColor: "#38bdf8",
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
+  },
   brandCopy: { minWidth: 150 },
   brandName: {
     color: "#f8fafc",
@@ -844,43 +772,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(5,8,20,0.86)",
     overflow: "hidden",
   },
-  plannerShell: { flex: 1, backgroundColor: "#050816" },
-  plannerToolbar: {
-    minHeight: 64,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 18,
-    paddingHorizontal: 28,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(148,163,184,0.12)",
-    backgroundColor: "rgba(7,12,27,0.94)",
-  },
-  plannerToolbarCopy: { flex: 1, minWidth: 0 },
-  plannerEyebrow: {
-    color: "#8f7ae8",
-    fontSize: 8,
-    fontFamily: "Inter_800ExtraBold",
-    letterSpacing: 1.15,
-  },
-  plannerTitle: {
-    color: "#dce5f2",
-    fontSize: 12,
-    fontFamily: "Inter_700Bold",
-    marginTop: 2,
-  },
-  returnButton: {
-    height: 36,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.14)",
-    backgroundColor: "rgba(15,23,42,0.72)",
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-  },
-  returnButtonText: { color: "#b9c7da", fontSize: 9, fontFamily: "Inter_700Bold" },
-  plannerContent: { flex: 1 },
   sidebarNav: { flex: 1 },
   sidebarScroll: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 12 },
   sidebarLabel: {

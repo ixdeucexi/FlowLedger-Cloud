@@ -113,6 +113,10 @@
     ,"lib/ledgerEngine.test.ts"
     ,"lib/desktopExperience.ts"
     ,"lib/desktopExperience.test.ts"
+    ,"lib/desktopActions.ts"
+    ,"lib/desktopActions.test.ts"
+    ,"lib/appTabs.ts"
+    ,"lib/appTabs.test.ts"
     ,"lib/dashboardFinancialModel.ts"
     ,"lib/dashboardFinancialModel.test.ts"
   ]

@@ -28,23 +28,15 @@ import { buildReviewQueue } from "@/lib/reviewCenter";
 import { tabBadgeValue } from "@/lib/tabBadge";
 import { buildOverdueBillOccurrences, groupOverdueBills } from "@/lib/overdueBills";
 import { pendingOccurrenceKeySet, unmatchedPendingTransactions } from "@/lib/pendingPlanMatches";
-import { planningTabPresentation } from "@/lib/planningMode";
 import { tabBarDisplayLabel, tabBarLabelSize } from "@/lib/mobileLayout";
 import { appNotificationCount, clearAppBadge, syncAppBadge } from "@/lib/appBadge";
+import { appTabsForPlanning } from "@/lib/appTabs";
 
 
 function todayIsoDate() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
-
-const TABS = [
-  { name: "index",        title: "Dashboard",    icon: "bar-chart-2"     },
-  { name: "bills",        title: "Bills",        icon: "file-text"       },
-  { name: "transactions", title: "Activity",     icon: "repeat"          },
-  { name: "monthly",      title: "Monthly",      icon: "calendar"        },
-  { name: "more",         title: "More",         icon: "more-horizontal" },
-] as const;
 
 const DesktopChrome = React.lazy(() =>
   import("@/components/desktop/DesktopChrome").then((module) => ({
@@ -492,11 +484,8 @@ function TabContent() {
               ) : null,
           }}
         >
-          {TABS.map(tab => {
+          {appTabsForPlanning(settings.zeroBasedBudgetEnabled).map(tab => {
             const isActivity = tab.name === "transactions";
-            const activityPresentation = planningTabPresentation(settings.zeroBasedBudgetEnabled);
-            const tabTitle = isActivity ? activityPresentation.title : tab.title;
-            const tabIcon = isActivity ? activityPresentation.icon : tab.icon;
             const isBills = tab.name === "bills";
             const isMore = tab.name === "more";
             const reviewBadge = isActivity ? tabBadgeValue(activityAlertCount) : undefined;
@@ -508,18 +497,18 @@ function TabContent() {
                 key={tab.name}
                 name={tab.name}
                 options={{
-                  title: tabTitle,
-                  tabBarLabel: tabBarDisplayLabel(tabTitle, viewportWidth),
-                  tabBarIcon: ({ color }) => <Feather name={tabIcon} size={22} color={color} />,
+                  title: tab.title,
+                  tabBarLabel: tabBarDisplayLabel(tab.title, viewportWidth),
+                  tabBarIcon: ({ color }) => <Feather name={tab.icon} size={22} color={color} />,
                   tabBarBadge: badge,
                   tabBarBadgeStyle: badge ? styles.alertTabBadge : undefined,
                   tabBarAccessibilityLabel: reviewBadge
-                    ? `${tabTitle}, ${activityReviewCount} item${activityReviewCount === 1 ? "" : "s"} need review and ${pendingAlertCount} unmatched transaction${pendingAlertCount === 1 ? "" : "s"} pending`
+                    ? `${tab.title}, ${activityReviewCount} item${activityReviewCount === 1 ? "" : "s"} need review and ${pendingAlertCount} unmatched transaction${pendingAlertCount === 1 ? "" : "s"} pending`
                     : billBadge
                       ? `Bills, ${overdueBillCount} past-due bill${overdueBillCount === 1 ? "" : "s"} need action`
                     : feedbackBadge
                       ? `More, ${newFeedbackCount} new feedback item${newFeedbackCount === 1 ? "" : "s"}`
-                    : tabTitle,
+                    : tab.title,
                 }}
               />
             );
