@@ -40,3 +40,16 @@ test("Settings theme and text-style choices expose selected button state", async
 
   assert.equal(selectedButtons.length, 2);
 });
+
+test("compact Settings theme buttons keep intrinsic touch-target height", async () => {
+  const source = await readFile(
+    path.join(__dirname, "../../artifacts/mobile/app/(tabs)/more.tsx"),
+    "utf8",
+  );
+
+  assert.match(
+    source,
+    /themeBtnCompact:\s*\{[^}]*flexGrow:\s*0[^}]*flexShrink:\s*0[^}]*flexBasis:\s*"auto"[^}]*minHeight:\s*40[^}]*width:\s*"100%"/,
+  );
+  assert.doesNotMatch(source, /themeBtnCompact:\s*\{[^}]*flex:\s*0/);
+});

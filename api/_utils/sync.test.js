@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 const {
+  acquirePlaidSyncLock,
   creditCardDebtValues,
   duplicatePlaidAccountIds,
   editablePlaidFields,
@@ -10,11 +11,128 @@ const {
   isCreditCardPaymentTransaction,
   isLiabilitiesUnavailable,
   persistCanonicalPlaidTransaction,
+  releasePlaidSyncLock,
   stablePlaidFingerprint,
   shouldImportPlaidTransaction,
   shouldQueuePendingNotification,
   shouldQueuePostedNotification,
+  transferPendingPlaidBillMatch,
+  withPlaidSyncLock,
 } = require("./sync");
+
+test("Plaid sync lock helpers use the migration RPC boundary", async () => {
+  const calls = [];
+  const db = {
+    async rpc(name, args) {
+      calls.push({ name, args });
+      return { data: true, error: null };
+    },
+  };
+
+  assert.equal(await acquirePlaidSyncLock({
+    db,
+    itemId: "00000000-0000-0000-0000-000000000001",
+    userId: "00000000-0000-0000-0000-000000000002",
+    lockToken: "00000000-0000-0000-0000-000000000003",
+  }), true);
+  assert.equal(await releasePlaidSyncLock({
+    db,
+    itemId: "00000000-0000-0000-0000-000000000001",
+    userId: "00000000-0000-0000-0000-000000000002",
+    lockToken: "00000000-0000-0000-0000-000000000003",
+  }), true);
+
+  assert.deepEqual(calls.map(call => call.name), [
+    "acquire_plaid_sync_lock",
+    "release_plaid_sync_lock",
+  ]);
+  assert.equal(calls[0].args.p_lock_token, calls[1].args.p_lock_token);
+});
+
+test("a Plaid item sync releases its lock after success and failure", async () => {
+  const calls = [];
+  const db = {
+    async rpc(name) {
+      calls.push(name);
+      return { data: true, error: null };
+    },
+  };
+  const input = {
+    db,
+    itemId: "00000000-0000-0000-0000-000000000001",
+    userId: "00000000-0000-0000-0000-000000000002",
+    lockToken: "00000000-0000-0000-0000-000000000003",
+  };
+
+  assert.equal(await withPlaidSyncLock(input, async () => {
+    calls.push("work");
+    return "synced";
+  }), "synced");
+  await assert.rejects(
+    withPlaidSyncLock(input, async () => {
+      calls.push("failed-work");
+      throw new Error("sync failed");
+    }),
+    /sync failed/,
+  );
+
+  assert.deepEqual(calls, [
+    "acquire_plaid_sync_lock",
+    "work",
+    "release_plaid_sync_lock",
+    "acquire_plaid_sync_lock",
+    "failed-work",
+    "release_plaid_sync_lock",
+  ]);
+});
+
+test("an overlapping Plaid item sync stops before doing work", async () => {
+  let worked = false;
+  const db = {
+    async rpc(name) {
+      assert.equal(name, "acquire_plaid_sync_lock");
+      return { data: false, error: null };
+    },
+  };
+
+  await assert.rejects(
+    withPlaidSyncLock({
+      db,
+      itemId: "00000000-0000-0000-0000-000000000001",
+      userId: "00000000-0000-0000-0000-000000000002",
+      lockToken: "00000000-0000-0000-0000-000000000003",
+    }, async () => {
+      worked = true;
+    }),
+    error => error?.code === "PLAID_SYNC_ALREADY_RUNNING",
+  );
+  assert.equal(worked, false);
+});
+
+test("pending-to-posted bill replacement uses one atomic migration RPC", async () => {
+  const calls = [];
+  const db = {
+    async rpc(name, args) {
+      calls.push({ name, args });
+      return { data: true, error: null };
+    },
+  };
+
+  assert.equal(await transferPendingPlaidBillMatch({
+    db,
+    userId: "00000000-0000-0000-0000-000000000002",
+    pendingPlaidTransactionId: "pending-transaction",
+    postedTransactionId: "plaid:user:posted-transaction",
+  }), true);
+  assert.deepEqual(calls, [{
+    name: "transfer_pending_plaid_bill_match",
+    args: {
+      p_user_id: "00000000-0000-0000-0000-000000000002",
+      p_pending_plaid_transaction_id: "pending-transaction",
+      p_posted_transaction_id: "plaid:user:posted-transaction",
+    },
+  }]);
+});
 
 test("Plaid credit liabilities become the live Snowball debt values", () => {
   const values = creditCardDebtValues({

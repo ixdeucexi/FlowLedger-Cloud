@@ -1,3 +1,5 @@
+const { randomUUID } = require("node:crypto");
+
 const { plaid } = require("./plaid");
 const { serviceSupabase, safeError } = require("./supabase");
 const { decryptAccessToken } = require("./crypto");
@@ -129,6 +131,63 @@ function shouldQueuePostedNotification(originalCursor, imported) {
 
 function shouldQueuePendingNotification(originalCursor, imported) {
   return Boolean(originalCursor && imported && imported.isNewPending && imported.plaidTransactionId);
+}
+
+async function acquirePlaidSyncLock({ db, itemId, userId, lockToken }) {
+  const { data, error } = await db.rpc("acquire_plaid_sync_lock", {
+    p_item_id: itemId,
+    p_user_id: userId,
+    p_lock_token: lockToken,
+  });
+  if (error) throw error;
+  return data === true;
+}
+
+async function releasePlaidSyncLock({ db, itemId, userId, lockToken }) {
+  const { data, error } = await db.rpc("release_plaid_sync_lock", {
+    p_item_id: itemId,
+    p_user_id: userId,
+    p_lock_token: lockToken,
+  });
+  if (error) throw error;
+  return data === true;
+}
+
+async function withPlaidSyncLock({ db, itemId, userId, lockToken = randomUUID() }, work) {
+  const acquired = await acquirePlaidSyncLock({ db, itemId, userId, lockToken });
+  if (!acquired) {
+    const error = new Error("A sync is already running for this Plaid connection.");
+    error.code = "PLAID_SYNC_ALREADY_RUNNING";
+    throw error;
+  }
+
+  try {
+    return await work();
+  } finally {
+    try {
+      await releasePlaidSyncLock({ db, itemId, userId, lockToken });
+    } catch (error) {
+      console.error("[plaid:sync] lock release deferred", {
+        itemRecordId: itemId,
+        errorCode: plaidErrorCode(error),
+      });
+    }
+  }
+}
+
+async function transferPendingPlaidBillMatch({
+  db,
+  userId,
+  pendingPlaidTransactionId,
+  postedTransactionId,
+}) {
+  const { data, error } = await db.rpc("transfer_pending_plaid_bill_match", {
+    p_user_id: userId,
+    p_pending_plaid_transaction_id: pendingPlaidTransactionId,
+    p_posted_transaction_id: postedTransactionId,
+  });
+  if (error) throw error;
+  return data === true;
 }
 
 function editablePlaidFields(existing, imported) {
@@ -721,36 +780,12 @@ async function upsertPlaidTransaction({ userId, householdId, accountRow, transac
   }
 
   if (!transaction.pending && pendingTransactionId && flowledgerId) {
-    const { data: pendingFlowTransaction, error: pendingLookupError } = await db
-      .from("transactions")
-      .select("id,linked_bill_id,match_reason")
-      .eq("user_id", userId)
-      .eq("plaid_transaction_id", pendingTransactionId)
-      .maybeSingle();
-    if (pendingLookupError) throw pendingLookupError;
-    if (
-      pendingFlowTransaction &&
-      pendingFlowTransaction.id !== flowledgerId &&
-      pendingFlowTransaction.linked_bill_id &&
-      pendingFlowTransaction.match_reason === "confirmed_bill_match"
-    ) {
-      const billId = pendingFlowTransaction.linked_bill_id;
-      const unmatched = await db.rpc("unmatch_transaction_from_bill", {
-        p_transaction_id: pendingFlowTransaction.id,
-      });
-      if (unmatched.error) throw unmatched.error;
-      const rematched = await db.rpc("match_transaction_to_bill", {
-        p_transaction_id: flowledgerId,
-        p_bill_id: billId,
-      });
-      if (rematched.error) {
-        await db.rpc("match_transaction_to_bill", {
-          p_transaction_id: pendingFlowTransaction.id,
-          p_bill_id: billId,
-        });
-        throw rematched.error;
-      }
-    }
+    await transferPendingPlaidBillMatch({
+      db,
+      userId,
+      pendingPlaidTransactionId: pendingTransactionId,
+      postedTransactionId: flowledgerId,
+    });
   }
   return {
     flowledgerId,
@@ -918,10 +953,7 @@ async function syncTransactions({ client, userId, item, accessToken }) {
   return { cursor, added, modified, removed };
 }
 
-async function syncItem({ userId, item }) {
-  const accessToken = tokenFor(item);
-  const client = plaid();
-  const db = serviceSupabase();
+async function syncItemUnlocked({ userId, item, accessToken, client, db }) {
   const attempted = new Date().toISOString();
   await db
     .from("plaid_items")
@@ -1004,6 +1036,16 @@ async function syncItem({ userId, item }) {
   }
 }
 
+async function syncItem({ userId, item }) {
+  const accessToken = tokenFor(item);
+  const client = plaid();
+  const db = serviceSupabase();
+  return withPlaidSyncLock(
+    { db, itemId: item.id, userId },
+    () => syncItemUnlocked({ userId, item, accessToken, client, db }),
+  );
+}
+
 module.exports = {
   syncItem,
   syncAccounts,
@@ -1024,6 +1066,10 @@ module.exports = {
   shouldImportPlaidTransaction,
   shouldQueuePendingNotification,
   shouldQueuePostedNotification,
+  acquirePlaidSyncLock,
+  releasePlaidSyncLock,
+  withPlaidSyncLock,
+  transferPendingPlaidBillMatch,
   editablePlaidFields,
   persistCanonicalPlaidTransaction,
 };

@@ -3033,7 +3033,7 @@ const styles = StyleSheet.create({
   themeRow:  { flexDirection: "row", padding: 4, gap: 4 },
   themeRowCompact: { flexDirection: "column" },
   themeBtn:  { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10 },
-  themeBtnCompact: { flex: 0, width: "100%" },
+  themeBtnCompact: { flexGrow: 0, flexShrink: 0, flexBasis: "auto", minHeight: 40, width: "100%" },
   themeBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   methodText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   methodDesc: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 19, marginTop: 10 },
