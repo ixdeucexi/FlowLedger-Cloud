@@ -9,9 +9,23 @@ import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { flowmentumPreviewStorageKey } from "@/lib/flowmentumHandoff";
 import { PLAN_CATALOG, PLAN_TIERS, type PlanTier } from "@/lib/membership";
+import { desktopPalette as palette } from "@/components/desktop/DesktopUI";
 
-export function AdminMembershipTools() {
-  const colors = useColors();
+export function AdminMembershipTools({ appearance = "theme" }: { appearance?: "theme" | "desktop" }) {
+  const themeColors = useColors();
+  const isDesktop = appearance === "desktop";
+  const colors = isDesktop ? {
+    ...themeColors,
+    card: palette.surface,
+    foreground: palette.text,
+    mutedForeground: palette.muted,
+    muted: palette.surfaceMuted,
+    border: palette.border,
+    primary: palette.purple,
+    success: palette.green,
+    destructive: palette.red,
+    warning: palette.amber,
+  } : themeColors;
   const router = useRouter();
   const { session, user } = useAuth();
   const { actualPlan, previewTier, setPreviewTier, resetPreview } = useMembership();
@@ -52,8 +66,8 @@ export function AdminMembershipTools() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.warning + "55" }]}>
+    <View style={[styles.container, isDesktop && styles.desktopContainer]}>
+      <View style={[styles.card, isDesktop && styles.desktopCard, { backgroundColor: colors.card, borderColor: isDesktop ? colors.border : colors.warning + "55" }]}>
         <View style={styles.header}>
           <Feather name="tool" size={18} color={colors.warning} />
           <View style={styles.copy}>
@@ -74,6 +88,7 @@ export function AdminMembershipTools() {
                 onPress={() => void setPreviewTier(tier)}
                 style={({ pressed }) => [
                   styles.previewButton,
+                  isDesktop && styles.desktopControl,
                   {
                     backgroundColor: selected ? colors.primary : colors.muted,
                     borderColor: selected ? colors.primary : colors.border,
@@ -94,6 +109,7 @@ export function AdminMembershipTools() {
             onPress={() => void resetPreview()}
             style={({ pressed }) => [
               styles.previewButton,
+              isDesktop && styles.desktopControl,
               {
                 backgroundColor: colors.muted,
                 borderColor: colors.border,
@@ -106,7 +122,7 @@ export function AdminMembershipTools() {
         </View>
       </View>
 
-      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.success + "55" }]}>
+      <View style={[styles.card, isDesktop && styles.desktopCard, { backgroundColor: colors.card, borderColor: isDesktop ? colors.border : colors.success + "55" }]}>
         <View style={styles.header}>
           <Feather name="trending-up" size={18} color={colors.success} />
           <View style={styles.copy}>
@@ -124,6 +140,7 @@ export function AdminMembershipTools() {
             onPress={() => void previewFlowmentumHandoff()}
             style={({ pressed }) => [
               styles.testerButton,
+              isDesktop && styles.desktopControl,
               {
                 backgroundColor: colors.success,
                 opacity: !user?.id ? 0.45 : pressed ? 0.76 : 1,
@@ -135,7 +152,7 @@ export function AdminMembershipTools() {
         </View>
       </View>
 
-      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.primary + "55" }]}>
+      <View style={[styles.card, isDesktop && styles.desktopCard, { backgroundColor: colors.card, borderColor: isDesktop ? colors.border : colors.primary + "55" }]}>
         <View style={styles.header}>
           <Feather name="user-check" size={18} color={colors.primary} />
           <View style={styles.copy}>
@@ -154,7 +171,7 @@ export function AdminMembershipTools() {
           placeholderTextColor={colors.mutedForeground}
           value={testerEmail}
           onChangeText={setTesterEmail}
-          style={[styles.input, { color: colors.foreground, backgroundColor: colors.muted, borderColor: colors.border }]}
+          style={[styles.input, isDesktop && styles.desktopInput, { color: colors.foreground, backgroundColor: colors.muted, borderColor: colors.border }]}
         />
         <View style={styles.actions}>
           <Pressable
@@ -162,6 +179,7 @@ export function AdminMembershipTools() {
             onPress={() => void setTesterPlan("pro")}
             style={({ pressed }) => [
               styles.testerButton,
+              isDesktop && styles.desktopControl,
               {
                 backgroundColor: colors.primary,
                 opacity: testerBusy || !testerEmail.trim() ? 0.45 : pressed ? 0.76 : 1,
@@ -177,6 +195,7 @@ export function AdminMembershipTools() {
             onPress={() => void setTesterPlan("free")}
             style={({ pressed }) => [
               styles.testerButton,
+              isDesktop && styles.desktopControl,
               {
                 backgroundColor: colors.muted,
                 borderColor: colors.border,
@@ -199,7 +218,11 @@ export function AdminMembershipTools() {
 
 const styles = StyleSheet.create({
   container: { gap: 12 },
+  desktopContainer: { gap: 12 },
   card: { borderWidth: 1, borderRadius: 18, padding: 14 },
+  desktopCard: { borderRadius: 10, padding: 16 },
+  desktopControl: { minHeight: 38, borderRadius: 7 },
+  desktopInput: { minHeight: 38, borderRadius: 7, fontSize: 11 },
   header: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   copy: { flex: 1 },
   title: { fontSize: 15, fontFamily: "Inter_800ExtraBold" },
