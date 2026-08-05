@@ -22,7 +22,6 @@ import { confirmAction } from "@/lib/confirmAction";
 import { effectiveDebtMinimum } from "@/lib/snowball";
 import { buildDebtPaymentPlanSummary } from "@/lib/debtPaymentPlan";
 import { orderActiveDebtsForStrategy, sortDebtsWithPaidLast } from "@/lib/debtOrder";
-import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { loadCategoryBudgets } from "@/lib/categoryBudgetStore";
 import { buildOverdueBillOccurrences, groupOverdueBills } from "@/lib/overdueBills";
 import { activePendingPlanMatches, pendingOccurrenceKeySet } from "@/lib/pendingPlanMatches";
@@ -64,7 +63,7 @@ export default function BillsScreen() {
     settings, updateSettings,
     previewDebtSnowball, getExtraPayment,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal, getPaidAmount,
-    getDailyBalances, getIncomeOccurrencesInMonth, activeHousehold,
+    activeHousehold,
     pendingBankTransactions, pendingPlanMatches,
   } = useBudget();
 
@@ -74,7 +73,6 @@ export default function BillsScreen() {
   const [filter, setFilter]             = useState<Filter>("all");
   const [sortMode, setSortMode]         = useState<SortMode>("priority");
   const [debtInfoVisible, setDebtInfoVisible] = useState(false);
-  const [dismissedBillPromptKey, setDismissedBillPromptKey] = useState<string | null>(null);
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -137,10 +135,6 @@ export default function BillsScreen() {
       sortTime: Number.MAX_SAFE_INTEGER,
     };
   }, [currentDay, currentMonth, currentYear, getBillOccurrencesInMonth]);
-  const firstOccurrenceDay = useCallback(
-    (bill: Bill) => billOccurrenceDays(bill)[0] ?? bill.due_day,
-    [billOccurrenceDays],
-  );
   const stoppedCutoff = useMemo(() => new Date(currentYear, currentMonth + 1, 0), [currentMonth, currentYear]);
   const isStoppedFutureBill = useCallback((bill: Bill) => {
     if (!bill.end_date) return false;
@@ -306,72 +300,6 @@ export default function BillsScreen() {
   const nextStrategyTarget = strategyOrder[1] ?? null;
 
   const priorityColors = ["#22c55e", "#f0b429", "#ef4444", "#8b5cf6", "#ec4899"];
-  const todayIso = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const paycheckPlan = useMemo(() => {
-    const horizon = Math.max(2, Math.min(settings.forecast_horizon_months, 6));
-    const incomeEvents: { id?: string; name: string; amount: number; date: string }[] = [];
-    const billEvents: { id?: string; name: string; amount: number; dueDate: string }[] = [];
-    const balanceEvents: { date: string; balance: number }[] = [];
-    for (let i = 0; i < horizon; i += 1) {
-      const absoluteMonth = currentMonth + i;
-      const month = absoluteMonth % 12;
-      const year = currentYear + Math.floor(absoluteMonth / 12);
-      getIncomeOccurrencesInMonth(month, year).forEach(({ income, days, effectiveAmount }) => {
-        days.forEach(day => incomeEvents.push({ id: income.id, name: income.name, amount: effectiveAmount, date: makeDateKey(year, month, day) }));
-      });
-      getMonthlyBills(month, year).forEach(bill => {
-        const occurrences = getBillOccurrencesInMonth(bill, month, year);
-        if (!occurrences.length) return;
-        const perOccurrence = getBillMonthlyTotal(bill, month, year) / occurrences.length;
-        let paidRemaining = getPaidAmount(bill.id, month, year);
-        occurrences.forEach(day => {
-          const appliedPaid = Math.min(perOccurrence, Math.max(0, paidRemaining));
-          paidRemaining = Math.max(0, paidRemaining - perOccurrence);
-          const remaining = Math.max(0, perOccurrence - appliedPaid);
-          if (remaining > 0.005) billEvents.push({ id: bill.id, name: bill.name, amount: remaining, dueDate: makeDateKey(year, month, day) });
-        });
-      });
-      getDailyBalances(month, year).forEach(day => balanceEvents.push({ date: makeDateKey(year, month, day.day), balance: day.balance }));
-    }
-    return buildPaycheckPlan(incomeEvents, billEvents, balanceEvents, settings.safety_floor, todayIso);
-  }, [currentMonth, currentYear, getBillMonthlyTotal, getBillOccurrencesInMonth, getDailyBalances, getIncomeOccurrencesInMonth, getMonthlyBills, getPaidAmount, settings.forecast_horizon_months, settings.safety_floor, todayIso]);
-  const billOptimizationPrompt = useMemo(() => {
-    if (!paycheckPlan.nextPaycheck || !paycheckPlan.billsDue.length) return null;
-    const bill = [...paycheckPlan.billsDue].sort((left, right) => right.amount - left.amount)[0];
-    const saferDate = new Date(`${paycheckPlan.nextPaycheck.date}T12:00:00`);
-    saferDate.setDate(saferDate.getDate() + 1);
-    const key = `${bill.id ?? bill.name}-${bill.dueDate}-${paycheckPlan.nextPaycheck.date}`;
-    if (dismissedBillPromptKey === key) return null;
-    return { bill, saferDate, key };
-  }, [dismissedBillPromptKey, paycheckPlan]);
-  const billPrioritySummary = useMemo(() => {
-    const currentNonDebtBills = currentMonthBills.filter(bill => !bill.is_debt);
-    const unpaid = currentNonDebtBills
-      .map(bill => {
-        const monthlyTotal = getBillMonthlyTotal(bill, currentMonth, currentYear);
-        const remaining = Math.max(0, monthlyTotal - getPaidAmount(bill.id, currentMonth, currentYear));
-        const daysUntilDue = firstOccurrenceDay(bill) - currentDay;
-        const urgency = daysUntilDue <= 0 ? 40 : daysUntilDue <= 3 ? 30 : daysUntilDue <= 7 ? 18 : 6;
-        const score = urgency + Math.min(25, remaining / 40);
-        return { bill, remaining, daysUntilDue, score };
-      })
-      .filter(item => item.remaining > 0.005)
-      .sort((left, right) => right.score - left.score || left.bill.due_day - right.bill.due_day);
-    const target = unpaid[0];
-    if (!target) return null;
-    const dueText = target.daysUntilDue <= 0
-      ? "due now"
-      : target.daysUntilDue === 1
-        ? "due tomorrow"
-        : `due in ${target.daysUntilDue} days`;
-    return {
-      bill: target.bill,
-      amount: target.remaining,
-      dueText,
-      count: unpaid.length,
-    };
-  }, [currentDay, currentMonth, currentYear, currentMonthBills, firstOccurrenceDay, getBillMonthlyTotal, getPaidAmount]);
-
   // ── Handlers ────────────────────────────────────────────────────
   const handleSave = useCallback((data: Omit<Bill, "id" | "created_at"> | Bill) => {
     if ("id" in data) return updateBill(data as Bill);
@@ -474,40 +402,6 @@ export default function BillsScreen() {
       ) : null}
 
       {/* ── Bills / Debt segment toggle ── */}
-      {activeTab === "bills" && billOptimizationPrompt ? (
-        <Pressable
-          onPress={() => router.push({ pathname: "/(tabs)/flo", params: { prompt: `Move ${billOptimizationPrompt.bill.name} to after payday` } } as any)}
-          style={({ pressed }) => [
-            styles.billPromptCard,
-            isDesktop && styles.desktopSection,
-            { backgroundColor: c.warning + "12", borderColor: c.warning + "70", opacity: pressed ? 0.82 : 1 },
-          ]}
-        >
-          <Feather name="zap" size={17} color={c.warning} />
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.billPromptTitle, { color: c.foreground }]}>{billOptimizationPrompt.bill.name} hits before payday</Text>
-            <Text style={[styles.billPromptText, { color: c.mutedForeground }]}>
-              Safer after {billOptimizationPrompt.saferDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}. Tap to ask Flo.
-            </Text>
-            <View style={styles.billPromptActions}>
-              <Pressable
-                onPress={() => router.push({ pathname: "/(tabs)/flo", params: { prompt: `Move ${billOptimizationPrompt.bill.name} to after payday` } } as any)}
-                style={({ pressed }) => [styles.billPromptAction, { backgroundColor: c.primary + "18", opacity: pressed ? 0.75 : 1 }]}
-              >
-                <Text style={[styles.billPromptActionText, { color: c.primary }]}>Preview move</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setDismissedBillPromptKey(billOptimizationPrompt.key)}
-                style={({ pressed }) => [styles.billPromptAction, { backgroundColor: c.muted, opacity: pressed ? 0.75 : 1 }]}
-              >
-                <Text style={[styles.billPromptActionText, { color: c.mutedForeground }]}>Keep as-is</Text>
-              </Pressable>
-            </View>
-          </View>
-          <Feather name="chevron-right" size={16} color={c.mutedForeground} />
-        </Pressable>
-      ) : null}
-
       <View style={[styles.segmentWrap, isDesktop && styles.desktopSegmentWrap, { paddingHorizontal: 16, marginBottom: 12 }]}>
         <View style={[styles.segment, { backgroundColor: c.muted }]}>
           {(["bills", "debt"] as Tab[]).map(t => (
@@ -532,26 +426,6 @@ export default function BillsScreen() {
       {/* ════════════════════ BILLS VIEW ════════════════════ */}
       {activeTab === "bills" && (
         <>
-          {billPrioritySummary ? (
-            <Pressable
-              onPress={() => router.push({ pathname: "/(tabs)/flo", params: { prompt: "Which bill should I pay first?" } } as any)}
-              style={({ pressed }) => [
-                styles.billPromptCard,
-                isDesktop && styles.desktopSection,
-                { backgroundColor: c.card, borderColor: c.primary + "45", opacity: pressed ? 0.84 : 1 },
-              ]}
-            >
-              <Feather name="file-text" size={17} color={c.primary} />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.billPromptTitle, { color: c.foreground }]}>Bill Priority: {billPrioritySummary.bill.name}</Text>
-                <Text style={[styles.billPromptText, { color: c.mutedForeground }]}>
-                  ${billPrioritySummary.amount.toFixed(0)} left · {billPrioritySummary.dueText}. Tap to ask Flo why.
-                </Text>
-              </View>
-              <Feather name="chevron-right" size={16} color={c.mutedForeground} />
-            </Pressable>
-          ) : null}
-
           <View style={[styles.filterRow, isDesktop && styles.desktopToolbar]}>
             {(["all", "recurring", "one-time", "stopped"] as Filter[]).map(f => (
               <Pressable
@@ -577,7 +451,6 @@ export default function BillsScreen() {
               />
             ) : filteredBills.map(item => {
               const catColor = CAT_COLORS[item.category] ?? c.primary;
-              const beforePayday = paycheckPlan.billsDue.some(bill => bill.id === item.id);
               const stopped = isStoppedFutureBill(item);
               const overdue = overdueByBill.get(item.id);
               const pending = pendingByBill.get(item.id);
@@ -585,52 +458,47 @@ export default function BillsScreen() {
                 <Pressable
                   key={item.id}
                   onPress={() => { setEditBill(item); setModalVisible(true); }}
-                  style={({ pressed }) => [styles.card, isDesktop && styles.desktopBillCard, { backgroundColor: c.card, borderRadius: colors.radius, opacity: pressed ? 0.88 : 1 }]}
+                  style={({ pressed }) => [styles.card, styles.activitySizedBillCard, { backgroundColor: c.card, borderRadius: colors.radius, opacity: pressed ? 0.88 : 1 }]}
                 >
                   <View style={[styles.catBar, { backgroundColor: catColor }]} />
-                  <View style={[styles.cardBody, isDesktop && styles.desktopBillCardBody]}>
-                    <View style={[styles.cardTop, isDesktop && styles.desktopBillCardTop]}>
+                  <View style={[styles.cardBody, styles.activitySizedBillCardBody]}>
+                    <View style={[styles.cardTop, styles.activitySizedBillCardTop]}>
                       <View style={styles.cardLeft}>
-                        <Text style={[styles.billName, isDesktop && styles.desktopBillName, { color: c.foreground }]} numberOfLines={1}>{item.name}</Text>
-                        <View style={[styles.metaRow, isDesktop && styles.desktopBillMetaRow]}>
-                          <View style={[styles.tag, isDesktop && styles.desktopBillTag, { backgroundColor: catColor + "18" }]}>
-                            <Text style={[styles.tagText, isDesktop && styles.desktopBillTagText, { color: catColor }]}>{item.category}</Text>
+                        <Text style={[styles.billName, styles.activitySizedBillName, { color: c.foreground }]} numberOfLines={1}>{item.name}</Text>
+                        <View style={[styles.metaRow, styles.activitySizedBillMetaRow]}>
+                          <View style={[styles.tag, styles.activitySizedBillTag, { backgroundColor: catColor + "18" }]}>
+                            <Text style={[styles.tagText, styles.activitySizedBillTagText, { color: catColor }]}>{item.category}</Text>
                           </View>
-                          <Text style={[styles.metaText, isDesktop && styles.desktopBillMetaText, { color: c.mutedForeground }]}>
+                          <Text style={[styles.metaText, styles.activitySizedBillMetaText, { color: c.mutedForeground }]}>
                             {stopped ? formatStoppedText(item) : formatBillDueText(item)}
                           </Text>
                           {stopped ? (
-                            <View style={[styles.tag, isDesktop && styles.desktopBillTag, { backgroundColor: c.muted }]}>
-                              <Text style={[styles.tagText, isDesktop && styles.desktopBillTagText, { color: c.mutedForeground }]}>Stopped</Text>
+                            <View style={[styles.tag, styles.activitySizedBillTag, { backgroundColor: c.muted }]}>
+                              <Text style={[styles.tagText, styles.activitySizedBillTagText, { color: c.mutedForeground }]}>Stopped</Text>
                             </View>
                           ) : null}
                           {overdue ? (
-                            <View style={[styles.tag, isDesktop && styles.desktopBillTag, { backgroundColor: c.destructive + "18" }]}>
-                              <Text style={[styles.tagText, isDesktop && styles.desktopBillTagText, { color: c.destructive }]}>Past due · ${overdue.remainingAmount.toFixed(2)}</Text>
+                            <View style={[styles.tag, styles.activitySizedBillTag, { backgroundColor: c.destructive + "18" }]}>
+                              <Text style={[styles.tagText, styles.activitySizedBillTagText, { color: c.destructive }]}>Past due · ${overdue.remainingAmount.toFixed(2)}</Text>
                             </View>
                           ) : null}
                           {pending ? (
-                            <View style={[styles.tag, isDesktop && styles.desktopBillTag, { backgroundColor: colors.brand.blue + "18" }]}>
-                              <Text style={[styles.tagText, isDesktop && styles.desktopBillTagText, { color: colors.brand.blue }]}>
+                            <View style={[styles.tag, styles.activitySizedBillTag, { backgroundColor: colors.brand.blue + "18" }]}>
+                              <Text style={[styles.tagText, styles.activitySizedBillTagText, { color: colors.brand.blue }]}>
                                 {pending.status === "ready_review" ? "Ready to review" : "Payment pending"}
                               </Text>
                             </View>
                           ) : null}
-                          {!stopped && beforePayday ? (
-                            <View style={[styles.tag, isDesktop && styles.desktopBillTag, { backgroundColor: c.warning + "18" }]}>
-                              <Text style={[styles.tagText, isDesktop && styles.desktopBillTagText, { color: c.warning }]}>Before payday</Text>
-                            </View>
-                          ) : null}
                           {!item.is_recurring && (
-                            <View style={[styles.tag, isDesktop && styles.desktopBillTag, { backgroundColor: c.muted }]}>
-                              <Text style={[styles.tagText, isDesktop && styles.desktopBillTagText, { color: c.mutedForeground }]}>One-time</Text>
+                            <View style={[styles.tag, styles.activitySizedBillTag, { backgroundColor: c.muted }]}>
+                              <Text style={[styles.tagText, styles.activitySizedBillTagText, { color: c.mutedForeground }]}>One-time</Text>
                             </View>
                           )}
                         </View>
                       </View>
-                      <View style={[styles.cardRight, isDesktop && styles.desktopBillCardRight]}>
-                        <Text style={[styles.amount, isDesktop && styles.desktopBillAmount, { color: c.foreground }]}>${item.amount.toFixed(2)}</Text>
-                        <Text style={[styles.amountSub, isDesktop && styles.desktopBillAmountSub, { color: c.mutedForeground }]}>{frequencyText(item)}</Text>
+                      <View style={[styles.cardRight, styles.activitySizedBillCardRight]}>
+                        <Text style={[styles.amount, styles.activitySizedBillAmount, { color: c.foreground }]}>${item.amount.toFixed(2)}</Text>
+                        <Text style={[styles.amountSub, styles.activitySizedBillAmountSub, { color: c.mutedForeground }]}>{frequencyText(item)}</Text>
                       </View>
                     </View>
                   </View>
@@ -650,7 +518,7 @@ export default function BillsScreen() {
                       <Feather name="refresh-cw" size={17} color={c.primary} />
                     </Pressable>
                   ) : (
-                    <View style={[styles.editHint, isDesktop && styles.desktopBillEditHint]}>
+                    <View style={[styles.editHint, styles.activitySizedBillEditHint]}>
                       <Feather name="edit-2" size={13} color={c.mutedForeground} />
                     </View>
                   )}
@@ -980,44 +848,38 @@ const styles = StyleSheet.create({
   desktopSegmentWrap: { alignSelf: "stretch" },
   desktopToolbar: { alignSelf: "stretch" },
   desktopList: { alignSelf: "stretch", paddingTop: 8 },
-  desktopBillCard: { minHeight: 58, marginBottom: 7, alignItems: "center", shadowOpacity: 0.1, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 2 },
-  desktopBillCardBody: { padding: 11 },
-  desktopBillCardTop: { alignItems: "center", marginBottom: 0 },
-  desktopBillName: { fontSize: 13, marginBottom: 3, letterSpacing: 0 },
-  desktopBillMetaRow: { gap: 5 },
-  desktopBillMetaText: { fontSize: 9 },
-  desktopBillTag: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5 },
-  desktopBillTagText: { fontSize: 9 },
-  desktopBillCardRight: { marginLeft: 10 },
-  desktopBillAmount: { fontSize: 14 },
-  desktopBillAmountSub: { fontSize: 9 },
-  desktopBillEditHint: { paddingHorizontal: 11, paddingVertical: 10 },
+  activitySizedBillCard: { minHeight: 58, marginBottom: 7, alignItems: "center", shadowOpacity: 0.1, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 2 },
+  activitySizedBillCardBody: { padding: 11 },
+  activitySizedBillCardTop: { alignItems: "center", marginBottom: 0 },
+  activitySizedBillName: { fontSize: 13, marginBottom: 3, letterSpacing: 0 },
+  activitySizedBillMetaRow: { gap: 5 },
+  activitySizedBillMetaText: { fontSize: 9 },
+  activitySizedBillTag: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5 },
+  activitySizedBillTagText: { fontSize: 9 },
+  activitySizedBillCardRight: { marginLeft: 10 },
+  activitySizedBillAmount: { fontSize: 14 },
+  activitySizedBillAmountSub: { fontSize: 9 },
+  activitySizedBillEditHint: { paddingHorizontal: 11, paddingVertical: 10 },
   desktopCard: { minHeight: 82, borderRadius: 16, shadowOpacity: 0.12, shadowRadius: 16 },
   header:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingBottom: 14 },
   title:    { fontSize: 34, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.1 },
   subtitle: { fontSize: 13, fontFamily: "Inter_500Medium", marginTop: 3, letterSpacing: 0.2 },
-  billPromptCard: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 22, padding: 14, marginHorizontal: 16, marginBottom: 12 },
-  billPromptTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
-  billPromptText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 2 },
-  billPromptActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
-  billPromptAction: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999 },
-  billPromptActionText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   overdueCard: { flexDirection: "row", alignItems: "center", gap: 11, borderWidth: 1, borderRadius: 22, padding: 14, marginHorizontal: 16, marginBottom: 12 },
   overdueIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   overdueCopy: { flex: 1 },
   overdueEyebrow: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.7 },
   overdueTitle: { fontSize: 15, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
   overdueText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 3 },
-  billSnapshotCard: { borderWidth: 1, borderRadius: 22, padding: 14, marginHorizontal: 16, marginBottom: 12, shadowColor: "#2563eb", shadowOpacity: 0.10, shadowRadius: 18, shadowOffset: { width: 0, height: 10 } },
-  billSnapshotHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10 },
-  billSnapshotLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.8 },
-  billSnapshotTitle: { fontSize: 20, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
+  billSnapshotCard: { borderWidth: 1, borderRadius: 20, padding: 12, marginHorizontal: 16, marginBottom: 10 },
+  billSnapshotHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 10 },
+  billSnapshotLabel: { fontSize: 9, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 1 },
+  billSnapshotTitle: { fontSize: 17, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
   billSnapshotBadge: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
   billSnapshotBadgeText: { fontSize: 10, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.4 },
-  billSnapshotStats: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
-  billSnapshotStat: { flex: 1, minWidth: 86, borderWidth: 1, borderRadius: 14, padding: 10 },
+  billSnapshotStats: { flexDirection: "row", gap: 10 },
+  billSnapshotStat: { flex: 1, borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 9 },
   billSnapshotValue: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
-  billSnapshotStatLabel: { fontSize: 9, lineHeight: 12, fontFamily: "Inter_700Bold", marginTop: 2 },
+  billSnapshotStatLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.5, marginTop: 2 },
 
   // Segment toggle
   segmentWrap: {},
