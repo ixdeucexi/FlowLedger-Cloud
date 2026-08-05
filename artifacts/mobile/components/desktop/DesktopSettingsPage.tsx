@@ -609,50 +609,61 @@ export function DesktopSettingsPage({
 
             {section === "Admin" && isAdmin ? (
               <>
-                <AdminMembershipTools appearance="desktop" />
                 <DesktopCard>
-                  <CardHeader title="Test Labs" />
-                  <View style={styles.sectionBody}>
-                    <SettingsLine
-                      icon="shield"
-                      title="Zero Budget Lab"
-                      description="Test Zero Budget with isolated sample money."
-                      action={
-                        <SecondaryButton
-                          label="Open Lab"
-                          icon="arrow-up-right"
-                          onPress={() =>
-                            router.push("/(tabs)/zero-budget-lab" as never)
-                          }
-                        />
-                      }
-                    />
-                  </View>
+                  <CardHeader title="Access & Testers" />
+                  <AdminMembershipTools appearance="settings" />
                 </DesktopCard>
-                <AdminMoneyHealth
-                  householdId={activeHousehold?.householdId}
-                  appearance="desktop"
-                />
-                <NotificationSettings scope="admin" appearance="desktop" />
-                {onOpenAdmin ? (
-                  <DesktopCard>
-                    <CardHeader title="Feedback Inbox" />
+                <View style={styles.previewGrid}>
+                  <DesktopCard style={styles.previewCard}>
+                    <CardHeader title="Test Labs" />
                     <View style={styles.sectionBody}>
                       <SettingsLine
-                        icon="message-square"
-                        title="App admin inbox"
-                        description="Review, respond to, and archive tester feedback."
+                        icon="shield"
+                        title="Zero Budget Lab"
+                        description="Test Zero Budget with isolated sample money."
                         action={
                           <SecondaryButton
-                            label="Open Inbox"
-                            icon="arrow-right"
-                            onPress={onOpenAdmin}
+                            label="Open Lab"
+                            icon="arrow-up-right"
+                            onPress={() =>
+                              router.push("/(tabs)/zero-budget-lab" as never)
+                            }
                           />
                         }
                       />
                     </View>
                   </DesktopCard>
-                ) : null}
+                  {onOpenAdmin ? (
+                    <DesktopCard style={styles.previewCard}>
+                      <CardHeader title="Feedback Inbox" />
+                      <View style={styles.sectionBody}>
+                        <SettingsLine
+                          icon="message-square"
+                          title="App admin inbox"
+                          description="Review, respond to, and archive tester feedback."
+                          action={
+                            <SecondaryButton
+                              label="Open Inbox"
+                              icon="arrow-right"
+                              onPress={onOpenAdmin}
+                            />
+                          }
+                        />
+                      </View>
+                    </DesktopCard>
+                  ) : null}
+                </View>
+                <DesktopCard>
+                  <CardHeader title="System Integrity" />
+                  <AdminMoneyHealth
+                    householdId={activeHousehold?.householdId}
+                    appearance="settings"
+                  />
+                </DesktopCard>
+                <DesktopCard>
+                  <CardHeader title="Admin Notifications" />
+                  <NotificationSettings scope="admin" appearance="settings" />
+                </DesktopCard>
               </>
             ) : null}
           </View>

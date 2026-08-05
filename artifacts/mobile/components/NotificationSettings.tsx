@@ -11,6 +11,7 @@ import {
 
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { desktopPalette as palette } from "@/components/desktop/DesktopUI";
 import { isCompactSettingsLayout } from "@/lib/settingsLayout";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
@@ -72,13 +73,31 @@ const ALERT_OPTIONS: AlertOption[] = [
 
 interface NotificationSettingsProps {
   scope?: "user" | "admin";
-  appearance?: "theme" | "desktop";
+  appearance?: "theme" | "desktop" | "settings";
 }
 
 export function NotificationSettings({
   scope = "user",
+  appearance = "theme",
 }: NotificationSettingsProps) {
-  const c = useColors();
+  const themeColors = useColors();
+  const isDesktop = appearance !== "theme";
+  const isSettings = appearance === "settings";
+  const c = isDesktop ? {
+    ...themeColors,
+    card: palette.surface,
+    foreground: palette.text,
+    mutedForeground: palette.muted,
+    muted: palette.surfaceMuted,
+    border: palette.border,
+    primary: palette.purple,
+    success: palette.green,
+    destructive: palette.red,
+  } : themeColors;
+  const primarySoft = isDesktop ? palette.purpleSoft : c.primary + "18";
+  const primaryFaint = isDesktop ? palette.purpleSoft : c.primary + "14";
+  const primaryBorder = isDesktop ? palette.purple : c.primary + "66";
+  const primaryTrack = isDesktop ? palette.purple : c.primary + "88";
   const { width: viewportWidth } = useWindowDimensions();
   const compactLayout = isCompactSettingsLayout(viewportWidth);
   const { session, user } = useAuth();
@@ -227,7 +246,7 @@ export function NotificationSettings({
   );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, isDesktop && styles.desktopContainer, isSettings && styles.settingsContainer]}>
       {scope === "user" ? (
         <View
           style={[
@@ -236,7 +255,7 @@ export function NotificationSettings({
           ]}
         >
           <View style={[styles.row, compactLayout && styles.rowCompact]}>
-            <View style={[styles.icon, { backgroundColor: c.primary + "18" }]}>
+            <View style={[styles.icon, { backgroundColor: primarySoft }]}>
               <Feather name="bell" size={20} color={c.primary} />
             </View>
             <View style={styles.copy}>
@@ -257,7 +276,7 @@ export function NotificationSettings({
               }
               value={enabled}
               onValueChange={(value) => void toggleDevice(value)}
-              trackColor={{ false: c.border, true: c.primary + "88" }}
+              trackColor={{ false: c.border, true: primaryTrack }}
               thumbColor={enabled ? c.primary : c.mutedForeground}
               style={compactLayout ? styles.switchCompact : undefined}
             />
@@ -265,7 +284,7 @@ export function NotificationSettings({
         </View>
       ) : null}
 
-      <View style={styles.sectionHeading}>
+      {!isSettings ? <View style={styles.sectionHeading}>
         <Text style={[styles.sectionTitle, { color: c.foreground }]}>
           {scope === "admin" ? "Admin alerts" : "Choose your alerts"}
         </Text>
@@ -274,11 +293,13 @@ export function NotificationSettings({
             ? "Get notified when new tester feedback arrives."
             : "These choices follow your account on every device."}
         </Text>
-      </View>
+      </View> : null}
 
       <View
         style={[
           styles.optionsCard,
+          isDesktop && styles.desktopOptionsCard,
+          isSettings && styles.settingsOptionsCard,
           { backgroundColor: c.card, borderColor: c.border },
         ]}
       >
@@ -287,6 +308,7 @@ export function NotificationSettings({
             key={option.key}
             style={[
               styles.optionRow,
+              isDesktop && styles.desktopOptionRow,
               compactLayout && styles.optionRowCompact,
               index < options.length - 1
                 ? { borderBottomWidth: 1, borderBottomColor: c.border }
@@ -294,7 +316,7 @@ export function NotificationSettings({
             ]}
           >
             <View
-              style={[styles.smallIcon, { backgroundColor: c.primary + "14" }]}
+              style={[styles.smallIcon, { backgroundColor: primaryFaint }]}
             >
               <Feather name={option.icon} size={17} color={c.primary} />
             </View>
@@ -318,8 +340,8 @@ export function NotificationSettings({
                   style={({ pressed }) => [
                     styles.inlineTest,
                     {
-                      borderColor: c.primary + "66",
-                      backgroundColor: c.primary + "12",
+                      borderColor: primaryBorder,
+                      backgroundColor: primaryFaint,
                       opacity:
                         !preferences[option.key] ||
                         testingKey !== null ||
@@ -347,7 +369,7 @@ export function NotificationSettings({
               onValueChange={(value) =>
                 void togglePreference(option.key, value)
               }
-              trackColor={{ false: c.border, true: c.primary + "88" }}
+              trackColor={{ false: c.border, true: primaryTrack }}
               thumbColor={
                 preferences[option.key] ? c.primary : c.mutedForeground
               }
@@ -398,6 +420,8 @@ export function NotificationSettings({
 
 const styles = StyleSheet.create({
   container: { gap: 14 },
+  desktopContainer: { gap: 12 },
+  settingsContainer: { gap: 0 },
   card: { borderWidth: 1, borderRadius: 16, padding: 16 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   rowCompact: { alignItems: "stretch", flexDirection: "column", gap: 9 },
@@ -426,6 +450,8 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   optionsCard: { borderWidth: 1, borderRadius: 16, overflow: "hidden" },
+  desktopOptionsCard: { borderRadius: 10 },
+  settingsOptionsCard: { borderWidth: 0, borderRadius: 0 },
   optionRow: {
     minHeight: 82,
     paddingHorizontal: 14,
@@ -434,6 +460,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 11,
   },
+  desktopOptionRow: { minHeight: 66, paddingHorizontal: 15, paddingVertical: 11 },
   optionRowCompact: { alignItems: "stretch", flexDirection: "column", gap: 9 },
   optionTitle: { fontFamily: "Inter_700Bold", fontSize: 14 },
   inlineTest: {
