@@ -15,7 +15,7 @@ import { DatePickerField } from "@/components/DatePickerField";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
-import { DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_WIDE } from "@/lib/desktopModal";
+import { DESKTOP_MODAL_HANDLE, DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_WIDE } from "@/lib/desktopModal";
 import type { ConfirmActionOptions } from "@/lib/confirmAction";
 import { MONTH_NAMES } from "@/lib/dateLabels";
 import { BILL_IMPORTANCE_OPTIONS, normalizeBillImportance, type BillImportance } from "@/lib/billImportance";
@@ -247,8 +247,9 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
       onRequestClose={() => confirmation ? setConfirmation(null) : onClose()}
     >
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.overlay, isDesktop && DESKTOP_MODAL_OVERLAY]}>
+        <Pressable accessibilityLabel="Close bill editor" onPress={onClose} style={StyleSheet.absoluteFillObject} />
         <View style={[styles.container, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_WIDE]}>
-          <View style={styles.handle} />
+          <View style={[styles.handle, isDesktop && DESKTOP_MODAL_HANDLE]} />
           <View style={styles.header}>
             <Text style={[styles.title, { color: c.foreground }]}>
               {title ?? (editBill ? `Edit ${noun}` : `Add ${noun}`)}
@@ -258,7 +259,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
             </Pressable>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollView showsVerticalScrollIndicator={isDesktop} keyboardShouldPersistTaps="handled">
 
             {/* Name */}
             <Text style={lbl}>{noun} Name</Text>

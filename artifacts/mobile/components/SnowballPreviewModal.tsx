@@ -7,7 +7,7 @@ import { DatePickerField } from "@/components/DatePickerField";
 import type { DebtMethod, SnowballProjectionResult } from "@/lib/snowball";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
-import { DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_WIDE } from "@/lib/desktopModal";
+import { DESKTOP_MODAL_HANDLE, DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_WIDE } from "@/lib/desktopModal";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import type { ConfirmActionOptions } from "@/lib/confirmAction";
 import { MONTH_NAMES } from "@/lib/dateLabels";
@@ -50,8 +50,8 @@ export function SnowballPreviewModal({ visible, method, preview, amount, existin
   return (
     <Modal visible={visible} transparent animationType={isDesktop ? "fade" : "slide"} onRequestClose={() => confirmation ? setConfirmation(null) : onClose()}>
       <Pressable style={[styles.overlay, isDesktop && DESKTOP_MODAL_OVERLAY]} onPress={onClose}>
-        <Pressable style={[styles.sheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_WIDE]} onPress={() => {}}>
-          <View style={[styles.handle, { backgroundColor: c.border }]} />
+        <Pressable style={[styles.sheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_WIDE]} onPress={event => event.stopPropagation()}>
+          <View style={[styles.handle, { backgroundColor: c.border }, isDesktop && DESKTOP_MODAL_HANDLE]} />
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.title, { color: c.foreground }]}>{existingPayment ? `Edit ${methodName} Payment` : `${methodName} Preview`}</Text>

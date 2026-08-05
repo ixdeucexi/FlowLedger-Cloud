@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   DESKTOP_MODAL_COMPACT,
+  DESKTOP_MODAL_HANDLE,
+  DESKTOP_MODAL_MATCH,
   DESKTOP_MODAL_OVERLAY,
   DESKTOP_MODAL_REGULAR,
   DESKTOP_MODAL_WIDE,
@@ -22,4 +24,7 @@ test("desktop dialogs use deliberate size tiers instead of full-width sheets", (
   assert.equal(DESKTOP_MODAL_COMPACT.maxHeight, "86%");
   assert.equal(DESKTOP_MODAL_REGULAR.borderRadius, 24);
   assert.equal(DESKTOP_MODAL_WIDE.width, "100%");
+  assert.equal(DESKTOP_MODAL_MATCH.maxWidth, 820);
+  assert.equal(DESKTOP_MODAL_MATCH.maxHeight, "80%");
+  assert.equal(DESKTOP_MODAL_HANDLE.display, "none");
 });

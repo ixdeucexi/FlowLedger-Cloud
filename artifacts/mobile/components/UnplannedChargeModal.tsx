@@ -6,7 +6,7 @@ import type { Transaction } from "@/context/BudgetContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
-import { DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR } from "@/lib/desktopModal";
+import { DESKTOP_MODAL_HANDLE, DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR } from "@/lib/desktopModal";
 
 interface UnplannedChargeModalProps {
   visible: boolean;
@@ -50,8 +50,9 @@ export function UnplannedChargeModal({ visible, transaction, categories, saving,
   return (
     <Modal visible={visible} animationType={isDesktop ? "fade" : "slide"} transparent onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.overlay, isDesktop && DESKTOP_MODAL_OVERLAY]}>
+        <Pressable accessibilityLabel="Close forgotten expense" onPress={onClose} style={StyleSheet.absoluteFillObject} />
         <View style={[styles.container, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_REGULAR]}>
-          <View style={[styles.handle, { backgroundColor: c.border }]} />
+          <View style={[styles.handle, { backgroundColor: c.border }, isDesktop && DESKTOP_MODAL_HANDLE]} />
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.eyebrow, { color: c.primary }]}>FORGOTTEN EXPENSE</Text>
@@ -62,7 +63,7 @@ export function UnplannedChargeModal({ visible, transaction, categories, saving,
             </Pressable>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollView showsVerticalScrollIndicator={isDesktop} keyboardShouldPersistTaps="handled">
             <Text style={[styles.intro, { color: c.mutedForeground }]}>Keep it one-time or make it a bill.</Text>
 
             <View style={[styles.bankCard, { backgroundColor: c.card, borderColor: c.border }]}>

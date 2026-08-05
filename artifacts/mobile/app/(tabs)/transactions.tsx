@@ -26,7 +26,7 @@ import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
-import { DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR, DESKTOP_MODAL_WIDE } from "@/lib/desktopModal";
+import { DESKTOP_MODAL_HANDLE, DESKTOP_MODAL_MATCH, DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR } from "@/lib/desktopModal";
 import { debtPaymentStatusLabel } from "@/lib/forecastDisplay";
 import { canMatchExpenseToBill, confirmedBillMatchId, confirmedBillMatchOccurrenceDate, isCashFlowTransaction, isCheckingBalanceTransaction, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "@/lib/billMatching";
 import { activityAmountOutsidePlannedBill, listActivityMonths, summarizeActivityMonth } from "@/lib/monthlySummary";
@@ -156,6 +156,8 @@ export function ActivityScreen() {
     editDebtPaymentAt?: string;
     pendingId?: string;
     pendingAt?: string;
+    activityId?: string;
+    activityAt?: string;
   }>();
   const { isFeatureLocked, bypassFeature } = useMembership();
   const {
@@ -203,6 +205,7 @@ export function ActivityScreen() {
   } | null>(null);
   const handledExtraPaymentRouteRef = useRef("");
   const handledPendingRouteRef = useRef("");
+  const handledActivityRouteRef = useRef("");
   useBackDismiss(!!detailItem, () => setDetailItem(null));
   useBackDismiss(filterModalVisible, () => setFilterModalVisible(false));
   useBackDismiss(weeklySummaryVisible, () => setWeeklySummaryVisible(false));
@@ -1144,6 +1147,17 @@ export function ActivityScreen() {
     }
   };
 
+  useEffect(() => {
+    const activityId = Array.isArray(params.activityId) ? params.activityId[0] : params.activityId;
+    if (!activityId) return;
+    const routeToken = `${activityId}:${Array.isArray(params.activityAt) ? params.activityAt[0] : params.activityAt ?? ""}`;
+    if (handledActivityRouteRef.current === routeToken) return;
+    const activityItem = allActivity.find(item => item.rawTx?.id === activityId);
+    if (!activityItem) return;
+    handledActivityRouteRef.current = routeToken;
+    openItem(activityItem);
+  }, [allActivity, params.activityAt, params.activityId]);
+
   // ── Detail sheet for auto-generated entries ───────────────────────────────
   const renderWeeklySummarySheet = () => (
     <Modal
@@ -1155,7 +1169,7 @@ export function ActivityScreen() {
       <Pressable style={styles.summaryOverlay} onPress={() => setWeeklySummaryVisible(false)}>
         <Pressable
           style={[styles.summarySheet, { backgroundColor: c.card, borderColor: c.border }]}
-          onPress={() => {}}
+          onPress={event => event.stopPropagation()}
         >
           <View style={styles.summarySheetHeader}>
             <View>
@@ -1213,13 +1227,15 @@ export function ActivityScreen() {
       <Modal
         visible={!!detailItem}
         transparent
-        animationType="slide"
+        animationType={isDesktop ? "fade" : "slide"}
         onRequestClose={() => setDetailItem(null)}
       >
         <Pressable style={[styles.sheetOverlay, isDesktop && DESKTOP_MODAL_OVERLAY]} onPress={() => setDetailItem(null)}>
-          <Pressable style={[styles.sheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_REGULAR]} onPress={() => {}}>
+          <Pressable style={[styles.sheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_REGULAR]} onPress={event => event.stopPropagation()}>
             {/* Handle */}
-            <View style={[styles.sheetHandle, { backgroundColor: c.border }]} />
+            <View style={[styles.sheetHandle, { backgroundColor: c.border }, isDesktop && DESKTOP_MODAL_HANDLE]} />
+
+            <ScrollView showsVerticalScrollIndicator={isDesktop} contentContainerStyle={styles.sheetScrollContent}>
 
             {/* Icon + title */}
             <View style={styles.sheetHeader}>
@@ -1350,6 +1366,7 @@ export function ActivityScreen() {
             >
               <Text style={[styles.sheetCloseText, { color: c.primaryForeground }]}>Done</Text>
             </Pressable>
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1524,7 +1541,7 @@ export function ActivityScreen() {
         contentContainerStyle={[styles.list, { paddingBottom: listBottomPadding }]}
         scrollIndicatorInsets={{ bottom: listBottomPadding }}
         stickySectionHeadersEnabled
-        ListHeaderComponent={renderListHeader}
+        ListHeaderComponent={renderListHeader()}
         ListEmptyComponent={
           <EmptyState
             icon="repeat"
@@ -1619,12 +1636,12 @@ export function ActivityScreen() {
       <Modal
         visible={!!pendingMatchTx}
         transparent
-        animationType="slide"
+        animationType={isDesktop ? "fade" : "slide"}
         onRequestClose={() => setPendingMatchTx(null)}
       >
         <Pressable style={[styles.matchOverlay, isDesktop && DESKTOP_MODAL_OVERLAY]} onPress={() => setPendingMatchTx(null)}>
-          <Pressable style={[styles.matchSheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_WIDE]} onPress={() => {}}>
-            <View style={[styles.filterHandle, { backgroundColor: c.border }]} />
+          <Pressable style={[styles.matchSheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_MATCH]} onPress={event => event.stopPropagation()}>
+            <View style={[styles.filterHandle, { backgroundColor: c.border }, isDesktop && DESKTOP_MODAL_HANDLE]} />
             <View style={styles.matchHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.matchEyebrow, { color: c.warning }]}>PENDING BANK PAYMENT</Text>
@@ -1670,7 +1687,7 @@ export function ActivityScreen() {
                 <Text style={[styles.matchIntro, { color: c.mutedForeground }]}>
                   Choose the bill this pending payment is expected to cover.
                 </Text>
-                <ScrollView style={styles.matchList} showsVerticalScrollIndicator={false}>
+                <ScrollView style={[styles.matchList, isDesktop && styles.desktopMatchList]} showsVerticalScrollIndicator={isDesktop}>
                   {pendingBillMatchOptions.length > 0 ? pendingBillMatchOptions.map((option, index) => (
                     <Pressable
                       key={`${option.billId}-${option.nearestOccurrenceDate}`}
@@ -1724,12 +1741,12 @@ export function ActivityScreen() {
       <Modal
         visible={!!matchTx}
         transparent
-        animationType="slide"
+        animationType={isDesktop ? "fade" : "slide"}
         onRequestClose={() => setMatchTx(null)}
       >
         <Pressable style={[styles.matchOverlay, isDesktop && DESKTOP_MODAL_OVERLAY]} onPress={() => setMatchTx(null)}>
-          <Pressable style={[styles.matchSheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_WIDE]} onPress={() => {}}>
-            <View style={[styles.filterHandle, { backgroundColor: c.border }]} />
+          <Pressable style={[styles.matchSheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_MATCH]} onPress={event => event.stopPropagation()}>
+            <View style={[styles.filterHandle, { backgroundColor: c.border }, isDesktop && DESKTOP_MODAL_HANDLE]} />
             <View style={styles.matchHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.matchEyebrow, { color: c.mutedForeground }]}>{matchingBankActivity ? "BANK ACTIVITY" : "MANUAL EXPENSE"}</Text>
@@ -1759,7 +1776,7 @@ export function ActivityScreen() {
             ) : (
               <>
                 <Text style={[styles.matchIntro, { color: c.mutedForeground }]}>Choose what this payment covered.</Text>
-                <ScrollView style={styles.matchList} showsVerticalScrollIndicator={false}>
+                <ScrollView style={[styles.matchList, isDesktop && styles.desktopMatchList]} showsVerticalScrollIndicator={isDesktop}>
                   {combinedMatchOptions.length > 0 ? combinedMatchOptions.map((option, index) => (
                     <Pressable
                       key={`${option.targetType}-${option.billId}`}
@@ -1909,12 +1926,12 @@ export function ActivityScreen() {
       <Modal
         visible={filterModalVisible}
         transparent
-        animationType="slide"
+        animationType={isDesktop ? "fade" : "slide"}
         onRequestClose={() => setFilterModalVisible(false)}
       >
         <Pressable style={[styles.filterOverlay, isDesktop && DESKTOP_MODAL_OVERLAY]} onPress={() => setFilterModalVisible(false)}>
-          <Pressable style={[styles.filterSheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_REGULAR]} onPress={() => {}}>
-            <View style={[styles.filterHandle, { backgroundColor: c.border }]} />
+          <Pressable style={[styles.filterSheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_REGULAR]} onPress={event => event.stopPropagation()}>
+            <View style={[styles.filterHandle, { backgroundColor: c.border }, isDesktop && DESKTOP_MODAL_HANDLE]} />
             <View style={styles.filterSheetHeader}>
               <View>
                 <Text style={[styles.filterSheetTitle, { color: c.foreground }]}>Filter activity</Text>
@@ -1925,7 +1942,7 @@ export function ActivityScreen() {
               </Pressable>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={styles.filterSheetScroll}>
+            <ScrollView showsVerticalScrollIndicator={isDesktop} style={styles.filterSheetScroll}>
               <Text style={[styles.filterGroupLabel, { color: c.mutedForeground, marginTop: 2 }]}>QUICK FILTERS</Text>
               <View style={styles.filterOptionGrid}>
                 {quickChips.map(chip => (
@@ -2198,6 +2215,7 @@ const styles = StyleSheet.create({
   matchAmount: { fontSize: 13, fontFamily: "Inter_700Bold", marginTop: 5 },
   matchIntro: { fontSize: 12, fontFamily: "Inter_500Medium", lineHeight: 18, marginBottom: 12 },
   matchList: { flexGrow: 0, maxHeight: 420 },
+  desktopMatchList: { maxHeight: 360 },
   matchBody: { gap: 12 },
   matchRow: { borderWidth: 1, borderRadius: 16, padding: 12, marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 10 },
   matchIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
@@ -2236,6 +2254,7 @@ const styles = StyleSheet.create({
   // Detail bottom sheet
   sheetOverlay:    { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.55)" },
   sheet:           { borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 20, paddingBottom: 36, paddingTop: 12 },
+  sheetScrollContent: { paddingBottom: 2 },
   sheetHandle:     { width: 38, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 18 },
   sheetHeader:     { flexDirection: "row", alignItems: "flex-start", gap: 14, marginBottom: 18 },
   sheetIconWrap:   { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },

@@ -54,6 +54,7 @@ export function SnowballModal({ visible, onClose, method, onRun }: Props) {
   return (
     <Modal visible={visible} animationType={isDesktop ? "fade" : "slide"} transparent onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.overlay, isDesktop && DESKTOP_MODAL_OVERLAY]}>
+        <Pressable accessibilityLabel="Close debt payment editor" onPress={handleClose} style={StyleSheet.absoluteFillObject} />
         <View style={[styles.container, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_REGULAR]}>
           <View style={styles.header}>
             <View>
@@ -69,7 +70,7 @@ export function SnowballModal({ visible, onClose, method, onRun }: Props) {
             </Pressable>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollView showsVerticalScrollIndicator={isDesktop} keyboardShouldPersistTaps="handled">
             {!ran ? (
               <>
                 <Text style={[styles.label, { color: c.mutedForeground }]}>Extra Payment Amount ($)</Text>
