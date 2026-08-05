@@ -1,9 +1,11 @@
 import { Feather } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { useBudget } from "@/context/BudgetContext";
 import { isActiveTransaction } from "@/lib/billMatching";
+import { desktopPlannerDestination } from "@/lib/desktopActions";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 
@@ -92,6 +94,7 @@ function PageHeader({ eyebrow, title, description, action, onAction }: {
       </View>
       <Pressable
         accessibilityRole="button"
+        accessibilityLabel={action}
         onPress={onAction}
         style={({ pressed }) => [styles.primaryButton, { opacity: pressed ? 0.76 : 1 }]}
       >
@@ -164,7 +167,7 @@ function EmptyRow({ text }: { text: string }) {
   );
 }
 
-function BillsPage({ debtOnly, onOpenPlanner }: { debtOnly: boolean; onOpenPlanner: () => void }) {
+function BillsPage({ debtOnly, onOpenPlanner, onOpenSnowball }: { debtOnly: boolean; onOpenPlanner: () => void; onOpenSnowball: () => void }) {
   const {
     bills,
     connectedBankAccounts,
@@ -193,7 +196,7 @@ function BillsPage({ debtOnly, onOpenPlanner }: { debtOnly: boolean; onOpenPlann
           ? "Balances, minimums, and snowball priority in one desktop view."
           : "See every recurring commitment and what remains this month."}
         action={debtOnly ? "Open snowball planner" : "Manage bills"}
-        onAction={onOpenPlanner}
+        onAction={debtOnly ? onOpenSnowball : onOpenPlanner}
       />
       <View style={styles.statGrid}>
         <Stat label={debtOnly ? "Total debt" : "Planned this month"} value={currency(debtOnly ? debtBalance : planned)} detail={`${rows.length} active ${debtOnly ? "debt" : "bill"}${rows.length === 1 ? "" : "s"}`} icon={debtOnly ? "credit-card" : "file-text"} tone="purple" />
@@ -242,7 +245,7 @@ function BillsPage({ debtOnly, onOpenPlanner }: { debtOnly: boolean; onOpenPlann
   );
 }
 
-function ActivityPage({ onOpenPlanner }: { onOpenPlanner: () => void }) {
+function ActivityPage({ onOpenReview }: { onOpenReview: () => void }) {
   const { getTransactionsForMonth, pendingBankTransactions, selectedYear } = useBudget();
   const month = new Date().getMonth();
   const rows = getTransactionsForMonth(month, selectedYear)
@@ -254,7 +257,7 @@ function ActivityPage({ onOpenPlanner }: { onOpenPlanner: () => void }) {
 
   return (
     <>
-      <PageHeader eyebrow="Ledger" title="Activity" description="A web-first ledger for imported and manual activity across your plan." action="Open review center" onAction={onOpenPlanner} />
+      <PageHeader eyebrow="Ledger" title="Activity" description="A web-first ledger for imported and manual activity across your plan." action="Open review center" onAction={onOpenReview} />
       <View style={styles.statGrid}>
         <Stat label="Money in" value={currency(income)} detail={`${MONTHS[month]} inflows`} icon="arrow-down-left" tone="green" />
         <Stat label="Money out" value={currency(spending)} detail={`${MONTHS[month]} outflows`} icon="arrow-up-right" tone="purple" />
@@ -445,7 +448,7 @@ function ReportsPage({ onOpenPlanner }: { onOpenPlanner: () => void }) {
   );
 }
 
-function SettingsPage({ onOpenPlanner }: { onOpenPlanner: () => void }) {
+function SettingsPage({ onOpenPlanner, onOpenMoneySettings }: { onOpenPlanner: () => void; onOpenMoneySettings: () => void }) {
   const { settings, connectedBankAccounts, accounts, forecastConfidence, activeHousehold } = useBudget();
   const confidenceLabel = forecastConfidence.label;
   const settingRows = [
@@ -465,12 +468,18 @@ function SettingsPage({ onOpenPlanner }: { onOpenPlanner: () => void }) {
       </View>
       <Panel title="Planning preferences" subtitle="These settings apply everywhere you use FlowLedger">
         {settingRows.map((row, index) => (
-          <View key={row.label} style={[styles.settingRow, index > 0 && styles.tableDivider]}>
+          <Pressable
+            key={row.label}
+            accessibilityRole="button"
+            accessibilityLabel={`Edit ${row.label}`}
+            onPress={onOpenMoneySettings}
+            style={({ pressed }) => [styles.settingRow, index > 0 && styles.tableDivider, { opacity: pressed ? 0.72 : 1 }]}
+          >
             <View style={styles.settingIcon}><Feather name={row.icon} size={16} color="#b9a7ff" /></View>
             <View style={{ flex: 1 }}><Text style={styles.rowName}>{row.label}</Text><Text style={styles.rowMeta}>{row.detail}</Text></View>
             <Text style={styles.settingValue}>{row.value}</Text>
             <Feather name="chevron-right" size={16} color="#5f6d84" />
-          </View>
+          </Pressable>
         ))}
       </Panel>
     </>
@@ -478,14 +487,15 @@ function SettingsPage({ onOpenPlanner }: { onOpenPlanner: () => void }) {
 }
 
 export function DesktopWorkspacePage({ pathname, section, onOpenPlanner }: DesktopWorkspacePageProps) {
+  const router = useRouter();
   const { dashboardFilter } = useBudget();
   const normalized = pathname === "/(tabs)" ? "/" : pathname;
   let content: React.ReactNode;
 
   if (normalized === "/bills") {
-    content = <BillsPage debtOnly={dashboardFilter === "debt"} onOpenPlanner={onOpenPlanner} />;
+    content = <BillsPage debtOnly={dashboardFilter === "debt"} onOpenPlanner={onOpenPlanner} onOpenSnowball={() => router.push("/snowball-plan" as never)} />;
   } else if (normalized === "/transactions") {
-    content = <ActivityPage onOpenPlanner={onOpenPlanner} />;
+    content = <ActivityPage onOpenReview={() => router.push(desktopPlannerDestination("review") as never)} />;
   } else if (normalized === "/monthly") {
     content = <CalendarPage onOpenPlanner={onOpenPlanner} />;
   } else if (normalized === "/more" && section === "money") {
@@ -495,7 +505,7 @@ export function DesktopWorkspacePage({ pathname, section, onOpenPlanner }: Deskt
   } else if (normalized === "/more" && section === "reports") {
     content = <ReportsPage onOpenPlanner={onOpenPlanner} />;
   } else {
-    content = <SettingsPage onOpenPlanner={onOpenPlanner} />;
+    content = <SettingsPage onOpenPlanner={onOpenPlanner} onOpenMoneySettings={() => router.push({ pathname: "/(tabs)/more", params: { section: "money", mode: "planner" } } as never)} />;
   }
 
   return (

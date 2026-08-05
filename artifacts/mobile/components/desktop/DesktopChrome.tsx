@@ -13,7 +13,13 @@ import {
 
 import { useAuth } from "@/context/AuthContext";
 import { useBudget, type DashboardFilter } from "@/context/BudgetContext";
+import { DesktopAddMenu } from "@/components/desktop/DesktopAddMenu";
 import { DesktopWorkspacePage } from "@/components/desktop/DesktopWorkspacePage";
+import {
+  desktopAddDestination,
+  desktopPlannerDestination,
+  type DesktopAddAction,
+} from "@/lib/desktopActions";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 
@@ -85,6 +91,7 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(width < 1180);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -122,8 +129,16 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
     }
     setNotificationsOpen(false);
     setProfileOpen(false);
+    setAddOpen(false);
     setSearchOpen(false);
     setSearchQuery("");
+  };
+
+  const launchAddAction = (action: DesktopAddAction) => {
+    router.push(desktopAddDestination(action) as never);
+    setAddOpen(false);
+    setNotificationsOpen(false);
+    setProfileOpen(false);
   };
 
   const isActive = (item: NavigationItem) => {
@@ -178,7 +193,10 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
             <Feather name="search" size={16} color="#69758d" />
             <TextInput
               accessibilityLabel="Search FlowLedger"
-              onFocus={() => setSearchOpen(true)}
+              onFocus={() => {
+                setSearchOpen(true);
+                setAddOpen(false);
+              }}
               onChangeText={setSearchQuery}
               onSubmitEditing={() => {
                 if (searchResults[0]) navigateTo(searchResults[0]);
@@ -223,20 +241,23 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
         </View>
 
         <View style={styles.topbarActions}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Add to your plan"
-            onPress={() =>
-              router.push({
-                pathname: "/(tabs)/more",
-                params: { section: "money" },
-              } as never)
-            }
-            style={({ pressed }) => [styles.addButton, { opacity: pressed ? 0.78 : 1 }]}
-          >
-            <Feather name="plus" size={17} color="#ffffff" />
-            {!compactActions ? <Text style={styles.addButtonText}>Add</Text> : null}
-          </Pressable>
+          <View style={styles.actionAnchor}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add to your plan"
+              accessibilityState={{ expanded: addOpen }}
+              onPress={() => {
+                setAddOpen((value) => !value);
+                setNotificationsOpen(false);
+                setProfileOpen(false);
+              }}
+              style={({ pressed }) => [styles.addButton, { opacity: pressed ? 0.78 : 1 }]}
+            >
+              <Feather name="plus" size={17} color="#ffffff" />
+              {!compactActions ? <Text style={styles.addButtonText}>Add</Text> : null}
+            </Pressable>
+            {addOpen ? <DesktopAddMenu onSelect={launchAddAction} style={styles.topAddMenu} /> : null}
+          </View>
 
           <Pressable
             accessibilityRole="button"
@@ -254,6 +275,7 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
               onPress={() => {
                 setNotificationsOpen((value) => !value);
                 setProfileOpen(false);
+                setAddOpen(false);
               }}
               style={({ pressed }) => [
                 styles.iconButton,
@@ -272,10 +294,7 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
                 </Text>
                 <Pressable
                   onPress={() => {
-                    router.push({
-                      pathname: "/(tabs)/more",
-                      params: { section: "notifications" },
-                    } as never);
+                    router.push(desktopPlannerDestination("notifications") as never);
                     setNotificationsOpen(false);
                   }}
                   style={styles.notificationSettingsRow}
@@ -295,6 +314,7 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
               onPress={() => {
                 setProfileOpen((value) => !value);
                 setNotificationsOpen(false);
+                setAddOpen(false);
               }}
               style={({ pressed }) => [
                 styles.profileButton,
@@ -323,7 +343,10 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
                 </Text>
                 <View style={styles.popoverDivider} />
                 <Pressable
-                  onPress={() => navigateTo(NAVIGATION[NAVIGATION.length - 1])}
+                  onPress={() => {
+                    router.push(desktopPlannerDestination("accounts") as never);
+                    setProfileOpen(false);
+                  }}
                   style={styles.profileMenuRow}
                 >
                   <Feather name="settings" size={15} color="#aab7cc" />
@@ -672,6 +695,7 @@ const styles = StyleSheet.create({
     zIndex: 60,
   },
   actionAnchor: { position: "relative" },
+  topAddMenu: { top: 50, right: 0 },
   iconButton: {
     width: 40,
     height: 40,
