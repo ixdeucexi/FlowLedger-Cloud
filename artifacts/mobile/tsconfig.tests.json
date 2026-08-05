@@ -121,5 +121,7 @@
     ,"lib/dashboardFinancialModel.test.ts"
     ,"lib/desktopModal.ts"
     ,"lib/desktopModal.test.ts"
+    ,"lib/transactionDebt.ts"
+    ,"lib/transactionDebt.test.ts"
   ]
 }

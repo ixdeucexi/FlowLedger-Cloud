@@ -43,6 +43,7 @@ export type DesktopActivityRow = {
   detail?: string;
   accountName?: string;
   note?: string;
+  debtName?: string;
 };
 
 type Summary = { title: string; income: number; out: number; net: number };
@@ -79,7 +80,7 @@ function exportRows(rows: DesktopActivityRow[]) {
   const escape = (value: unknown) =>
     `"${String(value ?? "").replace(/"/g, '""')}"`;
   const csv = [
-    ["Date", "Description", "Category", "Account", "Amount", "Type", "Note"]
+    ["Date", "Description", "Category", "Account", "Amount", "Type", "Applied Debt", "Note"]
       .map(escape)
       .join(","),
     ...rows.map((row) =>
@@ -90,6 +91,7 @@ function exportRows(rows: DesktopActivityRow[]) {
         row.accountName ?? "",
         row.amount,
         sourceLabel(row.source),
+        row.debtName ?? "",
         row.note ?? "",
       ]
         .map(escape)
@@ -169,6 +171,7 @@ export function DesktopActivityPage({
             (!query ||
               row.label.toLowerCase().includes(query) ||
               row.category.toLowerCase().includes(query) ||
+              row.debtName?.toLowerCase().includes(query) ||
               row.note?.toLowerCase().includes(query)) &&
             (account === "All Accounts" || row.accountName === account) &&
             (category === "All Categories" || row.category === category) &&
@@ -388,6 +391,12 @@ export function DesktopActivityPage({
                           {row.note}
                         </Text>
                       ) : null}
+                      {row.debtName ? (
+                        <View style={styles.debtIndicator}>
+                          <Feather name="credit-card" size={9} color={palette.purple} />
+                          <Text style={styles.debtIndicatorText} numberOfLines={1}>Applied to {row.debtName}</Text>
+                        </View>
+                      ) : null}
                     </View>
                   </View>
                   <View style={styles.colCategory}>
@@ -606,6 +615,8 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     marginTop: 2,
   },
+  debtIndicator: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 },
+  debtIndicatorText: { flexShrink: 1, color: palette.purple, fontSize: 8, fontFamily: "Inter_700Bold" },
   summaryBody: { padding: 14 },
   summaryRow: {
     minHeight: 28,

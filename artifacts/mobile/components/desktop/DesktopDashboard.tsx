@@ -37,6 +37,7 @@ import {
 import { buildDashboardFinancialModel } from "@/lib/dashboardFinancialModel";
 import { desktopActivityDestination, isDesktopAddAction, type DesktopAddAction } from "@/lib/desktopActions";
 import { WIDE_DESKTOP_BREAKPOINT } from "@/lib/desktopExperience";
+import { transactionDebt } from "@/lib/transactionDebt";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 type Accent = "cyan" | "purple" | "green" | "amber" | "blue" | "neutral";
@@ -908,6 +909,7 @@ export function DesktopDashboard() {
                 {recentActivity.length ? (
                   recentActivity.map((transaction, index) => {
                     const positive = transaction.amount >= 0;
+                    const selectedDebt = transactionDebt(transaction, bills);
                     return (
                       <Pressable
                         key={transaction.id}
@@ -947,6 +949,12 @@ export function DesktopDashboard() {
                               ? "Needs review"
                               : transaction.category || (positive ? "Income" : "Spending")}
                           </Text>
+                          {selectedDebt ? (
+                            <View style={styles.activityDebtMeta}>
+                              <Feather name="credit-card" size={8} color={BRAND.purple} />
+                              <Text style={styles.activityDebtText} numberOfLines={1}>Applied to {selectedDebt.name}</Text>
+                            </View>
+                          ) : null}
                         </View>
                         <View style={styles.activityAmountWrap}>
                           <Text
@@ -1699,6 +1707,8 @@ const styles = StyleSheet.create({
   },
   activityName: { color: "#e8eef8", fontSize: 10, fontFamily: "Inter_700Bold" },
   activityMeta: { color: "#6f7d94", fontSize: 8, fontFamily: "Inter_500Medium", marginTop: 2 },
+  activityDebtMeta: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 },
+  activityDebtText: { flexShrink: 1, color: BRAND.purple, fontSize: 8, fontFamily: "Inter_700Bold" },
   activityAmountWrap: { alignItems: "flex-end" },
   activityAmount: { fontSize: 10, fontFamily: "Inter_800ExtraBold" },
   activityDate: { color: "#627087", fontSize: 8, fontFamily: "Inter_500Medium", marginTop: 2 },

@@ -97,6 +97,7 @@ import {
   pendingMatchStatusLabel,
   unmatchedPendingTransactions,
 } from "@/lib/pendingPlanMatches";
+import { transactionDebt } from "@/lib/transactionDebt";
 import { CategoryBudgetScreen } from "./category-budget";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -136,6 +137,7 @@ interface ActivityItem {
   pending?: boolean;
   rawPending?: PendingBankTransaction;
   pendingMatchLabel?: string;
+  debtName?: string;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -471,6 +473,7 @@ export function ActivityScreen() {
       const matchedIncome = tx.linked_income_id
         ? incomes.find((income) => income.id === tx.linked_income_id)
         : undefined;
+      const selectedDebt = transactionDebt(tx, bills);
       const allocationDetail = (tx.review_allocations ?? [])
         .map((allocation) => {
           if (
@@ -511,6 +514,7 @@ export function ActivityScreen() {
         source,
         editable: true,
         rawTx: tx,
+        debtName: selectedDebt?.name,
         detail:
           allocationDetail ||
           (tx.note ? `${tx.note} · ${tx.category}` : tx.category),
@@ -2071,6 +2075,9 @@ export function ActivityScreen() {
                   label: "Source",
                   value: meta.description,
                 },
+                ...(detailItem.debtName
+                  ? [{ icon: "credit-card" as const, label: "Applied toward debt", value: detailItem.debtName }]
+                  : []),
                 ...(detailItem.detail
                   ? [
                       {
@@ -2557,6 +2564,7 @@ export function ActivityScreen() {
             pending: item.pending,
             detail: item.detail,
             note: item.rawTx?.note,
+            debtName: item.debtName,
             accountName: item.rawTx?.account_id
               ? accounts.find(
                   (account) => account.id === item.rawTx?.account_id,
@@ -2701,6 +2709,12 @@ export function ActivityScreen() {
                         </Text>
                       </View>
                     )}
+                    {item.debtName ? (
+                      <View style={[styles.debtBadge, { backgroundColor: c.primary + "18" }]}>
+                        <Feather name="credit-card" size={9} color={c.primary} />
+                        <Text style={[styles.debtBadgeText, { color: c.primary }]} numberOfLines={1}>Applied to {item.debtName}</Text>
+                      </View>
+                    ) : null}
                     {item.pending ? (
                       <View
                         style={[
@@ -4293,6 +4307,8 @@ const styles = StyleSheet.create({
   sourceBadgeText: { fontSize: 9, fontFamily: "Inter_700Bold" },
   catBadge: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5 },
   catBadgeText: { fontSize: 9, fontFamily: "Inter_600SemiBold" },
+  debtBadge: { maxWidth: 180, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, flexDirection: "row", alignItems: "center", gap: 3 },
+  debtBadgeText: { flexShrink: 1, fontSize: 9, fontFamily: "Inter_700Bold" },
   txDate: { fontSize: 9, fontFamily: "Inter_400Regular" },
   txRight: { alignItems: "flex-end" },
   txAmount: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
