@@ -10,26 +10,77 @@ import {
 } from "react-native";
 
 export const desktopPalette = {
-  canvas: "#f8fafc",
-  surface: "#ffffff",
-  border: "#e4e7ec",
-  borderSoft: "#eef0f3",
-  text: "#101828",
-  textSecondary: "#475467",
-  muted: "#667085",
-  faint: "#98a2b3",
-  purple: "#6d3bea",
-  purpleDark: "#5b2fc7",
-  purpleSoft: "#f1edff",
-  green: "#039855",
-  greenSoft: "#ecfdf3",
-  red: "#d92d20",
-  redSoft: "#fef3f2",
-  amber: "#dc6803",
-  amberSoft: "#fffaeb",
-  blue: "#1570ef",
-  blueSoft: "#eff8ff",
+  canvas: "var(--fl-desktop-canvas, #ffffff)",
+  surface: "var(--fl-desktop-surface, #ffffff)",
+  surfaceMuted: "var(--fl-desktop-surface-muted, #f9fafb)",
+  border: "var(--fl-desktop-border, #e4e7ec)",
+  borderSoft: "var(--fl-desktop-border-soft, #eef0f3)",
+  text: "var(--fl-desktop-text, #101828)",
+  textSecondary: "var(--fl-desktop-text-secondary, #475467)",
+  muted: "var(--fl-desktop-muted, #667085)",
+  faint: "var(--fl-desktop-faint, #98a2b3)",
+  purple: "var(--fl-desktop-purple, #6d3bea)",
+  purpleDark: "var(--fl-desktop-purple-strong, #5b2fc7)",
+  purpleSoft: "var(--fl-desktop-purple-soft, #f1edff)",
+  green: "var(--fl-desktop-green, #039855)",
+  greenSoft: "var(--fl-desktop-green-soft, #ecfdf3)",
+  red: "var(--fl-desktop-red, #d92d20)",
+  redSoft: "var(--fl-desktop-red-soft, #fef3f2)",
+  amber: "var(--fl-desktop-amber, #dc6803)",
+  amberSoft: "var(--fl-desktop-amber-soft, #fffaeb)",
+  blue: "var(--fl-desktop-blue, #1570ef)",
+  blueSoft: "var(--fl-desktop-blue-soft, #eff8ff)",
 };
+
+export function desktopThemeVariables(isDark: boolean) {
+  return (
+    isDark
+      ? {
+          "--fl-desktop-canvas": "#03040b",
+          "--fl-desktop-surface": "#0b0e17",
+          "--fl-desktop-surface-muted": "#101522",
+          "--fl-desktop-border": "#252b3a",
+          "--fl-desktop-border-soft": "#1a2030",
+          "--fl-desktop-text": "#f8fafc",
+          "--fl-desktop-text-secondary": "#d0d5dd",
+          "--fl-desktop-muted": "#98a2b3",
+          "--fl-desktop-faint": "#667085",
+          "--fl-desktop-purple": "#9f5cff",
+          "--fl-desktop-purple-strong": "#c4b5fd",
+          "--fl-desktop-purple-soft": "#211638",
+          "--fl-desktop-green": "#34d399",
+          "--fl-desktop-green-soft": "#0b2c24",
+          "--fl-desktop-red": "#fb7185",
+          "--fl-desktop-red-soft": "#35141c",
+          "--fl-desktop-amber": "#fbbf24",
+          "--fl-desktop-amber-soft": "#33260a",
+          "--fl-desktop-blue": "#60a5fa",
+          "--fl-desktop-blue-soft": "#10264b",
+        }
+      : {
+          "--fl-desktop-canvas": "#ffffff",
+          "--fl-desktop-surface": "#ffffff",
+          "--fl-desktop-surface-muted": "#f9fafb",
+          "--fl-desktop-border": "#e4e7ec",
+          "--fl-desktop-border-soft": "#eef0f3",
+          "--fl-desktop-text": "#101828",
+          "--fl-desktop-text-secondary": "#475467",
+          "--fl-desktop-muted": "#667085",
+          "--fl-desktop-faint": "#98a2b3",
+          "--fl-desktop-purple": "#6d3bea",
+          "--fl-desktop-purple-strong": "#5b2fc7",
+          "--fl-desktop-purple-soft": "#f1edff",
+          "--fl-desktop-green": "#039855",
+          "--fl-desktop-green-soft": "#ecfdf3",
+          "--fl-desktop-red": "#d92d20",
+          "--fl-desktop-red-soft": "#fef3f2",
+          "--fl-desktop-amber": "#dc6803",
+          "--fl-desktop-amber-soft": "#fffaeb",
+          "--fl-desktop-blue": "#1570ef",
+          "--fl-desktop-blue-soft": "#eff8ff",
+        }
+  ) as never;
+}
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 
@@ -211,7 +262,7 @@ export function StatusBadge({
     red: [desktopPalette.redSoft, desktopPalette.red],
     amber: [desktopPalette.amberSoft, desktopPalette.amber],
     blue: [desktopPalette.blueSoft, desktopPalette.blue],
-    gray: ["#f2f4f7", desktopPalette.textSecondary],
+    gray: [desktopPalette.surfaceMuted, desktopPalette.textSecondary],
   }[tone];
   return (
     <View style={[styles.badge, { backgroundColor: colors[0] }]}>
@@ -373,7 +424,7 @@ export const desktopTableStyles = StyleSheet.create({
     borderTopWidth: 1,
     borderBottomWidth: 1,
     borderColor: desktopPalette.borderSoft,
-    backgroundColor: "#fcfcfd",
+    backgroundColor: desktopPalette.surfaceMuted,
   },
   headerText: {
     color: desktopPalette.muted,
@@ -444,7 +495,7 @@ const styles = StyleSheet.create({
   secondaryButton: {
     minHeight: 38,
     borderRadius: 7,
-    backgroundColor: "#ffffff",
+    backgroundColor: desktopPalette.surface,
     borderWidth: 1,
     borderColor: desktopPalette.border,
     paddingHorizontal: 13,
@@ -536,7 +587,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: desktopPalette.border,
     borderRadius: 7,
-    backgroundColor: "#ffffff",
+    backgroundColor: desktopPalette.surface,
     paddingHorizontal: 11,
   },
   desktopSearchInput: {
@@ -552,7 +603,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: desktopPalette.border,
     borderRadius: 7,
-    backgroundColor: "#ffffff",
+    backgroundColor: desktopPalette.surface,
     paddingHorizontal: 11,
     flexDirection: "row",
     alignItems: "center",
@@ -585,7 +636,7 @@ const styles = StyleSheet.create({
     height: 20,
     padding: 2,
     borderRadius: 10,
-    backgroundColor: "#d0d5dd",
+    backgroundColor: desktopPalette.faint,
   },
   toggleOn: { backgroundColor: desktopPalette.purple },
   toggleKnob: {

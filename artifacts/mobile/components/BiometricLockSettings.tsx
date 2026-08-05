@@ -12,24 +12,11 @@ import { useBiometricLock } from "@/context/BiometricLockContext";
 import { useColors } from "@/hooks/useColors";
 
 export function BiometricLockSettings({
-  appearance = "theme",
+  appearance: _appearance = "theme",
 }: {
   appearance?: "theme" | "desktop";
 }) {
-  const themeColors = useColors();
-  const colors =
-    appearance === "desktop"
-      ? {
-          border: "#e4e7ec",
-          card: "#ffffff",
-          destructive: "#d92d20",
-          foreground: "#101828",
-          muted: "#f2f4f7",
-          mutedForeground: "#667085",
-          primary: "#6d3bea",
-          primaryForeground: "#ffffff",
-        }
-      : themeColors;
+  const colors = useColors();
   const {
     supported,
     enabled,

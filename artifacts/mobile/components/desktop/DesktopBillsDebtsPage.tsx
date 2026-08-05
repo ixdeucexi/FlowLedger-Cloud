@@ -215,11 +215,7 @@ export function DesktopBillsDebtsPage() {
             next.month,
             next.year,
           );
-          const total = getBillMonthlyTotal(
-            bill,
-            next.month,
-            next.year,
-          );
+          const total = getBillMonthlyTotal(bill, next.month, next.year);
           const paid = getPaidAmount(bill.id, next.month, next.year);
           return [
             {
@@ -1254,7 +1250,7 @@ const styles = StyleSheet.create({
   progressTrack: {
     height: 13,
     borderRadius: 7,
-    backgroundColor: "#eaecf0",
+    backgroundColor: palette.borderSoft,
     overflow: "hidden",
   },
   progressFill: {
@@ -1299,7 +1295,7 @@ const styles = StyleSheet.create({
     width: 76,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#eaecf0",
+    backgroundColor: palette.borderSoft,
     overflow: "hidden",
     marginTop: 5,
   },
