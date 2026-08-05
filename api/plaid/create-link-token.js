@@ -1,5 +1,5 @@
 const { plaid, plaidOptions } = require("../_utils/plaid");
-const { buildLinkTokenRequest, LINK_INTENTS, normalizeLinkIntent } = require("../_utils/plaidLink");
+const { buildLinkTokenRequest, normalizeLinkIntent } = require("../_utils/plaidLink");
 const { sealPlaidLinkSession } = require("../_utils/crypto");
 const { authenticatedUser, safeError } = require("../_utils/supabase");
 const { authorizeProHousehold, requestedHouseholdId } = require("../_utils/plaidAccess");
@@ -20,7 +20,10 @@ module.exports = async function createLinkToken(req, res) {
     const access = await authorizeProHousehold(auth.user.id, requestedHouseholdId(req));
     if (!access.ok) return res.status(access.status).json({ error: access.error, message: access.message });
     const config = plaidOptions();
-    const hosted = intent === LINK_INTENTS.creditCard;
+    // Use the same hosted flow for every new connection. It reliably returns
+    // installed PWAs to FlowLedger after bank OAuth and supports selecting
+    // checking, savings, and credit accounts in one session.
+    const hosted = true;
     const request = buildLinkTokenRequest({ userId: auth.user.id, config, intent, hosted });
     const response = await plaid().linkTokenCreate(request);
     const data = response.data || response;

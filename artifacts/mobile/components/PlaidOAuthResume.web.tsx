@@ -21,6 +21,22 @@ type LegacyResumeProps = {
   onError: () => void;
 };
 
+type ConnectionResult = {
+  credit_cards_count?: number;
+  credit_card_debts_count?: number;
+};
+
+function completedConnectionMessage(result: ConnectionResult) {
+  const attachedCards = Number(result.credit_card_debts_count || 0);
+  if (attachedCards > 0) {
+    return `${attachedCards} credit card${attachedCards === 1 ? " is" : "s are"} now in Debt and Snowball.`;
+  }
+  if (Number(result.credit_cards_count || 0) > 0) {
+    return "Credit card connected. Attach it to Debt and Snowball below.";
+  }
+  return "Account connected. Recent activity is syncing now.";
+}
+
 function LegacyPlaidOAuthResume({ resume, onSuccess, onExit, onError }: LegacyResumeProps) {
   const { ready, error, open } = usePlaidLink({
     token: resume.linkToken,
@@ -78,7 +94,7 @@ export function PlaidOAuthResume() {
 
   const onSuccess = useCallback(async (publicToken: string) => {
     if (!resume || !session?.access_token || resume.userId !== session.user.id) {
-      finish("Please sign in again, then reconnect the card.");
+      finish("Please sign in again, then reconnect the account.");
       return;
     }
     try {
@@ -93,20 +109,18 @@ export function PlaidOAuthResume() {
         body: JSON.stringify({ public_token: publicToken }),
       });
       const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.message || "Could not finish connecting this card.");
-      finish(result.credit_card_debts_count > 0
-        ? `${result.credit_card_debts_count} credit card${result.credit_card_debts_count === 1 ? " is" : "s are"} now in Debt and Snowball.`
-        : "Card connected. Attach it to Debt and Snowball below.");
+      if (!response.ok) throw new Error(result.message || "Could not finish connecting this account.");
+      finish(completedConnectionMessage(result));
     } catch (error) {
-      finish(error instanceof Error ? error.message : "Could not finish connecting this card.");
+      finish(error instanceof Error ? error.message : "Could not finish connecting this account.");
     }
   }, [finish, resume, session?.access_token, session?.user.id]);
 
   const onExit = useCallback(() => {
-    finish("Card connection was not completed. You can try again below.");
+    finish("Account connection was not completed. You can try again below.");
   }, [finish]);
   const onLegacyError = useCallback(() => {
-    finish("Plaid could not resume the card connection. Please try again.");
+    finish("Plaid could not resume the account connection. Please try again.");
   }, [finish]);
 
   useEffect(() => {
@@ -136,16 +150,14 @@ export function PlaidOAuthResume() {
             await new Promise(resolve => window.setTimeout(resolve, 1_500));
             continue;
           }
-          if (!response.ok) throw new Error(result.message || "Could not finish connecting this card.");
-          finish(result.credit_card_debts_count > 0
-            ? `${result.credit_card_debts_count} credit card${result.credit_card_debts_count === 1 ? " is" : "s are"} now in Debt and Snowball.`
-            : "Card connected. Attach it to Debt and Snowball below.");
+          if (!response.ok) throw new Error(result.message || "Could not finish connecting this account.");
+          finish(completedConnectionMessage(result));
           return;
         }
         if (!controller.signal.aborted) finish("Plaid is still finishing this connection. Open Bank connections again in a moment.");
       } catch (completionError) {
         if (!controller.signal.aborted) {
-          finish(completionError instanceof Error ? completionError.message : "Could not finish connecting this card.");
+          finish(completionError instanceof Error ? completionError.message : "Could not finish connecting this account.");
         }
       }
     };
@@ -162,8 +174,8 @@ export function PlaidOAuthResume() {
       <View accessibilityLiveRegion="polite" style={styles.overlay}>
         <View style={styles.card}>
           <ActivityIndicator color="#9f7aea" />
-          <Text style={styles.title}>Finishing your secure card connection…</Text>
-          <Text style={styles.copy}>Keep this page open while FlowLedger attaches the card to your plan.</Text>
+          <Text style={styles.title}>Finishing your secure account connection…</Text>
+          <Text style={styles.copy}>Keep this page open while FlowLedger adds the accounts you selected.</Text>
         </View>
       </View>
     </>
