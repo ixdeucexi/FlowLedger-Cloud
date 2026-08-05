@@ -5,6 +5,8 @@ import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleShee
 import type { Transaction } from "@/context/BudgetContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
+import { useDesktopExperience } from "@/hooks/useDesktopExperience";
+import { DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR } from "@/lib/desktopModal";
 
 interface UnplannedChargeModalProps {
   visible: boolean;
@@ -32,6 +34,7 @@ function transactionName(transaction: Transaction) {
 
 export function UnplannedChargeModal({ visible, transaction, categories, saving, onClose, onSaveOneTime, onCreateBill }: UnplannedChargeModalProps) {
   const c = useColors();
+  const isDesktop = useDesktopExperience();
   useBackDismiss(visible, onClose);
   const categoryOptions = useMemo(() => categories.filter(category => category !== "Income"), [categories]);
   const [selectedCategory, setSelectedCategory] = useState("Other");
@@ -45,9 +48,9 @@ export function UnplannedChargeModal({ visible, transaction, categories, saving,
   if (!transaction) return null;
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
-        <View style={[styles.container, { backgroundColor: c.background }]}>
+    <Modal visible={visible} animationType={isDesktop ? "fade" : "slide"} transparent onRequestClose={onClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.overlay, isDesktop && DESKTOP_MODAL_OVERLAY]}>
+        <View style={[styles.container, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_REGULAR]}>
           <View style={[styles.handle, { backgroundColor: c.border }]} />
           <View style={styles.header}>
             <View style={{ flex: 1 }}>

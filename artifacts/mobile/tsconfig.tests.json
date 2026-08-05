@@ -119,5 +119,7 @@
     ,"lib/appTabs.test.ts"
     ,"lib/dashboardFinancialModel.ts"
     ,"lib/dashboardFinancialModel.test.ts"
+    ,"lib/desktopModal.ts"
+    ,"lib/desktopModal.test.ts"
   ]
 }

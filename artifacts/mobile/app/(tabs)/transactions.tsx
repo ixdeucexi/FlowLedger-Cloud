@@ -25,6 +25,8 @@ import { useBudget } from "@/context/BudgetContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
+import { useDesktopExperience } from "@/hooks/useDesktopExperience";
+import { DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR, DESKTOP_MODAL_WIDE } from "@/lib/desktopModal";
 import { debtPaymentStatusLabel } from "@/lib/forecastDisplay";
 import { canMatchExpenseToBill, confirmedBillMatchId, confirmedBillMatchOccurrenceDate, isCashFlowTransaction, isCheckingBalanceTransaction, isConfirmedBillMatch, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "@/lib/billMatching";
 import { activityAmountOutsidePlannedBill, listActivityMonths, summarizeActivityMonth } from "@/lib/monthlySummary";
@@ -146,6 +148,7 @@ export default function TransactionsScreen() {
 
 export function ActivityScreen() {
   const c = useColors();
+  const isDesktop = useDesktopExperience();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -1213,8 +1216,8 @@ export function ActivityScreen() {
         animationType="slide"
         onRequestClose={() => setDetailItem(null)}
       >
-        <Pressable style={styles.sheetOverlay} onPress={() => setDetailItem(null)}>
-          <Pressable style={[styles.sheet, { backgroundColor: c.background }]} onPress={() => {}}>
+        <Pressable style={[styles.sheetOverlay, isDesktop && DESKTOP_MODAL_OVERLAY]} onPress={() => setDetailItem(null)}>
+          <Pressable style={[styles.sheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_REGULAR]} onPress={() => {}}>
             {/* Handle */}
             <View style={[styles.sheetHandle, { backgroundColor: c.border }]} />
 
@@ -1619,8 +1622,8 @@ export function ActivityScreen() {
         animationType="slide"
         onRequestClose={() => setPendingMatchTx(null)}
       >
-        <Pressable style={styles.matchOverlay} onPress={() => setPendingMatchTx(null)}>
-          <Pressable style={[styles.matchSheet, { backgroundColor: c.background }]} onPress={() => {}}>
+        <Pressable style={[styles.matchOverlay, isDesktop && DESKTOP_MODAL_OVERLAY]} onPress={() => setPendingMatchTx(null)}>
+          <Pressable style={[styles.matchSheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_WIDE]} onPress={() => {}}>
             <View style={[styles.filterHandle, { backgroundColor: c.border }]} />
             <View style={styles.matchHeader}>
               <View style={{ flex: 1 }}>
@@ -1724,8 +1727,8 @@ export function ActivityScreen() {
         animationType="slide"
         onRequestClose={() => setMatchTx(null)}
       >
-        <Pressable style={styles.matchOverlay} onPress={() => setMatchTx(null)}>
-          <Pressable style={[styles.matchSheet, { backgroundColor: c.background }]} onPress={() => {}}>
+        <Pressable style={[styles.matchOverlay, isDesktop && DESKTOP_MODAL_OVERLAY]} onPress={() => setMatchTx(null)}>
+          <Pressable style={[styles.matchSheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_WIDE]} onPress={() => {}}>
             <View style={[styles.filterHandle, { backgroundColor: c.border }]} />
             <View style={styles.matchHeader}>
               <View style={{ flex: 1 }}>
@@ -1909,8 +1912,8 @@ export function ActivityScreen() {
         animationType="slide"
         onRequestClose={() => setFilterModalVisible(false)}
       >
-        <Pressable style={styles.filterOverlay} onPress={() => setFilterModalVisible(false)}>
-          <Pressable style={[styles.filterSheet, { backgroundColor: c.background }]} onPress={() => {}}>
+        <Pressable style={[styles.filterOverlay, isDesktop && DESKTOP_MODAL_OVERLAY]} onPress={() => setFilterModalVisible(false)}>
+          <Pressable style={[styles.filterSheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_REGULAR]} onPress={() => {}}>
             <View style={[styles.filterHandle, { backgroundColor: c.border }]} />
             <View style={styles.filterSheetHeader}>
               <View>

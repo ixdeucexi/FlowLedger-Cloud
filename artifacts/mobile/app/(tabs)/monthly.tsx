@@ -25,6 +25,8 @@ import type { Bill, BillDateMove, DecisionRecord, Goal, IncomeItem, Transaction 
 import { useBudget } from "@/context/BudgetContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
+import { useDesktopExperience } from "@/hooks/useDesktopExperience";
+import { DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR, DESKTOP_MODAL_WIDE } from "@/lib/desktopModal";
 import { confirmedBillMatchId, isConfirmedBillMatch } from "@/lib/billMatching";
 import { allocationLabel, groupPlannedExpenseAllocations, matchedOccurrenceAllocations, occurrenceKey, reviewSettlementSummary, transactionDisplayName } from "@/lib/reviewCenter";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
@@ -205,6 +207,7 @@ function CalendarDebtPaymentCard({
 
 export default function MonthlyScreen() {
   const c = useColors();
+  const isDesktop = useDesktopExperience();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const routeParams = useLocalSearchParams<{ openDate?: string | string[]; openDateAt?: string | string[] }>();
@@ -1746,10 +1749,11 @@ export default function MonthlyScreen() {
               transparent
               onRequestClose={() => dayConfirmation ? setDayConfirmation(null) : setSelectedDate(null)}
             >
-              <Pressable style={styles.dayOverlayBackdrop} onPress={() => setSelectedDate(null)}>
+              <Pressable style={[styles.dayOverlayBackdrop, isDesktop && DESKTOP_MODAL_OVERLAY]} onPress={() => setSelectedDate(null)}>
                 <Pressable
                   style={[
                     styles.dayOverlayCard,
+                    isDesktop && DESKTOP_MODAL_WIDE,
                     {
                       backgroundColor: c.isDark ? "rgba(8,13,30,0.96)" : "rgba(255,255,255,0.98)",
                       borderColor: c.isDark ? "rgba(148,163,184,0.20)" : "rgba(15,23,42,0.12)",
@@ -2342,11 +2346,12 @@ export default function MonthlyScreen() {
         transparent
         onRequestClose={closeMonthSearch}
       >
-        <Pressable style={styles.monthSearchBackdrop} onPress={closeMonthSearch}>
+        <Pressable style={[styles.monthSearchBackdrop, isDesktop && DESKTOP_MODAL_OVERLAY]} onPress={closeMonthSearch}>
           <Pressable
             onPress={event => event.stopPropagation()}
             style={[
               styles.monthSearchSheet,
+              isDesktop && DESKTOP_MODAL_WIDE,
               {
                 backgroundColor: c.isDark ? "rgba(15,23,42,0.98)" : "rgba(255,255,255,0.98)",
                 borderColor: c.border,
@@ -2438,8 +2443,8 @@ export default function MonthlyScreen() {
         transparent
         onRequestClose={() => setDueDayPicker(null)}
       >
-        <Pressable style={styles.pickerOverlay} onPress={() => setDueDayPicker(null)}>
-          <Pressable style={[styles.pickerSheet, { backgroundColor: c.background }]} onPress={e => e.stopPropagation()}>
+        <Pressable style={[styles.pickerOverlay, isDesktop && DESKTOP_MODAL_OVERLAY]} onPress={() => setDueDayPicker(null)}>
+          <Pressable style={[styles.pickerSheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_REGULAR]} onPress={e => e.stopPropagation()}>
             {dueDayPicker && (() => {
               const { bill, fromDate } = dueDayPicker;
               const daysInMonth = new Date(selectedYear, month + 1, 0).getDate();
@@ -2536,8 +2541,8 @@ export default function MonthlyScreen() {
         transparent
         onRequestClose={() => setIncomeDatePicker(null)}
       >
-        <Pressable style={styles.pickerOverlay} onPress={() => setIncomeDatePicker(null)}>
-          <Pressable style={[styles.pickerSheet, { backgroundColor: c.background }]} onPress={e => e.stopPropagation()}>
+        <Pressable style={[styles.pickerOverlay, isDesktop && DESKTOP_MODAL_OVERLAY]} onPress={() => setIncomeDatePicker(null)}>
+          <Pressable style={[styles.pickerSheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_REGULAR]} onPress={e => e.stopPropagation()}>
             {incomeDatePicker && (() => {
               const daysInMonth = new Date(selectedYear, month + 1, 0).getDate();
               const effectiveDay = incomeDatePicker.day;
@@ -2639,8 +2644,8 @@ export default function MonthlyScreen() {
         transparent
         onRequestClose={() => setEditPlan(null)}
       >
-        <Pressable style={styles.pickerOverlay} onPress={() => setEditPlan(null)}>
-          <Pressable style={[styles.pickerSheet, { backgroundColor: c.background }]} onPress={e => e.stopPropagation()}>
+        <Pressable style={[styles.pickerOverlay, isDesktop && DESKTOP_MODAL_OVERLAY]} onPress={() => setEditPlan(null)}>
+          <Pressable style={[styles.pickerSheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_REGULAR]} onPress={e => e.stopPropagation()}>
             <View style={styles.pickerHandle} />
             <View style={styles.pickerHeader}>
               <View>
