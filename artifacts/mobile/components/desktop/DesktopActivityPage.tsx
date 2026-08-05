@@ -51,8 +51,7 @@ type ActivityTab =
   | "All Activity"
   | "Transactions"
   | "Transfers"
-  | "Adjustments"
-  | "Notes";
+  | "Adjustments";
 
 function money(value: number, signed = false) {
   const prefix = signed ? (value > 0 ? "+" : value < 0 ? "−" : "") : "";
@@ -60,9 +59,19 @@ function money(value: number, signed = false) {
 }
 
 function dateLabel(value: string) {
-  const [year, month, day] = value.split("-").map(Number);
+  const [year, month, day] = value.slice(0, 10).split("-").map(Number);
   return new Date(year, month - 1, day, 12).toLocaleDateString(undefined, {
     month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function dateGroupLabel(value: string) {
+  const [year, month, day] = value.slice(0, 10).split("-").map(Number);
+  return new Date(year, month - 1, day, 12).toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
     day: "numeric",
     year: "numeric",
   });
@@ -164,8 +173,7 @@ export function DesktopActivityPage({
             (tab === "Transactions" &&
               !["transfer", "extra_payment"].includes(row.source)) ||
             (tab === "Transfers" && row.source === "transfer") ||
-            (tab === "Adjustments" && row.source === "extra_payment") ||
-            (tab === "Notes" && Boolean(row.note));
+            (tab === "Adjustments" && row.source === "extra_payment");
           return (
             tabMatch &&
             (!query ||
@@ -183,6 +191,16 @@ export function DesktopActivityPage({
         .sort((left, right) => right.date.localeCompare(left.date)),
     [account, category, rows, search, tab, type],
   );
+  const groupedActivity = useMemo(() => {
+    const groups: Array<{ date: string; rows: DesktopActivityRow[] }> = [];
+    filtered.slice(0, 80).forEach((row) => {
+      const date = row.date.slice(0, 10);
+      const current = groups[groups.length - 1];
+      if (current?.date === date) current.rows.push(row);
+      else groups.push({ date, rows: [row] });
+    });
+    return groups;
+  }, [filtered]);
 
   const spending = useMemo(() => {
     const totals = new Map<string, number>();
@@ -217,12 +235,6 @@ export function DesktopActivityPage({
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 6);
   }, [monthRows]);
-  const notes = monthRows
-    .filter((row) => row.note?.trim())
-    .slice()
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 3);
-
   return (
     <DesktopPage>
       <ScrollView
@@ -280,7 +292,6 @@ export function DesktopActivityPage({
               "Transactions",
               "Transfers",
               "Adjustments",
-              "Notes",
             ] as ActivityTab[]
           ).map((item) => (
             <Pressable
@@ -346,15 +357,25 @@ export function DesktopActivityPage({
               <Text style={[table.headerText, styles.colAction]} />
             </View>
             {filtered.length ? (
-              filtered.slice(0, 80).map((row) => (
-                <Pressable
-                  key={row.id}
-                  onPress={() => onOpen(row.id)}
-                  style={({ pressed }) => [
-                    table.row,
-                    pressed && styles.pressed,
-                  ]}
-                >
+              groupedActivity.map((group) => (
+                <View key={group.date}>
+                  <View style={styles.dateGroupHeader}>
+                    <Text style={styles.dateGroupTitle}>
+                      {dateGroupLabel(group.date)}
+                    </Text>
+                    <Text style={styles.dateGroupCount}>
+                      {group.rows.length} {group.rows.length === 1 ? "transaction" : "transactions"}
+                    </Text>
+                  </View>
+                  {group.rows.map((row) => (
+                    <Pressable
+                      key={row.id}
+                      onPress={() => onOpen(row.id)}
+                      style={({ pressed }) => [
+                        table.row,
+                        pressed && styles.pressed,
+                      ]}
+                    >
                   <Text style={[table.cellText, styles.colDate]}>
                     {dateLabel(row.date)}
                   </Text>
@@ -386,11 +407,6 @@ export function DesktopActivityPage({
                       <Text style={table.cellStrong} numberOfLines={1}>
                         {row.label}
                       </Text>
-                      {row.note ? (
-                        <Text style={styles.rowMuted} numberOfLines={1}>
-                          {row.note}
-                        </Text>
-                      ) : null}
                       {row.debtName ? (
                         <View style={styles.debtIndicator}>
                           <Feather name="credit-card" size={9} color={palette.purple} />
@@ -438,7 +454,9 @@ export function DesktopActivityPage({
                       color={palette.muted}
                     />
                   </View>
-                </Pressable>
+                    </Pressable>
+                  ))}
+                </View>
               ))
             ) : (
               <EmptyState
@@ -496,39 +514,6 @@ export function DesktopActivityPage({
                   <Text style={styles.emptyTiny}>
                     No spending in this period.
                   </Text>
-                )}
-              </View>
-            </DesktopCard>
-            <DesktopCard>
-              <CardHeader title="Recent Activity Notes" />
-              <View style={styles.notesBody}>
-                {notes.length ? (
-                  notes.map((row) => (
-                    <Pressable
-                      key={row.id}
-                      onPress={() => onOpen(row.id)}
-                      style={({ pressed }) => [
-                        styles.noteRow,
-                        pressed && styles.pressed,
-                      ]}
-                    >
-                      <View style={styles.noteIcon}>
-                        <Feather
-                          name="edit-3"
-                          size={13}
-                          color={palette.purple}
-                        />
-                      </View>
-                      <View style={styles.noteCopy}>
-                        <Text style={styles.noteTitle}>{row.label}</Text>
-                        <Text style={styles.noteText} numberOfLines={2}>
-                          {row.note}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  ))
-                ) : (
-                  <Text style={styles.emptyTiny}>No recent notes.</Text>
                 )}
               </View>
             </DesktopCard>
@@ -609,11 +594,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  rowMuted: {
+  dateGroupHeader: {
+    minHeight: 36,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    backgroundColor: palette.surfaceMuted,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.borderSoft,
+  },
+  dateGroupTitle: {
+    flex: 1,
+    color: palette.text,
+    fontSize: 10,
+    fontFamily: "Inter_700Bold",
+  },
+  dateGroupCount: {
     color: palette.muted,
-    fontSize: 8,
-    fontFamily: "Inter_400Regular",
-    marginTop: 2,
+    fontSize: 9,
+    fontFamily: "Inter_600SemiBold",
   },
   debtIndicator: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 },
   debtIndicatorText: { flexShrink: 1, color: palette.purple, fontSize: 8, fontFamily: "Inter_700Bold" },
@@ -660,26 +661,6 @@ const styles = StyleSheet.create({
     color: palette.muted,
     fontSize: 8,
   },
-  notesBody: { paddingHorizontal: 12, paddingVertical: 6 },
-  noteRow: {
-    minHeight: 52,
-    flexDirection: "row",
-    gap: 9,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: palette.borderSoft,
-  },
-  noteIcon: {
-    width: 27,
-    height: 27,
-    borderRadius: 8,
-    backgroundColor: palette.purpleSoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  noteCopy: { flex: 1, minWidth: 0 },
-  noteTitle: { color: palette.text, fontSize: 9, fontFamily: "Inter_700Bold" },
-  noteText: { color: palette.muted, fontSize: 8, lineHeight: 12, marginTop: 2 },
   emptyTiny: {
     color: palette.muted,
     fontSize: 10,

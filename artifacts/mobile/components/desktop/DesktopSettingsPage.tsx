@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Pressable,
@@ -10,6 +11,8 @@ import {
 } from "react-native";
 
 import { BiometricLockSettings } from "@/components/BiometricLockSettings";
+import { AdminMembershipTools } from "@/components/AdminMembershipTools";
+import { AdminMoneyHealth } from "@/components/AdminMoneyHealth";
 import { LegalDocumentModal } from "@/components/LegalDocumentModal";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { PlaidLinkButton } from "@/components/PlaidLinkButton";
@@ -130,6 +133,7 @@ export function DesktopSettingsPage({
   isAdmin?: boolean;
   onOpenAdmin?: () => void;
 }) {
+  const router = useRouter();
   const { user, signOut } = useAuth();
   const { accounts, connectedBankAccounts, activeHousehold } = useBudget();
   const { actualPlan, loading: membershipLoading } = useMembership();
@@ -197,10 +201,6 @@ export function DesktopSettingsPage({
                   accessibilityRole="tab"
                   accessibilityState={{ selected: section === item.label }}
                   onPress={() => {
-                    if (item.label === "Admin" && onOpenAdmin) {
-                      onOpenAdmin();
-                      return;
-                    }
                     setSection(item.label);
                     setMessage(null);
                   }}
@@ -605,6 +605,55 @@ export function DesktopSettingsPage({
                   />
                 </View>
               </DesktopCard>
+            ) : null}
+
+            {section === "Admin" && isAdmin ? (
+              <>
+                <AdminMembershipTools appearance="desktop" />
+                <DesktopCard>
+                  <CardHeader title="Test Labs" />
+                  <View style={styles.sectionBody}>
+                    <SettingsLine
+                      icon="shield"
+                      title="Zero Budget Lab"
+                      description="Test Zero Budget with isolated sample money."
+                      action={
+                        <SecondaryButton
+                          label="Open Lab"
+                          icon="arrow-up-right"
+                          onPress={() =>
+                            router.push("/(tabs)/zero-budget-lab" as never)
+                          }
+                        />
+                      }
+                    />
+                  </View>
+                </DesktopCard>
+                <AdminMoneyHealth
+                  householdId={activeHousehold?.householdId}
+                  appearance="desktop"
+                />
+                <NotificationSettings scope="admin" appearance="desktop" />
+                {onOpenAdmin ? (
+                  <DesktopCard>
+                    <CardHeader title="Feedback Inbox" />
+                    <View style={styles.sectionBody}>
+                      <SettingsLine
+                        icon="message-square"
+                        title="App admin inbox"
+                        description="Review, respond to, and archive tester feedback."
+                        action={
+                          <SecondaryButton
+                            label="Open Inbox"
+                            icon="arrow-right"
+                            onPress={onOpenAdmin}
+                          />
+                        }
+                      />
+                    </View>
+                  </DesktopCard>
+                ) : null}
+              </>
             ) : null}
           </View>
         </View>
