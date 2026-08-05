@@ -119,20 +119,19 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.message || "Could not finish connecting this bank.");
       if (typeof window !== "undefined") clearPlaidOAuthSession(window.localStorage);
-      const connectedCreditCard = activeAction === "credit_card";
       finish(result.already_connected
         ? "That account is already connected. FlowLedger kept the existing secure connection."
         : result.credit_card_debts_count > 0
           ? `${result.credit_card_debts_count} credit card${result.credit_card_debts_count === 1 ? "" : "s"} added to Debt and Snowball with live balances.`
-          : connectedCreditCard
-            ? "Credit card connected. FlowLedger is syncing its balance, minimum payment, due date, and activity now."
-            : "Bank connected. Recent activity is syncing now.");
+          : result.credit_cards_count > 0
+            ? "Credit card connected. Attach it to Debt and Snowball below."
+            : "Account connected. Recent activity is syncing now.");
       onConnected?.();
       await loadStatus();
     } catch (error) {
       finish(error instanceof Error ? error.message : "Could not finish connecting this bank.");
     }
-  }, [activeAction, finish, householdId, loadStatus, onConnected]);
+  }, [finish, householdId, loadStatus, onConnected]);
 
   const onExit = useCallback(() => {
     if (typeof window !== "undefined") clearPlaidOAuthSession(window.localStorage);
@@ -187,7 +186,7 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
           awaitingReturn: Boolean(result.hosted_link_url),
         });
         linkUserId.current = session.user.id;
-        if (intent === "credit_card" && result.hosted_link_url && result.hosted_session) {
+        if (result.hosted_link_url && result.hosted_session) {
           window.location.assign(result.hosted_link_url);
           return;
         }
@@ -321,23 +320,13 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
       <View style={styles.actions}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Add a credit card through Plaid"
-          disabled={busy}
-          onPress={() => void connect("credit_card")}
-          style={({ pressed }) => [styles.button, { backgroundColor: colors.primary, opacity: pressed || busy ? 0.7 : 1 }]}
-        >
-          {activeAction === "credit_card" ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Feather name="credit-card" size={16} color={colors.primaryForeground} />}
-          <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Add credit card</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Add a bank account through Plaid"
+          accessibilityLabel="Connect a bank account or credit card through Plaid"
           disabled={busy}
           onPress={() => void connect("bank")}
-          style={({ pressed }) => [styles.secondary, { borderColor: colors.border, opacity: pressed || busy ? 0.7 : 1 }]}
+          style={({ pressed }) => [styles.button, { backgroundColor: colors.primary, opacity: pressed || busy ? 0.7 : 1 }]}
         >
-          {activeAction === "bank" ? <ActivityIndicator size="small" color={colors.primary} /> : <Feather name="plus-circle" size={15} color={colors.primary} />}
-          <Text style={[styles.secondaryText, { color: colors.primary }]}>Add bank account</Text>
+          {activeAction === "bank" ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Feather name="plus-circle" size={16} color={colors.primaryForeground} />}
+          <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Connect account</Text>
         </Pressable>
         {connected && (
           <Pressable
@@ -349,7 +338,7 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
             {activeAction === "sync"
               ? <ActivityIndicator size="small" color={colors.mutedForeground} />
               : <Feather name="refresh-cw" size={15} color={colors.mutedForeground} />}
-            <Text style={[styles.syncText, { color: colors.mutedForeground }]}>Sync existing accounts</Text>
+            <Text style={[styles.syncText, { color: colors.mutedForeground }]}>Sync accounts</Text>
           </Pressable>
         )}
       </View>
@@ -387,8 +376,6 @@ const styles = StyleSheet.create({
   actions: { gap: 10 },
   button: { minHeight: 48, borderRadius: 11, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
   buttonText: { fontSize: 15, fontWeight: "700" },
-  secondary: { minHeight: 44, borderWidth: 1, borderRadius: 11, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7 },
-  secondaryText: { fontSize: 14, fontWeight: "700" },
   syncButton: { minHeight: 42, borderTopWidth: StyleSheet.hairlineWidth, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7 },
   syncText: { fontSize: 13, fontWeight: "700" },
   message: { fontSize: 13, lineHeight: 19 },

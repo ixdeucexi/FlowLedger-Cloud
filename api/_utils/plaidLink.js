@@ -33,7 +33,7 @@ function buildLinkTokenRequest({ userId, config, intent, hosted = false }) {
   if (config.redirectUri) request.redirect_uri = config.redirectUri;
   if (hosted) {
     if (!config.redirectUri) {
-      const error = new Error("PLAID_REDIRECT_URI is required for mobile credit-card linking.");
+      const error = new Error("PLAID_REDIRECT_URI is required for mobile account linking.");
       error.code = "PLAID_REDIRECT_URI_MISSING";
       throw error;
     }

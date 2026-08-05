@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Easing,
@@ -21,8 +21,12 @@ import Svg, {
   Stop,
 } from "react-native-svg";
 
+import { AddBillModal } from "@/components/AddBillModal";
+import { DesktopAddMenu } from "@/components/desktop/DesktopAddMenu";
+import { GoalModal } from "@/components/GoalModal";
+import { IncomeModal } from "@/components/IncomeModal";
 import { useAuth } from "@/context/AuthContext";
-import { useBudget } from "@/context/BudgetContext";
+import { useBudget, type Bill, type Goal, type IncomeItem } from "@/context/BudgetContext";
 import { isActiveTransaction } from "@/lib/billMatching";
 import {
   categoryBudgetStorageKey,
@@ -31,6 +35,7 @@ import {
   subscribeCategoryBudgets,
 } from "@/lib/categoryBudgetStore";
 import { buildDashboardFinancialModel } from "@/lib/dashboardFinancialModel";
+import { isDesktopAddAction, type DesktopAddAction } from "@/lib/desktopActions";
 import { WIDE_DESKTOP_BREAKPOINT } from "@/lib/desktopExperience";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
@@ -467,11 +472,16 @@ function EmptyState({ icon, text }: { icon: FeatherName; text: string }) {
 
 export function DesktopDashboard() {
   const router = useRouter();
+  const routeParams = useLocalSearchParams<{ action?: string }>();
   const { width } = useWindowDimensions();
   const { user } = useAuth();
   const {
     accounts,
+    addBill,
+    addGoal,
+    addIncome,
     activeHousehold,
+    bills,
     categories,
     connectedBankAccounts,
     forecastConfidence,
@@ -490,7 +500,40 @@ export function DesktopDashboard() {
     selectedYear,
     setDashboardFilter,
     settings,
+    deleteBill,
+    deleteBillMistake,
+    deleteGoal,
+    stopFutureBill,
+    updateBill,
+    updateGoal,
   } = useBudget();
+
+  const [pageAddOpen, setPageAddOpen] = useState(false);
+  const [billEditor, setBillEditor] = useState<{ bill: Bill | null; debt: boolean } | null>(null);
+  const [goalEditor, setGoalEditor] = useState<Goal | null | undefined>(undefined);
+  const [incomeEditorOpen, setIncomeEditorOpen] = useState(false);
+
+  const openAddAction = useCallback((action: DesktopAddAction) => {
+    setPageAddOpen(false);
+    if (action === "bill") setBillEditor({ bill: null, debt: false });
+    else if (action === "debt") setBillEditor({ bill: null, debt: true });
+    else if (action === "goal") setGoalEditor(null);
+    else setIncomeEditorOpen(true);
+  }, []);
+
+  useEffect(() => {
+    const requestedAction = Array.isArray(routeParams.action) ? routeParams.action[0] : routeParams.action;
+    if (!isDesktopAddAction(requestedAction)) return;
+    openAddAction(requestedAction);
+    router.setParams({ action: "" } as never);
+  }, [openAddAction, routeParams.action, router]);
+
+  const saveBill = useCallback((bill: Omit<Bill, "id" | "created_at"> | Bill) =>
+    "id" in bill ? updateBill(bill) : addBill(bill), [addBill, updateBill]);
+  const saveGoal = useCallback((goal: Omit<Goal, "id" | "created_at"> | Goal) =>
+    "id" in goal ? updateGoal(goal) : addGoal(goal), [addGoal, updateGoal]);
+  const saveIncome = useCallback((income: Omit<IncomeItem, "id"> | IncomeItem) =>
+    addIncome(income as Omit<IncomeItem, "id">), [addIncome]);
 
   const now = new Date();
   const currentMonth = now.getMonth();
@@ -708,19 +751,23 @@ export function DesktopDashboard() {
           <Text style={styles.greetingSub}>Here&apos;s your financial overview for today.</Text>
         </View>
         <View style={styles.pageActions}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Add to your plan"
-            onPress={() => go("/(tabs)/more", { section: "money" })}
-            style={({ pressed }) => [styles.pageAddButton, { opacity: pressed ? 0.78 : 1 }]}
-          >
-            <Feather name="plus" size={17} color="#ffffff" />
-            <Text style={styles.pageAddText}>Add</Text>
-          </Pressable>
+          <View style={styles.pageAddAnchor}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add to your plan"
+              accessibilityState={{ expanded: pageAddOpen }}
+              onPress={() => setPageAddOpen((value) => !value)}
+              style={({ pressed }) => [styles.pageAddButton, { opacity: pressed ? 0.78 : 1 }]}
+            >
+              <Feather name="plus" size={17} color="#ffffff" />
+              <Text style={styles.pageAddText}>Add</Text>
+            </Pressable>
+            {pageAddOpen ? <DesktopAddMenu onSelect={openAddAction} style={styles.pageAddMenu} /> : null}
+          </View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Open settings"
-            onPress={() => go("/(tabs)/more", { section: "settings" })}
+            onPress={() => go("/(tabs)/more")}
             style={({ pressed }) => [styles.pageSettingsButton, { opacity: pressed ? 0.72 : 1 }]}
           >
             <Feather name="settings" size={15} color="#b7c3d7" />
@@ -793,15 +840,15 @@ export function DesktopDashboard() {
                 <View style={styles.accountPills}>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Add a credit card"
-                    onPress={() => go("/(tabs)/more", { section: "plaid" })}
+                    accessibilityLabel="Open bank connections"
+                    onPress={() => go("/(tabs)/more", { section: "plaid", mode: "planner" })}
                     style={({ pressed }) => [styles.accountPill, styles.connectPill, { opacity: pressed ? 0.7 : 1 }]}
                   >
                     <Feather name="credit-card" size={12} color="#8ddcff" />
-                    <Text style={[styles.accountPillText, { color: "#ccefff" }]}>Connect card</Text>
+                    <Text style={[styles.accountPillText, { color: "#ccefff" }]}>Connections</Text>
                   </Pressable>
                   <Pressable
-                    onPress={() => go("/(tabs)/more", { section: "accounts" })}
+                    onPress={() => go("/(tabs)/more", { section: "accounts", mode: "planner" })}
                     style={({ pressed }) => [styles.accountPill, { opacity: pressed ? 0.7 : 1 }]}
                   >
                     <Feather name="refresh-cw" size={12} color="#a7b8d2" />
@@ -1028,25 +1075,25 @@ export function DesktopDashboard() {
                     label: "Add Income",
                     icon: "arrow-down-left" as const,
                     color: BRAND.green,
-                    onPress: () => go("/(tabs)/more", { section: "money", add: "income" }),
+                    onPress: () => openAddAction("income"),
                   },
                   {
                     label: "Add Bill",
                     icon: "file-plus" as const,
                     color: "#60a5fa",
-                    onPress: () => openBills("bills"),
+                    onPress: () => openAddAction("bill"),
                   },
                   {
                     label: "Add Debt",
                     icon: "credit-card" as const,
                     color: BRAND.purple,
-                    onPress: () => openBills("debt"),
+                    onPress: () => openAddAction("debt"),
                   },
                   {
                     label: "Add Goal",
                     icon: "target" as const,
                     color: "#f472b6",
-                    onPress: () => go("/(tabs)/more", { section: "goals" }),
+                    onPress: () => openAddAction("goal"),
                   },
                 ].map((action) => (
                   <Pressable
@@ -1094,26 +1141,36 @@ export function DesktopDashboard() {
             />
             <View style={styles.timelineList}>
               {upcoming.length ? (
-                upcoming.map((bill, index) => (
-                  <View key={bill.key} style={[styles.timelineRow, index > 0 && styles.rowDivider]}>
-                    <View style={styles.timelineDate}>
-                      <Text style={styles.timelineMonth}>
-                        {new Date(bill.year, bill.month, 1)
-                          .toLocaleDateString("en-US", { month: "short" })
-                          .toUpperCase()}
-                      </Text>
-                      <Text style={styles.timelineDay}>{bill.day}</Text>
-                    </View>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={styles.timelineName} numberOfLines={1}>{bill.name}</Text>
-                      <Text style={styles.timelineMeta} numberOfLines={1}>
-                        {bill.category} · {formatMonthDay(bill.year, bill.month, bill.day)}
-                        {bill.pending ? " · pending at bank" : ""}
-                      </Text>
-                    </View>
-                    <Text style={styles.timelineAmount}>{currency(bill.amount, 2)}</Text>
-                  </View>
-                ))
+                upcoming.map((bill, index) => {
+                  const sourceBill = bills.find((item) => item.id === bill.id);
+                  return (
+                    <Pressable
+                      key={bill.key}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit ${bill.name}`}
+                      disabled={!sourceBill}
+                      onPress={() => sourceBill && setBillEditor({ bill: sourceBill, debt: sourceBill.is_debt })}
+                      style={({ pressed }) => [styles.timelineRow, index > 0 && styles.rowDivider, { opacity: pressed ? 0.72 : 1 }]}
+                    >
+                      <View style={styles.timelineDate}>
+                        <Text style={styles.timelineMonth}>
+                          {new Date(bill.year, bill.month, 1)
+                            .toLocaleDateString("en-US", { month: "short" })
+                            .toUpperCase()}
+                        </Text>
+                        <Text style={styles.timelineDay}>{bill.day}</Text>
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.timelineName} numberOfLines={1}>{bill.name}</Text>
+                        <Text style={styles.timelineMeta} numberOfLines={1}>
+                          {bill.category} · {formatMonthDay(bill.year, bill.month, bill.day)}
+                          {bill.pending ? " · pending at bank" : ""}
+                        </Text>
+                      </View>
+                      <Text style={styles.timelineAmount}>{currency(bill.amount, 2)}</Text>
+                    </Pressable>
+                  );
+                })
               ) : (
                 <EmptyState icon="calendar" text="No upcoming bills are waiting." />
               )}
@@ -1204,7 +1261,13 @@ export function DesktopDashboard() {
                       ? Math.min(100, (goal.current_amount / goal.target_amount) * 100)
                       : 0;
                   return (
-                    <View key={goal.id} style={[styles.goalRow, index > 0 && styles.rowDivider]}>
+                    <Pressable
+                      key={goal.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit ${goal.name}`}
+                      onPress={() => setGoalEditor(goal)}
+                      style={({ pressed }) => [styles.goalRow, index > 0 && styles.rowDivider, { opacity: pressed ? 0.72 : 1 }]}
+                    >
                       <View style={styles.goalIcon}>
                         <Feather
                           name={goal.goal_type === "savings" ? "shield" : "star"}
@@ -1217,7 +1280,7 @@ export function DesktopDashboard() {
                         <Text style={styles.goalMeta}>{Math.round(percent)}% funded</Text>
                       </View>
                       <Text style={styles.goalAmount}>{currency(goal.current_amount)}</Text>
-                    </View>
+                    </Pressable>
                   );
                 })
               ) : (
@@ -1231,11 +1294,40 @@ export function DesktopDashboard() {
       <View style={styles.footer}>
         <Text style={styles.footerText}>© {now.getFullYear()} FlowLedger Algo. All rights reserved.</Text>
         <View style={styles.footerLinks}>
-          <Text style={styles.footerMeta}>Privacy Policy</Text>
-          <Text style={styles.footerMeta}>Terms of Service</Text>
-          <Text style={styles.footerMeta}>Help</Text>
+          <Pressable onPress={() => go("/(tabs)/more", { section: "legal", mode: "planner" })}>
+            <Text style={styles.footerMeta}>Privacy Policy</Text>
+          </Pressable>
+          <Pressable onPress={() => go("/(tabs)/more", { section: "legal", mode: "planner" })}>
+            <Text style={styles.footerMeta}>Terms of Service</Text>
+          </Pressable>
+          <Pressable onPress={() => go("/(tabs)/more", { section: "help", mode: "planner" })}>
+            <Text style={styles.footerMeta}>Help</Text>
+          </Pressable>
         </View>
       </View>
+
+      <AddBillModal
+        visible={billEditor !== null}
+        onClose={() => setBillEditor(null)}
+        onSave={saveBill}
+        onDelete={deleteBill}
+        onStopFuture={stopFutureBill}
+        onDeleteMistake={deleteBillMistake}
+        editBill={billEditor?.bill ?? null}
+        forceDebt={billEditor?.debt ?? false}
+      />
+      <IncomeModal
+        visible={incomeEditorOpen}
+        onClose={() => setIncomeEditorOpen(false)}
+        onSave={saveIncome}
+      />
+      <GoalModal
+        visible={goalEditor !== undefined}
+        onClose={() => setGoalEditor(undefined)}
+        onSave={saveGoal}
+        onDelete={deleteGoal}
+        editGoal={goalEditor ?? null}
+      />
     </ScrollView>
   );
 }
@@ -1324,7 +1416,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    zIndex: 45,
   },
+  pageAddAnchor: { position: "relative" },
+  pageAddMenu: { top: 48, right: 0 },
   pageAddButton: {
     height: 40,
     borderRadius: 11,

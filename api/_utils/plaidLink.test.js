@@ -57,6 +57,20 @@ test("general bank linking remains available without hiding non-credit accounts"
   assert.equal(request.redirect_uri, "https://flowledger-algo.com/more");
 });
 
+test("the unified hosted connection keeps all account types available", () => {
+  const request = buildLinkTokenRequest({
+    userId: "user-1",
+    config: { redirectUri: "https://flowledger-algo.com/plaid/oauth" },
+    intent: LINK_INTENTS.bank,
+    hosted: true,
+  });
+
+  assert.equal(request.account_filters, undefined);
+  assert.deepEqual(request.products, ["transactions"]);
+  assert.deepEqual(request.additional_consented_products, ["liabilities"]);
+  assert.equal(request.hosted_link.completion_redirect_uri, "https://flowledger-algo.com/plaid/oauth");
+});
+
 test("link intent validation defaults safely and rejects unknown values", () => {
   assert.equal(normalizeLinkIntent(undefined), LINK_INTENTS.bank);
   assert.equal(normalizeLinkIntent("credit_card"), LINK_INTENTS.creditCard);
