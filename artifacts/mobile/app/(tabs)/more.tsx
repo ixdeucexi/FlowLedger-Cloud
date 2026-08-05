@@ -2104,6 +2104,8 @@ export default function MoreScreen() {
     return (
       <DesktopSettingsPage
         initialSection={desktopSettingsSection}
+        isAdmin={feedbackAdmin}
+        onOpenAdmin={() => openSettingsSection("admin")}
         onExport={() => {
           void handleExport();
         }}

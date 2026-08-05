@@ -579,10 +579,7 @@ function TabContent() {
 
   return (
     <View
-      style={[
-        styles.tabTransitionRoot,
-        { backgroundColor: isDesktop ? "#f8fafc" : colors.background },
-      ]}
+      style={[styles.tabTransitionRoot, { backgroundColor: colors.background }]}
     >
       <View style={styles.tabTransitionContent}>
         <ResponsiveDesktopChrome enabled={isDesktop}>
@@ -594,7 +591,7 @@ function TabContent() {
               freezeOnBlur: !isWeb,
               lazy: true,
               sceneStyle: {
-                backgroundColor: isDesktop ? "#f8fafc" : colors.background,
+                backgroundColor: colors.background,
               },
               tabBarActiveTintColor: isDark ? "#8b5cf6" : colors.primary,
               tabBarInactiveTintColor: colors.mutedForeground,
@@ -721,11 +718,11 @@ function TabContent() {
             />
           </Tabs>
         </ResponsiveDesktopChrome>
-            {demoMode ? <DemoModeBanner /> : null}
+        {demoMode ? <DemoModeBanner /> : null}
         <PlanPreviewBanner />
         <SaveStatusBanner />
         <DecisionDueModal />
-            <FloDemo />
+        <FloDemo />
       </View>
     </View>
   );

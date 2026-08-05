@@ -42,7 +42,8 @@ export type DesktopSettingsSection =
   | "Data & Privacy"
   | "Connections"
   | "Subscription"
-  | "About";
+  | "About"
+  | "Admin";
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 
 const SECTIONS: Array<{
@@ -79,14 +80,15 @@ const SECTIONS: Array<{
     icon: "credit-card",
   },
   { label: "About", description: "About FlowLedger Algo", icon: "info" },
+  { label: "Admin", description: "Authorized administration", icon: "shield" },
 ];
 
-const lightColors = {
+const desktopColors = {
   background: palette.canvas,
-  card: "#ffffff",
+  card: palette.surface,
   foreground: palette.text,
   mutedForeground: palette.muted,
-  muted: "#f2f4f7",
+  muted: palette.surfaceMuted,
   border: palette.border,
   primary: palette.purple,
   primaryForeground: "#ffffff",
@@ -119,10 +121,14 @@ export function DesktopSettingsPage({
   initialSection = "Profile",
   onExport,
   onSync,
+  isAdmin = false,
+  onOpenAdmin,
 }: {
   initialSection?: DesktopSettingsSection;
   onExport: () => void;
   onSync: () => Promise<void>;
+  isAdmin?: boolean;
+  onOpenAdmin?: () => void;
 }) {
   const { user, signOut } = useAuth();
   const { accounts, connectedBankAccounts, activeHousehold } = useBudget();
@@ -184,41 +190,49 @@ export function DesktopSettingsPage({
         />
         <View style={styles.settingsLayout}>
           <DesktopCard style={styles.secondaryNav}>
-            {SECTIONS.map((item) => (
-              <Pressable
-                key={item.label}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: section === item.label }}
-                onPress={() => {
-                  setSection(item.label);
-                  setMessage(null);
-                }}
-                style={({ pressed }) => [
-                  styles.navRow,
-                  section === item.label && styles.navRowActive,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <Feather
-                  name={item.icon}
-                  size={16}
-                  color={
-                    section === item.label ? palette.purple : palette.muted
-                  }
-                />
-                <View style={styles.navCopy}>
-                  <Text
-                    style={[
-                      styles.navTitle,
-                      section === item.label && styles.navTitleActive,
-                    ]}
-                  >
-                    {item.label}
-                  </Text>
-                  <Text style={styles.navDescription}>{item.description}</Text>
-                </View>
-              </Pressable>
-            ))}
+            {SECTIONS.filter((item) => item.label !== "Admin" || isAdmin).map(
+              (item) => (
+                <Pressable
+                  key={item.label}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: section === item.label }}
+                  onPress={() => {
+                    if (item.label === "Admin" && onOpenAdmin) {
+                      onOpenAdmin();
+                      return;
+                    }
+                    setSection(item.label);
+                    setMessage(null);
+                  }}
+                  style={({ pressed }) => [
+                    styles.navRow,
+                    section === item.label && styles.navRowActive,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Feather
+                    name={item.icon}
+                    size={16}
+                    color={
+                      section === item.label ? palette.purple : palette.muted
+                    }
+                  />
+                  <View style={styles.navCopy}>
+                    <Text
+                      style={[
+                        styles.navTitle,
+                        section === item.label && styles.navTitleActive,
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                    <Text style={styles.navDescription}>
+                      {item.description}
+                    </Text>
+                  </View>
+                </Pressable>
+              ),
+            )}
           </DesktopCard>
 
           <View style={styles.settingsMain}>
@@ -461,7 +475,7 @@ export function DesktopSettingsPage({
                   <CardHeader title="Bank Connections" />
                   <View style={styles.connectionActions}>
                     <PlaidLinkButton
-                      colors={lightColors as never}
+                      colors={desktopColors as never}
                       onConnected={onSync}
                     />
                     <SecondaryButton
@@ -757,7 +771,7 @@ const styles = StyleSheet.create({
   message: {
     minHeight: 38,
     borderWidth: 1,
-    borderColor: "#d9d1ff",
+    borderColor: palette.purple,
     borderRadius: 8,
     backgroundColor: palette.purpleSoft,
     paddingHorizontal: 12,
@@ -807,13 +821,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.border,
     borderRadius: 7,
-    backgroundColor: "#ffffff",
+    backgroundColor: palette.surface,
     paddingHorizontal: 10,
     color: palette.text,
     fontSize: 10,
     outlineStyle: "none",
   } as never,
-  inputDisabled: { backgroundColor: "#f9fafb", color: palette.muted },
+  inputDisabled: {
+    backgroundColor: palette.surfaceMuted,
+    color: palette.muted,
+  },
   saveRow: { alignItems: "flex-end" },
   previewGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   previewCard: { width: "48.8%" as never, minHeight: 150 },

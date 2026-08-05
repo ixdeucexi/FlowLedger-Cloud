@@ -77,22 +77,8 @@ interface NotificationSettingsProps {
 
 export function NotificationSettings({
   scope = "user",
-  appearance = "theme",
 }: NotificationSettingsProps) {
-  const themeColors = useColors();
-  const c =
-    appearance === "desktop"
-      ? {
-          border: "#e4e7ec",
-          card: "#ffffff",
-          destructive: "#d92d20",
-          foreground: "#101828",
-          muted: "#f2f4f7",
-          mutedForeground: "#667085",
-          primary: "#6d3bea",
-          success: "#039855",
-        }
-      : themeColors;
+  const c = useColors();
   const { width: viewportWidth } = useWindowDimensions();
   const compactLayout = isCompactSettingsLayout(viewportWidth);
   const { session, user } = useAuth();
