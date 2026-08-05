@@ -35,7 +35,7 @@ import {
   subscribeCategoryBudgets,
 } from "@/lib/categoryBudgetStore";
 import { buildDashboardFinancialModel } from "@/lib/dashboardFinancialModel";
-import { isDesktopAddAction, type DesktopAddAction } from "@/lib/desktopActions";
+import { desktopActivityDestination, isDesktopAddAction, type DesktopAddAction } from "@/lib/desktopActions";
 import { WIDE_DESKTOP_BREAKPOINT } from "@/lib/desktopExperience";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
@@ -909,8 +909,11 @@ export function DesktopDashboard() {
                   recentActivity.map((transaction, index) => {
                     const positive = transaction.amount >= 0;
                     return (
-                      <View
+                      <Pressable
                         key={transaction.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Open ${transaction.merchant_name || transaction.note || transaction.category || "transaction"}`}
+                        onPress={() => router.push(desktopActivityDestination(transaction.id, String(Date.now())) as never)}
                         style={[styles.activityRow, index > 0 && styles.rowDivider]}
                       >
                         <View
@@ -956,7 +959,7 @@ export function DesktopDashboard() {
                           </Text>
                           <Text style={styles.activityDate}>{formatActivityDate(transaction.date)}</Text>
                         </View>
-                      </View>
+                      </Pressable>
                     );
                   })
                 ) : (
@@ -1204,7 +1207,13 @@ export function DesktopDashboard() {
                         ? BRAND.amber
                         : CATEGORY_COLORS[index % CATEGORY_COLORS.length];
                   return (
-                    <View key={row.category} style={styles.categoryRow}>
+                    <Pressable
+                      key={row.category}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Open ${row.category} budget`}
+                      onPress={() => go("/(tabs)/category-budget")}
+                      style={({ pressed }) => [styles.categoryRow, { opacity: pressed ? 0.72 : 1 }]}
+                    >
                       <View style={styles.categoryLabelRow}>
                         <View style={[styles.categoryDot, { backgroundColor: color }]} />
                         <Text style={styles.categoryName} numberOfLines={1}>{row.category}</Text>
@@ -1213,7 +1222,7 @@ export function DesktopDashboard() {
                         </Text>
                       </View>
                       <ProgressBar percent={row.percentUsed} color={color} height={5} />
-                    </View>
+                    </Pressable>
                   );
                 })
               ) : (

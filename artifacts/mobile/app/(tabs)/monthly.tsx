@@ -26,7 +26,7 @@ import { useBudget } from "@/context/BudgetContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
-import { DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR, DESKTOP_MODAL_WIDE } from "@/lib/desktopModal";
+import { DESKTOP_MODAL_HANDLE, DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR, DESKTOP_MODAL_WIDE } from "@/lib/desktopModal";
 import { confirmedBillMatchId, isConfirmedBillMatch } from "@/lib/billMatching";
 import { allocationLabel, groupPlannedExpenseAllocations, matchedOccurrenceAllocations, occurrenceKey, reviewSettlementSummary, transactionDisplayName } from "@/lib/reviewCenter";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
@@ -1344,7 +1344,7 @@ export default function MonthlyScreen() {
   return (
     <View style={[styles.screen, { backgroundColor: c.background }]}>
       <PremiumBackdrop variant="purple" />
-      <View style={[styles.header, { paddingTop: insets.top + 12 + webTopPad }]}>
+      <View style={[styles.header, isDesktop && styles.desktopHeader, { paddingTop: insets.top + 12 + webTopPad }]}>
         <View>
           <Text style={[styles.calendarBrand, { color: c.primary }]}>FLOWLEDGER ALGO</Text>
           <Text style={[styles.calendarScreenLabel, { color: c.foreground }]}>Calendar</Text>
@@ -1378,6 +1378,7 @@ export default function MonthlyScreen() {
       <View
         style={[
           styles.calendarMonthBar,
+          isDesktop && styles.desktopMonthBar,
           {
             backgroundColor: c.isDark ? "rgba(2,6,23,0.32)" : "rgba(255,255,255,0.82)",
             borderColor: c.isDark ? "rgba(148,163,184,0.12)" : "rgba(15,23,42,0.10)",
@@ -1725,8 +1726,8 @@ export default function MonthlyScreen() {
             }}
           />
       ) : (
-        <View style={[styles.calFixed, { paddingBottom: insets.bottom + 92 }]}>
-          <View style={styles.calInner}>
+        <View style={[styles.calFixed, isDesktop && styles.desktopCalFixed, { paddingBottom: isDesktop ? 24 : insets.bottom + 92 }]}>
+          <View style={[styles.calInner, isDesktop && styles.desktopCalInner]}>
             <View {...(Platform.OS === "web" ? {} : calendarSwipeResponder.panHandlers)}>
               <CalendarView
                 month={month}
@@ -1781,7 +1782,7 @@ export default function MonthlyScreen() {
                     </Pressable>
                   </View>
 
-                  <ScrollView style={styles.dayOverlayScroll} contentContainerStyle={styles.dayOverlayScrollContent}>
+                  <ScrollView style={styles.dayOverlayScroll} contentContainerStyle={styles.dayOverlayScrollContent} showsVerticalScrollIndicator={isDesktop}>
                     {selectedForecastDay && selectedForecastDay.balance < settings.safety_floor ? (
                       <View style={[styles.dayOverlayRisk, { backgroundColor: selectedForecastDay.balance < 0 ? c.destructive + "14" : c.warning + "16", borderColor: selectedForecastDay.balance < 0 ? c.destructive + "70" : c.warning + "70" }]}>
                         <Feather name="alert-triangle" size={16} color={selectedForecastDay.balance < 0 ? c.destructive : c.warning} />
@@ -2454,7 +2455,7 @@ export default function MonthlyScreen() {
               const originalDay = dayFromIsoDate(fromDate);
               return (
                 <>
-                  <View style={styles.pickerHandle} />
+                  <View style={[styles.pickerHandle, isDesktop && DESKTOP_MODAL_HANDLE]} />
                   <View style={styles.pickerHeader}>
                     <View>
                       <Text style={[styles.pickerTitle, { color: c.foreground }]}>{bill.name}</Text>
@@ -2548,7 +2549,7 @@ export default function MonthlyScreen() {
               const effectiveDay = incomeDatePicker.day;
               return (
                 <>
-                  <View style={styles.pickerHandle} />
+                  <View style={[styles.pickerHandle, isDesktop && DESKTOP_MODAL_HANDLE]} />
                   <View style={styles.pickerHeader}>
                     <View>
                       <Text style={[styles.pickerTitle, { color: c.foreground }]}>{incomeDatePicker.income.name}</Text>
@@ -2646,7 +2647,7 @@ export default function MonthlyScreen() {
       >
         <Pressable style={[styles.pickerOverlay, isDesktop && DESKTOP_MODAL_OVERLAY]} onPress={() => setEditPlan(null)}>
           <Pressable style={[styles.pickerSheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_REGULAR]} onPress={e => e.stopPropagation()}>
-            <View style={styles.pickerHandle} />
+            <View style={[styles.pickerHandle, isDesktop && DESKTOP_MODAL_HANDLE]} />
             <View style={styles.pickerHeader}>
               <View>
                 <Text style={[styles.pickerTitle, { color: c.foreground }]}>Edit Plan</Text>
@@ -2782,6 +2783,7 @@ export default function MonthlyScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 22, paddingBottom: 10 },
+  desktopHeader: { width: "96%", maxWidth: 1440, alignSelf: "center" },
   calendarBrand: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 2.2, marginBottom: 3, textTransform: "uppercase" },
   calendarScreenLabel: { fontSize: 28, fontFamily: "Inter_700Bold", letterSpacing: -0.8 },
   forecastTag: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginTop: 1 },
@@ -2789,6 +2791,7 @@ const styles = StyleSheet.create({
   todayChip: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", borderWidth: 2 },
   todayChipText: { fontSize: 17, fontFamily: "Inter_800ExtraBold", lineHeight: 20 },
   calendarMonthBar: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginHorizontal: 22, marginTop: 0, marginBottom: 12, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", backgroundColor: "rgba(2,6,23,0.32)", borderRadius: 24, paddingHorizontal: 8, paddingVertical: 10 },
+  desktopMonthBar: { width: "96%", maxWidth: 1440, alignSelf: "center", marginHorizontal: 0 },
   monthArrowBtn: { width: 46, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: "rgba(15,23,42,0.58)" },
   monthCenterLabel: { flex: 1, minHeight: 42, alignItems: "center", justifyContent: "center", borderRadius: 18 },
   monthCenterPressed: { opacity: 0.72, transform: [{ scale: 0.985 }] },
@@ -2858,6 +2861,8 @@ const styles = StyleSheet.create({
   dueDayInput: { width: 42, height: 30, borderRadius: 6, textAlign: "center", fontSize: 14, fontFamily: "Inter_600SemiBold", borderWidth: 1 },
   calFixed: { flex: 1, paddingTop: 8 },
   calInner: { flex: 1, paddingHorizontal: 12 },
+  desktopCalFixed: { paddingTop: 0 },
+  desktopCalInner: { width: "96%", maxWidth: 1440, alignSelf: "center", paddingHorizontal: 0 },
   weeklyChip: { flexDirection: "row", alignItems: "center", gap: 5, marginHorizontal: 12, marginTop: 2, marginBottom: 6, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   weeklyChipText: { fontSize: 11, fontFamily: "Inter_500Medium" },
   dayOverlayBackdrop: { flex: 1, justifyContent: "center", padding: 18, backgroundColor: "rgba(0,0,0,0.64)" },

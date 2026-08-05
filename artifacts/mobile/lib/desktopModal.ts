@@ -35,3 +35,13 @@ export const DESKTOP_MODAL_WIDE: ViewStyle = {
   ...DESKTOP_MODAL_SURFACE,
   maxWidth: 660,
 };
+
+export const DESKTOP_MODAL_MATCH: ViewStyle = {
+  ...DESKTOP_MODAL_SURFACE,
+  maxWidth: 820,
+  maxHeight: "80%",
+};
+
+export const DESKTOP_MODAL_HANDLE: ViewStyle = {
+  display: "none",
+};

@@ -1,8 +1,9 @@
 import React from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 import type { DailyBalance, DecisionRecord, Goal, GoalExpense, Transaction } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
+import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { isConfirmedBillMatch } from "@/lib/billMatching";
 import { isSnowballPaymentTransaction, snowballPaymentName } from "@/lib/debtPaymentPlan";
 import { allocationLabel, groupPlannedExpenseAllocations, occurrenceKey } from "@/lib/reviewCenter";
@@ -104,6 +105,8 @@ export function CalendarView({
   overdueBillOccurrenceKeys = EMPTY_OVERDUE_BILL_KEYS,
 }: CalendarViewProps) {
   const c = useColors();
+  const isDesktop = useDesktopExperience();
+  const { height: viewportHeight } = useWindowDimensions();
   const calendarTheme = c.isDark
     ? {
         surface: CALENDAR.surface,
@@ -189,6 +192,8 @@ export function CalendarView({
   for (let d = 1; d <= daysInMonth; d += 1) cells.push(d);
   while (cells.length % 7 !== 0) cells.push(null);
   const hasSixRows = cells.length / 7 > 5;
+  const calendarRowCount = cells.length / 7;
+  const desktopCellHeight = Math.max(72, Math.min(118, Math.floor((viewportHeight - 250) / calendarRowCount)));
 
   const dateStr = (day: number) =>
     `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -295,6 +300,7 @@ export function CalendarView({
               accessibilityState={{ disabled: isBeforeStart, selected: isSelected }}
               style={({ pressed }) => [
                 styles.cellOuter,
+                isDesktop && { minHeight: desktopCellHeight },
                 { borderColor: calendarTheme.line },
                 { opacity: isBeforeStart ? 0.58 : pressed ? 0.72 : 1 },
               ]}
@@ -302,6 +308,7 @@ export function CalendarView({
               <View
                 style={[
                   styles.cellInner,
+                  isDesktop && styles.desktopCellInner,
                   { backgroundColor: calendarTheme.cell },
                   isToday ? { backgroundColor: calendarTheme.todayCell } : null,
                   isSelected
@@ -317,7 +324,7 @@ export function CalendarView({
                     : null,
                 ]}
               >
-                <View style={styles.dayTopRow}>
+                <View style={[styles.dayTopRow, isDesktop && styles.desktopDayTopRow]}>
                   <View style={isToday ? [styles.todayCircle, { backgroundColor: calendarTheme.today }] : undefined}>
                     <Text
                       style={[
@@ -335,6 +342,7 @@ export function CalendarView({
                     <Text
                       style={[
                         styles.balanceText,
+                        isDesktop && styles.desktopBalanceText,
                         { color: db.balance >= safetyFloor ? calendarTheme.green : db.balance < 0 ? calendarTheme.red : calendarTheme.amber },
                       ]}
                       numberOfLines={1}
@@ -349,7 +357,7 @@ export function CalendarView({
                     const palette = chipPalette(chip.kind, c.isDark);
                     return (
                       <View key={`${chip.label}-${index}`} style={[styles.eventChip, { backgroundColor: palette.bg, borderColor: palette.border }]}>
-                        <Text style={[styles.eventChipText, { color: palette.text }]} numberOfLines={1}>{chip.label}</Text>
+                        <Text style={[styles.eventChipText, isDesktop && styles.desktopEventChipText, { color: palette.text }]} numberOfLines={1}>{chip.label}</Text>
                       </View>
                     );
                   })}
@@ -421,11 +429,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingBottom: 4,
   },
+  desktopCellInner: { paddingTop: 8, paddingHorizontal: 8, paddingBottom: 7 },
   emptyCell: { opacity: 0.35 },
   dayTopRow: { alignItems: "center", gap: 1, minHeight: 27 },
+  desktopDayTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   todayCircle: { minWidth: 22, height: 22, borderRadius: 7, alignItems: "center", justifyContent: "center", paddingHorizontal: 6, backgroundColor: CALENDAR.today },
   dayNum: { fontSize: 15 },
   balanceText: { flexShrink: 1, fontSize: 9, fontFamily: "Inter_800ExtraBold" },
+  desktopBalanceText: { fontSize: 10 },
   eventStack: { marginTop: 4, gap: 2 },
   eventChip: {
     minHeight: 16,
@@ -438,6 +449,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   eventChipText: { flex: 1, fontSize: 8, fontFamily: "Inter_800ExtraBold", lineHeight: 11 },
+  desktopEventChipText: { fontSize: 9, lineHeight: 12 },
   moreText: { fontSize: 8, fontFamily: "Inter_600SemiBold", textAlign: "center", color: CALENDAR.faded },
   legendRow: {
     flexDirection: "row",

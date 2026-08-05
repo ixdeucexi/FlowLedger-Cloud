@@ -260,13 +260,14 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
       onRequestClose={() => confirmation ? setConfirmation(null) : onClose()}
     >
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.overlay, isDesktop && DESKTOP_MODAL_OVERLAY]}>
+        <Pressable accessibilityLabel="Close transaction editor" onPress={onClose} style={StyleSheet.absoluteFillObject} />
         <View style={[styles.container, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_REGULAR]}>
           <View style={styles.header}>
             <Text style={[styles.title, { color: c.foreground }]}>{editTx ? "Edit Transaction" : "Add Transaction"}</Text>
             <Pressable onPress={onClose} hitSlop={8}><Feather name="x" size={22} color={c.mutedForeground} /></Pressable>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollView showsVerticalScrollIndicator={isDesktop} keyboardShouldPersistTaps="handled">
             <View style={[styles.typeToggle, { backgroundColor: c.muted, borderRadius: 10 }]}>
               <Pressable
                 onPress={() => { setIsTransfer(false); setIsExpense(true); }}

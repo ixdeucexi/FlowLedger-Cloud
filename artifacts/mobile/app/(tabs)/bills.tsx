@@ -508,7 +508,7 @@ export default function BillsScreen() {
         </Pressable>
       ) : null}
 
-      <View style={[styles.segmentWrap, isDesktop && styles.desktopSegmentWrap, { paddingHorizontal: isDesktop ? 0 : 16, marginBottom: 12 }]}>
+      <View style={[styles.segmentWrap, isDesktop && styles.desktopSegmentWrap, { paddingHorizontal: 16, marginBottom: 12 }]}>
         <View style={[styles.segment, { backgroundColor: c.muted }]}>
           {(["bills", "debt"] as Tab[]).map(t => (
             <Pressable
@@ -973,13 +973,13 @@ export default function BillsScreen() {
 
 const styles = StyleSheet.create({
   screen:   { flex: 1 },
-  desktopCanvas: { width: "100%", maxWidth: 1120, alignSelf: "center", paddingHorizontal: 24, paddingTop: 16 },
-  desktopHeader: { width: "100%", maxWidth: 900, alignSelf: "center", paddingHorizontal: 0, paddingBottom: 18 },
+  desktopCanvas: { width: "100%", paddingTop: 16 },
+  desktopHeader: { width: "100%", paddingHorizontal: 18, paddingBottom: 10 },
   desktopTitle: { fontSize: 30, letterSpacing: -0.8 },
-  desktopSection: { width: "100%", maxWidth: 900, alignSelf: "center", marginHorizontal: 0 },
-  desktopSegmentWrap: { width: "100%", maxWidth: 900, alignSelf: "center" },
-  desktopToolbar: { width: "100%", maxWidth: 900, alignSelf: "center", paddingHorizontal: 0 },
-  desktopList: { width: "100%", maxWidth: 900, alignSelf: "center", paddingHorizontal: 0, paddingTop: 8 },
+  desktopSection: { alignSelf: "stretch" },
+  desktopSegmentWrap: { alignSelf: "stretch" },
+  desktopToolbar: { alignSelf: "stretch" },
+  desktopList: { alignSelf: "stretch", paddingTop: 8 },
   desktopCard: { minHeight: 82, borderRadius: 16, shadowOpacity: 0.12, shadowRadius: 16 },
   header:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingBottom: 14 },
   title:    { fontSize: 34, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.1 },

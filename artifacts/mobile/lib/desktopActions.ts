@@ -19,3 +19,10 @@ export function desktopPlannerDestination(section: "accounts" | "notifications" 
     params: { section, mode: "planner" },
   };
 }
+
+export function desktopActivityDestination(activityId: string, activityAt: string) {
+  return {
+    pathname: "/(tabs)/transactions" as const,
+    params: { activityId, activityAt },
+  };
+}

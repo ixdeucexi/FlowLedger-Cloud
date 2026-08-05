@@ -14,7 +14,7 @@ import { useBudget, type Goal, type GoalAffordability } from "@/context/BudgetCo
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
-import { DESKTOP_MODAL_COMPACT, DESKTOP_MODAL_OVERLAY } from "@/lib/desktopModal";
+import { DESKTOP_MODAL_COMPACT, DESKTOP_MODAL_HANDLE, DESKTOP_MODAL_OVERLAY } from "@/lib/desktopModal";
 import type { ConfirmActionOptions } from "@/lib/confirmAction";
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
@@ -155,8 +155,9 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
         onRequestClose={() => confirmation ? setConfirmation(null) : onClose()}
       >
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.overlay, isDesktop && DESKTOP_MODAL_OVERLAY]}>
+        <Pressable accessibilityLabel="Close goal editor" onPress={onClose} style={StyleSheet.absoluteFillObject} />
         <View style={[styles.container, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_COMPACT]}>
-          <View style={styles.handle} />
+          <View style={[styles.handle, isDesktop && DESKTOP_MODAL_HANDLE]} />
           <View style={styles.header}>
             <Text style={[styles.title, { color: c.foreground }]}>
               {editGoal ? "Edit Goal or Bucket" : "Set Aside Money"}
@@ -166,7 +167,7 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
             </Pressable>
           </View>
 
-          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={isDesktop}>
 
             {/* ── Goal type ── */}
             <Text style={lbl}>Goal Type</Text>

@@ -80,6 +80,7 @@ export function AccountModal({
   return (
     <Modal visible={visible} animationType={isDesktop ? "fade" : "slide"} transparent onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.overlay, isDesktop && DESKTOP_MODAL_OVERLAY]}>
+        <Pressable accessibilityLabel="Close account editor" onPress={onClose} style={StyleSheet.absoluteFillObject} />
         <View style={[styles.sheet, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_COMPACT]}>
           <View style={styles.header}>
             <Text style={[styles.title, { color: c.foreground }]}>

@@ -46,6 +46,7 @@ export function ExtraPaymentModal({ visible, onClose, onApply }: ExtraPaymentMod
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={[styles.overlay, isDesktop && DESKTOP_MODAL_OVERLAY]}
       >
+        <Pressable accessibilityLabel="Close extra payment editor" onPress={onClose} style={StyleSheet.absoluteFillObject} />
         <View style={[styles.container, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_COMPACT]}>
           <View style={styles.header}>
             <Text style={[styles.title, { color: c.foreground }]}>Extra Payment</Text>
