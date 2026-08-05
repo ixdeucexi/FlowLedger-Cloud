@@ -48,17 +48,19 @@ function ConfirmActionDialog({ request, onClose, contained = false }: DialogProp
   };
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Cancel ${confirmText.toLowerCase()}`}
+    <View
       accessibilityViewIsModal
       style={[styles.overlay, contained && styles.containedOverlay]}
-      onPress={close}
     >
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Cancel ${confirmText.toLowerCase()}`}
+        onPress={close}
+        style={StyleSheet.absoluteFillObject}
+      />
+      <View
         accessibilityRole="alert"
         style={[styles.dialog, { backgroundColor: c.card, borderColor: c.border }]}
-        onPress={() => undefined}
       >
         <View style={[styles.icon, { backgroundColor: actionColor + "18" }]}>
           <Feather name={destructive ? "trash-2" : "help-circle"} size={20} color={actionColor} />
@@ -93,8 +95,8 @@ function ConfirmActionDialog({ request, onClose, contained = false }: DialogProp
             </Text>
           </Pressable>
         </View>
-      </Pressable>
-    </Pressable>
+      </View>
+    </View>
   );
 }
 

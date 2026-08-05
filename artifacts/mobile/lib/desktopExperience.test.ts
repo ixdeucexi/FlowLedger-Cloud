@@ -20,7 +20,7 @@ test("keeps native apps and narrow web sessions on the existing layout", () => {
     false,
   );
   assert.equal(
-    shouldUseDesktopExperience({ platform: "web", viewportWidth: 899 }),
+    shouldUseDesktopExperience({ platform: "web", viewportWidth: 1023 }),
     false,
   );
 });
