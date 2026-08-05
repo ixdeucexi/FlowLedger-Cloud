@@ -15,6 +15,7 @@ import { CalendarView } from "@/components/CalendarView";
 import { CommandPlusButton } from "@/components/CommandPlusButton";
 import { ConfirmActionOverlay } from "@/components/ConfirmActionModal";
 import { DebtPaymentAppliedModal, type DebtPaymentAppliedDetail } from "@/components/DebtPaymentAppliedModal";
+import { DesktopCalendarPage } from "@/components/desktop/DesktopCalendarPage";
 import { EmptyState } from "@/components/EmptyState";
 import { FullPaymentPromptModal } from "@/components/FullPaymentPromptModal";
 import { GoalModal } from "@/components/GoalModal";
@@ -31,6 +32,7 @@ import { confirmedBillMatchId, isConfirmedBillMatch } from "@/lib/billMatching";
 import { allocationLabel, groupPlannedExpenseAllocations, matchedOccurrenceAllocations, occurrenceKey, reviewSettlementSummary, transactionDisplayName } from "@/lib/reviewCenter";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
 import { buildDayForecastFloPrompt, groupForecastEvents } from "@/lib/forecastDisplay";
+import type { FinancialEvent } from "@/lib/forecast";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { buildOverdueBillOccurrences } from "@/lib/overdueBills";
 import { pendingMatchStatusLabel, pendingOccurrenceKeySet, pendingPlanMatchForOccurrence } from "@/lib/pendingPlanMatches";
@@ -461,6 +463,14 @@ export default function MonthlyScreen() {
       category: transaction.user_edited_at ? transaction.category : primaryAllocation?.category || transaction.category,
     } : transaction;
   }), [txList]);
+  const transferTransactionIds = useMemo(
+    () => new Set(
+      calendarTransactions
+        .filter(transaction => transaction.review_status === "transfer" || Boolean(transaction.transfer_group_id))
+        .map(transaction => transaction.id),
+    ),
+    [calendarTransactions],
+  );
   const billOccurrenceMatches = useMemo(() => matchedOccurrenceAllocations(txList, "bill"), [txList]);
   const incomeOccurrenceMatches = useMemo(() => matchedOccurrenceAllocations(txList, "income"), [txList]);
   const pendingBillOccurrenceKeys = useMemo(
@@ -1304,6 +1314,15 @@ export default function MonthlyScreen() {
     if (selectedYear !== todayYear) setSelectedYear(todayYear);
   }, [selectedYear, setSelectedYear, todayIso, todayMonth, todayYear]);
 
+  const desktopSelectionMonthRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isDesktop) return;
+    const monthKey = `${selectedYear}-${month}`;
+    if (desktopSelectionMonthRef.current === monthKey) return;
+    desktopSelectionMonthRef.current = monthKey;
+    setSelectedDate(isCurrentMonth ? todayIso : isoDateForMonthDay(selectedYear, month, 1));
+  }, [isCurrentMonth, isDesktop, month, selectedYear, todayIso]);
+
   const monthSearchOptions = useMemo(() => {
     const query = monthSearchQuery.trim().toLowerCase();
     return MONTH_FULL
@@ -1339,10 +1358,68 @@ export default function MonthlyScreen() {
     setSelectedDate(isoDateForMonthDay(nextYear, month, 1));
   }, [month, selectedYear, setSelectedYear]);
 
+  const openDesktopCalendarEvent = (event: FinancialEvent) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (event.sourceType === "transaction") {
+      const transaction = transactions.find(item => item.id === event.sourceId);
+      if (transaction) openEditTransaction(transaction);
+      return;
+    }
+    if (event.sourceType === "bill") {
+      const bill = bills.find(item => item.id === event.sourceId);
+      if (!bill) return;
+      setSelectedDate(null);
+      setDueDayPicker({ bill, fromDate: event.date });
+      return;
+    }
+    if (event.sourceType === "income") {
+      const occurrence = incomeOccurrences.find(item => item.incomeId === event.sourceId && item.day === dayFromIsoDate(event.date));
+      if (!occurrence) return;
+      setSelectedDate(null);
+      setIncomeDatePicker({ income: occurrence.income, day: occurrence.day, amount: occurrence.amount });
+      return;
+    }
+    if (event.sourceType === "goal") {
+      openEditBucket(event.sourceId);
+      return;
+    }
+    if (event.sourceType === "decision") {
+      const plan = decisions.find(item => item.id === event.sourceId);
+      if (plan) {
+        setSelectedDate(null);
+        openEditPlan(plan);
+      }
+      return;
+    }
+    if (event.sourceType === "extra_payment") {
+      setSelectedDate(null);
+      setSnowballModalVisible(true);
+    }
+  };
+
   const webTopPad = Platform.OS === "web" ? 4 : 0;
 
   return (
     <View style={[styles.screen, { backgroundColor: c.background }]}>
+      {isDesktop ? (
+        <DesktopCalendarPage
+          month={month}
+          year={selectedYear}
+          selectedDate={selectedDate}
+          dailyBalances={dailyBalances}
+          transferTransactionIds={transferTransactionIds}
+          getDailyBalances={getDailyBalances}
+          onToday={jumpToToday}
+          onPreviousMonth={() => changeMonth(-1)}
+          onNextMonth={() => changeMonth(1)}
+          onOpenMonthSelector={openMonthSearch}
+          onAddTransaction={openAddTransaction}
+          onSelectDate={setSelectedDate}
+          onCloseSelectedDay={() => setSelectedDate(null)}
+          onOpenEvent={openDesktopCalendarEvent}
+        />
+      ) : (
+        <>
       <PremiumBackdrop variant="purple" />
       <View style={[styles.header, isDesktop && styles.desktopHeader, { paddingTop: insets.top + 12 + webTopPad }]}>
         <View>
@@ -2339,6 +2416,8 @@ export default function MonthlyScreen() {
 
           </View>
         </View>
+      )}
+        </>
       )}
 
       <Modal

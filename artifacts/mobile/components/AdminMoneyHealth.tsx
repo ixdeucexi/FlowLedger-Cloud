@@ -34,9 +34,10 @@ function checkedLabel(value?: string) {
   return `Checked ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })} at ${date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
 }
 
-export function AdminMoneyHealth({ householdId, appearance = "theme" }: { householdId?: string | null; appearance?: "theme" | "desktop" }) {
+export function AdminMoneyHealth({ householdId, appearance = "theme" }: { householdId?: string | null; appearance?: "theme" | "desktop" | "settings" }) {
   const themeColors = useColors();
-  const isDesktop = appearance === "desktop";
+  const isDesktop = appearance !== "theme";
+  const isSettings = appearance === "settings";
   const colors = isDesktop ? {
     ...themeColors,
     card: palette.surface,
@@ -95,7 +96,7 @@ export function AdminMoneyHealth({ householdId, appearance = "theme" }: { househ
   const error = runCheck.error || health.error;
 
   return (
-    <View style={[styles.card, isDesktop && styles.desktopCard, { backgroundColor: colors.card, borderColor: isDesktop ? colors.border : statusColor + "55" }]}>
+    <View style={[styles.card, isDesktop && styles.desktopCard, isSettings && styles.settingsCard, { backgroundColor: isSettings ? "transparent" : colors.card, borderColor: isDesktop ? colors.border : statusColor + "55" }]}>
       <View style={styles.header}>
         <View style={[styles.icon, { backgroundColor: statusBackground }]}>
           <Feather name={clean ? "check-circle" : "activity"} size={18} color={statusColor} />
@@ -160,6 +161,7 @@ export function AdminMoneyHealth({ householdId, appearance = "theme" }: { househ
 const styles = StyleSheet.create({
   card: { borderWidth: 1, borderRadius: 18, padding: 16, gap: 12 },
   desktopCard: { borderRadius: 10 },
+  settingsCard: { borderWidth: 0, borderRadius: 0, paddingHorizontal: 15, paddingVertical: 14 },
   header: { flexDirection: "row", alignItems: "flex-start", gap: 11 },
   icon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   copy: { flex: 1, minWidth: 0 },

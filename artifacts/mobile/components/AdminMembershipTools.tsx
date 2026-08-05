@@ -11,9 +11,10 @@ import { flowmentumPreviewStorageKey } from "@/lib/flowmentumHandoff";
 import { PLAN_CATALOG, PLAN_TIERS, type PlanTier } from "@/lib/membership";
 import { desktopPalette as palette } from "@/components/desktop/DesktopUI";
 
-export function AdminMembershipTools({ appearance = "theme" }: { appearance?: "theme" | "desktop" }) {
+export function AdminMembershipTools({ appearance = "theme" }: { appearance?: "theme" | "desktop" | "settings" }) {
   const themeColors = useColors();
-  const isDesktop = appearance === "desktop";
+  const isDesktop = appearance !== "theme";
+  const isSettings = appearance === "settings";
   const colors = isDesktop ? {
     ...themeColors,
     card: palette.surface,
@@ -66,8 +67,8 @@ export function AdminMembershipTools({ appearance = "theme" }: { appearance?: "t
   };
 
   return (
-    <View style={[styles.container, isDesktop && styles.desktopContainer]}>
-      <View style={[styles.card, isDesktop && styles.desktopCard, { backgroundColor: colors.card, borderColor: isDesktop ? colors.border : colors.warning + "55" }]}>
+    <View style={[styles.container, isDesktop && styles.desktopContainer, isSettings && styles.settingsContainer]}>
+      <View style={[styles.card, isDesktop && styles.desktopCard, isSettings && styles.settingsSection, { backgroundColor: isSettings ? "transparent" : colors.card, borderColor: isDesktop ? colors.border : colors.warning + "55" }]}>
         <View style={styles.header}>
           <Feather name="tool" size={18} color={colors.warning} />
           <View style={styles.copy}>
@@ -122,7 +123,7 @@ export function AdminMembershipTools({ appearance = "theme" }: { appearance?: "t
         </View>
       </View>
 
-      <View style={[styles.card, isDesktop && styles.desktopCard, { backgroundColor: colors.card, borderColor: isDesktop ? colors.border : colors.success + "55" }]}>
+      <View style={[styles.card, isDesktop && styles.desktopCard, isSettings && styles.settingsSection, isSettings && styles.settingsDivider, { backgroundColor: isSettings ? "transparent" : colors.card, borderColor: isDesktop ? colors.border : colors.success + "55" }]}>
         <View style={styles.header}>
           <Feather name="trending-up" size={18} color={colors.success} />
           <View style={styles.copy}>
@@ -152,7 +153,7 @@ export function AdminMembershipTools({ appearance = "theme" }: { appearance?: "t
         </View>
       </View>
 
-      <View style={[styles.card, isDesktop && styles.desktopCard, { backgroundColor: colors.card, borderColor: isDesktop ? colors.border : colors.primary + "55" }]}>
+      <View style={[styles.card, isDesktop && styles.desktopCard, isSettings && styles.settingsSection, isSettings && styles.settingsDivider, { backgroundColor: isSettings ? "transparent" : colors.card, borderColor: isDesktop ? colors.border : colors.primary + "55" }]}>
         <View style={styles.header}>
           <Feather name="user-check" size={18} color={colors.primary} />
           <View style={styles.copy}>
@@ -175,6 +176,8 @@ export function AdminMembershipTools({ appearance = "theme" }: { appearance?: "t
         />
         <View style={styles.actions}>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Grant Pro access to tester"
             disabled={testerBusy || !testerEmail.trim()}
             onPress={() => void setTesterPlan("pro")}
             style={({ pressed }) => [
@@ -191,6 +194,8 @@ export function AdminMembershipTools({ appearance = "theme" }: { appearance?: "t
             </Text>
           </Pressable>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Return tester to Basic access"
             disabled={testerBusy || !testerEmail.trim()}
             onPress={() => void setTesterPlan("free")}
             style={({ pressed }) => [
@@ -219,8 +224,11 @@ export function AdminMembershipTools({ appearance = "theme" }: { appearance?: "t
 const styles = StyleSheet.create({
   container: { gap: 12 },
   desktopContainer: { gap: 12 },
+  settingsContainer: { gap: 0 },
   card: { borderWidth: 1, borderRadius: 18, padding: 14 },
   desktopCard: { borderRadius: 10, padding: 16 },
+  settingsSection: { borderWidth: 0, borderRadius: 0, paddingHorizontal: 15, paddingVertical: 14 },
+  settingsDivider: { borderTopWidth: 1, borderTopColor: palette.borderSoft },
   desktopControl: { minHeight: 38, borderRadius: 7 },
   desktopInput: { minHeight: 38, borderRadius: 7, fontSize: 11 },
   header: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
