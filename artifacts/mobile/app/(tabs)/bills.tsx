@@ -568,6 +568,57 @@ export default function BillsScreen() {
             />
           </View>
 
+          {/* Keep the Bills / Debt switch in one stable location for both views. */}
+          <View
+            style={[
+              styles.segmentWrap,
+              { paddingHorizontal: 16, marginBottom: 12 },
+            ]}
+          >
+            <View style={[styles.segment, { backgroundColor: c.muted }]}>
+              {(["bills", "debt"] as Tab[]).map((t) => (
+                <Pressable
+                  key={t}
+                  accessibilityRole="tab"
+                  accessibilityLabel={t === "bills" ? "Bills" : "Debt"}
+                  accessibilityState={{ selected: activeTab === t }}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setActiveTab(t);
+                  }}
+                  style={[
+                    styles.segmentBtn,
+                    {
+                      backgroundColor:
+                        activeTab === t ? c.primary : "transparent",
+                    },
+                  ]}
+                >
+                  <Feather
+                    name={t === "bills" ? "file-text" : "credit-card"}
+                    size={13}
+                    color={
+                      activeTab === t ? c.primaryForeground : c.mutedForeground
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      {
+                        color:
+                          activeTab === t
+                            ? c.primaryForeground
+                            : c.mutedForeground,
+                      },
+                    ]}
+                  >
+                    {t === "bills" ? "Bills" : "Debt"}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
           {activeTab === "bills" && firstOverdueBill ? (
             <Pressable
               accessibilityRole="button"
@@ -747,55 +798,6 @@ export default function BillsScreen() {
               </View>
             </View>
           ) : null}
-
-          {/* ── Bills / Debt segment toggle ── */}
-          <View
-            style={[
-              styles.segmentWrap,
-              isDesktop && styles.desktopSegmentWrap,
-              { paddingHorizontal: 16, marginBottom: 12 },
-            ]}
-          >
-            <View style={[styles.segment, { backgroundColor: c.muted }]}>
-              {(["bills", "debt"] as Tab[]).map((t) => (
-                <Pressable
-                  key={t}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setActiveTab(t);
-                  }}
-                  style={[
-                    styles.segmentBtn,
-                    {
-                      backgroundColor:
-                        activeTab === t ? c.primary : "transparent",
-                    },
-                  ]}
-                >
-                  <Feather
-                    name={t === "bills" ? "file-text" : "credit-card"}
-                    size={13}
-                    color={
-                      activeTab === t ? c.primaryForeground : c.mutedForeground
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.segmentText,
-                      {
-                        color:
-                          activeTab === t
-                            ? c.primaryForeground
-                            : c.mutedForeground,
-                      },
-                    ]}
-                  >
-                    {t === "bills" ? "Bills" : "Debt"}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
 
           {/* ════════════════════ BILLS VIEW ════════════════════ */}
           {activeTab === "bills" && (
@@ -1875,7 +1877,6 @@ const styles = StyleSheet.create({
   desktopHeader: { width: "100%", paddingHorizontal: 18, paddingBottom: 10 },
   desktopTitle: { fontSize: 30, letterSpacing: -0.8 },
   desktopSection: { alignSelf: "stretch" },
-  desktopSegmentWrap: { alignSelf: "stretch" },
   desktopToolbar: { alignSelf: "stretch" },
   desktopList: { alignSelf: "stretch", paddingTop: 8 },
   activitySizedBillCard: {
