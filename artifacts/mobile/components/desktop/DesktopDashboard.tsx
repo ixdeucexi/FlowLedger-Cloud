@@ -38,6 +38,7 @@ import { buildDashboardFinancialModel } from "@/lib/dashboardFinancialModel";
 import { desktopActivityDestination, isDesktopAddAction, type DesktopAddAction } from "@/lib/desktopActions";
 import { WIDE_DESKTOP_BREAKPOINT } from "@/lib/desktopExperience";
 import { transactionDebt } from "@/lib/transactionDebt";
+import { buildReviewQueue } from "@/lib/reviewCenter";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 type Accent = "cyan" | "purple" | "green" | "amber" | "blue" | "neutral";
@@ -57,8 +58,8 @@ type UpcomingBill = {
 
 const BRAND = {
   background: "#03040b",
-  surface: "rgba(10, 16, 36, 0.92)",
-  surfaceStrong: "rgba(12, 20, 44, 0.96)",
+  surface: "rgba(10, 16, 36, 0.96)",
+  surfaceStrong: "rgba(12, 20, 44, 0.985)",
   text: "#f8fafc",
   muted: "#94a3b8",
   subtle: "#64748b",
@@ -498,6 +499,7 @@ export function DesktopDashboard() {
     incomes,
     pendingBankTransactions,
     pendingPlanMatches,
+    transactions,
     selectedYear,
     setDashboardFilter,
     settings,
@@ -717,6 +719,13 @@ export function DesktopDashboard() {
         .sort((left, right) => right.date.localeCompare(left.date))
         .slice(0, 4),
     [monthTransactions],
+  );
+  const reviewCount = useMemo(
+    () => buildReviewQueue(
+      transactions,
+      `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`,
+    ).length,
+    [now, transactions],
   );
   const available = algorithmSuite.safeCushion.amount;
   const progress = algorithmSuite.stability;
@@ -1131,6 +1140,26 @@ export function DesktopDashboard() {
                     <Text style={styles.quickLabel}>{action.label}</Text>
                   </Pressable>
                 ))}
+              </View>
+              <View style={styles.quickFooter}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open Review Center${reviewCount ? `, ${reviewCount} items need attention` : ""}`}
+                  onPress={() => go("/(tabs)/review")}
+                  style={({ pressed }) => [styles.quickFooterButton, { opacity: pressed ? 0.72 : 1 }]}
+                >
+                  <Feather name="check-square" size={14} color={BRAND.purple} />
+                  <Text style={styles.quickFooterText}>Review Center{reviewCount ? ` · ${reviewCount}` : ""}</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Open Reports and Insights"
+                  onPress={() => go("/(tabs)/reports")}
+                  style={({ pressed }) => [styles.quickFooterButton, { opacity: pressed ? 0.72 : 1 }]}
+                >
+                  <Feather name="bar-chart-2" size={14} color={BRAND.cyan} />
+                  <Text style={styles.quickFooterText}>Reports &amp; Insights</Text>
+                </Pressable>
               </View>
             </View>
           </SurfaceCard>

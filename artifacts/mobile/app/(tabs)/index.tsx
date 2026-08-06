@@ -29,7 +29,7 @@ import { applyCategoryBudgetMove, buildZeroBudgetSummary } from "@/lib/categoryP
 import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets as saveCategoryBudgetsRemote, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
 import { buildDashboardFinancialModel } from "@/lib/dashboardFinancialModel";
 import { isCheckingBalanceTransaction } from "@/lib/billMatching";
-import { dateOnlyToLocalDate } from "@/lib/dateLabels";
+import { dateOnlyToLocalDate, localDateString } from "@/lib/dateLabels";
 import {
   FLOWMENTUM_URL,
   flowmentumPreviewStorageKey,
@@ -37,7 +37,7 @@ import {
   isFlowmentumHandoffEligible,
   shouldShowFlowmentumHandoff,
 } from "@/lib/flowmentumHandoff";
-import { transactionCategoryParts } from "@/lib/reviewCenter";
+import { buildReviewQueue, transactionCategoryParts } from "@/lib/reviewCenter";
 import type { AlgorithmInsight } from "@/lib/algorithmSuite";
 import { unplannedPendingExpenses } from "@/lib/plaidActivity";
 
@@ -222,7 +222,7 @@ function MobileDashboardScreen() {
     getCashFlow, addBill, getDailyBalances, getTransactionsForMonth, settings,
     accounts, connectedBankAccounts, incomes, updateSettings, forecastConfidence,
     categories, activeHousehold, canEditHousehold,
-    pendingBankTransactions, pendingPlanMatches,
+    pendingBankTransactions, pendingPlanMatches, transactions,
   } = useBudget();
   const categoryBudgetScope = useMemo(() => ({
     userId: user?.id,
@@ -798,6 +798,10 @@ function MobileDashboardScreen() {
       },
     } as any);
   }, [algorithmSuite.flowScore.label, algorithmSuite.flowScore.score, algorithmSuite.safeCushion.lowestBalance, algorithmSuite.stability, forecastConfidence.label, router, settings.safety_floor]);
+  const reviewCenterCount = useMemo(
+    () => buildReviewQueue(transactions, localDateString()).length,
+    [transactions],
+  );
   return (
     <ScrollView
       style={[styles.screen, styles.dashboardStage, { backgroundColor: dashboardTheme.screen }]}
@@ -1165,6 +1169,44 @@ function MobileDashboardScreen() {
         progress={algorithmSuite.stability}
         onViewGuide={openStabilityGuide}
       />
+
+      <View style={[styles.dashboardQuickAccess, { backgroundColor: c.card, borderColor: c.border }]}>
+        <Text style={[styles.dashboardQuickTitle, { color: c.foreground }]}>Quick access</Text>
+        <View style={styles.dashboardQuickRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Open Review Center${reviewCenterCount ? `, ${reviewCenterCount} items need attention` : ""}`}
+            onPress={() => router.push("/(tabs)/review" as any)}
+            style={({ pressed }) => [styles.dashboardQuickButton, { backgroundColor: c.primary + "12", borderColor: c.primary + "35", opacity: pressed ? 0.74 : 1 }]}
+          >
+            <View style={[styles.dashboardQuickIcon, { backgroundColor: c.primary + "20" }]}>
+              <Feather name="check-square" size={18} color={c.primary} />
+            </View>
+            <View style={styles.dashboardQuickCopy}>
+              <Text style={[styles.dashboardQuickLabel, { color: c.foreground }]}>Review Center</Text>
+              <Text style={[styles.dashboardQuickMeta, { color: c.mutedForeground }]}>
+                {reviewCenterCount ? `${reviewCenterCount} item${reviewCenterCount === 1 ? "" : "s"} need attention` : "Your posted activity is reviewed"}
+              </Text>
+            </View>
+            <Feather name="chevron-right" size={17} color={c.mutedForeground} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open Reports and Insights"
+            onPress={() => router.push("/(tabs)/reports" as any)}
+            style={({ pressed }) => [styles.dashboardQuickButton, { backgroundColor: c.accent + "10", borderColor: c.accent + "30", opacity: pressed ? 0.74 : 1 }]}
+          >
+            <View style={[styles.dashboardQuickIcon, { backgroundColor: c.accent + "18" }]}>
+              <Feather name="bar-chart-2" size={18} color={c.accent} />
+            </View>
+            <View style={styles.dashboardQuickCopy}>
+              <Text style={[styles.dashboardQuickLabel, { color: c.foreground }]}>Reports &amp; Insights</Text>
+              <Text style={[styles.dashboardQuickMeta, { color: c.mutedForeground }]}>See trends, categories, and next steps</Text>
+            </View>
+            <Feather name="chevron-right" size={17} color={c.mutedForeground} />
+          </Pressable>
+        </View>
+      </View>
 
       {isCommandWide && settings.zeroBasedBudgetEnabled && (
         <Pressable
@@ -1841,6 +1883,14 @@ const styles = StyleSheet.create({
   setupStepText: { fontSize: 12, fontFamily: "Inter_500Medium" },
   setupButton: { height: 40, borderRadius: 9, alignItems: "center", justifyContent: "center", marginTop: 10 },
   setupButtonText: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  dashboardQuickAccess: { borderWidth: 1, borderRadius: 18, padding: 14, marginTop: 12, marginBottom: 12 },
+  dashboardQuickTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold", marginBottom: 10 },
+  dashboardQuickRow: { gap: 9 },
+  dashboardQuickButton: { minHeight: 64, borderWidth: 1, borderRadius: 15, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 11 },
+  dashboardQuickIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  dashboardQuickCopy: { flex: 1, minWidth: 0 },
+  dashboardQuickLabel: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  dashboardQuickMeta: { fontSize: 11, lineHeight: 15, fontFamily: "Inter_500Medium", marginTop: 2 },
   proactiveAlertIcon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   proactiveAlertTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   proactiveAlertText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 2 },

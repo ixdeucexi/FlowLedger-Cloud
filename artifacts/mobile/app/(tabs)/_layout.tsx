@@ -786,6 +786,8 @@ function TabContent() {
             })}
             <Tabs.Screen name="accounts" options={{ href: null }} />
             <Tabs.Screen name="more" options={{ href: null }} />
+            <Tabs.Screen name="reports" options={{ href: null }} />
+            <Tabs.Screen name="review" options={{ href: null }} />
             <Tabs.Screen name="flo" options={{ href: null }} />
             <Tabs.Screen name="category-budget" options={{ href: null }} />
             <Tabs.Screen
