@@ -6,7 +6,7 @@ import { Inter_800ExtraBold } from "@expo-google-fonts/inter/800ExtraBold";
 import { Feather } from "@expo/vector-icons";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useFonts } from "expo-font";
-import { Stack, useRouter, useSegments } from "expo-router";
+import { Stack, useGlobalSearchParams, usePathname, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, BackHandler, Easing, Image, Platform, StyleSheet, StyleProp, Text, View, ViewStyle } from "react-native";
@@ -25,22 +25,37 @@ import { BudgetProvider, useBudget } from "@/context/BudgetContext";
 import { MembershipProvider } from "@/context/MembershipContext";
 import { ThemeProvider, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
-import { readLastAppRoute, rememberCurrentAppRoute } from "@/lib/navigationMemory";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
+import { readLastAppRoute, rememberAppRoute } from "@/lib/navigationMemory";
 import { supabase } from "@/lib/supabase";
 import { WEB_VIEWPORT_CONTENT } from "@/lib/webViewport";
 
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
-const PLAN_LOADING_MS = 1000;
+const PLAN_LOADING_MS = 220;
 
 function AuthObserver() {
   const { session, loading } = useAuth();
+  const { activeHousehold, loading: budgetLoading } = useBudget();
   const router = useRouter();
   const segments = useSegments();
+  const pathname = usePathname();
+  const searchParams = useGlobalSearchParams<Record<string, string | string[]>>();
+  const restoreAttemptRef = useRef<string | null>(null);
+
+  const currentRoute = React.useMemo(() => {
+    const query = new URLSearchParams();
+    Object.entries(searchParams).forEach(([key, rawValue]) => {
+      const value = Array.isArray(rawValue) ? rawValue[0] : rawValue;
+      if (typeof value === "string" && value.length > 0) query.set(key, value);
+    });
+    const serialized = query.toString();
+    return serialized ? `${pathname}?${serialized}` : pathname;
+  }, [pathname, searchParams]);
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || (session && budgetLoading)) return;
     const firstSegment = segments[0] as string | undefined;
     const inAuth = firstSegment === "login";
     const isPublicLegal = firstSegment === "legal";
@@ -49,6 +64,8 @@ function AuthObserver() {
     const replaceRoute = (destination: string) => {
       router.replace(destination as any);
     };
+
+    const householdId = activeHousehold?.householdId ?? `personal-${session?.user.id ?? "signed-out"}`;
 
     if (!session && !inAuth && !isPublicLegal) {
       replaceRoute("/login");
@@ -61,8 +78,16 @@ function AuthObserver() {
         } catch {}
       }
       if (!requestedSetup) {
-        replaceRoute(readLastAppRoute() ?? "/(tabs)");
-        return;
+        const restoreKey = `${session.user.id}:${householdId}`;
+        if (restoreAttemptRef.current === restoreKey) return;
+        restoreAttemptRef.current = restoreKey;
+        let cancelled = false;
+        void readLastAppRoute(session.user.id, householdId).then(destination => {
+          if (!cancelled) replaceRoute(destination ?? "/(tabs)");
+        });
+        return () => {
+          cancelled = true;
+        };
       }
       let cancelled = false;
       void supabase
@@ -82,18 +107,20 @@ function AuthObserver() {
     }
 
     if (session && !inAuth && !atRoot && !isPublicLegal) {
-      rememberCurrentAppRoute();
+      restoreAttemptRef.current = null;
+      void rememberAppRoute(session.user.id, householdId, currentRoute);
     }
-  }, [session, loading, segments, router]);
+  }, [activeHousehold?.householdId, budgetLoading, currentRoute, loading, router, segments, session]);
 
   useEffect(() => {
-    if (loading || !session || Platform.OS !== "web" || typeof window === "undefined" || typeof document === "undefined") {
+    if (loading || budgetLoading || !session || Platform.OS !== "web" || typeof window === "undefined" || typeof document === "undefined") {
       return;
     }
 
-    const rememberRouteBeforePause = () => rememberCurrentAppRoute();
+    const householdId = activeHousehold?.householdId ?? `personal-${session.user.id}`;
+    const rememberRouteBeforePause = () => void rememberAppRoute(session.user.id, householdId, currentRoute);
     const rememberRouteWhenHidden = () => {
-      if (document.visibilityState === "hidden") rememberCurrentAppRoute();
+      if (document.visibilityState === "hidden") rememberRouteBeforePause();
     };
 
     window.addEventListener("pagehide", rememberRouteBeforePause);
@@ -103,7 +130,7 @@ function AuthObserver() {
       window.removeEventListener("pagehide", rememberRouteBeforePause);
       document.removeEventListener("visibilitychange", rememberRouteWhenHidden);
     };
-  }, [session, loading]);
+  }, [activeHousehold?.householdId, budgetLoading, currentRoute, loading, session]);
 
   return null;
 }
@@ -119,25 +146,24 @@ function StartupScreen({ style }: { style?: StyleProp<ViewStyle> } = {}) {
         style={styles.startupIcon}
         resizeMode="contain"
       />
-      <Text style={[styles.startupStatus, { color: colors.mutedForeground }]}>Loading your plan…</Text>
+      <Text style={[styles.startupStatus, { color: colors.mutedForeground }]}>Restoring your workspace…</Text>
     </Animated.View>
   );
 }
 
 function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSplash: () => void }) {
   const colors = useColors();
-  const { session, loading: authLoading } = useAuth();
+  const { loading: authLoading } = useAuth();
   const { ready: biometricLockReady, locked: biometricLocked } = useBiometricLock();
-  const { loading: budgetLoading } = useBudget();
   const { ready: themeReady } = useThemeMode();
+  const reduceMotion = useReducedMotion();
   const router = useRouter();
   const [minimumStartupReady, setMinimumStartupReady] = useState(false);
   const [showStartupOverlay, setShowStartupOverlay] = useState(true);
   const startupOpacity = useRef(new Animated.Value(1)).current;
   const appOpacity = useRef(new Animated.Value(0)).current;
   const coreReady = fontsReady && !authLoading && biometricLockReady && themeReady;
-  const servicesReady = coreReady && (!session || !budgetLoading);
-  const appReady = servicesReady && minimumStartupReady;
+  const appReady = coreReady && minimumStartupReady;
 
   useEffect(() => {
     if (!coreReady || biometricLocked) return;
@@ -158,6 +184,12 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
     }
 
     hideSplash();
+    if (reduceMotion) {
+      startupOpacity.setValue(0);
+      appOpacity.setValue(1);
+      setShowStartupOverlay(false);
+      return;
+    }
     setShowStartupOverlay(true);
     Animated.parallel([
       Animated.timing(startupOpacity, {
@@ -173,7 +205,7 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
         useNativeDriver: Platform.OS !== "web",
       }),
     ]).start(() => setShowStartupOverlay(false));
-  }, [appReady, appOpacity, hideSplash, startupOpacity]);
+  }, [appReady, appOpacity, hideSplash, reduceMotion, startupOpacity]);
 
   useEffect(() => {
     if (!appReady || Platform.OS === "web") return;

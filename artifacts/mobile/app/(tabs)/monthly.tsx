@@ -22,6 +22,7 @@ import { GoalModal } from "@/components/GoalModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
 import colors from "@/constants/colors";
+import { useAuth } from "@/context/AuthContext";
 import type { Bill, BillDateMove, DecisionRecord, Goal, IncomeItem, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
@@ -48,6 +49,7 @@ import {
   snowballPlanTotalThroughDate,
 } from "@/lib/debtPaymentPlan";
 import { replaceBillSurplusFundingSource } from "@/lib/snowballFunding";
+import { readInterfacePreferences, updateInterfacePreferences } from "@/lib/interfacePreferences";
 
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
@@ -213,6 +215,7 @@ export default function MonthlyScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const routeParams = useLocalSearchParams<{ openDate?: string | string[]; openDateAt?: string | string[] }>();
+  const { user } = useAuth();
   const {
     bills, overrides, billDateMoves, transactions, pendingBankTransactions, pendingPlanMatches, extraPayments, goals, decisions, getAmount, getPaidAmount, setPaidAmount, setCustomAmount,
     getCustomDueDay, setCustomDueDay,
@@ -222,7 +225,7 @@ export default function MonthlyScreen() {
     getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill, deleteBill, updateIncome,
     getCashFlow, getMonthlyIncome, getDailyBalances, getIncomeOccurrencesInMonth,
     previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, finalizeBillPayment, getExtraPayment,
-    updateDecision, deleteDecision, updateGoal, deleteGoal,
+    updateDecision, deleteDecision, updateGoal, deleteGoal, activeHousehold,
   } = useBudget();
 
   const [month, setMonth] = useState(new Date().getMonth());
@@ -234,6 +237,7 @@ export default function MonthlyScreen() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [dayConfirmation, setDayConfirmation] = useState<ConfirmActionOptions | null>(null);
   const handledOpenDateRef = useRef<string | null>(null);
+  const calendarPreferenceReadyRef = useRef(false);
   const [editingAmounts, setEditingAmounts] = useState<Record<string, string>>({});
   const [editingPaid, setEditingPaid] = useState<Record<string, string>>({});
   const editingPaidRef = useRef<Record<string, string>>({});
@@ -252,6 +256,35 @@ export default function MonthlyScreen() {
     setMonth(monthNumber - 1);
     setSelectedDate(openDate);
   }, [routeParams.openDate, routeParams.openDateAt, setSelectedYear]);
+
+  useEffect(() => {
+    if (!user || !activeHousehold) return;
+    calendarPreferenceReadyRef.current = false;
+    let active = true;
+    const requestedDate = Array.isArray(routeParams.openDate) ? routeParams.openDate[0] : routeParams.openDate;
+    void readInterfacePreferences(user.id, activeHousehold.householdId).then(preferences => {
+      if (!active) return;
+      const saved = preferences.calendar;
+      if (!requestedDate && saved && saved.month >= 0 && saved.month <= 11 && saved.year >= 2000 && saved.year <= 2200) {
+        setMonth(saved.month);
+        setSelectedYear(saved.year);
+        setSelectedDate(saved.selectedDate && /^\d{4}-\d{2}-\d{2}$/.test(saved.selectedDate) ? saved.selectedDate : null);
+      }
+      calendarPreferenceReadyRef.current = true;
+    });
+    return () => { active = false; };
+  }, [activeHousehold?.householdId, routeParams.openDate, setSelectedYear, user?.id]);
+
+  useEffect(() => {
+    if (!user || !activeHousehold || !calendarPreferenceReadyRef.current) return;
+    void updateInterfacePreferences(user.id, activeHousehold.householdId, {
+      calendar: {
+        month,
+        year: selectedYear,
+        ...(selectedDate ? { selectedDate } : {}),
+      },
+    });
+  }, [activeHousehold?.householdId, month, selectedDate, selectedYear, user?.id]);
 
   useFocusEffect(
     useCallback(() => {

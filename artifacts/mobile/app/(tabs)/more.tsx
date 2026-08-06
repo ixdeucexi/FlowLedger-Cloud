@@ -53,12 +53,12 @@ import { ReviewCenter } from "@/components/ReviewCenter";
 import { PWA_INSTALL_EVENT } from "@/components/PwaInstallPrompt";
 import { PlaidLinkButton } from "@/components/PlaidLinkButton";
 import { RecentlyDeletedTransactions } from "@/components/RecentlyDeletedTransactions";
-import { ReportsInsightsView } from "@/components/ReportsInsightsView";
 import colors from "@/constants/colors";
 import type { Account, IncomeItem } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useAuth } from "@/context/AuthContext";
+import { useAppDiscovery } from "@/context/AppDiscoveryContext";
 import {
   type AppFontStyle,
   type ThemeMode,
@@ -89,6 +89,7 @@ import {
   householdInviteRolesFor,
   householdRoleLabel,
 } from "@/lib/householdPermissions";
+
 import { DEFAULT_ONBOARDING_PREFERENCES } from "@/lib/onboarding";
 import {
   loadOnboardingPreferences,
@@ -96,6 +97,7 @@ import {
   saveOnboardingPreferences,
 } from "@/lib/onboardingPreferences";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
+import { readInterfacePreferences, updateInterfacePreferences } from "@/lib/interfacePreferences";
 import {
   getForecastSafetyLayout,
   isCompactSettingsLayout,
@@ -135,6 +137,10 @@ import {
   type SubscriptionCandidate,
 } from "@/lib/competitiveGrowth";
 import { buildCategoryPlan } from "@/lib/categoryPlanning";
+
+const ReportsInsightsView = React.lazy(() =>
+  import("@/components/ReportsInsightsView").then(module => ({ default: module.ReportsInsightsView })),
+);
 
 const FREQ_LABELS: Record<string, string> = {
   monthly: "Monthly",
@@ -270,34 +276,12 @@ function subscriptionDecisionToStatus(
 }
 
 const VISIBLE_SETTINGS_SECTIONS = SETTINGS_SECTIONS;
-const ACTIVE_SETTINGS_SECTION_KEY = "flowledger_active_settings_section";
 
 function isSettingsSectionId(value: unknown): value is SettingsSectionId {
   return (
     value === "overview" ||
     VISIBLE_SETTINGS_SECTIONS.some((section) => section.id === value)
   );
-}
-
-function readStoredSettingsSection(): SettingsSectionId {
-  if (Platform.OS !== "web" || typeof window === "undefined") return "overview";
-  try {
-    const stored = window.sessionStorage?.getItem(ACTIVE_SETTINGS_SECTION_KEY);
-    return isSettingsSectionId(stored) ? stored : "overview";
-  } catch {
-    return "overview";
-  }
-}
-
-function writeStoredSettingsSection(sectionId: SettingsSectionId) {
-  if (Platform.OS !== "web" || typeof window === "undefined") return;
-  try {
-    if (sectionId === "overview") {
-      window.sessionStorage?.removeItem(ACTIVE_SETTINGS_SECTION_KEY);
-    } else {
-      window.sessionStorage?.setItem(ACTIVE_SETTINGS_SECTION_KEY, sectionId);
-    }
-  } catch {}
 }
 
 function csvCell(value: unknown): string {
@@ -422,6 +406,7 @@ export default function MoreScreen({
     [viewportWidth],
   );
   const router = useRouter();
+  const { openCommands, openNotifications, openSearch, unreadNotificationCount } = useAppDiscovery();
   const routeParams = useLocalSearchParams<{
     section?: string;
     feedback?: string;
@@ -506,7 +491,7 @@ export default function MoreScreen({
   const [legalDoc, setLegalDoc] = useState<"terms" | "privacy" | null>(null);
   useBackDismiss(Boolean(legalDoc), () => setLegalDoc(null));
   const [activeSettingsSection, setActiveSettingsSection] =
-    useState<SettingsSectionId>(() => initialSection ?? readStoredSettingsSection());
+    useState<SettingsSectionId>(() => initialSection ?? "overview");
   const requestedReviewTransactionId = Array.isArray(
     routeParams.reviewTransactionId,
   )
@@ -523,8 +508,13 @@ export default function MoreScreen({
   const settingsScrollRef = useRef<ScrollView>(null);
   const openSettingsSection = useCallback((sectionId: SettingsSectionId) => {
     setActiveSettingsSection(sectionId);
-    writeStoredSettingsSection(sectionId);
-  }, []);
+    router.setParams({ section: sectionId === "overview" ? "" : sectionId });
+    if (user && activeHousehold) {
+      void updateInterfacePreferences(user.id, activeHousehold.householdId, {
+        settingsSection: sectionId,
+      });
+    }
+  }, [activeHousehold, router, user]);
   useBackDismiss(activeSettingsSection !== "overview", () =>
     openSettingsSection("overview"),
   );
@@ -676,14 +666,17 @@ export default function MoreScreen({
     if (isSettingsSectionId(requestedSection)) {
       const safeSection = requestedSection as SettingsSectionId;
       setActiveSettingsSection(safeSection);
-      writeStoredSettingsSection(safeSection);
       return;
     }
-    const storedSection = readStoredSettingsSection();
-    if (storedSection !== "overview") {
-      setActiveSettingsSection(storedSection);
-    }
-  }, [initialSection, routeParams.section]);
+    if (!user || !activeHousehold) return;
+    let active = true;
+    void readInterfacePreferences(user.id, activeHousehold.householdId).then(preferences => {
+      if (active && isSettingsSectionId(preferences.settingsSection)) {
+        setActiveSettingsSection(preferences.settingsSection);
+      }
+    });
+    return () => { active = false; };
+  }, [activeHousehold?.householdId, initialSection, routeParams.section, user?.id]);
 
   useEffect(() => {
     const requestedAdd = Array.isArray(routeParams.add)
@@ -2144,6 +2137,10 @@ export default function MoreScreen({
             membershipLabel={membershipStatusLabel}
             statuses={hubStatuses}
             isAdmin={feedbackAdmin}
+            onOpenSearch={openSearch}
+            onOpenCommands={openCommands}
+            onOpenNotifications={openNotifications}
+            unreadNotificationCount={unreadNotificationCount}
             onOpenSection={(sectionId) => {
               openSettingsSection(sectionId);
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -4304,7 +4301,14 @@ export default function MoreScreen({
         )}
 
         {activeSettingsSection === "reports" && (
-          <>
+          <React.Suspense
+            fallback={
+              <View style={[styles.card, styles.reportsLoadingCard, { backgroundColor: c.card, borderColor: c.border }]}>
+                <Text style={[styles.reportsLoadingTitle, { color: c.foreground }]}>Loading reports…</Text>
+                <Text style={[styles.reportsLoadingText, { color: c.mutedForeground }]}>Your existing plan stays available while charts prepare.</Text>
+              </View>
+            }
+          >
             <ReportsInsightsView
               monthLabel={new Date(
                 `${currentMonthPrefix}-01T12:00:00`,
@@ -4322,7 +4326,7 @@ export default function MoreScreen({
               onOpenBills={() => router.push("/(tabs)/bills")}
               onOpenSubscriptions={() => openSettingsSection("subscriptions")}
             />
-          </>
+          </React.Suspense>
         )}
 
         {activeSettingsSection === "goals" && (
@@ -6554,4 +6558,13 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     marginTop: 5,
   },
+  reportsLoadingCard: {
+    minHeight: 220,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 28,
+  },
+  reportsLoadingTitle: { fontFamily: "Inter_800ExtraBold", fontSize: 18 },
+  reportsLoadingText: { fontFamily: "Inter_500Medium", fontSize: 13, lineHeight: 19, marginTop: 6, textAlign: "center" },
 });

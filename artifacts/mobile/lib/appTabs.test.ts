@@ -9,7 +9,8 @@ test("desktop sidebar keeps the primary planning routes", () => {
     "Bills",
     "Activity",
     "Monthly",
-    "More",
+    "Reports",
+    "Settings",
   ]);
 });
 
@@ -19,6 +20,7 @@ test("every shared tab has a unique working route", () => {
     "/(tabs)/bills",
     "/(tabs)/transactions",
     "/(tabs)/monthly",
+    "/(tabs)/reports",
     "/(tabs)/more",
   ]);
   assert.equal(new Set(APP_TABS.map(({ pathname }) => pathname)).size, APP_TABS.length);
