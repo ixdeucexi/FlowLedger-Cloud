@@ -1,9 +1,9 @@
 export const MOBILE_RIBBON_ITEMS = [
   { name: "index", title: "Dashboard", icon: "home" },
-  { name: "monthly", title: "Calendar", icon: "calendar" },
+  { name: "bills", title: "Bills", icon: "file-text" },
   { name: "add", title: "Add", icon: "plus" },
-  { name: "accounts", title: "Accounts", icon: "credit-card" },
-  { name: "more", title: "Menu", icon: "menu" },
+  { name: "transactions", title: "Activity", icon: "repeat" },
+  { name: "monthly", title: "Monthly", icon: "calendar" },
 ] as const;
 
 export type MobileRibbonItem = (typeof MOBILE_RIBBON_ITEMS)[number];
