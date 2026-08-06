@@ -804,7 +804,7 @@ function createDemoBudgetData(today = new Date()) {
   return { bills, overrides, billDateMoves: [] as BillDateMove[], transactions, incomes, goals, extraPayments: [] as ExtraPayment[], categories: DEFAULT_CATEGORIES, accounts, decisions, settings };
 }
 
-function normalizeTransactionRow(transaction: any): Transaction {
+export function normalizeTransactionRow(transaction: any): Transaction {
   return {
     ...transaction,
     amount: Number(transaction.amount),

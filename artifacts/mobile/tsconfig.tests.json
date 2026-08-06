@@ -130,5 +130,9 @@
     ,"lib/interfacePreferences.ts"
     ,"lib/navigationMemory.ts"
     ,"lib/navigationMemory.test.ts"
+    ,"lib/activityRange.ts"
+    ,"lib/activityRange.test.ts"
+    ,"lib/activityCsv.ts"
+    ,"lib/activityCsv.test.ts"
   ]
 }

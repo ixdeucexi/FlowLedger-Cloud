@@ -1,12 +1,13 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
 import {
-  Platform,
   Pressable,
   ScrollView,
+  type StyleProp,
   StyleSheet,
   Text,
   View,
+  type ViewStyle,
 } from "react-native";
 
 import {
@@ -24,6 +25,7 @@ import {
   desktopPalette as palette,
   desktopTableStyles as table,
 } from "@/components/desktop/DesktopUI";
+import { exportActivityCsv } from "@/lib/activityCsv";
 
 export type DesktopActivityRow = {
   id: string;
@@ -44,9 +46,10 @@ export type DesktopActivityRow = {
   accountName?: string;
   note?: string;
   debtName?: string;
+  runningBalance?: number;
 };
 
-type Summary = { title: string; income: number; out: number; net: number };
+type Summary = { title: string; income: number; out: number; net: number; transactions?: number };
 type ActivityTab =
   | "All Activity"
   | "Transactions"
@@ -85,36 +88,17 @@ function sourceLabel(source: DesktopActivityRow["source"]) {
 }
 
 function exportRows(rows: DesktopActivityRow[]) {
-  if (Platform.OS !== "web" || typeof document === "undefined") return;
-  const escape = (value: unknown) =>
-    `"${String(value ?? "").replace(/"/g, '""')}"`;
-  const csv = [
-    ["Date", "Description", "Category", "Account", "Amount", "Type", "Applied Debt", "Note"]
-      .map(escape)
-      .join(","),
-    ...rows.map((row) =>
-      [
-        row.date,
-        row.label,
-        row.category,
-        row.accountName ?? "",
-        row.amount,
-        sourceLabel(row.source),
-        row.debtName ?? "",
-        row.note ?? "",
-      ]
-        .map(escape)
-        .join(","),
-    ),
-  ].join("\n");
-  const url = URL.createObjectURL(
-    new Blob([csv], { type: "text/csv;charset=utf-8" }),
-  );
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `flowledger-activity-${Date.now()}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
+  exportActivityCsv(rows.map(row => ({
+    date: row.date,
+    description: row.label,
+    category: row.category,
+    account: row.accountName,
+    amount: row.amount,
+    type: sourceLabel(row.source),
+    appliedDebt: row.debtName,
+    note: row.note,
+    runningBalance: row.runningBalance,
+  })));
 }
 
 export function DesktopActivityPage({
@@ -122,17 +106,44 @@ export function DesktopActivityPage({
   summary,
   onAdd,
   onOpen,
+  dateRangeLabel,
+  onDateRangePress,
+  search: controlledSearch,
+  onSearchChange,
+  categoryFilter,
+  onCategoryPress,
+  typeFilter,
+  onTypePress,
+  hasActiveFilters,
+  onResetFilters,
+  hasMore,
+  loadingMore,
+  loadError,
+  onLoadMore,
 }: {
   rows: DesktopActivityRow[];
   summary: Summary;
   onAdd: () => void;
   onOpen: (id: string) => void;
+  dateRangeLabel: string;
+  onDateRangePress: () => void;
+  search: string;
+  onSearchChange: (value: string) => void;
+  categoryFilter: string;
+  onCategoryPress: () => void;
+  typeFilter: string;
+  onTypePress: () => void;
+  hasActiveFilters: boolean;
+  onResetFilters: () => void;
+  hasMore: boolean;
+  loadingMore: boolean;
+  loadError?: string | null;
+  onLoadMore: () => void;
 }) {
   const [tab, setTab] = useState<ActivityTab>("All Activity");
-  const [search, setSearch] = useState("");
   const [account, setAccount] = useState("All Accounts");
-  const [category, setCategory] = useState("All Categories");
-  const [type, setType] = useState("All Types");
+  const [sortBy, setSortBy] = useState<"date" | "description" | "category" | "account" | "amount" | "type">("date");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
   const accounts = useMemo(
     () =>
@@ -145,29 +156,15 @@ export function DesktopActivityPage({
       ).sort(),
     [rows],
   );
-  const categories = useMemo(
-    () => Array.from(new Set(rows.map((row) => row.category))).sort(),
-    [rows],
-  );
   const cycle = (
     current: string,
     values: string[],
     update: (value: string) => void,
   ) => update(values[(values.indexOf(current) + 1) % values.length]);
-  const monthRows = useMemo(
-    () =>
-      rows.filter((row) =>
-        row.date.startsWith(
-          `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`,
-        ),
-      ),
-    [rows],
-  );
   const filtered = useMemo(
     () =>
       rows
         .filter((row) => {
-          const query = search.trim().toLowerCase();
           const tabMatch =
             tab === "All Activity" ||
             (tab === "Transactions" &&
@@ -176,24 +173,22 @@ export function DesktopActivityPage({
             (tab === "Adjustments" && row.source === "extra_payment");
           return (
             tabMatch &&
-            (!query ||
-              row.label.toLowerCase().includes(query) ||
-              row.category.toLowerCase().includes(query) ||
-              row.debtName?.toLowerCase().includes(query) ||
-              row.note?.toLowerCase().includes(query)) &&
-            (account === "All Accounts" || row.accountName === account) &&
-            (category === "All Categories" || row.category === category) &&
-            (type === "All Types" ||
-              (type === "Inflows" && row.amount > 0) ||
-              (type === "Outflows" && row.amount < 0))
+            (account === "All Accounts" || row.accountName === account)
           );
         })
-        .sort((left, right) => right.date.localeCompare(left.date)),
-    [account, category, rows, search, tab, type],
+        .sort((left, right) => {
+          const direction = sortDirection === "asc" ? 1 : -1;
+          const leftValue = sortBy === "date" ? left.date : sortBy === "description" ? left.label : sortBy === "category" ? left.category : sortBy === "account" ? left.accountName ?? "" : sortBy === "amount" ? left.amount : sourceLabel(left.source);
+          const rightValue = sortBy === "date" ? right.date : sortBy === "description" ? right.label : sortBy === "category" ? right.category : sortBy === "account" ? right.accountName ?? "" : sortBy === "amount" ? right.amount : sourceLabel(right.source);
+          return typeof leftValue === "number" && typeof rightValue === "number"
+            ? (leftValue - rightValue) * direction
+            : String(leftValue).localeCompare(String(rightValue)) * direction;
+        }),
+    [account, rows, sortBy, sortDirection, tab],
   );
   const groupedActivity = useMemo(() => {
     const groups: Array<{ date: string; rows: DesktopActivityRow[] }> = [];
-    filtered.slice(0, 80).forEach((row) => {
+    filtered.forEach((row) => {
       const date = row.date.slice(0, 10);
       const current = groups[groups.length - 1];
       if (current?.date === date) current.rows.push(row);
@@ -204,7 +199,7 @@ export function DesktopActivityPage({
 
   const spending = useMemo(() => {
     const totals = new Map<string, number>();
-    monthRows
+    rows
       .filter(
         (row) => row.amount < 0 && row.source !== "transfer" && !row.pending,
       )
@@ -234,7 +229,15 @@ export function DesktopActivityPage({
       }))
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 6);
-  }, [monthRows]);
+  }, [rows]);
+
+  const toggleSort = (column: typeof sortBy) => {
+    if (sortBy === column) setSortDirection(value => value === "asc" ? "desc" : "asc");
+    else {
+      setSortBy(column);
+      setSortDirection(column === "date" || column === "amount" ? "desc" : "asc");
+    }
+  };
   return (
     <DesktopPage>
       <ScrollView
@@ -279,7 +282,7 @@ export function DesktopActivityPage({
           />
           <SummaryMetricCard
             label="Transactions"
-            value={String(monthRows.filter((row) => !row.pending).length)}
+            value={String(summary.transactions ?? rows.filter((row) => !row.pending).length)}
             detail="This period"
             icon="file-text"
             tone="blue"
@@ -313,9 +316,14 @@ export function DesktopActivityPage({
           <DesktopCard style={styles.activityCard}>
             <View style={styles.filters}>
               <DesktopSearch
-                value={search}
-                onChangeText={setSearch}
-                placeholder="Search transactions..."
+                value={controlledSearch}
+                onChangeText={onSearchChange}
+                placeholder="Search merchant or description..."
+              />
+              <FilterButton
+                label={dateRangeLabel}
+                onPress={onDateRangePress}
+                active={dateRangeLabel !== "This Month"}
               />
               <FilterButton
                 label={account}
@@ -325,35 +333,26 @@ export function DesktopActivityPage({
                 active={account !== "All Accounts"}
               />
               <FilterButton
-                label={category}
-                onPress={() =>
-                  cycle(
-                    category,
-                    ["All Categories", ...categories],
-                    setCategory,
-                  )
-                }
-                active={category !== "All Categories"}
+                label={categoryFilter === "all" ? "All Categories" : categoryFilter}
+                onPress={onCategoryPress}
+                active={categoryFilter !== "all"}
               />
               <FilterButton
-                label={type}
-                onPress={() =>
-                  cycle(type, ["All Types", "Inflows", "Outflows"], setType)
-                }
-                active={type !== "All Types"}
+                label={typeFilter === "all" ? "All Types" : typeFilter === "income" ? "Inflows" : "Outflows"}
+                onPress={onTypePress}
+                active={typeFilter !== "all"}
               />
+              {hasActiveFilters ? (
+                <SecondaryButton label="Reset" icon="x" onPress={onResetFilters} />
+              ) : null}
             </View>
             <View style={table.header}>
-              <Text style={[table.headerText, styles.colDate]}>Date</Text>
-              <Text style={[table.headerText, styles.colDescription]}>
-                Description
-              </Text>
-              <Text style={[table.headerText, styles.colCategory]}>
-                Category
-              </Text>
-              <Text style={[table.headerText, styles.colAccount]}>Account</Text>
-              <Text style={[table.headerText, styles.colAmount]}>Amount</Text>
-              <Text style={[table.headerText, styles.colType]}>Type</Text>
+              <SortHeader label="Date" column="date" style={styles.colDate} active={sortBy === "date"} direction={sortDirection} onPress={toggleSort} />
+              <SortHeader label="Description" column="description" style={styles.colDescription} active={sortBy === "description"} direction={sortDirection} onPress={toggleSort} />
+              <SortHeader label="Category" column="category" style={styles.colCategory} active={sortBy === "category"} direction={sortDirection} onPress={toggleSort} />
+              <SortHeader label="Account" column="account" style={styles.colAccount} active={sortBy === "account"} direction={sortDirection} onPress={toggleSort} />
+              <SortHeader label="Amount" column="amount" style={styles.colAmount} active={sortBy === "amount"} direction={sortDirection} onPress={toggleSort} />
+              <SortHeader label="Type" column="type" style={styles.colType} active={sortBy === "type"} direction={sortDirection} onPress={toggleSort} />
               <Text style={[table.headerText, styles.colAction]} />
             </View>
             {filtered.length ? (
@@ -424,15 +423,19 @@ export function DesktopActivityPage({
                   >
                     {row.accountName ?? "—"}
                   </Text>
-                  <Text
-                    style={[
-                      table.cellStrong,
-                      styles.colAmount,
-                      { color: row.amount >= 0 ? palette.green : palette.red },
-                    ]}
-                  >
-                    {money(row.amount, true)}
-                  </Text>
+                  <View style={styles.colAmount}>
+                    <Text
+                      style={[
+                        table.cellStrong,
+                        { color: row.amount >= 0 ? palette.green : palette.red },
+                      ]}
+                    >
+                      {money(row.amount, true)}
+                    </Text>
+                    {row.runningBalance != null ? (
+                      <Text style={styles.runningBalance}>Balance {money(row.runningBalance)}</Text>
+                    ) : null}
+                  </View>
                   <View style={styles.colType}>
                     <StatusBadge
                       label={row.pending ? "Pending" : sourceLabel(row.source)}
@@ -467,6 +470,16 @@ export function DesktopActivityPage({
                 }
               />
             )}
+            {loadError ? (
+              <View style={styles.loadMoreState}>
+                <Text style={styles.loadMoreError}>{loadError}</Text>
+                <SecondaryButton label="Retry" icon="refresh-cw" onPress={onLoadMore} />
+              </View>
+            ) : hasMore ? (
+              <View style={styles.loadMoreState}>
+                <SecondaryButton label={loadingMore ? "Loading…" : "Load more"} icon="chevron-down" onPress={onLoadMore} />
+              </View>
+            ) : null}
           </DesktopCard>
           <View style={styles.insightsColumn}>
             <DesktopCard>
@@ -541,6 +554,34 @@ function SummaryRow({
   );
 }
 
+function SortHeader({
+  label,
+  column,
+  style,
+  active,
+  direction,
+  onPress,
+}: {
+  label: string;
+  column: "date" | "description" | "category" | "account" | "amount" | "type";
+  style: StyleProp<ViewStyle>;
+  active: boolean;
+  direction: "asc" | "desc";
+  onPress: (column: "date" | "description" | "category" | "account" | "amount" | "type") => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Sort by ${label}`}
+      onPress={() => onPress(column)}
+      style={[style, styles.sortHeader]}
+    >
+      <Text style={table.headerText}>{label}</Text>
+      {active ? <Feather name={direction === "asc" ? "chevron-up" : "chevron-down"} size={12} color={palette.purple} /> : null}
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   pageScroll: { flex: 1, margin: -22 },
   pageContent: { padding: 22 },
@@ -577,6 +618,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 7,
     padding: 10,
+    flexWrap: "wrap",
   },
   colDate: { flex: 0.82, minWidth: 60 },
   colDescription: { flex: 1.7, minWidth: 90 },
@@ -594,6 +636,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  sortHeader: { flexDirection: "row", alignItems: "center", gap: 3 },
+  loadMoreState: { minHeight: 66, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, padding: 12 },
+  loadMoreError: { color: palette.red, fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  runningBalance: { color: palette.muted, fontSize: 10, fontFamily: "Inter_500Medium", marginTop: 2 },
   dateGroupHeader: {
     minHeight: 36,
     paddingHorizontal: 14,
