@@ -672,8 +672,13 @@ function TabContent() {
           >
             {MOBILE_RIBBON_ITEMS.map((tab) => {
               const isAdd = tab.name === "add";
-              const isMenu = tab.name === "more";
-              const menuBadge = isMenu ? tabBadgeValue(notificationCount) : undefined;
+              const isBills = tab.name === "bills";
+              const isActivity = tab.name === "transactions";
+              const badge = isBills
+                ? tabBadgeValue(overdueBillCount)
+                : isActivity
+                  ? tabBadgeValue(activityAlertCount)
+                  : undefined;
               return (
                 <Tabs.Screen
                   key={tab.name}
@@ -722,17 +727,19 @@ function TabContent() {
                           </Pressable>
                         )
                       : undefined,
-                    tabBarBadge: menuBadge,
-                    tabBarBadgeStyle: menuBadge ? styles.alertTabBadge : undefined,
-                    tabBarAccessibilityLabel: isMenu && menuBadge
-                      ? `Menu, ${notificationCount} item${notificationCount === 1 ? "" : "s"} need attention`
-                      : tab.title,
+                    tabBarBadge: badge,
+                    tabBarBadgeStyle: badge ? styles.alertTabBadge : undefined,
+                    tabBarAccessibilityLabel: isActivity && badge
+                      ? `Activity, ${activityReviewCount} item${activityReviewCount === 1 ? "" : "s"} need review and ${pendingAlertCount} unmatched transaction${pendingAlertCount === 1 ? "" : "s"} pending`
+                      : isBills && badge
+                        ? `Bills, ${overdueBillCount} past-due bill${overdueBillCount === 1 ? "" : "s"} need action`
+                        : tab.title,
                   }}
                 />
               );
             })}
-            <Tabs.Screen name="bills" options={{ href: null }} />
-            <Tabs.Screen name="transactions" options={{ href: null }} />
+            <Tabs.Screen name="accounts" options={{ href: null }} />
+            <Tabs.Screen name="more" options={{ href: null }} />
             <Tabs.Screen name="flo" options={{ href: null }} />
             <Tabs.Screen name="category-budget" options={{ href: null }} />
             <Tabs.Screen
