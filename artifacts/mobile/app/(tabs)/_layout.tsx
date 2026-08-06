@@ -154,6 +154,43 @@ function BudgetLoadErrorScreen({
   );
 }
 
+function PlanRestoreOverlay({ isDesktop }: { isDesktop: boolean }) {
+  const colors = useColors();
+  return (
+    <View
+      accessibilityRole="progressbar"
+      accessibilityLabel="Restoring this household"
+      style={[
+        styles.planRestoreOverlay,
+        { backgroundColor: colors.background },
+        !isDesktop && styles.planRestoreOverlayMobile,
+      ]}
+    >
+      <View style={styles.planRestoreHeader}>
+        <View style={[styles.skeletonTitle, { backgroundColor: colors.muted }]} />
+        <View style={[styles.skeletonAction, { backgroundColor: colors.muted }]} />
+      </View>
+      <Text style={[styles.planRestoreLabel, { color: colors.mutedForeground }]}>Restoring this household…</Text>
+      <View style={[styles.skeletonGrid, !isDesktop && styles.skeletonGridMobile]}>
+        {[0, 1, 2, 3].map(item => (
+          <View
+            key={item}
+            style={[
+              styles.skeletonCard,
+              { backgroundColor: colors.card, borderColor: colors.border },
+              !isDesktop && styles.skeletonCardMobile,
+            ]}
+          >
+            <View style={[styles.skeletonLineShort, { backgroundColor: colors.muted }]} />
+            <View style={[styles.skeletonLine, { backgroundColor: colors.muted }]} />
+          </View>
+        ))}
+      </View>
+      <View style={[styles.skeletonPanel, { backgroundColor: colors.card, borderColor: colors.border }]} />
+    </View>
+  );
+}
+
 function readDemoTourStep() {
   if (Platform.OS !== "web") return 0;
   try {
@@ -489,6 +526,7 @@ function TabContent() {
   const colors = useColors();
   const router = useRouter();
   const {
+    loading,
     loadError,
     retryBudgetLoad,
     demoMode,
@@ -572,17 +610,16 @@ function TabContent() {
     [],
   );
 
-  if (loadError)
-    return (
-      <BudgetLoadErrorScreen message={loadError} onRetry={retryBudgetLoad} />
-    );
-
   return (
     <View
       style={[styles.tabTransitionRoot, { backgroundColor: colors.background }]}
     >
       <View style={styles.tabTransitionContent}>
         <ResponsiveDesktopChrome enabled={isDesktop}>
+          {loadError ? (
+            <BudgetLoadErrorScreen message={loadError} onRetry={retryBudgetLoad} />
+          ) : (
+          <View style={styles.tabsFrame}>
           <Tabs
             backBehavior="history"
             detachInactiveScreens={false}
@@ -600,10 +637,19 @@ function TabContent() {
                 fontFamily: "Inter_600SemiBold",
                 fontSize: tabBarLabelSize(viewportWidth),
                 marginTop: 1,
+                width: "100%",
+                textAlign: "center",
               },
               tabBarItemStyle: {
+                flex: 1,
+                flexBasis: 0,
+                minWidth: 0,
                 paddingVertical: 6,
                 borderRadius: 18,
+              },
+              tabBarIconStyle: {
+                width: 28,
+                height: 28,
               },
               tabBarStyle: {
                 display: isDesktop ? "none" : "flex",
@@ -751,6 +797,9 @@ function TabContent() {
               options={{ href: null, tabBarStyle: { display: "none" } }}
             />
           </Tabs>
+          {loading ? <PlanRestoreOverlay isDesktop={isDesktop} /> : null}
+          </View>
+          )}
         </ResponsiveDesktopChrome>
         {demoMode ? <DemoModeBanner /> : null}
         <PlanPreviewBanner />
@@ -807,6 +856,10 @@ const styles = StyleSheet.create({
   tabTransitionContent: {
     flex: 1,
   },
+  tabsFrame: {
+    flex: 1,
+    minWidth: 0,
+  },
   alertTabBadge: {
     minWidth: 18,
     height: 18,
@@ -819,6 +872,7 @@ const styles = StyleSheet.create({
   },
   addTabSlot: {
     flex: 1,
+    flexBasis: 0,
     minWidth: 64,
     alignItems: "center",
     justifyContent: "flex-start",
@@ -836,6 +890,50 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.48,
     shadowRadius: 20,
     elevation: 18,
+  },
+  planRestoreOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 60,
+    padding: 28,
+  },
+  planRestoreOverlayMobile: {
+    bottom: 86,
+    paddingHorizontal: 18,
+    paddingTop: 24,
+  },
+  planRestoreHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  planRestoreLabel: {
+    marginTop: 12,
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+  },
+  skeletonTitle: { width: 190, height: 28, borderRadius: 9, opacity: 0.7 },
+  skeletonAction: { width: 112, height: 42, borderRadius: 14, opacity: 0.55 },
+  skeletonGrid: { flexDirection: "row", gap: 14, marginTop: 24 },
+  skeletonGridMobile: { flexWrap: "wrap", gap: 10, marginTop: 18 },
+  skeletonCard: {
+    flex: 1,
+    minHeight: 132,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 18,
+    justifyContent: "center",
+    gap: 14,
+  },
+  skeletonCardMobile: { flexBasis: "46%", minHeight: 112, padding: 14 },
+  skeletonLineShort: { width: "44%", height: 12, borderRadius: 6, opacity: 0.6 },
+  skeletonLine: { width: "72%", height: 22, borderRadius: 7, opacity: 0.7 },
+  skeletonPanel: {
+    flex: 1,
+    minHeight: 220,
+    marginTop: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    opacity: 0.72,
   },
   loadingScreen: {
     flex: 1,

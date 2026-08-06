@@ -212,7 +212,7 @@ function MobileDashboardScreen() {
   const isCommandWide = Platform.OS === "web" && viewportWidth >= 900;
   const isIosWeb = Platform.OS === "web" && typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent);
   const dashboardTopPadding = Platform.OS === "web" ? (isIosWeb ? 58 : 12) : insets.top + 10;
-  const dashboardBottomPadding = Platform.OS === "web" ? (isIosWeb ? 92 : 68) : insets.bottom + 86;
+  const dashboardBottomPadding = Platform.OS === "web" ? (isIosWeb ? 108 : 104) : insets.bottom + 104;
   const { user } = useAuth();
   const { isAdmin } = useMembership();
   const {
@@ -806,7 +806,7 @@ function MobileDashboardScreen() {
         isCommandWide && styles.contentWide,
         { paddingTop: dashboardTopPadding, paddingBottom: dashboardBottomPadding },
       ]}
-      scrollEnabled={isCommandWide}
+      scrollEnabled
       bounces={false}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"

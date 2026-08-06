@@ -23,6 +23,7 @@ import {
   isAppTabActive,
   type AppTabName,
 } from "@/lib/appTabs";
+import { readInterfacePreferences, updateInterfacePreferences } from "@/lib/interfacePreferences";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 
@@ -37,14 +38,25 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { width } = useWindowDimensions();
-  const { signOut } = useAuth();
-  const { settings } = useBudget();
+  const { signOut, user } = useAuth();
+  const { activeHousehold, settings } = useBudget();
   const colors = useColors();
   const [collapsed, setCollapsed] = useState(width < 1180);
 
+  const preferenceScope = user && activeHousehold
+    ? { userId: user.id, householdId: activeHousehold.householdId }
+    : null;
+
   useEffect(() => {
-    if (width < 1180) setCollapsed(true);
-  }, [width]);
+    if (!preferenceScope) return;
+    let active = true;
+    void readInterfacePreferences(preferenceScope.userId, preferenceScope.householdId).then(preferences => {
+      if (active && typeof preferences.sidebarCollapsed === "boolean") {
+        setCollapsed(preferences.sidebarCollapsed);
+      }
+    });
+    return () => { active = false; };
+  }, [preferenceScope?.householdId, preferenceScope?.userId]);
 
   const navigation = useMemo<NavigationItem[]>(
     () =>
@@ -56,7 +68,18 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
       })),
     [settings.zeroBasedBudgetEnabled],
   );
-  const sidebarWidth = collapsed ? 76 : 244;
+  const isCollapsed = collapsed;
+  const sidebarWidth = isCollapsed ? 76 : 244;
+
+  const toggleSidebar = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    if (preferenceScope) {
+      void updateInterfacePreferences(preferenceScope.userId, preferenceScope.householdId, {
+        sidebarCollapsed: next,
+      });
+    }
+  };
 
   return (
     <View
@@ -67,14 +90,14 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
       ]}
     >
       <View style={[styles.sidebar, { width: sidebarWidth }]}>
-        <View style={[styles.brand, collapsed && styles.brandCollapsed]}>
+        <View style={[styles.brand, isCollapsed && styles.brandCollapsed]}>
           <Image
             accessibilityLabel="FlowLedger Algo logo"
             resizeMode="contain"
             source={require("../../assets/images/startup_f_transparent.png")}
             style={styles.logo}
           />
-          {!collapsed ? (
+          {!isCollapsed ? (
             <Text style={styles.brandName} numberOfLines={1}>
               FlowLedger <Text style={styles.brandAccent}>Algo</Text>
             </Text>
@@ -86,7 +109,7 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
           contentContainerStyle={styles.navContent}
           showsVerticalScrollIndicator={false}
         >
-          {!collapsed ? <Text style={styles.navEyebrow}>Workspace</Text> : null}
+          {!isCollapsed ? <Text style={styles.navEyebrow}>Workspace</Text> : null}
           {navigation.map((item) => {
             const active = isAppTabActive(item.tab, pathname);
             return (
@@ -98,12 +121,12 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
                 onPress={() => router.push(item.pathname as never)}
                 style={({ pressed }) => [
                   styles.navItem,
-                  collapsed && styles.navItemCollapsed,
+                  isCollapsed && styles.navItemCollapsed,
                   active && styles.navItemActive,
                   pressed && styles.pressed,
                 ]}
               >
-                {active ? <View style={styles.activeRail} /> : null}
+                <View style={[styles.activeRail, !active && styles.activeRailInactive]} />
                 <View style={[styles.navIcon, active && styles.navIconActive]}>
                   <Feather
                     name={item.icon}
@@ -111,7 +134,7 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
                     color={active ? palette.purple : palette.muted}
                   />
                 </View>
-                {!collapsed ? (
+                {!isCollapsed ? (
                   <Text
                     style={[styles.navLabel, active && styles.navLabelActive]}
                   >
@@ -122,7 +145,7 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
             );
           })}
 
-          {!collapsed ? (
+          {!isCollapsed ? (
             <View style={styles.promoCard}>
               <View style={styles.promoIcon}>
                 <Feather name="trending-up" size={16} color={palette.purple} />
@@ -142,33 +165,33 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
             onPress={() => void signOut()}
             style={({ pressed }) => [
               styles.footerButton,
-              collapsed && styles.footerButtonCollapsed,
+              isCollapsed && styles.footerButtonCollapsed,
               pressed && styles.pressed,
             ]}
           >
             <Feather name="log-out" size={18} color={palette.muted} />
-            {!collapsed ? (
+            {!isCollapsed ? (
               <Text style={styles.footerText}>Sign Out</Text>
             ) : null}
           </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
-              collapsed ? "Expand sidebar" : "Collapse sidebar"
+              isCollapsed ? "Expand sidebar" : "Collapse sidebar"
             }
-            onPress={() => setCollapsed((value) => !value)}
+            onPress={toggleSidebar}
             style={({ pressed }) => [
               styles.footerButton,
-              collapsed && styles.footerButtonCollapsed,
+              isCollapsed && styles.footerButtonCollapsed,
               pressed && styles.pressed,
             ]}
           >
             <Feather
-              name={collapsed ? "chevrons-right" : "chevrons-left"}
+              name={isCollapsed ? "chevrons-right" : "chevrons-left"}
               size={18}
               color={palette.muted}
             />
-            {!collapsed ? (
+            {!isCollapsed ? (
               <Text style={styles.footerText}>Collapse sidebar</Text>
             ) : null}
           </Pressable>
@@ -243,6 +266,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: palette.purple,
   },
+  activeRailInactive: { opacity: 0 },
   navIcon: {
     width: 28,
     height: 28,
@@ -252,6 +276,8 @@ const styles = StyleSheet.create({
   },
   navIconActive: { backgroundColor: palette.surface },
   navLabel: {
+    flex: 1,
+    minWidth: 0,
     color: palette.textSecondary,
     fontSize: 15,
     fontFamily: "Inter_500Medium",

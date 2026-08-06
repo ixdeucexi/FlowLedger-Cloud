@@ -303,8 +303,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (session?.access_token) {
       await detachPushNotifications(session.access_token).catch(() => undefined);
     }
+    const signedOutUserId = session?.user.id;
     setSession(null);
-    clearLastAppRoute();
+    await clearLastAppRoute(signedOutUserId);
     if (demoMode) {
       disableDevDemoMode();
       setDemoMode(false);

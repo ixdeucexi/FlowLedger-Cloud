@@ -1136,12 +1136,31 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!user || demoMode) return;
     const next = households.find(household => household.householdId === householdId);
     if (!next) return;
+    setLoading(true);
+    setLoadError(null);
+    await queryClient.cancelQueries({ queryKey: ["budget-core", user.id] });
+    queryClient.removeQueries({ queryKey: ["budget-core", user.id] });
+    setBills([]);
+    setOverrides([]);
+    setBillDateMoves([]);
+    setTransactions([]);
+    setDeletedTransactions([]);
+    setPendingBankTransactions([]);
+    setPendingPlanMatches([]);
+    setIncomes([]);
+    setGoals([]);
+    setExtraPayments([]);
+    setCategories([]);
+    setAccounts([]);
+    setConnectedBankAccounts([]);
+    setDecisions([]);
+    setSettings(DEFAULT_SETTINGS);
     setActiveHouseholdId(next.householdId);
     householdScopeRef.current = next;
     await saveActiveHouseholdId(user.id, next.householdId);
     await refreshHouseholdDetails(next);
     setLoadRetryNonce(value => value + 1);
-  }, [user, demoMode, households, refreshHouseholdDetails]);
+  }, [user, demoMode, households, queryClient, refreshHouseholdDetails]);
 
   const createHouseholdInvite = useCallback(async (role: HouseholdInviteRole = "editor") => {
     if (!activeHousehold) throw new Error("Choose a household first.");

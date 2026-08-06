@@ -127,5 +127,8 @@
     ,"lib/desktopCalendar.test.ts"
     ,"lib/transactionDebt.ts"
     ,"lib/transactionDebt.test.ts"
+    ,"lib/interfacePreferences.ts"
+    ,"lib/navigationMemory.ts"
+    ,"lib/navigationMemory.test.ts"
   ]
 }

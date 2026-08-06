@@ -96,6 +96,7 @@ import {
   saveOnboardingPreferences,
 } from "@/lib/onboardingPreferences";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
+import { readInterfacePreferences, updateInterfacePreferences } from "@/lib/interfacePreferences";
 import {
   getForecastSafetyLayout,
   isCompactSettingsLayout,
@@ -270,34 +271,12 @@ function subscriptionDecisionToStatus(
 }
 
 const VISIBLE_SETTINGS_SECTIONS = SETTINGS_SECTIONS;
-const ACTIVE_SETTINGS_SECTION_KEY = "flowledger_active_settings_section";
 
 function isSettingsSectionId(value: unknown): value is SettingsSectionId {
   return (
     value === "overview" ||
     VISIBLE_SETTINGS_SECTIONS.some((section) => section.id === value)
   );
-}
-
-function readStoredSettingsSection(): SettingsSectionId {
-  if (Platform.OS !== "web" || typeof window === "undefined") return "overview";
-  try {
-    const stored = window.sessionStorage?.getItem(ACTIVE_SETTINGS_SECTION_KEY);
-    return isSettingsSectionId(stored) ? stored : "overview";
-  } catch {
-    return "overview";
-  }
-}
-
-function writeStoredSettingsSection(sectionId: SettingsSectionId) {
-  if (Platform.OS !== "web" || typeof window === "undefined") return;
-  try {
-    if (sectionId === "overview") {
-      window.sessionStorage?.removeItem(ACTIVE_SETTINGS_SECTION_KEY);
-    } else {
-      window.sessionStorage?.setItem(ACTIVE_SETTINGS_SECTION_KEY, sectionId);
-    }
-  } catch {}
 }
 
 function csvCell(value: unknown): string {
@@ -506,7 +485,7 @@ export default function MoreScreen({
   const [legalDoc, setLegalDoc] = useState<"terms" | "privacy" | null>(null);
   useBackDismiss(Boolean(legalDoc), () => setLegalDoc(null));
   const [activeSettingsSection, setActiveSettingsSection] =
-    useState<SettingsSectionId>(() => initialSection ?? readStoredSettingsSection());
+    useState<SettingsSectionId>(() => initialSection ?? "overview");
   const requestedReviewTransactionId = Array.isArray(
     routeParams.reviewTransactionId,
   )
@@ -523,8 +502,13 @@ export default function MoreScreen({
   const settingsScrollRef = useRef<ScrollView>(null);
   const openSettingsSection = useCallback((sectionId: SettingsSectionId) => {
     setActiveSettingsSection(sectionId);
-    writeStoredSettingsSection(sectionId);
-  }, []);
+    router.setParams({ section: sectionId === "overview" ? "" : sectionId });
+    if (user && activeHousehold) {
+      void updateInterfacePreferences(user.id, activeHousehold.householdId, {
+        settingsSection: sectionId,
+      });
+    }
+  }, [activeHousehold, router, user]);
   useBackDismiss(activeSettingsSection !== "overview", () =>
     openSettingsSection("overview"),
   );
@@ -676,14 +660,17 @@ export default function MoreScreen({
     if (isSettingsSectionId(requestedSection)) {
       const safeSection = requestedSection as SettingsSectionId;
       setActiveSettingsSection(safeSection);
-      writeStoredSettingsSection(safeSection);
       return;
     }
-    const storedSection = readStoredSettingsSection();
-    if (storedSection !== "overview") {
-      setActiveSettingsSection(storedSection);
-    }
-  }, [initialSection, routeParams.section]);
+    if (!user || !activeHousehold) return;
+    let active = true;
+    void readInterfacePreferences(user.id, activeHousehold.householdId).then(preferences => {
+      if (active && isSettingsSectionId(preferences.settingsSection)) {
+        setActiveSettingsSection(preferences.settingsSection);
+      }
+    });
+    return () => { active = false; };
+  }, [activeHousehold?.householdId, initialSection, routeParams.section, user?.id]);
 
   useEffect(() => {
     const requestedAdd = Array.isArray(routeParams.add)

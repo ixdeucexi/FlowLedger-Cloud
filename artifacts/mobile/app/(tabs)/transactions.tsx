@@ -41,6 +41,7 @@ import { PlanViewSelector } from "@/components/PlanViewSelector";
 import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
 import { UnplannedChargeModal } from "@/components/UnplannedChargeModal";
 import colors from "@/constants/colors";
+import { useAuth } from "@/context/AuthContext";
 import type {
   Bill,
   ExtraPayment,
@@ -98,6 +99,7 @@ import {
   unmatchedPendingTransactions,
 } from "@/lib/pendingPlanMatches";
 import { transactionDebt } from "@/lib/transactionDebt";
+import { readInterfacePreferences, updateInterfacePreferences } from "@/lib/interfacePreferences";
 import { CategoryBudgetScreen } from "./category-budget";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -288,6 +290,7 @@ export function ActivityScreen() {
   const isDesktop = useDesktopExperience();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { user } = useAuth();
   const params = useLocalSearchParams<{
     editDebtPaymentId?: string;
     editDebtPaymentAt?: string;
@@ -333,6 +336,7 @@ export function ActivityScreen() {
     addGoal,
     addBill,
     deleteBillMistake,
+    activeHousehold,
   } = useBudget();
 
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -347,7 +351,45 @@ export function ActivityScreen() {
   const [currentActivityMonth] = useState(() => todayIsoDate().slice(0, 7));
   const [monthFilter, setMonthFilter] = useState(currentActivityMonth);
   const [search, setSearch] = useState("");
+  const activityPreferenceReadyRef = useRef(false);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
+
+  useEffect(() => {
+    if (!user || !activeHousehold) return;
+    activityPreferenceReadyRef.current = false;
+    let active = true;
+    void readInterfacePreferences(user.id, activeHousehold.householdId).then(preferences => {
+      if (!active) return;
+      const saved = preferences.activity;
+      if (saved) {
+        if (saved.range && /^\d{4}-\d{2}$/.test(saved.range)) setMonthFilter(saved.range);
+        if (saved.search) setSearch(saved.search);
+        if (saved.category) setCategoryFilter(saved.category);
+        if (saved.type === "all" || saved.type === "expense" || saved.type === "income") setTypeFilter(saved.type);
+        if (saved.account === "all" || Object.hasOwn(SOURCE_META, saved.account ?? "")) setSourceFilter(saved.account as SourceFilter);
+        if (saved.sort === "asc" || saved.sort === "desc") setSortOrder(saved.sort);
+      }
+      activityPreferenceReadyRef.current = true;
+    });
+    return () => { active = false; };
+  }, [activeHousehold?.householdId, user?.id]);
+
+  useEffect(() => {
+    if (!user || !activeHousehold || !activityPreferenceReadyRef.current) return;
+    const timer = setTimeout(() => {
+      void updateInterfacePreferences(user.id, activeHousehold.householdId, {
+        activity: {
+          range: monthFilter,
+          search,
+          account: sourceFilter,
+          category: categoryFilter,
+          type: typeFilter,
+          sort: sortOrder,
+        },
+      });
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [activeHousehold?.householdId, categoryFilter, monthFilter, search, sortOrder, sourceFilter, typeFilter, user?.id]);
   const [weeklySummaryVisible, setWeeklySummaryVisible] = useState(false);
   const [matchTx, setMatchTx] = useState<Transaction | null>(null);
   const [unplannedChargeTx, setUnplannedChargeTx] =
