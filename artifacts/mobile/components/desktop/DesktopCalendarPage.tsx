@@ -49,6 +49,8 @@ type DesktopCalendarPageProps = {
   selectedDate: string | null;
   dailyBalances: DailyBalance[];
   transferTransactionIds: ReadonlySet<string>;
+  overdueBillOccurrenceKeys: ReadonlySet<string>;
+  safetyFloor: number;
   getDailyBalances: (month: number, year: number) => DailyBalance[];
   onToday: () => void;
   onPreviousMonth: () => void;
@@ -92,10 +94,10 @@ function shortDate(value: string) {
 function eventTone(kind: DesktopCalendarEventKind) {
   return {
     income: { color: palette.green, background: palette.greenSoft },
-    bill: { color: palette.purple, background: palette.purpleSoft },
-    expense: { color: palette.red, background: palette.redSoft },
-    transfer: { color: palette.blue, background: palette.blueSoft },
-    other: { color: palette.amber, background: palette.amberSoft },
+    bill: { color: palette.amber, background: palette.amberSoft },
+    plan: { color: palette.blue, background: palette.blueSoft },
+    spending: { color: palette.purple, background: palette.purpleSoft },
+    risk: { color: palette.red, background: palette.redSoft },
   }[kind];
 }
 
@@ -196,11 +198,17 @@ function CalendarHeader({
 function CalendarEventPill({
   event,
   transferTransactionIds,
+  overdueBillOccurrenceKeys,
 }: {
   event: FinancialEvent;
   transferTransactionIds: ReadonlySet<string>;
+  overdueBillOccurrenceKeys: ReadonlySet<string>;
 }) {
-  const kind = calendarEventKind(event, transferTransactionIds);
+  const kind = calendarEventKind(
+    event,
+    transferTransactionIds,
+    overdueBillOccurrenceKeys,
+  );
   const tone = eventTone(kind);
   return (
     <View
@@ -219,7 +227,7 @@ function CalendarEventPill({
 function CalendarLegend() {
   return (
     <View accessibilityLabel="Calendar legend" style={styles.legend}>
-      {(["income", "bill", "expense", "transfer", "other"] as const).map((kind) => {
+      {(["income", "bill", "plan", "spending", "risk"] as const).map((kind) => {
         const tone = eventTone(kind);
         return (
           <View key={kind} style={styles.legendItem}>
@@ -238,13 +246,15 @@ function DesktopMonthGrid({
   selectedDate,
   dailyBalances,
   transferTransactionIds,
+  overdueBillOccurrenceKeys,
+  safetyFloor,
   lowestBalanceDate,
   lowestBalance,
   compact,
   onSelectDate,
 }: Pick<
   DesktopCalendarPageProps,
-  "month" | "year" | "selectedDate" | "dailyBalances" | "transferTransactionIds" | "onSelectDate"
+  "month" | "year" | "selectedDate" | "dailyBalances" | "transferTransactionIds" | "overdueBillOccurrenceKeys" | "safetyFloor" | "onSelectDate"
 > & {
   lowestBalanceDate: string;
   lowestBalance: number;
@@ -274,6 +284,7 @@ function DesktopMonthGrid({
           const selected = selectedDate === cell.date;
           const isToday = today === cell.date;
           const isLowest = cell.date === lowestBalanceDate;
+          const isRisk = Boolean(balance && balance.balance < safetyFloor);
           return (
             <Pressable
               key={cell.date}
@@ -301,15 +312,18 @@ function DesktopMonthGrid({
                   key={event.id}
                   event={event}
                   transferTransactionIds={transferTransactionIds}
+                  overdueBillOccurrenceKeys={overdueBillOccurrenceKeys}
                 />
               ))}
               {hiddenCount > 0 ? (
                 <Text style={styles.moreText}>+{hiddenCount} more</Text>
               ) : null}
               {isLowest ? (
-                <View style={styles.lowestCellBadge}>
-                  <Text style={styles.lowestCellLabel}>Lowest balance</Text>
-                  <Text style={styles.lowestCellValue}>{money(lowestBalance)}</Text>
+                <View style={[styles.lowestCellBadge, isRisk && styles.riskCellBadge]}>
+                  <Text style={[styles.lowestCellLabel, isRisk && styles.riskCellLabel]}>
+                    {isRisk ? "Risk · Lowest balance" : "Lowest balance"}
+                  </Text>
+                  <Text style={[styles.lowestCellValue, isRisk && styles.riskCellValue]}>{money(lowestBalance)}</Text>
                 </View>
               ) : null}
             </Pressable>
@@ -325,13 +339,21 @@ function SummaryRows({ summary }: { summary: ReturnType<typeof summarizeCalendar
   return (
     <View style={styles.summaryRows}>
       <View style={styles.summaryRow}><Text style={styles.summaryLabel}>Income</Text><Text style={[styles.summaryValue, { color: palette.green }]}>{money(summary.income)}</Text></View>
-      <View style={styles.summaryRow}><Text style={styles.summaryLabel}>Expenses</Text><Text style={[styles.summaryValue, { color: palette.red }]}>−{money(summary.expenses)}</Text></View>
-      <View style={[styles.summaryRow, styles.summaryNet]}><Text style={styles.summaryNetLabel}>Net</Text><Text style={[styles.summaryNetValue, { color: summary.net >= 0 ? palette.purple : palette.red }]}>{money(summary.net, true)}</Text></View>
+      <View style={styles.summaryRow}><Text style={styles.summaryLabel}>Expenses</Text><Text style={[styles.summaryValue, { color: palette.purple }]}>−{money(summary.expenses)}</Text></View>
+      <View style={[styles.summaryRow, styles.summaryNet]}><Text style={styles.summaryNetLabel}>Net</Text><Text style={[styles.summaryNetValue, { color: summary.net >= 0 ? palette.green : palette.red }]}>{money(summary.net, true)}</Text></View>
     </View>
   );
 }
 
-function BalanceTrend({ balances, label }: { balances: number[]; label: string }) {
+function BalanceTrend({
+  balances,
+  label,
+  tone = "plan",
+}: {
+  balances: number[];
+  label: string;
+  tone?: "plan" | "risk";
+}) {
   const min = Math.min(...balances);
   const max = Math.max(...balances);
   const span = Math.max(1, max - min);
@@ -339,7 +361,7 @@ function BalanceTrend({ balances, label }: { balances: number[]; label: string }
     <View accessibilityLabel={label} style={styles.trend}>
       {balances.map((balance, index) => (
         <View key={`${index}-${balance}`} style={styles.trendColumn}>
-          <View style={[styles.trendBar, { height: 8 + ((balance - min) / span) * 24 }]} />
+          <View style={[styles.trendBar, { backgroundColor: tone === "risk" ? palette.red : palette.blue, height: 8 + ((balance - min) / span) * 24 }]} />
         </View>
       ))}
     </View>
@@ -352,6 +374,8 @@ function SelectedDayPanel({
   weekDates,
   weekDays,
   transferTransactionIds,
+  overdueBillOccurrenceKeys,
+  safetyFloor,
   onClose,
   onAddTransaction,
   onOpenEvent,
@@ -361,6 +385,8 @@ function SelectedDayPanel({
   weekDates: string[];
   weekDays: DailyBalance[];
   transferTransactionIds: ReadonlySet<string>;
+  overdueBillOccurrenceKeys: ReadonlySet<string>;
+  safetyFloor: number;
   onClose: () => void;
   onAddTransaction: () => void;
   onOpenEvent: (event: FinancialEvent) => void;
@@ -373,6 +399,7 @@ function SelectedDayPanel({
   );
   const weekLabel = `Week of ${shortDate(weekDates[0] ?? selectedDate)} – ${shortDate(weekDates[6] ?? selectedDate)}`;
   const trendValues = weekDays.length ? weekDays.map((day) => day.balance) : [selectedDay?.balance ?? 0];
+  const isRiskDay = Boolean(selectedDay && selectedDay.balance < safetyFloor);
   return (
     <DesktopCard style={styles.detailPanel}>
       <View style={styles.detailHeader}>
@@ -389,7 +416,11 @@ function SelectedDayPanel({
         <Text style={styles.sectionTitle}>Scheduled Items ({events.length})</Text>
         <View style={styles.scheduledList}>
           {events.length ? events.map((event) => {
-            const kind = calendarEventKind(event, transferTransactionIds);
+            const kind = calendarEventKind(
+              event,
+              transferTransactionIds,
+              overdueBillOccurrenceKeys,
+            );
             const tone = eventTone(kind);
             const canOpen = event.sourceType !== "reconciliation";
             return (
@@ -419,10 +450,10 @@ function SelectedDayPanel({
           <Feather name="file-text" size={15} color={palette.faint} /><Text style={styles.disabledActionText}>Add Note · Coming Soon</Text>
         </Pressable>
 
-        <View style={styles.balanceCard}>
-          <View style={styles.balanceIcon}><Feather name="shield" size={16} color={palette.purple} /></View>
-          <View style={styles.balanceCopy}><Text style={styles.balanceLabel}>Lowest Balance</Text><Text style={styles.balanceValue}>{money(selectedDay?.balance ?? 0)}</Text><Text style={styles.balanceDetail}>This day</Text></View>
-          <BalanceTrend balances={trendValues} label={`Balance trend for ${weekLabel}`} />
+        <View style={[styles.balanceCard, isRiskDay && styles.riskBalanceCard]}>
+          <View style={[styles.balanceIcon, isRiskDay && styles.riskBalanceIcon]}><Feather name="shield" size={18} color={isRiskDay ? palette.red : palette.blue} /></View>
+          <View style={styles.balanceCopy}><Text style={styles.balanceLabel}>{isRiskDay ? "Risk Balance" : "Daily Balance"}</Text><Text style={[styles.balanceValue, isRiskDay && styles.riskBalanceValue]}>{money(selectedDay?.balance ?? 0)}</Text><Text style={styles.balanceDetail}>{isRiskDay ? `Below ${money(safetyFloor)} safety floor` : "This day"}</Text></View>
+          <BalanceTrend balances={trendValues} label={`Balance trend for ${weekLabel}`} tone={isRiskDay ? "risk" : "plan"} />
         </View>
 
         <View style={styles.weekCard}>
@@ -484,7 +515,7 @@ export function DesktopCalendarPage(props: DesktopCalendarPageProps) {
               <SummaryMetricCard label="Total Income" value={money(summary.income)} detail={`${summary.incomeCount} income ${summary.incomeCount === 1 ? "item" : "items"}`} icon="arrow-up" tone="green" />
             </View>
             <View style={[styles.metricItem, compact && styles.metricItemCompact]}>
-              <SummaryMetricCard label="Total Expenses" value={money(summary.expenses)} detail={`${summary.expenseCount} bills & expenses`} icon="arrow-down" tone="red" />
+              <SummaryMetricCard label="Total Expenses" value={money(summary.expenses)} detail={`${summary.expenseCount} bills & expenses`} icon="arrow-down" tone="purple" />
             </View>
             <View style={[styles.metricItem, compact && styles.metricItemCompact]}>
               <SummaryMetricCard label="Net Flow" value={money(summary.net, true)} detail="Income - Expenses" icon="trending-up" tone="purple" />
@@ -501,6 +532,8 @@ export function DesktopCalendarPage(props: DesktopCalendarPageProps) {
                 selectedDate={props.selectedDate}
                 dailyBalances={props.dailyBalances}
                 transferTransactionIds={props.transferTransactionIds}
+                overdueBillOccurrenceKeys={props.overdueBillOccurrenceKeys}
+                safetyFloor={props.safetyFloor}
                 lowestBalanceDate={summary.lowestBalanceDate}
                 lowestBalance={summary.lowestBalance}
                 compact={compact}
@@ -514,6 +547,8 @@ export function DesktopCalendarPage(props: DesktopCalendarPageProps) {
                 weekDates={weekDates}
                 weekDays={weekDays}
                 transferTransactionIds={props.transferTransactionIds}
+                overdueBillOccurrenceKeys={props.overdueBillOccurrenceKeys}
+                safetyFloor={props.safetyFloor}
                 onClose={props.onCloseSelectedDay}
                 onAddTransaction={() => props.onAddTransaction(props.selectedDate)}
                 onOpenEvent={props.onOpenEvent}
@@ -534,18 +569,18 @@ const styles = StyleSheet.create({
   pageHeader: { minHeight: 62, flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 18, marginBottom: 14 },
   pageHeaderCompact: { flexWrap: "wrap" },
   pageHeaderCopy: { flex: 1, minWidth: 280 },
-  pageTitle: { color: palette.text, fontSize: 25, lineHeight: 31, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.7 },
-  pageSubtitle: { color: palette.muted, fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular", marginTop: 2 },
+  pageTitle: { color: palette.text, fontSize: 27, lineHeight: 33, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.7 },
+  pageSubtitle: { color: palette.muted, fontSize: 14, lineHeight: 20, fontFamily: "Inter_400Regular", marginTop: 2 },
   monthControls: { flexDirection: "row", alignItems: "center", gap: 8 },
   monthControlsCompact: { flexWrap: "wrap", justifyContent: "flex-end" },
   secondaryButton: { minHeight: 38, borderRadius: 7, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.border, paddingHorizontal: 13, alignItems: "center", justifyContent: "center" },
-  secondaryButtonText: { color: palette.textSecondary, fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  secondaryButtonText: { color: palette.textSecondary, fontSize: 13, fontFamily: "Inter_600SemiBold" },
   arrowGroup: { flexDirection: "row" },
   iconButton: { width: 38, height: 38, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surface, alignItems: "center", justifyContent: "center", marginLeft: -1 },
   monthSelector: { minHeight: 38, borderRadius: 7, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surface, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 8 },
-  monthSelectorText: { color: palette.textSecondary, fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  monthSelectorText: { color: palette.textSecondary, fontSize: 13, fontFamily: "Inter_600SemiBold" },
   addButton: { minHeight: 38, borderRadius: 7, backgroundColor: palette.purple, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
-  addButtonText: { color: "#ffffff", fontSize: 11, fontFamily: "Inter_700Bold" },
+  addButtonText: { color: "#ffffff", fontSize: 13, fontFamily: "Inter_700Bold" },
   pressed: { opacity: 0.72 },
   metrics: { flexDirection: "row", gap: 12, marginBottom: 14 },
   metricsCompact: { flexWrap: "wrap" },
@@ -554,71 +589,77 @@ const styles = StyleSheet.create({
   mainRow: { flexDirection: "row", alignItems: "flex-start", gap: 14 },
   calendarColumn: { flex: 1, minWidth: 0 },
   calendarCard: { overflow: "hidden" },
-  weekdayRow: { minHeight: 43, flexDirection: "row", alignItems: "center", borderBottomWidth: 1, borderBottomColor: palette.border },
-  weekday: { width: "14.2857%" as never, textAlign: "center", color: palette.textSecondary, fontSize: 10, fontFamily: "Inter_700Bold" },
+  weekdayRow: { minHeight: 48, flexDirection: "row", alignItems: "center", borderBottomWidth: 1, borderBottomColor: palette.border },
+  weekday: { width: "14.2857%" as never, textAlign: "center", color: palette.textSecondary, fontSize: 12, fontFamily: "Inter_700Bold" },
   calendarGrid: { flexDirection: "row", flexWrap: "wrap" },
-  dayCell: { width: "14.2857%" as never, minHeight: 116, padding: 8, borderRightWidth: 1, borderBottomWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surface },
-  dayCellCompact: { minHeight: 102, padding: 6 },
+  dayCell: { width: "14.2857%" as never, minHeight: 136, padding: 9, borderRightWidth: 1, borderBottomWidth: 1, borderColor: palette.borderSoft, backgroundColor: palette.surface },
+  dayCellCompact: { minHeight: 120, padding: 7 },
   dayCellOutside: { backgroundColor: palette.surfaceMuted, opacity: 0.62 },
   dayCellSelected: { backgroundColor: palette.purpleSoft, borderColor: palette.purple },
   dayCellPressed: { opacity: 0.72 },
   dayTopRow: { minHeight: 24, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
   dayNumberWrap: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   dayNumberActive: { backgroundColor: palette.purple },
-  dayNumber: { color: palette.textSecondary, fontSize: 10, fontFamily: "Inter_700Bold" },
+  dayNumber: { color: palette.textSecondary, fontSize: 12, fontFamily: "Inter_700Bold" },
   dayNumberMuted: { color: palette.faint },
   dayNumberActiveText: { color: "#ffffff" },
-  todayLabel: { color: palette.purple, fontSize: 7, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.5 },
-  eventPill: { minHeight: 19, borderRadius: 5, paddingHorizontal: 5, marginBottom: 3, flexDirection: "row", alignItems: "center", gap: 4, overflow: "hidden" },
-  eventDot: { width: 5, height: 5, borderRadius: 3 },
-  eventName: { flex: 1, minWidth: 0, color: palette.text, fontSize: 7.5, fontFamily: "Inter_600SemiBold" },
-  eventAmount: { fontSize: 7, fontFamily: "Inter_700Bold" },
-  moreText: { color: palette.purple, fontSize: 7.5, fontFamily: "Inter_700Bold", marginTop: 1 },
-  lowestCellBadge: { marginTop: "auto", paddingTop: 4 },
-  lowestCellLabel: { color: palette.blue, fontSize: 7, fontFamily: "Inter_700Bold", textTransform: "uppercase" },
-  lowestCellValue: { color: palette.purple, fontSize: 9, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
-  legend: { minHeight: 50, flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 16, paddingHorizontal: 12, paddingVertical: 10 },
+  todayLabel: { color: palette.purple, fontSize: 11, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.5 },
+  eventPill: { minHeight: 24, borderRadius: 6, paddingHorizontal: 7, marginBottom: 4, flexDirection: "row", alignItems: "center", gap: 5, overflow: "hidden" },
+  eventDot: { width: 7, height: 7, borderRadius: 4 },
+  eventName: { flex: 1, minWidth: 0, color: palette.text, fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  eventAmount: { fontSize: 11, fontFamily: "Inter_700Bold" },
+  moreText: { color: palette.purple, fontSize: 11, fontFamily: "Inter_700Bold", marginTop: 1 },
+  lowestCellBadge: { marginTop: "auto", paddingTop: 5 },
+  lowestCellLabel: { color: palette.blue, fontSize: 11, fontFamily: "Inter_700Bold", textTransform: "uppercase" },
+  lowestCellValue: { color: palette.blue, fontSize: 12, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
+  riskCellBadge: { borderRadius: 6, backgroundColor: palette.redSoft, paddingHorizontal: 5, paddingBottom: 4 },
+  riskCellLabel: { color: palette.red },
+  riskCellValue: { color: palette.red },
+  legend: { minHeight: 56, flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 20, paddingHorizontal: 14, paddingVertical: 12 },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
-  legendDot: { width: 6, height: 6, borderRadius: 3 },
-  legendText: { color: palette.muted, fontSize: 9, fontFamily: "Inter_500Medium" },
-  detailPanel: { width: "30%" as never, minWidth: 286, maxWidth: 365, overflow: "hidden" },
-  detailHeader: { minHeight: 52, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 10, borderBottomWidth: 1, borderBottomColor: palette.borderSoft },
-  detailTitle: { flex: 1, color: palette.text, fontSize: 12, lineHeight: 17, fontFamily: "Inter_800ExtraBold" },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendText: { color: palette.muted, fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  detailPanel: { width: "32%" as never, minWidth: 306, maxWidth: 405, overflow: "hidden" },
+  detailHeader: { minHeight: 60, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 10, borderBottomWidth: 1, borderBottomColor: palette.borderSoft },
+  detailTitle: { flex: 1, color: palette.text, fontSize: 14, lineHeight: 19, fontFamily: "Inter_800ExtraBold" },
   closeButton: { minHeight: 34, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 4 },
-  closeText: { color: palette.textSecondary, fontSize: 9, fontFamily: "Inter_600SemiBold" },
-  detailScroll: { maxHeight: 720 },
-  detailContent: { padding: 14, gap: 12 },
-  sectionTitle: { color: palette.text, fontSize: 10, fontFamily: "Inter_800ExtraBold" },
-  summaryRows: { gap: 8 },
-  summaryRow: { minHeight: 22, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  summaryLabel: { color: palette.textSecondary, fontSize: 9, fontFamily: "Inter_600SemiBold" },
-  summaryValue: { fontSize: 9, fontFamily: "Inter_700Bold" },
+  closeText: { color: palette.textSecondary, fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  detailScroll: { maxHeight: 850 },
+  detailContent: { padding: 16, gap: 15 },
+  sectionTitle: { color: palette.text, fontSize: 14, fontFamily: "Inter_800ExtraBold" },
+  summaryRows: { gap: 9 },
+  summaryRow: { minHeight: 28, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  summaryLabel: { color: palette.textSecondary, fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  summaryValue: { fontSize: 12, fontFamily: "Inter_700Bold" },
   summaryNet: { borderTopWidth: 1, borderTopColor: palette.borderSoft, paddingTop: 9, marginTop: 2 },
-  summaryNetLabel: { color: palette.text, fontSize: 9, fontFamily: "Inter_700Bold" },
-  summaryNetValue: { fontSize: 10, fontFamily: "Inter_800ExtraBold" },
+  summaryNetLabel: { color: palette.text, fontSize: 12, fontFamily: "Inter_700Bold" },
+  summaryNetValue: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   scheduledList: { borderTopWidth: 1, borderTopColor: palette.borderSoft },
-  scheduledRow: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: 9, borderBottomWidth: 1, borderBottomColor: palette.borderSoft, paddingVertical: 8 },
-  scheduledIcon: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  scheduledRow: { minHeight: 62, flexDirection: "row", alignItems: "center", gap: 10, borderBottomWidth: 1, borderBottomColor: palette.borderSoft, paddingVertical: 10 },
+  scheduledIcon: { width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center" },
   scheduledDot: { width: 7, height: 7, borderRadius: 4 },
   scheduledCopy: { flex: 1, minWidth: 0 },
-  scheduledName: { color: palette.text, fontSize: 9, fontFamily: "Inter_700Bold" },
-  scheduledCategory: { color: palette.muted, fontSize: 8, marginTop: 2 },
-  scheduledAmount: { fontSize: 9, fontFamily: "Inter_700Bold" },
+  scheduledName: { color: palette.text, fontSize: 13, fontFamily: "Inter_700Bold" },
+  scheduledCategory: { color: palette.muted, fontSize: 11, marginTop: 3 },
+  scheduledAmount: { fontSize: 12, fontFamily: "Inter_700Bold" },
   emptyState: { minHeight: 110, alignItems: "center", justifyContent: "center", padding: 12 },
-  emptyTitle: { color: palette.text, fontSize: 10, fontFamily: "Inter_700Bold", marginTop: 7 },
-  emptyText: { color: palette.muted, fontSize: 8, marginTop: 3, textAlign: "center" },
-  primaryAction: { minHeight: 38, borderRadius: 7, backgroundColor: palette.purple, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
-  primaryActionText: { color: "#ffffff", fontSize: 10, fontFamily: "Inter_700Bold" },
-  disabledAction: { minHeight: 38, borderRadius: 7, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surfaceMuted, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, opacity: 0.72 },
-  disabledActionText: { color: palette.faint, fontSize: 9, fontFamily: "Inter_600SemiBold" },
-  balanceCard: { minHeight: 76, borderRadius: 8, backgroundColor: palette.purpleSoft, padding: 11, flexDirection: "row", alignItems: "center", gap: 9 },
-  balanceIcon: { width: 30, height: 30, borderRadius: 8, backgroundColor: palette.surface, alignItems: "center", justifyContent: "center" },
+  emptyTitle: { color: palette.text, fontSize: 12, fontFamily: "Inter_700Bold", marginTop: 7 },
+  emptyText: { color: palette.muted, fontSize: 11, marginTop: 3, textAlign: "center" },
+  primaryAction: { minHeight: 44, borderRadius: 8, backgroundColor: palette.purple, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
+  primaryActionText: { color: "#ffffff", fontSize: 13, fontFamily: "Inter_700Bold" },
+  disabledAction: { minHeight: 44, borderRadius: 8, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surfaceMuted, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, opacity: 0.72 },
+  disabledActionText: { color: palette.faint, fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  balanceCard: { minHeight: 92, borderRadius: 9, backgroundColor: palette.blueSoft, padding: 13, flexDirection: "row", alignItems: "center", gap: 10 },
+  riskBalanceCard: { backgroundColor: palette.redSoft },
+  balanceIcon: { width: 36, height: 36, borderRadius: 9, backgroundColor: palette.surface, alignItems: "center", justifyContent: "center" },
+  riskBalanceIcon: { borderWidth: 1, borderColor: palette.red },
   balanceCopy: { flex: 1, minWidth: 0 },
-  balanceLabel: { color: palette.text, fontSize: 9, fontFamily: "Inter_700Bold" },
-  balanceValue: { color: palette.text, fontSize: 14, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
-  balanceDetail: { color: palette.muted, fontSize: 8, marginTop: 1 },
+  balanceLabel: { color: palette.text, fontSize: 12, fontFamily: "Inter_700Bold" },
+  balanceValue: { color: palette.text, fontSize: 18, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
+  riskBalanceValue: { color: palette.red },
+  balanceDetail: { color: palette.muted, fontSize: 11, lineHeight: 15, marginTop: 2 },
   trend: { width: 92, height: 42, flexDirection: "row", alignItems: "flex-end", gap: 3 },
   trendColumn: { flex: 1, height: 38, justifyContent: "flex-end" },
-  trendBar: { width: "100%", borderRadius: 3, backgroundColor: palette.purple },
-  weekCard: { borderWidth: 1, borderColor: palette.borderSoft, borderRadius: 8, padding: 11, gap: 10 },
+  trendBar: { width: "100%", borderRadius: 3, backgroundColor: palette.blue },
+  weekCard: { borderWidth: 1, borderColor: palette.borderSoft, borderRadius: 9, padding: 13, gap: 11 },
 });

@@ -1,5 +1,7 @@
 import type { FinancialEvent } from "./forecast";
 
+const EMPTY_CALENDAR_KEYS: ReadonlySet<string> = new Set();
+
 export type CalendarForecastDay = {
   day: number;
   balance: number;
@@ -9,9 +11,9 @@ export type CalendarForecastDay = {
 export type DesktopCalendarEventKind =
   | "income"
   | "bill"
-  | "expense"
-  | "transfer"
-  | "other";
+  | "plan"
+  | "spending"
+  | "risk";
 
 export type DesktopCalendarSummary = {
   income: number;
@@ -35,18 +37,32 @@ export type DesktopCalendarCell = {
 export function calendarEventKind(
   event: FinancialEvent,
   transferTransactionIds: ReadonlySet<string>,
+  overdueBillOccurrenceKeys: ReadonlySet<string> = EMPTY_CALENDAR_KEYS,
 ): DesktopCalendarEventKind {
-  if (event.sourceType === "reconciliation") return "other";
+  const overdueBill =
+    (event.sourceType === "bill" || event.kind === "bill") &&
+    overdueBillOccurrenceKeys.has(`${event.sourceId}:${event.date.slice(0, 10)}`);
+  if (overdueBill) return "risk";
+  if (event.sourceType === "reconciliation") return "plan";
   if (
     event.sourceType === "transaction" &&
     transferTransactionIds.has(event.sourceId)
   ) {
-    return "transfer";
+    return "plan";
+  }
+  if (event.sourceType === "bill" || event.kind === "bill") return "bill";
+  if (
+    event.sourceType === "goal" ||
+    event.sourceType === "decision" ||
+    event.sourceType === "extra_payment" ||
+    event.kind === "goal" ||
+    event.kind === "debt_payment"
+  ) {
+    return "plan";
   }
   if (event.amount > 0) return "income";
-  if (event.sourceType === "bill" || event.kind === "bill") return "bill";
-  if (event.amount < 0) return "expense";
-  return "other";
+  if (event.amount < 0) return "spending";
+  return "plan";
 }
 
 export function uniqueCalendarEvents(days: CalendarForecastDay[]): FinancialEvent[] {
@@ -65,11 +81,14 @@ export function summarizeCalendarEvents(
 ): DesktopCalendarSummary {
   return events.reduce<DesktopCalendarSummary>(
     (summary, event) => {
-      const kind = calendarEventKind(event, transferTransactionIds);
-      if (kind === "income") {
+      const isTransfer =
+        event.sourceType === "transaction" &&
+        transferTransactionIds.has(event.sourceId);
+      if (event.sourceType === "reconciliation" || isTransfer) return summary;
+      if (event.amount > 0) {
         summary.income += event.amount;
         summary.incomeCount += 1;
-      } else if (kind === "bill" || kind === "expense") {
+      } else if (event.amount < 0) {
         summary.expenses += Math.abs(event.amount);
         summary.expenseCount += 1;
       }

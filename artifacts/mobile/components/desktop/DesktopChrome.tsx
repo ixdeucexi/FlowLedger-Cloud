@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
   logo: { width: 34, height: 34 },
   brandName: {
     color: palette.text,
-    fontSize: 17,
+    fontSize: 19,
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: -0.5,
   },
@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
   navContent: { padding: 12, gap: 5 },
   navEyebrow: {
     color: palette.faint,
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: "Inter_700Bold",
     letterSpacing: 1.7,
     textTransform: "uppercase",
@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
   navIconActive: { backgroundColor: palette.surface },
   navLabel: {
     color: palette.textSecondary,
-    fontSize: 13,
+    fontSize: 15,
     fontFamily: "Inter_500Medium",
   },
   navLabelActive: {
@@ -279,14 +279,14 @@ const styles = StyleSheet.create({
   },
   promoTitle: {
     color: palette.text,
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 14,
+    lineHeight: 19,
     fontFamily: "Inter_700Bold",
   },
   promoCopy: {
     color: palette.muted,
-    fontSize: 10,
-    lineHeight: 16,
+    fontSize: 12,
+    lineHeight: 18,
     marginTop: 5,
   },
   sidebarFooter: {
@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
   footerButtonCollapsed: { justifyContent: "center", paddingHorizontal: 0 },
   footerText: {
     color: palette.muted,
-    fontSize: 11,
+    fontSize: 13,
     fontFamily: "Inter_600SemiBold",
   },
   main: {

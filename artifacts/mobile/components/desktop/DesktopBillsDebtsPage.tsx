@@ -1141,7 +1141,7 @@ const styles = StyleSheet.create({
   tabActive: { borderBottomColor: palette.purple },
   tabText: {
     color: palette.muted,
-    fontSize: 11,
+    fontSize: 13,
     fontFamily: "Inter_600SemiBold",
   },
   tabTextActive: { color: palette.purpleDark, fontFamily: "Inter_700Bold" },
@@ -1150,7 +1150,7 @@ const styles = StyleSheet.create({
   overviewCard: { width: "100%", minWidth: 0, overflow: "hidden" },
   textLink: {
     color: palette.purpleDark,
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: "Inter_700Bold",
     textTransform: "capitalize",
   },
@@ -1175,7 +1175,7 @@ const styles = StyleSheet.create({
   },
   upcomingHeaderText: {
     color: palette.muted,
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: "Inter_700Bold",
     textTransform: "uppercase",
     letterSpacing: 0.35,
@@ -1201,19 +1201,19 @@ const styles = StyleSheet.create({
   upcomingAmountColumn: { width: 130 },
   upcomingAmount: {
     color: palette.text,
-    fontSize: 11,
+    fontSize: 13,
     fontFamily: "Inter_700Bold",
   },
   upcomingStatusColumn: { width: 110, alignItems: "flex-start" },
-  rowStrong: { color: palette.text, fontSize: 10, fontFamily: "Inter_700Bold" },
+  rowStrong: { color: palette.text, fontSize: 12, fontFamily: "Inter_700Bold" },
   rowText: {
     color: palette.textSecondary,
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: "Inter_500Medium",
   },
   rowMuted: {
     color: palette.muted,
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: "Inter_400Regular",
     marginTop: 2,
   },
@@ -1235,7 +1235,7 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "center",
     color: palette.muted,
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: "Inter_600SemiBold",
   },
   calendarGrid: { flexDirection: "row", flexWrap: "wrap" },
@@ -1249,11 +1249,11 @@ const styles = StyleSheet.create({
   },
   calendarDay: {
     color: palette.textSecondary,
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: "Inter_600SemiBold",
   },
   calendarAmount: {
-    fontSize: 8,
+    fontSize: 11,
     fontFamily: "Inter_700Bold",
     textAlign: "center",
     marginTop: 2,
@@ -1299,12 +1299,12 @@ const styles = StyleSheet.create({
   },
   progressTitle: {
     color: palette.textSecondary,
-    fontSize: 11,
+    fontSize: 13,
     fontFamily: "Inter_500Medium",
   },
   progressPercent: {
     color: palette.text,
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: "Inter_700Bold",
   },
   progressTrack: {
@@ -1341,7 +1341,7 @@ const styles = StyleSheet.create({
     width: 34,
     textAlign: "right",
     color: palette.muted,
-    fontSize: 9,
+    fontSize: 11,
   },
   debtColName: { flex: 1.5, minWidth: 130 },
   debtColCategory: { flex: 0.85, minWidth: 72 },

@@ -428,7 +428,7 @@ export const desktopTableStyles = StyleSheet.create({
   },
   headerText: {
     color: desktopPalette.muted,
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: "Inter_700Bold",
   },
   row: {
@@ -441,12 +441,12 @@ export const desktopTableStyles = StyleSheet.create({
   },
   cellText: {
     color: desktopPalette.textSecondary,
-    fontSize: 11,
+    fontSize: 13,
     fontFamily: "Inter_500Medium",
   },
   cellStrong: {
     color: desktopPalette.text,
-    fontSize: 11,
+    fontSize: 13,
     fontFamily: "Inter_700Bold",
   },
 });
@@ -464,15 +464,15 @@ const styles = StyleSheet.create({
   pageHeaderCopy: { flex: 1 },
   pageTitle: {
     color: desktopPalette.text,
-    fontSize: 25,
-    lineHeight: 31,
+    fontSize: 27,
+    lineHeight: 33,
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: -0.7,
   },
   pageDescription: {
     color: desktopPalette.muted,
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 20,
     fontFamily: "Inter_400Regular",
     marginTop: 2,
   },
@@ -489,7 +489,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: "#ffffff",
-    fontSize: 11,
+    fontSize: 13,
     fontFamily: "Inter_700Bold",
   },
   secondaryButton: {
@@ -506,7 +506,7 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: desktopPalette.textSecondary,
-    fontSize: 11,
+    fontSize: 13,
     fontFamily: "Inter_600SemiBold",
   },
   card: {
@@ -531,20 +531,20 @@ const styles = StyleSheet.create({
   metricCopy: { flex: 1, minWidth: 0 },
   metricLabel: {
     color: desktopPalette.textSecondary,
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: "Inter_700Bold",
     marginBottom: 8,
   },
   metricValue: {
     color: desktopPalette.text,
-    fontSize: 20,
-    lineHeight: 24,
+    fontSize: 22,
+    lineHeight: 26,
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: -0.4,
   },
   metricDetail: {
     color: desktopPalette.muted,
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: "Inter_400Regular",
     marginTop: 5,
   },
@@ -566,7 +566,7 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     color: desktopPalette.text,
-    fontSize: 13,
+    fontSize: 15,
     fontFamily: "Inter_700Bold",
   },
   badge: {
@@ -575,7 +575,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 4,
   },
-  badgeText: { fontSize: 9, fontFamily: "Inter_700Bold" },
+  badgeText: { fontSize: 11, fontFamily: "Inter_700Bold" },
   desktopSearch: {
     flex: 1,
     minWidth: 180,
@@ -593,7 +593,7 @@ const styles = StyleSheet.create({
   desktopSearchInput: {
     flex: 1,
     color: desktopPalette.text,
-    fontSize: 11,
+    fontSize: 13,
     fontFamily: "Inter_500Medium",
     outlineStyle: "none",
   } as never,
@@ -616,7 +616,7 @@ const styles = StyleSheet.create({
   },
   filterButtonText: {
     color: desktopPalette.textSecondary,
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: "Inter_600SemiBold",
   },
   filterButtonTextActive: { color: desktopPalette.purpleDark },
@@ -628,7 +628,7 @@ const styles = StyleSheet.create({
   },
   toggleLabel: {
     color: desktopPalette.textSecondary,
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: "Inter_600SemiBold",
   },
   toggle: {
@@ -663,15 +663,15 @@ const styles = StyleSheet.create({
   },
   stateTitle: {
     color: desktopPalette.text,
-    fontSize: 14,
+    fontSize: 16,
     fontFamily: "Inter_700Bold",
     textAlign: "center",
   },
   stateMessage: {
     maxWidth: 360,
     color: desktopPalette.muted,
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: 13,
+    lineHeight: 19,
     textAlign: "center",
     marginTop: 5,
     marginBottom: 12,

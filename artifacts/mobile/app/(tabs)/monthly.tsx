@@ -1408,6 +1408,8 @@ export default function MonthlyScreen() {
           selectedDate={selectedDate}
           dailyBalances={dailyBalances}
           transferTransactionIds={transferTransactionIds}
+          overdueBillOccurrenceKeys={overdueBillOccurrenceKeys}
+          safetyFloor={settings.safety_floor}
           getDailyBalances={getDailyBalances}
           onToday={jumpToToday}
           onPreviousMonth={() => changeMonth(-1)}

@@ -822,11 +822,11 @@ const styles = StyleSheet.create({
   navCopy: { flex: 1, minWidth: 0 },
   navTitle: {
     color: palette.textSecondary,
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: "Inter_600SemiBold",
   },
   navTitleActive: { color: palette.purpleDark, fontFamily: "Inter_700Bold" },
-  navDescription: { color: palette.muted, fontSize: 8, marginTop: 2 },
+  navDescription: { color: palette.muted, fontSize: 11, marginTop: 2 },
   settingsMain: { flex: 1, minWidth: 0, gap: 12 },
   message: {
     minHeight: 38,
@@ -842,7 +842,7 @@ const styles = StyleSheet.create({
   messageText: {
     flex: 1,
     color: palette.purpleDark,
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: "Inter_600SemiBold",
   },
   profileBody: { flexDirection: "row", padding: 16, gap: 20 },
@@ -863,16 +863,16 @@ const styles = StyleSheet.create({
   },
   largeAvatarText: {
     color: palette.purple,
-    fontSize: 24,
+    fontSize: 26,
     fontFamily: "Inter_700Bold",
   },
-  avatarHint: { color: palette.muted, fontSize: 9, marginTop: 8 },
+  avatarHint: { color: palette.muted, fontSize: 11, marginTop: 8 },
   profileFields: { flex: 1, minWidth: 0 },
   fieldRow: { flexDirection: "row", gap: 12, marginBottom: 11 },
   field: { flex: 1, minWidth: 0 },
   fieldLabel: {
     color: palette.textSecondary,
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: "Inter_600SemiBold",
     marginBottom: 6,
   },
@@ -884,7 +884,7 @@ const styles = StyleSheet.create({
     backgroundColor: palette.surface,
     paddingHorizontal: 10,
     color: palette.text,
-    fontSize: 10,
+    fontSize: 12,
     outlineStyle: "none",
   } as never,
   inputDisabled: {
@@ -895,7 +895,7 @@ const styles = StyleSheet.create({
   previewGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   previewCard: { width: "48.8%" as never, minHeight: 150 },
   previewBody: { padding: 14, flex: 1 },
-  previewLine: { color: palette.textSecondary, fontSize: 10, lineHeight: 18 },
+  previewLine: { color: palette.textSecondary, fontSize: 12, lineHeight: 20 },
   previewLink: {
     marginTop: "auto",
     paddingTop: 13,
@@ -906,7 +906,7 @@ const styles = StyleSheet.create({
   },
   previewLinkText: {
     color: palette.purple,
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: "Inter_700Bold",
   },
   sectionBody: { paddingHorizontal: 15 },
@@ -928,11 +928,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   lineCopy: { flex: 1, minWidth: 0 },
-  lineTitle: { color: palette.text, fontSize: 11, fontFamily: "Inter_700Bold" },
+  lineTitle: { color: palette.text, fontSize: 13, fontFamily: "Inter_700Bold" },
   lineDescription: {
     color: palette.muted,
-    fontSize: 9,
-    lineHeight: 14,
+    fontSize: 11,
+    lineHeight: 16,
     marginTop: 3,
   },
   optionGroup: { marginBottom: 20, paddingTop: 15 },
@@ -953,14 +953,14 @@ const styles = StyleSheet.create({
   },
   optionText: {
     color: palette.textSecondary,
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: "Inter_600SemiBold",
   },
   optionTextActive: { color: palette.purpleDark, fontFamily: "Inter_700Bold" },
   supportNote: {
     color: palette.muted,
-    fontSize: 9,
-    lineHeight: 15,
+    fontSize: 11,
+    lineHeight: 17,
     marginVertical: 12,
   },
   connectionActions: {
@@ -987,9 +987,9 @@ const styles = StyleSheet.create({
   planCopy: { flex: 1, minWidth: 0 },
   planName: {
     color: palette.text,
-    fontSize: 19,
+    fontSize: 21,
     fontFamily: "Inter_800ExtraBold",
   },
-  planDescription: { color: palette.textSecondary, fontSize: 11, marginTop: 5 },
+  planDescription: { color: palette.textSecondary, fontSize: 13, marginTop: 5 },
   pressed: { opacity: 0.68 },
 });
