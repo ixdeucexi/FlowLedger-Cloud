@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/context/AuthContext";
+import { AppDiscoveryProvider } from "@/context/AppDiscoveryContext";
 import { useBudget } from "@/context/BudgetContext";
 import { SaveStatusBanner } from "@/components/SaveStatusBanner";
 import { DecisionDueModal } from "@/components/DecisionDueModal";
@@ -615,6 +616,7 @@ function TabContent() {
       style={[styles.tabTransitionRoot, { backgroundColor: colors.background }]}
     >
       <View style={styles.tabTransitionContent}>
+        <AppDiscoveryProvider>
         <ResponsiveDesktopChrome enabled={isDesktop}>
           {loadError ? (
             <BudgetLoadErrorScreen message={loadError} onRetry={retryBudgetLoad} />
@@ -803,6 +805,7 @@ function TabContent() {
           </View>
           )}
         </ResponsiveDesktopChrome>
+        </AppDiscoveryProvider>
         {demoMode ? <DemoModeBanner /> : null}
         <PlanPreviewBanner />
         <SaveStatusBanner />

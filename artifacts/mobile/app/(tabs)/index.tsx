@@ -23,6 +23,7 @@ import colors from "@/constants/colors";
 import type { Bill, Goal, PendingBankTransaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useAuth } from "@/context/AuthContext";
+import { useAppDiscovery } from "@/context/AppDiscoveryContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
@@ -206,11 +207,12 @@ export default function DashboardScreen() {
 
 function MobileDashboardScreen() {
   const c = useColors();
+  const { openNotifications, unreadNotificationCount } = useAppDiscovery();
   const dashboardTheme = DASHBOARD_THEMES[c.mode];
   const [isFocused, setIsFocused] = useState(true);
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const routeParams = useLocalSearchParams<{ add?: string }>();
+  const routeParams = useLocalSearchParams<{ add?: string; action?: string }>();
   const { width: viewportWidth } = useWindowDimensions();
   const compactDashboardHeader = viewportWidth < 430;
   const isCommandWide = Platform.OS === "web" && viewportWidth >= 900;
@@ -242,6 +244,7 @@ function MobileDashboardScreen() {
   const [editGoal, setEditGoal]                     = useState<Goal | null>(null);
   const [actionModalVisible, setActionModalVisible] = useState(false);
   const [addBillVisible, setAddBillVisible]         = useState(false);
+  const [addBillForceDebt, setAddBillForceDebt]     = useState(false);
   const [negCalendarVisible, setNegCalendarVisible]  = useState(false);
   const [categoryBudgetModalVisible, setCategoryBudgetModalVisible] = useState(false);
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
@@ -281,10 +284,29 @@ function MobileDashboardScreen() {
     const requestedAdd = Array.isArray(routeParams.add)
       ? routeParams.add[0]
       : routeParams.add;
+    const requestedAction = Array.isArray(routeParams.action)
+      ? routeParams.action[0]
+      : routeParams.action;
     if (requestedAdd !== "1") return;
+    if (requestedAction === "bill" || requestedAction === "debt") {
+      setAddBillForceDebt(requestedAction === "debt");
+      setAddBillVisible(true);
+      router.setParams({ add: "", action: "" });
+      return;
+    }
+    if (requestedAction === "goal") {
+      setEditGoal(null);
+      setGoalModalVisible(true);
+      router.setParams({ add: "", action: "" });
+      return;
+    }
+    if (requestedAction === "income") {
+      router.replace({ pathname: "/(tabs)/more", params: { section: "money", add: "income" } } as any);
+      return;
+    }
     setActionModalVisible(true);
-    router.setParams({ add: "" });
-  }, [routeParams.add, router]);
+    router.setParams({ add: "", action: "" });
+  }, [routeParams.action, routeParams.add, router]);
   const dismissFlowmentum = useCallback(() => {
     setFlowmentumVisible(false);
     if (!flowmentumAdminPreview && flowmentumSeenKey) {
@@ -914,6 +936,22 @@ function MobileDashboardScreen() {
         </View>
         <View style={styles.dashboardHeaderActions}>
           <HouseholdSwitcher appearance="header" />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Open notifications${unreadNotificationCount ? `, ${unreadNotificationCount} unread` : ""}`}
+            onPress={openNotifications}
+            style={({ pressed }) => [
+              styles.settingsHeaderButton,
+              { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.72 : 1 },
+            ]}
+          >
+            <Feather name="bell" size={20} color={c.foreground} />
+            {unreadNotificationCount ? (
+              <View style={[styles.discoveryHeaderBadge, { backgroundColor: c.destructive }]}>
+                <Text style={styles.discoveryHeaderBadgeText}>{Math.min(unreadNotificationCount, 9)}</Text>
+              </View>
+            ) : null}
+          </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Customize dashboard"
@@ -1751,10 +1789,11 @@ function MobileDashboardScreen() {
 
       <AddBillModal
         visible={addBillVisible}
-        onClose={() => setAddBillVisible(false)}
+        onClose={() => { setAddBillVisible(false); setAddBillForceDebt(false); }}
         onSave={(data) => addBill(data as Omit<Bill, "id" | "created_at">)}
         onDelete={() => {}}
         editBill={null}
+        forceDebt={addBillForceDebt}
       />
 
       <GoalModal
@@ -1915,6 +1954,8 @@ const styles = StyleSheet.create({
   headingCompact: { fontSize: 20, letterSpacing: -0.65 },
   dashboardHeaderActions: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8 },
   settingsHeaderButton: { width: 44, height: 44, borderWidth: 1, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  discoveryHeaderBadge: { position: "absolute", right: -3, top: -3, minWidth: 16, height: 16, borderRadius: 8, alignItems: "center", justifyContent: "center", paddingHorizontal: 3 },
+  discoveryHeaderBadgeText: { color: "#ffffff", fontFamily: "Inter_800ExtraBold", fontSize: 8 },
   setupCard: { borderWidth: 1, borderRadius: 18, padding: 14, marginBottom: 12 },
   setupHeader: { flexDirection: "row", alignItems: "flex-start", marginBottom: 8 },
   setupTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },

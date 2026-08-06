@@ -309,6 +309,11 @@ export function ActivityScreen() {
     pendingAt?: string;
     activityId?: string;
     activityAt?: string;
+    activityDate?: string;
+    search?: string;
+    category?: string;
+    range?: string;
+    add?: string;
   }>();
   const { isFeatureLocked, bypassFeature } = useMembership();
   const {
@@ -396,10 +401,31 @@ export function ActivityScreen() {
         if (saved.account === "all" || Object.hasOwn(SOURCE_META, saved.account ?? "")) setSourceFilter(saved.account as SourceFilter);
         if (saved.sort === "asc" || saved.sort === "desc") setSortOrder(saved.sort);
       }
+      if (params.activityDate && /^\d{4}-\d{2}-\d{2}$/.test(params.activityDate)) {
+        setRangeFilter("custom");
+        setCustomStartDate(params.activityDate);
+        setCustomEndDate(params.activityDate);
+      } else if (params.range && isActivityRangeId(params.range)) {
+        setRangeFilter(params.range);
+      }
+      if (params.search) setSearch(params.search);
+      if (params.category) setCategoryFilter(params.category);
       activityPreferenceReadyRef.current = true;
     });
     return () => { active = false; };
-  }, [activeHousehold?.householdId, user?.id]);
+  }, [activeHousehold?.householdId, params.activityAt, params.activityDate, params.category, params.range, params.search, user?.id]);
+
+  const addRequestRef = useRef("");
+  useEffect(() => {
+    const requested = Array.isArray(params.add) ? params.add[0] : params.add;
+    if (requested !== "1") return;
+    const token = `${requested}:${Date.now()}`;
+    if (addRequestRef.current === token) return;
+    addRequestRef.current = token;
+    setEditTx(null);
+    setEditModalVisible(true);
+    router.setParams({ add: "" } as never);
+  }, [params.add, router]);
 
   useEffect(() => {
     if (!user || !activeHousehold || !activityPreferenceReadyRef.current) return;

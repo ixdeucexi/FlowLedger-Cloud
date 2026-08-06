@@ -138,5 +138,9 @@
     ,"lib/dashboardCustomization.test.ts"
     ,"lib/todaysDecisions.ts"
     ,"lib/todaysDecisions.test.ts"
+    ,"lib/universalSearch.ts"
+    ,"lib/universalSearch.test.ts"
+    ,"lib/notificationCenter.ts"
+    ,"lib/notificationCenter.test.ts"
   ]
 }

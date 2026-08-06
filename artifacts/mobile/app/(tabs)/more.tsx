@@ -59,6 +59,7 @@ import type { Account, IncomeItem } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useAuth } from "@/context/AuthContext";
+import { useAppDiscovery } from "@/context/AppDiscoveryContext";
 import {
   type AppFontStyle,
   type ThemeMode,
@@ -401,6 +402,7 @@ export default function MoreScreen({
     [viewportWidth],
   );
   const router = useRouter();
+  const { openCommands, openNotifications, openSearch, unreadNotificationCount } = useAppDiscovery();
   const routeParams = useLocalSearchParams<{
     section?: string;
     feedback?: string;
@@ -2131,6 +2133,10 @@ export default function MoreScreen({
             membershipLabel={membershipStatusLabel}
             statuses={hubStatuses}
             isAdmin={feedbackAdmin}
+            onOpenSearch={openSearch}
+            onOpenCommands={openCommands}
+            onOpenNotifications={openNotifications}
+            unreadNotificationCount={unreadNotificationCount}
             onOpenSection={(sectionId) => {
               openSettingsSection(sectionId);
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

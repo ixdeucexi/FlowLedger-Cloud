@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { DashboardLayoutPreference } from "./dashboardCustomization";
+import type { NotificationCenterState } from "./notificationCenter";
 
 const PREFERENCE_PREFIX = "flowledger_interface_v1";
 
@@ -27,6 +28,7 @@ export type InterfacePreferences = {
   calendar?: CalendarPresentationState;
   activity?: ActivityPresentationState;
   dashboard?: DashboardLayoutPreference;
+  notifications?: NotificationCenterState;
 };
 
 function cleanScopePart(value: string) {

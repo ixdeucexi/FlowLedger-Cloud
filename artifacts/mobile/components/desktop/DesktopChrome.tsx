@@ -16,6 +16,7 @@ import {
   desktopThemeVariables,
 } from "@/components/desktop/DesktopUI";
 import { useAuth } from "@/context/AuthContext";
+import { useAppDiscovery } from "@/context/AppDiscoveryContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import {
@@ -41,6 +42,7 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
   const { signOut, user } = useAuth();
   const { activeHousehold, settings } = useBudget();
   const colors = useColors();
+  const { openCommands, openNotifications, openSearch, unreadNotificationCount } = useAppDiscovery();
   const [collapsed, setCollapsed] = useState(width < 1180);
 
   const preferenceScope = user && activeHousehold
@@ -109,6 +111,43 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
           contentContainerStyle={styles.navContent}
           showsVerticalScrollIndicator={false}
         >
+          <View style={[styles.discoveryActions, isCollapsed && styles.discoveryActionsCollapsed]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Search FlowLedger"
+              accessibilityHint="Search this household's bills, debts, goals, activity, reports, and settings"
+              onPress={openSearch}
+              style={({ pressed }) => [styles.discoveryButton, isCollapsed && styles.discoveryButtonCollapsed, pressed && styles.pressed]}
+            >
+              <Feather name="search" size={17} color={palette.muted} />
+              {!isCollapsed ? <Text style={styles.discoveryText}>Search</Text> : null}
+              {!isCollapsed ? <Text style={styles.discoveryShortcut}>/</Text> : null}
+            </Pressable>
+            <View style={[styles.discoverySecondaryRow, isCollapsed && styles.discoverySecondaryColumn]}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Open quick actions"
+                onPress={openCommands}
+                style={({ pressed }) => [styles.discoverySmallButton, isCollapsed && styles.discoverySmallButtonCollapsed, pressed && styles.pressed]}
+              >
+                <Feather name="zap" size={16} color={palette.purple} />
+                {!isCollapsed ? <Text style={styles.discoverySmallText}>Actions</Text> : null}
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Open notifications${unreadNotificationCount ? `, ${unreadNotificationCount} unread` : ""}`}
+                onPress={openNotifications}
+                style={({ pressed }) => [styles.discoverySmallButton, isCollapsed && styles.discoverySmallButtonCollapsed, pressed && styles.pressed]}
+              >
+                <View>
+                  <Feather name="bell" size={16} color={palette.muted} />
+                  {unreadNotificationCount ? <View style={styles.notificationDot} /> : null}
+                </View>
+                {!isCollapsed ? <Text style={styles.discoverySmallText}>Alerts</Text> : null}
+                {!isCollapsed && unreadNotificationCount ? <View style={styles.notificationBadge}><Text style={styles.notificationBadgeText}>{Math.min(unreadNotificationCount, 99)}</Text></View> : null}
+              </Pressable>
+            </View>
+          </View>
           {!isCollapsed ? <Text style={styles.navEyebrow}>Workspace</Text> : null}
           {navigation.map((item) => {
             const active = isAppTabActive(item.tab, pathname);
@@ -235,6 +274,20 @@ const styles = StyleSheet.create({
   brandAccent: { color: palette.purple },
   navScroll: { flex: 1 },
   navContent: { padding: 12, gap: 5 },
+  discoveryActions: { gap: 7, marginBottom: 10 },
+  discoveryActionsCollapsed: { alignItems: "center" },
+  discoveryButton: { minHeight: 42, borderWidth: 1, borderColor: palette.border, borderRadius: 11, backgroundColor: palette.surfaceMuted, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", gap: 9 },
+  discoveryButtonCollapsed: { width: 48, justifyContent: "center", paddingHorizontal: 0 },
+  discoveryText: { flex: 1, color: palette.textSecondary, fontFamily: "Inter_600SemiBold", fontSize: 13 },
+  discoveryShortcut: { color: palette.faint, fontFamily: "Inter_700Bold", fontSize: 12 },
+  discoverySecondaryRow: { flexDirection: "row", gap: 7 },
+  discoverySecondaryColumn: { flexDirection: "column" },
+  discoverySmallButton: { flex: 1, minHeight: 38, borderWidth: 1, borderColor: palette.borderSoft, borderRadius: 10, paddingHorizontal: 9, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
+  discoverySmallButtonCollapsed: { width: 48, flex: 0, paddingHorizontal: 0 },
+  discoverySmallText: { color: palette.muted, fontFamily: "Inter_600SemiBold", fontSize: 11 },
+  notificationDot: { position: "absolute", right: -4, top: -4, width: 7, height: 7, borderRadius: 4, backgroundColor: palette.red },
+  notificationBadge: { minWidth: 19, height: 19, borderRadius: 10, backgroundColor: palette.red, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
+  notificationBadgeText: { color: "#ffffff", fontFamily: "Inter_800ExtraBold", fontSize: 9 },
   navEyebrow: {
     color: palette.faint,
     fontSize: 11,
