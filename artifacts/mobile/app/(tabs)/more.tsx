@@ -407,7 +407,11 @@ function activitySentence(
   }
 }
 
-export default function MoreScreen() {
+export default function MoreScreen({
+  initialSection,
+}: {
+  initialSection?: SettingsSectionId;
+} = {}) {
   const c = useColors();
   const isDesktop = useDesktopExperience();
   const insets = useSafeAreaInsets();
@@ -502,7 +506,7 @@ export default function MoreScreen() {
   const [legalDoc, setLegalDoc] = useState<"terms" | "privacy" | null>(null);
   useBackDismiss(Boolean(legalDoc), () => setLegalDoc(null));
   const [activeSettingsSection, setActiveSettingsSection] =
-    useState<SettingsSectionId>(() => readStoredSettingsSection());
+    useState<SettingsSectionId>(() => initialSection ?? readStoredSettingsSection());
   const requestedReviewTransactionId = Array.isArray(
     routeParams.reviewTransactionId,
   )
@@ -655,7 +659,7 @@ export default function MoreScreen() {
     const requestedSectionParam = Array.isArray(routeParams.section)
       ? routeParams.section[0]
       : routeParams.section;
-    let requestedSection = requestedSectionParam;
+    let requestedSection = requestedSectionParam ?? initialSection;
     if (
       !requestedSection &&
       Platform.OS === "web" &&
@@ -679,7 +683,7 @@ export default function MoreScreen() {
     if (storedSection !== "overview") {
       setActiveSettingsSection(storedSection);
     }
-  }, [routeParams.section]);
+  }, [initialSection, routeParams.section]);
 
   useEffect(() => {
     const requestedAdd = Array.isArray(routeParams.add)

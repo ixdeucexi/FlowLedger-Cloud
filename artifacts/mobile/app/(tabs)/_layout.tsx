@@ -52,7 +52,7 @@ import {
   clearAppBadge,
   syncAppBadge,
 } from "@/lib/appBadge";
-import { appTabsForPlanning } from "@/lib/appTabs";
+import { MOBILE_RIBBON_ITEMS } from "@/lib/mobileRibbon";
 
 function todayIsoDate() {
   const now = new Date();
@@ -487,6 +487,7 @@ function FloDemo() {
 function TabContent() {
   const { width: viewportWidth } = useWindowDimensions();
   const colors = useColors();
+  const router = useRouter();
   const {
     loadError,
     retryBudgetLoad,
@@ -494,7 +495,6 @@ function TabContent() {
     transactions,
     pendingBankTransactions,
     pendingPlanMatches,
-    settings,
     getMonthlyBills,
     getBillOccurrencesInMonth,
     getBillEffectiveMonthlyTotal,
@@ -634,6 +634,7 @@ function TabContent() {
                 shadowRadius: 26,
                 elevation: 14,
                 paddingHorizontal: 6,
+                overflow: "visible",
                 ...(isWeb
                   ? {
                       height: isIosWeb ? 72 : 82,
@@ -669,20 +670,10 @@ function TabContent() {
                 ) : null,
             }}
           >
-            {appTabsForPlanning(settings.zeroBasedBudgetEnabled).map((tab) => {
-              const isActivity = tab.name === "transactions";
-              const isBills = tab.name === "bills";
-              const isMore = tab.name === "more";
-              const reviewBadge = isActivity
-                ? tabBadgeValue(activityAlertCount)
-                : undefined;
-              const billBadge = isBills
-                ? tabBadgeValue(overdueBillCount)
-                : undefined;
-              const feedbackBadge = isMore
-                ? tabBadgeValue(newFeedbackCount)
-                : undefined;
-              const badge = reviewBadge ?? billBadge ?? feedbackBadge;
+            {MOBILE_RIBBON_ITEMS.map((tab) => {
+              const isAdd = tab.name === "add";
+              const isMenu = tab.name === "more";
+              const menuBadge = isMenu ? tabBadgeValue(notificationCount) : undefined;
               return (
                 <Tabs.Screen
                   key={tab.name}
@@ -690,22 +681,58 @@ function TabContent() {
                   options={{
                     title: tab.title,
                     tabBarLabel: tabBarDisplayLabel(tab.title, viewportWidth),
-                    tabBarIcon: ({ color }) => (
-                      <Feather name={tab.icon} size={22} color={color} />
-                    ),
-                    tabBarBadge: badge,
-                    tabBarBadgeStyle: badge ? styles.alertTabBadge : undefined,
-                    tabBarAccessibilityLabel: reviewBadge
-                      ? `${tab.title}, ${activityReviewCount} item${activityReviewCount === 1 ? "" : "s"} need review and ${pendingAlertCount} unmatched transaction${pendingAlertCount === 1 ? "" : "s"} pending`
-                      : billBadge
-                        ? `Bills, ${overdueBillCount} past-due bill${overdueBillCount === 1 ? "" : "s"} need action`
-                        : feedbackBadge
-                          ? `More, ${newFeedbackCount} new feedback item${newFeedbackCount === 1 ? "" : "s"}`
-                          : tab.title,
+                    tabBarIcon: isAdd
+                      ? undefined
+                      : ({ color }) => (
+                          <Feather name={tab.icon} size={22} color={color} />
+                        ),
+                    tabBarButton: isAdd
+                      ? () => (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Add to FlowLedger"
+                            onPress={() =>
+                              router.push({
+                                pathname: "/(tabs)",
+                                params: { add: "1" },
+                              } as any)
+                            }
+                            style={({ pressed }) => [
+                              styles.addTabSlot,
+                              { opacity: pressed ? 0.78 : 1 },
+                            ]}
+                          >
+                            <View
+                              style={[
+                                styles.addTabButton,
+                                {
+                                  backgroundColor: colors.primary,
+                                  borderColor: isDark
+                                    ? "rgba(196,181,253,0.46)"
+                                    : colors.primary,
+                                },
+                              ]}
+                            >
+                              <Feather
+                                name="plus"
+                                size={32}
+                                color={colors.primaryForeground}
+                              />
+                            </View>
+                          </Pressable>
+                        )
+                      : undefined,
+                    tabBarBadge: menuBadge,
+                    tabBarBadgeStyle: menuBadge ? styles.alertTabBadge : undefined,
+                    tabBarAccessibilityLabel: isMenu && menuBadge
+                      ? `Menu, ${notificationCount} item${notificationCount === 1 ? "" : "s"} need attention`
+                      : tab.title,
                   }}
                 />
               );
             })}
+            <Tabs.Screen name="bills" options={{ href: null }} />
+            <Tabs.Screen name="transactions" options={{ href: null }} />
             <Tabs.Screen name="flo" options={{ href: null }} />
             <Tabs.Screen name="category-budget" options={{ href: null }} />
             <Tabs.Screen
@@ -782,6 +809,26 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_800ExtraBold",
     fontSize: 10,
     lineHeight: 18,
+  },
+  addTabSlot: {
+    flex: 1,
+    minWidth: 64,
+    alignItems: "center",
+    justifyContent: "flex-start",
+  },
+  addTabButton: {
+    width: 66,
+    height: 66,
+    marginTop: -23,
+    borderRadius: 33,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#7c3aed",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.48,
+    shadowRadius: 20,
+    elevation: 18,
   },
   loadingScreen: {
     flex: 1,

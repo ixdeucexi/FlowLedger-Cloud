@@ -11,6 +11,7 @@ import {
 } from "react-native";
 
 import { BiometricLockSettings } from "@/components/BiometricLockSettings";
+import { HouseholdSwitcher } from "@/components/HouseholdSwitcher";
 import { AdminMembershipTools } from "@/components/AdminMembershipTools";
 import { AdminMoneyHealth } from "@/components/AdminMoneyHealth";
 import { LegalDocumentModal } from "@/components/LegalDocumentModal";
@@ -354,6 +355,7 @@ export function DesktopSettingsPage({
                     icon="users"
                     title="Household"
                     description={activeHousehold?.name ?? "Personal household"}
+                    action={<HouseholdSwitcher appearance="settings" />}
                   />
                   <SettingsLine
                     icon="log-out"

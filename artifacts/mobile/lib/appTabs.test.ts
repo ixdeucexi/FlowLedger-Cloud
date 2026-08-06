@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { APP_TABS, appTabsForPlanning, isAppTabActive } from "./appTabs";
 
-test("desktop sidebar stays aligned with the visible PWA tabs", () => {
+test("desktop sidebar keeps the primary planning routes", () => {
   assert.deepEqual(APP_TABS.map(({ title }) => title), [
     "Dashboard",
     "Bills",
