@@ -564,7 +564,7 @@ const styles = StyleSheet.create({
   tabActive: { borderBottomColor: palette.purple },
   tabText: {
     color: palette.muted,
-    fontSize: 11,
+    fontSize: 13,
     fontFamily: "Inter_600SemiBold",
   },
   tabTextActive: { color: palette.purpleDark, fontFamily: "Inter_700Bold" },
@@ -608,16 +608,16 @@ const styles = StyleSheet.create({
   dateGroupTitle: {
     flex: 1,
     color: palette.text,
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: "Inter_700Bold",
   },
   dateGroupCount: {
     color: palette.muted,
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: "Inter_600SemiBold",
   },
   debtIndicator: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 },
-  debtIndicatorText: { flexShrink: 1, color: palette.purple, fontSize: 8, fontFamily: "Inter_700Bold" },
+  debtIndicatorText: { flexShrink: 1, color: palette.purple, fontSize: 11, fontFamily: "Inter_700Bold" },
   summaryBody: { padding: 14 },
   summaryRow: {
     minHeight: 28,
@@ -627,10 +627,10 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     color: palette.textSecondary,
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: "Inter_500Medium",
   },
-  summaryValue: { fontSize: 10, fontFamily: "Inter_700Bold" },
+  summaryValue: { fontSize: 12, fontFamily: "Inter_700Bold" },
   summaryDivider: {
     height: 1,
     backgroundColor: palette.borderSoft,
@@ -647,23 +647,23 @@ const styles = StyleSheet.create({
   spendingLabel: {
     flex: 1,
     color: palette.textSecondary,
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: "Inter_500Medium",
   },
   spendingAmount: {
     color: palette.text,
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: "Inter_700Bold",
   },
   spendingPercent: {
     width: 28,
     textAlign: "right",
     color: palette.muted,
-    fontSize: 8,
+    fontSize: 11,
   },
   emptyTiny: {
     color: palette.muted,
-    fontSize: 10,
+    fontSize: 12,
     textAlign: "center",
     paddingVertical: 18,
   },

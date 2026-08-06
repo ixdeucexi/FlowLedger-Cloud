@@ -4,6 +4,7 @@ import test from "node:test";
 import type { FinancialEvent } from "./forecast";
 import {
   type CalendarForecastDay,
+  calendarEventKind,
   desktopCalendarCells,
   desktopCalendarWeekDates,
   summarizeCalendarEvents,
@@ -44,6 +45,17 @@ test("calendar summaries exclude transfers and balance reconciliations", () => {
     incomeCount: 1,
     expenseCount: 1,
   });
+});
+
+test("calendar categories use the shared five-color financial system", () => {
+  const transferIds = new Set(["transfer"]);
+  const overdueKeys = new Set(["bill:2026-08-05"]);
+  assert.equal(calendarEventKind(event("paycheck", 2500, "income"), transferIds), "income");
+  assert.equal(calendarEventKind(event("bill", -120, "bill"), transferIds), "bill");
+  assert.equal(calendarEventKind(event("transfer", -400), transferIds), "plan");
+  assert.equal(calendarEventKind(event("goal", -300, "goal"), transferIds), "plan");
+  assert.equal(calendarEventKind(event("purchase", -85), transferIds), "spending");
+  assert.equal(calendarEventKind(event("bill", -120, "bill"), transferIds, overdueKeys), "risk");
 });
 
 test("calendar month summary uses unique forecast events and the lowest daily balance", () => {
