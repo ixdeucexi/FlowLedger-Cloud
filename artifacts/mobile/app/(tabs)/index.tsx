@@ -11,6 +11,8 @@ import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from "re
 
 import { AddBillModal } from "@/components/AddBillModal";
 import { AppText } from "@/components/AppText";
+import { DashboardCustomizer } from "@/components/DashboardCustomizer";
+import { DashboardUtilityWidgets } from "@/components/DashboardUtilityWidgets";
 import { FlowmentumHandoffModal } from "@/components/FlowmentumHandoffModal";
 import { GoalModal } from "@/components/GoalModal";
 import { HouseholdSwitcher } from "@/components/HouseholdSwitcher";
@@ -25,6 +27,7 @@ import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
+import { useDashboardLayoutPreferences } from "@/hooks/useDashboardLayoutPreferences";
 import { applyCategoryBudgetMove, buildZeroBudgetSummary } from "@/lib/categoryPlanning";
 import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets as saveCategoryBudgetsRemote, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
 import { buildDashboardFinancialModel } from "@/lib/dashboardFinancialModel";
@@ -40,6 +43,7 @@ import {
 import { buildReviewQueue, transactionCategoryParts } from "@/lib/reviewCenter";
 import type { AlgorithmInsight } from "@/lib/algorithmSuite";
 import { unplannedPendingExpenses } from "@/lib/plaidActivity";
+import { buildTodaysDecisions } from "@/lib/todaysDecisions";
 
 const MONTH_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
@@ -254,6 +258,8 @@ function MobileDashboardScreen() {
   const [flowmentumVisible, setFlowmentumVisible] = useState(false);
   const [flowmentumAdminPreview, setFlowmentumAdminPreview] = useState(false);
   const [pendingFloCharge, setPendingFloCharge] = useState<PendingBankTransaction | null>(null);
+  const [customizerOpen, setCustomizerOpen] = useState(false);
+  const { layout: dashboardLayout, updateLayout: updateDashboardLayout, resetLayout: resetDashboardLayout } = useDashboardLayoutPreferences();
   const startupAlertShownRef = useRef(false);
   const checkedPendingSignatureRef = useRef("");
   const flowScoreSwipeResponder = useMemo(() => PanResponder.create({
@@ -802,6 +808,51 @@ function MobileDashboardScreen() {
     () => buildReviewQueue(transactions, localDateString()).length,
     [transactions],
   );
+  const mobileSnowballTarget = useMemo(
+    () => bills
+      .filter(bill => bill.is_debt && bill.balance > 0.005 && bill.include_in_snowball !== false)
+      .sort((left, right) => left.balance - right.balance || left.priority - right.priority)[0] ?? null,
+    [bills],
+  );
+  const mobileGoalNearCompletion = useMemo(
+    () => currentGoals
+      .filter(goal => goal.target_amount > 0 && goal.current_amount < goal.target_amount)
+      .sort((left, right) => (right.current_amount / right.target_amount) - (left.current_amount / left.target_amount))[0] ?? null,
+    [currentGoals],
+  );
+  const todayDecisions = useMemo(() => {
+    const priorityBill = algorithmSuite.billPriority.nextBill;
+    let priorityDate: Date | null = null;
+    if (priorityBill) {
+      const priorityMonth = priorityBill.dueDay >= today ? currentMonth : (currentMonth + 1) % 12;
+      const priorityYear = priorityBill.dueDay >= today || currentMonth < 11 ? selectedYear : selectedYear + 1;
+      priorityDate = new Date(priorityYear, priorityMonth, priorityBill.dueDay);
+    }
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const daysAway = priorityDate ? Math.max(0, Math.round((priorityDate.getTime() - todayStart.getTime()) / 86_400_000)) : 0;
+    const lowestDate = algorithmSuite.safeCushion.lowestDay
+      ? new Date(selectedYear, currentMonth, algorithmSuite.safeCushion.lowestDay).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+      : null;
+    return buildTodaysDecisions({
+      reviewCount: reviewCenterCount,
+      lowestBalance: algorithmSuite.safeCushion.lowestBalance,
+      lowestDate,
+      safetyFloor: settings.safety_floor,
+      safeToSpend: algorithmSuite.safeCushion.amount,
+      nextBill: priorityBill && priorityDate ? {
+        name: priorityBill.name,
+        amount: priorityBill.amount,
+        dateLabel: daysAway === 0 ? "today" : daysAway === 1 ? "tomorrow" : priorityDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        daysAway,
+      } : null,
+      snowballTarget: mobileSnowballTarget ? { name: mobileSnowballTarget.name, balance: mobileSnowballTarget.balance } : null,
+      goal: mobileGoalNearCompletion ? {
+        name: mobileGoalNearCompletion.name,
+        current: mobileGoalNearCompletion.current_amount,
+        target: mobileGoalNearCompletion.target_amount,
+      } : null,
+    });
+  }, [algorithmSuite.billPriority.nextBill, algorithmSuite.safeCushion, currentMonth, mobileGoalNearCompletion, mobileSnowballTarget, now, reviewCenterCount, selectedYear, settings.safety_floor, today]);
   return (
     <ScrollView
       style={[styles.screen, styles.dashboardStage, { backgroundColor: dashboardTheme.screen }]}
@@ -863,6 +914,17 @@ function MobileDashboardScreen() {
         </View>
         <View style={styles.dashboardHeaderActions}>
           <HouseholdSwitcher appearance="header" />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Customize dashboard"
+            onPress={() => setCustomizerOpen(true)}
+            style={({ pressed }) => [
+              styles.settingsHeaderButton,
+              { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.72 : 1 },
+            ]}
+          >
+            <Feather name="sliders" size={20} color={c.foreground} />
+          </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Open Settings"
@@ -1170,43 +1232,21 @@ function MobileDashboardScreen() {
         onViewGuide={openStabilityGuide}
       />
 
-      <View style={[styles.dashboardQuickAccess, { backgroundColor: c.card, borderColor: c.border }]}>
-        <Text style={[styles.dashboardQuickTitle, { color: c.foreground }]}>Quick access</Text>
-        <View style={styles.dashboardQuickRow}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Open Review Center${reviewCenterCount ? `, ${reviewCenterCount} items need attention` : ""}`}
-            onPress={() => router.push("/(tabs)/review" as any)}
-            style={({ pressed }) => [styles.dashboardQuickButton, { backgroundColor: c.primary + "12", borderColor: c.primary + "35", opacity: pressed ? 0.74 : 1 }]}
-          >
-            <View style={[styles.dashboardQuickIcon, { backgroundColor: c.primary + "20" }]}>
-              <Feather name="check-square" size={18} color={c.primary} />
-            </View>
-            <View style={styles.dashboardQuickCopy}>
-              <Text style={[styles.dashboardQuickLabel, { color: c.foreground }]}>Review Center</Text>
-              <Text style={[styles.dashboardQuickMeta, { color: c.mutedForeground }]}>
-                {reviewCenterCount ? `${reviewCenterCount} item${reviewCenterCount === 1 ? "" : "s"} need attention` : "Your posted activity is reviewed"}
-              </Text>
-            </View>
-            <Feather name="chevron-right" size={17} color={c.mutedForeground} />
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Open Reports and Insights"
-            onPress={() => router.push("/(tabs)/reports" as any)}
-            style={({ pressed }) => [styles.dashboardQuickButton, { backgroundColor: c.accent + "10", borderColor: c.accent + "30", opacity: pressed ? 0.74 : 1 }]}
-          >
-            <View style={[styles.dashboardQuickIcon, { backgroundColor: c.accent + "18" }]}>
-              <Feather name="bar-chart-2" size={18} color={c.accent} />
-            </View>
-            <View style={styles.dashboardQuickCopy}>
-              <Text style={[styles.dashboardQuickLabel, { color: c.foreground }]}>Reports &amp; Insights</Text>
-              <Text style={[styles.dashboardQuickMeta, { color: c.mutedForeground }]}>See trends, categories, and next steps</Text>
-            </View>
-            <Feather name="chevron-right" size={17} color={c.mutedForeground} />
-          </Pressable>
-        </View>
-      </View>
+      <DashboardUtilityWidgets
+        layout={dashboardLayout}
+        decisions={todayDecisions}
+        reviewCount={reviewCenterCount}
+        compact
+        onNavigate={(pathname, params) => router.push({ pathname: pathname as any, params } as any)}
+      />
+
+      <DashboardCustomizer
+        visible={customizerOpen}
+        layout={dashboardLayout}
+        onChange={updateDashboardLayout}
+        onReset={resetDashboardLayout}
+        onClose={() => setCustomizerOpen(false)}
+      />
 
       {isCommandWide && settings.zeroBasedBudgetEnabled && (
         <Pressable

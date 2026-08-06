@@ -134,5 +134,9 @@
     ,"lib/activityRange.test.ts"
     ,"lib/activityCsv.ts"
     ,"lib/activityCsv.test.ts"
+    ,"lib/dashboardCustomization.ts"
+    ,"lib/dashboardCustomization.test.ts"
+    ,"lib/todaysDecisions.ts"
+    ,"lib/todaysDecisions.test.ts"
   ]
 }

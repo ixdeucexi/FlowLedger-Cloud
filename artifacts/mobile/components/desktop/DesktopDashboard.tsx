@@ -22,11 +22,14 @@ import Svg, {
 } from "react-native-svg";
 
 import { AddBillModal } from "@/components/AddBillModal";
+import { DashboardCustomizer } from "@/components/DashboardCustomizer";
+import { DashboardUtilityWidgets } from "@/components/DashboardUtilityWidgets";
 import { DesktopAddMenu } from "@/components/desktop/DesktopAddMenu";
 import { GoalModal } from "@/components/GoalModal";
 import { IncomeModal } from "@/components/IncomeModal";
 import { useAuth } from "@/context/AuthContext";
 import { useBudget, type Bill, type Goal, type IncomeItem } from "@/context/BudgetContext";
+import { useDashboardLayoutPreferences } from "@/hooks/useDashboardLayoutPreferences";
 import { isActiveTransaction } from "@/lib/billMatching";
 import {
   categoryBudgetStorageKey,
@@ -39,6 +42,7 @@ import { desktopActivityDestination, isDesktopAddAction, type DesktopAddAction }
 import { WIDE_DESKTOP_BREAKPOINT } from "@/lib/desktopExperience";
 import { transactionDebt } from "@/lib/transactionDebt";
 import { buildReviewQueue } from "@/lib/reviewCenter";
+import { buildTodaysDecisions } from "@/lib/todaysDecisions";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 type Accent = "cyan" | "purple" | "green" | "amber" | "blue" | "neutral";
@@ -515,6 +519,8 @@ export function DesktopDashboard() {
   const [billEditor, setBillEditor] = useState<{ bill: Bill | null; debt: boolean } | null>(null);
   const [goalEditor, setGoalEditor] = useState<Goal | null | undefined>(undefined);
   const [incomeEditorOpen, setIncomeEditorOpen] = useState(false);
+  const [customizerOpen, setCustomizerOpen] = useState(false);
+  const { layout: dashboardLayout, updateLayout: updateDashboardLayout, resetLayout: resetDashboardLayout } = useDashboardLayoutPreferences();
 
   const openAddAction = useCallback((action: DesktopAddAction) => {
     setPageAddOpen(false);
@@ -727,6 +733,42 @@ export function DesktopDashboard() {
     ).length,
     [now, transactions],
   );
+  const snowballTarget = useMemo(
+    () => bills
+      .filter(bill => bill.is_debt && bill.balance > 0.005 && bill.include_in_snowball !== false)
+      .sort((left, right) => left.balance - right.balance || left.priority - right.priority)[0] ?? null,
+    [bills],
+  );
+  const nearlyCompleteGoal = useMemo(
+    () => activeGoals
+      .filter(goal => goal.target_amount > 0 && goal.current_amount < goal.target_amount)
+      .sort((left, right) => (right.current_amount / right.target_amount) - (left.current_amount / left.target_amount))[0] ?? null,
+    [activeGoals],
+  );
+  const todayDecisions = useMemo(() => {
+    const next = upcoming[0];
+    const nextDate = next ? new Date(next.year, next.month, next.day) : null;
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const daysAway = nextDate ? Math.max(0, Math.round((nextDate.getTime() - todayStart.getTime()) / 86_400_000)) : 0;
+    const lowestDate = algorithmSuite.safeCushion.lowestDay
+      ? new Date(selectedYear, currentMonth, algorithmSuite.safeCushion.lowestDay).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+      : null;
+    return buildTodaysDecisions({
+      reviewCount,
+      lowestBalance: algorithmSuite.safeCushion.lowestBalance,
+      lowestDate,
+      safetyFloor: settings.safety_floor,
+      safeToSpend: algorithmSuite.safeCushion.amount,
+      nextBill: next && nextDate ? {
+        name: next.name,
+        amount: next.amount,
+        dateLabel: daysAway === 0 ? "today" : daysAway === 1 ? "tomorrow" : nextDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        daysAway,
+      } : null,
+      snowballTarget: snowballTarget ? { name: snowballTarget.name, balance: snowballTarget.balance } : null,
+      goal: nearlyCompleteGoal ? { name: nearlyCompleteGoal.name, current: nearlyCompleteGoal.current_amount, target: nearlyCompleteGoal.target_amount } : null,
+    });
+  }, [algorithmSuite.safeCushion, currentMonth, nearlyCompleteGoal, now, reviewCount, selectedYear, settings.safety_floor, snowballTarget, upcoming]);
   const available = algorithmSuite.safeCushion.amount;
   const progress = algorithmSuite.stability;
   const nextMilestone =
@@ -761,6 +803,15 @@ export function DesktopDashboard() {
           <Text style={styles.greetingSub}>Here&apos;s your financial overview for today.</Text>
         </View>
         <View style={styles.pageActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Customize dashboard"
+            onPress={() => setCustomizerOpen(true)}
+            style={({ pressed }) => [styles.pageSettingsButton, { opacity: pressed ? 0.72 : 1 }]}
+          >
+            <Feather name="sliders" size={15} color="#b7c3d7" />
+            <Text style={styles.pageSettingsText}>Customize</Text>
+          </Pressable>
           <View style={styles.pageAddAnchor}>
             <Pressable
               accessibilityRole="button"
@@ -828,6 +879,13 @@ export function DesktopDashboard() {
           onPress={() => go("/(tabs)/more", { section: "goals" })}
         />
       </View>
+
+      <DashboardUtilityWidgets
+        layout={dashboardLayout}
+        decisions={todayDecisions}
+        reviewCount={reviewCount}
+        onNavigate={go}
+      />
 
       <View style={[styles.primaryGrid, !isPrimaryRow && styles.primaryGridStacked]}>
         <View style={styles.primaryColumn}>
@@ -1141,30 +1199,18 @@ export function DesktopDashboard() {
                   </Pressable>
                 ))}
               </View>
-              <View style={styles.quickFooter}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open Review Center${reviewCount ? `, ${reviewCount} items need attention` : ""}`}
-                  onPress={() => go("/(tabs)/review")}
-                  style={({ pressed }) => [styles.quickFooterButton, { opacity: pressed ? 0.72 : 1 }]}
-                >
-                  <Feather name="check-square" size={14} color={BRAND.purple} />
-                  <Text style={styles.quickFooterText}>Review Center{reviewCount ? ` · ${reviewCount}` : ""}</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Open Reports and Insights"
-                  onPress={() => go("/(tabs)/reports")}
-                  style={({ pressed }) => [styles.quickFooterButton, { opacity: pressed ? 0.72 : 1 }]}
-                >
-                  <Feather name="bar-chart-2" size={14} color={BRAND.cyan} />
-                  <Text style={styles.quickFooterText}>Reports &amp; Insights</Text>
-                </Pressable>
-              </View>
             </View>
           </SurfaceCard>
         </View>
       </View>
+
+      <DashboardCustomizer
+        visible={customizerOpen}
+        layout={dashboardLayout}
+        onChange={updateDashboardLayout}
+        onReset={resetDashboardLayout}
+        onClose={() => setCustomizerOpen(false)}
+      />
 
       <View style={styles.detailGrid}>
         <SurfaceCard
