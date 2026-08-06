@@ -1,34 +1,45 @@
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import React, { useMemo, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText } from "@/components/AppText";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { useColors } from "@/hooks/useColors";
-import { ALGORITHM_GUIDE, FLOWLEDGER_MONEY_RULES, STABILITY_PATH_GUIDE } from "@/lib/flowledgerGuide";
+import { useBackDismiss } from "@/hooks/useBackDismiss";
+import { useDesktopExperience } from "@/hooks/useDesktopExperience";
+import {
+  ALGORITHM_GUIDE,
+  FLOWLEDGER_MONEY_RULES,
+  FLOW_GUIDE_SECTIONS,
+  STABILITY_PATH_GUIDE,
+  flowGuideSectionIndex,
+} from "@/lib/flowledgerGuide";
 import { FLOW_SCORE_GUIDE, FLOW_SCORE_MAX_POINTS } from "@/lib/flowScorePolicy";
 import type { StabilityStage } from "@/lib/stability";
 
-function param(value: string | string[] | undefined, fallback: string): string {
+function param(value: string | string[] | undefined, fallback: string) {
   return Array.isArray(value) ? value[0] ?? fallback : value ?? fallback;
 }
 
-function amount(value: string | string[] | undefined): number {
+function amount(value: string | string[] | undefined) {
   const parsed = Number(param(value, "0"));
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function currency(value: number): string {
+function currency(value: number) {
   return value.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 }
 
 export default function HowFlowLedgerWorksScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const c = useColors();
+  const insets = useSafeAreaInsets();
+  const isDesktop = useDesktopExperience();
+  const { height } = useWindowDimensions();
   const params = useLocalSearchParams<{
+    section?: string;
     stage?: string;
     stageLabel?: string;
     protectedDays?: string;
@@ -46,241 +57,188 @@ export default function HowFlowLedgerWorksScreen() {
     flowScore?: string;
     flowScoreLabel?: string;
   }>();
-
+  const [sectionIndex, setSectionIndex] = useState(() => flowGuideSectionIndex(param(params.section, "overview")));
+  const section = FLOW_GUIDE_SECTIONS[sectionIndex];
+  const lastSection = sectionIndex === FLOW_GUIDE_SECTIONS.length - 1;
   const stage = param(params.stage, "next_paycheck") as StabilityStage;
   const currentStageIndex = Math.max(0, STABILITY_PATH_GUIDE.findIndex(step => step.id === stage));
-  const protectedDays = amount(params.protectedDays);
-  const protectedAmount = amount(params.protectedAmount);
-  const reserveTarget = amount(params.reserveTarget);
-  const backupTarget = amount(params.backupTarget);
-  const safeUntilPayday = param(params.safeUntilPayday, "unknown");
-  const nextPaycheckLabel = param(params.nextPaycheckLabel, "next payday");
-  const nextMilestoneAmount = amount(params.nextMilestoneAmount);
-  const nextMilestone = param(params.nextMilestone, "Build a complete required-expense plan");
-  const milestoneText = nextMilestoneAmount > 0
-    ? `${nextMilestone} - ${currency(nextMilestoneAmount)} to go`
-    : nextMilestone;
+
+  const facts = useMemo(() => ({
+    protectedDays: amount(params.protectedDays),
+    protectedAmount: amount(params.protectedAmount),
+    reserveTarget: amount(params.reserveTarget),
+    backupTarget: amount(params.backupTarget),
+    nextMilestoneAmount: amount(params.nextMilestoneAmount),
+    lowestBalance: amount(params.lowestBalance),
+    safetyFloor: amount(params.safetyFloor),
+    flowScore: amount(params.flowScore),
+  }), [params.backupTarget, params.flowScore, params.lowestBalance, params.nextMilestoneAmount, params.protectedAmount, params.protectedDays, params.reserveTarget, params.safetyFloor]);
+
+  const close = () => router.canGoBack() ? router.back() : router.replace("/(tabs)" as any);
+  useBackDismiss(true, close);
+  const goTo = (index: number) => setSectionIndex(Math.max(0, Math.min(FLOW_GUIDE_SECTIONS.length - 1, index)));
 
   return (
-    <ScrollView
-      style={[styles.screen, { backgroundColor: c.background }]}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 42 }]}
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={[styles.screen, { backgroundColor: c.background, paddingTop: isDesktop ? 18 : insets.top }]}>
       <PremiumBackdrop variant="purple" />
-      <View style={styles.header}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          onPress={() => router.canGoBack() ? router.back() : router.replace("/(tabs)" as any)}
-          style={({ pressed }) => [styles.backButton, { borderColor: c.border, backgroundColor: c.card, opacity: pressed ? 0.7 : 1 }]}
-        >
-          <Feather name="arrow-left" size={20} color={c.foreground} />
-        </Pressable>
-        <View style={styles.headerCopy}>
-          <AppText tone="label" style={[styles.eyebrow, { color: c.primary }]}>FLOWLEDGER GUIDE</AppText>
-          <AppText tone="title" style={[styles.title, { color: c.foreground }]}>How your path works</AppText>
-        </View>
-      </View>
-
-      <View style={[styles.currentCard, { backgroundColor: c.card, borderColor: c.primary + "55" }]}>
-        <AppText tone="label" style={[styles.sectionEyebrow, { color: c.primary }]}>YOUR CURRENT POSITION</AppText>
-        <AppText tone="title" style={[styles.currentTitle, { color: c.foreground }]}>{param(params.stageLabel, "Build the first plan")}</AppText>
-        <View style={styles.metrics}>
-          <Metric label="Safe to payday" value={safeUntilPayday === "true" ? `Yes · ${nextPaycheckLabel}` : safeUntilPayday === "false" ? "Not yet" : "Needs pay date"} />
-          <Metric label="Backup" value={`${protectedDays} days`} />
-          <Metric label="180-day target" value={currency(backupTarget)} />
-        </View>
-        <View style={[styles.nextCard, { backgroundColor: c.primary + "12", borderColor: c.primary + "33" }]}>
-          <AppText tone="label" style={[styles.nextLabel, { color: c.primary }]}>NEXT MILESTONE</AppText>
-          <AppText style={[styles.nextText, { color: c.foreground }]}>{milestoneText}</AppText>
-          <AppText tone="label" style={[styles.nextLabel, styles.nextActionLabel, { color: c.mutedForeground }]}>NEXT ACTION</AppText>
-          <AppText style={[styles.actionText, { color: c.foreground }]}>{param(params.nextAction, "Finish listing required income and expenses.")}</AppText>
-        </View>
-      </View>
-
-      <SectionHeader title="The Stability Path" description="The path can move forward or backward when income, bills, spending, or account balances change." />
-      <View style={[styles.sectionCard, { backgroundColor: c.card, borderColor: c.border }]}>
-        {STABILITY_PATH_GUIDE.map((step, index) => {
-          const active = index === currentStageIndex;
-          const complete = index < currentStageIndex;
-          const color = active ? c.primary : complete ? c.success : c.mutedForeground;
-          return (
-            <View key={step.id} style={styles.pathRow}>
-              <View style={styles.pathRail}>
-                <View style={[styles.pathDot, { backgroundColor: color, borderColor: color }]}>
-                  {complete ? <Feather name="check" size={11} color="#fff" /> : <AppText style={styles.pathNumber}>{index + 1}</AppText>}
-                </View>
-                {index < STABILITY_PATH_GUIDE.length - 1 ? <View style={[styles.pathLine, { backgroundColor: complete ? c.success + "66" : c.border }]} /> : null}
-              </View>
-              <View style={[styles.pathCopy, active && { borderColor: c.primary + "55", backgroundColor: c.primary + "0D" }]}>
-                <View style={styles.pathTitleRow}>
-                  <AppText tone="title" style={[styles.pathTitle, { color: active ? c.primary : c.foreground }]}>{step.title}</AppText>
-                  {active ? <AppText tone="label" style={[styles.currentPill, { color: c.primary, backgroundColor: c.primary + "18" }]}>CURRENT</AppText> : null}
-                </View>
-                <AppText style={[styles.pathRange, { color }]}>{step.range}</AppText>
-                <AppText style={[styles.pathDescription, { color: c.mutedForeground }]}>{step.description}</AppText>
-              </View>
-            </View>
-          );
-        })}
-      </View>
-
-      <SectionHeader title="What does one protected day mean?" description="Think of it like food in a pantry: more days means more time before you need the next paycheck." />
-      <View style={[styles.sectionCard, { backgroundColor: c.card, borderColor: c.border }]}>
-        <View style={styles.ruleRow}>
-          <Feather name="divide-circle" size={16} color={c.primary} />
-          <AppText style={[styles.ruleText, { color: c.foreground }]}>Flo adds one month of Must Pay bills, then divides that total by 30. That is the cost of one backup day.</AppText>
-        </View>
-        <View style={styles.ruleRow}>
-          <Feather name="shield" size={16} color={c.success} />
-          <AppText style={[styles.ruleText, { color: c.foreground }]}>If you spend backup money, the day count goes down. If you keep safe extra money, the day count grows.</AppText>
-        </View>
-      </View>
-
-      <SectionHeader title="How the numbers are calculated" description="FlowLedger recalculates when real money, planned money, or bill importance changes." />
-      <View style={[styles.sectionCard, { backgroundColor: c.card, borderColor: c.border }]}>
-        <CalculationRow label="Lowest upcoming checking balance" value={currency(amount(params.lowestBalance))} />
-        <CalculationRow label="Protected safety floor" value={`-${currency(amount(params.safetyFloor))}`} />
-        <CalculationRow label="Backup money above the floor" value={currency(protectedAmount)} emphasized />
-        <CalculationRow label="30 days of Must Pay expenses" value={currency(reserveTarget)} />
-        <CalculationRow label="180-day backup target" value={currency(backupTarget)} />
-        <CalculationRow label="Forecast confidence" value={param(params.confidence, "Building")} />
-      </View>
-
-      <SectionHeader title="How the Flow Score is calculated" description="Six parts add up to 100. Your score changes when your real or planned money changes." />
-      <View style={[styles.sectionCard, { backgroundColor: c.card, borderColor: c.border }]}>
-        <View style={[styles.scoreSummary, { backgroundColor: c.primary + "12", borderColor: c.primary + "33" }]}>
-          <View>
-            <AppText tone="label" style={[styles.scoreSummaryLabel, { color: c.primary }]}>YOUR FLOW SCORE</AppText>
-            <AppText tone="number" style={[styles.scoreSummaryValue, { color: c.foreground }]}>{amount(params.flowScore)}/{FLOW_SCORE_MAX_POINTS}</AppText>
+      <View style={[styles.walkthrough, isDesktop && styles.walkthroughDesktop, { backgroundColor: c.card, borderColor: c.border, height: isDesktop ? Math.max(480, height - 36) : undefined }]}>
+        <View style={[styles.header, { borderBottomColor: c.border }]}>
+          <View style={styles.headerCopy}>
+            <AppText tone="label" style={[styles.eyebrow, { color: c.primary }]}>HOW YOUR PATH WORKS</AppText>
+            <AppText accessibilityRole="header" tone="title" style={[styles.title, { color: c.foreground }]}>{section.title}</AppText>
+            <AppText style={[styles.subtitle, { color: c.mutedForeground }]}>{section.description}</AppText>
           </View>
-          <AppText tone="title" style={[styles.scoreSummaryStatus, { color: c.primary }]}>{param(params.flowScoreLabel, "Building")}</AppText>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close walkthrough" onPress={close} style={({ pressed }) => [styles.closeButton, { backgroundColor: c.muted, borderColor: c.border, opacity: pressed ? 0.7 : 1 }]}>
+            <Feather name="x" size={20} color={c.foreground} />
+          </Pressable>
         </View>
-        {FLOW_SCORE_GUIDE.map(item => (
-          <View key={item.id} style={[styles.scoreRow, { borderBottomColor: c.border }]}>
-            <View style={styles.scoreRowCopy}>
-              <AppText tone="title" style={[styles.scoreRowTitle, { color: c.foreground }]}>{item.label}</AppText>
-              <AppText style={[styles.scoreRowDescription, { color: c.mutedForeground }]}>{item.description}</AppText>
-            </View>
-            <AppText tone="number" style={[styles.scoreRowPoints, { color: c.primary }]}>up to {item.points}</AppText>
-          </View>
-        ))}
-        <AppText style={[styles.scoreFootnote, { color: c.mutedForeground }]}>Tap the Flow Score on Dashboard to see what is helping or lowering today&apos;s score.</AppText>
-      </View>
 
-      <SectionHeader title="Money rules" description="These rules keep the same dollars from being mixed together or counted twice." />
-      <View style={[styles.sectionCard, { backgroundColor: c.card, borderColor: c.border }]}>
-        {FLOWLEDGER_MONEY_RULES.map(rule => (
-          <View key={rule} style={styles.ruleRow}>
-            <Feather name="check-circle" size={16} color={c.success} />
-            <AppText style={[styles.ruleText, { color: c.foreground }]}>{rule}</AppText>
-          </View>
-        ))}
-      </View>
-
-      <SectionHeader title="What each algorithm does" description="Each algorithm answers one specific question using the same verified plan." />
-      <View style={styles.algorithmGrid}>
-        {ALGORITHM_GUIDE.map(item => (
-          <View key={item.id} style={[styles.algorithmCard, { backgroundColor: c.card, borderColor: c.border }]}>
-            <View style={[styles.algorithmIcon, { backgroundColor: c.primary + "16" }]}>
-              <Feather name="activity" size={15} color={c.primary} />
+        <View style={[styles.body, isDesktop && styles.bodyDesktop]}>
+          {isDesktop ? (
+            <View accessibilityRole="tablist" style={[styles.sectionNav, { borderRightColor: c.border }]}>
+              {FLOW_GUIDE_SECTIONS.map((item, index) => (
+                <Pressable
+                  key={item.id}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: index === sectionIndex }}
+                  onPress={() => goTo(index)}
+                  style={({ pressed }) => [styles.navItem, index === sectionIndex && { backgroundColor: c.primary + "18", borderColor: c.primary + "45" }, { opacity: pressed ? 0.76 : 1 }]}
+                >
+                  <View style={[styles.navNumber, { backgroundColor: index <= sectionIndex ? c.primary : c.muted }]}><Text style={styles.navNumberText}>{index + 1}</Text></View>
+                  <View style={styles.navCopy}><Text style={[styles.navTitle, { color: index === sectionIndex ? c.primary : c.foreground }]}>{item.title}</Text><Text numberOfLines={2} style={[styles.navDescription, { color: c.mutedForeground }]}>{item.description}</Text></View>
+                </Pressable>
+              ))}
             </View>
-            <View style={styles.algorithmCopy}>
-              <AppText tone="title" style={[styles.algorithmTitle, { color: c.foreground }]}>{item.title}</AppText>
-              <AppText style={[styles.algorithmDescription, { color: c.mutedForeground }]}>{item.description}</AppText>
-            </View>
-          </View>
-        ))}
-      </View>
-    </ScrollView>
-  );
-}
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mobileStepStrip} accessibilityRole="tablist">
+              {FLOW_GUIDE_SECTIONS.map((item, index) => (
+                <Pressable key={item.id} accessibilityRole="tab" accessibilityState={{ selected: index === sectionIndex }} onPress={() => goTo(index)} style={[styles.mobileStep, { backgroundColor: index === sectionIndex ? c.primary : c.muted, borderColor: index === sectionIndex ? c.primary : c.border }]}>
+                  <Text style={[styles.mobileStepText, { color: index === sectionIndex ? c.primaryForeground : c.mutedForeground }]}>{index + 1}. {item.title}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
 
-function Metric({ label, value }: { label: string; value: string }) {
-  const c = useColors();
-  return (
-    <View style={[styles.metric, { backgroundColor: c.muted, borderColor: c.border }]}>
-      <AppText tone="number" style={[styles.metricValue, { color: c.foreground }]}>{value}</AppText>
-      <AppText style={[styles.metricLabel, { color: c.mutedForeground }]}>{label}</AppText>
+          <ScrollView style={styles.contentScroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator keyboardShouldPersistTaps="handled">
+            <GuideSection
+              id={section.id}
+              c={c}
+              facts={facts}
+              params={params}
+              currentStageIndex={currentStageIndex}
+            />
+          </ScrollView>
+        </View>
+
+        <View style={[styles.footer, !isDesktop && styles.footerMobile, { borderTopColor: c.border, paddingBottom: isDesktop ? 14 : Math.max(14, insets.bottom) }]}>
+          <View style={styles.progressCopy}><Text style={[styles.progressText, { color: c.mutedForeground }]}>Section {sectionIndex + 1} of {FLOW_GUIDE_SECTIONS.length}</Text><View style={[styles.progressTrack, { backgroundColor: c.muted }]}><View style={[styles.progressFill, { backgroundColor: c.primary, width: `${((sectionIndex + 1) / FLOW_GUIDE_SECTIONS.length) * 100}%` }]} /></View></View>
+          <View style={styles.footerActions}>
+            {sectionIndex > 0 ? <Pressable accessibilityRole="button" onPress={() => goTo(sectionIndex - 1)} style={[styles.secondaryButton, { borderColor: c.border }]}><Feather name="arrow-left" size={15} color={c.foreground} /><Text style={[styles.secondaryText, { color: c.foreground }]}>Previous</Text></Pressable> : null}
+            <Pressable accessibilityRole="button" onPress={() => lastSection ? close() : goTo(sectionIndex + 1)} style={[styles.primaryButton, { backgroundColor: c.primary }]}><Text style={[styles.primaryText, { color: c.primaryForeground }]}>{lastSection ? "Got it" : "Next"}</Text><Feather name={lastSection ? "check" : "arrow-right"} size={15} color={c.primaryForeground} /></Pressable>
+          </View>
+        </View>
+      </View>
     </View>
   );
 }
 
-function SectionHeader({ title, description }: { title: string; description: string }) {
-  const c = useColors();
-  return (
-    <View style={styles.sectionHeader}>
-      <AppText tone="title" style={[styles.sectionTitle, { color: c.foreground }]}>{title}</AppText>
-      <AppText style={[styles.sectionDescription, { color: c.mutedForeground }]}>{description}</AppText>
-    </View>
-  );
+type GuideFacts = {
+  protectedDays: number;
+  protectedAmount: number;
+  reserveTarget: number;
+  backupTarget: number;
+  nextMilestoneAmount: number;
+  lowestBalance: number;
+  safetyFloor: number;
+  flowScore: number;
+};
+
+function GuideSection({ id, c, facts, params, currentStageIndex }: { id: (typeof FLOW_GUIDE_SECTIONS)[number]["id"]; c: ReturnType<typeof useColors>; facts: GuideFacts; params: Record<string, string | string[] | undefined>; currentStageIndex: number }) {
+  if (id === "overview") return <>
+    <InfoCard c={c} eyebrow="YOUR CURRENT POSITION" title={param(params.stageLabel, "Build the first plan")} icon="compass">
+      <View style={styles.metricGrid}><Metric c={c} label="Safe to payday" value={param(params.safeUntilPayday, "unknown") === "true" ? `Yes · ${param(params.nextPaycheckLabel, "next payday")}` : param(params.safeUntilPayday, "unknown") === "false" ? "Not yet" : "Needs pay date"} /><Metric c={c} label="Backup" value={`${facts.protectedDays} days`} /><Metric c={c} label="Forecast confidence" value={param(params.confidence, "Building")} /></View>
+    </InfoCard>
+    <SectionTitle c={c} title="One plan, shared everywhere" description="The website and PWA use the same posted activity, bills, income, forecast, and household." />
+    <InfoCard c={c} title="How FlowLedger decides what to show" icon="layers"><Bullet c={c} text="Posted bank activity and your saved plan feed one forecast." /><Bullet c={c} text="The lowest upcoming checking balance determines breathing room." /><Bullet c={c} text="Recommendations protect required bills and your safety floor first." /></InfoCard>
+  </>;
+
+  if (id === "flow-score") return <>
+    <View style={[styles.scoreHero, { backgroundColor: c.primary + "14", borderColor: c.primary + "40" }]}><View><Text style={[styles.cardEyebrow, { color: c.primary }]}>YOUR FLOW SCORE</Text><Text style={[styles.scoreValue, { color: c.foreground }]}>{facts.flowScore}/{FLOW_SCORE_MAX_POINTS}</Text></View><Text style={[styles.scoreStatus, { color: c.primary }]}>{param(params.flowScoreLabel, "Building")}</Text></View>
+    <SectionTitle c={c} title="Six signals make the score" description="Each part uses the same verified financial plan. Nothing is manually hardcoded here." />
+    <InfoCard c={c}>{FLOW_SCORE_GUIDE.map(item => <View key={item.id} style={[styles.listRow, { borderBottomColor: c.border }]}><View style={styles.listCopy}><Text style={[styles.listTitle, { color: c.foreground }]}>{item.label}</Text><Text style={[styles.listDescription, { color: c.mutedForeground }]}>{item.description}</Text></View><Text style={[styles.points, { color: c.primary }]}>up to {item.points}</Text></View>)}</InfoCard>
+  </>;
+
+  if (id === "protected-days") return <>
+    <InfoCard c={c} eyebrow="PROTECTED DAYS" title={`${facts.protectedDays} days backed up`} icon="shield"><Text style={[styles.bodyText, { color: c.mutedForeground }]}>FlowLedger adds one month of Must Pay expenses and divides it by 30. Money above the forecast safety floor is then translated into days of protection.</Text></InfoCard>
+    <SectionTitle c={c} title="The current calculation" description="These values come directly from your active forecast." />
+    <InfoCard c={c}><Calculation c={c} label="Lowest upcoming checking balance" value={currency(facts.lowestBalance)} /><Calculation c={c} label="Protected safety floor" value={`−${currency(facts.safetyFloor)}`} /><Calculation c={c} label="Backup money above the floor" value={currency(facts.protectedAmount)} emphasized /><Calculation c={c} label="30 days of Must Pay expenses" value={currency(facts.reserveTarget)} /></InfoCard>
+  </>;
+
+  if (id === "stability") return <>
+    <SectionTitle c={c} title="Your Stability Path" description="The path can move forward or backward when real balances, income, bills, or spending change." />
+    <InfoCard c={c}>{STABILITY_PATH_GUIDE.map((step, index) => { const active = index === currentStageIndex; const complete = index < currentStageIndex; return <View key={step.id} style={styles.pathRow}><View style={styles.pathRail}><View style={[styles.pathDot, { backgroundColor: active ? c.primary : complete ? c.success : c.muted, borderColor: active ? c.primary : complete ? c.success : c.border }]}>{complete ? <Feather name="check" size={11} color="#fff" /> : <Text style={styles.pathNumber}>{index + 1}</Text>}</View>{index < STABILITY_PATH_GUIDE.length - 1 ? <View style={[styles.pathLine, { backgroundColor: complete ? c.success + "66" : c.border }]} /> : null}</View><View style={[styles.pathContent, active && { backgroundColor: c.primary + "0D", borderColor: c.primary + "45" }]}><View style={styles.pathHeading}><Text style={[styles.listTitle, { color: active ? c.primary : c.foreground }]}>{step.title}</Text>{active ? <Text style={[styles.currentPill, { color: c.primary, backgroundColor: c.primary + "18" }]}>CURRENT</Text> : null}</View><Text style={[styles.pathRange, { color: active ? c.primary : c.mutedForeground }]}>{step.range}</Text><Text style={[styles.listDescription, { color: c.mutedForeground }]}>{step.description}</Text></View></View>; })}</InfoCard>
+  </>;
+
+  if (id === "backup") return <>
+    <InfoCard c={c} eyebrow="180-DAY TARGET" title={currency(facts.backupTarget)} icon="target"><Text style={[styles.bodyText, { color: c.mutedForeground }]}>Your backup target is based on six months of Must Pay expenses. It changes when those required expenses change.</Text></InfoCard>
+    <SectionTitle c={c} title="Your next milestone" description="FlowLedger focuses on the next useful step, not the entire distance at once." />
+    <InfoCard c={c}><Text style={[styles.nextTitle, { color: c.foreground }]}>{param(params.nextMilestone, "Build a complete required-expense plan")}</Text>{facts.nextMilestoneAmount > 0 ? <Text style={[styles.nextAmount, { color: c.primary }]}>{currency(facts.nextMilestoneAmount)} to go</Text> : null}<View style={[styles.callout, { backgroundColor: c.primary + "10", borderColor: c.primary + "30" }]}><Text style={[styles.cardEyebrow, { color: c.primary }]}>NEXT ACTION</Text><Text style={[styles.bodyText, { color: c.foreground }]}>{param(params.nextAction, "Finish listing required income and expenses.")}</Text></View></InfoCard>
+  </>;
+
+  if (id === "algorithms") return <>
+    <SectionTitle c={c} title="One job for each algorithm" description="Every engine answers a specific question with the same balances and forecast." />
+    <View style={styles.algorithmGrid}>{ALGORITHM_GUIDE.map(item => <View key={item.id} style={[styles.algorithmCard, { backgroundColor: c.muted, borderColor: c.border }]}><View style={[styles.algorithmIcon, { backgroundColor: c.primary + "18" }]}><Feather name="activity" size={16} color={c.primary} /></View><View style={styles.listCopy}><Text style={[styles.listTitle, { color: c.foreground }]}>{item.title}</Text><Text style={[styles.listDescription, { color: c.mutedForeground }]}>{item.description}</Text></View></View>)}</View>
+  </>;
+
+  return <>
+    <SectionTitle c={c} title="Frequently asked questions" description="The rules below prevent money from being mixed together or counted twice." />
+    <InfoCard c={c}>{[
+      ["Why does checking drive the forecast?", "Checking represents the spendable cash used for day-to-day bills. Savings stays separate until you intentionally move it."],
+      ["Are pending bank charges counted?", "Pending activity is visible, but the forecast waits for the final posted amount so a temporary authorization does not distort your plan."],
+      ["Can matching a transaction count it twice?", "No. A posted transaction replaces or settles its planned item; it remains one cash event."],
+      ["Why can my path move backward?", "New bills, spending, changed income, or a lower bank balance can reduce the number of protected days. The path recalculates from current facts."],
+    ].map(([question, answer]) => <View key={question} style={[styles.faqRow, { borderBottomColor: c.border }]}><Text style={[styles.faqQuestion, { color: c.foreground }]}>{question}</Text><Text style={[styles.listDescription, { color: c.mutedForeground }]}>{answer}</Text></View>)}</InfoCard>
+    <InfoCard c={c} eyebrow="MONEY RULES">{FLOWLEDGER_MONEY_RULES.map(rule => <Bullet key={rule} c={c} text={rule} />)}</InfoCard>
+  </>;
 }
 
-function CalculationRow({ label, value, emphasized = false }: { label: string; value: string; emphasized?: boolean }) {
-  const c = useColors();
-  return (
-    <View style={[styles.calculationRow, { borderBottomColor: c.border }]}>
-      <AppText style={[styles.calculationLabel, { color: c.mutedForeground }]}>{label}</AppText>
-      <AppText tone="number" style={[styles.calculationValue, { color: emphasized ? c.primary : c.foreground }]}>{value}</AppText>
-    </View>
-  );
+function InfoCard({ c, eyebrow, title, icon, children }: { c: ReturnType<typeof useColors>; eyebrow?: string; title?: string; icon?: React.ComponentProps<typeof Feather>["name"]; children?: React.ReactNode }) {
+  return <View style={[styles.card, { backgroundColor: c.muted, borderColor: c.border }]}>{(title || eyebrow) ? <View style={styles.cardHeader}>{icon ? <View style={[styles.cardIcon, { backgroundColor: c.primary + "18" }]}><Feather name={icon} size={18} color={c.primary} /></View> : null}<View style={styles.cardHeaderCopy}>{eyebrow ? <Text style={[styles.cardEyebrow, { color: c.primary }]}>{eyebrow}</Text> : null}{title ? <Text style={[styles.cardTitle, { color: c.foreground }]}>{title}</Text> : null}</View></View> : null}{children}</View>;
 }
+
+function Metric({ c, label, value }: { c: ReturnType<typeof useColors>; label: string; value: string }) { return <View style={[styles.metric, { backgroundColor: c.card, borderColor: c.border }]}><Text style={[styles.metricValue, { color: c.foreground }]}>{value}</Text><Text style={[styles.metricLabel, { color: c.mutedForeground }]}>{label}</Text></View>; }
+function SectionTitle({ c, title, description }: { c: ReturnType<typeof useColors>; title: string; description: string }) { return <View style={styles.sectionTitleWrap}><Text style={[styles.sectionTitle, { color: c.foreground }]}>{title}</Text><Text style={[styles.sectionDescription, { color: c.mutedForeground }]}>{description}</Text></View>; }
+function Bullet({ c, text }: { c: ReturnType<typeof useColors>; text: string }) { return <View style={styles.bulletRow}><Feather name="check-circle" size={17} color={c.success} /><Text style={[styles.bulletText, { color: c.foreground }]}>{text}</Text></View>; }
+function Calculation({ c, label, value, emphasized = false }: { c: ReturnType<typeof useColors>; label: string; value: string; emphasized?: boolean }) { return <View style={[styles.calculation, { borderBottomColor: c.border }]}><Text style={[styles.calculationLabel, { color: c.mutedForeground }]}>{label}</Text><Text style={[styles.calculationValue, { color: emphasized ? c.primary : c.foreground }]}>{value}</Text></View>; }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1 },
-  content: { flexGrow: 1, paddingHorizontal: 18 },
-  header: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 18 },
-  backButton: { width: 44, height: 44, borderRadius: 15, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  headerCopy: { flex: 1 },
-  eyebrow: { fontSize: 9, fontFamily: "Inter_700Bold", letterSpacing: 1.1 },
-  title: { fontSize: 26, lineHeight: 31, fontFamily: "Inter_700Bold", marginTop: 2 },
-  currentCard: { borderWidth: 1, borderRadius: 24, padding: 16 },
-  sectionEyebrow: { fontSize: 9, fontFamily: "Inter_700Bold", letterSpacing: 1 },
-  currentTitle: { fontSize: 21, lineHeight: 26, fontFamily: "Inter_700Bold", marginTop: 5 },
-  metrics: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 14 },
-  metric: { flexGrow: 1, flexBasis: 92, minWidth: 84, borderRadius: 14, borderWidth: 1, padding: 10 },
-  metricValue: { fontSize: 17, fontFamily: "Inter_700Bold" },
-  metricLabel: { fontSize: 9, lineHeight: 13, fontFamily: "Inter_600SemiBold", marginTop: 2 },
-  nextCard: { borderWidth: 1, borderRadius: 16, padding: 12, marginTop: 12 },
-  nextLabel: { fontSize: 8, fontFamily: "Inter_700Bold" },
-  nextText: { fontSize: 13, lineHeight: 18, fontFamily: "Inter_700Bold", marginTop: 3 },
-  nextActionLabel: { marginTop: 11 },
-  actionText: { fontSize: 12, lineHeight: 17, fontFamily: "Inter_600SemiBold", marginTop: 3 },
-  sectionHeader: { marginTop: 24, marginBottom: 9 },
-  sectionTitle: { fontSize: 18, lineHeight: 23, fontFamily: "Inter_700Bold" },
-  sectionDescription: { fontSize: 12, lineHeight: 17, marginTop: 3 },
-  sectionCard: { borderWidth: 1, borderRadius: 20, padding: 14 },
-  pathRow: { flexDirection: "row", alignItems: "stretch" },
-  pathRail: { width: 32, alignItems: "center" },
-  pathDot: { width: 25, height: 25, borderRadius: 13, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  pathNumber: { color: "#fff", fontSize: 10, fontFamily: "Inter_700Bold" },
-  pathLine: { flex: 1, width: 2, minHeight: 62 },
-  pathCopy: { flex: 1, borderWidth: 1, borderColor: "transparent", borderRadius: 15, padding: 10, marginBottom: 8 },
-  pathTitleRow: { flexDirection: "row", alignItems: "center", gap: 7 },
-  pathTitle: { flex: 1, fontSize: 14, fontFamily: "Inter_700Bold" },
-  currentPill: { borderRadius: 999, paddingHorizontal: 7, paddingVertical: 4, fontSize: 7, fontFamily: "Inter_700Bold" },
-  pathRange: { fontSize: 10, lineHeight: 14, fontFamily: "Inter_700Bold", marginTop: 3 },
-  pathDescription: { fontSize: 11, lineHeight: 16, marginTop: 4 },
-  calculationRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
-  calculationLabel: { flex: 1, fontSize: 11, lineHeight: 15, fontFamily: "Inter_600SemiBold" },
-  calculationValue: { fontSize: 12, fontFamily: "Inter_700Bold", textAlign: "right" },
-  scoreSummary: { borderWidth: 1, borderRadius: 16, padding: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 4 },
-  scoreSummaryLabel: { fontSize: 8, fontFamily: "Inter_700Bold", letterSpacing: 0.8 },
-  scoreSummaryValue: { fontSize: 24, lineHeight: 29, fontFamily: "Inter_700Bold", marginTop: 2 },
-  scoreSummaryStatus: { fontSize: 13, fontFamily: "Inter_700Bold", textAlign: "right" },
-  scoreRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
-  scoreRowCopy: { flex: 1 },
-  scoreRowTitle: { fontSize: 12, lineHeight: 16, fontFamily: "Inter_700Bold" },
-  scoreRowDescription: { fontSize: 10, lineHeight: 15, marginTop: 2 },
-  scoreRowPoints: { minWidth: 50, fontSize: 10, lineHeight: 15, fontFamily: "Inter_700Bold", textAlign: "right" },
-  scoreFootnote: { fontSize: 10, lineHeight: 15, marginTop: 10 },
-  ruleRow: { flexDirection: "row", alignItems: "flex-start", gap: 9, paddingVertical: 8 },
-  ruleText: { flex: 1, fontSize: 12, lineHeight: 18, fontFamily: "Inter_600SemiBold" },
-  algorithmGrid: { gap: 9 },
-  algorithmCard: { borderWidth: 1, borderRadius: 18, padding: 13, flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  algorithmIcon: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  algorithmCopy: { flex: 1 },
-  algorithmTitle: { fontSize: 14, fontFamily: "Inter_700Bold" },
-  algorithmDescription: { fontSize: 11, lineHeight: 16, marginTop: 3 },
+  screen: { flex: 1, alignItems: "center", justifyContent: "center" },
+  walkthrough: { flex: 1, width: "100%", borderWidth: 0, overflow: "hidden" },
+  walkthroughDesktop: { flex: 0, width: "96%", maxWidth: 1160, borderWidth: 1, borderRadius: 26 },
+  header: { minHeight: 86, borderBottomWidth: 1, paddingHorizontal: 20, paddingVertical: 14, flexDirection: "row", alignItems: "center", gap: 16 },
+  headerCopy: { flex: 1, minWidth: 0 },
+  eyebrow: { fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.3 },
+  title: { fontSize: 25, lineHeight: 31, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
+  subtitle: { fontSize: 13, lineHeight: 18, fontFamily: "Inter_500Medium", marginTop: 2 },
+  closeButton: { width: 44, height: 44, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  body: { flex: 1 }, bodyDesktop: { flexDirection: "row" },
+  sectionNav: { width: 250, borderRightWidth: 1, padding: 12, gap: 5 },
+  navItem: { minHeight: 62, borderWidth: 1, borderColor: "transparent", borderRadius: 14, padding: 9, flexDirection: "row", alignItems: "center", gap: 9 },
+  navNumber: { width: 28, height: 28, borderRadius: 9, alignItems: "center", justifyContent: "center" }, navNumberText: { color: "#fff", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
+  navCopy: { flex: 1, minWidth: 0 }, navTitle: { fontSize: 13, fontFamily: "Inter_700Bold" }, navDescription: { fontSize: 10, lineHeight: 14, fontFamily: "Inter_500Medium", marginTop: 2 },
+  mobileStepStrip: { gap: 7, paddingHorizontal: 14, paddingVertical: 10 }, mobileStep: { minHeight: 36, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, alignItems: "center", justifyContent: "center" }, mobileStepText: { fontSize: 11, fontFamily: "Inter_700Bold" },
+  contentScroll: { flex: 1 }, content: { padding: 18, paddingBottom: 30 },
+  card: { borderWidth: 1, borderRadius: 19, padding: 15, marginBottom: 14 }, cardHeader: { flexDirection: "row", alignItems: "center", gap: 11, marginBottom: 12 }, cardIcon: { width: 40, height: 40, borderRadius: 13, alignItems: "center", justifyContent: "center" }, cardHeaderCopy: { flex: 1 }, cardEyebrow: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.9 }, cardTitle: { fontSize: 18, lineHeight: 23, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
+  sectionTitleWrap: { marginTop: 4, marginBottom: 10 }, sectionTitle: { fontSize: 19, lineHeight: 24, fontFamily: "Inter_800ExtraBold" }, sectionDescription: { fontSize: 13, lineHeight: 18, fontFamily: "Inter_500Medium", marginTop: 3 },
+  metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 9 }, metric: { flexGrow: 1, flexBasis: 130, minHeight: 74, borderWidth: 1, borderRadius: 14, padding: 11, justifyContent: "center" }, metricValue: { fontSize: 16, fontFamily: "Inter_800ExtraBold" }, metricLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginTop: 3 },
+  bodyText: { fontSize: 13, lineHeight: 20, fontFamily: "Inter_500Medium" }, bulletRow: { flexDirection: "row", alignItems: "flex-start", gap: 9, paddingVertical: 7 }, bulletText: { flex: 1, fontSize: 13, lineHeight: 19, fontFamily: "Inter_600SemiBold" },
+  scoreHero: { borderWidth: 1, borderRadius: 20, padding: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }, scoreValue: { fontSize: 34, fontFamily: "Inter_800ExtraBold", marginTop: 2 }, scoreStatus: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
+  listRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth }, listCopy: { flex: 1, minWidth: 0 }, listTitle: { fontSize: 14, fontFamily: "Inter_700Bold" }, listDescription: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_500Medium", marginTop: 3 }, points: { minWidth: 58, fontSize: 11, fontFamily: "Inter_800ExtraBold", textAlign: "right" },
+  calculation: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: 12, borderBottomWidth: StyleSheet.hairlineWidth }, calculationLabel: { flex: 1, fontSize: 12, lineHeight: 17, fontFamily: "Inter_600SemiBold" }, calculationValue: { fontSize: 13, fontFamily: "Inter_800ExtraBold", textAlign: "right" },
+  pathRow: { flexDirection: "row", alignItems: "stretch" }, pathRail: { width: 34, alignItems: "center" }, pathDot: { width: 27, height: 27, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" }, pathNumber: { color: "#fff", fontSize: 10, fontFamily: "Inter_800ExtraBold" }, pathLine: { flex: 1, width: 2, minHeight: 64 }, pathContent: { flex: 1, borderWidth: 1, borderColor: "transparent", borderRadius: 14, padding: 10, marginBottom: 8 }, pathHeading: { flexDirection: "row", alignItems: "center", gap: 7 }, currentPill: { fontSize: 8, fontFamily: "Inter_800ExtraBold", borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3 }, pathRange: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_700Bold", marginTop: 2 },
+  nextTitle: { fontSize: 18, lineHeight: 24, fontFamily: "Inter_800ExtraBold" }, nextAmount: { fontSize: 22, fontFamily: "Inter_800ExtraBold", marginTop: 6 }, callout: { borderWidth: 1, borderRadius: 14, padding: 12, marginTop: 14 },
+  algorithmGrid: { gap: 9 }, algorithmCard: { borderWidth: 1, borderRadius: 16, padding: 13, flexDirection: "row", alignItems: "flex-start", gap: 11 }, algorithmIcon: { width: 37, height: 37, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  faqRow: { paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth }, faqQuestion: { fontSize: 14, lineHeight: 19, fontFamily: "Inter_700Bold" },
+  footer: { minHeight: 78, borderTopWidth: 1, paddingHorizontal: 16, paddingTop: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }, progressCopy: { flex: 1, maxWidth: 260 }, progressText: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginBottom: 6 }, progressTrack: { height: 5, borderRadius: 999, overflow: "hidden" }, progressFill: { height: "100%", borderRadius: 999 }, footerActions: { flexDirection: "row", alignItems: "center", gap: 8 }, secondaryButton: { minHeight: 44, borderWidth: 1, borderRadius: 13, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }, secondaryText: { fontSize: 13, fontFamily: "Inter_700Bold" }, primaryButton: { minHeight: 44, minWidth: 100, borderRadius: 13, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }, primaryText: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  footerMobile: { minHeight: 112, flexDirection: "column", alignItems: "stretch", gap: 9 },
 });

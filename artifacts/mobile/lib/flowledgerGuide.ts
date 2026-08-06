@@ -13,6 +13,24 @@ export interface AlgorithmGuideItem {
   description: string;
 }
 
+export const FLOW_GUIDE_SECTIONS = [
+  { id: "overview", title: "Overview", description: "The plan in one clear picture" },
+  { id: "flow-score", title: "Flow Score", description: "What is helping or lowering your score" },
+  { id: "protected-days", title: "Protected Days", description: "How backup days are measured" },
+  { id: "stability", title: "Stability Path", description: "The steps from today to a stronger buffer" },
+  { id: "backup", title: "Backup Goal", description: "Your next milestone and long-term target" },
+  { id: "algorithms", title: "Algorithms", description: "The engines behind each recommendation" },
+  { id: "faq", title: "Frequently Asked Questions", description: "Straight answers about the calculation rules" },
+] as const;
+
+export type FlowGuideSectionId = (typeof FLOW_GUIDE_SECTIONS)[number]["id"];
+
+export function flowGuideSectionIndex(value?: string) {
+  const normalized = value === "path" ? "stability" : value;
+  const index = FLOW_GUIDE_SECTIONS.findIndex(section => section.id === normalized);
+  return index >= 0 ? index : 0;
+}
+
 export const STABILITY_PATH_GUIDE: readonly StabilityPathGuideStep[] = [
   {
     id: "stabilize",
