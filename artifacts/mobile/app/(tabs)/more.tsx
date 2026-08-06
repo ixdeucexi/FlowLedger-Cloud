@@ -53,7 +53,6 @@ import { ReviewCenter } from "@/components/ReviewCenter";
 import { PWA_INSTALL_EVENT } from "@/components/PwaInstallPrompt";
 import { PlaidLinkButton } from "@/components/PlaidLinkButton";
 import { RecentlyDeletedTransactions } from "@/components/RecentlyDeletedTransactions";
-import { ReportsInsightsView } from "@/components/ReportsInsightsView";
 import colors from "@/constants/colors";
 import type { Account, IncomeItem } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
@@ -90,6 +89,7 @@ import {
   householdInviteRolesFor,
   householdRoleLabel,
 } from "@/lib/householdPermissions";
+
 import { DEFAULT_ONBOARDING_PREFERENCES } from "@/lib/onboarding";
 import {
   loadOnboardingPreferences,
@@ -137,6 +137,10 @@ import {
   type SubscriptionCandidate,
 } from "@/lib/competitiveGrowth";
 import { buildCategoryPlan } from "@/lib/categoryPlanning";
+
+const ReportsInsightsView = React.lazy(() =>
+  import("@/components/ReportsInsightsView").then(module => ({ default: module.ReportsInsightsView })),
+);
 
 const FREQ_LABELS: Record<string, string> = {
   monthly: "Monthly",
@@ -4297,7 +4301,14 @@ export default function MoreScreen({
         )}
 
         {activeSettingsSection === "reports" && (
-          <>
+          <React.Suspense
+            fallback={
+              <View style={[styles.card, styles.reportsLoadingCard, { backgroundColor: c.card, borderColor: c.border }]}>
+                <Text style={[styles.reportsLoadingTitle, { color: c.foreground }]}>Loading reports…</Text>
+                <Text style={[styles.reportsLoadingText, { color: c.mutedForeground }]}>Your existing plan stays available while charts prepare.</Text>
+              </View>
+            }
+          >
             <ReportsInsightsView
               monthLabel={new Date(
                 `${currentMonthPrefix}-01T12:00:00`,
@@ -4315,7 +4326,7 @@ export default function MoreScreen({
               onOpenBills={() => router.push("/(tabs)/bills")}
               onOpenSubscriptions={() => openSettingsSection("subscriptions")}
             />
-          </>
+          </React.Suspense>
         )}
 
         {activeSettingsSection === "goals" && (
@@ -6547,4 +6558,13 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     marginTop: 5,
   },
+  reportsLoadingCard: {
+    minHeight: 220,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 28,
+  },
+  reportsLoadingTitle: { fontFamily: "Inter_800ExtraBold", fontSize: 18 },
+  reportsLoadingText: { fontFamily: "Inter_500Medium", fontSize: 13, lineHeight: 19, marginTop: 6, textAlign: "center" },
 });

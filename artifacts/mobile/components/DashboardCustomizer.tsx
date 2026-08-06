@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
 import {
   DASHBOARD_WIDGETS,
   moveDashboardWidget,
@@ -26,6 +27,7 @@ export function DashboardCustomizer({ visible, layout, onChange, onReset, onClos
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const compact = width < 700;
+  const reduceMotion = useReducedMotion();
   useBackDismiss(visible, onClose);
 
   useEffect(() => {
@@ -42,7 +44,7 @@ export function DashboardCustomizer({ visible, layout, onChange, onReset, onClos
   };
 
   return (
-    <Modal visible={visible} transparent animationType={compact ? "slide" : "fade"} onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType={reduceMotion ? "none" : compact ? "slide" : "fade"} onRequestClose={onClose}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Close dashboard customization"
@@ -50,6 +52,7 @@ export function DashboardCustomizer({ visible, layout, onChange, onReset, onClos
         style={[styles.backdrop, compact && styles.backdropCompact]}
       >
         <Pressable
+          accessibilityViewIsModal
           accessibilityRole="none"
           onPress={event => event.stopPropagation()}
           style={[
@@ -162,7 +165,7 @@ const styles = StyleSheet.create({
   required: { fontFamily: "Inter_700Bold", fontSize: 11, marginTop: 5, textTransform: "uppercase", letterSpacing: 0.6 },
   rowActions: { alignItems: "flex-end", gap: 10 },
   moveActions: { flexDirection: "row", gap: 6 },
-  smallButton: { width: 34, height: 34, borderRadius: 10, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  smallButton: { width: 42, height: 42, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   switch: { width: 44, height: 25, borderRadius: 13, padding: 3, justifyContent: "center" },
   switchThumb: { width: 19, height: 19, borderRadius: 10, backgroundColor: "#ffffff" },
   switchThumbOn: { alignSelf: "flex-end" },

@@ -18,6 +18,7 @@ import { useAuth } from "@/context/AuthContext";
 import { AppDiscoveryProvider } from "@/context/AppDiscoveryContext";
 import { useBudget } from "@/context/BudgetContext";
 import { SaveStatusBanner } from "@/components/SaveStatusBanner";
+import { ConnectivityBanner } from "@/components/ConnectivityBanner";
 import { DecisionDueModal } from "@/components/DecisionDueModal";
 import { FloLogo } from "@/components/FloLogo";
 import { PlanPreviewBanner } from "@/components/PlanPreviewBanner";
@@ -616,6 +617,7 @@ function TabContent() {
       style={[styles.tabTransitionRoot, { backgroundColor: colors.background }]}
     >
       <View style={styles.tabTransitionContent}>
+        <ConnectivityBanner desktop={isDesktop} />
         <AppDiscoveryProvider>
         <ResponsiveDesktopChrome enabled={isDesktop}>
           {loadError ? (

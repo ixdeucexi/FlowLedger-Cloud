@@ -142,5 +142,7 @@
     ,"lib/universalSearch.test.ts"
     ,"lib/notificationCenter.ts"
     ,"lib/notificationCenter.test.ts"
+    ,"lib/resumePolicy.ts"
+    ,"lib/resumePolicy.test.ts"
   ]
 }

@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
 import type { InAppNotification, InAppNotificationTone } from "@/lib/notificationCenter";
 
 type Props = {
@@ -38,6 +39,7 @@ export function NotificationCenterModal({ visible, notifications, readIds, onOpe
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const compact = width < 700;
+  const reduceMotion = useReducedMotion();
   const read = new Set(readIds);
   const unread = notifications.filter(item => !read.has(item.id)).length;
   useBackDismiss(visible, onClose);
@@ -54,9 +56,10 @@ export function NotificationCenterModal({ visible, notifications, readIds, onOpe
   const toneColor = (tone: InAppNotificationTone) => tone === "risk" ? c.destructive : tone === "watch" ? c.warning : tone === "safe" ? c.success : c.primary;
 
   return (
-    <Modal visible={visible} transparent animationType={compact ? "slide" : "fade"} onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType={reduceMotion ? "none" : compact ? "slide" : "fade"} onRequestClose={onClose}>
       <Pressable style={[styles.backdrop, compact && styles.backdropCompact]} onPress={onClose}>
         <Pressable
+          accessibilityViewIsModal
           onPress={event => event.stopPropagation()}
           style={[
             styles.dialog,

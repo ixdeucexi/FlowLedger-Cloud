@@ -25,6 +25,7 @@ import { BudgetProvider, useBudget } from "@/context/BudgetContext";
 import { MembershipProvider } from "@/context/MembershipContext";
 import { ThemeProvider, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { readLastAppRoute, rememberAppRoute } from "@/lib/navigationMemory";
 import { supabase } from "@/lib/supabase";
 import { WEB_VIEWPORT_CONTENT } from "@/lib/webViewport";
@@ -155,6 +156,7 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
   const { loading: authLoading } = useAuth();
   const { ready: biometricLockReady, locked: biometricLocked } = useBiometricLock();
   const { ready: themeReady } = useThemeMode();
+  const reduceMotion = useReducedMotion();
   const router = useRouter();
   const [minimumStartupReady, setMinimumStartupReady] = useState(false);
   const [showStartupOverlay, setShowStartupOverlay] = useState(true);
@@ -182,6 +184,12 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
     }
 
     hideSplash();
+    if (reduceMotion) {
+      startupOpacity.setValue(0);
+      appOpacity.setValue(1);
+      setShowStartupOverlay(false);
+      return;
+    }
     setShowStartupOverlay(true);
     Animated.parallel([
       Animated.timing(startupOpacity, {
@@ -197,7 +205,7 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
         useNativeDriver: Platform.OS !== "web",
       }),
     ]).start(() => setShowStartupOverlay(false));
-  }, [appReady, appOpacity, hideSplash, startupOpacity]);
+  }, [appReady, appOpacity, hideSplash, reduceMotion, startupOpacity]);
 
   useEffect(() => {
     if (!appReady || Platform.OS === "web") return;

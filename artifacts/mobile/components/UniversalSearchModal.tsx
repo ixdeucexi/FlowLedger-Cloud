@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
 import type { SearchResultKind, UniversalSearchResult } from "@/lib/universalSearch";
 
 type Props = {
@@ -41,6 +42,7 @@ export function UniversalSearchModal(props: Props) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const compact = width < 700;
+  const reduceMotion = useReducedMotion();
   const [selectedIndex, setSelectedIndex] = useState(0);
   useBackDismiss(visible, onClose);
 
@@ -75,9 +77,10 @@ export function UniversalSearchModal(props: Props) {
   const prompt = mode === "commands" ? "Search actions…" : "Search bills, debts, goals, activity…";
 
   return (
-    <Modal visible={visible} transparent animationType={compact ? "slide" : "fade"} onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType={reduceMotion ? "none" : compact ? "slide" : "fade"} onRequestClose={onClose}>
       <Pressable style={[styles.backdrop, compact && styles.backdropCompact]} onPress={onClose}>
         <Pressable
+          accessibilityViewIsModal
           onPress={event => event.stopPropagation()}
           style={[
             styles.dialog,

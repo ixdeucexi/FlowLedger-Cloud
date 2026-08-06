@@ -52,6 +52,7 @@ import { canonicalConnectedAccounts, pendingPlaidActivityWithBalanceHolds } from
 import { normalizeBillImportance, type BillImportance } from "@/lib/billImportance";
 import { buildTransactionLedger, remainingPlannedAmount } from "@/lib/ledgerEngine";
 import type { PendingPlanMatch } from "@/lib/pendingPlanMatches";
+import { shouldRefreshPlanOnResume } from "@/lib/resumePolicy";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -950,6 +951,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const bankRefreshRequestRef = useRef(0);
   const plaidSyncPromiseRef = useRef<Promise<void> | null>(null);
   const lastPlaidSyncAtRef = useRef(0);
+  const lastPlanRefreshAtRef = useRef(0);
+  const backgroundRefreshPendingRef = useRef(false);
   useEffect(() => { overridesRef.current = overrides; }, [overrides]);
   useEffect(() => { billDateMovesRef.current = billDateMoves; }, [billDateMoves]);
   useEffect(() => { accountsRef.current = accounts; }, [accounts]);
@@ -1100,6 +1103,15 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setLoadRetryNonce(value => value + 1);
   }, [queryClient]);
 
+  const refreshPlanInBackground = useCallback(() => {
+    if (!user || demoMode || loadError || !loaded.current || backgroundRefreshPendingRef.current) return;
+    const online = Platform.OS !== "web" || typeof navigator === "undefined" || navigator.onLine !== false;
+    if (!shouldRefreshPlanOnResume({ lastRefreshAt: lastPlanRefreshAtRef.current, online })) return;
+    backgroundRefreshPendingRef.current = true;
+    void queryClient.invalidateQueries({ queryKey: ["budget-core", user.id] });
+    setLoadRetryNonce(value => value + 1);
+  }, [demoMode, loadError, queryClient, user]);
+
   const refreshHouseholds = useCallback(async () => {
     if (!user || demoMode) return;
     await resolveHouseholds(user.id);
@@ -1237,8 +1249,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
       return;
     }
-    loaded.current = false;
-    setLoading(true);
+    const backgroundRefresh = backgroundRefreshPendingRef.current && loaded.current;
+    backgroundRefreshPendingRef.current = false;
+    if (!backgroundRefresh) {
+      loaded.current = false;
+      setLoading(true);
+    }
     setLoadError(null);
     (async () => {
       const loadStarted = Date.now();
@@ -1386,13 +1402,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         setLoadError(null);
       } catch (error) {
         console.warn("Budget load failed or timed out", error);
-        if (requestId === loadRequestRef.current) {
+        if (!backgroundRefresh && requestId === loadRequestRef.current) {
           setLoadError(error instanceof Error ? error.message : "FlowLedger could not load your plan.");
         }
       } finally {
         if (requestId === loadRequestRef.current) {
           loaded.current = true;
-          setLoading(false);
+          lastPlanRefreshAtRef.current = Date.now();
+          if (!backgroundRefresh) setLoading(false);
         }
         void recordDiagnostic(user.id, {
           eventType: "performance", operation: "data_load", platform: diagnosticPlatform(),
@@ -1485,6 +1502,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const refreshBankData = useCallback(async () => {
     if (!user || demoMode || Platform.OS !== "web") return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
     if (plaidSyncPromiseRef.current) return plaidSyncPromiseRef.current;
 
     const now = Date.now();
@@ -1533,22 +1551,30 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!user || demoMode) return;
     void refreshBankData();
     const subscription = AppState.addEventListener("change", state => {
-      if (state === "active") void refreshBankData();
+      if (state === "active") {
+        refreshPlanInBackground();
+        void refreshBankData();
+      }
     });
     if (Platform.OS !== "web" || typeof document === "undefined" || typeof window === "undefined") {
       return () => subscription.remove();
     }
     const refreshVisibleBankData = () => {
-      if (document.visibilityState !== "hidden") void refreshBankData();
+      if (document.visibilityState !== "hidden") {
+        refreshPlanInBackground();
+        void refreshBankData();
+      }
     };
     document.addEventListener("visibilitychange", refreshVisibleBankData);
     window.addEventListener("focus", refreshVisibleBankData);
+    window.addEventListener("online", refreshVisibleBankData);
     return () => {
       subscription.remove();
       document.removeEventListener("visibilitychange", refreshVisibleBankData);
       window.removeEventListener("focus", refreshVisibleBankData);
+      window.removeEventListener("online", refreshVisibleBankData);
     };
-  }, [user, demoMode, activeHouseholdId, refreshBankData]);
+  }, [user, demoMode, activeHouseholdId, refreshBankData, refreshPlanInBackground]);
 
   // ─── Bills ────────────────────────────────────────────────────────────────────
 

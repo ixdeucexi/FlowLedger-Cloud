@@ -2,8 +2,6 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { Platform } from "react-native";
 import { useRouter } from "expo-router";
 
-import { NotificationCenterModal } from "@/components/NotificationCenterModal";
-import { UniversalSearchModal } from "@/components/UniversalSearchModal";
 import { useAuth } from "@/context/AuthContext";
 import { useBudget, type Transaction } from "@/context/BudgetContext";
 import { useMembership } from "@/context/MembershipContext";
@@ -33,6 +31,13 @@ import {
 } from "@/lib/universalSearch";
 
 type DiscoveryMode = "search" | "commands";
+
+const UniversalSearchModal = React.lazy(() =>
+  import("@/components/UniversalSearchModal").then(module => ({ default: module.UniversalSearchModal })),
+);
+const NotificationCenterModal = React.lazy(() =>
+  import("@/components/NotificationCenterModal").then(module => ({ default: module.NotificationCenterModal })),
+);
 
 type AppDiscoveryValue = {
   openSearch: () => void;
@@ -97,6 +102,7 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
   const [notificationState, setNotificationState] = useState<NotificationCenterState>(EMPTY_NOTIFICATION_STATE);
   const notificationStateRef = useRef(notificationState);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  const remoteSearchCacheRef = useRef(new Map<string, UniversalSearchResult[]>());
 
   const userId = user?.id ?? null;
   const householdId = activeHousehold?.householdId ?? null;
@@ -134,6 +140,7 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     let cancelled = false;
+    remoteSearchCacheRef.current.clear();
     notificationStateRef.current = EMPTY_NOTIFICATION_STATE;
     setNotificationState(EMPTY_NOTIFICATION_STATE);
     if (!userId || !householdId) return () => { cancelled = true; };
@@ -200,7 +207,17 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
     let cancelled = false;
     const timer = setTimeout(() => {
       const safeQuery = query.trim().replace(/[^a-zA-Z0-9 ]/g, " ").replace(/\s+/g, " ").slice(0, 64);
-      if (!safeQuery) return;
+      if (!safeQuery) {
+        setRemoteLoading(false);
+        return;
+      }
+      const cacheKey = `${householdId}:${safeQuery.toLowerCase()}`;
+      const cached = remoteSearchCacheRef.current.get(cacheKey);
+      if (cached) {
+        setRemoteResults(cached);
+        setRemoteLoading(false);
+        return;
+      }
       setRemoteLoading(true);
       void supabase
         .from("transactions")
@@ -215,7 +232,7 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
           if (error) {
             setRemoteResults([]);
           } else {
-            setRemoteResults((data ?? []).map(row => ({
+            const nextResults = (data ?? []).map(row => ({
               id: String(row.id),
               kind: "Activity" as const,
               title: String(row.merchant_name || row.note || row.category || "Transaction"),
@@ -224,7 +241,9 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
               route: "/(tabs)/transactions",
               params: { activityId: String(row.id), activityDate: String(row.date), activityAt: String(Date.now()) },
               keywords: String(row.note || ""),
-            })));
+            }));
+            remoteSearchCacheRef.current.set(cacheKey, nextResults);
+            setRemoteResults(nextResults);
           }
           setRemoteLoading(false);
         });
@@ -338,26 +357,34 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
   return (
     <AppDiscoveryContext.Provider value={value}>
       {children}
-      <UniversalSearchModal
-        visible={searchVisible}
-        mode={mode}
-        query={query}
-        results={searchResults}
-        loading={remoteLoading}
-        onModeChange={setMode}
-        onQueryChange={setQuery}
-        onSelect={selectResult}
-        onClose={() => setSearchVisible(false)}
-      />
-      <NotificationCenterModal
-        visible={notificationsVisible}
-        notifications={notifications}
-        readIds={notificationState.readIds}
-        onOpen={openNotification}
-        onDismiss={id => persistNotificationState(state => dismissNotification(state, id))}
-        onMarkAllRead={() => persistNotificationState(state => markAllNotificationsRead(state, generatedNotifications))}
-        onClose={() => setNotificationsVisible(false)}
-      />
+      {searchVisible ? (
+        <React.Suspense fallback={null}>
+          <UniversalSearchModal
+            visible
+            mode={mode}
+            query={query}
+            results={searchResults}
+            loading={remoteLoading}
+            onModeChange={setMode}
+            onQueryChange={setQuery}
+            onSelect={selectResult}
+            onClose={() => setSearchVisible(false)}
+          />
+        </React.Suspense>
+      ) : null}
+      {notificationsVisible ? (
+        <React.Suspense fallback={null}>
+          <NotificationCenterModal
+            visible
+            notifications={notifications}
+            readIds={notificationState.readIds}
+            onOpen={openNotification}
+            onDismiss={id => persistNotificationState(state => dismissNotification(state, id))}
+            onMarkAllRead={() => persistNotificationState(state => markAllNotificationsRead(state, generatedNotifications))}
+            onClose={() => setNotificationsVisible(false)}
+          />
+        </React.Suspense>
+      ) : null}
     </AppDiscoveryContext.Provider>
   );
 }
