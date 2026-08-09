@@ -5,6 +5,10 @@ This repository uses a high-accountability multi-agent workflow. Treat every tas
 ## Branch and release policy
 - Work from `dev` unless the user explicitly instructs otherwise.
 - Never push directly to `main` or production without explicit user approval.
+- Before every production/live deployment, create and clearly name a rollback point that captures the currently live production state before the new release is applied.
+- The rollback point must be created before production is changed, and the release report must state its exact branch/tag/commit reference.
+- Prefer rollback naming that is easy to identify later, such as `rollback/prod-before-<short-change-name>-YYYYMMDD-HHMM`.
+- If a rollback point cannot be created or verified, do not proceed live unless the user explicitly overrides this safeguard.
 - Keep changes scoped. Do not bundle unrelated cleanup into a requested fix.
 - Preserve existing behavior unless the task explicitly requires changing it.
 
@@ -24,6 +28,8 @@ This repository uses a high-accountability multi-agent workflow. Treat every tas
 5. Run the relevant checks and tests available in the repository.
 6. Verify normal, boundary, and failure cases.
 7. Report exactly what changed, what was tested, and any remaining risk.
+8. Before an approved production release, capture and verify the current live state as a named rollback point.
+9. Report the rollback reference together with the production release result.
 
 ## Core verification commands
 Use the commands appropriate to the affected workspace. At repository level, prefer:
@@ -52,7 +58,7 @@ Owns user-facing product analysis, value framing, onboarding/release implication
 
 ## Default orchestration
 For meaningful code changes, use this sequence:
-ATLAS -> FORGE -> SENTINEL -> user approval -> release.
+ATLAS -> FORGE -> SENTINEL -> user approval -> create rollback point -> release.
 
 DRAFTER and PULSE are supporting specialists and should be invoked only when relevant.
 
