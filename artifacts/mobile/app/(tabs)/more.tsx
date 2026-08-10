@@ -143,7 +143,7 @@ const ReportsInsightsView = React.lazy(() =>
 );
 
 const FREQ_LABELS: Record<string, string> = {
-  monthly: "Monthly",
+  monthly: "Forecast",
   biweekly: "Biweekly",
   weekly: "Weekly",
 };

@@ -7,6 +7,5 @@ export function tabBarLabelSize(viewportWidth: number) {
 export function tabBarDisplayLabel(title: string, viewportWidth: number) {
   if (viewportWidth >= COMPACT_TAB_WIDTH) return title;
   if (title === "Dashboard") return "Home";
-  if (title === "Monthly") return "Month";
   return title;
 }

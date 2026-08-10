@@ -8,7 +8,7 @@ test("desktop sidebar keeps the primary planning routes", () => {
     "Dashboard",
     "Bills",
     "Activity",
-    "Monthly",
+    "Forecast",
     "Reports",
     "Settings",
   ]);
@@ -39,7 +39,7 @@ test("desktop adds a dedicated Debt destination beside Bills", () => {
     "Bills",
     "Debt",
     "Activity",
-    "Monthly",
+    "Forecast",
     "Reports",
     "Settings",
   ]);

@@ -21,7 +21,7 @@ export const APP_TABS = [
   },
   {
     name: "monthly",
-    title: "Monthly",
+    title: "Forecast",
     icon: "calendar",
     pathname: "/(tabs)/monthly",
   },

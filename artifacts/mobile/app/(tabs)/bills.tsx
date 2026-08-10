@@ -117,6 +117,7 @@ export default function BillsScreen() {
     getBillOccurrencesInMonth,
     getBillMonthlyTotal,
     getBillEffectiveMonthlyTotal,
+    getDebtPlanForMonth,
     getPaidAmount,
     activeHousehold,
     pendingBankTransactions,
@@ -403,6 +404,7 @@ export default function BillsScreen() {
     [bills, debtPlanMonth, debtPlanYear, previewDebtSnowball],
   );
   const existingSnowball = getExtraPayment(debtPlanMonth, debtPlanYear);
+  const datedDebtPlan = getDebtPlanForMonth(debtPlanMonth, debtPlanYear);
   const cashFlowSafeSnowballAmount = baseSnowballPreview.safeMaximum;
 
   const debtPlanIds = new Set(
@@ -476,6 +478,26 @@ export default function BillsScreen() {
     ? debtMonthlyMinimum(activeDebtTarget)
     : 0;
   const nextStrategyTarget = strategyOrder[1] ?? null;
+  const activeDebtRollover = activeDebtTarget && datedDebtPlan
+    ? datedDebtPlan.allocations.filter(allocation =>
+      allocation.kind === "rollover"
+      && allocation.sourceBillId === activeDebtTarget.id
+      && allocation.targetBillId !== activeDebtTarget.id)
+    : [];
+  const activeDebtRolloverAmount = activeDebtRollover.reduce((sum, allocation) => sum + allocation.amount, 0);
+  const activeDebtRolloverNames = Array.from(new Set(activeDebtRollover.map(allocation => allocation.targetBillName))).join(", ");
+  const activeDebtRolloverDate = activeDebtRollover[0]?.date;
+  const forecastDebtPayment = datedDebtPlan?.plannedPayment ?? totalMinPayments;
+  const forecastPaymentByDebtId = new Map(
+    datedDebtPlan?.payments.map(payment => [payment.billId, payment.totalPayment]) ?? [],
+  );
+  const forecastRolloverByDebtId = new Map<string, number>();
+  datedDebtPlan?.allocations.filter(allocation => allocation.kind === "rollover").forEach(allocation => {
+    forecastRolloverByDebtId.set(
+      allocation.targetBillId,
+      (forecastRolloverByDebtId.get(allocation.targetBillId) ?? 0) + allocation.amount,
+    );
+  });
 
   const priorityColors = [
     "#22c55e",
@@ -1117,9 +1139,9 @@ export default function BillsScreen() {
                         },
                         {
                           label: debtPlanIsFuture
-                            ? `${MONTH_FULL[debtPlanMonth].slice(0, 3)} Minimum`
-                            : "Min/Month",
-                          value: `$${totalMinPayments.toFixed(0)}`,
+                            ? `${MONTH_FULL[debtPlanMonth].slice(0, 3)} Forecast`
+                            : "Forecast",
+                          value: `$${forecastDebtPayment.toFixed(0)}`,
                           color: c.warning,
                           icon: "calendar" as const,
                         },
@@ -1314,7 +1336,7 @@ export default function BillsScreen() {
                           {MONTH_FULL[debtPlanMonth]} {debtPlanYear}.
                         </Text>
                       ) : null}
-                      {activeDebtTarget && nextStrategyTarget ? (
+                      {activeDebtTarget && activeDebtRolloverAmount > 0.005 ? (
                         <View
                           style={[
                             styles.rolloverCard,
@@ -1331,8 +1353,10 @@ export default function BillsScreen() {
                               { color: c.foreground },
                             ]}
                           >
-                            ${activeDebtMinimum.toFixed(0)}/mo rolls to{" "}
-                            {nextStrategyTarget.name} next.
+                            ${activeDebtRolloverAmount.toFixed(2)} rolls to {activeDebtRolloverNames} on{" "}
+                            {activeDebtRolloverDate
+                              ? `${MONTH_FULL[Number(activeDebtRolloverDate.slice(5, 7)) - 1]} ${Number(activeDebtRolloverDate.slice(8, 10))}`
+                              : "the same day"}.
                           </Text>
                         </View>
                       ) : null}
@@ -1476,6 +1500,8 @@ export default function BillsScreen() {
                         ] ?? c.primary);
                   const effectiveMinimum = debtMonthlyMinimum(item);
                   const requiredMinimum = debtRequiredMinimum(item);
+                  const forecastPayment = forecastPaymentByDebtId.get(item.id);
+                  const forecastRollover = forecastRolloverByDebtId.get(item.id) ?? 0;
                   const monthsToPayoff =
                     item.balance > 0 && effectiveMinimum > 0
                       ? Math.ceil(item.balance / effectiveMinimum)
@@ -1587,22 +1613,20 @@ export default function BillsScreen() {
                                   { color: c.mutedForeground },
                                 ]}
                               >
-                                ${requiredMinimum.toFixed(2)}/mo required
+                                {forecastPayment !== undefined
+                                  ? `$${forecastPayment.toFixed(2)} forecast payment`
+                                  : `$${requiredMinimum.toFixed(2)}/mo required`}
                               </Text>
                             )}
                             {!isPaidOff &&
-                              (item.snowball_minimum_boost ?? 0) > 0 && (
+                              forecastRollover > 0.005 && (
                                 <Text
                                   style={[
                                     styles.metaText,
                                     { color: c.success },
                                   ]}
                                 >
-                                  +$
-                                  {Number(item.snowball_minimum_boost).toFixed(
-                                    2,
-                                  )}{" "}
-                                  snowball rollover
+                                  Includes ${forecastRollover.toFixed(2)} rollover
                                 </Text>
                               )}
                           </View>

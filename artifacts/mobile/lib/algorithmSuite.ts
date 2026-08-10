@@ -1295,8 +1295,8 @@ function buildSafeCushionDetails(
       ? `Lowest on ${lowestLabel}`
       : `Below floor on ${lowestLabel}`;
   const calendarHint = facts.lowestDay
-    ? `Monthly will point you to ${formatMonthDay(input, facts.lowestDay)}, where the balance is lowest.`
-    : "Monthly will show the first date that starts to pressure your cushion.";
+    ? `Forecast will point you to ${formatMonthDay(input, facts.lowestDay)}, where the balance is lowest.`
+    : "Forecast will show the first date that starts to pressure your cushion.";
   const topReason = status === "safe"
     ? `Your lowest forecast stays $${facts.safeCushionAmount.toFixed(0)} above the $${input.safetyFloor.toFixed(0)} floor.`
     : status === "watch"

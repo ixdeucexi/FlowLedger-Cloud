@@ -152,7 +152,7 @@ function CalendarHeader({
   return (
     <View style={[styles.pageHeader, compact && styles.pageHeaderCompact]}>
       <View style={styles.pageHeaderCopy}>
-        <Text accessibilityRole="header" style={styles.pageTitle}>Calendar</Text>
+        <Text accessibilityRole="header" style={styles.pageTitle}>Forecast</Text>
         <Text style={styles.pageSubtitle}>
           View your month at a glance. Click any day to see details.
         </Text>

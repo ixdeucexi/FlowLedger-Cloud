@@ -74,7 +74,7 @@ export function FeedbackManageModal({ feedback, busy, onClose, onAction }: Feedb
               maxLength={1000}
               multiline
               textAlignVertical="top"
-              placeholder="Example: We fixed the Monthly balance calculation."
+              placeholder="Example: We fixed the Forecast balance calculation."
               placeholderTextColor={c.mutedForeground}
               style={[styles.noteInput, { color: c.foreground, backgroundColor: c.muted, borderColor: c.border }]}
             />

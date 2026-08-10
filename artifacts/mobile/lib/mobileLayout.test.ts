@@ -16,10 +16,10 @@ test("tab labels shrink under enlarged-text viewport pressure", () => {
 
 test("long tab labels use readable compact names under zoom pressure", () => {
   assert.equal(tabBarDisplayLabel("Dashboard", 260), "Home");
-  assert.equal(tabBarDisplayLabel("Monthly", 260), "Month");
+  assert.equal(tabBarDisplayLabel("Forecast", 260), "Forecast");
   assert.equal(tabBarDisplayLabel("Activity", 260), "Activity");
   assert.equal(tabBarDisplayLabel("Dashboard", 312), "Home");
-  assert.equal(tabBarDisplayLabel("Monthly", 330), "Month");
+  assert.equal(tabBarDisplayLabel("Forecast", 330), "Forecast");
   assert.equal(tabBarDisplayLabel("Dashboard", 340), "Dashboard");
   assert.equal(tabBarDisplayLabel("Dashboard", 360), "Dashboard");
 });

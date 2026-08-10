@@ -601,10 +601,11 @@ export default function MonthlyScreen() {
     const occurrenceDate = `${selectedYear}-${String(month + 1).padStart(2, "0")}-${String(selectedDay).padStart(2, "0")}`;
     return monthBills.filter(bill => {
       if (!getBillOccurrencesInMonth(bill, month, selectedYear).includes(selectedDay)) return false;
+      if (bill.is_debt && selectedDebtPayments.some(payment => payment.event.sourceId === bill.id)) return false;
       const match = billOccurrenceMatches.get(occurrenceKey(bill.id, occurrenceDate));
       return !match || match.settlement === "partial";
     });
-  }, [monthBills, billOccurrenceMatches, getBillOccurrencesInMonth, selectedDay, month, selectedYear]);
+  }, [monthBills, billOccurrenceMatches, getBillOccurrencesInMonth, selectedDebtPayments, selectedDay, month, selectedYear]);
 
   const movedInByBillId = useMemo(() => {
     if (!selectedDate) return new Map<string, BillDateMove>();
@@ -1136,7 +1137,7 @@ export default function MonthlyScreen() {
     const itemLabel = bill.is_debt ? "debt" : "bill";
     setDayConfirmation({
       title: `Delete ${bill.is_debt ? "Debt" : "Bill"}`,
-      message: `Delete "${bill.name}" completely? This removes it from Bills and Monthly. Existing Activity entries stay for history.`,
+      message: `Delete "${bill.name}" completely? This removes it from Bills and Forecast. Existing Activity entries stay for history.`,
       confirmText: "Delete",
       destructive: true,
       onConfirm: async () => {
@@ -1177,7 +1178,7 @@ export default function MonthlyScreen() {
   const handleDeleteGoalFromDay = useCallback((goalId: string, goalName: string) => {
     setDayConfirmation({
       title: "Delete Bucket",
-      message: `Delete "${goalName}"? This removes the bucket from Monthly and your plan.`,
+      message: `Delete "${goalName}"? This removes the bucket from Forecast and your plan.`,
       confirmText: "Delete bucket",
       destructive: true,
       onConfirm: async () => {
@@ -1194,7 +1195,7 @@ export default function MonthlyScreen() {
   const openEditBucket = useCallback((goalId: string) => {
     const bucket = goals.find(goal => goal.id === goalId && goal.goal_type === "planned_expense");
     if (!bucket) {
-      Alert.alert("Bucket not found", "Refresh Monthly and try again.");
+      Alert.alert("Bucket not found", "Refresh Forecast and try again.");
       return;
     }
     setSelectedDate(null);
@@ -1459,7 +1460,7 @@ export default function MonthlyScreen() {
       <View style={[styles.header, isDesktop && styles.desktopHeader, { paddingTop: insets.top + 12 + webTopPad }]}>
         <View>
           <Text style={[styles.calendarBrand, { color: c.primary }]}>FLOWLEDGER ALGO</Text>
-          <Text style={[styles.calendarScreenLabel, { color: c.foreground }]}>Calendar</Text>
+          <Text style={[styles.calendarScreenLabel, { color: c.foreground }]}>Forecast</Text>
           {isFuture && <Text style={[styles.forecastTag, { color: c.primary }]}>Forecast Mode</Text>}
         </View>
         <View style={styles.headerActions}>
@@ -2475,7 +2476,7 @@ export default function MonthlyScreen() {
           >
             <View style={styles.monthSearchHeader}>
               <View>
-                <Text style={[styles.monthSearchEyebrow, { color: c.primary }]}>Calendar search</Text>
+                <Text style={[styles.monthSearchEyebrow, { color: c.primary }]}>Forecast search</Text>
                 <Text style={[styles.monthSearchTitle, { color: c.foreground }]}>Jump to month</Text>
               </View>
               <Pressable

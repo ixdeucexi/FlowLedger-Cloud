@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { allocateSnowballExtra, diffAppliedSnowballAllocations, effectiveDebtMinimum, monthlyDebtAmount, monthlyInterestCharge, orderDebts, projectSnowballMonth, scheduledDebtPaymentAmount, simulateSnowballPayoff, type SnowballDebtInput } from "./snowball";
+import { allocateSnowballExtra, diffAppliedSnowballAllocations, effectiveDebtMinimum, monthlyDebtAmount, monthlyInterestCharge, orderDebts, projectDatedSnowballMonth, projectSnowballMonth, remainingDatedDebtAllocations, scheduledDebtPaymentAmount, simulateSnowballPayoff, type SnowballDebtInput } from "./snowball";
 
 const debts: SnowballDebtInput[] = [
   { id: "large", name: "Large", balance: 1_000, minimum: 100, apr: 12, dueDay: 15, included: true },
@@ -55,6 +55,103 @@ describe("debt ordering and allocation", () => {
 });
 
 describe("payoff simulation", () => {
+  it("caps a dated payment and rolls the difference to the next debt on the same day", () => {
+    const result = projectDatedSnowballMonth({
+      debts: [
+        { id: "camera", name: "Camera", balance: 45, minimum: 67.27, apr: 0, dueDay: 11, included: true },
+        { id: "concert", name: "Concert", balance: 319, minimum: 35.41, apr: 0, dueDay: 29, included: true },
+      ],
+      method: "snowball",
+      month: 7,
+      year: 2026,
+    });
+
+    assert.deepEqual(
+      result.allocations.map(allocation => [allocation.date, allocation.targetBillId, allocation.kind, allocation.amount]),
+      [
+        ["2026-08-11", "camera", "required", 45],
+        ["2026-08-11", "concert", "rollover", 22.27],
+        ["2026-08-29", "concert", "required", 35.41],
+      ],
+    );
+    assert.equal(result.plannedPayment, 102.68);
+    assert.equal(result.unusedAmount, 0);
+  });
+
+  it("keeps a one-month adjustment in the dated total without exceeding the target balance", () => {
+    const result = projectDatedSnowballMonth({
+      debts: [
+        { id: "camera", name: "Camera", balance: 45, minimum: 103, apr: 0, dueDay: 11, included: true },
+        { id: "concert", name: "Concert", balance: 319, minimum: 35.41, apr: 0, dueDay: 29, included: true },
+      ],
+      method: "snowball",
+      month: 7,
+      year: 2026,
+    });
+
+    assert.deepEqual(
+      result.allocations.slice(0, 2).map(allocation => [allocation.targetBillId, allocation.amount, allocation.date]),
+      [
+        ["camera", 45, "2026-08-11"],
+        ["concert", 58, "2026-08-11"],
+      ],
+    );
+    assert.equal(result.plannedPayment, 138.41);
+  });
+
+  it("processes same-day required payments before cascading rollover", () => {
+    const result = projectDatedSnowballMonth({
+      debts: [
+        { id: "a", name: "A", balance: 10, minimum: 25, apr: 0, dueDay: 10, included: true },
+        { id: "b", name: "B", balance: 20, minimum: 20, apr: 0, dueDay: 10, included: true },
+        { id: "c", name: "C", balance: 100, minimum: 10, apr: 0, dueDay: 20, included: true },
+      ],
+      method: "snowball",
+      month: 7,
+      year: 2026,
+    });
+
+    assert.deepEqual(
+      result.allocations.slice(0, 3).map(allocation => [allocation.targetBillId, allocation.kind, allocation.amount]),
+      [["a", "required", 10], ["b", "required", 20], ["c", "rollover", 15]],
+    );
+  });
+
+  it("returns unused dated money to cash after every eligible debt is paid", () => {
+    const result = projectDatedSnowballMonth({
+      debts: [
+        { id: "only", name: "Only", balance: 20, minimum: 50, apr: 0, dueDay: 10, included: true },
+      ],
+      method: "snowball",
+      month: 7,
+      year: 2026,
+    });
+
+    assert.equal(result.plannedPayment, 20);
+    assert.equal(result.unusedAmount, 30);
+    assert.equal(result.allocations[0]?.amount, 20);
+  });
+
+  it("removes a matched parent payment from every child allocation without double-counting cash", () => {
+    const plan = projectDatedSnowballMonth({
+      debts: [
+        { id: "camera", name: "Camera", balance: 45, minimum: 103, apr: 0, dueDay: 11, included: true },
+        { id: "concert", name: "Concert", balance: 319, minimum: 35.41, apr: 0, dueDay: 29, included: true },
+      ],
+      method: "snowball",
+      month: 7,
+      year: 2026,
+    });
+    const remaining = remainingDatedDebtAllocations(plan.allocations, [{
+      sourceType: "bill",
+      billId: "camera",
+      date: "2026-08-11",
+      amount: 103,
+    }]);
+
+    assert.deepEqual(remaining.map(allocation => [allocation.targetBillName, allocation.amount]), [["Concert", 35.41]]);
+  });
+
   it("keeps paying minimum payments on all active debts", () => {
     const result = projectSnowballMonth({
       debts,

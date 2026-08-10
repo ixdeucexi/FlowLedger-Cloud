@@ -128,6 +128,7 @@ export function DesktopBillsDebtsPage() {
     getBillMonthlyTotal,
     getBillEffectiveMonthlyTotal,
     getPaidAmount,
+    getDebtPlanForMonth,
     previewDebtSnowball,
   } = useBudget();
   const isDebt = params.view === "debt";
@@ -335,6 +336,7 @@ export function DesktopBillsDebtsPage() {
             onPlan={() => router.push("/snowball-plan" as never)}
             getOccurrences={getBillOccurrencesInMonth}
             preview={previewDebtSnowball(now.getMonth(), now.getFullYear())}
+            datedPlan={getDebtPlanForMonth(now.getMonth(), now.getFullYear())}
             now={now}
           />
         ) : (
@@ -801,6 +803,7 @@ function DebtsDesktop({
   onPlan,
   getOccurrences,
   preview,
+  datedPlan,
   now,
 }: {
   bills: Bill[];
@@ -815,6 +818,7 @@ function DebtsDesktop({
   onPlan: () => void;
   getOccurrences: (bill: Bill, month: number, year: number) => number[];
   preview: ReturnType<ReturnType<typeof useBudget>["previewDebtSnowball"]>;
+  datedPlan: ReturnType<ReturnType<typeof useBudget>["getDebtPlanForMonth"]>;
   now: Date;
 }) {
   const active = bills.filter((bill) => bill.balance > 0.005);
@@ -822,10 +826,12 @@ function DebtsDesktop({
   const ordered = orderActiveDebtsForStrategy(active, strategy);
   const rank = new Map(ordered.map((bill, index) => [bill.id, index + 1]));
   const total = active.reduce((sum, bill) => sum + bill.balance, 0);
-  const monthly = active.reduce(
-    (sum, bill) =>
-      sum + effectiveDebtMinimum(bill.amount, bill.snowball_minimum_boost ?? 0),
+  const monthly = datedPlan?.plannedPayment ?? active.reduce(
+    (sum, bill) => sum + effectiveDebtMinimum(bill.amount, bill.snowball_minimum_boost ?? 0),
     0,
+  );
+  const forecastPaymentByDebtId = new Map(
+    datedPlan?.payments.map(payment => [payment.billId, payment.totalPayment]) ?? [],
   );
   const nextDue = active
     .flatMap((bill) => {
@@ -883,9 +889,9 @@ function DebtsDesktop({
           icon="credit-card"
         />
         <SummaryMetricCard
-          label="Monthly Payments"
+          label="Forecast Payments"
           value={money(monthly)}
-          detail="Minimums and rollovers"
+          detail="Same schedule as Forecast"
           icon="calendar"
           tone="green"
         />
@@ -1018,7 +1024,7 @@ function DebtsDesktop({
             Interest Rate
           </Text>
           <Text style={[table.headerText, styles.debtColMinimum]}>
-            Min. Payment
+            Forecast Payment
           </Text>
           <Text style={[table.headerText, styles.debtColDue]}>Due Date</Text>
           <Text style={[table.headerText, styles.debtColStatus]}>
@@ -1072,12 +1078,8 @@ function DebtsDesktop({
                   {bill.interest_rate.toFixed(2)}%
                 </Text>
                 <Text style={[table.cellStrong, styles.debtColMinimum]}>
-                  {money(
-                    effectiveDebtMinimum(
-                      bill.amount,
-                      bill.snowball_minimum_boost ?? 0,
-                    ),
-                  )}
+                  {money(forecastPaymentByDebtId.get(bill.id)
+                    ?? effectiveDebtMinimum(bill.amount, bill.snowball_minimum_boost ?? 0))}
                 </Text>
                 <Text style={[table.cellText, styles.debtColDue]}>
                   {next ? displayDate(next.year, next.month, next.day) : "—"}
