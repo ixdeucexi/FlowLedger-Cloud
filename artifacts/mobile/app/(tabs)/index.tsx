@@ -69,7 +69,6 @@ function pendingInsightStorageKey(userId: string, householdId: string): string {
 const DASHBOARD_THEMES = {
   dark: {
     screen: "#030712",
-    heading: "#f8fafc",
     hero: "rgba(2,6,23,0.42)",
     heroBorder: "rgba(148,163,184,0.14)",
     heroShadow: "#22d3ee",
@@ -92,7 +91,6 @@ const DASHBOARD_THEMES = {
   },
   light: {
     screen: "#f8fafc",
-    heading: "#0f172a",
     hero: "rgba(255,255,255,0.90)",
     heroBorder: "rgba(148,163,184,0.34)",
     heroShadow: "#64748b",
@@ -929,9 +927,6 @@ function MobileDashboardScreen() {
         <View style={styles.brandLockup}>
           <View style={[styles.brandMark, compactDashboardHeader && styles.brandMarkCompact]}>
             <Image source={FLOWLEDGER_LOGO} style={styles.brandMarkImage} resizeMode="cover" />
-          </View>
-          <View style={styles.brandCopy}>
-            <AppText numberOfLines={1} tone="title" style={[styles.heading, compactDashboardHeader && styles.headingCompact, { color: dashboardTheme.heading, textShadowColor: c.isDark ? "rgba(56,189,248,0.35)" : "transparent" }]}>FlowLedger Algo</AppText>
           </View>
         </View>
         <View style={styles.dashboardHeaderActions}>
@@ -1946,12 +1941,9 @@ const styles = StyleSheet.create({
   dashboardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 14, marginBottom: 18 },
   dashboardHeaderCompact: { gap: 9 },
   brandLockup: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1, minWidth: 0 },
-  brandCopy: { flex: 1, minWidth: 0 },
   brandMark: { width: 48, height: 48, borderRadius: 17, alignItems: "center", justifyContent: "center", overflow: "hidden", borderWidth: 1, borderColor: "rgba(96,165,250,0.35)", backgroundColor: "#020617", shadowColor: "#38bdf8", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 18, elevation: 9 },
   brandMarkCompact: { width: 40, height: 40, borderRadius: 14 },
   brandMarkImage: { width: "100%", height: "100%" },
-  heading:    { fontSize: 30, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.0, color: "#f8fafc", textShadowColor: "rgba(56,189,248,0.35)", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 12 },
-  headingCompact: { fontSize: 20, letterSpacing: -0.65 },
   dashboardHeaderActions: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8 },
   settingsHeaderButton: { width: 44, height: 44, borderWidth: 1, borderRadius: 15, alignItems: "center", justifyContent: "center" },
   discoveryHeaderBadge: { position: "absolute", right: -3, top: -3, minWidth: 16, height: 16, borderRadius: 8, alignItems: "center", justifyContent: "center", paddingHorizontal: 3 },
