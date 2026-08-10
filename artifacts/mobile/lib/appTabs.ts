@@ -41,12 +41,29 @@ export const APP_TABS = [
 
 export type AppTab = (typeof APP_TABS)[number];
 export type AppTabName = AppTab["name"];
+export type DesktopPlanningTabName = AppTabName | "debt";
+export type DesktopPlanningTab = {
+  name: DesktopPlanningTabName;
+  title: string;
+  icon: string;
+  pathname: string;
+  view?: "bills" | "debt";
+};
 
 export function appTabsForPlanning(zeroBasedBudgetEnabled: boolean) {
   const activityPresentation = planningTabPresentation(zeroBasedBudgetEnabled);
   return APP_TABS.map((tab) => tab.name === "transactions"
     ? { ...tab, ...activityPresentation }
     : tab);
+}
+
+export function desktopTabsForPlanning(zeroBasedBudgetEnabled: boolean): DesktopPlanningTab[] {
+  return appTabsForPlanning(zeroBasedBudgetEnabled).flatMap<DesktopPlanningTab>(tab => tab.name === "bills"
+    ? [
+      { ...tab, view: "bills" },
+      { name: "debt", title: "Debt", icon: "credit-card", pathname: "/(tabs)/bills", view: "debt" },
+    ]
+    : [tab]);
 }
 
 function normalizedPathname(pathname: string) {
@@ -59,4 +76,11 @@ function normalizedPathname(pathname: string) {
 export function isAppTabActive(tab: AppTabName, pathname: string) {
   const currentPath = normalizedPathname(pathname);
   return tab === "index" ? currentPath === "/" : currentPath === `/${tab}`;
+}
+
+export function isDesktopPlanningTabActive(tab: DesktopPlanningTabName, pathname: string, billView: string | null) {
+  const billsActive = isAppTabActive("bills", pathname);
+  if (tab === "debt") return billsActive && billView === "debt";
+  if (tab === "bills") return billsActive && billView !== "debt";
+  return isAppTabActive(tab, pathname);
 }

@@ -18,6 +18,10 @@ export type NotificationCenterState = {
 
 export const EMPTY_NOTIFICATION_STATE: NotificationCenterState = { readIds: [], dismissedIds: [] };
 
+export function isBillEligibleForDueNotification(bill: { is_debt: boolean; balance: number }) {
+  return !bill.is_debt || Number(bill.balance) > 0.009;
+}
+
 function uniqueStrings(value: unknown) {
   if (!Array.isArray(value)) return [];
   return [...new Set(value.filter(item => typeof item === "string" && item.length <= 240))].slice(-500);

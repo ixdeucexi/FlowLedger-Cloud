@@ -99,6 +99,7 @@ function buildOverdueOccurrences({ bills, overrides, moves, today }) {
   const overrideByBill = new Map((overrides || []).map(override => [override.bill_id, override]));
 
   return (bills || []).flatMap(bill => {
+    if (bill.is_debt && Number(bill.balance) <= 0.009) return [];
     const override = overrideByBill.get(bill.id);
     const days = occurrenceDays(bill, override, moves, month, year);
     const amount = plannedOccurrenceAmount(bill, override, days.length);

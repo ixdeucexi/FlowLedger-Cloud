@@ -34,7 +34,7 @@ module.exports = async function overdueBillNotifications(req, res) {
     if (membershipError) throw membershipError;
     const householdIds = unique((memberships || []).map(row => row.household_id));
 
-    const billSelect = "id,user_id,household_id,name,amount,due_day,day_of_week,next_payment_date,start_date,end_date,is_debt,is_recurring,frequency,snowball_minimum_boost";
+    const billSelect = "id,user_id,household_id,name,amount,balance,due_day,day_of_week,next_payment_date,start_date,end_date,is_debt,is_recurring,frequency,snowball_minimum_boost";
     const householdBillsRequest = householdIds.length
       ? db.from("bills").select(billSelect).in("household_id", householdIds)
       : Promise.resolve({ data: [], error: null });

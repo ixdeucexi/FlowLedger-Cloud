@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   dismissNotification,
+  isBillEligibleForDueNotification,
   markAllNotificationsRead,
   markNotificationRead,
   normalizeNotificationState,
@@ -10,6 +11,13 @@ import {
   visibleNotifications,
   type InAppNotification,
 } from "./notificationCenter";
+
+test("closed debts never produce due notifications", () => {
+  assert.equal(isBillEligibleForDueNotification({ is_debt: true, balance: 0 }), false);
+  assert.equal(isBillEligibleForDueNotification({ is_debt: true, balance: 0.009 }), false);
+  assert.equal(isBillEligibleForDueNotification({ is_debt: true, balance: 25 }), true);
+  assert.equal(isBillEligibleForDueNotification({ is_debt: false, balance: 0 }), true);
+});
 
 const notifications: InAppNotification[] = [
   { id: "review:1", type: "review", title: "Review", body: "One item", timestamp: "2026-08-05T12:00:00.000Z", route: "/review", tone: "watch" },

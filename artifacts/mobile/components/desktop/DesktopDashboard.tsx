@@ -802,7 +802,7 @@ export function DesktopDashboard() {
   );
   const openBills = (filter: "bills" | "debt" = "bills") => {
     setDashboardFilter(filter);
-    go("/(tabs)/bills");
+    go("/(tabs)/bills", { view: filter });
   };
   const askFlo = (prompt: string) => go("/(tabs)/flo", { prompt });
 

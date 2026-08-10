@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import { usePathname, useRouter } from "expo-router";
+import { useGlobalSearchParams, usePathname, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Image,
@@ -20,9 +20,9 @@ import { useAppDiscovery } from "@/context/AppDiscoveryContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import {
-  appTabsForPlanning,
-  isAppTabActive,
-  type AppTabName,
+  desktopTabsForPlanning,
+  isDesktopPlanningTabActive,
+  type DesktopPlanningTabName,
 } from "@/lib/appTabs";
 import { readInterfacePreferences, updateInterfacePreferences } from "@/lib/interfacePreferences";
 
@@ -32,12 +32,14 @@ type NavigationItem = {
   label: string;
   icon: FeatherName;
   pathname: string;
-  tab: AppTabName;
+  tab: DesktopPlanningTabName;
+  view?: "bills" | "debt";
 };
 
 export function DesktopChrome({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const params = useGlobalSearchParams<{ view?: string }>();
   const { width } = useWindowDimensions();
   const { signOut, user } = useAuth();
   const { activeHousehold, settings } = useBudget();
@@ -62,11 +64,12 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
 
   const navigation = useMemo<NavigationItem[]>(
     () =>
-      appTabsForPlanning(settings.zeroBasedBudgetEnabled).map((tab) => ({
+      desktopTabsForPlanning(settings.zeroBasedBudgetEnabled).map((tab) => ({
         label: tab.title,
         icon: tab.icon as FeatherName,
         pathname: tab.pathname,
         tab: tab.name,
+        view: tab.view,
       })),
     [settings.zeroBasedBudgetEnabled],
   );
@@ -150,14 +153,18 @@ export function DesktopChrome({ children }: { children: React.ReactNode }) {
           </View>
           {!isCollapsed ? <Text style={styles.navEyebrow}>Workspace</Text> : null}
           {navigation.map((item) => {
-            const active = isAppTabActive(item.tab, pathname);
+            const active = isDesktopPlanningTabActive(item.tab, pathname, params.view ?? null);
             return (
               <Pressable
                 key={item.tab}
                 accessibilityRole="link"
                 accessibilityLabel={item.label}
                 accessibilityState={{ selected: active }}
-                onPress={() => router.push(item.pathname as never)}
+                onPress={() => {
+                  router.push(item.view
+                    ? { pathname: item.pathname, params: { view: item.view } } as never
+                    : item.pathname as never);
+                }}
                 style={({ pressed }) => [
                   styles.navItem,
                   isCollapsed && styles.navItemCollapsed,
