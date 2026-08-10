@@ -22,11 +22,14 @@ import Svg, {
 } from "react-native-svg";
 
 import { AddBillModal } from "@/components/AddBillModal";
+import { DashboardCustomizer } from "@/components/DashboardCustomizer";
+import { DashboardUtilityWidgets } from "@/components/DashboardUtilityWidgets";
 import { DesktopAddMenu } from "@/components/desktop/DesktopAddMenu";
 import { GoalModal } from "@/components/GoalModal";
 import { IncomeModal } from "@/components/IncomeModal";
 import { useAuth } from "@/context/AuthContext";
 import { useBudget, type Bill, type Goal, type IncomeItem } from "@/context/BudgetContext";
+import { useDashboardLayoutPreferences } from "@/hooks/useDashboardLayoutPreferences";
 import { isActiveTransaction } from "@/lib/billMatching";
 import {
   categoryBudgetStorageKey,
@@ -37,6 +40,9 @@ import {
 import { buildDashboardFinancialModel } from "@/lib/dashboardFinancialModel";
 import { desktopActivityDestination, isDesktopAddAction, type DesktopAddAction } from "@/lib/desktopActions";
 import { WIDE_DESKTOP_BREAKPOINT } from "@/lib/desktopExperience";
+import { transactionDebt } from "@/lib/transactionDebt";
+import { buildReviewQueue } from "@/lib/reviewCenter";
+import { buildTodaysDecisions } from "@/lib/todaysDecisions";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 type Accent = "cyan" | "purple" | "green" | "amber" | "blue" | "neutral";
@@ -56,8 +62,8 @@ type UpcomingBill = {
 
 const BRAND = {
   background: "#03040b",
-  surface: "rgba(10, 16, 36, 0.92)",
-  surfaceStrong: "rgba(12, 20, 44, 0.96)",
+  surface: "rgba(10, 16, 36, 0.96)",
+  surfaceStrong: "rgba(12, 20, 44, 0.985)",
   text: "#f8fafc",
   muted: "#94a3b8",
   subtle: "#64748b",
@@ -497,6 +503,7 @@ export function DesktopDashboard() {
     incomes,
     pendingBankTransactions,
     pendingPlanMatches,
+    transactions,
     selectedYear,
     setDashboardFilter,
     settings,
@@ -512,6 +519,8 @@ export function DesktopDashboard() {
   const [billEditor, setBillEditor] = useState<{ bill: Bill | null; debt: boolean } | null>(null);
   const [goalEditor, setGoalEditor] = useState<Goal | null | undefined>(undefined);
   const [incomeEditorOpen, setIncomeEditorOpen] = useState(false);
+  const [customizerOpen, setCustomizerOpen] = useState(false);
+  const { layout: dashboardLayout, updateLayout: updateDashboardLayout, resetLayout: resetDashboardLayout } = useDashboardLayoutPreferences();
 
   const openAddAction = useCallback((action: DesktopAddAction) => {
     setPageAddOpen(false);
@@ -717,6 +726,49 @@ export function DesktopDashboard() {
         .slice(0, 4),
     [monthTransactions],
   );
+  const reviewCount = useMemo(
+    () => buildReviewQueue(
+      transactions,
+      `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`,
+    ).length,
+    [now, transactions],
+  );
+  const snowballTarget = useMemo(
+    () => bills
+      .filter(bill => bill.is_debt && bill.balance > 0.005 && bill.include_in_snowball !== false)
+      .sort((left, right) => left.balance - right.balance || left.priority - right.priority)[0] ?? null,
+    [bills],
+  );
+  const nearlyCompleteGoal = useMemo(
+    () => activeGoals
+      .filter(goal => goal.target_amount > 0 && goal.current_amount < goal.target_amount)
+      .sort((left, right) => (right.current_amount / right.target_amount) - (left.current_amount / left.target_amount))[0] ?? null,
+    [activeGoals],
+  );
+  const todayDecisions = useMemo(() => {
+    const next = upcoming[0];
+    const nextDate = next ? new Date(next.year, next.month, next.day) : null;
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const daysAway = nextDate ? Math.max(0, Math.round((nextDate.getTime() - todayStart.getTime()) / 86_400_000)) : 0;
+    const lowestDate = algorithmSuite.safeCushion.lowestDay
+      ? new Date(selectedYear, currentMonth, algorithmSuite.safeCushion.lowestDay).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+      : null;
+    return buildTodaysDecisions({
+      reviewCount,
+      lowestBalance: algorithmSuite.safeCushion.lowestBalance,
+      lowestDate,
+      safetyFloor: settings.safety_floor,
+      safeToSpend: algorithmSuite.safeCushion.amount,
+      nextBill: next && nextDate ? {
+        name: next.name,
+        amount: next.amount,
+        dateLabel: daysAway === 0 ? "today" : daysAway === 1 ? "tomorrow" : nextDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        daysAway,
+      } : null,
+      snowballTarget: snowballTarget ? { name: snowballTarget.name, balance: snowballTarget.balance } : null,
+      goal: nearlyCompleteGoal ? { name: nearlyCompleteGoal.name, current: nearlyCompleteGoal.current_amount, target: nearlyCompleteGoal.target_amount } : null,
+    });
+  }, [algorithmSuite.safeCushion, currentMonth, nearlyCompleteGoal, now, reviewCount, selectedYear, settings.safety_floor, snowballTarget, upcoming]);
   const available = algorithmSuite.safeCushion.amount;
   const progress = algorithmSuite.stability;
   const nextMilestone =
@@ -751,6 +803,15 @@ export function DesktopDashboard() {
           <Text style={styles.greetingSub}>Here&apos;s your financial overview for today.</Text>
         </View>
         <View style={styles.pageActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Customize dashboard"
+            onPress={() => setCustomizerOpen(true)}
+            style={({ pressed }) => [styles.pageSettingsButton, { opacity: pressed ? 0.72 : 1 }]}
+          >
+            <Feather name="sliders" size={15} color="#b7c3d7" />
+            <Text style={styles.pageSettingsText}>Customize</Text>
+          </Pressable>
           <View style={styles.pageAddAnchor}>
             <Pressable
               accessibilityRole="button"
@@ -818,6 +879,13 @@ export function DesktopDashboard() {
           onPress={() => go("/(tabs)/more", { section: "goals" })}
         />
       </View>
+
+      <DashboardUtilityWidgets
+        layout={dashboardLayout}
+        decisions={todayDecisions}
+        reviewCount={reviewCount}
+        onNavigate={go}
+      />
 
       <View style={[styles.primaryGrid, !isPrimaryRow && styles.primaryGridStacked]}>
         <View style={styles.primaryColumn}>
@@ -908,6 +976,7 @@ export function DesktopDashboard() {
                 {recentActivity.length ? (
                   recentActivity.map((transaction, index) => {
                     const positive = transaction.amount >= 0;
+                    const selectedDebt = transactionDebt(transaction, bills);
                     return (
                       <Pressable
                         key={transaction.id}
@@ -947,6 +1016,12 @@ export function DesktopDashboard() {
                               ? "Needs review"
                               : transaction.category || (positive ? "Income" : "Spending")}
                           </Text>
+                          {selectedDebt ? (
+                            <View style={styles.activityDebtMeta}>
+                              <Feather name="credit-card" size={8} color={BRAND.purple} />
+                              <Text style={styles.activityDebtText} numberOfLines={1}>Applied to {selectedDebt.name}</Text>
+                            </View>
+                          ) : null}
                         </View>
                         <View style={styles.activityAmountWrap}>
                           <Text
@@ -1128,6 +1203,14 @@ export function DesktopDashboard() {
           </SurfaceCard>
         </View>
       </View>
+
+      <DashboardCustomizer
+        visible={customizerOpen}
+        layout={dashboardLayout}
+        onChange={updateDashboardLayout}
+        onReset={resetDashboardLayout}
+        onClose={() => setCustomizerOpen(false)}
+      />
 
       <View style={styles.detailGrid}>
         <SurfaceCard
@@ -1409,15 +1492,15 @@ const styles = StyleSheet.create({
   },
   greeting: {
     color: BRAND.text,
-    fontSize: 30,
-    lineHeight: 37,
+    fontSize: 32,
+    lineHeight: 39,
     fontFamily: "Inter_700Bold",
     letterSpacing: -0.8,
   },
   greetingSub: {
     color: BRAND.muted,
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 15,
+    lineHeight: 22,
     fontFamily: "Inter_500Medium",
     marginTop: 4,
   },
@@ -1445,7 +1528,7 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
   },
-  pageAddText: { color: "#ffffff", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
+  pageAddText: { color: "#ffffff", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   pageSettingsButton: {
     height: 40,
     borderRadius: 11,
@@ -1458,7 +1541,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(148,163,184,0.13)",
     backgroundColor: "rgba(15,23,42,0.72)",
   },
-  pageSettingsText: { color: "#cbd5e1", fontSize: 10, fontFamily: "Inter_700Bold" },
+  pageSettingsText: { color: "#cbd5e1", fontSize: 12, fontFamily: "Inter_700Bold" },
   cardPressable: { minWidth: 0 },
   card: {
     flex: 1,
@@ -1488,7 +1571,7 @@ const styles = StyleSheet.create({
   metricLabel: {
     flex: 1,
     color: "#c5cfdd",
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: 0.72,
   },
@@ -1502,8 +1585,8 @@ const styles = StyleSheet.create({
   },
   metricValue: {
     color: "#ffffff",
-    fontSize: 27,
-    lineHeight: 33,
+    fontSize: 29,
+    lineHeight: 35,
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: -0.7,
     marginTop: 6,
@@ -1512,8 +1595,8 @@ const styles = StyleSheet.create({
   metricVisual: { position: "absolute", right: -2, bottom: -3 },
   metricDetail: {
     flex: 1,
-    fontSize: 10,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 17,
     fontFamily: "Inter_600SemiBold",
     paddingBottom: 4,
     paddingRight: 76,
@@ -1539,21 +1622,21 @@ const styles = StyleSheet.create({
   accountHeader: { flexDirection: "row", alignItems: "flex-start", gap: 14 },
   cardEyebrow: {
     color: "#a8b5ca",
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: 0.8,
   },
   checkingValue: {
     color: "#ffffff",
-    fontSize: 34,
-    lineHeight: 40,
+    fontSize: 36,
+    lineHeight: 42,
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: -1.1,
     marginTop: 4,
   },
   accountMeta: {
     color: "#8292aa",
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: "Inter_500Medium",
     marginTop: 4,
   },
@@ -1573,7 +1656,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(159,92,255,0.25)",
     backgroundColor: "rgba(124,58,237,0.12)",
   },
-  accountPillText: { color: "#aab8cd", fontSize: 9, fontFamily: "Inter_700Bold" },
+  accountPillText: { color: "#aab8cd", fontSize: 11, fontFamily: "Inter_700Bold" },
   connectPill: { borderColor: "rgba(56, 189, 248, 0.28)", backgroundColor: "rgba(14, 165, 233, 0.12)" },
   accountBody: { flex: 1, flexDirection: "row", alignItems: "center", gap: 16, marginTop: 5, overflow: "hidden" },
   accountGlow: {
@@ -1605,7 +1688,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
   },
   accountInsight: { flex: 1, alignSelf: "flex-end", paddingBottom: 5 },
-  accountInsightLabel: { color: "#71829e", fontSize: 7, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.8, marginBottom: 6 },
+  accountInsightLabel: { color: "#71829e", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.8, marginBottom: 6 },
   balancePathWrap: {
     flex: 1,
     minWidth: 0,
@@ -1619,11 +1702,11 @@ const styles = StyleSheet.create({
   balancePathLabel: {
     flex: 1,
     color: "#71829e",
-    fontSize: 8,
+    fontSize: 11,
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: 0.7,
   },
-  savingsText: { color: "#76deb3", fontSize: 9, fontFamily: "Inter_700Bold" },
+  savingsText: { color: "#76deb3", fontSize: 11, fontFamily: "Inter_700Bold" },
   balanceBars: {
     height: 82,
     flexDirection: "row",
@@ -1644,7 +1727,7 @@ const styles = StyleSheet.create({
   },
   balancePathFooter: { marginTop: 8 },
   balanceSignal: { flexDirection: "row", alignItems: "center", gap: 6 },
-  balanceSignalText: { fontSize: 9, fontFamily: "Inter_700Bold" },
+  balanceSignalText: { fontSize: 11, fontFamily: "Inter_700Bold" },
   scoreSummary: {
     width: 170,
     alignItems: "center",
@@ -1657,24 +1740,24 @@ const styles = StyleSheet.create({
   scoreRingCenter: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
   scoreValue: {
     color: "#ffffff",
-    fontSize: 27,
-    lineHeight: 31,
+    fontSize: 29,
+    lineHeight: 33,
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: -1,
   },
   scoreLabel: {
     color: "#aab6cb",
-    fontSize: 7,
+    fontSize: 11,
     fontFamily: "Inter_800ExtraBold",
     letterSpacing: 0.9,
     marginTop: 1,
   },
-  scoreStatus: { color: "#63e6b1", fontSize: 10, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
+  scoreStatus: { color: "#63e6b1", fontSize: 12, fontFamily: "Inter_800ExtraBold", marginTop: 1 },
   scoreUnderline: { width: 58, height: 3, borderRadius: 2, backgroundColor: "#2dd4bf", marginTop: 5 },
   scoreReason: {
     color: "#7e8ca3",
-    fontSize: 8,
-    lineHeight: 12,
+    fontSize: 11,
+    lineHeight: 14,
     textAlign: "center",
     fontFamily: "Inter_500Medium",
     marginTop: 4,
@@ -1682,10 +1765,10 @@ const styles = StyleSheet.create({
   recentCardWrap: { minHeight: 276 },
   sectionCardContent: { flex: 1, padding: 19 },
   sectionHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 12 },
-  sectionTitle: { color: BRAND.text, fontSize: 16, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.3 },
-  sectionSubtitle: { color: "#77879f", fontSize: 9, fontFamily: "Inter_500Medium", marginTop: 3 },
+  sectionTitle: { color: BRAND.text, fontSize: 18, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.3 },
+  sectionSubtitle: { color: "#77879f", fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 3 },
   sectionAction: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 4 },
-  sectionActionText: { color: "#91a7c6", fontSize: 9, fontFamily: "Inter_700Bold" },
+  sectionActionText: { color: "#91a7c6", fontSize: 11, fontFamily: "Inter_700Bold" },
   activityList: { flex: 1 },
   activityRow: { minHeight: 42, flexDirection: "row", alignItems: "center", gap: 9 },
   rowDivider: { borderTopWidth: 1, borderTopColor: "rgba(148,163,184,0.09)" },
@@ -1697,11 +1780,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  activityName: { color: "#e8eef8", fontSize: 10, fontFamily: "Inter_700Bold" },
-  activityMeta: { color: "#6f7d94", fontSize: 8, fontFamily: "Inter_500Medium", marginTop: 2 },
+  activityName: { color: "#e8eef8", fontSize: 12, fontFamily: "Inter_700Bold" },
+  activityMeta: { color: "#6f7d94", fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
+  activityDebtMeta: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 },
+  activityDebtText: { flexShrink: 1, color: BRAND.purple, fontSize: 11, fontFamily: "Inter_700Bold" },
   activityAmountWrap: { alignItems: "flex-end" },
-  activityAmount: { fontSize: 10, fontFamily: "Inter_800ExtraBold" },
-  activityDate: { color: "#627087", fontSize: 8, fontFamily: "Inter_500Medium", marginTop: 2 },
+  activityAmount: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
+  activityDate: { color: "#627087", fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
   stabilityWrap: { minHeight: 362 },
   stabilityCard: { flex: 1, padding: 16 },
   stabilityHeader: { flexDirection: "row", alignItems: "center", gap: 11 },
@@ -1715,8 +1800,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(159,92,255,0.24)",
     backgroundColor: "rgba(124,58,237,0.14)",
   },
-  stabilityEyebrow: { color: "#55d7e8", fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.9 },
-  stabilityTitle: { color: "#f3f6fb", fontSize: 15, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
+  stabilityEyebrow: { color: "#55d7e8", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.9 },
+  stabilityTitle: { color: "#f3f6fb", fontSize: 17, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
   statusBadge: {
     height: 26,
     borderRadius: 999,
@@ -1730,7 +1815,7 @@ const styles = StyleSheet.create({
   statusWatch: { borderColor: "rgba(251,191,36,0.25)", backgroundColor: "rgba(251,191,36,0.07)" },
   statusSafe: { borderColor: "rgba(34,197,94,0.24)", backgroundColor: "rgba(34,197,94,0.07)" },
   statusDot: { width: 5, height: 5, borderRadius: 3 },
-  statusText: { color: "#d5deea", fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.5 },
+  statusText: { color: "#d5deea", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.5 },
   stabilitySummary: {
     minHeight: 60,
     flexDirection: "row",
@@ -1739,13 +1824,13 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   protectedMetric: { flexDirection: "row", alignItems: "flex-end", gap: 8 },
-  protectedValue: { color: "#ffffff", fontSize: 29, lineHeight: 33, fontFamily: "Inter_800ExtraBold", letterSpacing: -1 },
-  protectedUnit: { color: "#dbe5f3", fontSize: 12, fontFamily: "Inter_700Bold" },
-  protectedSub: { color: "#718097", fontSize: 8, fontFamily: "Inter_500Medium", marginTop: 2 },
+  protectedValue: { color: "#ffffff", fontSize: 31, lineHeight: 35, fontFamily: "Inter_800ExtraBold", letterSpacing: -1 },
+  protectedUnit: { color: "#dbe5f3", fontSize: 14, fontFamily: "Inter_700Bold" },
+  protectedSub: { color: "#718097", fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
   summaryDivider: { width: 1, height: 40, backgroundColor: "rgba(148,163,184,0.12)" },
   summaryMetric: { flex: 1, minWidth: 0 },
-  summaryLabel: { color: "#49cae1", fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7 },
-  summaryValue: { color: "#e7edf7", fontSize: 11, fontFamily: "Inter_700Bold", marginTop: 5 },
+  summaryLabel: { color: "#49cae1", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7 },
+  summaryValue: { color: "#e7edf7", fontSize: 13, fontFamily: "Inter_700Bold", marginTop: 5 },
   stabilityCallout: {
     minHeight: 34,
     borderRadius: 11,
@@ -1759,12 +1844,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   calloutIcon: { width: 22, height: 22, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(34,197,94,0.1)" },
-  stabilityCalloutText: { flex: 1, color: "#7be2b7", fontSize: 9, lineHeight: 13, fontFamily: "Inter_600SemiBold" },
+  stabilityCalloutText: { flex: 1, color: "#7be2b7", fontSize: 11, lineHeight: 15, fontFamily: "Inter_600SemiBold" },
   pathHeader: { flexDirection: "row", alignItems: "center", marginTop: 11, marginBottom: 6 },
-  pathLabel: { flex: 1, color: "#9aa9bf", fontSize: 9, fontFamily: "Inter_700Bold" },
-  pathPercent: { color: "#d9e1ee", fontSize: 9, fontFamily: "Inter_800ExtraBold" },
+  pathLabel: { flex: 1, color: "#9aa9bf", fontSize: 11, fontFamily: "Inter_700Bold" },
+  pathPercent: { color: "#d9e1ee", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   pathMilestones: { flexDirection: "row", justifyContent: "space-between", marginTop: 6 },
-  pathMilestone: { color: "#65758e", fontSize: 8, fontFamily: "Inter_600SemiBold" },
+  pathMilestone: { color: "#65758e", fontSize: 11, fontFamily: "Inter_600SemiBold" },
   nextAction: {
     minHeight: 53,
     borderRadius: 12,
@@ -1778,8 +1863,8 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   nextActionIcon: { width: 31, height: 31, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(159,92,255,0.16)" },
-  nextActionLabel: { color: "#c8a8ff", fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7 },
-  nextActionText: { color: "#e9ddff", fontSize: 10, lineHeight: 14, fontFamily: "Inter_700Bold", marginTop: 2 },
+  nextActionLabel: { color: "#c8a8ff", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7 },
+  nextActionText: { color: "#e9ddff", fontSize: 12, lineHeight: 16, fontFamily: "Inter_700Bold", marginTop: 2 },
   floButton: {
     height: 31,
     borderRadius: 10,
@@ -1789,7 +1874,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 10,
   },
-  floButtonText: { color: "#ffffff", fontSize: 9, fontFamily: "Inter_800ExtraBold" },
+  floButtonText: { color: "#ffffff", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   howItWorks: {
     minHeight: 30,
     borderRadius: 10,
@@ -1802,7 +1887,7 @@ const styles = StyleSheet.create({
     gap: 7,
     marginTop: 7,
   },
-  howItWorksText: { color: "#9db2d0", fontSize: 9, fontFamily: "Inter_700Bold" },
+  howItWorksText: { color: "#9db2d0", fontSize: 11, fontFamily: "Inter_700Bold" },
   quickCardWrap: { minHeight: 153 },
   quickGrid: { flexDirection: "row", gap: 9 },
   quickAction: {
@@ -1815,7 +1900,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   quickIcon: { width: 33, height: 33, borderRadius: 11, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  quickLabel: { color: "#d3dbea", fontSize: 8, fontFamily: "Inter_700Bold", marginTop: 6, textAlign: "center" },
+  quickLabel: { color: "#d3dbea", fontSize: 11, fontFamily: "Inter_700Bold", marginTop: 6, textAlign: "center" },
   quickFooter: { flexDirection: "row", gap: 8, marginTop: 10 },
   quickFooterButton: {
     flex: 1,
@@ -1828,7 +1913,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
   },
-  quickFooterText: { color: "#9aa9be", fontSize: 8, fontFamily: "Inter_700Bold" },
+  quickFooterText: { color: "#9aa9be", fontSize: 11, fontFamily: "Inter_700Bold" },
   detailGrid: { flexDirection: "row", flexWrap: "wrap", alignItems: "stretch", gap: 16 },
   timelineList: { flex: 1 },
   timelineRow: { minHeight: 55, flexDirection: "row", alignItems: "center", gap: 10 },
@@ -1842,33 +1927,33 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  timelineMonth: { color: "#d6a92d", fontSize: 6, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.5 },
-  timelineDay: { color: "#f5f7fb", fontSize: 14, lineHeight: 16, fontFamily: "Inter_800ExtraBold" },
-  timelineName: { color: "#e5ecf6", fontSize: 10, fontFamily: "Inter_700Bold" },
-  timelineMeta: { color: "#6f7d94", fontSize: 8, fontFamily: "Inter_500Medium", marginTop: 2 },
-  timelineAmount: { color: "#f2f5fa", fontSize: 10, fontFamily: "Inter_800ExtraBold" },
+  timelineMonth: { color: "#d6a92d", fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.5 },
+  timelineDay: { color: "#f5f7fb", fontSize: 16, lineHeight: 18, fontFamily: "Inter_800ExtraBold" },
+  timelineName: { color: "#e5ecf6", fontSize: 12, fontFamily: "Inter_700Bold" },
+  timelineMeta: { color: "#6f7d94", fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
+  timelineAmount: { color: "#f2f5fa", fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   categoryList: { flex: 1, gap: 12 },
   categoryRow: { gap: 6 },
   categoryLabelRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   categoryDot: { width: 7, height: 7, borderRadius: 4 },
-  categoryName: { flex: 1, color: "#dce5f2", fontSize: 9, fontFamily: "Inter_700Bold" },
-  categoryAmount: { color: "#dce5f2", fontSize: 8, fontFamily: "Inter_700Bold" },
+  categoryName: { flex: 1, color: "#dce5f2", fontSize: 11, fontFamily: "Inter_700Bold" },
+  categoryAmount: { color: "#dce5f2", fontSize: 11, fontFamily: "Inter_700Bold" },
   categoryBudget: { color: "#65758d", fontFamily: "Inter_500Medium" },
   goalSummary: { flexDirection: "row", alignItems: "flex-end", marginBottom: 10 },
-  goalSummaryValue: { color: "#ffffff", fontSize: 28, lineHeight: 31, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.9 },
-  goalSummaryLabel: { color: "#718198", fontSize: 8, fontFamily: "Inter_500Medium", marginTop: 2 },
+  goalSummaryValue: { color: "#ffffff", fontSize: 30, lineHeight: 33, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.9 },
+  goalSummaryLabel: { color: "#718198", fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
   goalSummaryMoney: { marginLeft: "auto", alignItems: "flex-end" },
-  goalFunded: { color: "#72dfb0", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
-  goalTarget: { color: "#6f7d94", fontSize: 8, fontFamily: "Inter_500Medium", marginTop: 2 },
+  goalFunded: { color: "#72dfb0", fontSize: 15, fontFamily: "Inter_800ExtraBold" },
+  goalTarget: { color: "#6f7d94", fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
   goalList: { marginTop: 9 },
   goalRow: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 9 },
   goalIcon: { width: 29, height: 29, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(34,197,94,0.1)" },
-  goalName: { color: "#e2eaf5", fontSize: 9, fontFamily: "Inter_700Bold" },
-  goalMeta: { color: "#718097", fontSize: 8, fontFamily: "Inter_500Medium", marginTop: 2 },
-  goalAmount: { color: "#cdd7e6", fontSize: 9, fontFamily: "Inter_800ExtraBold" },
+  goalName: { color: "#e2eaf5", fontSize: 11, fontFamily: "Inter_700Bold" },
+  goalMeta: { color: "#718097", fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 2 },
+  goalAmount: { color: "#cdd7e6", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   emptyState: { flex: 1, minHeight: 126, alignItems: "center", justifyContent: "center", padding: 18 },
   emptyIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(148,163,184,0.08)", marginBottom: 8 },
-  emptyText: { maxWidth: 260, color: "#718097", fontSize: 9, lineHeight: 14, textAlign: "center", fontFamily: "Inter_500Medium" },
+  emptyText: { maxWidth: 260, color: "#718097", fontSize: 11, lineHeight: 16, textAlign: "center", fontFamily: "Inter_500Medium" },
   footer: {
     minHeight: 38,
     flexDirection: "row",
@@ -1877,6 +1962,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   footerLinks: { marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 28 },
-  footerText: { color: "#5f6d82", fontSize: 8, fontFamily: "Inter_600SemiBold" },
-  footerMeta: { color: "#5f6d82", fontSize: 8, fontFamily: "Inter_600SemiBold" },
+  footerText: { color: "#5f6d82", fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  footerMeta: { color: "#5f6d82", fontSize: 11, fontFamily: "Inter_600SemiBold" },
 });

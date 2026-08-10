@@ -26,9 +26,15 @@ export const APP_TABS = [
     pathname: "/(tabs)/monthly",
   },
   {
+    name: "reports",
+    title: "Reports",
+    icon: "bar-chart-2",
+    pathname: "/(tabs)/reports",
+  },
+  {
     name: "more",
-    title: "More",
-    icon: "more-horizontal",
+    title: "Settings",
+    icon: "settings",
     pathname: "/(tabs)/more",
   },
 ] as const;

@@ -66,10 +66,10 @@ const styles = StyleSheet.create({
     shadowRadius: 28,
     shadowOffset: { width: 0, height: 14 },
   },
-  eyebrow: { color: "#71809a", fontSize: 10, fontWeight: "800", letterSpacing: 1.1, paddingHorizontal: 8, paddingVertical: 7 },
+  eyebrow: { color: "#71809a", fontSize: 12, fontWeight: "800", letterSpacing: 1.1, paddingHorizontal: 8, paddingVertical: 7 },
   row: { minHeight: 55, borderRadius: 11, paddingHorizontal: 8, flexDirection: "row", alignItems: "center", gap: 10 },
   icon: { width: 34, height: 34, borderRadius: 10, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   copy: { flex: 1, minWidth: 0 },
-  label: { color: "#edf4ff", fontSize: 13, fontWeight: "800" },
-  detail: { color: "#7f8da5", fontSize: 11, marginTop: 2 },
+  label: { color: "#edf4ff", fontSize: 15, fontWeight: "800" },
+  detail: { color: "#7f8da5", fontSize: 13, marginTop: 2 },
 });

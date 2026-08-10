@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { desktopPalette as palette } from "@/components/desktop/DesktopUI";
 
 interface MoneyHealthIssue {
   code: string;
@@ -33,8 +34,22 @@ function checkedLabel(value?: string) {
   return `Checked ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })} at ${date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
 }
 
-export function AdminMoneyHealth({ householdId }: { householdId?: string | null }) {
-  const colors = useColors();
+export function AdminMoneyHealth({ householdId, appearance = "theme" }: { householdId?: string | null; appearance?: "theme" | "desktop" | "settings" }) {
+  const themeColors = useColors();
+  const isDesktop = appearance !== "theme";
+  const isSettings = appearance === "settings";
+  const colors = isDesktop ? {
+    ...themeColors,
+    card: palette.surface,
+    foreground: palette.text,
+    mutedForeground: palette.muted,
+    muted: palette.surfaceMuted,
+    border: palette.border,
+    primary: palette.purple,
+    success: palette.green,
+    destructive: palette.red,
+    warning: palette.amber,
+  } : themeColors;
   const { session, user } = useAuth();
   const queryClient = useQueryClient();
   const queryKey = ["admin-money-health", user?.id ?? "guest", householdId ?? "personal"];
@@ -71,12 +86,19 @@ export function AdminMoneyHealth({ householdId }: { householdId?: string | null 
   const latest = health.data?.latest ?? null;
   const clean = latest?.status === "clean";
   const statusColor = clean ? colors.success : latest ? colors.warning : colors.mutedForeground;
+  const statusBackground = isDesktop
+    ? clean
+      ? palette.greenSoft
+      : latest
+        ? palette.amberSoft
+        : palette.surfaceMuted
+    : statusColor + "18";
   const error = runCheck.error || health.error;
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.card, borderColor: statusColor + "55" }]}>
+    <View style={[styles.card, isDesktop && styles.desktopCard, isSettings && styles.settingsCard, { backgroundColor: isSettings ? "transparent" : colors.card, borderColor: isDesktop ? colors.border : statusColor + "55" }]}>
       <View style={styles.header}>
-        <View style={[styles.icon, { backgroundColor: statusColor + "18" }]}>
+        <View style={[styles.icon, { backgroundColor: statusBackground }]}>
           <Feather name={clean ? "check-circle" : "activity"} size={18} color={statusColor} />
         </View>
         <View style={styles.copy}>
@@ -90,7 +112,7 @@ export function AdminMoneyHealth({ householdId }: { householdId?: string | null 
           </Text>
           <Text style={[styles.checked, { color: colors.mutedForeground }]}>{checkedLabel(latest?.checked_at)}</Text>
         </View>
-        <View style={[styles.badge, { backgroundColor: statusColor + "18" }]}>
+        <View style={[styles.badge, { backgroundColor: statusBackground }]}>
           <Text style={[styles.badgeText, { color: statusColor }]}>{clean ? "CLEAN" : latest ? "REVIEW" : "NEW"}</Text>
         </View>
       </View>
@@ -122,6 +144,7 @@ export function AdminMoneyHealth({ householdId }: { householdId?: string | null 
           onPress={() => runCheck.mutate()}
           style={({ pressed }) => [
             styles.button,
+            isDesktop && styles.desktopButton,
             { backgroundColor: colors.primary, opacity: runCheck.isPending ? 0.55 : pressed ? 0.75 : 1 },
           ]}
         >
@@ -137,6 +160,8 @@ export function AdminMoneyHealth({ householdId }: { householdId?: string | null 
 
 const styles = StyleSheet.create({
   card: { borderWidth: 1, borderRadius: 18, padding: 16, gap: 12 },
+  desktopCard: { borderRadius: 10 },
+  settingsCard: { borderWidth: 0, borderRadius: 0, paddingHorizontal: 15, paddingVertical: 14 },
   header: { flexDirection: "row", alignItems: "flex-start", gap: 11 },
   icon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   copy: { flex: 1, minWidth: 0 },
@@ -153,5 +178,6 @@ const styles = StyleSheet.create({
   footer: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   readOnly: { flex: 1, fontSize: 11, lineHeight: 15 },
   button: { borderRadius: 12, paddingHorizontal: 13, minHeight: 40, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
+  desktopButton: { borderRadius: 7, minHeight: 38 },
   buttonText: { fontSize: 13, fontWeight: "800" },
 });

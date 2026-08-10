@@ -27,6 +27,7 @@ import { DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR } from "@/lib/desktopModal
 import { localDateString } from "@/lib/dateLabels";
 import { buildSafetyStop, type SafetyStopWarning } from "@/lib/safetyStop";
 import type { ConfirmActionOptions } from "@/lib/confirmAction";
+import { transactionDebtId } from "@/lib/transactionDebt";
 
 interface Props {
   visible: boolean;
@@ -65,6 +66,10 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
     .sort((left, right) =>
       Number(left.balance) - Number(right.balance) || left.name.localeCompare(right.name),
     );
+  const editDebtId = editTx ? transactionDebtId(editTx, bills) : undefined;
+  const selectedDebt = linkedBillId
+    ? bills.find(bill => bill.id === linkedBillId && bill.is_debt)
+    : undefined;
 
   useEffect(() => {
     setConfirmation(null);
@@ -77,7 +82,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
       setIsTransfer(Boolean(editTx.transfer_group_id));
       setAccountId(editTx.amount < 0 ? editTx.account_id : transferMate?.account_id);
       setTransferToAccountId(editTx.amount < 0 ? transferMate?.account_id : editTx.account_id);
-      setLinkedBillId(editTx.linked_bill_id);
+      setLinkedBillId(editDebtId);
     } else {
       const init = defaultDate ?? localDateString();
       setAmount("");
@@ -90,7 +95,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
       setTransferToAccountId(accounts.filter(account => account.is_active)[1]?.id);
       setLinkedBillId(undefined);
     }
-  }, [editTx, visible, defaultDate, accounts, transferMate]);
+  }, [editTx, visible, defaultDate, accounts, transferMate, editDebtId]);
 
   const buildForecastBaseline = (startDate: string) => {
     const [startYear, startMonth] = startDate.split("-").map(Number);
@@ -320,7 +325,7 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
               </View>
             </>}
 
-            {!isTransfer && isExpense && activeDebts.length > 0 && <>
+            {!isTransfer && isExpense && (activeDebts.length > 0 || selectedDebt) && <>
               <Text style={labelStyle}>Apply Toward Debt (Optional)</Text>
               <Text style={[styles.helpText, { color: c.mutedForeground }]}>Reduces the debt on this date.</Text>
               <View style={styles.categoryGrid}>
@@ -337,6 +342,21 @@ export function AddTransactionModal({ visible, onClose, onSave, onDelete, onDele
                   </Pressable>
                 ))}
               </View>
+              {selectedDebt ? (
+                <View
+                  accessibilityLabel={`Selected debt ${selectedDebt.name}`}
+                  style={[styles.selectedDebt, { backgroundColor: c.primary + "12", borderColor: c.primary + "48" }]}
+                >
+                  <View style={[styles.selectedDebtIcon, { backgroundColor: c.primary + "22" }]}>
+                    <Feather name="check-circle" size={16} color={c.primary} />
+                  </View>
+                  <View style={styles.selectedDebtCopy}>
+                    <Text style={[styles.selectedDebtLabel, { color: c.primary }]}>Selected debt</Text>
+                    <Text style={[styles.selectedDebtName, { color: c.foreground }]} numberOfLines={1}>{selectedDebt.name}</Text>
+                  </View>
+                  <Text style={[styles.selectedDebtBalance, { color: c.mutedForeground }]}>${Number(selectedDebt.balance).toFixed(2)} balance</Text>
+                </View>
+              ) : null}
             </>}
 
             {accounts.some(account => account.is_active) && <>
@@ -405,4 +425,10 @@ const styles = StyleSheet.create({
   deleteBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
   saveBtn: { height: 52, alignItems: "center", justifyContent: "center", marginTop: 12, marginBottom: 24 },
   saveBtnText: { fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  selectedDebt: { minHeight: 58, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, marginTop: 10, flexDirection: "row", alignItems: "center", gap: 10 },
+  selectedDebtIcon: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  selectedDebtCopy: { flex: 1, minWidth: 0 },
+  selectedDebtLabel: { fontSize: 10, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 0.45 },
+  selectedDebtName: { fontSize: 14, fontFamily: "Inter_700Bold", marginTop: 2 },
+  selectedDebtBalance: { fontSize: 11, fontFamily: "Inter_600SemiBold", textAlign: "right" },
 });

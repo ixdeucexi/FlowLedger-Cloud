@@ -15,8 +15,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/context/AuthContext";
+import { AppDiscoveryProvider } from "@/context/AppDiscoveryContext";
 import { useBudget } from "@/context/BudgetContext";
 import { SaveStatusBanner } from "@/components/SaveStatusBanner";
+import { ConnectivityBanner } from "@/components/ConnectivityBanner";
 import { DecisionDueModal } from "@/components/DecisionDueModal";
 import { FloLogo } from "@/components/FloLogo";
 import { PlanPreviewBanner } from "@/components/PlanPreviewBanner";
@@ -52,7 +54,7 @@ import {
   clearAppBadge,
   syncAppBadge,
 } from "@/lib/appBadge";
-import { appTabsForPlanning } from "@/lib/appTabs";
+import { MOBILE_RIBBON_ITEMS } from "@/lib/mobileRibbon";
 
 function todayIsoDate() {
   const now = new Date();
@@ -150,6 +152,43 @@ function BudgetLoadErrorScreen({
           Try again
         </Text>
       </Pressable>
+    </View>
+  );
+}
+
+function PlanRestoreOverlay({ isDesktop }: { isDesktop: boolean }) {
+  const colors = useColors();
+  return (
+    <View
+      accessibilityRole="progressbar"
+      accessibilityLabel="Restoring this household"
+      style={[
+        styles.planRestoreOverlay,
+        { backgroundColor: colors.background },
+        !isDesktop && styles.planRestoreOverlayMobile,
+      ]}
+    >
+      <View style={styles.planRestoreHeader}>
+        <View style={[styles.skeletonTitle, { backgroundColor: colors.muted }]} />
+        <View style={[styles.skeletonAction, { backgroundColor: colors.muted }]} />
+      </View>
+      <Text style={[styles.planRestoreLabel, { color: colors.mutedForeground }]}>Restoring this household…</Text>
+      <View style={[styles.skeletonGrid, !isDesktop && styles.skeletonGridMobile]}>
+        {[0, 1, 2, 3].map(item => (
+          <View
+            key={item}
+            style={[
+              styles.skeletonCard,
+              { backgroundColor: colors.card, borderColor: colors.border },
+              !isDesktop && styles.skeletonCardMobile,
+            ]}
+          >
+            <View style={[styles.skeletonLineShort, { backgroundColor: colors.muted }]} />
+            <View style={[styles.skeletonLine, { backgroundColor: colors.muted }]} />
+          </View>
+        ))}
+      </View>
+      <View style={[styles.skeletonPanel, { backgroundColor: colors.card, borderColor: colors.border }]} />
     </View>
   );
 }
@@ -487,14 +526,15 @@ function FloDemo() {
 function TabContent() {
   const { width: viewportWidth } = useWindowDimensions();
   const colors = useColors();
+  const router = useRouter();
   const {
+    loading,
     loadError,
     retryBudgetLoad,
     demoMode,
     transactions,
     pendingBankTransactions,
     pendingPlanMatches,
-    settings,
     getMonthlyBills,
     getBillOccurrencesInMonth,
     getBillEffectiveMonthlyTotal,
@@ -572,17 +612,18 @@ function TabContent() {
     [],
   );
 
-  if (loadError)
-    return (
-      <BudgetLoadErrorScreen message={loadError} onRetry={retryBudgetLoad} />
-    );
-
   return (
     <View
       style={[styles.tabTransitionRoot, { backgroundColor: colors.background }]}
     >
       <View style={styles.tabTransitionContent}>
+        <ConnectivityBanner desktop={isDesktop} />
+        <AppDiscoveryProvider>
         <ResponsiveDesktopChrome enabled={isDesktop}>
+          {loadError ? (
+            <BudgetLoadErrorScreen message={loadError} onRetry={retryBudgetLoad} />
+          ) : (
+          <View style={styles.tabsFrame}>
           <Tabs
             backBehavior="history"
             detachInactiveScreens={false}
@@ -600,10 +641,19 @@ function TabContent() {
                 fontFamily: "Inter_600SemiBold",
                 fontSize: tabBarLabelSize(viewportWidth),
                 marginTop: 1,
+                width: "100%",
+                textAlign: "center",
               },
               tabBarItemStyle: {
+                flex: 1,
+                flexBasis: 0,
+                minWidth: 0,
                 paddingVertical: 6,
                 borderRadius: 18,
+              },
+              tabBarIconStyle: {
+                width: 28,
+                height: 28,
               },
               tabBarStyle: {
                 display: isDesktop ? "none" : "flex",
@@ -634,6 +684,7 @@ function TabContent() {
                 shadowRadius: 26,
                 elevation: 14,
                 paddingHorizontal: 6,
+                overflow: "visible",
                 ...(isWeb
                   ? {
                       height: isIosWeb ? 72 : 82,
@@ -669,20 +720,15 @@ function TabContent() {
                 ) : null,
             }}
           >
-            {appTabsForPlanning(settings.zeroBasedBudgetEnabled).map((tab) => {
-              const isActivity = tab.name === "transactions";
+            {MOBILE_RIBBON_ITEMS.map((tab) => {
+              const isAdd = tab.name === "add";
               const isBills = tab.name === "bills";
-              const isMore = tab.name === "more";
-              const reviewBadge = isActivity
-                ? tabBadgeValue(activityAlertCount)
-                : undefined;
-              const billBadge = isBills
+              const isActivity = tab.name === "transactions";
+              const badge = isBills
                 ? tabBadgeValue(overdueBillCount)
-                : undefined;
-              const feedbackBadge = isMore
-                ? tabBadgeValue(newFeedbackCount)
-                : undefined;
-              const badge = reviewBadge ?? billBadge ?? feedbackBadge;
+                : isActivity
+                  ? tabBadgeValue(activityAlertCount)
+                  : undefined;
               return (
                 <Tabs.Screen
                   key={tab.name}
@@ -690,22 +736,62 @@ function TabContent() {
                   options={{
                     title: tab.title,
                     tabBarLabel: tabBarDisplayLabel(tab.title, viewportWidth),
-                    tabBarIcon: ({ color }) => (
-                      <Feather name={tab.icon} size={22} color={color} />
-                    ),
+                    tabBarIcon: isAdd
+                      ? undefined
+                      : ({ color }) => (
+                          <Feather name={tab.icon} size={22} color={color} />
+                        ),
+                    tabBarButton: isAdd
+                      ? () => (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Add to FlowLedger"
+                            onPress={() =>
+                              router.push({
+                                pathname: "/(tabs)",
+                                params: { add: "1" },
+                              } as any)
+                            }
+                            style={({ pressed }) => [
+                              styles.addTabSlot,
+                              { opacity: pressed ? 0.78 : 1 },
+                            ]}
+                          >
+                            <View
+                              style={[
+                                styles.addTabButton,
+                                {
+                                  backgroundColor: colors.primary,
+                                  borderColor: isDark
+                                    ? "rgba(196,181,253,0.46)"
+                                    : colors.primary,
+                                },
+                              ]}
+                            >
+                              <Feather
+                                name="plus"
+                                size={32}
+                                color={colors.primaryForeground}
+                              />
+                            </View>
+                          </Pressable>
+                        )
+                      : undefined,
                     tabBarBadge: badge,
                     tabBarBadgeStyle: badge ? styles.alertTabBadge : undefined,
-                    tabBarAccessibilityLabel: reviewBadge
-                      ? `${tab.title}, ${activityReviewCount} item${activityReviewCount === 1 ? "" : "s"} need review and ${pendingAlertCount} unmatched transaction${pendingAlertCount === 1 ? "" : "s"} pending`
-                      : billBadge
+                    tabBarAccessibilityLabel: isActivity && badge
+                      ? `Activity, ${activityReviewCount} item${activityReviewCount === 1 ? "" : "s"} need review and ${pendingAlertCount} unmatched transaction${pendingAlertCount === 1 ? "" : "s"} pending`
+                      : isBills && badge
                         ? `Bills, ${overdueBillCount} past-due bill${overdueBillCount === 1 ? "" : "s"} need action`
-                        : feedbackBadge
-                          ? `More, ${newFeedbackCount} new feedback item${newFeedbackCount === 1 ? "" : "s"}`
-                          : tab.title,
+                        : tab.title,
                   }}
                 />
               );
             })}
+            <Tabs.Screen name="accounts" options={{ href: null }} />
+            <Tabs.Screen name="more" options={{ href: null }} />
+            <Tabs.Screen name="reports" options={{ href: null }} />
+            <Tabs.Screen name="review" options={{ href: null }} />
             <Tabs.Screen name="flo" options={{ href: null }} />
             <Tabs.Screen name="category-budget" options={{ href: null }} />
             <Tabs.Screen
@@ -717,7 +803,11 @@ function TabContent() {
               options={{ href: null, tabBarStyle: { display: "none" } }}
             />
           </Tabs>
+          {loading ? <PlanRestoreOverlay isDesktop={isDesktop} /> : null}
+          </View>
+          )}
         </ResponsiveDesktopChrome>
+        </AppDiscoveryProvider>
         {demoMode ? <DemoModeBanner /> : null}
         <PlanPreviewBanner />
         <SaveStatusBanner />
@@ -773,6 +863,10 @@ const styles = StyleSheet.create({
   tabTransitionContent: {
     flex: 1,
   },
+  tabsFrame: {
+    flex: 1,
+    minWidth: 0,
+  },
   alertTabBadge: {
     minWidth: 18,
     height: 18,
@@ -782,6 +876,71 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_800ExtraBold",
     fontSize: 10,
     lineHeight: 18,
+  },
+  addTabSlot: {
+    flex: 1,
+    flexBasis: 0,
+    minWidth: 64,
+    alignItems: "center",
+    justifyContent: "flex-start",
+  },
+  addTabButton: {
+    width: 66,
+    height: 66,
+    marginTop: -23,
+    borderRadius: 33,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#7c3aed",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.48,
+    shadowRadius: 20,
+    elevation: 18,
+  },
+  planRestoreOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 60,
+    padding: 28,
+  },
+  planRestoreOverlayMobile: {
+    bottom: 86,
+    paddingHorizontal: 18,
+    paddingTop: 24,
+  },
+  planRestoreHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  planRestoreLabel: {
+    marginTop: 12,
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+  },
+  skeletonTitle: { width: 190, height: 28, borderRadius: 9, opacity: 0.7 },
+  skeletonAction: { width: 112, height: 42, borderRadius: 14, opacity: 0.55 },
+  skeletonGrid: { flexDirection: "row", gap: 14, marginTop: 24 },
+  skeletonGridMobile: { flexWrap: "wrap", gap: 10, marginTop: 18 },
+  skeletonCard: {
+    flex: 1,
+    minHeight: 132,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 18,
+    justifyContent: "center",
+    gap: 14,
+  },
+  skeletonCardMobile: { flexBasis: "46%", minHeight: 112, padding: 14 },
+  skeletonLineShort: { width: "44%", height: 12, borderRadius: 6, opacity: 0.6 },
+  skeletonLine: { width: "72%", height: 22, borderRadius: 7, opacity: 0.7 },
+  skeletonPanel: {
+    flex: 1,
+    minHeight: 220,
+    marginTop: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    opacity: 0.72,
   },
   loadingScreen: {
     flex: 1,

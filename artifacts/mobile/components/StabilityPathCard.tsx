@@ -3,6 +3,7 @@ import React, { memo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import { AppText } from "@/components/AppText";
+import { surfaceTokens } from "@/constants/surfaces";
 import { useColors } from "@/hooks/useColors";
 import type { StabilityProgress } from "@/lib/stability";
 
@@ -13,7 +14,7 @@ interface StabilityPathCardProps {
 
 const STABILITY_THEMES = {
   dark: {
-    card: "rgba(15,23,42,0.78)", border: "rgba(34,211,238,0.22)", shadow: "#22d3ee", shadowOpacity: 0.18,
+    card: surfaceTokens.dark.standard, border: "rgba(34,211,238,0.22)", shadow: "#22d3ee", shadowOpacity: 0.18,
     eyebrow: "#67e8f9", text: "#f8fafc", mutedText: "#94a3b8", labelText: "#cbd5e1",
     track: "rgba(148,163,184,0.18)", purpleText: "#c4b5fd",
     purpleStrongText: "#ede9fe", purpleSurface: "rgba(124,58,237,0.12)", purpleIconSurface: "rgba(124,58,237,0.24)",
@@ -21,7 +22,7 @@ const STABILITY_THEMES = {
     buttonSurface: "rgba(37,99,235,0.12)", buttonBorder: "rgba(96,165,250,0.22)",
   },
   light: {
-    card: "rgba(255,255,255,0.92)", border: "rgba(14,116,144,0.22)", shadow: "#64748b", shadowOpacity: 0.12,
+    card: surfaceTokens.light.glass, border: "rgba(14,116,144,0.22)", shadow: "#64748b", shadowOpacity: 0.12,
     eyebrow: "#0e7490", text: "#0f172a", mutedText: "#64748b", labelText: "#334155",
     track: "rgba(100,116,139,0.20)", purpleText: "#6d28d9",
     purpleStrongText: "#4c1d95", purpleSurface: "rgba(124,58,237,0.09)", purpleIconSurface: "rgba(124,58,237,0.14)",
@@ -146,7 +147,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1,
     borderColor: "rgba(34,211,238,0.22)",
-    backgroundColor: "rgba(15,23,42,0.78)",
+    backgroundColor: surfaceTokens.dark.standard,
     padding: 15,
     marginBottom: 10,
     shadowColor: "#22d3ee",

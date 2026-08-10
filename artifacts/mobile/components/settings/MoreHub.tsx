@@ -19,6 +19,10 @@ interface MoreHubProps {
   statuses: Partial<Record<SettingsDestinationId, SettingsStatus>>;
   isAdmin: boolean;
   onOpenSection: (sectionId: SettingsDestinationId) => void;
+  onOpenSearch: () => void;
+  onOpenCommands: () => void;
+  onOpenNotifications: () => void;
+  unreadNotificationCount: number;
 }
 
 export function MoreHub({
@@ -29,6 +33,10 @@ export function MoreHub({
   statuses,
   isAdmin,
   onOpenSection,
+  onOpenSearch,
+  onOpenCommands,
+  onOpenNotifications,
+  unreadNotificationCount,
 }: MoreHubProps) {
   const colors = useColors();
   const { width: viewportWidth } = useWindowDimensions();
@@ -48,6 +56,31 @@ export function MoreHub({
             </View>
           </View>
           <Text style={[styles.identity, { color: colors.mutedForeground }]}>{identity} · {householdRole}</Text>
+        </View>
+      </View>
+
+      <View style={styles.groupBlock}>
+        <Text style={[styles.groupTitle, { color: colors.foreground }]}>Quick access</Text>
+        <View style={[styles.quickGrid, compactLayout && styles.quickGridCompact]}>
+          {[
+            { label: "Search", description: "Find anything", icon: "search" as const, onPress: onOpenSearch },
+            { label: "Quick Actions", description: "Add or navigate", icon: "zap" as const, onPress: onOpenCommands },
+            { label: "Notifications", description: unreadNotificationCount ? `${unreadNotificationCount} unread` : "All caught up", icon: "bell" as const, onPress: onOpenNotifications },
+          ].map(action => (
+            <Pressable
+              key={action.label}
+              accessibilityRole="button"
+              accessibilityLabel={`${action.label}. ${action.description}`}
+              onPress={action.onPress}
+              style={({ pressed }) => [styles.quickCard, { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.72 : 1 }]}
+            >
+              <View style={[styles.quickIcon, { backgroundColor: colors.primary + "16" }]}>
+                <Feather name={action.icon} size={19} color={colors.primary} />
+              </View>
+              <Text style={[styles.quickLabel, { color: colors.foreground }]}>{action.label}</Text>
+              <Text style={[styles.quickDescription, { color: colors.mutedForeground }]}>{action.description}</Text>
+            </Pressable>
+          ))}
         </View>
       </View>
 
@@ -115,6 +148,12 @@ const styles = StyleSheet.create({
   membershipPill: { maxWidth: 104, borderWidth: 1, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
   membershipText: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.4 },
   groupBlock: { marginBottom: 24 },
+  quickGrid: { flexDirection: "row", gap: 10 },
+  quickGridCompact: { flexDirection: "column" },
+  quickCard: { flex: 1, minHeight: 96, borderWidth: 1, borderRadius: 18, padding: 13 },
+  quickIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center", marginBottom: 10 },
+  quickLabel: { fontFamily: "Inter_700Bold", fontSize: 14 },
+  quickDescription: { fontFamily: "Inter_500Medium", fontSize: 11, marginTop: 3 },
   groupTitle: { fontSize: 20, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.35, marginBottom: 9, paddingHorizontal: 12 },
   groupCard: { borderWidth: 1, borderRadius: 22, overflow: "hidden" },
   row: { minHeight: 64, paddingHorizontal: 14, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 12 },

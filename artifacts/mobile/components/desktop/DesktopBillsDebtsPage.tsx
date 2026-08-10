@@ -414,11 +414,20 @@ export function DesktopBillsDebtsPage() {
               <View style={styles.billOverviewRow}>
                 {billTab !== "Calendar" ? (
                   <UpcomingBills
-                    rows={upcomingRows.slice(0, 6)}
+                    rows={
+                      billTab === "Upcoming"
+                        ? upcomingRows
+                        : upcomingRows.slice(0, 6)
+                    }
                     onOpen={openBill}
+                    onViewAll={
+                      billTab === "Overview"
+                        ? () => setBillTab("Upcoming")
+                        : undefined
+                    }
                   />
                 ) : null}
-                {billTab !== "Upcoming" ? (
+                {billTab === "Calendar" ? (
                   <BillCalendar
                     cursor={calendarCursor}
                     onPrevious={() =>
@@ -492,48 +501,73 @@ export function DesktopBillsDebtsPage() {
 function UpcomingBills({
   rows,
   onOpen,
+  onViewAll,
 }: {
   rows: BillRow[];
   onOpen: (bill: Bill) => void;
+  onViewAll?: () => void;
 }) {
   return (
     <DesktopCard style={styles.overviewCard}>
       <CardHeader
         title="Upcoming Bills"
-        action={<Text style={styles.textLink}>View all</Text>}
+        action={
+          onViewAll ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="View all upcoming bills"
+              onPress={onViewAll}
+              style={({ pressed }) => pressed && styles.pressed}
+            >
+              <Text style={styles.textLink}>View all</Text>
+            </Pressable>
+          ) : undefined
+        }
       />
       {rows.length ? (
-        rows.map((row) => {
-          const paid = row.paid + 0.005 >= row.amount;
-          return (
-            <Pressable
-              key={`${row.bill.id}-${row.iso}`}
-              onPress={() => onOpen(row.bill)}
-              style={({ pressed }) => [
-                styles.upcomingRow,
-                pressed && styles.pressed,
-              ]}
-            >
-              <View style={styles.billIcon}>
-                <Feather name="file-text" size={15} color={palette.purple} />
-              </View>
-              <View style={styles.upcomingName}>
-                <Text style={styles.rowStrong}>{row.bill.name}</Text>
-                <Text style={styles.rowMuted}>{row.bill.category}</Text>
-              </View>
-              <View style={styles.upcomingDate}>
-                <Text style={styles.rowText}>
-                  {displayDate(row.year, row.month, row.day)}
-                </Text>
-              </View>
-              <Text style={styles.upcomingAmount}>{money(row.amount)}</Text>
-              <StatusBadge
-                label={paid ? "Paid" : "Upcoming"}
-                tone={paid ? "green" : "purple"}
-              />
-            </Pressable>
-          );
-        })
+        <>
+          <View style={styles.upcomingTableHeader}>
+            <Text style={[styles.upcomingHeaderText, styles.upcomingHeaderBill]}>Bill</Text>
+            <Text style={[styles.upcomingHeaderText, styles.upcomingDate]}>Due date</Text>
+            <Text style={[styles.upcomingHeaderText, styles.upcomingAmountColumn]}>Amount</Text>
+            <Text style={[styles.upcomingHeaderText, styles.upcomingStatusColumn]}>Status</Text>
+          </View>
+          {rows.map((row) => {
+            const paid = row.paid + 0.005 >= row.amount;
+            return (
+              <Pressable
+                key={`${row.bill.id}-${row.iso}`}
+                onPress={() => onOpen(row.bill)}
+                style={({ pressed }) => [
+                  styles.upcomingRow,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <View style={styles.upcomingBillCell}>
+                  <View style={styles.billIcon}>
+                    <Feather name="file-text" size={15} color={palette.purple} />
+                  </View>
+                  <View style={styles.upcomingName}>
+                    <Text style={styles.rowStrong} numberOfLines={1}>{row.bill.name}</Text>
+                    <Text style={styles.rowMuted} numberOfLines={1}>{row.bill.category}</Text>
+                  </View>
+                </View>
+                <View style={styles.upcomingDate}>
+                  <Text style={styles.rowText}>
+                    {displayDate(row.year, row.month, row.day)}
+                  </Text>
+                </View>
+                <Text style={[styles.upcomingAmount, styles.upcomingAmountColumn]}>{money(row.amount)}</Text>
+                <View style={styles.upcomingStatusColumn}>
+                  <StatusBadge
+                    label={paid ? "Paid" : "Upcoming"}
+                    tone={paid ? "green" : "purple"}
+                  />
+                </View>
+              </Pressable>
+            );
+          })}
+        </>
       ) : (
         <EmptyState
           title="No upcoming bills"
@@ -1107,27 +1141,52 @@ const styles = StyleSheet.create({
   tabActive: { borderBottomColor: palette.purple },
   tabText: {
     color: palette.muted,
-    fontSize: 11,
+    fontSize: 13,
     fontFamily: "Inter_600SemiBold",
   },
   tabTextActive: { color: palette.purpleDark, fontFamily: "Inter_700Bold" },
   metrics: { flexDirection: "row", gap: 12, marginBottom: 14 },
-  billOverviewRow: { flexDirection: "row", gap: 12, marginBottom: 14 },
-  overviewCard: { flex: 1, minWidth: 0 },
+  billOverviewRow: { marginBottom: 14 },
+  overviewCard: { width: "100%", minWidth: 0, overflow: "hidden" },
   textLink: {
     color: palette.purpleDark,
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: "Inter_700Bold",
     textTransform: "capitalize",
   },
   upcomingRow: {
-    minHeight: 55,
+    minHeight: 62,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 14,
+    gap: 16,
+    paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: palette.borderSoft,
+  },
+  upcomingTableHeader: {
+    minHeight: 36,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    paddingHorizontal: 20,
+    backgroundColor: palette.surfaceMuted,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.borderSoft,
+  },
+  upcomingHeaderText: {
+    color: palette.muted,
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    textTransform: "uppercase",
+    letterSpacing: 0.35,
+  },
+  upcomingHeaderBill: { flex: 1, paddingLeft: 46 },
+  upcomingBillCell: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
   billIcon: {
     width: 30,
@@ -1137,23 +1196,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  upcomingName: { flex: 1.3, minWidth: 0 },
-  upcomingDate: { flex: 1.1, minWidth: 0 },
+  upcomingName: { flex: 1, minWidth: 0 },
+  upcomingDate: { width: 180, minWidth: 0 },
+  upcomingAmountColumn: { width: 130 },
   upcomingAmount: {
-    width: 74,
     color: palette.text,
-    fontSize: 11,
+    fontSize: 13,
     fontFamily: "Inter_700Bold",
   },
-  rowStrong: { color: palette.text, fontSize: 10, fontFamily: "Inter_700Bold" },
+  upcomingStatusColumn: { width: 110, alignItems: "flex-start" },
+  rowStrong: { color: palette.text, fontSize: 12, fontFamily: "Inter_700Bold" },
   rowText: {
     color: palette.textSecondary,
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: "Inter_500Medium",
   },
   rowMuted: {
     color: palette.muted,
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: "Inter_400Regular",
     marginTop: 2,
   },
@@ -1175,7 +1235,7 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "center",
     color: palette.muted,
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: "Inter_600SemiBold",
   },
   calendarGrid: { flexDirection: "row", flexWrap: "wrap" },
@@ -1189,11 +1249,11 @@ const styles = StyleSheet.create({
   },
   calendarDay: {
     color: palette.textSecondary,
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: "Inter_600SemiBold",
   },
   calendarAmount: {
-    fontSize: 8,
+    fontSize: 11,
     fontFamily: "Inter_700Bold",
     textAlign: "center",
     marginTop: 2,
@@ -1239,12 +1299,12 @@ const styles = StyleSheet.create({
   },
   progressTitle: {
     color: palette.textSecondary,
-    fontSize: 11,
+    fontSize: 13,
     fontFamily: "Inter_500Medium",
   },
   progressPercent: {
     color: palette.text,
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: "Inter_700Bold",
   },
   progressTrack: {
@@ -1281,7 +1341,7 @@ const styles = StyleSheet.create({
     width: 34,
     textAlign: "right",
     color: palette.muted,
-    fontSize: 9,
+    fontSize: 11,
   },
   debtColName: { flex: 1.5, minWidth: 130 },
   debtColCategory: { flex: 0.85, minWidth: 72 },

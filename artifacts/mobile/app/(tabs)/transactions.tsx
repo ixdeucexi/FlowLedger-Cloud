@@ -41,6 +41,7 @@ import { PlanViewSelector } from "@/components/PlanViewSelector";
 import { SnowballPreviewModal } from "@/components/SnowballPreviewModal";
 import { UnplannedChargeModal } from "@/components/UnplannedChargeModal";
 import colors from "@/constants/colors";
+import { useAuth } from "@/context/AuthContext";
 import type {
   Bill,
   ExtraPayment,
@@ -48,7 +49,7 @@ import type {
   SnowballFundingSource,
   Transaction,
 } from "@/context/BudgetContext";
-import { useBudget } from "@/context/BudgetContext";
+import { normalizeTransactionRow, useBudget } from "@/context/BudgetContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
@@ -73,7 +74,6 @@ import {
 } from "@/lib/billMatching";
 import {
   activityAmountOutsidePlannedBill,
-  listActivityMonths,
   summarizeActivityMonth,
 } from "@/lib/monthlySummary";
 import { isValidDateInMonth } from "@/lib/schedule";
@@ -97,6 +97,19 @@ import {
   pendingMatchStatusLabel,
   unmatchedPendingTransactions,
 } from "@/lib/pendingPlanMatches";
+import { transactionDebt } from "@/lib/transactionDebt";
+import { readInterfacePreferences, updateInterfacePreferences } from "@/lib/interfacePreferences";
+import {
+  ACTIVITY_DATE_RANGE_OPTIONS,
+  dateOnly,
+  dateIsInActivityRange,
+  isActivityRangeId,
+  resolveActivityDateRange,
+  summarizeActivityRange,
+  type ActivityRangeId,
+} from "@/lib/activityRange";
+import { supabase } from "@/lib/supabase";
+import { exportActivityCsv } from "@/lib/activityCsv";
 import { CategoryBudgetScreen } from "./category-budget";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -111,6 +124,7 @@ type ActivitySource =
 type TypeFilter = "all" | "expense" | "income";
 type SourceFilter = "all" | ActivitySource;
 type SortOrder = "asc" | "desc";
+const ACTIVITY_PAGE_SIZE = 100;
 const MODAL_HANDOFF_DELAY_MS = 350;
 type MatchedPaymentPrompt = {
   transaction: Transaction;
@@ -136,6 +150,7 @@ interface ActivityItem {
   pending?: boolean;
   rawPending?: PendingBankTransaction;
   pendingMatchLabel?: string;
+  debtName?: string;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -286,6 +301,7 @@ export function ActivityScreen() {
   const isDesktop = useDesktopExperience();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { user } = useAuth();
   const params = useLocalSearchParams<{
     editDebtPaymentId?: string;
     editDebtPaymentAt?: string;
@@ -293,6 +309,11 @@ export function ActivityScreen() {
     pendingAt?: string;
     activityId?: string;
     activityAt?: string;
+    activityDate?: string;
+    search?: string;
+    category?: string;
+    range?: string;
+    add?: string;
   }>();
   const { isFeatureLocked, bypassFeature } = useMembership();
   const {
@@ -331,6 +352,8 @@ export function ActivityScreen() {
     addGoal,
     addBill,
     deleteBillMistake,
+    activeHousehold,
+    demoMode,
   } = useBudget();
 
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -342,10 +365,86 @@ export function ActivityScreen() {
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
-  const [currentActivityMonth] = useState(() => todayIsoDate().slice(0, 7));
-  const [monthFilter, setMonthFilter] = useState(currentActivityMonth);
+  const [rangeFilter, setRangeFilter] = useState<ActivityRangeId>("this_month");
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
   const [search, setSearch] = useState("");
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyTransactions, setHistoryTransactions] = useState<Transaction[]>([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyRetryNonce, setHistoryRetryNonce] = useState(0);
+  const activityPreferenceReadyRef = useRef(false);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
+
+  useEffect(() => {
+    if (!user || !activeHousehold || demoMode) return;
+    activityPreferenceReadyRef.current = false;
+    let active = true;
+    void readInterfacePreferences(user.id, activeHousehold.householdId).then(preferences => {
+      if (!active) return;
+      const saved = preferences.activity;
+      if (saved) {
+        if (isActivityRangeId(saved.range)) setRangeFilter(saved.range);
+        else if (saved.range && /^\d{4}-\d{2}$/.test(saved.range)) {
+          setRangeFilter("custom");
+          const [year, month] = saved.range.split("-").map(Number);
+          setCustomStartDate(`${saved.range}-01`);
+          setCustomEndDate(`${saved.range}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`);
+        }
+        if (saved.startDate) setCustomStartDate(saved.startDate);
+        if (saved.endDate) setCustomEndDate(saved.endDate);
+        if (saved.search) setSearch(saved.search);
+        if (saved.category) setCategoryFilter(saved.category);
+        if (saved.type === "all" || saved.type === "expense" || saved.type === "income") setTypeFilter(saved.type);
+        if (saved.account === "all" || Object.hasOwn(SOURCE_META, saved.account ?? "")) setSourceFilter(saved.account as SourceFilter);
+        if (saved.sort === "asc" || saved.sort === "desc") setSortOrder(saved.sort);
+      }
+      if (params.activityDate && /^\d{4}-\d{2}-\d{2}$/.test(params.activityDate)) {
+        setRangeFilter("custom");
+        setCustomStartDate(params.activityDate);
+        setCustomEndDate(params.activityDate);
+      } else if (params.range && isActivityRangeId(params.range)) {
+        setRangeFilter(params.range);
+      }
+      if (params.search) setSearch(params.search);
+      if (params.category) setCategoryFilter(params.category);
+      activityPreferenceReadyRef.current = true;
+    });
+    return () => { active = false; };
+  }, [activeHousehold?.householdId, params.activityAt, params.activityDate, params.category, params.range, params.search, user?.id]);
+
+  const addRequestRef = useRef("");
+  useEffect(() => {
+    const requested = Array.isArray(params.add) ? params.add[0] : params.add;
+    if (requested !== "1") return;
+    const token = `${requested}:${Date.now()}`;
+    if (addRequestRef.current === token) return;
+    addRequestRef.current = token;
+    setEditTx(null);
+    setEditModalVisible(true);
+    router.setParams({ add: "" } as never);
+  }, [params.add, router]);
+
+  useEffect(() => {
+    if (!user || !activeHousehold || !activityPreferenceReadyRef.current) return;
+    const timer = setTimeout(() => {
+      void updateInterfacePreferences(user.id, activeHousehold.householdId, {
+        activity: {
+          range: rangeFilter,
+          startDate: customStartDate,
+          endDate: customEndDate,
+          search,
+          account: sourceFilter,
+          category: categoryFilter,
+          type: typeFilter,
+          sort: sortOrder,
+        },
+      });
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [activeHousehold?.householdId, categoryFilter, customEndDate, customStartDate, rangeFilter, search, sortOrder, sourceFilter, typeFilter, user?.id]);
   const [weeklySummaryVisible, setWeeklySummaryVisible] = useState(false);
   const [matchTx, setMatchTx] = useState<Transaction | null>(null);
   const [unplannedChargeTx, setUnplannedChargeTx] =
@@ -405,6 +504,66 @@ export function ActivityScreen() {
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
   const listBottomPadding = insets.bottom + (Platform.OS === "web" ? 128 : 118);
+  const activeDateRange = useMemo(
+    () => resolveActivityDateRange(rangeFilter, new Date(), customStartDate, customEndDate),
+    [customEndDate, customStartDate, rangeFilter],
+  );
+  const currentActivityMonth = todayIsoDate().slice(0, 7);
+  const monthFilter = activeDateRange.startDate?.slice(0, 7) ?? currentActivityMonth;
+
+  useEffect(() => {
+    setHistoryPage(0);
+    setHistoryTransactions([]);
+  }, [activeDateRange.endDate, activeDateRange.id, activeDateRange.startDate, activeHousehold?.householdId, search]);
+
+  useEffect(() => {
+    if (!user || !activeHousehold) return;
+    let active = true;
+    const timer = setTimeout(() => {
+      setHistoryLoading(true);
+      setHistoryError(null);
+      void (async () => {
+        let query = supabase
+          .from("transactions")
+          .select("*", { count: "exact" })
+          .is("deleted_at", null)
+          .is("removed_at", null)
+          .order("date", { ascending: false })
+          .range(0, (historyPage + 1) * ACTIVITY_PAGE_SIZE - 1);
+        if (activeHousehold.isPersonal) {
+          query = query.or(`household_id.eq.${activeHousehold.householdId},and(household_id.is.null,user_id.eq.${user.id})`);
+        } else {
+          query = query.eq("household_id", activeHousehold.householdId);
+        }
+        if (activeDateRange.startDate) query = query.gte("date", activeDateRange.startDate);
+        if (activeDateRange.endDate) query = query.lte("date", activeDateRange.endDate);
+        const remoteSearch = search.trim().replace(/[%_(),]/g, " ").slice(0, 80);
+        if (remoteSearch) {
+          query = query.or(`merchant_name.ilike.%${remoteSearch}%,note.ilike.%${remoteSearch}%,category.ilike.%${remoteSearch}%`);
+        }
+        const { data, count, error } = await query;
+        if (error) throw error;
+        if (!active) return;
+        setHistoryTransactions((data ?? []).map(normalizeTransactionRow));
+        setHistoryTotal(count ?? data?.length ?? 0);
+      })().catch(error => {
+        if (active) setHistoryError(error instanceof Error ? error.message : "Activity history could not be loaded.");
+      }).finally(() => {
+        if (active) setHistoryLoading(false);
+      });
+    }, 240);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [activeDateRange.endDate, activeDateRange.startDate, activeHousehold, demoMode, historyPage, historyRetryNonce, search, user]);
+
+  const activityTransactions = useMemo(() => {
+    const byId = new Map<string, Transaction>();
+    transactions.forEach(transaction => byId.set(transaction.id, transaction));
+    historyTransactions.forEach(transaction => byId.set(transaction.id, transaction));
+    return Array.from(byId.values());
+  }, [historyTransactions, transactions]);
 
   // ── Build unified activity feed ───────────────────────────────────────────
   const allActivity = useMemo((): ActivityItem[] => {
@@ -413,12 +572,12 @@ export function ActivityScreen() {
     const currentMonth = today.getMonth();
     const currentYear = today.getFullYear();
     const snowballMatches = matchedOccurrenceAllocations(
-      transactions,
+      activityTransactions,
       "extra_principal",
       "snowball",
     );
     const confirmedBillMatchKeys = new Set(
-      transactions.filter(isConfirmedBillMatch).flatMap((transaction) => {
+      activityTransactions.filter(isConfirmedBillMatch).flatMap((transaction) => {
         const billId = confirmedBillMatchId(transaction);
         if (!billId) return [];
         const [year, month] = (
@@ -462,7 +621,7 @@ export function ActivityScreen() {
 
     // 1. Manual and bank transactions. Confirmed matches are presented as
     // the actual bill payment instead of a second, separate expense.
-    for (const tx of transactions) {
+    for (const tx of activityTransactions) {
       const matchedBillId = confirmedBillMatchId(tx);
       const matchedBill = matchedBillId
         ? bills.find((bill) => bill.id === matchedBillId)
@@ -471,6 +630,7 @@ export function ActivityScreen() {
       const matchedIncome = tx.linked_income_id
         ? incomes.find((income) => income.id === tx.linked_income_id)
         : undefined;
+      const selectedDebt = transactionDebt(tx, bills);
       const allocationDetail = (tx.review_allocations ?? [])
         .map((allocation) => {
           if (
@@ -511,6 +671,7 @@ export function ActivityScreen() {
         source,
         editable: true,
         rawTx: tx,
+        debtName: selectedDebt?.name,
         detail:
           allocationDetail ||
           (tx.note ? `${tx.note} · ${tx.category}` : tx.category),
@@ -561,7 +722,7 @@ export function ActivityScreen() {
     // 3. Income occurrences — past 24 months plus every occurrence in the current month.
     // Matched deposits replace their planned occurrence instead of being added twice.
     const incomeOccurrenceMatches = matchedOccurrenceAllocations(
-      transactions,
+      activityTransactions,
       "income",
     );
     for (let i = 24; i >= 0; i--) {
@@ -653,7 +814,7 @@ export function ActivityScreen() {
 
     return items;
   }, [
-    transactions,
+    activityTransactions,
     pendingBankTransactions,
     pendingPlanMatches,
     overrides,
@@ -685,44 +846,8 @@ export function ActivityScreen() {
     [allActivity],
   );
 
-  const availableActivityMonths = useMemo(
-    () =>
-      listActivityMonths(
-        [
-          ...transactions.map((transaction) => transaction.date),
-          ...pendingBankTransactions.map(
-            (transaction) => transaction.transaction_date,
-          ),
-          ...overrides
-            .filter(
-              (override) =>
-                override.paid_amount > 0.005 ||
-                override.actual_amount !== undefined,
-            )
-            .map(
-              (override) =>
-                override.paid_date ??
-                `${override.year}-${String(override.month + 1).padStart(2, "0")}-01`,
-            ),
-          ...extraPayments.map(
-            (payment) =>
-              payment.payment_date ??
-              `${payment.year}-${String(payment.month + 1).padStart(2, "0")}-01`,
-          ),
-        ],
-        currentActivityMonth,
-      ),
-    [
-      currentActivityMonth,
-      extraPayments,
-      overrides,
-      pendingBankTransactions,
-      transactions,
-    ],
-  );
-
   const activeFilterCount = [
-    monthFilter !== currentActivityMonth,
+    rangeFilter !== "this_month",
     typeFilter !== "all",
     sourceFilter !== "all",
     categoryFilter !== "all",
@@ -732,7 +857,9 @@ export function ActivityScreen() {
   const hasActiveFilters = activeFilterCount > 0 || search.trim().length > 0;
 
   const clearFilterSelections = () => {
-    setMonthFilter(currentActivityMonth);
+    setRangeFilter("this_month");
+    setCustomStartDate("");
+    setCustomEndDate("");
     setTypeFilter("all");
     setSourceFilter("all");
     setCategoryFilter("all");
@@ -745,8 +872,10 @@ export function ActivityScreen() {
   };
 
   const filtered = useMemo(() => {
+    const today = todayIsoDate();
     let list = allActivity.filter((item) =>
-      item.date.startsWith(`${monthFilter}-`),
+      dateIsInActivityRange(item.date, activeDateRange) &&
+      (item.pending || item.date <= today),
     );
     if (typeFilter === "expense") list = list.filter((t) => t.amount < 0);
     if (typeFilter === "income") list = list.filter((t) => t.amount > 0);
@@ -764,38 +893,70 @@ export function ActivityScreen() {
           SOURCE_META[t.source].label.toLowerCase().includes(q),
       );
     }
-    if (!hasActiveFilters) {
-      const now = new Date();
-      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-      const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-      list = list.filter((t) => t.date >= monthStart);
-      list.sort((a, b) => {
-        const aUpcoming = a.date >= today;
-        const bUpcoming = b.date >= today;
-        if (aUpcoming && bUpcoming) return a.date.localeCompare(b.date);
-        if (aUpcoming !== bUpcoming) return aUpcoming ? -1 : 1;
-        return b.date.localeCompare(a.date);
-      });
-    } else {
-      list.sort((a, b) =>
-        sortOrder === "asc"
-          ? a.date.localeCompare(b.date)
-          : b.date.localeCompare(a.date),
-      );
-    }
+    list.sort((a, b) =>
+      sortOrder === "asc"
+        ? a.date.localeCompare(b.date)
+        : b.date.localeCompare(a.date),
+    );
     return list;
   }, [
     allActivity,
-    monthFilter,
+    activeDateRange,
     typeFilter,
     sourceFilter,
     categoryFilter,
     search,
     sortOrder,
-    hasActiveFilters,
   ]);
 
   const sections = useMemo(() => groupByMonth(filtered), [filtered]);
+
+  const runningBalanceById = useMemo(() => {
+    const map = new Map<string, number>();
+    const today = todayIsoDate();
+    if (activeDateRange.endDate && activeDateRange.endDate < today) return map;
+    const checkingAccount = connectedBankAccounts.find(account =>
+      account.is_active &&
+      (account.account_subtype === "checking" || account.account_type === "checking" || /checking/i.test(account.name)),
+    );
+    const manualChecking = accounts.find(account => account.is_active && account.account_type === "checking");
+    const currentBalance = checkingAccount?.current_balance ?? manualChecking?.current_balance;
+    if (currentBalance == null || !Number.isFinite(currentBalance)) return map;
+    let balance = currentBalance;
+    filtered
+      .filter(item =>
+        Boolean(item.rawTx) &&
+        !item.pending &&
+        item.date <= today &&
+        isCashFlowTransaction(item.rawTx!) &&
+        isCheckingBalanceTransaction(item.rawTx!, connectedBankAccounts),
+      )
+      .sort((left, right) => right.date.localeCompare(left.date) || right.id.localeCompare(left.id))
+      .forEach(item => {
+        map.set(item.id, balance);
+        balance -= item.amount;
+      });
+    return map;
+  }, [accounts, activeDateRange.endDate, connectedBankAccounts, filtered]);
+
+  const exportVisibleActivity = useCallback(() => {
+    const exported = exportActivityCsv(filtered.map(item => ({
+      date: item.date,
+      description: item.label,
+      category: item.category,
+      account: item.rawTx?.account_id
+        ? accounts.find(account => account.id === item.rawTx?.account_id)?.name
+        : item.rawTx?.plaid_account_id
+          ? connectedBankAccounts.find(account => account.plaid_account_id === item.rawTx?.plaid_account_id || account.id === item.rawTx?.plaid_account_id)?.name
+          : undefined,
+      amount: item.amount,
+      type: SOURCE_META[item.source].label,
+      appliedDebt: item.debtName,
+      note: item.rawTx?.note,
+      runningBalance: runningBalanceById.get(item.id),
+    })));
+    if (!exported) Alert.alert("CSV export", "CSV export is available in the website and installed web app.");
+  }, [accounts, connectedBankAccounts, filtered, runningBalanceById]);
 
   const activityReviewCount = useMemo(
     () => buildReviewQueue(transactions, todayIsoDate()).length,
@@ -809,7 +970,7 @@ export function ActivityScreen() {
   );
 
   // ── Summary stats ─────────────────────────────────────────────────────────
-  const monthlySummary = useMemo(() => {
+  const monthSummaryBasis = useMemo(() => {
     const [year, monthNumber] = monthFilter.split("-").map(Number);
     const monthIndex = monthNumber - 1;
     const plannedBillEntries = getMonthlyBills(monthIndex, year).flatMap(
@@ -879,11 +1040,57 @@ export function ActivityScreen() {
     monthFilter,
   ]);
 
-  const feedOrderLabel = hasActiveFilters
-    ? sortOrder === "asc"
-      ? "oldest first"
-      : "newest first"
-    : "upcoming first";
+  const feedOrderLabel = sortOrder === "asc" ? "oldest first" : "newest first";
+
+  const activitySummary = useMemo(() => {
+    const cashRows = filtered.map(item => ({
+      amount: item.rawTx
+        ? activityAmountOutsidePlannedBill(
+            item.amount,
+            isConfirmedBillMatch(item.rawTx),
+            item.rawTx.review_allocations,
+          )
+        : item.amount,
+      pending: item.pending,
+      source:
+        (item.source === "bill_payment" && !item.rawTx) ||
+        (item.rawTx && !isCashFlowTransaction(item.rawTx)) ||
+        (item.rawTx && item.rawTx.amount > 0 && !isCheckingBalanceTransaction(item.rawTx, connectedBankAccounts))
+          ? "transfer"
+          : item.source,
+    }));
+    const summary = summarizeActivityRange(cashRows);
+    const weekRows = new Map<string, ActivityItem[]>();
+    filtered.forEach(item => {
+      const [year, month, day] = item.date.slice(0, 10).split("-").map(Number);
+      const date = new Date(year, month - 1, day, 12);
+      date.setDate(date.getDate() - date.getDay());
+      const key = dateOnly(date);
+      weekRows.set(key, [...(weekRows.get(key) ?? []), item]);
+    });
+    return {
+      title: activeDateRange.label,
+      ...summary,
+      weeks: rangeFilter === "this_month" || rangeFilter === "last_month"
+        ? monthSummaryBasis.weeks
+        : Array.from(weekRows.entries())
+        .sort(([left], [right]) => right.localeCompare(left))
+        .slice(0, 12)
+        .map(([start, rows]) => {
+          const startDate = new Date(`${start}T12:00:00`);
+          const endDate = new Date(startDate);
+          endDate.setDate(endDate.getDate() + 6);
+          const weekSummary = summarizeActivityRange(rows);
+          return {
+            startDay: startDate.getDate(),
+            endDay: endDate.getDate(),
+            label: `${startDate.toLocaleDateString(undefined, { month: "short", day: "numeric" })}–${endDate.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`,
+            ...weekSummary,
+            total: weekSummary.net,
+          };
+        }),
+    };
+  }, [activeDateRange.label, connectedBankAccounts, filtered, monthSummaryBasis.weeks, rangeFilter]);
 
   const quickChips = [
     {
@@ -1874,7 +2081,7 @@ export function ActivityScreen() {
                 Weekly breakdown
               </Text>
               <Text style={[styles.summarySheetTitle, { color: c.foreground }]}>
-                {monthlySummary.title}
+                {activitySummary.title}
               </Text>
             </View>
             <Pressable
@@ -1897,26 +2104,26 @@ export function ActivityScreen() {
                 style={[
                   styles.summaryLargeNet,
                   {
-                    color: monthlySummary.net >= 0 ? c.success : c.destructive,
+                    color: activitySummary.net >= 0 ? c.success : c.destructive,
                   },
                 ]}
               >
-                {monthlySummary.net >= 0 ? "+" : "-"}$
-                {Math.abs(monthlySummary.net).toFixed(0)}
+                {activitySummary.net >= 0 ? "+" : "-"}$
+                {Math.abs(activitySummary.net).toFixed(0)}
               </Text>
             </View>
             <View style={styles.summaryTotalRight}>
               <Text style={[styles.summaryMiniValue, { color: c.success }]}>
-                +${monthlySummary.income.toFixed(0)} in
+                +${activitySummary.income.toFixed(0)} in
               </Text>
               <Text style={[styles.summaryMiniValue, { color: c.destructive }]}>
-                -${monthlySummary.out.toFixed(0)} out
+                -${activitySummary.out.toFixed(0)} out
               </Text>
             </View>
           </View>
 
           <View style={styles.summaryWeekList}>
-            {monthlySummary.weeks.map((week) => (
+            {activitySummary.weeks.map((week) => (
               <View
                 key={week.label}
                 style={[
@@ -2071,6 +2278,9 @@ export function ActivityScreen() {
                   label: "Source",
                   value: meta.description,
                 },
+                ...(detailItem.debtName
+                  ? [{ icon: "credit-card" as const, label: "Applied toward debt", value: detailItem.debtName }]
+                  : []),
                 ...(detailItem.detail
                   ? [
                       {
@@ -2279,6 +2489,18 @@ export function ActivityScreen() {
             {feedOrderLabel}
           </Text>
         </View>
+        <View style={styles.headerActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Export visible activity as CSV"
+            onPress={exportVisibleActivity}
+            style={({ pressed }) => [
+              styles.exportButton,
+              { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.78 : 1 },
+            ]}
+          >
+            <Feather name="download" size={18} color={c.foreground} />
+          </Pressable>
         {activityReviewCount > 0 || pendingActivityCount > 0 ? (
           <Pressable
             accessibilityRole="button"
@@ -2328,6 +2550,7 @@ export function ActivityScreen() {
             accessibilityLabel="Add activity"
           />
         )}
+        </View>
       </View>
 
       {pendingActivityCount > 0 ? (
@@ -2374,7 +2597,7 @@ export function ActivityScreen() {
               Activity snapshot
             </Text>
             <Text style={[styles.monthlySummaryTitle, { color: c.foreground }]}>
-              {monthlySummary.title}
+              {activitySummary.title}
             </Text>
           </View>
           <View
@@ -2382,7 +2605,7 @@ export function ActivityScreen() {
               styles.activityHeroBadge,
               {
                 backgroundColor:
-                  monthlySummary.net >= 0
+                  activitySummary.net >= 0
                     ? c.success + "18"
                     : c.destructive + "18",
               },
@@ -2391,10 +2614,10 @@ export function ActivityScreen() {
             <Text
               style={[
                 styles.activityHeroBadgeText,
-                { color: monthlySummary.net >= 0 ? c.success : c.destructive },
+                { color: activitySummary.net >= 0 ? c.success : c.destructive },
               ]}
             >
-              {monthlySummary.net >= 0 ? "Positive" : "Negative"}
+              {activitySummary.net >= 0 ? "Positive" : "Negative"}
             </Text>
           </View>
         </View>
@@ -2415,11 +2638,11 @@ export function ActivityScreen() {
             <Text
               style={[
                 styles.monthlySummaryValue,
-                { color: monthlySummary.net >= 0 ? c.success : c.destructive },
+                { color: activitySummary.net >= 0 ? c.success : c.destructive },
               ]}
             >
-              {monthlySummary.net >= 0 ? "+" : "-"}$
-              {Math.abs(monthlySummary.net).toFixed(0)}
+              {activitySummary.net >= 0 ? "+" : "-"}$
+              {Math.abs(activitySummary.net).toFixed(0)}
             </Text>
             <Text
               style={[styles.monthlySummaryLabel, { color: c.mutedForeground }]}
@@ -2441,7 +2664,7 @@ export function ActivityScreen() {
             ]}
           >
             <Text style={[styles.monthlySummaryValue, { color: c.success }]}>
-              ${monthlySummary.income.toFixed(0)}
+              ${activitySummary.income.toFixed(0)}
             </Text>
             <Text
               style={[styles.monthlySummaryLabel, { color: c.mutedForeground }]}
@@ -2465,7 +2688,7 @@ export function ActivityScreen() {
             <Text
               style={[styles.monthlySummaryValue, { color: c.destructive }]}
             >
-              ${monthlySummary.out.toFixed(0)}
+              ${activitySummary.out.toFixed(0)}
             </Text>
             <Text
               style={[styles.monthlySummaryLabel, { color: c.mutedForeground }]}
@@ -2546,7 +2769,7 @@ export function ActivityScreen() {
       {!isDesktop ? <PremiumBackdrop variant="green" /> : null}
       {isDesktop ? (
         <DesktopActivityPage
-          rows={allActivity.map((item) => ({
+          rows={filtered.map((item) => ({
             id: item.id,
             date: item.date,
             amount: item.amount,
@@ -2557,6 +2780,8 @@ export function ActivityScreen() {
             pending: item.pending,
             detail: item.detail,
             note: item.rawTx?.note,
+            debtName: item.debtName,
+            runningBalance: runningBalanceById.get(item.id),
             accountName: item.rawTx?.account_id
               ? accounts.find(
                   (account) => account.id === item.rawTx?.account_id,
@@ -2570,7 +2795,24 @@ export function ActivityScreen() {
                   )?.name
                 : undefined,
           }))}
-          summary={monthlySummary}
+          summary={activitySummary}
+          dateRangeLabel={activeDateRange.label}
+          onDateRangePress={() => setFilterModalVisible(true)}
+          search={search}
+          onSearchChange={setSearch}
+          categoryFilter={categoryFilter}
+          onCategoryPress={() => {
+            const values = ["all", ...categoryOptions];
+            setCategoryFilter(values[(values.indexOf(categoryFilter) + 1) % values.length]);
+          }}
+          typeFilter={typeFilter}
+          onTypePress={() => setTypeFilter(typeFilter === "all" ? "income" : typeFilter === "income" ? "expense" : "all")}
+          hasActiveFilters={hasActiveFilters}
+          onResetFilters={clearFilters}
+          hasMore={historyTransactions.length < historyTotal}
+          loadingMore={historyLoading}
+          loadError={historyError}
+          onLoadMore={() => setHistoryPage(page => page + 1)}
           onAdd={() => {
             setEditTx(null);
             setEditModalVisible(true);
@@ -2590,6 +2832,12 @@ export function ActivityScreen() {
           ]}
           scrollIndicatorInsets={{ bottom: listBottomPadding }}
           stickySectionHeadersEnabled
+          onEndReachedThreshold={0.35}
+          onEndReached={() => {
+            if (!historyLoading && historyTransactions.length < historyTotal) {
+              setHistoryPage(page => page + 1);
+            }
+          }}
           ListHeaderComponent={renderListHeader()}
           ListEmptyComponent={
             <EmptyState
@@ -2610,6 +2858,24 @@ export function ActivityScreen() {
                     }
               }
             />
+          }
+          ListFooterComponent={
+            historyError ? (
+              <View style={styles.historyFooter}>
+                <Text style={[styles.historyError, { color: c.destructive }]}>{historyError}</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setHistoryRetryNonce(value => value + 1)}
+                  style={[styles.historyRetry, { borderColor: c.border, backgroundColor: c.card }]}
+                >
+                  <Text style={[styles.historyRetryText, { color: c.foreground }]}>Retry</Text>
+                </Pressable>
+              </View>
+            ) : historyLoading ? (
+              <View style={styles.historyFooter}>
+                <Text style={[styles.historyRetryText, { color: c.mutedForeground }]}>Loading more activity…</Text>
+              </View>
+            ) : null
           }
           renderSectionHeader={({ section: { title } }) => (
             <View
@@ -2701,6 +2967,12 @@ export function ActivityScreen() {
                         </Text>
                       </View>
                     )}
+                    {item.debtName ? (
+                      <View style={[styles.debtBadge, { backgroundColor: c.primary + "18" }]}>
+                        <Feather name="credit-card" size={9} color={c.primary} />
+                        <Text style={[styles.debtBadgeText, { color: c.primary }]} numberOfLines={1}>Applied to {item.debtName}</Text>
+                      </View>
+                    ) : null}
                     {item.pending ? (
                       <View
                         style={[
@@ -3572,22 +3844,22 @@ export function ActivityScreen() {
               <Text
                 style={[styles.filterGroupLabel, { color: c.mutedForeground }]}
               >
-                MONTH
+                DATE RANGE
               </Text>
               <View style={styles.filterOptionGrid}>
-                {availableActivityMonths.map((month) => (
+                {ACTIVITY_DATE_RANGE_OPTIONS.map((option) => (
                   <Pressable
-                    key={month}
+                    key={option.id}
                     accessibilityRole="button"
-                    accessibilityState={{ selected: monthFilter === month }}
-                    onPress={() => setMonthFilter(month)}
+                    accessibilityState={{ selected: rangeFilter === option.id }}
+                    onPress={() => setRangeFilter(option.id)}
                     style={[
                       styles.filterChip,
                       {
                         backgroundColor:
-                          monthFilter === month ? c.primary : c.card,
+                          rangeFilter === option.id ? c.primary : c.card,
                         borderColor:
-                          monthFilter === month ? c.primary : c.border,
+                          rangeFilter === option.id ? c.primary : c.border,
                       },
                     ]}
                   >
@@ -3596,19 +3868,44 @@ export function ActivityScreen() {
                         styles.filterText,
                         {
                           color:
-                            monthFilter === month
+                            rangeFilter === option.id
                               ? c.primaryForeground
                               : c.foreground,
                         },
                       ]}
                     >
-                      {month === currentActivityMonth
-                        ? `This month · ${activityMonthLabel(month)}`
-                        : activityMonthLabel(month)}
+                      {option.label}
                     </Text>
                   </Pressable>
                 ))}
               </View>
+
+              {rangeFilter === "custom" ? (
+                <View style={styles.customDateRow}>
+                  <View style={styles.customDateField}>
+                    <Text style={[styles.customDateLabel, { color: c.mutedForeground }]}>Start (YYYY-MM-DD)</Text>
+                    <TextInput
+                      accessibilityLabel="Custom Activity start date"
+                      value={customStartDate}
+                      onChangeText={setCustomStartDate}
+                      placeholder="2026-01-01"
+                      placeholderTextColor={c.mutedForeground}
+                      style={[styles.customDateInput, { color: c.foreground, backgroundColor: c.card, borderColor: c.border }]}
+                    />
+                  </View>
+                  <View style={styles.customDateField}>
+                    <Text style={[styles.customDateLabel, { color: c.mutedForeground }]}>End (YYYY-MM-DD)</Text>
+                    <TextInput
+                      accessibilityLabel="Custom Activity end date"
+                      value={customEndDate}
+                      onChangeText={setCustomEndDate}
+                      placeholder="2026-12-31"
+                      placeholderTextColor={c.mutedForeground}
+                      style={[styles.customDateInput, { color: c.foreground, backgroundColor: c.card, borderColor: c.border }]}
+                    />
+                  </View>
+                </View>
+              ) : null}
 
               {categoryOptions.length > 0 && (
                 <>
@@ -3822,6 +4119,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 18,
     paddingBottom: 10,
+  },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  exportButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 15,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   title: {
     fontSize: 30,
@@ -4109,6 +4415,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   filterOptionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  customDateRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 10 },
+  customDateField: { flex: 1, minWidth: 150 },
+  customDateLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginBottom: 5 },
+  customDateInput: { minHeight: 44, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, fontSize: 14 },
   filterChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -4293,6 +4603,8 @@ const styles = StyleSheet.create({
   sourceBadgeText: { fontSize: 9, fontFamily: "Inter_700Bold" },
   catBadge: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5 },
   catBadgeText: { fontSize: 9, fontFamily: "Inter_600SemiBold" },
+  debtBadge: { maxWidth: 180, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, flexDirection: "row", alignItems: "center", gap: 3 },
+  debtBadgeText: { flexShrink: 1, fontSize: 9, fontFamily: "Inter_700Bold" },
   txDate: { fontSize: 9, fontFamily: "Inter_400Regular" },
   txRight: { alignItems: "flex-end" },
   txAmount: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
@@ -4422,4 +4734,28 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   sheetCloseText: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  historyFooter: {
+    minHeight: 56,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  historyError: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: "Inter_500Medium",
+    textAlign: "center",
+  },
+  historyRetry: {
+    minHeight: 40,
+    minWidth: 104,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  historyRetryText: { fontSize: 13, fontFamily: "Inter_700Bold" },
 });

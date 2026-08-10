@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Pressable,
@@ -10,6 +11,9 @@ import {
 } from "react-native";
 
 import { BiometricLockSettings } from "@/components/BiometricLockSettings";
+import { HouseholdSwitcher } from "@/components/HouseholdSwitcher";
+import { AdminMembershipTools } from "@/components/AdminMembershipTools";
+import { AdminMoneyHealth } from "@/components/AdminMoneyHealth";
 import { LegalDocumentModal } from "@/components/LegalDocumentModal";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { PlaidLinkButton } from "@/components/PlaidLinkButton";
@@ -130,6 +134,7 @@ export function DesktopSettingsPage({
   isAdmin?: boolean;
   onOpenAdmin?: () => void;
 }) {
+  const router = useRouter();
   const { user, signOut } = useAuth();
   const { accounts, connectedBankAccounts, activeHousehold } = useBudget();
   const { actualPlan, loading: membershipLoading } = useMembership();
@@ -197,10 +202,6 @@ export function DesktopSettingsPage({
                   accessibilityRole="tab"
                   accessibilityState={{ selected: section === item.label }}
                   onPress={() => {
-                    if (item.label === "Admin" && onOpenAdmin) {
-                      onOpenAdmin();
-                      return;
-                    }
                     setSection(item.label);
                     setMessage(null);
                   }}
@@ -354,6 +355,7 @@ export function DesktopSettingsPage({
                     icon="users"
                     title="Household"
                     description={activeHousehold?.name ?? "Personal household"}
+                    action={<HouseholdSwitcher appearance="settings" />}
                   />
                   <SettingsLine
                     icon="log-out"
@@ -606,6 +608,66 @@ export function DesktopSettingsPage({
                 </View>
               </DesktopCard>
             ) : null}
+
+            {section === "Admin" && isAdmin ? (
+              <>
+                <DesktopCard>
+                  <CardHeader title="Access & Testers" />
+                  <AdminMembershipTools appearance="settings" />
+                </DesktopCard>
+                <View style={styles.previewGrid}>
+                  <DesktopCard style={styles.previewCard}>
+                    <CardHeader title="Test Labs" />
+                    <View style={styles.sectionBody}>
+                      <SettingsLine
+                        icon="shield"
+                        title="Zero Budget Lab"
+                        description="Test Zero Budget with isolated sample money."
+                        action={
+                          <SecondaryButton
+                            label="Open Lab"
+                            icon="arrow-up-right"
+                            onPress={() =>
+                              router.push("/(tabs)/zero-budget-lab" as never)
+                            }
+                          />
+                        }
+                      />
+                    </View>
+                  </DesktopCard>
+                  {onOpenAdmin ? (
+                    <DesktopCard style={styles.previewCard}>
+                      <CardHeader title="Feedback Inbox" />
+                      <View style={styles.sectionBody}>
+                        <SettingsLine
+                          icon="message-square"
+                          title="App admin inbox"
+                          description="Review, respond to, and archive tester feedback."
+                          action={
+                            <SecondaryButton
+                              label="Open Inbox"
+                              icon="arrow-right"
+                              onPress={onOpenAdmin}
+                            />
+                          }
+                        />
+                      </View>
+                    </DesktopCard>
+                  ) : null}
+                </View>
+                <DesktopCard>
+                  <CardHeader title="System Integrity" />
+                  <AdminMoneyHealth
+                    householdId={activeHousehold?.householdId}
+                    appearance="settings"
+                  />
+                </DesktopCard>
+                <DesktopCard>
+                  <CardHeader title="Admin Notifications" />
+                  <NotificationSettings scope="admin" appearance="settings" />
+                </DesktopCard>
+              </>
+            ) : null}
           </View>
         </View>
       </ScrollView>
@@ -762,11 +824,11 @@ const styles = StyleSheet.create({
   navCopy: { flex: 1, minWidth: 0 },
   navTitle: {
     color: palette.textSecondary,
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: "Inter_600SemiBold",
   },
   navTitleActive: { color: palette.purpleDark, fontFamily: "Inter_700Bold" },
-  navDescription: { color: palette.muted, fontSize: 8, marginTop: 2 },
+  navDescription: { color: palette.muted, fontSize: 11, marginTop: 2 },
   settingsMain: { flex: 1, minWidth: 0, gap: 12 },
   message: {
     minHeight: 38,
@@ -782,7 +844,7 @@ const styles = StyleSheet.create({
   messageText: {
     flex: 1,
     color: palette.purpleDark,
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: "Inter_600SemiBold",
   },
   profileBody: { flexDirection: "row", padding: 16, gap: 20 },
@@ -803,16 +865,16 @@ const styles = StyleSheet.create({
   },
   largeAvatarText: {
     color: palette.purple,
-    fontSize: 24,
+    fontSize: 26,
     fontFamily: "Inter_700Bold",
   },
-  avatarHint: { color: palette.muted, fontSize: 9, marginTop: 8 },
+  avatarHint: { color: palette.muted, fontSize: 11, marginTop: 8 },
   profileFields: { flex: 1, minWidth: 0 },
   fieldRow: { flexDirection: "row", gap: 12, marginBottom: 11 },
   field: { flex: 1, minWidth: 0 },
   fieldLabel: {
     color: palette.textSecondary,
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: "Inter_600SemiBold",
     marginBottom: 6,
   },
@@ -824,7 +886,7 @@ const styles = StyleSheet.create({
     backgroundColor: palette.surface,
     paddingHorizontal: 10,
     color: palette.text,
-    fontSize: 10,
+    fontSize: 12,
     outlineStyle: "none",
   } as never,
   inputDisabled: {
@@ -835,7 +897,7 @@ const styles = StyleSheet.create({
   previewGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   previewCard: { width: "48.8%" as never, minHeight: 150 },
   previewBody: { padding: 14, flex: 1 },
-  previewLine: { color: palette.textSecondary, fontSize: 10, lineHeight: 18 },
+  previewLine: { color: palette.textSecondary, fontSize: 12, lineHeight: 20 },
   previewLink: {
     marginTop: "auto",
     paddingTop: 13,
@@ -846,7 +908,7 @@ const styles = StyleSheet.create({
   },
   previewLinkText: {
     color: palette.purple,
-    fontSize: 9,
+    fontSize: 11,
     fontFamily: "Inter_700Bold",
   },
   sectionBody: { paddingHorizontal: 15 },
@@ -868,11 +930,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   lineCopy: { flex: 1, minWidth: 0 },
-  lineTitle: { color: palette.text, fontSize: 11, fontFamily: "Inter_700Bold" },
+  lineTitle: { color: palette.text, fontSize: 13, fontFamily: "Inter_700Bold" },
   lineDescription: {
     color: palette.muted,
-    fontSize: 9,
-    lineHeight: 14,
+    fontSize: 11,
+    lineHeight: 16,
     marginTop: 3,
   },
   optionGroup: { marginBottom: 20, paddingTop: 15 },
@@ -893,14 +955,14 @@ const styles = StyleSheet.create({
   },
   optionText: {
     color: palette.textSecondary,
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: "Inter_600SemiBold",
   },
   optionTextActive: { color: palette.purpleDark, fontFamily: "Inter_700Bold" },
   supportNote: {
     color: palette.muted,
-    fontSize: 9,
-    lineHeight: 15,
+    fontSize: 11,
+    lineHeight: 17,
     marginVertical: 12,
   },
   connectionActions: {
@@ -927,9 +989,9 @@ const styles = StyleSheet.create({
   planCopy: { flex: 1, minWidth: 0 },
   planName: {
     color: palette.text,
-    fontSize: 19,
+    fontSize: 21,
     fontFamily: "Inter_800ExtraBold",
   },
-  planDescription: { color: palette.textSecondary, fontSize: 11, marginTop: 5 },
+  planDescription: { color: palette.textSecondary, fontSize: 13, marginTop: 5 },
   pressed: { opacity: 0.68 },
 });

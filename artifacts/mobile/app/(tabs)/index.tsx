@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert, Animated, Image, Keyboard, Linking, Modal, PanResponder, Platform, Pressable,
@@ -11,9 +11,11 @@ import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from "re
 
 import { AddBillModal } from "@/components/AddBillModal";
 import { AppText } from "@/components/AppText";
-import { CommandPlusButton } from "@/components/CommandPlusButton";
+import { DashboardCustomizer } from "@/components/DashboardCustomizer";
+import { DashboardUtilityWidgets } from "@/components/DashboardUtilityWidgets";
 import { FlowmentumHandoffModal } from "@/components/FlowmentumHandoffModal";
 import { GoalModal } from "@/components/GoalModal";
+import { HouseholdSwitcher } from "@/components/HouseholdSwitcher";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { StabilityPathCard } from "@/components/StabilityPathCard";
 
@@ -21,15 +23,17 @@ import colors from "@/constants/colors";
 import type { Bill, Goal, PendingBankTransaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useAuth } from "@/context/AuthContext";
+import { useAppDiscovery } from "@/context/AppDiscoveryContext";
 import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
+import { useDashboardLayoutPreferences } from "@/hooks/useDashboardLayoutPreferences";
 import { applyCategoryBudgetMove, buildZeroBudgetSummary } from "@/lib/categoryPlanning";
 import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets as saveCategoryBudgetsRemote, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
 import { buildDashboardFinancialModel } from "@/lib/dashboardFinancialModel";
 import { isCheckingBalanceTransaction } from "@/lib/billMatching";
-import { dateOnlyToLocalDate } from "@/lib/dateLabels";
+import { dateOnlyToLocalDate, localDateString } from "@/lib/dateLabels";
 import {
   FLOWMENTUM_URL,
   flowmentumPreviewStorageKey,
@@ -37,9 +41,10 @@ import {
   isFlowmentumHandoffEligible,
   shouldShowFlowmentumHandoff,
 } from "@/lib/flowmentumHandoff";
-import { transactionCategoryParts } from "@/lib/reviewCenter";
+import { buildReviewQueue, transactionCategoryParts } from "@/lib/reviewCenter";
 import type { AlgorithmInsight } from "@/lib/algorithmSuite";
 import { unplannedPendingExpenses } from "@/lib/plaidActivity";
+import { buildTodaysDecisions } from "@/lib/todaysDecisions";
 
 const MONTH_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
@@ -202,15 +207,18 @@ export default function DashboardScreen() {
 
 function MobileDashboardScreen() {
   const c = useColors();
+  const { openNotifications, unreadNotificationCount } = useAppDiscovery();
   const dashboardTheme = DASHBOARD_THEMES[c.mode];
   const [isFocused, setIsFocused] = useState(true);
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const routeParams = useLocalSearchParams<{ add?: string; action?: string }>();
   const { width: viewportWidth } = useWindowDimensions();
+  const compactDashboardHeader = viewportWidth < 430;
   const isCommandWide = Platform.OS === "web" && viewportWidth >= 900;
   const isIosWeb = Platform.OS === "web" && typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent);
   const dashboardTopPadding = Platform.OS === "web" ? (isIosWeb ? 58 : 12) : insets.top + 10;
-  const dashboardBottomPadding = Platform.OS === "web" ? (isIosWeb ? 92 : 68) : insets.bottom + 86;
+  const dashboardBottomPadding = Platform.OS === "web" ? (isIosWeb ? 108 : 104) : insets.bottom + 104;
   const { user } = useAuth();
   const { isAdmin } = useMembership();
   const {
@@ -220,7 +228,7 @@ function MobileDashboardScreen() {
     getCashFlow, addBill, getDailyBalances, getTransactionsForMonth, settings,
     accounts, connectedBankAccounts, incomes, updateSettings, forecastConfidence,
     categories, activeHousehold, canEditHousehold,
-    pendingBankTransactions, pendingPlanMatches,
+    pendingBankTransactions, pendingPlanMatches, transactions,
   } = useBudget();
   const categoryBudgetScope = useMemo(() => ({
     userId: user?.id,
@@ -236,6 +244,7 @@ function MobileDashboardScreen() {
   const [editGoal, setEditGoal]                     = useState<Goal | null>(null);
   const [actionModalVisible, setActionModalVisible] = useState(false);
   const [addBillVisible, setAddBillVisible]         = useState(false);
+  const [addBillForceDebt, setAddBillForceDebt]     = useState(false);
   const [negCalendarVisible, setNegCalendarVisible]  = useState(false);
   const [categoryBudgetModalVisible, setCategoryBudgetModalVisible] = useState(false);
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
@@ -252,6 +261,8 @@ function MobileDashboardScreen() {
   const [flowmentumVisible, setFlowmentumVisible] = useState(false);
   const [flowmentumAdminPreview, setFlowmentumAdminPreview] = useState(false);
   const [pendingFloCharge, setPendingFloCharge] = useState<PendingBankTransaction | null>(null);
+  const [customizerOpen, setCustomizerOpen] = useState(false);
+  const { layout: dashboardLayout, updateLayout: updateDashboardLayout, resetLayout: resetDashboardLayout } = useDashboardLayoutPreferences();
   const startupAlertShownRef = useRef(false);
   const checkedPendingSignatureRef = useRef("");
   const flowScoreSwipeResponder = useMemo(() => PanResponder.create({
@@ -269,6 +280,33 @@ function MobileDashboardScreen() {
   useBackDismiss(flowScoreVisible, () => setFlowScoreVisible(false));
   useBackDismiss(safeCushionVisible, () => setSafeCushionVisible(false));
   useBackDismiss(startupAlertVisible, () => setStartupAlertVisible(false));
+  useEffect(() => {
+    const requestedAdd = Array.isArray(routeParams.add)
+      ? routeParams.add[0]
+      : routeParams.add;
+    const requestedAction = Array.isArray(routeParams.action)
+      ? routeParams.action[0]
+      : routeParams.action;
+    if (requestedAdd !== "1") return;
+    if (requestedAction === "bill" || requestedAction === "debt") {
+      setAddBillForceDebt(requestedAction === "debt");
+      setAddBillVisible(true);
+      router.setParams({ add: "", action: "" });
+      return;
+    }
+    if (requestedAction === "goal") {
+      setEditGoal(null);
+      setGoalModalVisible(true);
+      router.setParams({ add: "", action: "" });
+      return;
+    }
+    if (requestedAction === "income") {
+      router.replace({ pathname: "/(tabs)/more", params: { section: "money", add: "income" } } as any);
+      return;
+    }
+    setActionModalVisible(true);
+    router.setParams({ add: "", action: "" });
+  }, [routeParams.action, routeParams.add, router]);
   const dismissFlowmentum = useCallback(() => {
     setFlowmentumVisible(false);
     if (!flowmentumAdminPreview && flowmentumSeenKey) {
@@ -788,6 +826,55 @@ function MobileDashboardScreen() {
       },
     } as any);
   }, [algorithmSuite.flowScore.label, algorithmSuite.flowScore.score, algorithmSuite.safeCushion.lowestBalance, algorithmSuite.stability, forecastConfidence.label, router, settings.safety_floor]);
+  const reviewCenterCount = useMemo(
+    () => buildReviewQueue(transactions, localDateString()).length,
+    [transactions],
+  );
+  const mobileSnowballTarget = useMemo(
+    () => bills
+      .filter(bill => bill.is_debt && bill.balance > 0.005 && bill.include_in_snowball !== false)
+      .sort((left, right) => left.balance - right.balance || left.priority - right.priority)[0] ?? null,
+    [bills],
+  );
+  const mobileGoalNearCompletion = useMemo(
+    () => currentGoals
+      .filter(goal => goal.target_amount > 0 && goal.current_amount < goal.target_amount)
+      .sort((left, right) => (right.current_amount / right.target_amount) - (left.current_amount / left.target_amount))[0] ?? null,
+    [currentGoals],
+  );
+  const todayDecisions = useMemo(() => {
+    const priorityBill = algorithmSuite.billPriority.nextBill;
+    let priorityDate: Date | null = null;
+    if (priorityBill) {
+      const priorityMonth = priorityBill.dueDay >= today ? currentMonth : (currentMonth + 1) % 12;
+      const priorityYear = priorityBill.dueDay >= today || currentMonth < 11 ? selectedYear : selectedYear + 1;
+      priorityDate = new Date(priorityYear, priorityMonth, priorityBill.dueDay);
+    }
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const daysAway = priorityDate ? Math.max(0, Math.round((priorityDate.getTime() - todayStart.getTime()) / 86_400_000)) : 0;
+    const lowestDate = algorithmSuite.safeCushion.lowestDay
+      ? new Date(selectedYear, currentMonth, algorithmSuite.safeCushion.lowestDay).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+      : null;
+    return buildTodaysDecisions({
+      reviewCount: reviewCenterCount,
+      lowestBalance: algorithmSuite.safeCushion.lowestBalance,
+      lowestDate,
+      safetyFloor: settings.safety_floor,
+      safeToSpend: algorithmSuite.safeCushion.amount,
+      nextBill: priorityBill && priorityDate ? {
+        name: priorityBill.name,
+        amount: priorityBill.amount,
+        dateLabel: daysAway === 0 ? "today" : daysAway === 1 ? "tomorrow" : priorityDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        daysAway,
+      } : null,
+      snowballTarget: mobileSnowballTarget ? { name: mobileSnowballTarget.name, balance: mobileSnowballTarget.balance } : null,
+      goal: mobileGoalNearCompletion ? {
+        name: mobileGoalNearCompletion.name,
+        current: mobileGoalNearCompletion.current_amount,
+        target: mobileGoalNearCompletion.target_amount,
+      } : null,
+    });
+  }, [algorithmSuite.billPriority.nextBill, algorithmSuite.safeCushion, currentMonth, mobileGoalNearCompletion, mobileSnowballTarget, now, reviewCenterCount, selectedYear, settings.safety_floor, today]);
   return (
     <ScrollView
       style={[styles.screen, styles.dashboardStage, { backgroundColor: dashboardTheme.screen }]}
@@ -796,7 +883,7 @@ function MobileDashboardScreen() {
         isCommandWide && styles.contentWide,
         { paddingTop: dashboardTopPadding, paddingBottom: dashboardBottomPadding },
       ]}
-      scrollEnabled={isCommandWide}
+      scrollEnabled
       bounces={false}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
@@ -838,16 +925,65 @@ function MobileDashboardScreen() {
           </Pressable>
         </View>
       ) : null}
-      <View style={styles.dashboardHeader}>
+      <View style={[styles.dashboardHeader, compactDashboardHeader && styles.dashboardHeaderCompact]}>
         <View style={styles.brandLockup}>
-          <View style={styles.brandMark}>
+          <View style={[styles.brandMark, compactDashboardHeader && styles.brandMarkCompact]}>
             <Image source={FLOWLEDGER_LOGO} style={styles.brandMarkImage} resizeMode="cover" />
           </View>
-          <View>
-            <AppText tone="title" style={[styles.heading, { color: dashboardTheme.heading, textShadowColor: c.isDark ? "rgba(56,189,248,0.35)" : "transparent" }]}>FlowLedger Algo</AppText>
+          <View style={styles.brandCopy}>
+            <AppText numberOfLines={1} tone="title" style={[styles.heading, compactDashboardHeader && styles.headingCompact, { color: dashboardTheme.heading, textShadowColor: c.isDark ? "rgba(56,189,248,0.35)" : "transparent" }]}>FlowLedger Algo</AppText>
           </View>
         </View>
-        <CommandPlusButton onPress={() => setActionModalVisible(true)} accessibilityLabel="Add to FlowLedger" />
+        <View style={styles.dashboardHeaderActions}>
+          <HouseholdSwitcher appearance="header" />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Open notifications${unreadNotificationCount ? `, ${unreadNotificationCount} unread` : ""}`}
+            onPress={openNotifications}
+            style={({ pressed }) => [
+              styles.settingsHeaderButton,
+              { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.72 : 1 },
+            ]}
+          >
+            <Feather name="bell" size={20} color={c.foreground} />
+            {unreadNotificationCount ? (
+              <View style={[styles.discoveryHeaderBadge, { backgroundColor: c.destructive }]}>
+                <Text style={styles.discoveryHeaderBadgeText}>{Math.min(unreadNotificationCount, 9)}</Text>
+              </View>
+            ) : null}
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Customize dashboard"
+            onPress={() => setCustomizerOpen(true)}
+            style={({ pressed }) => [
+              styles.settingsHeaderButton,
+              { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.72 : 1 },
+            ]}
+          >
+            <Feather name="sliders" size={20} color={c.foreground} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open Settings"
+            onPress={() =>
+              router.push({
+                pathname: "/(tabs)/more",
+                params: { section: "overview" },
+              } as any)
+            }
+            style={({ pressed }) => [
+              styles.settingsHeaderButton,
+              {
+                backgroundColor: c.card,
+                borderColor: c.border,
+                opacity: pressed ? 0.72 : 1,
+              },
+            ]}
+          >
+            <Feather name="settings" size={20} color={c.foreground} />
+          </Pressable>
+        </View>
       </View>
       {!settings.onboarding_completed && (() => {
         const steps = [
@@ -1132,6 +1268,22 @@ function MobileDashboardScreen() {
       <StabilityPathCard
         progress={algorithmSuite.stability}
         onViewGuide={openStabilityGuide}
+      />
+
+      <DashboardUtilityWidgets
+        layout={dashboardLayout}
+        decisions={todayDecisions}
+        reviewCount={reviewCenterCount}
+        compact
+        onNavigate={(pathname, params) => router.push({ pathname: pathname as any, params } as any)}
+      />
+
+      <DashboardCustomizer
+        visible={customizerOpen}
+        layout={dashboardLayout}
+        onChange={updateDashboardLayout}
+        onReset={resetDashboardLayout}
+        onClose={() => setCustomizerOpen(false)}
       />
 
       {isCommandWide && settings.zeroBasedBudgetEnabled && (
@@ -1637,10 +1789,11 @@ function MobileDashboardScreen() {
 
       <AddBillModal
         visible={addBillVisible}
-        onClose={() => setAddBillVisible(false)}
+        onClose={() => { setAddBillVisible(false); setAddBillForceDebt(false); }}
         onSave={(data) => addBill(data as Omit<Bill, "id" | "created_at">)}
         onDelete={() => {}}
         editBill={null}
+        forceDebt={addBillForceDebt}
       />
 
       <GoalModal
@@ -1791,10 +1944,18 @@ const styles = StyleSheet.create({
   referenceRailFloTitle: { color: "#e0f2fe", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   referenceRailFloSub: { color: "#94a3b8", fontSize: 10, fontFamily: "Inter_500Medium" },
   dashboardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 14, marginBottom: 18 },
-  brandLockup: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
+  dashboardHeaderCompact: { gap: 9 },
+  brandLockup: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1, minWidth: 0 },
+  brandCopy: { flex: 1, minWidth: 0 },
   brandMark: { width: 48, height: 48, borderRadius: 17, alignItems: "center", justifyContent: "center", overflow: "hidden", borderWidth: 1, borderColor: "rgba(96,165,250,0.35)", backgroundColor: "#020617", shadowColor: "#38bdf8", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 18, elevation: 9 },
+  brandMarkCompact: { width: 40, height: 40, borderRadius: 14 },
   brandMarkImage: { width: "100%", height: "100%" },
   heading:    { fontSize: 30, fontFamily: "Inter_800ExtraBold", letterSpacing: -1.0, color: "#f8fafc", textShadowColor: "rgba(56,189,248,0.35)", textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 12 },
+  headingCompact: { fontSize: 20, letterSpacing: -0.65 },
+  dashboardHeaderActions: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8 },
+  settingsHeaderButton: { width: 44, height: 44, borderWidth: 1, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  discoveryHeaderBadge: { position: "absolute", right: -3, top: -3, minWidth: 16, height: 16, borderRadius: 8, alignItems: "center", justifyContent: "center", paddingHorizontal: 3 },
+  discoveryHeaderBadgeText: { color: "#ffffff", fontFamily: "Inter_800ExtraBold", fontSize: 8 },
   setupCard: { borderWidth: 1, borderRadius: 18, padding: 14, marginBottom: 12 },
   setupHeader: { flexDirection: "row", alignItems: "flex-start", marginBottom: 8 },
   setupTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
@@ -1803,6 +1964,14 @@ const styles = StyleSheet.create({
   setupStepText: { fontSize: 12, fontFamily: "Inter_500Medium" },
   setupButton: { height: 40, borderRadius: 9, alignItems: "center", justifyContent: "center", marginTop: 10 },
   setupButtonText: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  dashboardQuickAccess: { borderWidth: 1, borderRadius: 18, padding: 14, marginTop: 12, marginBottom: 12 },
+  dashboardQuickTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold", marginBottom: 10 },
+  dashboardQuickRow: { gap: 9 },
+  dashboardQuickButton: { minHeight: 64, borderWidth: 1, borderRadius: 15, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 11 },
+  dashboardQuickIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  dashboardQuickCopy: { flex: 1, minWidth: 0 },
+  dashboardQuickLabel: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  dashboardQuickMeta: { fontSize: 11, lineHeight: 15, fontFamily: "Inter_500Medium", marginTop: 2 },
   proactiveAlertIcon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   proactiveAlertTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   proactiveAlertText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 2 },
