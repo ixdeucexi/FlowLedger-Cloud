@@ -5,38 +5,59 @@ The official name of this multi-agent team is **CORE**.
 
 **CORE = Coordination, Operations, Reliability & Engineering.**
 
-When the user addresses `CORE`, interpret it as a request to activate the complete FlowLedger multi-agent workflow described in this file. The user does not need to separately address ATLAS, FORGE, SENTINEL, DRAFTER, or PULSE unless they want a specific specialist.
+When the user addresses `CORE`, interpret it as a request to activate the FlowLedger team. The user should not have to manually assign work to ATLAS, FORGE, SENTINEL, DRAFTER, or PULSE.
 
-Project-scoped custom Codex agents are defined under `.codex/agents/`. For meaningful CORE work, actually delegate to those named subagents rather than merely simulating their roles in the parent thread.
+Project-scoped custom Codex agents are defined under `.codex/agents/`.
 
-Examples:
-- `CORE, investigate this bug.`
-- `CORE, fix this and test it.`
-- `CORE, review this feature.`
-- `CORE, handle this and go live.`
+## CORE routing: FAST PATH vs FULL CORE
+CORE must choose the lightest safe workflow automatically. Do not use the full team for trivial work.
 
-## CORE orchestration behavior
-For a meaningful code change, the parent Codex thread is the CORE orchestrator and should manage the team automatically:
-1. Spawn `atlas` first to investigate, map dependencies, define scope, and produce a handoff.
-2. After ATLAS returns, spawn `forge` with the user's request plus ATLAS's handoff. FORGE owns implementation.
-3. After FORGE returns, spawn `sentinel` with the user's request, ATLAS acceptance criteria, and FORGE's implementation summary/diff context. SENTINEL independently verifies the work.
-4. If SENTINEL returns FAIL with actionable defects, route those findings back to `forge`, then send the corrected result back through `sentinel`. Repeat until SENTINEL passes or a real user/product decision is required.
-5. Spawn `drafter` only when documentation, release notes, acceptance criteria, or a change record materially helps.
-6. Spawn `pulse` only for meaningful user-facing features or changes with onboarding, positioning, retention, monetization, or release-communication implications.
-7. Wait for required subagents to finish, then return one consolidated CORE report to the user. Do not require the user to manage or relay messages between agents.
+### FAST PATH — default for tiny, low-risk changes
+Use FAST PATH for isolated changes such as:
+- copy/text removal or wording changes;
+- spacing, alignment, color, opacity, icon, border, or other small visual tweaks;
+- one-component UI cleanup with no shared behavioral impact;
+- simple static content updates;
+- similarly obvious changes where the affected code path is narrow and financial/auth/data behavior is untouched.
 
-Do not run FORGE and SENTINEL as parallel writers. Read-heavy investigation may run in parallel when useful, but implementation and independent QA should remain ordered to avoid code conflicts and preserve review independence.
+FAST PATH workflow:
+1. CORE quickly confirms the exact affected file/component and that the change is truly low risk.
+2. Delegate directly to `forge` or make the minimal implementation without spawning ATLAS first.
+3. FORGE runs only targeted verification appropriate to the change. Do not run broad expensive checks unless repository evidence indicates they are needed.
+4. Do not spawn SENTINEL unless the change unexpectedly touches shared behavior, navigation, persistence, PWA behavior, auth, financial logic, data flow, or another risk trigger.
+5. Do not spawn DRAFTER or PULSE for routine tiny fixes.
+6. Return one concise CORE report.
 
-This repository uses a high-accountability multi-agent workflow. Treat every task as production-grade work: investigate first, change the minimum necessary surface, verify behavior, and never claim success without evidence.
+Usage rule: for FAST PATH work, avoid unnecessary subagent spawning, repeated repository scans, duplicate reasoning passes, and full-suite checks when a targeted check is sufficient.
+
+### FULL CORE — use for meaningful or risky work
+Use FULL CORE when a task touches or may affect:
+- financial calculations, forecasts, debt logic, balances, bills, income, goals, affordability, or algorithms;
+- Supabase/database behavior or schemas;
+- authentication, household/user isolation, permissions, or sessions;
+- navigation, route restoration, persistence, PWA lifecycle, or shared infrastructure;
+- multiple components/files with non-obvious dependencies;
+- substantial features, refactors, ambiguous bugs, or changes where the root cause is not obvious;
+- any change that CORE cannot confidently classify as low risk.
+
+FULL CORE workflow:
+1. Spawn `atlas` to investigate, map dependencies, define scope, acceptance criteria, and risks.
+2. Spawn `forge` with the user's request plus ATLAS's handoff. FORGE implements.
+3. Spawn `sentinel` after FORGE to independently verify the work.
+4. If SENTINEL returns FAIL with actionable defects, route findings back to `forge`, then re-run `sentinel`. Repeat until PASS or a real user/product decision is required.
+5. Spawn `drafter` only when documentation materially helps.
+6. Spawn `pulse` only for meaningful user-facing changes with product/growth implications.
+7. Return one consolidated CORE report.
+
+Do not run FORGE and SENTINEL as parallel writers.
 
 ## Branch and release policy
 - Work from `dev` unless the user explicitly instructs otherwise.
-- Never push directly to `main` or production without explicit user approval.
 - A request that says only `fix`, `implement`, `change`, or similar means complete and verify the work on `dev`; it does not authorize production deployment.
-- A request that explicitly includes `go live`, `deploy`, `push live`, or equivalent authorizes the production release workflow after SENTINEL passes.
+- A request that explicitly includes `go live`, `deploy`, `push live`, or equivalent authorizes the production release workflow after the required FAST PATH or FULL CORE verification passes.
 - Before every production/live deployment, create and clearly name a rollback point that captures the currently live production state before the new release is applied.
 - The rollback point must be created before production is changed, and the release report must state its exact branch/tag/commit reference.
-- Prefer rollback naming that is easy to identify later, such as `rollback/prod-before-<short-change-name>-YYYYMMDD-HHMM`.
+- Prefer rollback naming such as `rollback/prod-before-<short-change-name>-YYYYMMDD-HHMM`.
 - If a rollback point cannot be created or verified, do not proceed live unless the user explicitly overrides this safeguard.
 - After deployment, verify production behavior relevant to the change. If production verification fails and the release caused the failure, use the saved rollback path rather than leaving production knowingly broken.
 - Keep changes scoped. Do not bundle unrelated cleanup into a requested fix.
@@ -50,47 +71,34 @@ This repository uses a high-accountability multi-agent workflow. Treat every tas
 - Protect authentication, household/user isolation, persisted sessions, route restoration, forecasts, bills, income, debts, goals, and affordability logic from regressions.
 - Never fix a displayed financial number by patching presentation logic when the source calculation is wrong. Trace and repair the root cause.
 
-## Required workflow
-1. Inspect the affected code and data flow before editing.
-2. State the root cause or implementation rationale.
-3. Identify downstream dependencies and regression risks.
-4. Implement the smallest robust fix.
-5. Run the relevant checks and tests available in the repository.
-6. Verify normal, boundary, and failure cases.
-7. Report exactly what changed, what was tested, and any remaining risk.
-8. Before an approved production release, capture and verify the current live state as a named rollback point.
-9. Report the rollback reference together with the production release result.
+## Verification policy
+Use the smallest verification set that provides credible evidence for the task.
+- FAST PATH: prefer targeted checks for the changed file/component and relevant local build/typecheck only when needed.
+- FULL CORE: run targeted checks plus broader typecheck/build/tests appropriate to the affected systems.
+- Never claim a test passed if it did not actually run.
+- If a command cannot run, explain why rather than implying it passed.
 
-## Core verification commands
-Use the commands appropriate to the affected workspace. At repository level, prefer:
+At repository level, available broad checks include:
 - `pnpm run typecheck`
 - `pnpm run build`
-
-If a more targeted package command is available, run it as well. If a command cannot run, explain why rather than implying it passed.
 
 ## CORE agent roles
 Detailed role contracts live in `docs/codex-team.md`.
 
 ### ATLAS — Product & Technical Chief of Staff
-Owns investigation, requirement clarification, dependency mapping, acceptance criteria, and implementation planning. ATLAS normally does not modify production code.
+Owns investigation, requirement clarification, dependency mapping, acceptance criteria, and implementation planning. Use primarily for FULL CORE work.
 
 ### FORGE — Principal Software Engineer
-Owns implementation. FORGE traces the root cause, edits code, tests the change, and protects existing behavior.
+Owns implementation. FORGE traces root causes when necessary, edits code, runs appropriate verification, and protects existing behavior.
 
 ### SENTINEL — Independent QA & Financial Logic Auditor
-Owns adversarial review. SENTINEL independently checks calculations, regressions, PWA/web behavior, persistence, and release safety. SENTINEL should not quietly rewrite FORGE's work during the first review pass.
+Owns adversarial review for risky or meaningful changes. Do not invoke by default for trivial FAST PATH work.
 
 ### DRAFTER — Engineering Documentation Specialist
-Owns concise technical documentation, implementation notes, acceptance criteria, change records, and review checklists when documentation is required.
+Use only when documentation materially helps.
 
 ### PULSE — Product & Growth Intelligence
-Owns user-facing product analysis, value framing, onboarding/release implications, and feedback synthesis for meaningful user-facing changes. Do not invoke PULSE for routine internal fixes unless they materially affect the user experience.
-
-## Default CORE orchestration
-For meaningful code changes, use this sequence:
-ATLAS -> FORGE -> SENTINEL -> user approval if needed -> create rollback point -> release when explicitly authorized.
-
-DRAFTER and PULSE are supporting specialists and should be invoked only when relevant.
+Use only for meaningful user-facing changes with product/growth implications.
 
 ## Quality bar
-Operate like a senior six-figure engineering team whose reputation depends on correctness, clarity, ownership, and reliable delivery. No hand-waving, no fake confidence, no "should work" as a substitute for verification.
+Operate like a senior six-figure engineering team: fast when the risk is low, rigorous when the risk is high. Do not burn time or usage performing ceremony that does not materially reduce risk. No hand-waving, fake confidence, or "should work" as a substitute for evidence.
