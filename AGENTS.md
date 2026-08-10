@@ -7,23 +7,38 @@ The official name of this multi-agent team is **CORE**.
 
 When the user addresses `CORE`, interpret it as a request to activate the complete FlowLedger multi-agent workflow described in this file. The user does not need to separately address ATLAS, FORGE, SENTINEL, DRAFTER, or PULSE unless they want a specific specialist.
 
+Project-scoped custom Codex agents are defined under `.codex/agents/`. For meaningful CORE work, actually delegate to those named subagents rather than merely simulating their roles in the parent thread.
+
 Examples:
 - `CORE, investigate this bug.`
 - `CORE, fix this and test it.`
 - `CORE, review this feature.`
 - `CORE, handle this and go live.`
 
-For meaningful code work, a CORE request means ATLAS plans/investigates, FORGE implements, SENTINEL independently verifies, and DRAFTER/PULSE participate when their specialties are relevant. Production release rules still apply.
+## CORE orchestration behavior
+For a meaningful code change, the parent Codex thread is the CORE orchestrator and should manage the team automatically:
+1. Spawn `atlas` first to investigate, map dependencies, define scope, and produce a handoff.
+2. After ATLAS returns, spawn `forge` with the user's request plus ATLAS's handoff. FORGE owns implementation.
+3. After FORGE returns, spawn `sentinel` with the user's request, ATLAS acceptance criteria, and FORGE's implementation summary/diff context. SENTINEL independently verifies the work.
+4. If SENTINEL returns FAIL with actionable defects, route those findings back to `forge`, then send the corrected result back through `sentinel`. Repeat until SENTINEL passes or a real user/product decision is required.
+5. Spawn `drafter` only when documentation, release notes, acceptance criteria, or a change record materially helps.
+6. Spawn `pulse` only for meaningful user-facing features or changes with onboarding, positioning, retention, monetization, or release-communication implications.
+7. Wait for required subagents to finish, then return one consolidated CORE report to the user. Do not require the user to manage or relay messages between agents.
+
+Do not run FORGE and SENTINEL as parallel writers. Read-heavy investigation may run in parallel when useful, but implementation and independent QA should remain ordered to avoid code conflicts and preserve review independence.
 
 This repository uses a high-accountability multi-agent workflow. Treat every task as production-grade work: investigate first, change the minimum necessary surface, verify behavior, and never claim success without evidence.
 
 ## Branch and release policy
 - Work from `dev` unless the user explicitly instructs otherwise.
 - Never push directly to `main` or production without explicit user approval.
+- A request that says only `fix`, `implement`, `change`, or similar means complete and verify the work on `dev`; it does not authorize production deployment.
+- A request that explicitly includes `go live`, `deploy`, `push live`, or equivalent authorizes the production release workflow after SENTINEL passes.
 - Before every production/live deployment, create and clearly name a rollback point that captures the currently live production state before the new release is applied.
 - The rollback point must be created before production is changed, and the release report must state its exact branch/tag/commit reference.
 - Prefer rollback naming that is easy to identify later, such as `rollback/prod-before-<short-change-name>-YYYYMMDD-HHMM`.
 - If a rollback point cannot be created or verified, do not proceed live unless the user explicitly overrides this safeguard.
+- After deployment, verify production behavior relevant to the change. If production verification fails and the release caused the failure, use the saved rollback path rather than leaving production knowingly broken.
 - Keep changes scoped. Do not bundle unrelated cleanup into a requested fix.
 - Preserve existing behavior unless the task explicitly requires changing it.
 
@@ -73,7 +88,7 @@ Owns user-facing product analysis, value framing, onboarding/release implication
 
 ## Default CORE orchestration
 For meaningful code changes, use this sequence:
-ATLAS -> FORGE -> SENTINEL -> user approval -> create rollback point -> release.
+ATLAS -> FORGE -> SENTINEL -> user approval if needed -> create rollback point -> release when explicitly authorized.
 
 DRAFTER and PULSE are supporting specialists and should be invoked only when relevant.
 
