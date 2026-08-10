@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -15,6 +15,7 @@ import {
   FLOW_GUIDE_SECTIONS,
   STABILITY_PATH_GUIDE,
   flowGuideSectionIndex,
+  guideTabScrollOffset,
 } from "@/lib/flowledgerGuide";
 import { FLOW_SCORE_GUIDE, FLOW_SCORE_MAX_POINTS } from "@/lib/flowScorePolicy";
 import type { StabilityStage } from "@/lib/stability";
@@ -66,12 +67,43 @@ export default function HowFlowLedgerWorksScreen() {
   }>();
   const routeSection = param(params.section, "overview");
   const [sectionIndex, setSectionIndex] = useState(() => flowGuideSectionIndex(routeSection));
+  const sectionNavRef = useRef<ScrollView>(null);
+  const contentScrollRef = useRef<ScrollView>(null);
+  const sectionNavViewport = useRef({ width: 0, height: 0 });
+  const sectionTabLayouts = useRef<Record<number, { x: number; y: number; width: number; height: number }>>({});
   const section = FLOW_GUIDE_SECTIONS[sectionIndex];
   const lastSection = sectionIndex === FLOW_GUIDE_SECTIONS.length - 1;
+
+  const scrollSectionTabIntoView = useCallback((index: number, animated = true) => {
+    const tab = sectionTabLayouts.current[index];
+    const viewport = sectionNavViewport.current;
+    if (!tab) return;
+
+    if (isDesktop && viewport.height > 0) {
+      sectionNavRef.current?.scrollTo({
+        y: guideTabScrollOffset(tab.y, tab.height, viewport.height),
+        animated,
+      });
+      return;
+    }
+
+    if (!isDesktop && viewport.width > 0) {
+      sectionNavRef.current?.scrollTo({
+        x: guideTabScrollOffset(tab.x, tab.width, viewport.width),
+        animated,
+      });
+    }
+  }, [isDesktop]);
 
   useEffect(() => {
     setSectionIndex(flowGuideSectionIndex(routeSection));
   }, [routeSection]);
+
+  useEffect(() => {
+    contentScrollRef.current?.scrollTo({ y: 0, animated: false });
+    const frame = requestAnimationFrame(() => scrollSectionTabIntoView(sectionIndex));
+    return () => cancelAnimationFrame(frame);
+  }, [scrollSectionTabIntoView, sectionIndex]);
 
   const facts = useMemo(() => readGuideFacts(params), [
     params.backupTarget,
@@ -121,12 +153,26 @@ export default function HowFlowLedgerWorksScreen() {
 
         <View style={[styles.body, isDesktop && styles.bodyDesktop]}>
           {isDesktop ? (
-            <ScrollView accessibilityRole="tablist" style={[styles.sectionNav, { borderRightColor: c.border }]} contentContainerStyle={styles.sectionNavContent} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              ref={sectionNavRef}
+              accessibilityRole="tablist"
+              style={[styles.sectionNav, { borderRightColor: c.border }]}
+              contentContainerStyle={styles.sectionNavContent}
+              showsVerticalScrollIndicator={false}
+              onLayout={({ nativeEvent: { layout } }) => {
+                sectionNavViewport.current = layout;
+                requestAnimationFrame(() => scrollSectionTabIntoView(sectionIndex, false));
+              }}
+            >
               {FLOW_GUIDE_SECTIONS.map((item, index) => (
                 <Pressable
                   key={item.id}
                   accessibilityRole="tab"
                   accessibilityState={{ selected: index === sectionIndex }}
+                  onLayout={({ nativeEvent: { layout } }) => {
+                    sectionTabLayouts.current[index] = layout;
+                    if (index === sectionIndex) requestAnimationFrame(() => scrollSectionTabIntoView(index, false));
+                  }}
                   onPress={() => goTo(index)}
                   style={({ pressed }) => [styles.navItem, index === sectionIndex && { backgroundColor: c.primary + "18", borderColor: c.primary + "45" }, { opacity: pressed ? 0.76 : 1 }]}
                 >
@@ -136,16 +182,37 @@ export default function HowFlowLedgerWorksScreen() {
               ))}
             </ScrollView>
           ) : (
-            <ScrollView horizontal style={styles.mobileSectionNav} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mobileStepStrip} accessibilityRole="tablist">
+            <ScrollView
+              ref={sectionNavRef}
+              horizontal
+              style={styles.mobileSectionNav}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.mobileStepStrip}
+              accessibilityRole="tablist"
+              onLayout={({ nativeEvent: { layout } }) => {
+                sectionNavViewport.current = layout;
+                requestAnimationFrame(() => scrollSectionTabIntoView(sectionIndex, false));
+              }}
+            >
               {FLOW_GUIDE_SECTIONS.map((item, index) => (
-                <Pressable key={item.id} accessibilityRole="tab" accessibilityState={{ selected: index === sectionIndex }} onPress={() => goTo(index)} style={[styles.mobileStep, { backgroundColor: index === sectionIndex ? c.primary : c.muted, borderColor: index === sectionIndex ? c.primary : c.border }]}>
+                <Pressable
+                  key={item.id}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: index === sectionIndex }}
+                  onLayout={({ nativeEvent: { layout } }) => {
+                    sectionTabLayouts.current[index] = layout;
+                    if (index === sectionIndex) requestAnimationFrame(() => scrollSectionTabIntoView(index, false));
+                  }}
+                  onPress={() => goTo(index)}
+                  style={[styles.mobileStep, { backgroundColor: index === sectionIndex ? c.primary : c.muted, borderColor: index === sectionIndex ? c.primary : c.border }]}
+                >
                   <AppText style={[styles.mobileStepText, { color: index === sectionIndex ? c.primaryForeground : c.mutedForeground }]}>{index + 1}. {item.title}</AppText>
                 </Pressable>
               ))}
             </ScrollView>
           )}
 
-          <ScrollView style={styles.contentScroll} contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]} showsVerticalScrollIndicator keyboardShouldPersistTaps="handled">
+          <ScrollView ref={contentScrollRef} style={styles.contentScroll} contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]} showsVerticalScrollIndicator keyboardShouldPersistTaps="handled">
             <GuideSection
               id={section.id}
               c={c}

@@ -806,7 +806,7 @@ function MobileDashboardScreen() {
     router.push({
       pathname: "/(tabs)/how-flowledger-works",
       params: buildFlowGuideRouteParams({
-        section: "stability",
+        section: "overview",
         stage: algorithmSuite.stability.stage,
         stageLabel: algorithmSuite.stability.stageLabel,
         protectedDays: algorithmSuite.stability.protectedDays,

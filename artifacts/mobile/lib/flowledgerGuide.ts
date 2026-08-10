@@ -31,6 +31,10 @@ export function flowGuideSectionIndex(value?: string) {
   return index >= 0 ? index : 0;
 }
 
+export function guideTabScrollOffset(itemStart: number, itemSize: number, viewportSize: number) {
+  return Math.max(0, itemStart - Math.max(0, (viewportSize - itemSize) / 2));
+}
+
 export interface FlowGuideRouteFacts {
   section?: FlowGuideSectionId;
   stage: StabilityStage;

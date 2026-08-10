@@ -781,7 +781,7 @@ export function DesktopDashboard() {
   const openStabilityGuide = () => go(
     "/(tabs)/how-flowledger-works",
     buildFlowGuideRouteParams({
-      section: "stability",
+      section: "overview",
       stage: progress.stage,
       stageLabel: progress.stageLabel,
       protectedDays: progress.protectedDays,

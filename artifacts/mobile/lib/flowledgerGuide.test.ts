@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { readFileSync } from "node:fs";
 
-import { ALGORITHM_GUIDE, FLOWLEDGER_MONEY_RULES, FLOW_GUIDE_SECTIONS, STABILITY_PATH_GUIDE, buildFlowGuideRouteParams, flowGuideSectionIndex } from "./flowledgerGuide";
+import { ALGORITHM_GUIDE, FLOWLEDGER_MONEY_RULES, FLOW_GUIDE_SECTIONS, STABILITY_PATH_GUIDE, buildFlowGuideRouteParams, flowGuideSectionIndex, guideTabScrollOffset } from "./flowledgerGuide";
 
 test("stability guide follows the calculation stages in order", () => {
   assert.deepEqual(
@@ -27,9 +27,15 @@ test("the responsive walkthrough exposes each requested section in order", () =>
   assert.equal(FLOW_GUIDE_SECTIONS.find(section => section.id === "faq")?.title, "FAQs");
 });
 
+test("selected guide tabs are centered without scrolling before the first step", () => {
+  assert.equal(guideTabScrollOffset(0, 120, 390), 0);
+  assert.equal(guideTabScrollOffset(500, 140, 390), 375);
+  assert.equal(guideTabScrollOffset(360, 58, 305), 236.5);
+});
+
 test("both dashboards use the shared guide route contract", () => {
   const input = {
-    section: "stability" as const,
+    section: "overview" as const,
     stage: "momentum" as const,
     stageLabel: "Build your backup",
     protectedDays: 45,
@@ -50,7 +56,7 @@ test("both dashboards use the shared guide route contract", () => {
   const params = buildFlowGuideRouteParams(input);
 
   assert.deepEqual(params, {
-    section: "stability",
+    section: "overview",
     stage: "momentum",
     stageLabel: "Build your backup",
     protectedDays: "45",
@@ -70,8 +76,19 @@ test("both dashboards use the shared guide route contract", () => {
   });
 
   for (const path of ["app/(tabs)/index.tsx", "components/desktop/DesktopDashboard.tsx"]) {
-    assert.match(readFileSync(path, "utf8"), /buildFlowGuideRouteParams\(\{/);
+    const source = readFileSync(path, "utf8");
+    assert.match(source, /buildFlowGuideRouteParams\(\{/);
+    assert.match(source, /section: "overview"/);
   }
+});
+
+test("changing sections resets content and keeps the selected tab visible", () => {
+  const source = readFileSync("app/(tabs)/how-flowledger-works.tsx", "utf8");
+  assert.match(source, /contentScrollRef\.current\?\.scrollTo\(\{ y: 0, animated: false \}\)/);
+  assert.match(source, /scrollSectionTabIntoView\(sectionIndex\)/);
+  assert.match(source, /ref=\{sectionNavRef\}/);
+  assert.match(source, /ref=\{contentScrollRef\}/);
+  assert.match(source, /accessibilityState=\{\{ selected: index === sectionIndex \}\}/);
 });
 
 test("the guide does not fabricate live facts when route data is absent", () => {
@@ -107,7 +124,7 @@ test("desktop section navigation stays at its intended width", () => {
 
 test("mobile section navigation stays a compact tab strip", () => {
   const source = readFileSync("app/(tabs)/how-flowledger-works.tsx", "utf8");
-  assert.match(source, /horizontal style=\{styles\.mobileSectionNav\}/);
+  assert.match(source, /horizontal[\s\S]*style=\{styles\.mobileSectionNav\}/);
   assert.match(source, /mobileSectionNav: \{ height: 60, minHeight: 60, maxHeight: 60, flexBasis: 60, flexGrow: 0, flexShrink: 0 \}/);
   assert.match(source, /mobileStepStrip: \{[^}]*paddingVertical: 8 \}/);
   assert.match(source, /mobileStep: \{ minHeight: 44,/);
