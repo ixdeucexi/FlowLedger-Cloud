@@ -397,6 +397,7 @@ interface BudgetContextType {
   getBillMonthlyTotal: (bill: Bill, month: number, year: number) => number;
   getBillEffectiveMonthlyTotal: (bill: Bill, month: number, year: number) => number;
   getDebtPlanForMonth: (month: number, year: number) => DatedSnowballMonthPlanResult | null;
+  getRemainingDebtPlanForMonth: (month: number, year: number) => DatedSnowballMonthPlanResult | null;
 
   runSnowball: (month: number, year: number, extraAmount: number) => SnowballAllocation[];
   previewDebtSnowball: (month: number, year: number, extraAmount?: number, additionalSafeCredit?: number, paymentDateOverride?: string, editingPaymentId?: string) => SnowballProjectionResult;
@@ -2261,7 +2262,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     return result;
   }, [bills, extraPayments, getBillMonthlyTotal, getBillOccurrencesInMonth, overrides, reviewedBillSettlements, settings.paymentMethod, settings.debtPayoffEnabled]);
 
-  const getRemainingDebtPlanForMonth = useCallback((month: number, year: number) => {
+  const getRemainingDebtPlanForMonth = useCallback((month: number, year: number): DatedSnowballMonthPlanResult | null => {
     const plan = getDebtPlanForMonth(month, year);
     if (!plan) return null;
     const billMatches = matchedOccurrenceAllocations(transactions, "bill");
@@ -4362,7 +4363,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       addBill, updateBill, stopFutureBill, deleteBill, deleteBillMistake, getBillById,
       getOverride, getAmount, getPaidAmount, setPaidAmount, setCustomAmount, getCustomDueDay, setCustomDueDay,
       moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence, getBillDateMovesForMonth,
-      getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal, getDebtPlanForMonth,
+      getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal, getDebtPlanForMonth, getRemainingDebtPlanForMonth,
       runSnowball, previewDebtSnowball, applyDebtSnowballPayment, saveExtraPayment, getExtraPayment, deleteExtraPayment, removeDebtSnowballPayment, finalizeBillPayment,
       addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, matchPendingTransactionToBill, removePendingPlanMatch, reconcileTransaction, undoTransactionReconciliation, removeReviewSurplusFunding, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome, getIncomeOccurrencesInMonth,

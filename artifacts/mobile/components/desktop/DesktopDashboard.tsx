@@ -60,6 +60,9 @@ type UpcomingBill = {
   year: number;
   isDebt: boolean;
   pending: boolean;
+  sourceId?: string;
+  kind?: "required" | "rollover" | "extra";
+  paidOff?: boolean;
 };
 
 const BRAND = {
@@ -497,6 +500,7 @@ export function DesktopDashboard() {
     getBillOccurrencesInMonth,
     getCashFlow,
     getDailyBalances,
+    getRemainingDebtPlanForMonth,
     getMonthlyBills,
     getMonthlyIncome,
     getPaidAmount,
@@ -666,7 +670,8 @@ export function DesktopDashboard() {
   const upcoming = useMemo(() => {
     const candidates: UpcomingBill[] = [];
     const appendMonth = (month: number, year: number, minimumDay: number) => {
-      getMonthlyBills(month, year).forEach((bill) => {
+      const debtPlan = getRemainingDebtPlanForMonth(month, year);
+      getMonthlyBills(month, year).filter(bill => !bill.is_debt || !debtPlan).forEach((bill) => {
         const days = getBillOccurrencesInMonth(bill, month, year).sort((a, b) => a - b);
         if (!days.length) return;
         const monthlyTotal = getBillMonthlyTotal(bill, month, year);
@@ -695,6 +700,28 @@ export function DesktopDashboard() {
           });
         });
       });
+      debtPlan?.allocations.forEach(allocation => {
+        const [allocationYear, allocationMonth, allocationDay] = allocation.date.split("-").map(Number);
+        if (allocationYear !== year || allocationMonth !== month + 1 || allocationDay < minimumDay || allocation.amount <= 0.005) return;
+        const pendingTargetId = allocation.sourceBillId ?? allocation.targetBillId;
+        candidates.push({
+          key: allocation.id,
+          id: allocation.targetBillId,
+          name: allocation.targetBillName,
+          category: allocation.kind === "rollover" ? "Snowball rollover" : "Debt payment",
+          amount: allocation.amount,
+          day: allocationDay,
+          month,
+          year,
+          isDebt: true,
+          pending: activePendingMatches.some(
+            match => match.target_id === pendingTargetId && match.occurrence_date === allocation.date,
+          ),
+          sourceId: allocation.sourceBillId,
+          kind: allocation.kind,
+          paidOff: allocation.paidOff,
+        });
+      });
     };
 
     appendMonth(currentMonth, selectedYear, today);
@@ -716,6 +743,7 @@ export function DesktopDashboard() {
     getBillOccurrencesInMonth,
     getMonthlyBills,
     getPaidAmount,
+    getRemainingDebtPlanForMonth,
     selectedYear,
     today,
   ]);
@@ -755,6 +783,18 @@ export function DesktopDashboard() {
     const lowestDate = algorithmSuite.safeCushion.lowestDay
       ? new Date(selectedYear, currentMonth, algorithmSuite.safeCushion.lowestDay).toLocaleDateString("en-US", { month: "short", day: "numeric" })
       : null;
+    const sameSourceRollovers = next?.isDebt && next.sourceId
+      ? upcoming.filter(candidate =>
+        candidate.key !== next.key
+        && candidate.sourceId === next.sourceId
+        && candidate.year === next.year
+        && candidate.month === next.month
+        && candidate.day === next.day
+        && candidate.kind === "rollover",
+      )
+      : [];
+    const rolloverAmount = sameSourceRollovers.reduce((sum, candidate) => sum + candidate.amount, 0);
+    const rolloverNames = [...new Set(sameSourceRollovers.map(candidate => candidate.name))];
     return buildTodaysDecisions({
       reviewCount,
       lowestBalance: algorithmSuite.safeCushion.lowestBalance,
@@ -766,6 +806,12 @@ export function DesktopDashboard() {
         amount: next.amount,
         dateLabel: daysAway === 0 ? "today" : daysAway === 1 ? "tomorrow" : nextDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
         daysAway,
+        isDebt: next.isDebt,
+        paidOff: next.paidOff,
+        rollover: rolloverAmount > 0.005 ? {
+          name: rolloverNames.length === 1 ? rolloverNames[0] : "your next debts",
+          amount: rolloverAmount,
+        } : null,
       } : null,
       snowballTarget: snowballTarget ? { name: snowballTarget.name, balance: snowballTarget.balance } : null,
       goal: nearlyCompleteGoal ? { name: nearlyCompleteGoal.name, current: nearlyCompleteGoal.current_amount, target: nearlyCompleteGoal.target_amount } : null,
@@ -1246,8 +1292,8 @@ export function DesktopDashboard() {
         >
           <View style={styles.sectionCardContent}>
             <SectionHeader
-              title="Upcoming Bills"
-              subtitle="The next unpaid occurrences"
+              title="Upcoming Payments"
+              subtitle="The next unpaid bills and debt allocations"
               action="Manage"
               onAction={() => openBills("bills")}
             />

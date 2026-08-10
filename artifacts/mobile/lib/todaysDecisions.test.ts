@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildTodaysDecisions } from "./todaysDecisions";
+import { buildTodaysDecisions, summarizeDatedDebtDecision } from "./todaysDecisions";
 
 const base = {
   reviewCount: 0,
@@ -35,4 +35,63 @@ test("today decisions return a forecast-grounded all-clear state", () => {
 test("transient financial data is not required for a stable empty state", () => {
   const decisions = buildTodaysDecisions({ ...base, safeToSpend: 0 });
   assert.equal(decisions[0].id, "check-plan");
+});
+
+test("dated debt decisions split a payoff from its same-day rollover", () => {
+  const summary = summarizeDatedDebtDecision([
+    {
+      id: "camera-required",
+      date: "2026-08-11",
+      sourceBillId: "camera",
+      sourceBillName: "Camera",
+      targetBillId: "camera",
+      targetBillName: "Camera",
+      kind: "required",
+      amount: 45,
+      sourceAmount: 103,
+      balanceBefore: 45,
+      balanceAfter: 0,
+      paidOff: true,
+    },
+    {
+      id: "camera-rollover",
+      date: "2026-08-11",
+      sourceBillId: "camera",
+      sourceBillName: "Camera",
+      targetBillId: "concert",
+      targetBillName: "Concert",
+      kind: "rollover",
+      amount: 58,
+      sourceAmount: 58,
+      balanceBefore: 319,
+      balanceAfter: 261,
+      paidOff: false,
+    },
+  ], "camera");
+
+  assert.deepEqual(summary, {
+    date: "2026-08-11",
+    name: "Camera",
+    amount: 45,
+    paidOff: true,
+    rollover: { name: "Concert", amount: 58 },
+  });
+
+  const decision = buildTodaysDecisions({
+    ...base,
+    nextBill: {
+      name: summary!.name,
+      amount: summary!.amount,
+      dateLabel: "tomorrow",
+      daysAway: 1,
+      isDebt: true,
+      paidOff: summary!.paidOff,
+      rollover: summary!.rollover,
+    },
+  })[0];
+
+  assert.equal(decision.title, "Camera payoff is coming up");
+  assert.equal(decision.reason, "$45 pays off Camera tomorrow. $58 rolls to Concert the same day.");
+  assert.equal(decision.actionLabel, "Review Debt");
+  assert.deepEqual(decision.params, { filter: "debt" });
 });

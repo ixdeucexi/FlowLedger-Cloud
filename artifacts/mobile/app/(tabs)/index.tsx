@@ -44,7 +44,7 @@ import {
 import { buildReviewQueue, transactionCategoryParts } from "@/lib/reviewCenter";
 import type { AlgorithmInsight } from "@/lib/algorithmSuite";
 import { unplannedPendingExpenses } from "@/lib/plaidActivity";
-import { buildTodaysDecisions } from "@/lib/todaysDecisions";
+import { buildTodaysDecisions, summarizeDatedDebtDecision } from "@/lib/todaysDecisions";
 import { buildFlowGuideRouteParams } from "@/lib/flowledgerGuide";
 
 const MONTH_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -221,7 +221,7 @@ function MobileDashboardScreen() {
   const { user } = useAuth();
   const { isAdmin } = useMembership();
   const {
-    bills, getPaidAmount, getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, selectedYear,
+    bills, getPaidAmount, getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, getRemainingDebtPlanForMonth, selectedYear,
     getMonthlyIncome,
     goals, addGoal, updateGoal, deleteGoal,
     getCashFlow, addBill, getDailyBalances, getTransactionsForMonth, settings,
@@ -850,6 +850,16 @@ function MobileDashboardScreen() {
       const priorityYear = priorityBill.dueDay >= today || currentMonth < 11 ? selectedYear : selectedYear + 1;
       priorityDate = new Date(priorityYear, priorityMonth, priorityBill.dueDay);
     }
+    const priorityBillRecord = priorityBill ? bills.find(bill => bill.id === priorityBill.id) : null;
+    const priorityMonth = priorityDate?.getMonth() ?? currentMonth;
+    const priorityYear = priorityDate?.getFullYear() ?? selectedYear;
+    const debtDecision = priorityBillRecord?.is_debt && priorityBill
+      ? summarizeDatedDebtDecision(
+        getRemainingDebtPlanForMonth(priorityMonth, priorityYear)?.allocations ?? [],
+        priorityBill.id,
+      )
+      : null;
+    if (debtDecision) priorityDate = dateOnlyToLocalDate(debtDecision.date);
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const daysAway = priorityDate ? Math.max(0, Math.round((priorityDate.getTime() - todayStart.getTime()) / 86_400_000)) : 0;
     const lowestDate = algorithmSuite.safeCushion.lowestDay
@@ -862,10 +872,13 @@ function MobileDashboardScreen() {
       safetyFloor: settings.safety_floor,
       safeToSpend: algorithmSuite.safeCushion.amount,
       nextBill: priorityBill && priorityDate ? {
-        name: priorityBill.name,
-        amount: priorityBill.amount,
+        name: debtDecision?.name ?? priorityBill.name,
+        amount: debtDecision?.amount ?? priorityBill.amount,
         dateLabel: daysAway === 0 ? "today" : daysAway === 1 ? "tomorrow" : priorityDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
         daysAway,
+        isDebt: Boolean(priorityBillRecord?.is_debt),
+        paidOff: debtDecision?.paidOff,
+        rollover: debtDecision?.rollover,
       } : null,
       snowballTarget: mobileSnowballTarget ? { name: mobileSnowballTarget.name, balance: mobileSnowballTarget.balance } : null,
       goal: mobileGoalNearCompletion ? {
@@ -874,7 +887,7 @@ function MobileDashboardScreen() {
         target: mobileGoalNearCompletion.target_amount,
       } : null,
     });
-  }, [algorithmSuite.billPriority.nextBill, algorithmSuite.safeCushion, currentMonth, mobileGoalNearCompletion, mobileSnowballTarget, now, reviewCenterCount, selectedYear, settings.safety_floor, today]);
+  }, [algorithmSuite.billPriority.nextBill, algorithmSuite.safeCushion, bills, currentMonth, getRemainingDebtPlanForMonth, mobileGoalNearCompletion, mobileSnowballTarget, now, reviewCenterCount, selectedYear, settings.safety_floor, today]);
   return (
     <ScrollView
       style={[styles.screen, styles.dashboardStage, { backgroundColor: dashboardTheme.screen }]}
