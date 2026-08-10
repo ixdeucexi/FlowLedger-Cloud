@@ -91,6 +91,28 @@ test("guide step glyphs use theme-aware foreground colors", () => {
   assert.doesNotMatch(source, /name="check" size=\{11\} color="#fff"/);
 });
 
+test("desktop walkthrough height cannot collapse in the web flex container", () => {
+  const source = readFileSync("app/(tabs)/how-flowledger-works.tsx", "utf8");
+  assert.match(source, /isDesktop \? styles\.walkthroughDesktop : styles\.walkthroughMobile/);
+  assert.match(source, /walkthroughMobile: \{ flex: 1 \}/);
+  assert.match(source, /walkthroughDesktop: \{ flexGrow: 0, flexShrink: 0,/);
+  assert.match(source, /Math\.min\(864, Math\.max\(480, height - 36\)\)/);
+  assert.doesNotMatch(source, /walkthroughDesktop: \{ flex: 0/);
+});
+
+test("desktop section navigation stays at its intended width", () => {
+  const source = readFileSync("app/(tabs)/how-flowledger-works.tsx", "utf8");
+  assert.match(source, /sectionNav: \{ width: 242, minWidth: 242, maxWidth: 242, flexBasis: 242, flexGrow: 0, flexShrink: 0,/);
+});
+
+test("mobile section navigation stays a compact tab strip", () => {
+  const source = readFileSync("app/(tabs)/how-flowledger-works.tsx", "utf8");
+  assert.match(source, /horizontal style=\{styles\.mobileSectionNav\}/);
+  assert.match(source, /mobileSectionNav: \{ height: 60, minHeight: 60, maxHeight: 60, flexBasis: 60, flexGrow: 0, flexShrink: 0 \}/);
+  assert.match(source, /mobileStepStrip: \{[^}]*paddingVertical: 8 \}/);
+  assert.match(source, /mobileStep: \{ minHeight: 44,/);
+});
+
 test("the guide explains core money rules without unrelated product messaging", () => {
   const copy = [
     ...STABILITY_PATH_GUIDE.flatMap(step => [step.title, step.range, step.description]),

@@ -107,7 +107,7 @@ export default function HowFlowLedgerWorksScreen() {
   return (
     <View style={[styles.screen, { backgroundColor: c.background, paddingTop: isDesktop ? 18 : insets.top }]}>
       <PremiumBackdrop variant="purple" />
-      <View style={[styles.walkthrough, isDesktop && styles.walkthroughDesktop, { backgroundColor: c.card, borderColor: c.border, height: walkthroughHeight }]}>
+      <View style={[styles.walkthrough, isDesktop ? styles.walkthroughDesktop : styles.walkthroughMobile, { backgroundColor: c.card, borderColor: c.border, height: walkthroughHeight }]}>
         <View style={[styles.header, { borderBottomColor: c.border }]}>
           <View style={styles.headerCopy}>
             <AppText tone="label" style={[styles.eyebrow, { color: c.primary }]}>HOW FLOWLEDGER WORKS</AppText>
@@ -136,7 +136,7 @@ export default function HowFlowLedgerWorksScreen() {
               ))}
             </ScrollView>
           ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mobileStepStrip} accessibilityRole="tablist">
+            <ScrollView horizontal style={styles.mobileSectionNav} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mobileStepStrip} accessibilityRole="tablist">
               {FLOW_GUIDE_SECTIONS.map((item, index) => (
                 <Pressable key={item.id} accessibilityRole="tab" accessibilityState={{ selected: index === sectionIndex }} onPress={() => goTo(index)} style={[styles.mobileStep, { backgroundColor: index === sectionIndex ? c.primary : c.muted, borderColor: index === sectionIndex ? c.primary : c.border }]}>
                   <AppText style={[styles.mobileStepText, { color: index === sectionIndex ? c.primaryForeground : c.mutedForeground }]}>{index + 1}. {item.title}</AppText>
@@ -301,8 +301,9 @@ function Calculation({ c, label, value, emphasized = false }: { c: ReturnType<ty
 
 const styles = StyleSheet.create({
   screen: { flex: 1, alignItems: "center", justifyContent: "center" },
-  walkthrough: { flex: 1, width: "100%", borderWidth: 0, overflow: "hidden" },
-  walkthroughDesktop: { flex: 0, width: "96%", maxWidth: 1160, borderWidth: 1, borderRadius: 26 },
+  walkthrough: { width: "100%", borderWidth: 0, overflow: "hidden" },
+  walkthroughMobile: { flex: 1 },
+  walkthroughDesktop: { flexGrow: 0, flexShrink: 0, width: "96%", maxWidth: 1160, borderWidth: 1, borderRadius: 26 },
   header: { minHeight: 86, borderBottomWidth: 1, paddingHorizontal: 20, paddingVertical: 14, flexDirection: "row", alignItems: "center", gap: 16 },
   headerCopy: { flex: 1, minWidth: 0 },
   eyebrow: { fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.3 },
@@ -310,11 +311,12 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 13, lineHeight: 18, fontFamily: "Inter_500Medium", marginTop: 2 },
   closeButton: { width: 44, height: 44, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   body: { flex: 1 }, bodyDesktop: { flexDirection: "row" },
-  sectionNav: { width: 242, borderRightWidth: 1 },
+  sectionNav: { width: 242, minWidth: 242, maxWidth: 242, flexBasis: 242, flexGrow: 0, flexShrink: 0, borderRightWidth: 1 },
   sectionNavContent: { padding: 10, gap: 5 },
   navItem: { minHeight: 58, borderWidth: 1, borderColor: "transparent", borderRadius: 14, padding: 9, flexDirection: "row", alignItems: "center", gap: 9 },
   navNumber: { width: 28, height: 28, borderRadius: 9, alignItems: "center", justifyContent: "center" }, navNumberText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   navCopy: { flex: 1, minWidth: 0 }, navTitle: { fontSize: 13, fontFamily: "Inter_700Bold" }, navDescription: { fontSize: 11, lineHeight: 15, fontFamily: "Inter_500Medium", marginTop: 2 },
+  mobileSectionNav: { height: 60, minHeight: 60, maxHeight: 60, flexBasis: 60, flexGrow: 0, flexShrink: 0 },
   mobileStepStrip: { gap: 7, paddingHorizontal: 14, paddingVertical: 8 }, mobileStep: { minHeight: 44, borderWidth: 1, borderRadius: 999, paddingHorizontal: 13, alignItems: "center", justifyContent: "center" }, mobileStepText: { fontSize: 11, fontFamily: "Inter_700Bold" },
   contentScroll: { flex: 1 }, content: { padding: 18, paddingBottom: 30 }, contentDesktop: { width: "100%", maxWidth: 800, alignSelf: "center", paddingHorizontal: 24 },
   card: { borderWidth: 1, borderRadius: 19, padding: 15, marginBottom: 14 }, cardHeader: { flexDirection: "row", alignItems: "center", gap: 11, marginBottom: 12 }, cardIcon: { width: 40, height: 40, borderRadius: 13, alignItems: "center", justifyContent: "center" }, cardHeaderCopy: { flex: 1 }, cardEyebrow: { fontSize: 11, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.9 }, cardTitle: { fontSize: 18, lineHeight: 23, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
