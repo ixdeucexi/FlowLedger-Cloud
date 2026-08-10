@@ -1,4 +1,4 @@
--- Keep database rollover targeting identical to the shared client allocator.
+-- Keep production rollover targeting identical to the shared client allocator.
 -- Snowball ties use the higher APR first, then a stable id; avalanche already
 -- uses APR first and balance second. The function remains invoker-scoped.
 
