@@ -1260,17 +1260,17 @@ function MobileDashboardScreen() {
         </Pressable>
       </View>
 
-      <StabilityPathCard
-        progress={algorithmSuite.stability}
-        onViewGuide={openStabilityGuide}
-      />
-
       <DashboardUtilityWidgets
         layout={dashboardLayout}
         decisions={todayDecisions}
         reviewCount={reviewCenterCount}
         compact
         onNavigate={(pathname, params) => router.push({ pathname: pathname as any, params } as any)}
+      />
+
+      <StabilityPathCard
+        progress={algorithmSuite.stability}
+        onViewGuide={openStabilityGuide}
       />
 
       <DashboardCustomizer
