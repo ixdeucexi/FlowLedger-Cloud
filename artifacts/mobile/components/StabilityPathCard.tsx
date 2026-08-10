@@ -128,12 +128,12 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
       <View style={styles.actions}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="See how the Stability Path and algorithms work"
+          accessibilityLabel="See how your Stability Path works"
           onPress={onViewGuide}
           style={({ pressed }) => [styles.secondaryButton, { backgroundColor: theme.buttonSurface, borderColor: theme.buttonBorder, opacity: pressed ? 0.72 : 1 }]}
         >
           <Feather name="map" size={14} color={theme.buttonIcon} />
-          <AppText style={[styles.secondaryButtonText, { color: theme.buttonText }]}>How it works</AppText>
+          <AppText tone="button" style={[styles.secondaryButtonText, { color: theme.buttonText }]}>See how your Stability Path works</AppText>
         </Pressable>
       </View>
     </View>
@@ -186,6 +186,6 @@ const styles = StyleSheet.create({
   nextMoveLabel: { color: "#c4b5fd", fontSize: 10, fontFamily: "Inter_800ExtraBold" },
   nextMoveText: { color: "#ede9fe", fontSize: 12, lineHeight: 16, fontFamily: "Inter_700Bold", marginTop: 2 },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
-  secondaryButton: { flex: 1, minWidth: 140, minHeight: 42, borderRadius: 14, borderWidth: 1, borderColor: "rgba(96,165,250,0.22)", backgroundColor: "rgba(37,99,235,0.12)", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingHorizontal: 10 },
-  secondaryButtonText: { color: "#bfdbfe", fontSize: 12, fontFamily: "Inter_800ExtraBold" },
+  secondaryButton: { flex: 1, minWidth: 140, minHeight: 44, borderRadius: 14, borderWidth: 1, borderColor: "rgba(96,165,250,0.22)", backgroundColor: "rgba(37,99,235,0.12)", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, paddingHorizontal: 10 },
+  secondaryButtonText: { color: "#bfdbfe", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
 });

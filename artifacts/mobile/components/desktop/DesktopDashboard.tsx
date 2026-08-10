@@ -22,6 +22,7 @@ import Svg, {
 } from "react-native-svg";
 
 import { AddBillModal } from "@/components/AddBillModal";
+import { AppText } from "@/components/AppText";
 import { DashboardCustomizer } from "@/components/DashboardCustomizer";
 import { DashboardUtilityWidgets } from "@/components/DashboardUtilityWidgets";
 import { DesktopAddMenu } from "@/components/desktop/DesktopAddMenu";
@@ -43,6 +44,7 @@ import { WIDE_DESKTOP_BREAKPOINT } from "@/lib/desktopExperience";
 import { transactionDebt } from "@/lib/transactionDebt";
 import { buildReviewQueue } from "@/lib/reviewCenter";
 import { buildTodaysDecisions } from "@/lib/todaysDecisions";
+import { buildFlowGuideRouteParams } from "@/lib/flowledgerGuide";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 type Accent = "cyan" | "purple" | "green" | "amber" | "blue" | "neutral";
@@ -776,6 +778,28 @@ export function DesktopDashboard() {
 
   const go = (pathname: string, params?: Record<string, string>) =>
     router.push({ pathname: pathname as never, params } as never);
+  const openStabilityGuide = () => go(
+    "/(tabs)/how-flowledger-works",
+    buildFlowGuideRouteParams({
+      section: "stability",
+      stage: progress.stage,
+      stageLabel: progress.stageLabel,
+      protectedDays: progress.protectedDays,
+      protectedAmount: progress.protectedAmount,
+      reserveTarget: progress.reserveTarget,
+      backupTarget: progress.backupTarget,
+      safeUntilPayday: progress.safeUntilPayday,
+      nextPaycheckLabel: progress.nextPaycheckLabel,
+      nextAction: progress.nextAction,
+      nextMilestone: progress.nextMilestone,
+      nextMilestoneAmount: progress.nextMilestoneAmount,
+      lowestBalance: algorithmSuite.safeCushion.lowestBalance,
+      safetyFloor: settings.safety_floor,
+      confidence: forecastConfidence.label,
+      flowScore: algorithmSuite.flowScore.score,
+      flowScoreLabel: algorithmSuite.flowScore.label,
+    }),
+  );
   const openBills = (filter: "bills" | "debt" = "bills") => {
     setDashboardFilter(filter);
     go("/(tabs)/bills");
@@ -1115,9 +1139,9 @@ export function DesktopDashboard() {
 
               <View style={styles.pathHeader}>
                 <Text style={styles.pathLabel}>180-day path</Text>
-                <Text style={styles.pathPercent}>{Math.round(progress.reserveProgress * 100)}%</Text>
+                <Text style={styles.pathPercent}>{Math.round(progress.backupProgress * 100)}%</Text>
               </View>
-              <ProgressBar percent={progress.reserveProgress * 100} color={BRAND.purple} height={7} />
+              <ProgressBar percent={progress.backupProgress * 100} color={BRAND.purple} height={7} />
               <View style={styles.pathMilestones}>
                 {[7, 30, 60, 90, 180].map((day) => (
                   <Text key={day} style={styles.pathMilestone}>{day}d</Text>
@@ -1135,11 +1159,13 @@ export function DesktopDashboard() {
               </View>
 
               <Pressable
-                onPress={() => go("/(tabs)/how-flowledger-works", { section: "stability" })}
+                accessibilityRole="button"
+                accessibilityLabel="See how your Stability Path works"
+                onPress={openStabilityGuide}
                 style={({ pressed }) => [styles.howItWorks, { opacity: pressed ? 0.7 : 1 }]}
               >
-                <Feather name="book-open" size={14} color="#9db2d0" />
-                <Text style={styles.howItWorksText}>How Stability Path works</Text>
+                <Feather name="map" size={16} color="#bfd2f2" />
+                <AppText tone="button" style={styles.howItWorksText}>See how your Stability Path works</AppText>
               </Pressable>
             </View>
           </SurfaceCard>
@@ -1876,8 +1902,9 @@ const styles = StyleSheet.create({
   },
   floButtonText: { color: "#ffffff", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   howItWorks: {
-    minHeight: 30,
-    borderRadius: 10,
+    width: "100%",
+    minHeight: 44,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(47,111,255,0.17)",
     backgroundColor: "rgba(47,111,255,0.05)",
@@ -1885,9 +1912,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 7,
-    marginTop: 7,
+    marginTop: 9,
+    paddingHorizontal: 12,
   },
-  howItWorksText: { color: "#9db2d0", fontSize: 11, fontFamily: "Inter_700Bold" },
+  howItWorksText: { color: "#bfd2f2", fontSize: 13, fontFamily: "Inter_700Bold" },
   quickCardWrap: { minHeight: 153 },
   quickGrid: { flexDirection: "row", gap: 9 },
   quickAction: {

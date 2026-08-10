@@ -21,3 +21,8 @@ test("rejects blocked, unknown, and privileged restoration targets", () => {
   assert.equal(normalizeRestorableRoute("/somewhere-else"), null);
   assert.equal(normalizeRestorableRoute("/more?section=admin"), "/more");
 });
+
+test("treats the How FlowLedger works guide as a transient route", () => {
+  assert.equal(normalizeRestorableRoute("/how-flowledger-works?section=stability"), "/(tabs)");
+  assert.equal(normalizeRestorableRoute("/(tabs)/how-flowledger-works?protectedDays=42"), "/(tabs)");
+});

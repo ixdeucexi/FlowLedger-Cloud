@@ -45,6 +45,7 @@ import { buildReviewQueue, transactionCategoryParts } from "@/lib/reviewCenter";
 import type { AlgorithmInsight } from "@/lib/algorithmSuite";
 import { unplannedPendingExpenses } from "@/lib/plaidActivity";
 import { buildTodaysDecisions } from "@/lib/todaysDecisions";
+import { buildFlowGuideRouteParams } from "@/lib/flowledgerGuide";
 
 const MONTH_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
@@ -804,24 +805,25 @@ function MobileDashboardScreen() {
   const openStabilityGuide = useCallback(() => {
     router.push({
       pathname: "/(tabs)/how-flowledger-works",
-      params: {
+      params: buildFlowGuideRouteParams({
+        section: "stability",
         stage: algorithmSuite.stability.stage,
         stageLabel: algorithmSuite.stability.stageLabel,
-        protectedDays: String(algorithmSuite.stability.protectedDays),
-        protectedAmount: String(algorithmSuite.stability.protectedAmount),
-        reserveTarget: String(algorithmSuite.stability.reserveTarget),
-        backupTarget: String(algorithmSuite.stability.backupTarget),
-        safeUntilPayday: algorithmSuite.stability.safeUntilPayday === null ? "unknown" : String(algorithmSuite.stability.safeUntilPayday),
-        nextPaycheckLabel: algorithmSuite.stability.nextPaycheckLabel ?? "",
+        protectedDays: algorithmSuite.stability.protectedDays,
+        protectedAmount: algorithmSuite.stability.protectedAmount,
+        reserveTarget: algorithmSuite.stability.reserveTarget,
+        backupTarget: algorithmSuite.stability.backupTarget,
+        safeUntilPayday: algorithmSuite.stability.safeUntilPayday,
+        nextPaycheckLabel: algorithmSuite.stability.nextPaycheckLabel,
         nextAction: algorithmSuite.stability.nextAction,
         nextMilestone: algorithmSuite.stability.nextMilestone,
-        nextMilestoneAmount: String(algorithmSuite.stability.nextMilestoneAmount),
-        lowestBalance: String(algorithmSuite.safeCushion.lowestBalance),
-        safetyFloor: String(settings.safety_floor),
+        nextMilestoneAmount: algorithmSuite.stability.nextMilestoneAmount,
+        lowestBalance: algorithmSuite.safeCushion.lowestBalance,
+        safetyFloor: settings.safety_floor,
         confidence: forecastConfidence.label,
-        flowScore: String(algorithmSuite.flowScore.score),
+        flowScore: algorithmSuite.flowScore.score,
         flowScoreLabel: algorithmSuite.flowScore.label,
-      },
+      }),
     } as any);
   }, [algorithmSuite.flowScore.label, algorithmSuite.flowScore.score, algorithmSuite.safeCushion.lowestBalance, algorithmSuite.stability, forecastConfidence.label, router, settings.safety_floor]);
   const reviewCenterCount = useMemo(
