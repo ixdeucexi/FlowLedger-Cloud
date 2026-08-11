@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildDayForecastFloPrompt, debtPaymentStatusLabel, formatCalendarBalance, groupForecastEvents } from "./forecastDisplay";
+import { buildDayForecastFloPrompt, debtPaymentStatusLabel, formatCalendarBalance, groupForecastEvents, plannedDebtEditorParams } from "./forecastDisplay";
 import type { FinancialEvent } from "./forecast";
 
 const event = (overrides: Partial<FinancialEvent> & Pick<FinancialEvent, "id" | "sourceType" | "sourceId" | "kind" | "date" | "amount" | "status">): FinancialEvent => ({
@@ -29,6 +29,33 @@ test("groups forecast events into plain-language sections", () => {
   assert.equal(groups[0].events[0].statusLabel, "scheduled");
   assert.equal(groups[2].events[0].label, "Snowball payment to Camera");
   assert.equal(groups[2].events[0].amountLabel, "-$20.00");
+});
+
+test("labels an authoritative bank commitment as payment pending", () => {
+  const groups = groupForecastEvents([
+    event({ id: "pending-camera", sourceType: "extra_payment", sourceId: "camera", kind: "debt_payment", date: "2026-08-11", amount: -42.81, status: "pending", name: "Camera debt payment", debtPlanSource: "canonical" }),
+  ]);
+
+  assert.equal(groups[0].events[0].statusLabel, "PAYMENT PENDING");
+  assert.equal(groups[0].events[0].event.sourceId, "camera");
+  assert.equal(groups[0].events[0].event.debtPlanSource, "canonical");
+});
+
+test("a canonical child opens the editor for its source debt and occurrence", () => {
+  const rolloverChild = event({
+    id: "camera-to-concert",
+    sourceType: "extra_payment",
+    sourceId: "camera",
+    kind: "debt_payment",
+    date: "2026-08-11",
+    amount: -60.19,
+    status: "planned",
+    name: "Concert debt payment",
+    debtPlanSource: "canonical",
+    debtTargetBillId: "concert",
+  });
+  assert.deepEqual(plannedDebtEditorParams(rolloverChild), { billId: "camera", date: "2026-08-11" });
+  assert.equal(plannedDebtEditorParams({ ...rolloverChild, debtPlanSource: "saved_extra" }), undefined);
 });
 
 test("labels debt payments scheduled until the selected date arrives", () => {

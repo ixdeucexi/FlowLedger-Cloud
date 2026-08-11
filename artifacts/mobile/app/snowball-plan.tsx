@@ -234,6 +234,22 @@ function SnowballPlanScreen() {
       }]
     : preview.allocations;
 
+  const openForecastAmountEditor = (debtId: string, fallbackDay: number) => {
+    const debt = monthDebts.find(item => item.id === debtId) ?? bills.find(item => item.id === debtId);
+    const occurrenceDay = debt
+      ? getBillOccurrencesInMonth(debt, planDate.month, planDate.year)[0]
+      : undefined;
+    const daysInMonth = new Date(planDate.year, planDate.month + 1, 0).getDate();
+    const day = Math.min(daysInMonth, Math.max(1, occurrenceDay ?? fallbackDay));
+    router.push({
+      pathname: "/planned-debt-payment",
+      params: {
+        billId: debtId,
+        date: `${planDate.year}-${String(planDate.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+      },
+    } as never);
+  };
+
   const closePlanner = () => {
     if (router.canGoBack()) router.back();
     else router.replace({ pathname: "/(tabs)/bills", params: { view: "debt" } } as never);
@@ -420,6 +436,8 @@ function SnowballPlanScreen() {
                             {row.id === target?.id ? <Text style={[styles.targetBadge, { color: c.primary }]}>TARGET NOW</Text> : null}
                             {row.settlement.status === "settled" ? <Text style={[styles.paidBadge, { color: c.success }]}>PAID THIS MONTH</Text> : null}
                             {row.settlement.status === "partial" ? <Text style={[styles.paidBadge, { color: c.warning }]}>PARTIALLY PAID</Text> : null}
+                            {row.settlement.plannedDebtAmount === 0 ? <Text style={[styles.paidBadge, { color: c.warning }]}>SKIPPED IN FORECAST</Text> : null}
+                            {(row.settlement.plannedDebtAmount ?? 0) > 0 ? <Text style={[styles.paidBadge, { color: c.primary }]}>CUSTOM FORECAST</Text> : null}
                             {row.paidOffThisMonth ? <Text style={[styles.paidBadge, { color: c.success }]}>PAYS OFF THIS MONTH</Text> : null}
                           </View>
                           <Text style={[styles.debtName, { color: c.foreground }]}>{row.name}</Text>
@@ -445,6 +463,19 @@ function SnowballPlanScreen() {
                       ) : null}
                       {row.forecastPayment > 0.009 ? (
                         <Text style={[styles.sourceOutflow, { color: c.mutedForeground }]}>Forecast source outflow: {money(row.forecastPayment)}</Text>
+                      ) : null}
+                      {row.settlement.plannedDebtAmount !== undefined ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Edit ${row.name} Forecast amount`}
+                          accessibilityState={{ disabled: !canEditHousehold }}
+                          disabled={!canEditHousehold}
+                          onPress={() => openForecastAmountEditor(row.id, row.dueDay)}
+                          style={({ pressed }) => [styles.forecastEditAction, { borderColor: c.primary + "55", opacity: !canEditHousehold ? 0.45 : pressed ? 0.72 : 1 }]}
+                        >
+                          <Feather name="edit-3" size={14} color={c.primary} />
+                          <Text style={[styles.forecastEditText, { color: c.primary }]}>{row.settlement.plannedDebtAmount === 0 ? "Restore or edit Forecast amount" : "Edit Forecast amount"}</Text>
+                        </Pressable>
                       ) : null}
                       {row.rolloverSent > 0.009 ? (
                         <View style={[styles.rolloverCallout, { backgroundColor: c.success + "12", borderColor: c.success + "38" }]}>
@@ -783,6 +814,8 @@ const styles = StyleSheet.create({
   debtStatLabel: { fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.65 },
   debtStatValue: { fontSize: 13, fontFamily: "Inter_700Bold", marginTop: 3 },
   sourceOutflow: { fontSize: 10, lineHeight: 15, fontFamily: "Inter_600SemiBold", marginTop: 10 },
+  forecastEditAction: { alignSelf: "flex-start", minHeight: 44, borderWidth: 1, borderRadius: 12, flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 11, marginTop: 10 },
+  forecastEditText: { fontSize: 11, fontFamily: "Inter_700Bold" },
   rolloverCallout: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 12, padding: 10, marginTop: 12 },
   rolloverText: { flex: 1, fontSize: 11, lineHeight: 16, fontFamily: "Inter_600SemiBold" },
   emptyCard: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 16, padding: 16, marginTop: 14 },

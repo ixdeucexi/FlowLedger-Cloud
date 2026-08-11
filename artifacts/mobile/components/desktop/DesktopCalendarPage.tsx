@@ -26,6 +26,7 @@ import {
   type DesktopCalendarEventKind,
 } from "@/lib/desktopCalendar";
 import type { FinancialEvent } from "@/lib/forecast";
+import { formatEventStatus } from "@/lib/forecastDisplay";
 
 const MONTHS = [
   "January",
@@ -433,7 +434,7 @@ function SelectedDayPanel({
                 style={({ pressed }) => [styles.scheduledRow, pressed && styles.pressed]}
               >
                 <View style={[styles.scheduledIcon, { backgroundColor: tone.background }]}><View style={[styles.scheduledDot, { backgroundColor: tone.color }]} /></View>
-                <View style={styles.scheduledCopy}><Text numberOfLines={1} style={styles.scheduledName}>{eventLabel(event)}</Text><Text style={styles.scheduledCategory}>{kind.charAt(0).toUpperCase() + kind.slice(1)}</Text></View>
+                <View style={styles.scheduledCopy}><Text numberOfLines={1} style={styles.scheduledName}>{eventLabel(event)}</Text><Text style={styles.scheduledCategory}>{event.status === "pending" ? formatEventStatus(event.status) : kind.charAt(0).toUpperCase() + kind.slice(1)}</Text></View>
                 <Text style={[styles.scheduledAmount, { color: tone.color }]}>{money(event.amount, true)}</Text>
                 {canOpen ? <Feather name="chevron-right" size={16} color={palette.muted} /> : null}
               </Pressable>

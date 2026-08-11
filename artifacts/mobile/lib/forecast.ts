@@ -7,7 +7,7 @@ export type FinancialEventKind =
   | "debt_payment"
   | "bank_adjustment";
 
-export type FinancialEventStatus = "planned" | "scheduled" | "finalized" | "actual" | "applied";
+export type FinancialEventStatus = "planned" | "scheduled" | "pending" | "finalized" | "actual" | "applied";
 
 export interface FinancialEvent {
   id: string;
@@ -19,6 +19,8 @@ export interface FinancialEvent {
   amount: number;
   status: FinancialEventStatus;
   name?: string;
+  debtPlanSource?: "canonical" | "saved_extra";
+  debtTargetBillId?: string;
 }
 
 export interface ForecastSnapshot {

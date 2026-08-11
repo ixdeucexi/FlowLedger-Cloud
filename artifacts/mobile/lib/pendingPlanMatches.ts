@@ -1,3 +1,5 @@
+import type { DebtSourceCommitment } from "./debtPlanDomain";
+
 export type PendingPlanMatchStatus = "active" | "ready_review" | "completed" | "expired" | "cancelled";
 
 export interface PendingPlanMatch {
@@ -21,6 +23,74 @@ export interface PendingPlanMatch {
 
 export interface PendingTransactionIdentity {
   plaid_transaction_id: string;
+}
+
+export interface PostedTransactionIdentity {
+  id: string;
+  plaid_transaction_id?: string;
+}
+
+export function livePendingPlanMatchForOccurrence(
+  matches: PendingPlanMatch[],
+  pendingTransactions: PendingTransactionIdentity[],
+  billId: string,
+  occurrenceDate: string,
+): PendingPlanMatch | undefined {
+  const liveIds = new Set(pendingTransactions.map(transaction => transaction.plaid_transaction_id));
+  return matches.find(match => match.status === "active"
+    && liveIds.has(match.pending_plaid_transaction_id)
+    && match.target_id === billId
+    && match.occurrence_date === occurrenceDate);
+}
+
+export function debtSourceCommitmentsFromPendingMatches(
+  matches: PendingPlanMatch[],
+  pendingTransactions: PendingTransactionIdentity[],
+  postedTransactions: PostedTransactionIdentity[],
+): DebtSourceCommitment[] {
+  const livePendingIds = new Set(pendingTransactions.map(transaction => transaction.plaid_transaction_id));
+  const postedIds = new Set(postedTransactions.flatMap(transaction => [
+    transaction.id,
+    ...(transaction.plaid_transaction_id ? [transaction.plaid_transaction_id] : []),
+  ]));
+  const candidates = matches.flatMap<DebtSourceCommitment>(match => {
+    if (match.status === "active" && livePendingIds.has(match.pending_plaid_transaction_id)) {
+      return [{ sourceBillId: match.target_id, sourceBillName: match.target_name, date: match.occurrence_date, amount: match.pending_amount, state: "pending" as const }];
+    }
+    if (match.status === "ready_review"
+      && Boolean(match.posted_transaction_id || match.posted_plaid_transaction_id)
+      && (Boolean(match.posted_transaction_id && postedIds.has(match.posted_transaction_id))
+        || Boolean(match.posted_plaid_transaction_id && postedIds.has(match.posted_plaid_transaction_id)))) {
+      return [{ sourceBillId: match.target_id, sourceBillName: match.target_name, date: match.occurrence_date, amount: 0, state: "posted" as const }];
+    }
+    return [];
+  });
+  const grouped = new Map<string, DebtSourceCommitment[]>();
+  candidates.forEach(commitment => {
+    const key = `${commitment.sourceBillId}:${commitment.date}`;
+    grouped.set(key, [...(grouped.get(key) ?? []), commitment]);
+  });
+  return Array.from(grouped.values(), commitments => {
+    const posted = commitments.find(commitment => commitment.state === "posted");
+    if (posted) return { ...posted, amount: 0, state: "posted" as const };
+    const first = commitments[0]!;
+    return {
+      ...first,
+      amount: Math.round(commitments.reduce((sum, commitment) => sum + Math.max(0, Number(commitment.amount) || 0), 0) * 100) / 100,
+      state: "pending" as const,
+    };
+  }).sort((left, right) => left.date.localeCompare(right.date) || left.sourceBillId.localeCompare(right.sourceBillId));
+}
+
+export function debtSourceCommitmentForOccurrence(
+  matches: PendingPlanMatch[],
+  pendingTransactions: PendingTransactionIdentity[],
+  postedTransactions: PostedTransactionIdentity[],
+  billId: string,
+  occurrenceDate: string,
+): DebtSourceCommitment | undefined {
+  return debtSourceCommitmentsFromPendingMatches(matches, pendingTransactions, postedTransactions)
+    .find(commitment => commitment.sourceBillId === billId && commitment.date === occurrenceDate);
 }
 
 export function activePendingPlanMatches(

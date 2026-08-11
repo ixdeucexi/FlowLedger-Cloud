@@ -33,6 +33,7 @@ create table if not exists monthly_overrides (
   month           integer not null,
   year            integer not null,
   custom_amount   numeric,
+  planned_debt_amount numeric check (planned_debt_amount is null or planned_debt_amount >= 0),
   custom_due_day  integer,
   paid_amount     numeric not null default 0,
   actual_amount   numeric,

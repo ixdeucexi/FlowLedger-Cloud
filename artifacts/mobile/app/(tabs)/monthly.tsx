@@ -32,7 +32,7 @@ import { DESKTOP_MODAL_HANDLE, DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR, DES
 import { confirmedBillMatchId, isConfirmedBillMatch } from "@/lib/billMatching";
 import { allocationLabel, groupPlannedExpenseAllocations, matchedOccurrenceAllocations, occurrenceKey, reviewSettlementSummary, transactionDisplayName } from "@/lib/reviewCenter";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
-import { buildDayForecastFloPrompt, groupForecastEvents } from "@/lib/forecastDisplay";
+import { buildDayForecastFloPrompt, groupForecastEvents, plannedDebtEditorParams } from "@/lib/forecastDisplay";
 import type { FinancialEvent } from "@/lib/forecast";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { buildOverdueBillOccurrences } from "@/lib/overdueBills";
@@ -1426,6 +1426,14 @@ export default function MonthlyScreen() {
       return;
     }
     if (event.sourceType === "extra_payment") {
+      const editorParams = plannedDebtEditorParams(event);
+      if (editorParams) {
+        router.push({
+          pathname: "/planned-debt-payment",
+          params: editorParams,
+        } as never);
+        return;
+      }
       setSelectedDate(null);
       setSnowballModalVisible(true);
     }
@@ -2108,7 +2116,9 @@ export default function MonthlyScreen() {
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
                         <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Planned debt payments</Text>
                         {selectedDebtPayments.map(payment => {
-                          const savedPayment = extraPayments.find(item => item.id === payment.event.sourceId);
+                          const savedPayment = payment.event.debtPlanSource === "canonical"
+                            ? undefined
+                            : extraPayments.find(item => item.id === payment.event.sourceId);
                           const amount = Math.abs(payment.event.amount);
                           const applied = payment.statusLabel.toLowerCase() === "applied";
                           const allocatedDebtIds = new Set(savedPayment?.allocations.map(allocation => allocation.billId) ?? []);
@@ -2139,6 +2149,11 @@ export default function MonthlyScreen() {
                                 router.push({
                                   pathname: "/snowball-plan",
                                   params: { paymentId: savedPayment.id },
+                                } as never);
+                              } : plannedDebtEditorParams(payment.event) ? () => {
+                                router.push({
+                                  pathname: "/planned-debt-payment",
+                                  params: plannedDebtEditorParams(payment.event),
                                 } as never);
                               } : undefined}
                               onRemove={savedPayment ? async () => {
