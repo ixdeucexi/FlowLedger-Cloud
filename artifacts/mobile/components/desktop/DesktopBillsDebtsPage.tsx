@@ -129,7 +129,6 @@ export function DesktopBillsDebtsPage() {
     getBillEffectiveMonthlyTotal,
     getPaidAmount,
     getDebtPlanForMonth,
-    previewDebtSnowball,
   } = useBudget();
   const isDebt = params.view === "debt";
   const now = useMemo(() => new Date(), []);
@@ -344,7 +343,6 @@ export function DesktopBillsDebtsPage() {
             onOpen={openBill}
             onPlan={() => router.push("/snowball-plan" as never)}
             getOccurrences={getBillOccurrencesInMonth}
-            preview={previewDebtSnowball(now.getMonth(), now.getFullYear())}
             datedPlan={getDebtPlanForMonth(now.getMonth(), now.getFullYear())}
             now={now}
           />
@@ -811,7 +809,6 @@ function DebtsDesktop({
   onOpen,
   onPlan,
   getOccurrences,
-  preview,
   datedPlan,
   now,
 }: {
@@ -826,7 +823,6 @@ function DebtsDesktop({
   onOpen: (bill: Bill) => void;
   onPlan: () => void;
   getOccurrences: (bill: Bill, month: number, year: number) => number[];
-  preview: ReturnType<ReturnType<typeof useBudget>["previewDebtSnowball"]>;
   datedPlan: ReturnType<ReturnType<typeof useBudget>["getDebtPlanForMonth"]>;
   now: Date;
 }) {
@@ -835,19 +831,9 @@ function DebtsDesktop({
   const ordered = orderActiveDebtsForStrategy(active, strategy);
   const rank = new Map(ordered.map((bill, index) => [bill.id, index + 1]));
   const total = active.reduce((sum, bill) => sum + bill.balance, 0);
-  const monthly = datedPlan?.plannedPayment ?? active.reduce(
-    (sum, bill) => sum + effectiveDebtMinimum(bill.amount, bill.snowball_minimum_boost ?? 0),
-    0,
-  );
   const forecastPaymentByDebtId = new Map(
     datedPlan?.payments.map(payment => [payment.billId, payment.totalPayment]) ?? [],
   );
-  const nextDue = active
-    .flatMap((bill) => {
-      const next = nextOccurrenceFor(bill, getOccurrences, now);
-      return next ? [{ bill, ...next }] : [];
-    })
-    .sort((a, b) => a.date.getTime() - b.date.getTime())[0];
   const categories = Array.from(
     new Set(active.map((bill) => bill.category)),
   ).map((category, index) => ({
@@ -873,12 +859,6 @@ function DebtsDesktop({
       if (sort === "balance") return left.balance - right.balance;
       return (rank.get(left.id) ?? 999) - (rank.get(right.id) ?? 999);
     });
-  const projected = preview.debtFreeDate
-    ? new Date(`${preview.debtFreeDate}-01T12:00:00`).toLocaleDateString(
-        undefined,
-        { month: "short", year: "numeric" },
-      )
-    : "Add safe extra";
   const completedCount = bills.filter((bill) => bill.balance <= 0.005).length;
   const progress = bills.length
     ? Math.round((completedCount / bills.length) * 100)
@@ -887,45 +867,9 @@ function DebtsDesktop({
     <DesktopPage style={styles.pageReset}>
       <PageHeader
         title="Debts"
-        description="Track and pay off your debt with purpose."
+        description={`${active.length} debt${active.length === 1 ? "" : "s"} · $${total.toLocaleString(undefined, { maximumFractionDigits: 0 })} total`}
         actions={<PrimaryButton label="Add Debt" onPress={onAdd} />}
       />
-      <View style={styles.metrics}>
-        <SummaryMetricCard
-          label="Total Due"
-          value={money(total)}
-          detail="All active debts combined"
-          icon="credit-card"
-        />
-        <SummaryMetricCard
-          label="Forecast Payments"
-          value={money(monthly)}
-          detail="Same schedule as Forecast"
-          icon="calendar"
-          tone="green"
-        />
-        <SummaryMetricCard
-          label="Next Due"
-          value={
-            nextDue
-              ? displayDate(nextDue.year, nextDue.month, nextDue.day)
-              : "No due date"
-          }
-          detail={nextDue?.bill.name ?? "No active debts"}
-          icon="calendar"
-          tone="red"
-        />
-        <SummaryMetricCard
-          label="Projected Payoff"
-          value={projected}
-          detail={
-            preview.debtFreeDate
-              ? "Using your current plan"
-              : "No projection yet"
-          }
-          icon="target"
-        />
-      </View>
       <View style={styles.debtOverviewRow}>
         <DesktopCard style={styles.debtOverviewCard}>
           <CardHeader

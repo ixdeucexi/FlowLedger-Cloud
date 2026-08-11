@@ -480,9 +480,6 @@ export default function BillsScreen() {
         Number(categoryBudgets.Debt ?? totalMinPayments) - totalMinPayments,
       )
     : cashFlowSafeSnowballAmount;
-  const highestAPR = debts.length
-    ? Math.max(...debts.map((b) => b.interest_rate))
-    : 0;
   const snowballTarget = snowballOrder[0] ?? null;
   const avalancheTarget = avalancheOrder[0] ?? null;
   const activeDebtTarget =
@@ -502,7 +499,6 @@ export default function BillsScreen() {
   const activeDebtRolloverAmount = activeDebtRollover.reduce((sum, allocation) => sum + allocation.amount, 0);
   const activeDebtRolloverNames = Array.from(new Set(activeDebtRollover.map(allocation => allocation.targetBillName))).join(", ");
   const activeDebtRolloverDate = activeDebtRollover[0]?.date;
-  const forecastDebtPayment = datedDebtPlan?.plannedPayment ?? totalMinPayments;
   const forecastPaymentByDebtId = new Map(
     datedDebtPlan?.payments.map(payment => [payment.billId, payment.totalPayment]) ?? [],
   );
@@ -1138,62 +1134,6 @@ export default function BillsScreen() {
             <View style={[styles.list, isDesktop && styles.desktopList]}>
               <>
                 <PlanFeatureGate feature="debt_payoff" compact>
-                  {debts.length > 0 && (
-                    <View
-                      style={[
-                        styles.statsRow,
-                        { marginHorizontal: 0, gap: 10 },
-                      ]}
-                    >
-                      {[
-                        {
-                          label: "Total Debt",
-                          value: `$${totalDebt.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
-                          color: c.destructive,
-                          icon: "trending-down" as const,
-                        },
-                        {
-                          label: debtPlanIsFuture
-                            ? `${MONTH_FULL[debtPlanMonth].slice(0, 3)} Forecast`
-                            : "Forecast",
-                          value: `$${forecastDebtPayment.toFixed(0)}`,
-                          color: c.warning,
-                          icon: "calendar" as const,
-                        },
-                        {
-                          label: "Highest APR",
-                          value: `${highestAPR}%`,
-                          color: c.primary,
-                          icon: "percent" as const,
-                        },
-                      ].map((s) => (
-                        <View
-                          key={s.label}
-                          style={[
-                            styles.statCard,
-                            {
-                              backgroundColor: c.card,
-                              borderRadius: colors.radius,
-                            },
-                          ]}
-                        >
-                          <Feather name={s.icon} size={14} color={s.color} />
-                          <Text style={[styles.statValue, { color: s.color }]}>
-                            {s.value}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.statLabel,
-                              { color: c.mutedForeground },
-                            ]}
-                          >
-                            {s.label}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
                   {settings.debtPayoffEnabled && debts.length > 0 && (
                     <View
                       style={[
@@ -2134,15 +2074,6 @@ const styles = StyleSheet.create({
   amountSub: { fontSize: 10, fontFamily: "Inter_400Regular" },
 
   // Debt-specific
-  statsRow: { flexDirection: "row" },
-  statCard: { flex: 1, alignItems: "center", paddingVertical: 12, gap: 4 },
-  statValue: { fontSize: 16, fontFamily: "Inter_700Bold" },
-  statLabel: {
-    fontSize: 10,
-    fontFamily: "Inter_500Medium",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
   debtAlgoCard: {
     borderWidth: 1,
     padding: 14,
