@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { buildSnowballPlannerRows, buildSnowballTimeline, payoffMonthsSooner, snowballPlanHistoryStatus } from "./snowballPlanner";
-import type { DatedSnowballMonthPlanResult } from "./snowball";
+import { projectDatedSnowballMonth, remainingDatedDebtAllocations, type DatedSnowballMonthPlanResult } from "./snowball";
 
 const plan: DatedSnowballMonthPlanResult = {
   payments: [
@@ -51,15 +51,94 @@ test("planner rows use the canonical dated payment and rollover amounts", () => 
 
   assert.deepEqual(rows.map(row => row.name), ["Camera", "Concert"]);
   assert.equal(rows[0]?.balance, 45);
-  assert.equal(rows[0]?.forecastPayment, 103);
-  assert.equal(rows[0]?.plannedToDebt, 45);
-  assert.equal(rows[0]?.paidOffThisMonth, true);
-  assert.equal(rows[0]?.rolloverSent, 58);
-  assert.equal(rows[1]?.rolloverReceived, 58);
+  assert.equal(rows[0]?.forecastPayment, 0);
+  assert.equal(rows[0]?.plannedToDebt, 0);
+  assert.equal(rows[0]?.paidOffThisMonth, false);
+  assert.equal(rows[0]?.rolloverSent, 0);
+  assert.equal(rows[1]?.rolloverReceived, 0);
   assert.equal(rows[1]?.extraReceived, 20);
   assert.equal(rows[1]?.forecastPayment, 35);
-  assert.equal(rows[1]?.plannedToDebt, 113);
-  assert.equal(rows[1]?.balanceAfter, 206);
+  assert.equal(rows[1]?.plannedToDebt, 55);
+  assert.equal(rows[1]?.balanceAfter, 264);
+});
+
+test("planner keeps one parent source outflow when a required payment rolls over on the same date", () => {
+  const generatedPlan = projectDatedSnowballMonth({
+    debts: [
+      { id: "camera", name: "Camera", balance: 42.81, minimum: 103, apr: 0, dueDay: 11, included: true },
+      { id: "concert", name: "Concert", balance: 319, minimum: 35, apr: 0, dueDay: 29, included: true },
+    ],
+    method: "snowball",
+    month: 7,
+    year: 2026,
+    paymentDatesByDebtId: new Map([
+      ["camera", ["2026-08-11"]],
+      ["concert", ["2026-08-29"]],
+    ]),
+  });
+  const rows = buildSnowballPlannerRows([
+    { id: "camera", name: "Camera", balance: 42.81, minimum: 103, apr: 0, dueDay: 11, included: true },
+    { id: "concert", name: "Concert", balance: 319, minimum: 35, apr: 0, dueDay: 29, included: true },
+  ], "snowball", generatedPlan, generatedPlan);
+  const byId = new Map(rows.map(row => [row.id, row]));
+
+  assert.equal(byId.get("camera")?.forecastPayment, 103);
+  assert.equal(byId.get("camera")?.plannedToDebt, 42.81);
+  assert.equal(byId.get("concert")?.rolloverReceived, 60.19);
+  assert.deepEqual(byId.get("camera")?.rolloverEvents, [{ date: "2026-08-11", amount: 60.19, targets: ["Concert"] }]);
+
+  const remainingAfterFifty = {
+    ...generatedPlan,
+    allocations: remainingDatedDebtAllocations(generatedPlan.allocations, [
+      { sourceType: "bill", billId: "camera", date: "2026-08-11", amount: 50 },
+    ]),
+  };
+  const partialRows = buildSnowballPlannerRows([
+    { id: "camera", name: "Camera", balance: 42.81, minimum: 103, apr: 0, dueDay: 11, included: true },
+    { id: "concert", name: "Concert", balance: 319, minimum: 35, apr: 0, dueDay: 29, included: true },
+  ], "snowball", remainingAfterFifty, generatedPlan);
+  const partialById = new Map(partialRows.map(row => [row.id, row]));
+
+  assert.equal(partialById.get("camera")?.forecastPayment, 53);
+  assert.equal(partialById.get("camera")?.plannedToDebt, 0);
+  assert.equal(partialById.get("concert")?.rolloverReceived, 53);
+});
+
+test("planner rows distinguish settled, partial, and genuinely unscheduled debt amounts", () => {
+  const fullPlan: DatedSnowballMonthPlanResult = {
+    ...plan,
+    payments: [
+      { billId: "partial", billName: "Partial", dueDay: 10, scheduledPayment: 127, extraPayment: 0, totalPayment: 127, balanceBefore: 500, balanceAfter: 373, paidOff: false },
+    ],
+    balances: new Map([["settled", 700], ["partial", 373], ["unscheduled", 900]]),
+    allocations: [
+      { id: "partial-full", date: "2026-08-10", sourceBillId: "partial", sourceBillName: "Partial", targetBillId: "partial", targetBillName: "Partial", kind: "required", amount: 127, sourceAmount: 127, balanceBefore: 500, balanceAfter: 373, paidOff: false },
+    ],
+  };
+  const remainingPlan: DatedSnowballMonthPlanResult = {
+    ...fullPlan,
+    plannedPayment: 77,
+    allocations: [{ ...fullPlan.allocations[0]!, id: "partial-remaining", amount: 77, sourceAmount: 77 }],
+  };
+  const settlements = new Map([
+    ["settled", { configuredObligation: 73, paidAmount: 73, remainingRequired: 0, status: "settled" as const }],
+    ["partial", { configuredObligation: 127, paidAmount: 50, remainingRequired: 77, status: "partial" as const }],
+    ["unscheduled", { configuredObligation: 450.08, paidAmount: 0, remainingRequired: 450.08, status: "scheduled" as const }],
+  ]);
+  const rows = buildSnowballPlannerRows([
+    { id: "settled", name: "Tia", balance: 700, minimum: 73, apr: 10, dueDay: 1, included: true },
+    { id: "partial", name: "John Capital One 2", balance: 500, minimum: 127, apr: 12, dueDay: 10, included: true },
+    { id: "unscheduled", name: "Upgrade", balance: 900, minimum: 450.08, apr: 14, dueDay: 20, included: true },
+  ], "snowball", remainingPlan, fullPlan, settlements);
+
+  const byId = new Map(rows.map(row => [row.id, row]));
+  assert.deepEqual(byId.get("settled")?.settlement, settlements.get("settled"));
+  assert.equal(byId.get("settled")?.plannedToDebt, 0);
+  assert.equal(byId.get("partial")?.settlement.paidAmount, 50);
+  assert.equal(byId.get("partial")?.plannedToDebt, 77);
+  assert.equal(byId.get("partial")?.balanceAfter, 423);
+  assert.equal(byId.get("unscheduled")?.settlement.status, "scheduled");
+  assert.equal(byId.get("unscheduled")?.plannedToDebt, 0);
 });
 
 test("future planner rows use canonical selected-month starting balances and omit prior-paid debts", () => {

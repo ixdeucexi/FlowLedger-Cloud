@@ -1,4 +1,5 @@
 import { orderDebts, type DatedDebtAllocation, type DatedSnowballMonthPlanResult, type DebtMethod } from "./snowball";
+import type { DebtMonthSettlement } from "./debtPlanDomain";
 
 export type SnowballPlannerDebt = {
   id: string;
@@ -20,6 +21,7 @@ export type SnowballPlannerRow = SnowballPlannerDebt & {
   extraReceived: number;
   balanceAfter: number;
   paidOffThisMonth: boolean;
+  settlement: DebtMonthSettlement;
   rolloverEvents: Array<{ date: string; amount: number; targets: string[] }>;
 };
 
@@ -38,6 +40,7 @@ export function buildSnowballPlannerRows(
   method: DebtMethod,
   remainingPlan: DatedSnowballMonthPlanResult | null,
   fullPlan: DatedSnowballMonthPlanResult | null = remainingPlan,
+  settlements: ReadonlyMap<string, DebtMonthSettlement> = new Map(),
 ): SnowballPlannerRow[] {
   const canonicalDebts = fullPlan
     ? debts.flatMap(debt => {
@@ -51,18 +54,23 @@ export function buildSnowballPlannerRows(
     canonicalDebts,
     method,
   );
-  const paymentById = new Map(fullPlan?.payments.map(payment => [payment.billId, payment]) ?? []);
-
   return ordered.map((debt, index) => {
-    const payment = paymentById.get(debt.id);
-    const fullAllocations = fullPlan?.allocations.filter(allocation => allocation.targetBillId === debt.id) ?? [];
-    const allocations = fullPlan?.allocations.filter(allocation => allocation.targetBillId === debt.id) ?? [];
-    const sourcedAllocations = fullPlan?.allocations.filter(allocation => allocation.sourceBillId === debt.id) ?? [];
+    const allocations = remainingPlan?.allocations.filter(allocation => allocation.targetBillId === debt.id) ?? [];
+    const sourcedAllocations = remainingPlan?.allocations.filter(allocation => allocation.sourceBillId === debt.id) ?? [];
+    const settlement = settlements.get(debt.id) ?? {
+      configuredObligation: cents(debt.minimum),
+      paidAmount: 0,
+      remainingRequired: cents(debt.minimum),
+      status: "scheduled" as const,
+    };
     const sourcePayments = new Map<string, number>();
     sourcedAllocations.forEach(allocation => {
-      sourcePayments.set(`${allocation.sourceBillId}:${allocation.date}`, allocation.sourceAmount);
+      const key = `${allocation.sourceBillId}:${allocation.date}`;
+      sourcePayments.set(key, cents((sourcePayments.get(key) ?? 0) + allocation.amount));
     });
     const rolloversSent = sourcedAllocations.filter(allocation => allocation.kind === "rollover");
+    const plannedToDebt = cents(allocations.reduce((sum, allocation) => sum + allocation.amount, 0));
+    const projectedMonthEnd = cents(Math.max(0, debt.balance - plannedToDebt));
     const rolloverEvents = new Map<string, typeof rolloversSent>();
     rolloversSent.forEach(allocation => {
       rolloverEvents.set(allocation.date, [...(rolloverEvents.get(allocation.date) ?? []), allocation]);
@@ -71,7 +79,7 @@ export function buildSnowballPlannerRows(
       ...debt,
       rank: index + 1,
       forecastPayment: cents(Array.from(sourcePayments.values()).reduce((sum, amount) => sum + amount, 0)),
-      plannedToDebt: cents(fullAllocations.reduce((sum, allocation) => sum + allocation.amount, 0)),
+      plannedToDebt,
       rolloverReceived: cents(allocations
         .filter(allocation => allocation.kind === "rollover")
         .reduce((sum, allocation) => sum + allocation.amount, 0)),
@@ -80,8 +88,9 @@ export function buildSnowballPlannerRows(
       extraReceived: cents(allocations
         .filter(allocation => allocation.kind === "extra")
         .reduce((sum, allocation) => sum + allocation.amount, 0)),
-      balanceAfter: cents(payment?.balanceAfter ?? debt.balance),
-      paidOffThisMonth: payment?.paidOff === true,
+      balanceAfter: projectedMonthEnd,
+      paidOffThisMonth: plannedToDebt > 0.009 && projectedMonthEnd <= 0.009,
+      settlement,
       rolloverEvents: Array.from(rolloverEvents, ([date, eventAllocations]) => ({
         date,
         amount: cents(eventAllocations.reduce((sum, allocation) => sum + allocation.amount, 0)),

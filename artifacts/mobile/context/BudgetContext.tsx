@@ -18,6 +18,7 @@ import {
   type SnowballProjectionResult,
 } from "@/lib/snowball";
 import { SNOWBALL_PLAN_SOURCE, upsertSnowballPlanById } from "@/lib/debtPaymentPlan";
+import { isValidExtraPaymentPlan, resolveDebtMonthSettlement, type DebtMonthSettlement } from "@/lib/debtPlanDomain";
 import { anchorForecastToBankBalance, forecastBalances, type FinancialEvent } from "@/lib/forecast";
 import { diagnosticErrorCode } from "@/lib/diagnosticPolicy";
 import { decisionDbPayload } from "@/lib/decisionPersistence";
@@ -396,6 +397,7 @@ interface BudgetContextType {
   getBillOccurrencesInMonth: (bill: Bill, month: number, year: number) => number[];
   getBillMonthlyTotal: (bill: Bill, month: number, year: number) => number;
   getBillEffectiveMonthlyTotal: (bill: Bill, month: number, year: number) => number;
+  getDebtMonthSettlements: (month: number, year: number) => Map<string, DebtMonthSettlement>;
   getDebtPlanForMonth: (month: number, year: number) => DatedSnowballMonthPlanResult | null;
   getRemainingDebtPlanForMonth: (month: number, year: number) => DatedSnowballMonthPlanResult | null;
 
@@ -1234,7 +1236,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setPendingBankTransactions([]);
       setIncomes(demo.incomes);
       setGoals(demo.goals);
-      setExtraPayments(demo.extraPayments);
+      setExtraPayments(demo.extraPayments.filter(isValidExtraPaymentPlan));
       setCategories(demo.categories);
       setAccounts(demo.accounts);
       setConnectedBankAccounts([]);
@@ -1379,7 +1381,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           allocations: ep.allocations ?? [],
           payment_date: ep.payment_date ?? undefined,
           sources: ep.sources ?? [{ type: "manual", amount: Number(ep.amount) }],
-        })));
+        })).filter(isValidExtraPaymentPlan));
         const loadedAccounts = (aData ?? []).filter((a: any) => a.account_type !== "credit_card").map((a: any) => ({
           ...a,
           current_balance: Number(a.current_balance),
@@ -2137,6 +2139,25 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     [bills, getBillOccurrencesInMonth]
   );
 
+  const getDebtMonthSettlements = useCallback((month: number, year: number) => {
+    const result = new Map<string, DebtMonthSettlement>();
+    getMonthlyBills(month, year).filter(bill => bill.is_debt).forEach(bill => {
+      const override = overrides.find(item => item.bill_id === bill.id && item.month === month && item.year === year);
+      const occurrences = getBillOccurrencesInMonth(bill, month, year).length;
+      const configuredObligation = effectiveDebtMinimum(
+        billBaseAmountForMonth(bill, override),
+        Number(bill.snowball_minimum_boost ?? 0),
+      ) * occurrences;
+      const monthKey = `${bill.id}:${year}-${String(month + 1).padStart(2, "0")}`;
+      result.set(bill.id, resolveDebtMonthSettlement({
+        configuredObligation,
+        reviewed: reviewedBillSettlements.get(monthKey),
+        override,
+      }));
+    });
+    return result;
+  }, [getBillOccurrencesInMonth, getMonthlyBills, overrides, reviewedBillSettlements]);
+
   // ─── Snowball / Avalanche ─────────────────────────────────────────────────────
 
   const runSnowball = useCallback(
@@ -2159,6 +2180,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   );
 
   const saveExtraPayment = useCallback(async (month: number, year: number, amount: number, allocations: SnowballAllocation[], paymentDate?: string, sources: SnowballFundingSource[] = [{ type: "manual", amount }]) => {
+    if (!isValidExtraPaymentPlan({ amount, allocations })) {
+      throw new Error("Extra payment plans require a positive amount with matching debt allocations.");
+    }
     if (!user) return;
     assertCanEditHousehold("save an extra debt payment");
     const existing = extraPayments.find(ep => ep.month === month && ep.year === year);
@@ -2185,7 +2209,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   }, [user, extraPayments, demoMode, scopedPayload, assertCanEditHousehold]);
 
   const getExtraPayment = useCallback(
-    (month: number, year: number) => extraPayments.find(ep => ep.month === month && ep.year === year),
+    (month: number, year: number) => extraPayments.find(ep => ep.month === month && ep.year === year && isValidExtraPaymentPlan(ep)),
     [extraPayments]
   );
 
@@ -2207,19 +2231,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     let guard = 0;
 
     while ((cursorYear < year || (cursorYear === year && cursorMonth <= month)) && guard < 240) {
+      const monthSettlements = getDebtMonthSettlements(cursorMonth, cursorYear);
       const debtsForMonth: SnowballDebtInput[] = debtBills
         .filter(bill => isBillActiveForMonth(bill, cursorMonth, cursorYear))
         .map(bill => {
-          const monthOverride = overrides.find(item => item.bill_id === bill.id && item.month === cursorMonth && item.year === cursorYear);
-          const settlementKey = `${bill.id}:${cursorYear}-${String(cursorMonth + 1).padStart(2, "0")}`;
-          const reviewedSettlement = reviewedBillSettlements.get(settlementKey);
-          const isSettled = reviewedSettlement?.status === "settled"
-            || Boolean(!reviewedSettlement && monthOverride?.actual_amount !== undefined && monthOverride.paid_date);
+          const settlement = monthSettlements.get(bill.id);
           return {
             id: bill.id,
             name: bill.name,
             balance: balances.get(bill.id) ?? Math.max(0, Number(bill.balance) || 0),
-            minimum: isSettled ? 0 : getBillMonthlyTotal(bill, cursorMonth, cursorYear),
+            minimum: settlement?.status === "settled" ? 0 : getBillMonthlyTotal(bill, cursorMonth, cursorYear),
             apr: Number(bill.interest_rate) || 0,
             dueDay: bill.due_day,
             included: bill.include_in_snowball !== false,
@@ -2233,7 +2254,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           : [];
         return [debt.id, dates] as const;
       }));
-      const savedExtra = extraPayments.find(payment => payment.month === cursorMonth && payment.year === cursorYear);
+      const savedExtra = extraPayments.find(payment => payment.month === cursorMonth && payment.year === cursorYear && isValidExtraPaymentPlan(payment));
       result = projectDatedSnowballMonth({
         debts: debtsForMonth,
         method: settings.paymentMethod,
@@ -2260,13 +2281,21 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
 
     return result;
-  }, [bills, extraPayments, getBillMonthlyTotal, getBillOccurrencesInMonth, overrides, reviewedBillSettlements, settings.paymentMethod, settings.debtPayoffEnabled]);
+  }, [bills, extraPayments, getBillMonthlyTotal, getBillOccurrencesInMonth, getDebtMonthSettlements, settings.paymentMethod, settings.debtPayoffEnabled]);
 
   const getRemainingDebtPlanForMonth = useCallback((month: number, year: number): DatedSnowballMonthPlanResult | null => {
     const plan = getDebtPlanForMonth(month, year);
     if (!plan) return null;
     const billMatches = matchedOccurrenceAllocations(transactions, "bill");
     const snowballMatches = matchedOccurrenceAllocations(transactions, "extra_principal", "snowball");
+    const debtSettlements = getDebtMonthSettlements(month, year);
+    const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+    const reviewedBillIds = new Set(Array.from(billMatches.values())
+      .filter(match => match.occurrenceDate?.startsWith(monthPrefix) && match.targetId)
+      .map(match => match.targetId!));
+    const overridePaidRemaining = new Map(Array.from(debtSettlements)
+      .filter(([billId, settlement]) => !reviewedBillIds.has(billId) && settlement.paidAmount > 0.005)
+      .map(([billId, settlement]) => [billId, settlement.paidAmount]));
     const settlements: DatedDebtSettlement[] = [];
     const seen = new Set<string>();
     plan.allocations.forEach(allocation => {
@@ -2281,6 +2310,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         : billMatches.get(occurrenceKey(billId, allocation.date));
       if (match && Number(match.amount) > 0.005) {
         settlements.push({ sourceType, billId, date: allocation.date, amount: Number(match.amount) });
+      } else if (sourceType === "bill") {
+        const fallbackPaid = overridePaidRemaining.get(billId) ?? 0;
+        if (fallbackPaid <= 0.005) return;
+        const applied = Math.min(fallbackPaid, Math.max(allocation.sourceAmount, allocation.amount));
+        settlements.push({ sourceType, billId, date: allocation.date, amount: applied });
+        overridePaidRemaining.set(billId, Math.max(0, fallbackPaid - applied));
       }
     });
     const allocations = remainingDatedDebtAllocations(plan.allocations, settlements);
@@ -2289,7 +2324,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       allocations,
       plannedPayment: allocations.reduce((sum, allocation) => sum + allocation.amount, 0),
     };
-  }, [getDebtPlanForMonth, transactions]);
+  }, [getDebtMonthSettlements, getDebtPlanForMonth, transactions]);
 
   const deleteExtraPayment = useCallback(async (id: string) => {
     if (!user) return;
@@ -2307,6 +2342,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     sources: SnowballFundingSource[] = [{ type: "manual", amount: preview.selectedExtra }],
     existingPaymentId?: string,
   ) => {
+    if (!isValidExtraPaymentPlan({ amount: preview.selectedExtra, allocations: preview.allocations })) {
+      throw new Error("Extra payment plans require a positive amount with matching debt allocations.");
+    }
     if (!user) return;
     if (!settings.debtPayoffEnabled) throw new Error("Turn on Debt Payoff Plan before applying an automatic debt payment.");
     assertCanEditHousehold("apply a debt snowball payment");
@@ -3844,7 +3882,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   }, [bills, transactions, deletedTransactions, forecastLedgerTransactions, transactionLedger, incomes, goals, decisions, overrides, billDateMoves, extraPayments, connectedBankAccounts, accounts, getBillEffectiveMonthlyTotal, getBillMonthlyTotal, getBillOccurrencesInMonth, getRemainingDebtPlanForMonth, settings.starting_balance, settings.starting_balance_date, balanceComputationCache, user]);
 
   const previewDebtSnowball = useCallback((month: number, year: number, requestedExtra?: number, additionalSafeCredit = 0, paymentDateOverride?: string, editingPaymentId?: string): SnowballProjectionResult => {
-    const existing = extraPayments.find(ep => ep.month === month && ep.year === year);
+    const existing = extraPayments.find(ep => ep.month === month && ep.year === year && isValidExtraPaymentPlan(ep));
     const editingAppliedPayment = Boolean(
       existing
       && existing.id === editingPaymentId
@@ -4363,7 +4401,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       addBill, updateBill, stopFutureBill, deleteBill, deleteBillMistake, getBillById,
       getOverride, getAmount, getPaidAmount, setPaidAmount, setCustomAmount, getCustomDueDay, setCustomDueDay,
       moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence, getBillDateMovesForMonth,
-      getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal, getDebtPlanForMonth, getRemainingDebtPlanForMonth,
+      getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal, getDebtMonthSettlements, getDebtPlanForMonth, getRemainingDebtPlanForMonth,
       runSnowball, previewDebtSnowball, applyDebtSnowballPayment, saveExtraPayment, getExtraPayment, deleteExtraPayment, removeDebtSnowballPayment, finalizeBillPayment,
       addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, matchPendingTransactionToBill, removePendingPlanMatch, reconcileTransaction, undoTransactionReconciliation, removeReviewSurplusFunding, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome, getIncomeOccurrencesInMonth,

@@ -140,6 +140,8 @@
     ,"lib/todaysDecisions.test.ts"
     ,"lib/monthlyDebtCheckIn.ts"
     ,"lib/monthlyDebtCheckIn.test.ts"
+    ,"lib/debtPlanDomain.ts"
+    ,"lib/debtPlanDomain.test.ts"
     ,"lib/snowballPlanner.ts"
     ,"lib/snowballPlanner.test.ts"
     ,"lib/universalSearch.ts"

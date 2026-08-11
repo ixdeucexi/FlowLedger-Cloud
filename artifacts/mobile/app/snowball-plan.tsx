@@ -19,6 +19,7 @@ import {
   requiredDebtPlanTotal,
   snowballTransactionEditDraft,
 } from "@/lib/debtPaymentPlan";
+import { isValidExtraPaymentPlan } from "@/lib/debtPlanDomain";
 import { localDateString, MONTH_NAMES } from "@/lib/dateLabels";
 import { matchedOccurrenceAllocations } from "@/lib/reviewCenter";
 import {
@@ -33,6 +34,10 @@ function money(value: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+function moneyOrDash(value: number) {
+  return value > 0.005 ? money(value) : "—";
 }
 
 function dateParts(value: string) {
@@ -81,6 +86,7 @@ function SnowballPlanScreen() {
     extraPayments,
     getBillOccurrencesInMonth,
     getDebtPlanForMonth,
+    getDebtMonthSettlements,
     getRemainingDebtPlanForMonth,
     getExtraPayment,
     getMonthlyBills,
@@ -91,7 +97,11 @@ function SnowballPlanScreen() {
     updateTransaction,
   } = useBudget();
   const today = localDateString();
-  const firstUpcomingPlan = extraPayments
+  const validExtraPayments = useMemo(
+    () => extraPayments.filter(isValidExtraPaymentPlan),
+    [extraPayments],
+  );
+  const firstUpcomingPlan = validExtraPayments
     .filter(payment => (payment.payment_date ?? "") >= today)
     .slice()
     .sort((left, right) => (left.payment_date ?? "").localeCompare(right.payment_date ?? ""))[0];
@@ -116,7 +126,7 @@ function SnowballPlanScreen() {
   const hydratedTransactionRef = useRef<string | null>(null);
   const hydratedDefaultPlanRef = useRef(false);
   const editingPayment = editingPaymentId
-    ? extraPayments.find(payment => payment.id === editingPaymentId)
+    ? validExtraPayments.find(payment => payment.id === editingPaymentId)
     : undefined;
 
   useEffect(() => {
@@ -166,6 +176,7 @@ function SnowballPlanScreen() {
   const monthDebts = getMonthlyBills(planDate.month, planDate.year).filter(debt => debt.is_debt);
   const fullDatedPlan = getDebtPlanForMonth(planDate.month, planDate.year);
   const remainingDatedPlan = getRemainingDebtPlanForMonth(planDate.month, planDate.year);
+  const debtMonthSettlements = getDebtMonthSettlements(planDate.month, planDate.year);
   const plannerRows = buildSnowballPlannerRows(
     monthDebts.map(debt => ({
       id: debt.id,
@@ -179,11 +190,12 @@ function SnowballPlanScreen() {
     settings.paymentMethod,
     remainingDatedPlan,
     fullDatedPlan,
+    debtMonthSettlements,
   );
   const timeline = buildSnowballTimeline(remainingDatedPlan?.allocations ?? []);
   const target = editDraft
     ? monthDebts.find(debt => debt.id === editDraft.debtId) ?? bills.find(debt => debt.id === editDraft.debtId && debt.is_debt)
-    : plannerRows[0] ?? null;
+    : plannerRows.find(row => row.settlement.status !== "settled") ?? null;
   const scheduledForecast = (remainingDatedPlan?.allocations ?? [])
     .filter(allocation => allocation.kind !== "extra")
     .reduce((total, allocation) => total + allocation.amount, 0);
@@ -209,10 +221,10 @@ function SnowballPlanScreen() {
     () => matchedOccurrenceAllocations(transactions, "extra_principal", "snowball"),
     [transactions],
   );
-  const scheduledPlans = useMemo(() => extraPayments
+  const scheduledPlans = useMemo(() => validExtraPayments
     .slice()
     .sort((left, right) => (right.payment_date ?? "").localeCompare(left.payment_date ?? "")),
-  [extraPayments]);
+  [validExtraPayments]);
   const displayedAllocations = editTransaction && target
     ? [{
         billId: target.id,
@@ -394,18 +406,20 @@ function SnowballPlanScreen() {
                 {plannerRows.length ? plannerRows.map((row, index) => (
                   <View key={row.id} style={styles.ladderItem}>
                     <View style={styles.ladderRail}>
-                      <View style={[styles.rankBubble, { backgroundColor: index === 0 ? c.primary : c.background, borderColor: index === 0 ? c.primary : c.border }]}>
-                        {row.paidOffThisMonth
-                          ? <Feather name="check" size={16} color={index === 0 ? c.primaryForeground : c.success} />
-                          : <Text style={[styles.rankText, { color: index === 0 ? c.primaryForeground : c.mutedForeground }]}>#{row.rank}</Text>}
+                      <View style={[styles.rankBubble, { backgroundColor: row.id === target?.id ? c.primary : c.background, borderColor: row.id === target?.id ? c.primary : c.border }]}>
+                        {row.paidOffThisMonth || row.settlement.status === "settled"
+                          ? <Feather name="check" size={16} color={row.id === target?.id ? c.primaryForeground : c.success} />
+                          : <Text style={[styles.rankText, { color: row.id === target?.id ? c.primaryForeground : c.mutedForeground }]}>#{row.rank}</Text>}
                       </View>
                       {index < plannerRows.length - 1 ? <View style={[styles.railLine, { backgroundColor: c.border }]} /> : null}
                     </View>
-                    <View style={[styles.debtCard, { backgroundColor: c.background + "88", borderColor: index === 0 ? c.primary + "66" : c.border }]}>
+                    <View style={[styles.debtCard, { backgroundColor: c.background + "88", borderColor: row.id === target?.id ? c.primary + "66" : c.border }]}>
                       <View style={styles.debtHeader}>
                         <View style={styles.flexOne}>
                           <View style={styles.inlineBadges}>
-                            {index === 0 ? <Text style={[styles.targetBadge, { color: c.primary }]}>TARGET NOW</Text> : null}
+                            {row.id === target?.id ? <Text style={[styles.targetBadge, { color: c.primary }]}>TARGET NOW</Text> : null}
+                            {row.settlement.status === "settled" ? <Text style={[styles.paidBadge, { color: c.success }]}>PAID THIS MONTH</Text> : null}
+                            {row.settlement.status === "partial" ? <Text style={[styles.paidBadge, { color: c.warning }]}>PARTIALLY PAID</Text> : null}
                             {row.paidOffThisMonth ? <Text style={[styles.paidBadge, { color: c.success }]}>PAYS OFF THIS MONTH</Text> : null}
                           </View>
                           <Text style={[styles.debtName, { color: c.foreground }]}>{row.name}</Text>
@@ -414,18 +428,21 @@ function SnowballPlanScreen() {
                       </View>
                       <View style={styles.debtStats}>
                         <View style={styles.debtStat}>
-                          <Text style={[styles.debtStatLabel, { color: c.mutedForeground }]}>REQUIRED MINIMUM</Text>
-                          <Text style={[styles.debtStatValue, { color: c.foreground }]}>{money(row.minimum)}</Text>
+                          <Text style={[styles.debtStatLabel, { color: c.mutedForeground }]}>{row.settlement.status === "settled" ? "PAID THIS MONTH" : row.settlement.status === "partial" ? "PAID TO DATE" : "REQUIRED MINIMUM"}</Text>
+                          <Text style={[styles.debtStatValue, { color: row.settlement.status === "settled" ? c.success : c.foreground }]}>{moneyOrDash(row.settlement.status === "scheduled" ? row.settlement.configuredObligation : row.settlement.paidAmount)}</Text>
                         </View>
                         <View style={styles.debtStat}>
-                          <Text style={[styles.debtStatLabel, { color: c.mutedForeground }]}>PLANNED TO DEBT</Text>
-                          <Text style={[styles.debtStatValue, { color: c.primary }]}>{money(row.plannedToDebt)}</Text>
+                          <Text style={[styles.debtStatLabel, { color: c.mutedForeground }]}>{row.settlement.status === "settled" ? "REMAINING REQUIRED" : row.settlement.status === "partial" ? "REMAINING SCHEDULED" : "PLANNED TO DEBT"}</Text>
+                          <Text style={[styles.debtStatValue, { color: c.primary }]}>{moneyOrDash(row.plannedToDebt)}</Text>
                         </View>
                         <View style={styles.debtStat}>
                           <Text style={[styles.debtStatLabel, { color: c.mutedForeground }]}>EST. MONTH-END</Text>
                           <Text style={[styles.debtStatValue, { color: row.balanceAfter <= 0.009 ? c.success : c.foreground }]}>{money(row.balanceAfter)}</Text>
                         </View>
                       </View>
+                      {row.plannedToDebt <= 0.005 ? (
+                        <Text style={[styles.sourceOutflow, { color: c.mutedForeground }]}>{row.settlement.status === "settled" ? `Required payment settled for ${monthLabel}.` : row.settlement.status === "partial" ? "Payment activity is recorded; no additional scheduled allocation is available." : "No required allocation is scheduled for this debt this month."}</Text>
+                      ) : null}
                       {row.forecastPayment > 0.009 ? (
                         <Text style={[styles.sourceOutflow, { color: c.mutedForeground }]}>Forecast source outflow: {money(row.forecastPayment)}</Text>
                       ) : null}
