@@ -60,6 +60,7 @@ type UpcomingBill = {
   month: number;
   year: number;
   isDebt: boolean;
+  frequency?: "monthly" | "quarterly" | "biweekly" | "weekly";
   pending: boolean;
   sourceId?: string;
   kind?: "required" | "rollover" | "extra";
@@ -694,6 +695,7 @@ export function DesktopDashboard() {
             month,
             year,
             isDebt: bill.is_debt,
+            frequency: bill.frequency,
             pending: activePendingMatches.some(
               (match) =>
                 match.target_id === bill.id && match.occurrence_date === occurrenceDate,
@@ -822,6 +824,7 @@ export function DesktopDashboard() {
         dateLabel: daysAway === 0 ? "today" : daysAway === 1 ? "tomorrow" : nextDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
         daysAway,
         isDebt: next.isDebt,
+        frequency: next.frequency,
         paidOff: next.paidOff,
         rollover: rolloverAmount > 0.005 ? {
           name: rolloverNames.length === 1 ? rolloverNames[0] : "your next debts",

@@ -24,6 +24,7 @@ export type TodayDecisionInput = {
     dateLabel: string;
     daysAway: number;
     isDebt?: boolean;
+    frequency?: "monthly" | "quarterly" | "biweekly" | "weekly";
     paidOff?: boolean;
     rollover?: { name: string; amount: number } | null;
   } | null;
@@ -85,6 +86,23 @@ function money(value: number) {
   });
 }
 
+function paymentCadenceLabel(
+  frequency?: "monthly" | "quarterly" | "biweekly" | "weekly",
+) {
+  switch (frequency) {
+    case "weekly":
+      return " weekly payment";
+    case "biweekly":
+      return " biweekly payment";
+    case "monthly":
+      return " monthly payment";
+    case "quarterly":
+      return " quarterly payment";
+    default:
+      return "";
+  }
+}
+
 export function buildTodaysDecisions(input: TodayDecisionInput): TodayDecision[] {
   const decisions: TodayDecision[] = [];
 
@@ -122,7 +140,7 @@ export function buildTodaysDecisions(input: TodayDecisionInput): TodayDecision[]
         : `${input.nextBill.name} is coming up`,
       reason: debtPayoffWithRollover && input.nextBill.rollover
         ? `${money(input.nextBill.amount)} pays off ${input.nextBill.name} ${input.nextBill.dateLabel}. ${money(input.nextBill.rollover.amount)} rolls to ${input.nextBill.rollover.name} the same day.`
-        : `${money(input.nextBill.amount)} is due ${input.nextBill.dateLabel}.`,
+        : `${money(input.nextBill.amount)}${paymentCadenceLabel(input.nextBill.frequency)} is due ${input.nextBill.dateLabel}.`,
       actionLabel: input.nextBill.isDebt ? "Review Debt" : "Review Bills",
       route: "/(tabs)/bills",
       params: input.nextBill.isDebt

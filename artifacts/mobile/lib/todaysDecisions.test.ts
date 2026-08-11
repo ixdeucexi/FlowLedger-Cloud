@@ -32,6 +32,31 @@ test("today decisions return a forecast-grounded all-clear state", () => {
   assert.match(decisions[0].reason, /forecast/i);
 });
 
+test("today decisions name every supported bill cadence", () => {
+  const cases = [
+    ["weekly", 150, "$150 weekly payment is due tomorrow."],
+    ["biweekly", 150, "$150 biweekly payment is due tomorrow."],
+    ["monthly", 120, "$120 monthly payment is due tomorrow."],
+    ["quarterly", 600, "$600 quarterly payment is due tomorrow."],
+  ] as const;
+
+  cases.forEach(([frequency, amount, expected]) => {
+    const decision = buildTodaysDecisions({
+      ...base,
+      nextBill: {
+        id: frequency,
+        name: `${frequency} bill`,
+        amount,
+        dateLabel: "tomorrow",
+        daysAway: 1,
+        frequency,
+      },
+    })[0];
+
+    assert.equal(decision.reason, expected, frequency);
+  });
+});
+
 test("transient financial data is not required for a stable empty state", () => {
   const decisions = buildTodaysDecisions({ ...base, safeToSpend: 0 });
   assert.equal(decisions[0].id, "check-plan");

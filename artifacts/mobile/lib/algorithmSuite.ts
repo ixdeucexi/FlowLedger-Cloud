@@ -478,7 +478,7 @@ function prioritizeBills(bills: AlgorithmBill[], todayDay: number, safetyFloor: 
     .map(({ bill, status }) => {
       const dueDay = status.nextDueDay ?? bill.due_day;
       const daysUntilDue = Math.max(0, dueDay - todayDay);
-      const unpaid = status.remainingAmount;
+      const unpaid = status.nextOccurrenceAmount;
       const urgencyScore = daysUntilDue <= 0 ? 45 : daysUntilDue <= 3 ? 34 : daysUntilDue <= 7 ? 22 : 8;
       const urgency: "now" | "soon" | "planned" = daysUntilDue <= 0 ? "now" : daysUntilDue <= 7 ? "soon" : "planned";
       const size = Math.min(28, unpaid / 45);
@@ -518,6 +518,7 @@ interface BillScheduleStatus {
   dueAmount: number;
   overdueAmount: number;
   remainingAmount: number;
+  nextOccurrenceAmount: number;
   nextDueDay: number | null;
   firstOverdueDay: number | null;
   overdueOccurrenceCount: number;
@@ -532,7 +533,7 @@ function buildBillScheduleStatus(bill: AlgorithmBill, todayDay: number): BillSch
   const paidAmount = Math.max(0, Number(bill.paidAmount) || 0);
   const remainingAmount = roundCurrency(Math.max(0, totalAmount - paidAmount));
   if (occurrences.length === 0 || totalAmount <= 0.005) {
-    return { dueAmount: 0, overdueAmount: 0, remainingAmount, nextDueDay: null, firstOverdueDay: null, overdueOccurrenceCount: 0 };
+    return { dueAmount: 0, overdueAmount: 0, remainingAmount, nextOccurrenceAmount: 0, nextDueDay: null, firstOverdueDay: null, overdueOccurrenceCount: 0 };
   }
 
   const occurrenceAmount = totalAmount / occurrences.length;
@@ -559,6 +560,7 @@ function buildBillScheduleStatus(bill: AlgorithmBill, todayDay: number): BillSch
     dueAmount,
     overdueAmount,
     remainingAmount,
+    nextOccurrenceAmount: roundCurrency(nextDue?.remaining ?? 0),
     nextDueDay: nextDue?.day ?? null,
     firstOverdueDay: overdue[0]?.day ?? null,
     overdueOccurrenceCount: overdue.length,
