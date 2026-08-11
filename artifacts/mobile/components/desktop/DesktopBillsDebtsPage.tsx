@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { AddBillModal } from "@/components/AddBillModal";
@@ -112,7 +112,7 @@ type BillRow = {
 };
 
 export function DesktopBillsDebtsPage() {
-  const params = useLocalSearchParams<{ view?: string }>();
+  const params = useLocalSearchParams<{ view?: string; debtId?: string }>();
   const router = useRouter();
   const {
     bills,
@@ -147,6 +147,15 @@ export function DesktopBillsDebtsPage() {
     month: now.getMonth(),
     year: now.getFullYear(),
   });
+
+  useEffect(() => {
+    if (!params.debtId) return;
+    const debt = bills.find((bill) => bill.id === params.debtId && bill.is_debt);
+    if (!debt) return;
+    setEditingBill(debt);
+    setModalVisible(true);
+    router.setParams({ debtId: "", view: "debt" } as never);
+  }, [bills, params.debtId, router]);
 
   const nonDebtBills = useMemo(
     () => bills.filter((bill) => !bill.is_debt && !bill.end_date),

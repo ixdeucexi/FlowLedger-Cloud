@@ -28,6 +28,7 @@ import { DashboardUtilityWidgets } from "@/components/DashboardUtilityWidgets";
 import { DesktopAddMenu } from "@/components/desktop/DesktopAddMenu";
 import { GoalModal } from "@/components/GoalModal";
 import { IncomeModal } from "@/components/IncomeModal";
+import { MonthlyDebtCheckInModal } from "@/components/MonthlyDebtCheckInModal";
 import { useAuth } from "@/context/AuthContext";
 import { useBudget, type Bill, type Goal, type IncomeItem } from "@/context/BudgetContext";
 import { useDashboardLayoutPreferences } from "@/hooks/useDashboardLayoutPreferences";
@@ -802,6 +803,7 @@ export function DesktopDashboard() {
       safetyFloor: settings.safety_floor,
       safeToSpend: algorithmSuite.safeCushion.amount,
       nextBill: next && nextDate ? {
+        id: next.id,
         name: next.name,
         amount: next.amount,
         dateLabel: daysAway === 0 ? "today" : daysAway === 1 ? "tomorrow" : nextDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
@@ -858,6 +860,7 @@ export function DesktopDashboard() {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
+      <MonthlyDebtCheckInModal onReview={() => openBills("debt")} />
       <View pointerEvents="none" style={styles.ambientLayer}>
         <View style={styles.ambientPurple} />
         <View style={styles.ambientBlue} />

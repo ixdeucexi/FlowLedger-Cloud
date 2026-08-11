@@ -18,6 +18,7 @@ export type TodayDecisionInput = {
   lowestDate?: string | null;
   safetyFloor: number;
   nextBill?: {
+    id: string;
     name: string;
     amount: number;
     dateLabel: string;
@@ -124,7 +125,9 @@ export function buildTodaysDecisions(input: TodayDecisionInput): TodayDecision[]
         : `${money(input.nextBill.amount)} is due ${input.nextBill.dateLabel}.`,
       actionLabel: input.nextBill.isDebt ? "Review Debt" : "Review Bills",
       route: "/(tabs)/bills",
-      params: { filter: input.nextBill.isDebt ? "debt" : "bills" },
+      params: input.nextBill.isDebt
+        ? { view: "debt", debtId: input.nextBill.id }
+        : { view: "bills" },
       tone: input.nextBill.daysAway <= 1 ? "watch" : "info",
     });
   }
@@ -136,7 +139,7 @@ export function buildTodaysDecisions(input: TodayDecisionInput): TodayDecision[]
       reason: `${money(input.snowballTarget.balance)} remains on your current lowest-balance debt.`,
       actionLabel: "View Snowball",
       route: "/(tabs)/bills",
-      params: { filter: "debt" },
+      params: { view: "debt" },
       tone: "info",
     });
   }

@@ -1,6 +1,6 @@
 ﻿import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
@@ -99,6 +99,7 @@ export default function BillsScreen() {
   const isDesktop = useDesktopExperience();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const routeParams = useLocalSearchParams<{ view?: string; debtId?: string }>();
   const { user } = useAuth();
   const {
     bills,
@@ -140,6 +141,20 @@ export default function BillsScreen() {
       setDashboardFilter(null);
     }
   }, [dashboardFilter]);
+
+  useEffect(() => {
+    if (routeParams.view === "debt") setActiveTab("debt");
+    else if (routeParams.view === "bills") setActiveTab("bills");
+
+    const debtId = routeParams.debtId;
+    if (!debtId) return;
+    const debt = bills.find((bill) => bill.id === debtId && bill.is_debt);
+    if (!debt) return;
+    setActiveTab("debt");
+    setEditBill(debt);
+    setModalVisible(true);
+    router.setParams({ debtId: "", view: "debt" } as never);
+  }, [bills, routeParams.debtId, routeParams.view, router]);
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
 

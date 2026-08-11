@@ -16,7 +16,7 @@ test("today decisions prioritize forecast risk and never exceed three items", ()
     reviewCount: 4,
     lowestBalance: 100,
     lowestDate: "August 12",
-    nextBill: { name: "Electric", amount: 120, dateLabel: "tomorrow", daysAway: 1 },
+    nextBill: { id: "electric", name: "Electric", amount: 120, dateLabel: "tomorrow", daysAway: 1 },
     snowballTarget: { name: "Card", balance: 900 },
   });
   assert.equal(decisions.length, 3);
@@ -80,6 +80,7 @@ test("dated debt decisions split a payoff from its same-day rollover", () => {
   const decision = buildTodaysDecisions({
     ...base,
     nextBill: {
+      id: "camera",
       name: summary!.name,
       amount: summary!.amount,
       dateLabel: "tomorrow",
@@ -93,5 +94,5 @@ test("dated debt decisions split a payoff from its same-day rollover", () => {
   assert.equal(decision.title, "Camera payoff is coming up");
   assert.equal(decision.reason, "$45 pays off Camera tomorrow. $58 rolls to Concert the same day.");
   assert.equal(decision.actionLabel, "Review Debt");
-  assert.deepEqual(decision.params, { filter: "debt" });
+  assert.deepEqual(decision.params, { view: "debt", debtId: "camera" });
 });

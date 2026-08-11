@@ -16,6 +16,7 @@ import { DashboardUtilityWidgets } from "@/components/DashboardUtilityWidgets";
 import { FlowmentumHandoffModal } from "@/components/FlowmentumHandoffModal";
 import { GoalModal } from "@/components/GoalModal";
 import { HouseholdSwitcher } from "@/components/HouseholdSwitcher";
+import { MonthlyDebtCheckInModal } from "@/components/MonthlyDebtCheckInModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { StabilityPathCard } from "@/components/StabilityPathCard";
 
@@ -630,6 +631,9 @@ function MobileDashboardScreen() {
   );
   // The hero is a bank snapshot. Forecasted balances belong on Monthly only.
   const dashboardCheckingBalance = bankCurrentCheckingBalance;
+  const compactSavingsFaceHeight = currentGoals.length === 0
+    ? 170
+    : 92 + Math.min(currentGoals.length, 3) * 38 + (currentGoals.length > 3 ? 14 : 0);
 
   // ── Savings summary for back of hero card ──────────────────────────────────
   // ── Affordability check (real calendar projection) ──────────────────────────
@@ -872,6 +876,7 @@ function MobileDashboardScreen() {
       safetyFloor: settings.safety_floor,
       safeToSpend: algorithmSuite.safeCushion.amount,
       nextBill: priorityBill && priorityDate ? {
+        id: priorityBill.id,
         name: debtDecision?.name ?? priorityBill.name,
         amount: debtDecision?.amount ?? priorityBill.amount,
         dateLabel: daysAway === 0 ? "today" : daysAway === 1 ? "tomorrow" : priorityDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
@@ -1140,6 +1145,10 @@ function MobileDashboardScreen() {
         onExplore={exploreFlowmentum}
       />
 
+      <MonthlyDebtCheckInModal
+        onReview={() => router.push({ pathname: "/(tabs)/bills", params: { view: "debt" } } as any)}
+      />
+
       <View style={[
         styles.referenceCommandHero,
         isCommandWide && styles.referenceCommandHeroWide,
@@ -1150,10 +1159,17 @@ function MobileDashboardScreen() {
           shadowOpacity: dashboardTheme.heroShadowOpacity,
         },
       ]}>
-        <View style={[styles.referenceHeroFlipShell, !isCommandWide && !flipped && styles.referenceHeroFlipShellCompact]}>
+        <View
+          style={[
+            styles.referenceHeroFlipShell,
+            !isCommandWide && {
+              minHeight: flipped ? compactSavingsFaceHeight : 118,
+            },
+          ]}
+        >
           <Animated.View
             pointerEvents={flipped ? "none" : "auto"}
-            style={[styles.referenceHeroFace, !isCommandWide && !flipped && styles.referenceHeroFaceCompact, { transform: [{ perspective: 1000 }, { rotateY: frontRotate }] }]}
+            style={[styles.referenceHeroFace, !isCommandWide && styles.referenceHeroFaceCompact, { transform: [{ perspective: 1000 }, { rotateY: frontRotate }] }]}
           >
             <View style={styles.referenceMoneyHeader}>
               <View style={{ flex: 1 }}>
@@ -1219,7 +1235,7 @@ function MobileDashboardScreen() {
 
           <Animated.View
             pointerEvents={flipped ? "auto" : "none"}
-            style={[styles.referenceHeroFace, styles.referenceHeroBackFace, { transform: [{ perspective: 1000 }, { rotateY: backRotate }] }]}
+            style={[styles.referenceHeroFace, !isCommandWide && styles.referenceHeroFaceCompact, styles.referenceHeroBackFace, { transform: [{ perspective: 1000 }, { rotateY: backRotate }] }]}
           >
             <View style={styles.referenceMoneyHeader}>
               <View style={{ flex: 1 }}>
