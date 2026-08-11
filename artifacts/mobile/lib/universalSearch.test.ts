@@ -16,7 +16,7 @@ const index = buildUniversalSearchIndex({
 
 test("universal search groups real entities and routes debts correctly", () => {
   assert.equal(searchUniversalIndex(index, "visa")[0].kind, "Debt");
-  assert.deepEqual(searchUniversalIndex(index, "visa")[0].params, { view: "debt" });
+  assert.deepEqual(searchUniversalIndex(index, "visa")[0].params, { view: "debt", debtId: "debt" });
   assert.equal(searchUniversalIndex(index, "weekend groceries")[0].id, "tx");
   assert.equal(index.filter(result => result.kind === "Category" && result.title === "Food").length, 1);
 });
@@ -30,5 +30,6 @@ test("universal search favors exact title matches and deduplicates remote rows",
 
 test("command palette exposes only supported application actions", () => {
   assert.equal(APP_COMMANDS.some(command => command.id === "add-transaction"), true);
+  assert.equal(APP_COMMANDS.some(command => command.id === "open-snowball" && command.route === "/snowball-plan"), true);
   assert.equal(APP_COMMANDS.every(command => command.route.startsWith("/")), true);
 });

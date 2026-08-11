@@ -137,9 +137,8 @@ export function buildTodaysDecisions(input: TodayDecisionInput): TodayDecision[]
       id: "snowball-target",
       title: `Keep targeting ${input.snowballTarget.name}`,
       reason: `${money(input.snowballTarget.balance)} remains on your current lowest-balance debt.`,
-      actionLabel: "View Snowball",
-      route: "/(tabs)/bills",
-      params: { view: "debt" },
+      actionLabel: "Open Planner",
+      route: "/snowball-plan",
       tone: "info",
     });
   }

@@ -241,9 +241,9 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
                 <Stack.Screen
                   name="snowball-plan"
                   options={{
-                    animation: "slide_from_bottom",
+                    animation: "slide_from_right",
                     animationTypeForReplace: "pop",
-                    presentation: "modal",
+                    presentation: "card",
                   }}
                 />
                 <Stack.Screen name="(tabs)" />

@@ -37,6 +37,16 @@ test("transient financial data is not required for a stable empty state", () => 
   assert.equal(decisions[0].id, "check-plan");
 });
 
+test("the snowball decision opens the dedicated planner", () => {
+  const decision = buildTodaysDecisions({
+    ...base,
+    snowballTarget: { name: "Camera", balance: 45 },
+  })[0];
+  assert.equal(decision.actionLabel, "Open Planner");
+  assert.equal(decision.route, "/snowball-plan");
+  assert.equal(decision.params, undefined);
+});
+
 test("dated debt decisions split a payoff from its same-day rollover", () => {
   const summary = summarizeDatedDebtDecision([
     {

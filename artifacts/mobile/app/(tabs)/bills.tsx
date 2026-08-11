@@ -1258,8 +1258,8 @@ export default function BillsScreen() {
                         accessibilityRole="button"
                         accessibilityLabel={
                           existingSnowball
-                            ? "View or change Snowball payment"
-                            : "Make a Snowball payment"
+                            ? "Open Debt Payoff Planner and review payment"
+                            : "Open Debt Payoff Planner"
                         }
                         onPress={openSnowballPlanner}
                         style={({ pressed }) => [
@@ -1282,8 +1282,8 @@ export default function BillsScreen() {
                           ]}
                         >
                           {existingSnowball
-                            ? "View or change Snowball payment"
-                            : "Make a Snowball Payment"}
+                            ? "Open Planner · plan saved"
+                            : "Open Debt Payoff Planner"}
                         </Text>
                       </Pressable>
                       {existingSnowball ? (

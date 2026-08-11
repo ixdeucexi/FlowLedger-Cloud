@@ -929,10 +929,10 @@ function DebtsDesktop({
       <View style={styles.debtOverviewRow}>
         <DesktopCard style={styles.debtOverviewCard}>
           <CardHeader
-            title="Debt Snowball Progress"
+            title="Debt Payoff Progress"
             action={
               <Pressable onPress={onPlan}>
-                <Text style={styles.textLink}>Open plan</Text>
+                <Text style={styles.textLink}>Open Debt Payoff Planner</Text>
               </Pressable>
             }
           />

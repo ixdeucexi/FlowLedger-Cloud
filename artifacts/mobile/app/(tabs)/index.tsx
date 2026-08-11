@@ -1528,7 +1528,7 @@ function MobileDashboardScreen() {
               { id: "income",  icon: "trending-up" as const, label: "Add Income",        sub: "Log a salary, freelance, or other",    col: c.success     },
               { id: "expense", icon: "shopping-bag"as const, label: "Add a Transaction", sub: "Record a one-time expense or income",  col: c.warning     },
               { id: "goal",    icon: "target"      as const, label: "Set Aside Money",   sub: "Create a savings goal or spending bucket", col: "#8b5cf6" },
-              { id: "snowball", icon: "trending-down" as const, label: "Snowball Payment", sub: "Plan or change an extra debt payment", col: c.destructive },
+              { id: "snowball", icon: "trending-down" as const, label: "Debt Payoff Planner", sub: "See the payoff ladder or plan safe extra money", col: c.destructive },
             ].map(item => (
               <Pressable
                 accessibilityRole="button"
