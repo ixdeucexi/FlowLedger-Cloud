@@ -206,6 +206,7 @@ export interface ConnectedBankAccount {
   id: string;
   plaid_account_id?: string;
   name: string;
+  display_name?: string;
   official_name?: string;
   mask?: string;
   persistent_account_id?: string;
@@ -463,6 +464,7 @@ interface BudgetContextType {
   importBills: (imported: Omit<Bill, "id" | "created_at">[]) => Promise<void>;
   addAccount: (account: Omit<Account, "id" | "created_at" | "last_reconciled_at">) => Promise<void>;
   updateAccount: (account: Account) => Promise<void>;
+  updateConnectedBankAccountDisplayName: (accountId: string, displayName: string | null) => Promise<void>;
   reconcileAccount: (accountId: string, balance: number, asOfDate: string) => Promise<void>;
   archiveAccount: (accountId: string) => Promise<void>;
   importStatementTransactions: (accountId: string, rows: ImportedTransactionRow[]) => Promise<{ imported: number; duplicates: number }>;
@@ -1370,7 +1372,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
                 applyHouseholdSelect(supabase.from("accounts").select("*"), uid).order("created_at"),
                 applyHouseholdSelect(
                   supabase.from("plaid_accounts")
-                    .select("id,plaid_account_id,name,official_name,mask,persistent_account_id,account_type,account_subtype,current_balance,available_balance,minimum_payment_amount,next_payment_due_date,last_statement_balance,last_statement_issue_date,is_overdue,purchase_apr,liability_last_synced_at,is_active,updated_at")
+                    .select("id,plaid_account_id,name,display_name,official_name,mask,persistent_account_id,account_type,account_subtype,current_balance,available_balance,minimum_payment_amount,next_payment_due_date,last_statement_balance,last_statement_issue_date,is_overdue,purchase_apr,liability_last_synced_at,is_active,updated_at")
                     .order("name"),
                   uid,
                 ),
@@ -1513,7 +1515,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       applyHouseholdSelect(supabase.from("accounts").select("*"), uid).order("created_at"),
       applyHouseholdSelect(
         supabase.from("plaid_accounts")
-          .select("id,plaid_account_id,name,official_name,mask,persistent_account_id,account_type,account_subtype,current_balance,available_balance,minimum_payment_amount,next_payment_due_date,last_statement_balance,last_statement_issue_date,is_overdue,purchase_apr,liability_last_synced_at,is_active,updated_at")
+          .select("id,plaid_account_id,name,display_name,official_name,mask,persistent_account_id,account_type,account_subtype,current_balance,available_balance,minimum_payment_amount,next_payment_due_date,last_statement_balance,last_statement_issue_date,is_overdue,purchase_apr,liability_last_synced_at,is_active,updated_at")
           .order("name"),
         uid,
       ),
@@ -4387,6 +4389,50 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, accounts, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, scopedPayload, assertCanEditHousehold]);
 
+  const updateConnectedBankAccountDisplayName = useCallback(async (accountId: string, displayName: string | null) => {
+    if (!user) return;
+    assertCanEditHousehold("rename a savings account");
+    if (Platform.OS !== "web") throw new Error("Connected account names can currently be changed in the FlowLedger website or PWA.");
+    const previous = connectedBankAccounts.find(account => account.id === accountId);
+    if (!previous || previous.account_subtype !== "savings") throw new Error("Savings account not found.");
+    const normalized = displayName === null ? undefined : displayName.trim().replace(/\s+/g, " ");
+    if (displayName !== null && (!normalized || normalized.length > 80)) {
+      throw new Error(normalized ? "Keep the account name under 80 characters." : "Enter an account name.");
+    }
+
+    setConnectedBankAccounts(current => current.map(account =>
+      account.id === accountId ? { ...account, display_name: normalized } : account,
+    ));
+    markSaveStarted();
+    try {
+      const { data } = await supabase.auth.getSession();
+      const accessToken = data.session?.access_token;
+      if (!accessToken) throw new Error("Sign in again before renaming this account.");
+      if (!activeHouseholdId) throw new Error("Choose a household before renaming this account.");
+      const response = await fetch("/api/plaid/account-nickname", {
+        method: "PATCH",
+        credentials: "include",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+          "X-FlowLedger-Household-Id": activeHouseholdId,
+        },
+        body: JSON.stringify({ accountId, displayName: normalized ?? null }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({})) as { message?: string };
+        throw new Error(payload.message || "Could not update the account name.");
+      }
+      markSaveCompleted();
+    } catch (error) {
+      setConnectedBankAccounts(current => current.map(account =>
+        account.id === accountId ? { ...account, display_name: previous.display_name } : account,
+      ));
+      markSaveFailed(error, () => updateConnectedBankAccountDisplayName(accountId, displayName));
+      throw error;
+    }
+  }, [activeHouseholdId, assertCanEditHousehold, connectedBankAccounts, markSaveCompleted, markSaveFailed, markSaveStarted, user]);
+
   const reconcileAccount = useCallback(async (accountId: string, balance: number, asOfDate: string) => {
     if (!user) return;
     assertCanEditHousehold("reconcile an account");
@@ -4539,7 +4585,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       getCashFlow, getDailyBalances,
       addCategory, updateCategory, deleteCategory,
       updateSettings, importBills,
-      addAccount, updateAccount, reconcileAccount, archiveAccount, importStatementTransactions,
+      addAccount, updateAccount, updateConnectedBankAccountDisplayName, reconcileAccount, archiveAccount, importStatementTransactions,
       saveDecision, updateDecision, deleteDecision,
       selectedYear, setSelectedYear,
     }}>

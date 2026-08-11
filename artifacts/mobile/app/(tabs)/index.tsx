@@ -18,6 +18,7 @@ import { GoalModal } from "@/components/GoalModal";
 import { HouseholdSwitcher } from "@/components/HouseholdSwitcher";
 import { MonthlyDebtCheckInModal } from "@/components/MonthlyDebtCheckInModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
+import { SavingsAccountNameModal } from "@/components/SavingsAccountNameModal";
 import { StabilityPathCard } from "@/components/StabilityPathCard";
 
 import colors from "@/constants/colors";
@@ -32,7 +33,7 @@ import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useDashboardLayoutPreferences } from "@/hooks/useDashboardLayoutPreferences";
 import { applyCategoryBudgetMove, buildZeroBudgetSummary } from "@/lib/categoryPlanning";
 import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets as saveCategoryBudgetsRemote, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
-import { buildDashboardFinancialModel } from "@/lib/dashboardFinancialModel";
+import { buildDashboardFinancialModel, type DashboardSavingsAccount } from "@/lib/dashboardFinancialModel";
 import { isCheckingBalanceTransaction } from "@/lib/billMatching";
 import { dateOnlyToLocalDate, localDateString } from "@/lib/dateLabels";
 import {
@@ -226,7 +227,7 @@ function MobileDashboardScreen() {
     getMonthlyIncome,
     goals, addGoal, updateGoal, deleteGoal,
     getCashFlow, addBill, getDailyBalances, getTransactionsForMonth, settings,
-    accounts, connectedBankAccounts, incomes, updateSettings, forecastConfidence,
+    accounts, connectedBankAccounts, incomes, updateSettings, updateAccount, updateConnectedBankAccountDisplayName, forecastConfidence,
     categories, activeHousehold, canEditHousehold,
     pendingBankTransactions, pendingPlanMatches, transactions,
   } = useBudget();
@@ -242,6 +243,7 @@ function MobileDashboardScreen() {
 
   const [goalModalVisible, setGoalModalVisible]     = useState(false);
   const [editGoal, setEditGoal]                     = useState<Goal | null>(null);
+  const [savingsAccountNameTarget, setSavingsAccountNameTarget] = useState<DashboardSavingsAccount | null>(null);
   const [actionModalVisible, setActionModalVisible] = useState(false);
   const [addBillVisible, setAddBillVisible]         = useState(false);
   const [addBillForceDebt, setAddBillForceDebt]     = useState(false);
@@ -640,6 +642,21 @@ function MobileDashboardScreen() {
     + (currentGoals.length === 0
       ? 80
       : Math.min(currentGoals.length, 3) * 38 + (currentGoals.length > 3 ? 14 : 0));
+
+  const saveSavingsAccountName = useCallback(async (account: DashboardSavingsAccount, name: string) => {
+    if (account.source === "connected") {
+      await updateConnectedBankAccountDisplayName(account.id, name);
+      return;
+    }
+    const manualAccount = accounts.find(item => item.id === account.id && item.account_type === "savings");
+    if (!manualAccount) throw new Error("Savings account not found.");
+    await updateAccount({ ...manualAccount, name });
+  }, [accounts, updateAccount, updateConnectedBankAccountDisplayName]);
+
+  const resetSavingsAccountName = useCallback(async (account: DashboardSavingsAccount) => {
+    if (account.source !== "connected") return;
+    await updateConnectedBankAccountDisplayName(account.id, null);
+  }, [updateConnectedBankAccountDisplayName]);
 
   // ── Savings summary for back of hero card ──────────────────────────────────
   // ── Affordability check (real calendar projection) ──────────────────────────
@@ -1155,6 +1172,13 @@ function MobileDashboardScreen() {
         onReview={() => router.push({ pathname: "/(tabs)/bills", params: { view: "debt" } } as any)}
       />
 
+      <SavingsAccountNameModal
+        account={savingsAccountNameTarget}
+        onClose={() => setSavingsAccountNameTarget(null)}
+        onSave={saveSavingsAccountName}
+        onReset={resetSavingsAccountName}
+      />
+
       <View style={[
         styles.referenceCommandHero,
         isCommandWide && styles.referenceCommandHeroWide,
@@ -1257,8 +1281,6 @@ function MobileDashboardScreen() {
               {savingsAccounts.length > 0 ? savingsAccounts.map((account) => (
                 <View
                   key={account.id}
-                  accessible
-                  accessibilityLabel={`${account.name}${account.mask ? ` ending in ${account.mask}` : ""}, ${formatDashboardCurrency(account.balance)}`}
                   style={[styles.referenceSavingsItem, { backgroundColor: dashboardTheme.goalSurface, borderColor: dashboardTheme.goalBorder }]}
                 >
                   <View style={styles.referenceSavingsIdentity}>
@@ -1269,9 +1291,22 @@ function MobileDashboardScreen() {
                       <AppText style={[styles.referenceSavingsMask, { color: dashboardTheme.subtleText }]}>•••• {account.mask}</AppText>
                     ) : null}
                   </View>
-                  <AppText tone="number" style={[styles.referenceSavingsBalance, { color: dashboardTheme.savings }]}>
-                    {formatDashboardCurrency(account.balance)}
-                  </AppText>
+                  <View style={styles.referenceSavingsValue}>
+                    <AppText tone="number" style={[styles.referenceSavingsBalance, { color: dashboardTheme.savings }]}>
+                      {formatDashboardCurrency(account.balance)}
+                    </AppText>
+                    {canEditHousehold ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Name ${account.name} savings account`}
+                        hitSlop={8}
+                        onPress={() => setSavingsAccountNameTarget(account)}
+                        style={({ pressed }) => [styles.referenceSavingsEdit, { backgroundColor: dashboardTheme.purpleSurface, borderColor: dashboardTheme.purpleBorder, opacity: pressed ? 0.68 : 1 }]}
+                      >
+                        <Feather name="edit-2" size={12} color={dashboardTheme.purpleText} />
+                      </Pressable>
+                    ) : null}
+                  </View>
                 </View>
               )) : (
                 <View style={[styles.referenceSavingsEmpty, { backgroundColor: dashboardTheme.goalSurface, borderColor: dashboardTheme.goalBorder }]}>
@@ -2095,7 +2130,9 @@ const styles = StyleSheet.create({
   referenceSavingsIdentity: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 },
   referenceSavingsName: { flexShrink: 1, fontSize: 11, fontFamily: "Inter_700Bold" },
   referenceSavingsMask: { fontSize: 9, fontFamily: "Inter_600SemiBold" },
+  referenceSavingsValue: { flexDirection: "row", alignItems: "center", gap: 6 },
   referenceSavingsBalance: { fontSize: 12, lineHeight: 16, fontFamily: "Inter_800ExtraBold" },
+  referenceSavingsEdit: { width: 28, height: 28, borderRadius: 9, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   referenceSavingsEmpty: { minHeight: 36, borderRadius: 10, borderWidth: 1, borderStyle: "dashed", alignItems: "center", justifyContent: "center", paddingHorizontal: 9 },
   referenceSavingsEmptyText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
   referenceGoalsHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8, marginBottom: 5 },

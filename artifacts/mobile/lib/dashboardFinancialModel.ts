@@ -28,6 +28,7 @@ export interface DashboardConnectedBankAccount {
   id: string;
   plaid_account_id?: string;
   name: string;
+  display_name?: string;
   official_name?: string;
   mask?: string;
   persistent_account_id?: string;
@@ -44,6 +45,8 @@ export interface DashboardSavingsAccount {
   name: string;
   balance: number;
   mask?: string;
+  source: "connected" | "manual";
+  providerName?: string;
 }
 
 export interface DashboardPendingTransaction {
@@ -180,18 +183,24 @@ export function buildDashboardSavingsAccounts(
   );
 
   const savingsAccounts = connectedSavings.length
-    ? connectedSavings.map((account) => ({
-        id: account.id,
-        name: account.name.trim() || account.official_name?.trim() || "Savings account",
-        balance: account.current_balance,
-        ...(account.mask ? { mask: account.mask } : {}),
-      }))
+    ? connectedSavings.map((account) => {
+        const providerName = account.name.trim() || account.official_name?.trim() || "Savings account";
+        return {
+          id: account.id,
+          name: account.display_name?.trim() || providerName,
+          providerName,
+          balance: account.current_balance,
+          source: "connected" as const,
+          ...(account.mask ? { mask: account.mask } : {}),
+        };
+      })
     : accounts
         .filter((account) => account.is_active && account.account_type === "savings")
         .map((account) => ({
           id: account.id,
           name: account.name.trim() || "Savings account",
           balance: account.current_balance,
+          source: "manual" as const,
         }));
 
   return savingsAccounts.sort((left, right) =>

@@ -184,6 +184,8 @@ test("builds the one financial model consumed by desktop and mobile dashboards",
     id: "connected-savings",
     name: "Savings",
     balance: 900,
+    providerName: "Savings",
+    source: "connected",
   }]);
   assert.equal(model.pendingCheckingSummary?.availableBalance, 2_100);
   assert.equal(model.monthlyIncome, 3_000);
@@ -212,6 +214,7 @@ test("lists each canonical savings account once and uses manual savings as a fal
       id: "current-savings",
       persistent_account_id: "bank-savings-1",
       name: "Emergency savings",
+      display_name: "House fund",
       mask: "4321",
       account_subtype: "savings",
       current_balance: 900,
@@ -232,14 +235,17 @@ test("lists each canonical savings account once and uses manual savings as a fal
 
   assert.deepEqual(buildDashboardSavingsAccounts(manualSavings, connectedSavings), [{
     id: "current-savings",
-    name: "Emergency savings",
+    name: "House fund",
     balance: 900,
     mask: "4321",
+    providerName: "Emergency savings",
+    source: "connected",
   }]);
   assert.deepEqual(buildDashboardSavingsAccounts(manualSavings, []), [{
     id: "manual-savings",
     name: "Rainy day",
     balance: 250,
+    source: "manual",
   }]);
 });
 
@@ -255,6 +261,15 @@ test("keeps both dashboard presentations on the shared calculation model", () =>
     assert.doesNotMatch(source, /import \{ buildAlgorithmSuite/);
     assert.doesNotMatch(source, /connectedCheckingBalance\(/);
   }
+});
+
+test("the flipped savings card lists canonical accounts and exposes the naming editor", () => {
+  const mobileDashboard = readFileSync("app/(tabs)/index.tsx", "utf8");
+
+  assert.match(mobileDashboard, /savingsAccounts\.map/);
+  assert.match(mobileDashboard, /SavingsAccountNameModal/);
+  assert.match(mobileDashboard, /updateConnectedBankAccountDisplayName/);
+  assert.match(mobileDashboard, /canEditHousehold \?/);
 });
 
 test("uses one Plaid connection action and keeps syncing separate", () => {

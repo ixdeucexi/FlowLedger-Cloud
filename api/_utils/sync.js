@@ -4,6 +4,10 @@ const { plaid } = require("./plaid");
 const { serviceSupabase, safeError } = require("./supabase");
 const { decryptAccessToken } = require("./crypto");
 const {
+  displayNameForSyncedPlaidAccount,
+  indexedPlaidAccountDisplayNames,
+} = require("./plaidAccountNickname");
+const {
   deliverPendingPostedTransactionNotifications,
   queuePendingTransactionNotifications,
   queuePostedTransactionNotifications,
@@ -359,33 +363,44 @@ async function syncAccounts({ client, userId, item, accessToken }) {
   const response = await client.accountsGet({ access_token: accessToken });
   const accounts = response.data.accounts || [];
   const db = serviceSupabase();
-  const rows = accounts.map((account) => ({
-    user_id: userId,
-    household_id: item.household_id || null,
-    plaid_item_id: item.id,
-    plaid_item_record_id: item.id,
-    plaid_account_id: account.account_id,
-    persistent_account_id: account.persistent_account_id || null,
-    name: account.name || "Bank account",
-    official_name: account.official_name || null,
-    mask: account.mask || null,
-    type: account.type || "depository",
-    subtype: account.subtype || null,
-    account_type: account.type || "depository",
-    account_subtype: account.subtype || null,
-    current_balance: Number((account.balances && account.balances.current) || 0),
-    available_balance:
-      account.balances && account.balances.available == null
-        ? null
-        : Number(account.balances && account.balances.available),
-    credit_limit:
-      account.balances && account.balances.limit == null
-        ? null
-        : Number(account.balances && account.balances.limit),
-    currency_code: (account.balances && account.balances.iso_currency_code) || "USD",
-    is_active: true,
-    updated_at: new Date().toISOString(),
-  }));
+  const namedAccounts = await db
+    .from("plaid_accounts")
+    .select("plaid_account_id,persistent_account_id,display_name,updated_at")
+    .eq("user_id", userId)
+    .not("display_name", "is", null);
+  if (namedAccounts.error) throw namedAccounts.error;
+  const displayNameIndex = indexedPlaidAccountDisplayNames(namedAccounts.data || []);
+  const rows = accounts.map((account) => {
+    const displayName = displayNameForSyncedPlaidAccount(account, displayNameIndex);
+    return {
+      user_id: userId,
+      household_id: item.household_id || null,
+      plaid_item_id: item.id,
+      plaid_item_record_id: item.id,
+      plaid_account_id: account.account_id,
+      persistent_account_id: account.persistent_account_id || null,
+      name: account.name || "Bank account",
+      official_name: account.official_name || null,
+      mask: account.mask || null,
+      type: account.type || "depository",
+      subtype: account.subtype || null,
+      account_type: account.type || "depository",
+      account_subtype: account.subtype || null,
+      current_balance: Number((account.balances && account.balances.current) || 0),
+      available_balance:
+        account.balances && account.balances.available == null
+          ? null
+          : Number(account.balances && account.balances.available),
+      credit_limit:
+        account.balances && account.balances.limit == null
+          ? null
+          : Number(account.balances && account.balances.limit),
+      currency_code: (account.balances && account.balances.iso_currency_code) || "USD",
+      is_active: true,
+      updated_at: new Date().toISOString(),
+      ...(displayName ? { display_name: displayName } : {}),
+    };
+  });
 
   // Use the composite user/item key from the original migration. This works
   // even when a deployment has not yet applied the later global index.
