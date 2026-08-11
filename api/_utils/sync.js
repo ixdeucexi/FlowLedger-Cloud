@@ -121,8 +121,16 @@ function isCreditCardPaymentTransaction(account, transaction) {
   return primary === "loan_payments" || detailed.includes("credit_card_payment");
 }
 
-function shouldImportPlaidTransaction(transaction) {
-  return !transaction || transaction.pending !== true;
+function plaidTransactionImportPolicy(account, transaction) {
+  const creditSource = isCreditAccount(account);
+  return {
+    importCanonical: !creditSource && (!transaction || transaction.pending !== true),
+    queuePendingNotification: !creditSource && Boolean(transaction && transaction.pending === true),
+  };
+}
+
+function shouldImportPlaidTransaction(account, transaction) {
+  return plaidTransactionImportPolicy(account, transaction).importCanonical;
 }
 
 function shouldQueuePostedNotification(originalCursor, imported) {
@@ -636,7 +644,8 @@ async function upsertPlaidTransaction({ userId, householdId, accountRow, transac
     .maybeSingle();
   if (existingPlaidError) throw existingPlaidError;
 
-  const shouldImport = shouldImportPlaidTransaction(transaction);
+  const importPolicy = plaidTransactionImportPolicy(accountRow, transaction);
+  const shouldImport = importPolicy.importCanonical;
   if (shouldImport && accountRow && accountRow.has_duplicate_history && (!existing || existing.removed_at)) {
     const equivalent = await findEquivalentPlaidTransaction({ db, userId, accountRow, transactionDate, amount, transaction });
     if (equivalent) {
@@ -678,7 +687,7 @@ async function upsertPlaidTransaction({ userId, householdId, accountRow, transac
   // Keep pending Plaid activity in the import ledger only. It must not affect
   // FlowLedger balances, forecasts, matching, or transaction totals until the
   // bank posts it. Retire any pending row created by an older deployment.
-  if (!shouldImport && existing && existing.source === "plaid") {
+  if (transaction.pending === true && !isCreditAccount(accountRow) && existing && existing.source === "plaid") {
     const { error } = await db
       .from("transactions")
       .update({ pending: true, removed_at: removedAt || now })
@@ -791,7 +800,7 @@ async function upsertPlaidTransaction({ userId, householdId, accountRow, transac
     flowledgerId,
     plaidTransactionId,
     isNewPosted,
-    isNewPending: !shouldImport && (!existingPlaid || Boolean(existingPlaid.removed_at)),
+    isNewPending: importPolicy.queuePendingNotification && (!existingPlaid || Boolean(existingPlaid.removed_at)),
   };
 }
 
@@ -1063,6 +1072,7 @@ module.exports = {
   isCreditAccount,
   isCreditCardPaymentTransaction,
   isLiabilitiesUnavailable,
+  plaidTransactionImportPolicy,
   shouldImportPlaidTransaction,
   shouldQueuePendingNotification,
   shouldQueuePostedNotification,

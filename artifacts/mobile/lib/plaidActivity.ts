@@ -1,5 +1,6 @@
 export interface PlaidAccountIdentityRow {
   id: string;
+  plaid_account_id?: string | null;
   persistent_account_id?: string | null;
   name?: string | null;
   official_name?: string | null;

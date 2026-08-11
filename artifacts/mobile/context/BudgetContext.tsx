@@ -57,14 +57,14 @@ import {
   type HouseholdRole,
 } from "@/lib/households";
 import { canEditHouseholdPlan, canManageHouseholdMembers } from "@/lib/householdPermissions";
-import { isActiveTransaction, isConfirmedBillMatch, isDeletedTransaction } from "@/lib/billMatching";
+import { isActiveTransaction, isConfirmedBillMatch, isDeletedTransaction, plaidTransactionAccountKind } from "@/lib/billMatching";
 import { matchedOccurrenceAllocations, occurrenceKey, reviewedBillMonthSettlements } from "@/lib/reviewCenter";
 import { normalizePlanningTools } from "@/lib/planningMode";
 import { localDateString } from "@/lib/dateLabels";
 import { spendingBucketSummary } from "@/lib/spendingBuckets";
 import { canonicalConnectedAccounts, pendingPlaidActivityWithBalanceHolds } from "@/lib/plaidActivity";
 import { normalizeBillImportance, type BillImportance } from "@/lib/billImportance";
-import { buildTransactionLedger, remainingPlannedAmount } from "@/lib/ledgerEngine";
+import { buildTransactionLedger, remainingPlannedAmount, selectFlowLedgerTransactions } from "@/lib/ledgerEngine";
 import { debtSourceCommitmentsFromPendingMatches, type PendingPlanMatch } from "@/lib/pendingPlanMatches";
 import { shouldRefreshPlanOnResume } from "@/lib/resumePolicy";
 
@@ -855,6 +855,34 @@ function splitTransactionRows(rows: any[]): { active: Transaction[]; deleted: Tr
   };
 }
 
+function accountAwareTransactionCollections(
+  rows: any[],
+  accountIdentities: readonly ConnectedBankAccount[],
+): { active: Transaction[]; deleted: Transaction[]; unknownPlaid: Transaction[] } {
+  const collections = splitTransactionRows(rows);
+  const active = selectFlowLedgerTransactions(collections.active, accountIdentities);
+  const deleted = selectFlowLedgerTransactions(collections.deleted, accountIdentities);
+  return {
+    active: active.included,
+    deleted: deleted.included,
+    unknownPlaid: [...active.unknownPlaid, ...deleted.unknownPlaid],
+  };
+}
+
+function checkingPendingBankRows(
+  rows: PendingBankTransaction[],
+  accountIdentities: readonly ConnectedBankAccount[],
+): { included: PendingBankTransaction[]; unknownCount: number } {
+  const included: PendingBankTransaction[] = [];
+  let unknownCount = 0;
+  rows.forEach(row => {
+    const kind = plaidTransactionAccountKind({ source: "plaid", plaid_account_id: row.plaid_account_id }, accountIdentities);
+    if (kind === "checking") included.push(row);
+    else if (kind === "unknown") unknownCount += 1;
+  });
+  return { included, unknownCount };
+}
+
 function normalizePendingBankRows(rows: any[]): PendingBankTransaction[] {
   return rows.map(row => ({
     plaid_transaction_id: String(row.plaid_transaction_id),
@@ -949,6 +977,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [categories,    setCategories]    = useState<string[]>([]);
   const [accounts,      setAccounts]      = useState<Account[]>([]);
   const [connectedBankAccounts, setConnectedBankAccounts] = useState<ConnectedBankAccount[]>([]);
+  const [transactionAccountIdentities, setTransactionAccountIdentities] = useState<ConnectedBankAccount[]>([]);
   const [decisions,     setDecisions]     = useState<DecisionRecord[]>([]);
   const [households,    setHouseholds]    = useState<HouseholdMembership[]>([]);
   const [householdMembers, setHouseholdMembers] = useState<HouseholdMember[]>([]);
@@ -968,6 +997,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const billDateMovesRef = useRef<BillDateMove[]>([]);
   const accountsRef = useRef<Account[]>([]);
   const connectedBankAccountsRef = useRef<ConnectedBankAccount[]>([]);
+  const transactionAccountIdentitiesRef = useRef<ConnectedBankAccount[]>([]);
   const retrySaveRef = useRef<null | (() => Promise<void>)>(null);
   const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const householdScopeRef = useRef<HouseholdMembership | null>(null);
@@ -981,6 +1011,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { billDateMovesRef.current = billDateMoves; }, [billDateMoves]);
   useEffect(() => { accountsRef.current = accounts; }, [accounts]);
   useEffect(() => { connectedBankAccountsRef.current = connectedBankAccounts; }, [connectedBankAccounts]);
+  useEffect(() => { transactionAccountIdentitiesRef.current = transactionAccountIdentities; }, [transactionAccountIdentities]);
 
   const activeHousehold = useMemo(
     () => households.find(household => household.householdId === activeHouseholdId) ?? null,
@@ -1189,6 +1220,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setCategories([]);
     setAccounts([]);
     setConnectedBankAccounts([]);
+    setTransactionAccountIdentities([]);
+    transactionAccountIdentitiesRef.current = [];
     setDecisions([]);
     setSettings(DEFAULT_SETTINGS);
     setActiveHouseholdId(next.householdId);
@@ -1257,6 +1290,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setCategories(demo.categories);
       setAccounts(demo.accounts);
       setConnectedBankAccounts([]);
+      setTransactionAccountIdentities([]);
+      transactionAccountIdentitiesRef.current = [];
       setDecisions(demo.decisions);
       setSettings(demo.settings);
       loaded.current = true;
@@ -1266,7 +1301,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!user) {
       setLoadError(null);
       setBills([]); setOverrides([]); setBillDateMoves([]); setTransactions([]); setDeletedTransactions([]); setPendingBankTransactions([]); setIncomes([]);
-      setGoals([]); setExtraPayments([]); setCategories([]); setAccounts([]); setConnectedBankAccounts([]); setDecisions([]); setSettings(DEFAULT_SETTINGS);
+      setGoals([]); setExtraPayments([]); setCategories([]); setAccounts([]); setConnectedBankAccounts([]); setTransactionAccountIdentities([]); setDecisions([]); setSettings(DEFAULT_SETTINGS);
+      transactionAccountIdentitiesRef.current = [];
       setHouseholds([]); setHouseholdMembers([]); setHouseholdActivity([]); setActiveHouseholdId(null); householdScopeRef.current = null;
       billDateMovesRef.current = [];
       loaded.current = false;
@@ -1334,8 +1370,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
                 applyHouseholdSelect(supabase.from("accounts").select("*"), uid).order("created_at"),
                 applyHouseholdSelect(
                   supabase.from("plaid_accounts")
-                    .select("id,name,official_name,mask,persistent_account_id,account_type,account_subtype,current_balance,available_balance,minimum_payment_amount,next_payment_due_date,last_statement_balance,last_statement_issue_date,is_overdue,purchase_apr,liability_last_synced_at,is_active,updated_at")
-                    .eq("is_active", true)
+                    .select("id,plaid_account_id,name,official_name,mask,persistent_account_id,account_type,account_subtype,current_balance,available_balance,minimum_payment_amount,next_payment_due_date,last_statement_balance,last_statement_issue_date,is_overdue,purchase_apr,liability_last_synced_at,is_active,updated_at")
                     .order("name"),
                   uid,
                 ),
@@ -1373,13 +1408,22 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         setOverrides((oData ?? []).map(normalizeMonthlyOverrideRow));
         setBillDateMoves(storedBillDateMoves);
         billDateMovesRef.current = storedBillDateMoves;
-        const transactionCollections = splitTransactionRows(tData ?? []);
+        const rawConnectedAccounts = normalizeConnectedBankRows(connectedAccountData ?? []);
+        const transactionCollections = accountAwareTransactionCollections(tData ?? [], rawConnectedAccounts);
         setTransactions(transactionCollections.active);
         setDeletedTransactions(transactionCollections.deleted);
-        const rawConnectedAccounts = normalizeConnectedBankRows(connectedAccountData ?? []);
+        setTransactionAccountIdentities(rawConnectedAccounts);
+        transactionAccountIdentitiesRef.current = rawConnectedAccounts;
         const canonicalBankAccounts = canonicalConnectedAccounts(rawConnectedAccounts);
         setConnectedBankAccounts(canonicalBankAccounts);
-        setPendingBankTransactions(pendingPlaidActivityWithBalanceHolds(normalizePendingBankRows(pendingData ?? []), rawConnectedAccounts, localDateString()));
+        const pendingRows = checkingPendingBankRows(normalizePendingBankRows(pendingData ?? []), rawConnectedAccounts);
+        setPendingBankTransactions(pendingPlaidActivityWithBalanceHolds(pendingRows.included, rawConnectedAccounts, localDateString()));
+        if (transactionCollections.unknownPlaid.length > 0 || pendingRows.unknownCount > 0) {
+          void recordDiagnostic(user.id, {
+            eventType: "unhandled_error", operation: "app_error", platform: diagnosticPlatform(),
+            errorCode: "unknown_plaid_account",
+          }).catch(() => undefined);
+        }
         setPendingPlanMatches((pendingPlanData ?? []).map(normalizePendingPlanMatchRow));
         setIncomes((iData ?? []).map((i: any) => ({
           ...i,
@@ -1469,8 +1513,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       applyHouseholdSelect(supabase.from("accounts").select("*"), uid).order("created_at"),
       applyHouseholdSelect(
         supabase.from("plaid_accounts")
-          .select("id,name,official_name,mask,persistent_account_id,account_type,account_subtype,current_balance,available_balance,minimum_payment_amount,next_payment_due_date,last_statement_balance,last_statement_issue_date,is_overdue,purchase_apr,liability_last_synced_at,is_active,updated_at")
-          .eq("is_active", true)
+          .select("id,plaid_account_id,name,official_name,mask,persistent_account_id,account_type,account_subtype,current_balance,available_balance,minimum_payment_amount,next_payment_due_date,last_statement_balance,last_statement_issue_date,is_overdue,purchase_apr,liability_last_synced_at,is_active,updated_at")
           .order("name"),
         uid,
       ),
@@ -1479,11 +1522,6 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (requestId !== bankRefreshRequestRef.current || scope?.householdId !== householdScopeRef.current?.householdId) return;
     if (!billResult.error) {
       setBills(reorderDebtPriorities((billResult.data ?? []).map(normalizeBillRow)));
-    }
-    if (!transactionResult.error) {
-      const transactionCollections = splitTransactionRows(transactionResult.data ?? []);
-      setTransactions(transactionCollections.active);
-      setDeletedTransactions(transactionCollections.deleted);
     }
     if (!pendingPlanResult.error) {
       setPendingPlanMatches((pendingPlanResult.data ?? []).map(normalizePendingPlanMatchRow));
@@ -1498,12 +1536,34 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       accountsRef.current = nextAccounts;
       setAccounts(nextAccounts);
     }
+    const rawConnectedAccounts = !connectedAccountResult.error
+      ? normalizeConnectedBankRows(connectedAccountResult.data ?? [])
+      : transactionAccountIdentitiesRef.current;
+    if (!transactionResult.error) {
+      const transactionCollections = accountAwareTransactionCollections(transactionResult.data ?? [], rawConnectedAccounts);
+      setTransactions(transactionCollections.active);
+      setDeletedTransactions(transactionCollections.deleted);
+      if (transactionCollections.unknownPlaid.length > 0) {
+        void recordDiagnostic(user.id, {
+          eventType: "unhandled_error", operation: "app_error", platform: diagnosticPlatform(),
+          errorCode: "unknown_plaid_account",
+        }).catch(() => undefined);
+      }
+    }
     if (!connectedAccountResult.error) {
-      const rawConnectedAccounts = normalizeConnectedBankRows(connectedAccountResult.data ?? []);
+      setTransactionAccountIdentities(rawConnectedAccounts);
+      transactionAccountIdentitiesRef.current = rawConnectedAccounts;
       const canonicalBankAccounts = canonicalConnectedAccounts(rawConnectedAccounts);
       setConnectedBankAccounts(canonicalBankAccounts);
       if (!pendingResult.error) {
-        setPendingBankTransactions(pendingPlaidActivityWithBalanceHolds(normalizePendingBankRows(pendingResult.data ?? []), rawConnectedAccounts, localDateString()));
+        const pendingRows = checkingPendingBankRows(normalizePendingBankRows(pendingResult.data ?? []), rawConnectedAccounts);
+        setPendingBankTransactions(pendingPlaidActivityWithBalanceHolds(pendingRows.included, rawConnectedAccounts, localDateString()));
+        if (pendingRows.unknownCount > 0) {
+          void recordDiagnostic(user.id, {
+            eventType: "unhandled_error", operation: "app_error", platform: diagnosticPlatform(),
+            errorCode: "unknown_plaid_account",
+          }).catch(() => undefined);
+        }
       }
     }
     if (!settingsResult.error && settingsResult.data) {
@@ -2562,7 +2622,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (billRows.error) throw new Error(`Refresh debts: ${billRows.error.message}`);
     if (transactionRows.error) throw new Error(`Refresh transactions: ${transactionRows.error.message}`);
     setBills(reorderDebtPriorities((billRows.data ?? []).map(normalizeBillRow)));
-    const transactionCollections = splitTransactionRows(transactionRows.data ?? []);
+    const transactionCollections = accountAwareTransactionCollections(transactionRows.data ?? [], transactionAccountIdentitiesRef.current);
     setTransactions(transactionCollections.active);
     setDeletedTransactions(transactionCollections.deleted);
   }, [user, applyHouseholdSelect]);
@@ -2582,8 +2642,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
 
     const today = localDateString();
-    const transactionsToCheck: Transaction[] = (transactionRows.data ?? [])
-      .map(normalizeTransactionRow)
+    const transactionsToCheck: Transaction[] = accountAwareTransactionCollections(transactionRows.data ?? [], transactionAccountIdentitiesRef.current).active
       .filter(isActiveTransaction)
       .filter((transaction: Transaction) => transaction.linked_bill_id || transaction.debt_applied_bill_id || Number(transaction.debt_applied_amount ?? 0) > 0)
       .sort((left: Transaction, right: Transaction) => left.date.localeCompare(right.date) || left.id.localeCompare(right.id));
@@ -2775,7 +2834,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (overrideRows.error) throw new Error(`Refresh matched bill: ${overrideRows.error.message}`);
     if (goalRows.error) throw new Error(`Refresh planned expense: ${goalRows.error.message}`);
     if (decisionRows.error) throw new Error(`Refresh calendar plan: ${decisionRows.error.message}`);
-    const transactionCollections = splitTransactionRows(transactionRows.data ?? []);
+    const transactionCollections = accountAwareTransactionCollections(transactionRows.data ?? [], transactionAccountIdentitiesRef.current);
     setTransactions(transactionCollections.active);
     setDeletedTransactions(transactionCollections.deleted);
     const nextOverrides = (overrideRows.data ?? []).map(normalizeMonthlyOverrideRow);
@@ -3517,9 +3576,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     () => buildTransactionLedger(
       [...transactions, ...deletedTransactions],
       transactions,
-      connectedBankAccounts,
+      transactionAccountIdentities,
     ),
-    [transactions, deletedTransactions, connectedBankAccounts],
+    [transactions, deletedTransactions, transactionAccountIdentities],
   );
   const forecastLedgerTransactions = transactionLedger.cashTransactions;
 
