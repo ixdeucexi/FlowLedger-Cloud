@@ -642,6 +642,11 @@ function MobileDashboardScreen() {
     + (currentGoals.length === 0
       ? 80
       : Math.min(currentGoals.length, 3) * 38 + (currentGoals.length > 3 ? 14 : 0));
+  const heroFrontFaceHeight = isCommandWide ? 260 : 250;
+  const heroCardVerticalPadding = isCommandWide ? 60 : 22;
+  const heroFrontCardHeight = heroFrontFaceHeight + heroCardVerticalPadding;
+  const heroBackCardHeight = Math.max(compactSavingsFaceHeight, heroFrontFaceHeight)
+    + heroCardVerticalPadding;
 
   const saveSavingsAccountName = useCallback(async (account: DashboardSavingsAccount, name: string) => {
     if (account.source === "connected") {
@@ -1179,28 +1184,30 @@ function MobileDashboardScreen() {
         onReset={resetSavingsAccountName}
       />
 
-      <View style={[
-        styles.referenceCommandHero,
-        isCommandWide && styles.referenceCommandHeroWide,
-        {
-          backgroundColor: dashboardTheme.hero,
-          borderColor: dashboardTheme.heroBorder,
-          shadowColor: dashboardTheme.heroShadow,
-          shadowOpacity: dashboardTheme.heroShadowOpacity,
-        },
-      ]}>
-        <View
-          style={[
-            styles.referenceHeroFlipShell,
-            !isCommandWide && {
-              minHeight: flipped ? compactSavingsFaceHeight : 118,
-            },
-          ]}
-        >
+      <View
+        style={[
+          styles.referenceCommandHeroFlipShell,
+          { minHeight: flipped ? heroBackCardHeight : heroFrontCardHeight },
+        ]}
+      >
           <Animated.View
             pointerEvents={flipped ? "none" : "auto"}
-            style={[styles.referenceHeroFace, !isCommandWide && styles.referenceHeroFaceCompact, { transform: [{ perspective: 1000 }, { rotateY: frontRotate }] }]}
+            style={[
+              styles.referenceCommandHero,
+              isCommandWide && styles.referenceCommandHeroWide,
+              isCommandWide ? styles.referenceHeroFrontWide : styles.referenceHeroFaceCompact,
+              styles.referenceCommandHeroFlipFace,
+              {
+                minHeight: flipped ? heroBackCardHeight : heroFrontCardHeight,
+                backgroundColor: dashboardTheme.hero,
+                borderColor: dashboardTheme.heroBorder,
+                shadowColor: dashboardTheme.heroShadow,
+                shadowOpacity: dashboardTheme.heroShadowOpacity,
+              },
+              { transform: [{ perspective: 1000 }, { rotateY: frontRotate }] },
+            ]}
           >
+            <View style={[styles.referenceHeroMoneyPanel, isCommandWide && styles.referenceHeroMoneyPanelWide]}>
             <View style={styles.referenceMoneyHeader}>
               <View style={{ flex: 1 }}>
                 <AppText tone="title" style={[styles.referenceGreeting, { color: dashboardTheme.text }]}>{timeGreeting}</AppText>
@@ -1261,11 +1268,34 @@ function MobileDashboardScreen() {
                 <AppText tone="title" style={[styles.referenceHeroFloText, { color: dashboardTheme.text }]}>Flo</AppText>
               </Pressable>
             </View>
+            </View>
+
+            <Pressable
+              onPress={() => setFlowScoreVisible(true)}
+              style={({ pressed }) => [styles.referenceScorePanel, { opacity: pressed ? 0.86 : 1 }]}
+            >
+              <FlowScoreGauge score={algorithmSuite.flowScore.score} theme={dashboardTheme} />
+              <AppText tone="title" style={[styles.referenceScoreStatus, { color: dashboardTheme.scoreStatus }]}>{algorithmSuite.flowScore.label}</AppText>
+              <View style={[styles.referenceScoreUnderline, { backgroundColor: dashboardTheme.scoreStatus }]} />
+            </Pressable>
           </Animated.View>
 
           <Animated.View
             pointerEvents={flipped ? "auto" : "none"}
-            style={[styles.referenceHeroFace, !isCommandWide && styles.referenceHeroFaceCompact, styles.referenceHeroBackFace, { transform: [{ perspective: 1000 }, { rotateY: backRotate }] }]}
+            style={[
+              styles.referenceCommandHero,
+              isCommandWide && styles.referenceCommandHeroWide,
+              !isCommandWide && styles.referenceHeroFaceCompact,
+              styles.referenceCommandHeroFlipFace,
+              styles.referenceCommandHeroBackFace,
+              {
+                backgroundColor: dashboardTheme.hero,
+                borderColor: dashboardTheme.heroBorder,
+                shadowColor: dashboardTheme.heroShadow,
+                shadowOpacity: dashboardTheme.heroShadowOpacity,
+              },
+              { transform: [{ perspective: 1000 }, { rotateY: backRotate }] },
+            ]}
           >
             <View style={styles.referenceMoneyHeader}>
               <View style={{ flex: 1 }}>
@@ -1346,16 +1376,6 @@ function MobileDashboardScreen() {
             )}
             {currentGoals.length > 3 && <AppText style={styles.referenceGoalsMore}>+{currentGoals.length - 3} more goal{currentGoals.length - 3 === 1 ? "" : "s"}</AppText>}
           </Animated.View>
-        </View>
-
-        <Pressable
-          onPress={() => setFlowScoreVisible(true)}
-          style={({ pressed }) => [styles.referenceScorePanel, { opacity: pressed ? 0.86 : 1 }]}
-        >
-          <FlowScoreGauge score={algorithmSuite.flowScore.score} theme={dashboardTheme} />
-          <AppText tone="title" style={[styles.referenceScoreStatus, { color: dashboardTheme.scoreStatus }]}>{algorithmSuite.flowScore.label}</AppText>
-          <View style={[styles.referenceScoreUnderline, { backgroundColor: dashboardTheme.scoreStatus }]} />
-        </Pressable>
       </View>
 
       <DashboardUtilityWidgets
@@ -2106,12 +2126,14 @@ const styles = StyleSheet.create({
     shadowRadius: 34,
     elevation: 10,
   },
-  referenceCommandHeroWide: { flexDirection: "row", minHeight: 320, padding: 30, alignItems: "center", gap: 22 },
-  referenceHeroFlipShell: { flex: 1, minHeight: 210, position: "relative" },
-  referenceHeroFlipShellCompact: { minHeight: 118 },
-  referenceHeroFace: { minHeight: 210, backfaceVisibility: "hidden" },
-  referenceHeroFaceCompact: { minHeight: 118 },
-  referenceHeroBackFace: { ...StyleSheet.absoluteFillObject },
+  referenceCommandHeroWide: { minHeight: 320, padding: 30 },
+  referenceCommandHeroFlipShell: { width: "100%", position: "relative", marginBottom: 6 },
+  referenceCommandHeroFlipFace: { width: "100%", marginBottom: 0, backfaceVisibility: "hidden" },
+  referenceCommandHeroBackFace: { ...StyleSheet.absoluteFillObject, marginBottom: 0 },
+  referenceHeroFaceCompact: { minHeight: 250 },
+  referenceHeroFrontWide: { minHeight: 260, flexDirection: "row", alignItems: "center", gap: 22 },
+  referenceHeroMoneyPanel: { width: "100%" },
+  referenceHeroMoneyPanelWide: { flex: 1, width: "auto" },
   referenceMoneyHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   referenceBalanceRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   referenceBalanceAmount: { flex: 1, minWidth: 0 },

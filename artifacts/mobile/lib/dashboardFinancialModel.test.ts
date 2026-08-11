@@ -272,6 +272,23 @@ test("the flipped savings card lists canonical accounts and exposes the naming e
   assert.match(mobileDashboard, /canEditHousehold \?/);
 });
 
+test("the dashboard flip keeps Flow Score on the animated checking face", () => {
+  const mobileDashboard = readFileSync("app/(tabs)/index.tsx", "utf8");
+  const checkingFace = mobileDashboard.indexOf('pointerEvents={flipped ? "none" : "auto"}');
+  const checkingCard = mobileDashboard.indexOf("styles.referenceCommandHero,", checkingFace);
+  const scorePanel = mobileDashboard.indexOf("styles.referenceScorePanel", checkingFace);
+  const savingsFace = mobileDashboard.indexOf('pointerEvents={flipped ? "auto" : "none"}', checkingFace);
+  const savingsCard = mobileDashboard.indexOf("styles.referenceCommandHero,", savingsFace);
+
+  assert.ok(checkingFace >= 0);
+  assert.ok(checkingCard > checkingFace);
+  assert.ok(scorePanel > checkingFace);
+  assert.ok(scorePanel < savingsFace);
+  assert.ok(savingsCard > savingsFace);
+  assert.match(mobileDashboard, /styles\.referenceCommandHeroBackFace/);
+  assert.match(mobileDashboard, /heroBackCardHeight/);
+});
+
 test("uses one Plaid connection action and keeps syncing separate", () => {
   const plaidConnections = readFileSync("components/PlaidLinkButton.web.tsx", "utf8");
   const plaidOAuthResume = readFileSync("components/PlaidOAuthResume.web.tsx", "utf8");
