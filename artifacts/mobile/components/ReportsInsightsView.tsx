@@ -90,8 +90,8 @@ export function ReportsInsightsView({
         </Text>
 
         <View style={[styles.metricRow, stackCompactContent && styles.metricRowCompact]}>
-          <Metric label="Money in" value={money(summary.income)} color={c.success} background={c.muted} />
-          <Metric label="Money out" value={money(summary.spending)} color={c.destructive} background={c.muted} />
+          <Metric label="Inflows" value={money(summary.income)} color={c.success} background={c.muted} />
+          <Metric label="Outflows" value={money(summary.spending)} color={c.destructive} background={c.muted} />
         </View>
 
         <View style={styles.paceRow}>

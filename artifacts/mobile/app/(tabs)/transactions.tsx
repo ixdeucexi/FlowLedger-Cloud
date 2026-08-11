@@ -1135,7 +1135,7 @@ export function ActivityScreen() {
     },
     {
       key: "out",
-      label: "Money out",
+      label: "Outflows",
       active: typeFilter === "expense" && sourceFilter === "all",
       onPress: () => {
         setTypeFilter("expense");
@@ -1144,7 +1144,7 @@ export function ActivityScreen() {
     },
     {
       key: "in",
-      label: "Money in",
+      label: "Inflows",
       active: typeFilter === "income" && sourceFilter === "all",
       onPress: () => {
         setTypeFilter("income");

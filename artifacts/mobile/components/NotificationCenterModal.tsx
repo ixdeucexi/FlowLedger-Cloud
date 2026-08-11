@@ -128,7 +128,7 @@ export function NotificationCenterModal({ visible, notifications, readIds, onOpe
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(2,6,23,0.72)", alignItems: "flex-end", paddingTop: 72, paddingRight: 28, paddingBottom: 28 },
-  backdropCompact: { padding: 0, justifyContent: "flex-end" },
+  backdropCompact: { padding: 0, justifyContent: "flex-end", alignItems: "center" },
   dialog: { width: 430, maxWidth: "94%", maxHeight: "86%", borderRadius: 22, borderWidth: 1, overflow: "hidden", shadowColor: "#7c3aed", shadowOpacity: 0.25, shadowRadius: 30, shadowOffset: { width: 0, height: 16 } },
   dialogCompact: { width: "100%", maxWidth: "100%", height: "100%", maxHeight: "100%", borderRadius: 0 },
   header: { minHeight: 76, borderBottomWidth: 1, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", gap: 10 },

@@ -227,3 +227,27 @@ test("uses one Plaid connection action and keeps syncing separate", () => {
   assert.match(desktopDashboard, /Connections/);
   assert.match(desktopDashboard, /section: "plaid"/);
 });
+
+test("desktop dashboard presents the debt payoff planner as a first-class card", () => {
+  const desktopDashboard = readFileSync("components/desktop/DesktopDashboard.tsx", "utf8");
+
+  assert.match(desktopDashboard, /Debt Payoff Planner/);
+  assert.match(desktopDashboard, /accessibilityLabel="Open Debt Payoff Planner"/);
+  assert.match(desktopDashboard, /onPress=\{\(\) => go\("\/snowball-plan"\)\}/);
+  assert.match(desktopDashboard, /CURRENT TARGET/);
+});
+
+test("activity surfaces use Inflows and Outflows wording across layouts", () => {
+  const activitySources = [
+    readFileSync("app/(tabs)/transactions.tsx", "utf8"),
+    readFileSync("components/ReportsInsightsView.tsx", "utf8"),
+    readFileSync("components/ReviewCenter.tsx", "utf8"),
+    readFileSync("components/desktop/DesktopWorkspacePage.tsx", "utf8"),
+  ];
+
+  for (const source of activitySources) {
+    assert.doesNotMatch(source, /Money in|Money out/);
+  }
+  assert.match(activitySources[0], /label: "Inflows"/);
+  assert.match(activitySources[0], /label: "Outflows"/);
+});

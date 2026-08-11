@@ -770,6 +770,19 @@ export function DesktopDashboard() {
       .sort((left, right) => left.balance - right.balance || left.priority - right.priority)[0] ?? null,
     [bills],
   );
+  const payoffDebts = useMemo(
+    () => bills.filter(bill => bill.is_debt && bill.balance > 0.005 && bill.include_in_snowball !== false),
+    [bills],
+  );
+  const payoffBalance = payoffDebts.reduce((sum, bill) => sum + bill.balance, 0);
+  const payoffTarget = useMemo(
+    () => payoffDebts.slice().sort((left, right) => (
+      settings.paymentMethod === "avalanche"
+        ? right.interest_rate - left.interest_rate || left.balance - right.balance
+        : left.balance - right.balance || left.priority - right.priority
+    ))[0] ?? null,
+    [payoffDebts, settings.paymentMethod],
+  );
   const nearlyCompleteGoal = useMemo(
     () => activeGoals
       .filter(goal => goal.target_amount > 0 && goal.current_amount < goal.target_amount)
@@ -952,6 +965,43 @@ export function DesktopDashboard() {
           onPress={() => go("/(tabs)/more", { section: "goals" })}
         />
       </View>
+
+      <SurfaceCard
+        accent="purple"
+        style={styles.debtPlannerCardWrap}
+        accessibilityLabel="Open Debt Payoff Planner"
+        onPress={() => go("/snowball-plan")}
+      >
+        <View style={styles.debtPlannerCard}>
+          <View style={styles.debtPlannerIcon}>
+            <Feather name="trending-down" size={23} color="#d8b4fe" />
+          </View>
+          <View style={styles.debtPlannerCopy}>
+            <Text style={styles.debtPlannerEyebrow}>DEBT PAYOFF</Text>
+            <Text style={styles.debtPlannerTitle}>Debt Payoff Planner</Text>
+            <Text style={styles.debtPlannerDescription}>
+              See your payoff order, forecast payments, rollovers, and safe extra-payment options.
+            </Text>
+          </View>
+          <View style={styles.debtPlannerStatus}>
+            <Text style={styles.debtPlannerStatusLabel}>
+              {payoffTarget ? "CURRENT TARGET" : "GET STARTED"}
+            </Text>
+            <Text style={styles.debtPlannerStatusValue} numberOfLines={1}>
+              {payoffTarget ? payoffTarget.name : "Build your plan"}
+            </Text>
+            <Text style={styles.debtPlannerStatusMeta} numberOfLines={1}>
+              {payoffTarget
+                ? `${payoffDebts.length} active ${payoffDebts.length === 1 ? "debt" : "debts"} · ${currency(payoffBalance)} remaining`
+                : "Add a debt to preview your payoff path"}
+            </Text>
+          </View>
+          <View style={styles.debtPlannerAction}>
+            <Text style={styles.debtPlannerActionText}>Open planner</Text>
+            <Feather name="arrow-right" size={17} color="#ffffff" />
+          </View>
+        </View>
+      </SurfaceCard>
 
       <DashboardUtilityWidgets
         layout={dashboardLayout}
@@ -1676,6 +1726,56 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
     paddingRight: 76,
   },
+  debtPlannerCardWrap: { minHeight: 132 },
+  debtPlannerCard: {
+    flex: 1,
+    minHeight: 132,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    paddingHorizontal: 21,
+    paddingVertical: 18,
+  },
+  debtPlannerIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(159,92,255,0.3)",
+    backgroundColor: "rgba(124,58,237,0.16)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  debtPlannerCopy: { flex: 1, minWidth: 240 },
+  debtPlannerEyebrow: { color: "#b78aff", fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.95 },
+  debtPlannerTitle: { color: BRAND.text, fontSize: 21, lineHeight: 27, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.35, marginTop: 3 },
+  debtPlannerDescription: { color: "#8493aa", fontSize: 12, lineHeight: 18, fontFamily: "Inter_500Medium", marginTop: 3 },
+  debtPlannerStatus: {
+    width: 250,
+    minWidth: 0,
+    borderLeftWidth: 1,
+    borderLeftColor: "rgba(159,92,255,0.18)",
+    paddingLeft: 19,
+  },
+  debtPlannerStatusLabel: { color: "#9b7acb", fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.75 },
+  debtPlannerStatusValue: { color: "#f1e8ff", fontSize: 15, fontFamily: "Inter_800ExtraBold", marginTop: 5 },
+  debtPlannerStatusMeta: { color: "#7f8da3", fontSize: 11, fontFamily: "Inter_600SemiBold", marginTop: 4 },
+  debtPlannerAction: {
+    minWidth: 132,
+    height: 44,
+    borderRadius: 13,
+    backgroundColor: BRAND.purple,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 15,
+    shadowColor: BRAND.purple,
+    shadowOpacity: 0.28,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 7 },
+  },
+  debtPlannerActionText: { color: "#ffffff", fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   progressTrack: {
     width: "100%",
     borderRadius: 999,
