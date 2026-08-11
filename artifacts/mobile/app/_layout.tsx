@@ -254,6 +254,14 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
                     presentation: "card",
                   }}
                 />
+                <Stack.Screen
+                  name="plan-simulator"
+                  options={{
+                    animation: "slide_from_right",
+                    animationTypeForReplace: "pop",
+                    presentation: "card",
+                  }}
+                />
                 <Stack.Screen name="(tabs)" />
               </Stack>
               <PwaInstallPrompt />

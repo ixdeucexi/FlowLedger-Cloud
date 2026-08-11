@@ -28,6 +28,8 @@ test("keeps manual budgeting free and Pro automation paid", () => {
   assert.equal(canUseFeature("free", "plaid_sync"), false);
   assert.equal(canUseFeature("pro", "connected_insights"), true);
   assert.equal(canUseFeature("pro", "transaction_matching"), true);
+  assert.equal(canUseFeature("free", "plan_simulator"), false);
+  assert.equal(canUseFeature("pro", "plan_simulator"), true);
 });
 
 test("calculates annual Pro pricing", () => {

@@ -1,4 +1,5 @@
 import { Session, User } from "@supabase/supabase-js";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { AppState, Platform } from "react-native";
 
@@ -7,6 +8,7 @@ import { LEGAL_VERSION, legalAcceptanceMetadata } from "@/lib/legalDocuments";
 import { clearLastAppRoute } from "@/lib/navigationMemory";
 import { detachPushNotifications, restorePushNotifications } from "@/lib/pushNotifications";
 import { clearStoredSetupStep } from "@/lib/setupProgress";
+import { planSimulationStoragePrefix } from "@/lib/planSimulator";
 import { supabase } from "@/lib/supabase";
 
 function friendlyAuthError(message?: string | null): string | null {
@@ -306,6 +308,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const signedOutUserId = session?.user.id;
     setSession(null);
     await clearLastAppRoute(signedOutUserId);
+    if (signedOutUserId) {
+      const prefix = planSimulationStoragePrefix(signedOutUserId);
+      const simulatorDraftKeys = await AsyncStorage.getAllKeys()
+        .then(keys => keys.filter(key => key.startsWith(prefix)))
+        .catch(() => [] as string[]);
+      if (simulatorDraftKeys.length) await AsyncStorage.multiRemove(simulatorDraftKeys).catch(() => undefined);
+    }
     if (demoMode) {
       disableDevDemoMode();
       setDemoMode(false);

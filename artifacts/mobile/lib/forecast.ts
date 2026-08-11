@@ -19,6 +19,9 @@ export interface FinancialEvent {
   amount: number;
   status: FinancialEventStatus;
   name?: string;
+  /** Full configured occurrence total and already-settled component for simulator edits. */
+  configuredOccurrenceAmount?: number;
+  settledOccurrenceAmount?: number;
   debtPlanSource?: "canonical" | "saved_extra";
   debtTargetBillId?: string;
 }

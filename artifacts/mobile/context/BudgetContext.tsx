@@ -67,6 +67,11 @@ import { normalizeBillImportance, type BillImportance } from "@/lib/billImportan
 import { buildTransactionLedger, remainingPlannedAmount, selectFlowLedgerTransactions } from "@/lib/ledgerEngine";
 import { debtSourceCommitmentsFromPendingMatches, type PendingPlanMatch } from "@/lib/pendingPlanMatches";
 import { shouldRefreshPlanOnResume } from "@/lib/resumePolicy";
+import {
+  buildCanonicalPlanSimulationBaseline,
+  type PlanSimulationBaseline,
+  type PlanSimulationHorizon,
+} from "@/lib/planSimulator";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -334,7 +339,10 @@ export interface DailyBalance {
   goalExpenses: GoalExpense[];
   net: number;
   balance: number;
+  projectedInflow?: number;
+  projectedOutflow?: number;
   events?: FinancialEvent[];
+  projectionEvents?: FinancialEvent[];
 }
 
 export type DashboardFilter = "bills" | "debt" | "paid" | "unpaid" | null;
@@ -455,6 +463,7 @@ interface BudgetContextType {
 
   getCashFlow: (month: number, year: number) => CashFlow;
   getDailyBalances: (month: number, year: number) => DailyBalance[];
+  getPlanSimulationBaseline: (horizonMonths: PlanSimulationHorizon, startDate?: string) => PlanSimulationBaseline;
 
   addCategory: (name: string) => Promise<void>;
   updateCategory: (oldName: string, newName: string) => Promise<void>;
@@ -3799,6 +3808,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           sourceType: "income", sourceId: i.id,
           date,
           kind: "scheduled_income", amount: scheduledAmount, status: "scheduled", name: i.name,
+          configuredOccurrenceAmount: amt,
+          settledOccurrenceAmount: Math.abs(Number(match?.amount) || 0),
         });
       });
     });
@@ -3841,6 +3852,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
             id: `bill:${b.id}:${year}-${month + 1}-${d}`, sourceType: "bill", sourceId: b.id,
             date,
             kind: "bill", amount: -remaining, status: match ? "planned" : "finalized", name: b.name,
+            configuredOccurrenceAmount: finalizedAmount,
+            settledOccurrenceAmount: Math.abs(Number(match?.amount) || 0),
           });
         });
         return;
@@ -3856,6 +3869,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           id: `bill:${b.id}:${year}-${month + 1}-${d}`, sourceType: "bill", sourceId: b.id,
           date,
           kind: "bill", amount: -remaining, status: "planned", name: b.name,
+          configuredOccurrenceAmount: amt,
+          settledOccurrenceAmount: Math.abs(Number(match?.amount) || 0),
         });
       });
     });
@@ -3985,7 +4000,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
     const visibleEventsByDate = new Map<string, FinancialEvent[]>();
     const visibleTransactionIds = new Set(transactionLedger.visibleTransactions.map(transaction => transaction.id));
-    financialEvents.forEach(event => {
+    balanceEvents.forEach(event => {
       if (event.sourceType === "transaction" && !visibleTransactionIds.has(event.sourceId)) return;
       visibleEventsByDate.set(event.date, [...(visibleEventsByDate.get(event.date) ?? []), event]);
     });
@@ -4004,14 +4019,27 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const dayGoals     = goalsByDay[day] ?? [];
       const forecastDay = forecast.days[day - 1];
       const visibleEvents = visibleEventsByDate.get(forecastDay.date) ?? [];
+      const projectedInflow = forecastDay.events.reduce((sum, event) => sum + Math.max(0, event.amount), 0);
+      const projectedOutflow = forecastDay.events.reduce((sum, event) => sum + Math.max(0, -event.amount), 0);
       result.push({
         day, income: incomeToday, scheduledIncome, expense: expenseToday, bills: billsToday,
-        goalExpenses: dayGoals, net: forecastDay.net, balance: forecastDay.balance, events: visibleEvents,
+        goalExpenses: dayGoals, net: forecastDay.net, balance: forecastDay.balance,
+        projectedInflow, projectedOutflow, events: visibleEvents,
+        projectionEvents: forecastDay.events.map(event => ({ ...event })),
       });
     }
     balanceComputationCache.daily.set(dailyKey, result);
     return result;
   }, [bills, transactions, deletedTransactions, forecastLedgerTransactions, transactionLedger, incomes, goals, decisions, overrides, billDateMoves, extraPayments, connectedBankAccounts, accounts, getBillEffectiveMonthlyTotal, getBillMonthlyTotal, getBillOccurrencesInMonth, getDebtSourceCommitment, getExtraPayment, getRemainingDebtPlanForMonth, pendingBankTransactions, pendingPlanMatches, settings.starting_balance, settings.starting_balance_date, balanceComputationCache, user]);
+
+  const getPlanSimulationBaseline = useCallback((
+    horizonMonths: PlanSimulationHorizon,
+    startDate = localDateString(),
+  ): PlanSimulationBaseline => buildCanonicalPlanSimulationBaseline({
+    startDate,
+    horizonMonths,
+    getDailyBalances,
+  }), [getDailyBalances]);
 
   const previewDebtSnowball = useCallback((month: number, year: number, requestedExtra?: number, additionalSafeCredit = 0, paymentDateOverride?: string, editingPaymentId?: string): SnowballProjectionResult => {
     const existing = extraPayments.find(ep => ep.month === month && ep.year === year && isValidExtraPaymentPlan(ep));
@@ -4582,7 +4610,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, matchPendingTransactionToBill, removePendingPlanMatch, reconcileTransaction, undoTransactionReconciliation, removeReviewSurplusFunding, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome, getIncomeOccurrencesInMonth,
       addGoal, updateGoal, closeSpendingBucket, reopenSpendingBucket, archiveSpendingBucket, restoreArchivedSpendingBucket, deleteGoal, checkGoalAffordability,
-      getCashFlow, getDailyBalances,
+      getCashFlow, getDailyBalances, getPlanSimulationBaseline,
       addCategory, updateCategory, deleteCategory,
       updateSettings, importBills,
       addAccount, updateAccount, updateConnectedBankAccountDisplayName, reconcileAccount, archiveAccount, importStatementTransactions,

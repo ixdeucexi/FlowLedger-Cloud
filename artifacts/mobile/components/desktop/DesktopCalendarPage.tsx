@@ -57,6 +57,8 @@ type DesktopCalendarPageProps = {
   onPreviousMonth: () => void;
   onNextMonth: () => void;
   onOpenMonthSelector: () => void;
+  simulatorLocked: boolean;
+  onOpenPlanSimulator: () => void;
   onAddTransaction: (date?: string | null) => void;
   onSelectDate: (date: string) => void;
   onCloseSelectedDay: () => void;
@@ -140,6 +142,8 @@ function CalendarHeader({
   onPreviousMonth,
   onNextMonth,
   onOpenMonthSelector,
+  simulatorLocked,
+  onOpenPlanSimulator,
   onAdd,
 }: Pick<
   DesktopCalendarPageProps,
@@ -149,6 +153,8 @@ function CalendarHeader({
   | "onPreviousMonth"
   | "onNextMonth"
   | "onOpenMonthSelector"
+  | "simulatorLocked"
+  | "onOpenPlanSimulator"
 > & { compact: boolean; onAdd: () => void }) {
   return (
     <View style={[styles.pageHeader, compact && styles.pageHeaderCompact]}>
@@ -159,6 +165,15 @@ function CalendarHeader({
         </Text>
       </View>
       <View style={[styles.monthControls, compact && styles.monthControlsCompact]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${simulatorLocked ? "Locked Pro " : ""}Plan Simulator`}
+          onPress={onOpenPlanSimulator}
+          style={({ pressed }) => [styles.simulatorButton, pressed && styles.pressed]}
+        >
+          <Feather name={simulatorLocked ? "lock" : "sliders"} size={15} color={palette.purple} />
+          <Text style={styles.simulatorButtonText}>Plan Simulator</Text>
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Go to today"
@@ -509,6 +524,8 @@ export function DesktopCalendarPage(props: DesktopCalendarPageProps) {
             onPreviousMonth={props.onPreviousMonth}
             onNextMonth={props.onNextMonth}
             onOpenMonthSelector={props.onOpenMonthSelector}
+            simulatorLocked={props.simulatorLocked}
+            onOpenPlanSimulator={props.onOpenPlanSimulator}
             onAdd={() => props.onAddTransaction(props.selectedDate)}
           />
           <View style={[styles.metrics, compact && styles.metricsCompact]}>
@@ -582,6 +599,8 @@ const styles = StyleSheet.create({
   monthSelectorText: { color: palette.textSecondary, fontSize: 13, fontFamily: "Inter_600SemiBold" },
   addButton: { minHeight: 38, borderRadius: 7, backgroundColor: palette.purple, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
   addButtonText: { color: "#ffffff", fontSize: 13, fontFamily: "Inter_700Bold" },
+  simulatorButton: { minHeight: 44, borderRadius: 7, borderWidth: 1, borderColor: palette.purple + "55", backgroundColor: palette.purpleSoft, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
+  simulatorButtonText: { color: palette.purple, fontSize: 12, fontFamily: "Inter_700Bold" },
   pressed: { opacity: 0.72 },
   metrics: { flexDirection: "row", gap: 12, marginBottom: 14 },
   metricsCompact: { flexWrap: "wrap" },

@@ -283,6 +283,7 @@ export function projectSnowballMonth(options: {
   startingBalances?: Map<string, number>;
   rolledPayment?: number;
   extraPayment?: number;
+  applyInterest?: boolean;
 }): SnowballMonthPlanResult {
   const balances = new Map(
     options.debts.map(debt => [
@@ -298,12 +299,14 @@ export function projectSnowballMonth(options: {
   );
   let interest = 0;
 
-  for (const debt of options.debts) {
-    const before = balances.get(debt.id) ?? 0;
-    if (before <= 0.009) continue;
-    const charge = monthlyInterestCharge(before, debt.apr);
-    balances.set(debt.id, cents(before + charge));
-    interest = cents(interest + charge);
+  if (options.applyInterest !== false) {
+    for (const debt of options.debts) {
+      const before = balances.get(debt.id) ?? 0;
+      if (before <= 0.009) continue;
+      const charge = monthlyInterestCharge(before, debt.apr);
+      balances.set(debt.id, cents(before + charge));
+      interest = cents(interest + charge);
+    }
   }
 
   let minimumPayments = 0;

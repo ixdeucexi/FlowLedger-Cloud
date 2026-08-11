@@ -25,6 +25,7 @@ import colors from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import type { Bill, BillDateMove, DecisionRecord, Goal, IncomeItem, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
+import { useMembership } from "@/context/MembershipContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
@@ -214,6 +215,7 @@ export default function MonthlyScreen() {
   const isDesktop = useDesktopExperience();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { isFeatureLocked } = useMembership();
   const routeParams = useLocalSearchParams<{ openDate?: string | string[]; openDateAt?: string | string[] }>();
   const { user } = useAuth();
   const {
@@ -1457,6 +1459,8 @@ export default function MonthlyScreen() {
           onPreviousMonth={() => changeMonth(-1)}
           onNextMonth={() => changeMonth(1)}
           onOpenMonthSelector={openMonthSearch}
+          simulatorLocked={isFeatureLocked("plan_simulator")}
+          onOpenPlanSimulator={() => router.push("/plan-simulator")}
           onAddTransaction={openAddTransaction}
           onSelectDate={setSelectedDate}
           onCloseSelectedDay={() => setSelectedDate(null)}
@@ -1472,6 +1476,18 @@ export default function MonthlyScreen() {
           {isFuture && <Text style={[styles.forecastTag, { color: c.primary }]}>Forecast Mode</Text>}
         </View>
         <View style={styles.headerActions}>
+          <Pressable
+            onPress={() => router.push("/plan-simulator")}
+            accessibilityRole="button"
+            accessibilityLabel={`${isFeatureLocked("plan_simulator") ? "Locked Pro " : ""}Plan Simulator`}
+            style={({ pressed }) => [
+              styles.simulatorButton,
+              { borderColor: c.primary + "55", backgroundColor: c.primary + "14", opacity: pressed ? 0.72 : 1 },
+            ]}
+          >
+            <Feather name={isFeatureLocked("plan_simulator") ? "lock" : "sliders"} size={15} color={c.primary} />
+            <Text style={[styles.simulatorButtonText, { color: c.primary }]}>Simulator</Text>
+          </Pressable>
           <Pressable
             onPress={jumpToToday}
             accessibilityRole="button"
@@ -2918,6 +2934,8 @@ const styles = StyleSheet.create({
   calendarScreenLabel: { fontSize: 28, fontFamily: "Inter_700Bold", letterSpacing: -0.8 },
   forecastTag: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginTop: 1 },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 10 },
+  simulatorButton: { minHeight: 44, borderWidth: 1, borderRadius: 13, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  simulatorButtonText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   todayChip: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", borderWidth: 2 },
   todayChipText: { fontSize: 17, fontFamily: "Inter_800ExtraBold", lineHeight: 20 },
   calendarMonthBar: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginHorizontal: 22, marginTop: 0, marginBottom: 12, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", backgroundColor: "rgba(2,6,23,0.32)", borderRadius: 24, paddingHorizontal: 8, paddingVertical: 10 },

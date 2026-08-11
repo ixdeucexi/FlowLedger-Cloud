@@ -150,5 +150,7 @@
     ,"lib/notificationCenter.test.ts"
     ,"lib/resumePolicy.ts"
     ,"lib/resumePolicy.test.ts"
+    ,"lib/planSimulator.ts"
+    ,"lib/planSimulator.test.ts"
   ]
 }
