@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  buildDashboardSavingsAccounts,
   buildDashboardFinancialModel,
   type DashboardAccount as Account,
   type DashboardBill as Bill,
@@ -179,6 +180,11 @@ test("builds the one financial model consumed by desktop and mobile dashboards",
   assert.equal(model.bankCurrentCheckingBalance, 2_243);
   assert.equal(model.connectedCheckingAccounts.length, 1);
   assert.equal(model.savingsAccountBalance, 900);
+  assert.deepEqual(model.savingsAccounts, [{
+    id: "connected-savings",
+    name: "Savings",
+    balance: 900,
+  }]);
   assert.equal(model.pendingCheckingSummary?.availableBalance, 2_100);
   assert.equal(model.monthlyIncome, 3_000);
   assert.equal(model.unpaidTotal, 1_000);
@@ -189,6 +195,52 @@ test("builds the one financial model consumed by desktop and mobile dashboards",
   assert.equal(model.categoryPlan.find((row) => row.category === "Food")?.budgeted, 500);
   assert.equal(model.categoryPlan.find((row) => row.category === "Food")?.spent, 125);
   assert.ok(Number.isFinite(model.algorithmSuite.flowScore.score));
+});
+
+test("lists each canonical savings account once and uses manual savings as a fallback", () => {
+  const manualSavings: Account[] = [{
+    id: "manual-savings",
+    name: "Rainy day",
+    account_type: "savings",
+    current_balance: 250,
+    balance_as_of: "2026-07-10",
+    is_active: true,
+    created_at: "2026-01-01T00:00:00.000Z",
+  }];
+  const connectedSavings: ConnectedBankAccount[] = [
+    {
+      id: "current-savings",
+      persistent_account_id: "bank-savings-1",
+      name: "Emergency savings",
+      mask: "4321",
+      account_subtype: "savings",
+      current_balance: 900,
+      is_active: true,
+      updated_at: "2026-07-10T12:00:00.000Z",
+    },
+    {
+      id: "reconnected-savings",
+      persistent_account_id: "bank-savings-1",
+      name: "Emergency savings",
+      mask: "4321",
+      account_subtype: "savings",
+      current_balance: 850,
+      is_active: true,
+      updated_at: "2026-07-09T12:00:00.000Z",
+    },
+  ];
+
+  assert.deepEqual(buildDashboardSavingsAccounts(manualSavings, connectedSavings), [{
+    id: "current-savings",
+    name: "Emergency savings",
+    balance: 900,
+    mask: "4321",
+  }]);
+  assert.deepEqual(buildDashboardSavingsAccounts(manualSavings, []), [{
+    id: "manual-savings",
+    name: "Rainy day",
+    balance: 250,
+  }]);
 });
 
 test("keeps both dashboard presentations on the shared calculation model", () => {

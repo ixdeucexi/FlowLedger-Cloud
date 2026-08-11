@@ -624,6 +624,7 @@ function MobileDashboardScreen() {
     decisionForecastDays,
     pendingCheckingSummary,
     savingsAccountBalance,
+    savingsAccounts,
   } = dashboardModel;
   const unplannedCheckingPending = useMemo(
     () => unplannedPendingExpenses(checkingPendingTransactions, activePendingMatchIds),
@@ -631,9 +632,14 @@ function MobileDashboardScreen() {
   );
   // The hero is a bank snapshot. Forecasted balances belong on Monthly only.
   const dashboardCheckingBalance = bankCurrentCheckingBalance;
-  const compactSavingsFaceHeight = currentGoals.length === 0
-    ? 170
-    : 92 + Math.min(currentGoals.length, 3) * 38 + (currentGoals.length > 3 ? 14 : 0);
+  const savingsAccountRowsHeight = savingsAccounts.length > 0
+    ? savingsAccounts.length * 36 + 8
+    : 44;
+  const compactSavingsFaceHeight = 92
+    + savingsAccountRowsHeight
+    + (currentGoals.length === 0
+      ? 80
+      : Math.min(currentGoals.length, 3) * 38 + (currentGoals.length > 3 ? 14 : 0));
 
   // ── Savings summary for back of hero card ──────────────────────────────────
   // ── Affordability check (real calendar projection) ──────────────────────────
@@ -1246,6 +1252,32 @@ function MobileDashboardScreen() {
                 <Feather name="repeat" size={13} color={dashboardTheme.purpleText} />
                 <AppText style={[styles.referenceFlipButtonText, { color: dashboardTheme.purpleText }]}>Checking</AppText>
               </Pressable>
+            </View>
+            <View style={styles.referenceSavingsList}>
+              {savingsAccounts.length > 0 ? savingsAccounts.map((account) => (
+                <View
+                  key={account.id}
+                  accessible
+                  accessibilityLabel={`${account.name}${account.mask ? ` ending in ${account.mask}` : ""}, ${formatDashboardCurrency(account.balance)}`}
+                  style={[styles.referenceSavingsItem, { backgroundColor: dashboardTheme.goalSurface, borderColor: dashboardTheme.goalBorder }]}
+                >
+                  <View style={styles.referenceSavingsIdentity}>
+                    <AppText style={[styles.referenceSavingsName, { color: dashboardTheme.mutedText }]} numberOfLines={1}>
+                      {account.name}
+                    </AppText>
+                    {account.mask ? (
+                      <AppText style={[styles.referenceSavingsMask, { color: dashboardTheme.subtleText }]}>•••• {account.mask}</AppText>
+                    ) : null}
+                  </View>
+                  <AppText tone="number" style={[styles.referenceSavingsBalance, { color: dashboardTheme.savings }]}>
+                    {formatDashboardCurrency(account.balance)}
+                  </AppText>
+                </View>
+              )) : (
+                <View style={[styles.referenceSavingsEmpty, { backgroundColor: dashboardTheme.goalSurface, borderColor: dashboardTheme.goalBorder }]}>
+                  <AppText style={[styles.referenceSavingsEmptyText, { color: dashboardTheme.mutedText }]}>No savings accounts added.</AppText>
+                </View>
+              )}
             </View>
             <View style={styles.referenceGoalsHeader}>
               <AppText tone="title" style={[styles.referenceGoalsTitle, { color: dashboardTheme.text }]}>Current goals</AppText>
@@ -2058,6 +2090,14 @@ const styles = StyleSheet.create({
   referenceFlipButton: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, borderWidth: 1, borderColor: "rgba(196,181,253,0.28)", backgroundColor: "rgba(124,58,237,0.18)", paddingHorizontal: 9, paddingVertical: 6 },
   referenceFlipButtonText: { color: "#c4b5fd", fontSize: 9, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.5 },
   referenceSavingsAmount: { color: "#6ee7b7", fontSize: 34, lineHeight: 38, letterSpacing: -1.4 },
+  referenceSavingsList: { marginTop: 8, gap: 5 },
+  referenceSavingsItem: { minHeight: 31, borderRadius: 10, borderWidth: 1, paddingHorizontal: 9, paddingVertical: 6, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  referenceSavingsIdentity: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 },
+  referenceSavingsName: { flexShrink: 1, fontSize: 11, fontFamily: "Inter_700Bold" },
+  referenceSavingsMask: { fontSize: 9, fontFamily: "Inter_600SemiBold" },
+  referenceSavingsBalance: { fontSize: 12, lineHeight: 16, fontFamily: "Inter_800ExtraBold" },
+  referenceSavingsEmpty: { minHeight: 36, borderRadius: 10, borderWidth: 1, borderStyle: "dashed", alignItems: "center", justifyContent: "center", paddingHorizontal: 9 },
+  referenceSavingsEmptyText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
   referenceGoalsHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8, marginBottom: 5 },
   referenceGoalsTitle: { color: "#f8fafc", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   referenceGoalAddButton: { width: 28, height: 28, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.42)", borderWidth: 1, borderColor: "rgba(196,181,253,0.28)" },
