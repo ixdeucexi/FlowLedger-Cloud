@@ -146,7 +146,7 @@ function StartupScreen({ style }: { style?: StyleProp<ViewStyle> } = {}) {
         style={styles.startupIcon}
         resizeMode="contain"
       />
-      <Text style={[styles.startupStatus, { color: colors.mutedForeground }]}>(loading plan...)</Text>
+      <Text style={[styles.startupStatus, { color: colors.mutedForeground }]}>Loading Plan...</Text>
     </Animated.View>
   );
 }

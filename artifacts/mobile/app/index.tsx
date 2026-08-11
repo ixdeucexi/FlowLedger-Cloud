@@ -9,7 +9,7 @@ export default function StartupRoute() {
         style={styles.logo}
         resizeMode="contain"
       />
-      <Text style={styles.appName}>(loading plan...)</Text>
+      <Text style={styles.appName}>Loading Plan...</Text>
     </View>
   );
 }

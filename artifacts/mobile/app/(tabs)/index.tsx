@@ -196,7 +196,7 @@ export default function DashboardScreen() {
             style={styles.desktopLoadingLogo}
             resizeMode="cover"
           />
-          <Text style={styles.desktopLoadingText}>(loading plan...)</Text>
+          <Text style={styles.desktopLoadingText}>Loading Plan...</Text>
         </View>
       }
     >
