@@ -10,6 +10,13 @@ test("Plaid sync router dispatches the credit-card attachment rewrite", () => {
   );
 });
 
+test("Plaid sync router dispatches the account nickname rewrite", () => {
+  assert.equal(
+    plaidAction({ query: { plaidAction: "account-nickname" } }),
+    "account-nickname",
+  );
+});
+
 test("Plaid sync router preserves the normal sync route", () => {
   assert.equal(plaidAction({ query: {} }), "");
 });

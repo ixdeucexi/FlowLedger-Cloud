@@ -99,6 +99,10 @@
       "destination": "/api/plaid/sync?plaidAction=attach-credit-card"
     },
     {
+      "source": "/api/plaid/account-nickname",
+      "destination": "/api/plaid/sync?plaidAction=account-nickname"
+    },
+    {
       "source": "/api/notifications/:notificationAction(config|overdue-bills|preferences|subscription|test)",
       "destination": "/api/notifications?notificationAction=:notificationAction"
     },
