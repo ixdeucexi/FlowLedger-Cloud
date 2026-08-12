@@ -16,6 +16,7 @@ import React, {
 } from "react";
 import {
   Alert,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -113,6 +114,7 @@ import {
 } from "@/lib/settingsHub";
 import { supabase } from "@/lib/supabase";
 import { transactionCategoryParts } from "@/lib/reviewCenter";
+import { flowLedgerUserGuideUrl } from "@/lib/userGuide";
 import {
   type AppFeedbackRow,
   type FeedbackAdminFilter,
@@ -1989,6 +1991,20 @@ export default function MoreScreen({
     router.push("/setup" as any);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
+
+  const openUserGuide = useCallback(() => {
+    const origin =
+      Platform.OS === "web" && typeof window !== "undefined"
+        ? window.location.origin
+        : undefined;
+    void Linking.openURL(flowLedgerUserGuideUrl(origin)).catch(() => {
+      Alert.alert(
+        "User Guide",
+        "The FlowLedger User Guide could not be opened. Please try again.",
+      );
+    });
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, []);
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
   const activeSettingsMeta = VISIBLE_SETTINGS_SECTIONS.find(
@@ -4499,6 +4515,43 @@ export default function MoreScreen({
           <>
             {activeSettingsSection === "help" ? (
               <>
+                <SLabel c={c} text="Guides & support" />
+                <Pressable
+                  accessibilityRole="link"
+                  accessibilityLabel="Open FlowLedger User Guide"
+                  accessibilityHint="Opens the illustrated user guide as a PDF"
+                  onPress={openUserGuide}
+                  style={({ pressed }) => [
+                    styles.card,
+                    styles.dataRow,
+                    {
+                      backgroundColor: c.card,
+                      borderRadius: colors.radius,
+                      opacity: pressed ? 0.76 : 1,
+                    },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.dataIcon,
+                      { backgroundColor: c.primary + "18" },
+                    ]}
+                  >
+                    <Feather name="book-open" size={18} color={c.primary} />
+                  </View>
+                  <View style={styles.dataBody}>
+                    <Text style={[styles.dataLabel, { color: c.foreground }]}>
+                      FlowLedger User Guide
+                    </Text>
+                    <Text
+                      style={[styles.dataDesc, { color: c.mutedForeground }]}
+                    >
+                      Everyday steps with pictures for Dashboard, Activity,
+                      Forecast, debt planning, savings, and Flo.
+                    </Text>
+                  </View>
+                  <Feather name="external-link" size={18} color={c.primary} />
+                </Pressable>
                 <SLabel c={c} text="Tester Feedback" />
                 <View
                   style={[

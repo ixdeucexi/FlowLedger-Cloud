@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -36,6 +37,7 @@ import {
   useThemeMode,
 } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
+import { flowLedgerUserGuideUrl } from "@/lib/userGuide";
 
 export type DesktopSettingsSection =
   | "Profile"
@@ -180,6 +182,14 @@ export function DesktopSettingsPage({
     } finally {
       setSyncing(false);
     }
+  };
+
+  const openUserGuide = () => {
+    void Linking.openURL(flowLedgerUserGuideUrl()).catch(() => {
+      setMessage(
+        "The FlowLedger User Guide could not be opened. Please try again.",
+      );
+    });
   };
 
   return (
@@ -582,6 +592,18 @@ export function DesktopSettingsPage({
                     icon="activity"
                     title="FlowLedger Algo"
                     description="A financial planning workspace built around your real cash flow."
+                  />
+                  <SettingsLine
+                    icon="book-open"
+                    title="FlowLedger User Guide"
+                    description="Everyday steps with pictures for Dashboard, Activity, Forecast, debt planning, savings, and Flo"
+                    action={
+                      <SecondaryButton
+                        label="Open Guide"
+                        icon="external-link"
+                        onPress={openUserGuide}
+                      />
+                    }
                   />
                   <SettingsLine
                     icon="shield"
