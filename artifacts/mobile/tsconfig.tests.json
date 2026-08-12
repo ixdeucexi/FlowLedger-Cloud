@@ -156,5 +156,7 @@
     ,"lib/planSimulator.test.ts"
     ,"lib/floExperience.ts"
     ,"lib/floExperience.test.ts"
+    ,"lib/floLauncherVisibility.ts"
+    ,"lib/floLauncherVisibility.test.ts"
   ]
 }
