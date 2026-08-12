@@ -33,6 +33,7 @@ create table if not exists monthly_overrides (
   month           integer not null,
   year            integer not null,
   custom_amount   numeric,
+  planned_debt_amount numeric check (planned_debt_amount is null or planned_debt_amount >= 0),
   custom_due_day  integer,
   paid_amount     numeric not null default 0,
   actual_amount   numeric,
@@ -183,3 +184,26 @@ create table if not exists app_diagnostics (
 alter table app_diagnostics enable row level security;
 create policy "diagnostics: user inserts" on app_diagnostics for insert with check (auth.uid() = user_id);
 create policy "diagnostics: user reads" on app_diagnostics for select using (auth.uid() = user_id);
+
+-- Plan Simulator stores scenario definitions only. Results always come from
+-- the latest live Forecast and are never persisted.
+create table if not exists plan_simulations (
+  id uuid primary key default gen_random_uuid(),
+  household_id uuid not null references households(id) on delete cascade,
+  name text not null check (char_length(btrim(name)) between 1 and 80),
+  horizon_months integer not null check (horizon_months in (3, 6, 12, 24)),
+  changes jsonb not null default '[]'::jsonb check (
+    jsonb_typeof(changes) = 'array'
+    and jsonb_array_length(changes) <= 50
+    and octet_length(changes::text) <= 65536
+  ),
+  schema_version smallint not null default 1 check (schema_version = 1),
+  version integer not null default 1 check (version >= 1),
+  created_by uuid not null references auth.users(id) on delete restrict,
+  updated_by uuid not null references auth.users(id) on delete restrict,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create unique index if not exists plan_simulations_household_normalized_name_idx
+  on plan_simulations (household_id, lower(btrim(name)));
+alter table plan_simulations enable row level security;

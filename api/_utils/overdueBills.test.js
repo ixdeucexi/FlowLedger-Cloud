@@ -3,6 +3,26 @@ const test = require("node:test");
 
 const { buildOverdueOccurrences, occurrenceDays, suppressPendingMatchedOccurrences } = require("./overdueBills");
 
+test("closed debts never create overdue notifications", () => {
+  const alerts = buildOverdueOccurrences({
+    today: "2026-08-10",
+    bills: [{
+      id: "closed-debt",
+      user_id: "user-1",
+      name: "Paid card",
+      amount: 75,
+      balance: 0,
+      due_day: 5,
+      is_debt: true,
+      is_recurring: true,
+      frequency: "monthly",
+    }],
+    overrides: [],
+    moves: [],
+  });
+  assert.deepEqual(alerts, []);
+});
+
 test("overdue bills use the exact weekly occurrence instead of the monthly total", () => {
   const alerts = buildOverdueOccurrences({
     today: "2026-07-21",

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ALGORITHM_GUIDE, FLOWLEDGER_MONEY_RULES, FLOW_GUIDE_SECTIONS, STABILITY_PATH_GUIDE, flowGuideSectionIndex } from "./flowledgerGuide";
+import { readFileSync } from "node:fs";
+
+import { ALGORITHM_GUIDE, FLOWLEDGER_MONEY_RULES, FLOW_GUIDE_SECTIONS, STABILITY_PATH_GUIDE, buildFlowGuideRouteParams, flowGuideSectionIndex, guideTabScrollOffset } from "./flowledgerGuide";
 
 test("stability guide follows the calculation stages in order", () => {
   assert.deepEqual(
@@ -19,7 +21,113 @@ test("the responsive walkthrough exposes each requested section in order", () =>
     "overview", "flow-score", "protected-days", "stability", "backup", "algorithms", "faq",
   ]);
   assert.equal(flowGuideSectionIndex("stability"), 3);
+  assert.equal(flowGuideSectionIndex("path"), 3);
   assert.equal(flowGuideSectionIndex("unknown"), 0);
+  assert.equal(FLOW_GUIDE_SECTIONS.find(section => section.id === "algorithms")?.title, "How calculations work");
+  assert.equal(FLOW_GUIDE_SECTIONS.find(section => section.id === "faq")?.title, "FAQs");
+});
+
+test("selected guide tabs are centered without scrolling before the first step", () => {
+  assert.equal(guideTabScrollOffset(0, 120, 390), 0);
+  assert.equal(guideTabScrollOffset(500, 140, 390), 375);
+  assert.equal(guideTabScrollOffset(360, 58, 305), 236.5);
+});
+
+test("both dashboards use the shared guide route contract", () => {
+  const input = {
+    section: "overview" as const,
+    stage: "momentum" as const,
+    stageLabel: "Build your backup",
+    protectedDays: 45,
+    protectedAmount: 4_500,
+    reserveTarget: 3_000,
+    backupTarget: 18_000,
+    safeUntilPayday: true,
+    nextPaycheckLabel: "Aug 14",
+    nextAction: "Keep the next safe dollars as backup.",
+    nextMilestone: "60 protected days",
+    nextMilestoneAmount: 1_500,
+    lowestBalance: 5_000,
+    safetyFloor: 500,
+    confidence: "High",
+    flowScore: 82,
+    flowScoreLabel: "Strong",
+  };
+  const params = buildFlowGuideRouteParams(input);
+
+  assert.deepEqual(params, {
+    section: "overview",
+    stage: "momentum",
+    stageLabel: "Build your backup",
+    protectedDays: "45",
+    protectedAmount: "4500",
+    reserveTarget: "3000",
+    backupTarget: "18000",
+    safeUntilPayday: "true",
+    nextPaycheckLabel: "Aug 14",
+    nextAction: "Keep the next safe dollars as backup.",
+    nextMilestone: "60 protected days",
+    nextMilestoneAmount: "1500",
+    lowestBalance: "5000",
+    safetyFloor: "500",
+    confidence: "High",
+    flowScore: "82",
+    flowScoreLabel: "Strong",
+  });
+
+  for (const path of ["app/(tabs)/index.tsx", "components/desktop/DesktopDashboard.tsx"]) {
+    const source = readFileSync(path, "utf8");
+    assert.match(source, /buildFlowGuideRouteParams\(\{/);
+    assert.match(source, /section: "overview"/);
+  }
+});
+
+test("changing sections resets content and keeps the selected tab visible", () => {
+  const source = readFileSync("app/(tabs)/how-flowledger-works.tsx", "utf8");
+  assert.match(source, /contentScrollRef\.current\?\.scrollTo\(\{ y: 0, animated: false \}\)/);
+  assert.match(source, /scrollSectionTabIntoView\(sectionIndex\)/);
+  assert.match(source, /ref=\{sectionNavRef\}/);
+  assert.match(source, /ref=\{contentScrollRef\}/);
+  assert.match(source, /accessibilityState=\{\{ selected: index === sectionIndex \}\}/);
+});
+
+test("the guide does not fabricate live facts when route data is absent", () => {
+  const source = readFileSync("app/(tabs)/how-flowledger-works.tsx", "utf8");
+  assert.match(source, /readGuideFacts/);
+  assert.match(source, /Live guidance appears when your plan is ready/);
+  assert.doesNotMatch(source, /param\(params\.stage, "next_paycheck"\)/);
+  assert.doesNotMatch(source, /amount\(params\.protectedDays\).*\?\?.*0/);
+});
+
+test("guide step glyphs use theme-aware foreground colors", () => {
+  const source = readFileSync("app/(tabs)/how-flowledger-works.tsx", "utf8");
+  assert.match(source, /index <= sectionIndex \? c\.primaryForeground : c\.foreground/);
+  assert.match(source, /active \? c\.primaryForeground : c\.foreground/);
+  assert.match(source, /c\.isDark \? c\.successForeground : c\.foreground/);
+  assert.doesNotMatch(source, /(?:navNumberText|pathNumber): \{ color: "#fff"/);
+  assert.doesNotMatch(source, /name="check" size=\{11\} color="#fff"/);
+});
+
+test("desktop walkthrough height cannot collapse in the web flex container", () => {
+  const source = readFileSync("app/(tabs)/how-flowledger-works.tsx", "utf8");
+  assert.match(source, /isDesktop \? styles\.walkthroughDesktop : styles\.walkthroughMobile/);
+  assert.match(source, /walkthroughMobile: \{ flex: 1 \}/);
+  assert.match(source, /walkthroughDesktop: \{ flexGrow: 0, flexShrink: 0,/);
+  assert.match(source, /Math\.min\(864, Math\.max\(480, height - 36\)\)/);
+  assert.doesNotMatch(source, /walkthroughDesktop: \{ flex: 0/);
+});
+
+test("desktop section navigation stays at its intended width", () => {
+  const source = readFileSync("app/(tabs)/how-flowledger-works.tsx", "utf8");
+  assert.match(source, /sectionNav: \{ width: 242, minWidth: 242, maxWidth: 242, flexBasis: 242, flexGrow: 0, flexShrink: 0,/);
+});
+
+test("mobile section navigation stays a compact tab strip", () => {
+  const source = readFileSync("app/(tabs)/how-flowledger-works.tsx", "utf8");
+  assert.match(source, /horizontal[\s\S]*style=\{styles\.mobileSectionNav\}/);
+  assert.match(source, /mobileSectionNav: \{ height: 60, minHeight: 60, maxHeight: 60, flexBasis: 60, flexGrow: 0, flexShrink: 0 \}/);
+  assert.match(source, /mobileStepStrip: \{[^}]*paddingVertical: 8 \}/);
+  assert.match(source, /mobileStep: \{ minHeight: 44,/);
 });
 
 test("the guide explains core money rules without unrelated product messaging", () => {

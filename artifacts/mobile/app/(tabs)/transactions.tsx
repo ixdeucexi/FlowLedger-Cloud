@@ -106,6 +106,7 @@ import {
   isActivityRangeId,
   resolveActivityDateRange,
   summarizeActivityRange,
+  summarizeActivitySnapshot,
   type ActivityRangeId,
 } from "@/lib/activityRange";
 import { supabase } from "@/lib/supabase";
@@ -338,6 +339,8 @@ export function ActivityScreen() {
     getBillOccurrencesInMonth,
     getBillMonthlyTotal,
     getBillEffectiveMonthlyTotal,
+    getPaidAmount,
+    getRemainingDebtPlanForMonth,
     matchTransactionToBill,
     unmatchTransactionFromBill,
     matchPendingTransactionToBill,
@@ -973,8 +976,10 @@ export function ActivityScreen() {
   const monthSummaryBasis = useMemo(() => {
     const [year, monthNumber] = monthFilter.split("-").map(Number);
     const monthIndex = monthNumber - 1;
-    const plannedBillEntries = getMonthlyBills(monthIndex, year).flatMap(
-      (bill) => {
+    const debtPlan = getRemainingDebtPlanForMonth(monthIndex, year);
+    const plannedBillEntries = getMonthlyBills(monthIndex, year)
+      .filter(bill => !bill.is_debt || !debtPlan)
+      .flatMap((bill) => {
         const occurrenceDays = getBillOccurrencesInMonth(
           bill,
           monthIndex,
@@ -991,8 +996,27 @@ export function ActivityScreen() {
           date: `${monthFilter}-${String(day).padStart(2, "0")}`,
           amount: -amountPerOccurrence,
         }));
-      },
-    );
+      });
+    const plannedDebtEntries = debtPlan?.allocations.map(allocation => ({
+      date: allocation.date,
+      amount: -allocation.amount,
+    })) ?? [];
+    const paidDebtEntries = debtPlan
+      ? getMonthlyBills(monthIndex, year)
+        .filter(bill => bill.is_debt)
+        .flatMap(bill => {
+          const paid = getPaidAmount(bill.id, monthIndex, year);
+          if (paid <= 0.005) return [];
+          const override = overrides.find(item =>
+            item.bill_id === bill.id && item.month === monthIndex && item.year === year,
+          );
+          const fallbackDay = getBillOccurrencesInMonth(bill, monthIndex, year)[0] ?? bill.due_day;
+          return [{
+            date: override?.paid_date ?? `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(fallbackDay).padStart(2, "0")}`,
+            amount: -paid,
+          }];
+        })
+      : [];
     const summary = summarizeActivityMonth(
       [
         ...allActivity.map((item) => ({
@@ -1016,6 +1040,8 @@ export function ActivityScreen() {
             ),
         })),
         ...plannedBillEntries,
+        ...plannedDebtEntries,
+        ...paidDebtEntries,
       ],
       year,
       monthIndex,
@@ -1037,29 +1063,34 @@ export function ActivityScreen() {
     getBillEffectiveMonthlyTotal,
     getBillOccurrencesInMonth,
     getMonthlyBills,
+    getPaidAmount,
+    getRemainingDebtPlanForMonth,
     monthFilter,
+    overrides,
   ]);
 
   const feedOrderLabel = sortOrder === "asc" ? "oldest first" : "newest first";
 
   const activitySummary = useMemo(() => {
     const cashRows = filtered.map(item => ({
-      amount: item.rawTx
-        ? activityAmountOutsidePlannedBill(
-            item.amount,
-            isConfirmedBillMatch(item.rawTx),
-            item.rawTx.review_allocations,
-          )
-        : item.amount,
+      amount: item.amount,
       pending: item.pending,
       source:
-        (item.source === "bill_payment" && !item.rawTx) ||
+        item.source === "transfer" ||
         (item.rawTx && !isCashFlowTransaction(item.rawTx)) ||
         (item.rawTx && item.rawTx.amount > 0 && !isCheckingBalanceTransaction(item.rawTx, connectedBankAccounts))
           ? "transfer"
           : item.source,
     }));
-    const summary = summarizeActivityRange(cashRows);
+    const usePlannedMonth = (rangeFilter === "this_month" || rangeFilter === "last_month")
+      && typeFilter === "all"
+      && sourceFilter === "all"
+      && categoryFilter === "all"
+      && search.trim().length === 0;
+    const summary = summarizeActivitySnapshot(
+      cashRows,
+      usePlannedMonth ? monthSummaryBasis : undefined,
+    );
     const weekRows = new Map<string, ActivityItem[]>();
     filtered.forEach(item => {
       const [year, month, day] = item.date.slice(0, 10).split("-").map(Number);
@@ -1090,7 +1121,7 @@ export function ActivityScreen() {
           };
         }),
     };
-  }, [activeDateRange.label, connectedBankAccounts, filtered, monthSummaryBasis.weeks, rangeFilter]);
+  }, [activeDateRange.label, categoryFilter, connectedBankAccounts, filtered, monthSummaryBasis, rangeFilter, search, sourceFilter, typeFilter]);
 
   const quickChips = [
     {
@@ -1104,7 +1135,7 @@ export function ActivityScreen() {
     },
     {
       key: "out",
-      label: "Money out",
+      label: "Outflows",
       active: typeFilter === "expense" && sourceFilter === "all",
       onPress: () => {
         setTypeFilter("expense");
@@ -1113,7 +1144,7 @@ export function ActivityScreen() {
     },
     {
       key: "in",
-      label: "Money in",
+      label: "Inflows",
       active: typeFilter === "income" && sourceFilter === "all",
       onPress: () => {
         setTypeFilter("income");

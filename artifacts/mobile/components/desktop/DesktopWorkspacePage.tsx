@@ -259,8 +259,8 @@ function ActivityPage({ onOpenReview }: { onOpenReview: () => void }) {
     <>
       <PageHeader eyebrow="Ledger" title="Activity" description="A web-first ledger for imported and manual activity across your plan." action="Open review center" onAction={onOpenReview} />
       <View style={styles.statGrid}>
-        <Stat label="Money in" value={currency(income)} detail={`${MONTHS[month]} inflows`} icon="arrow-down-left" tone="green" />
-        <Stat label="Money out" value={currency(spending)} detail={`${MONTHS[month]} outflows`} icon="arrow-up-right" tone="purple" />
+        <Stat label="Inflows" value={currency(income)} detail={`${MONTHS[month]} inflows`} icon="arrow-down-left" tone="green" />
+        <Stat label="Outflows" value={currency(spending)} detail={`${MONTHS[month]} outflows`} icon="arrow-up-right" tone="purple" />
         <Stat label="Needs review" value={String(review)} detail="Imported and unmatched activity" icon="alert-circle" tone="amber" />
         <Stat label="Transactions" value={String(rows.length)} detail="Posted activity this month" icon="repeat" tone="blue" />
       </View>

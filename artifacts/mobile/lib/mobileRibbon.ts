@@ -3,7 +3,7 @@ export const MOBILE_RIBBON_ITEMS = [
   { name: "bills", title: "Bills", icon: "file-text" },
   { name: "add", title: "Add", icon: "plus" },
   { name: "transactions", title: "Activity", icon: "repeat" },
-  { name: "monthly", title: "Monthly", icon: "calendar" },
+  { name: "monthly", title: "Forecast", icon: "calendar" },
 ] as const;
 
 export type MobileRibbonItem = (typeof MOBILE_RIBBON_ITEMS)[number];

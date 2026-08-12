@@ -1,7 +1,7 @@
 const { plaid, plaidOptions } = require("../_utils/plaid");
 const { buildLinkTokenRequest, normalizeLinkIntent } = require("../_utils/plaidLink");
 const { sealPlaidLinkSession } = require("../_utils/crypto");
-const { authenticatedUser, safeError } = require("../_utils/supabase");
+const { authenticatedUser, publicError } = require("../_utils/supabase");
 const { authorizeProHousehold, requestedHouseholdId } = require("../_utils/plaidAccess");
 
 function body(req) {
@@ -49,6 +49,6 @@ module.exports = async function createLinkToken(req, res) {
     });
   } catch (error) {
     const code = error && error.response && error.response.data && error.response.data.error_code;
-    return res.status(500).json({ error: code || error.code || "LINK_TOKEN_FAILED", message: safeError(error, "Could not start secure bank linking.") });
+    return res.status(500).json({ error: code || error.code || "LINK_TOKEN_FAILED", message: publicError(error, "Could not start secure bank linking.") });
   }
 };

@@ -1,4 +1,4 @@
-const { authenticatedUser, serviceSupabase, safeError } = require("../_utils/supabase");
+const { authenticatedUser, serviceSupabase, publicError } = require("../_utils/supabase");
 const { authorizeProHousehold, requestedHouseholdId } = require("../_utils/plaidAccess");
 const { accountsWithDebtStatus } = require("../_utils/plaidDebtStatus");
 
@@ -26,6 +26,6 @@ module.exports = async function plaidStatus(req, res) {
         .map(debt => ({ id: debt.id, name: debt.name })),
     });
   } catch (error) {
-    return res.status(500).json({ error: "PLAID_STATUS_FAILED", message: safeError(error, "Could not load bank connections.") });
+    return res.status(500).json({ error: "PLAID_STATUS_FAILED", message: publicError(error, "Could not load bank connections.") });
   }
 };

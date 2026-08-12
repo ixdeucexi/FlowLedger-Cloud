@@ -10,6 +10,7 @@ import { readInterfacePreferences, updateInterfacePreferences } from "@/lib/inte
 import {
   dismissNotification,
   EMPTY_NOTIFICATION_STATE,
+  isBillEligibleForDueNotification,
   markAllNotificationsRead,
   markNotificationRead,
   normalizeNotificationState,
@@ -280,7 +281,7 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
       });
     });
 
-    getMonthlyBills(month, year).forEach(bill => {
+    getMonthlyBills(month, year).filter(isBillEligibleForDueNotification).forEach(bill => {
       const days = getBillOccurrencesInMonth(bill, month, year).sort((left, right) => left - right);
       if (!days.length) return;
       const amount = getBillMonthlyTotal(bill, month, year) / days.length;
@@ -311,11 +312,6 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
     goals.filter(goal => !goal.archived_at && goal.target_amount > 0 && goal.current_amount >= goal.target_amount).forEach(goal => {
       const timestamp = validRecentTimestamp(goal.closed_at || goal.target_date || goal.created_at, now);
       if (timestamp) result.push({ id: `goal-complete:${goal.id}`, type: "goal", title: `${goal.name} is funded`, body: `You reached the ${currency(goal.target_amount)} target.`, timestamp, route: "/(tabs)/more", params: { section: "goals" }, tone: "safe" });
-    });
-
-    bills.filter(bill => bill.is_debt && bill.balance <= 0.005).forEach(debt => {
-      const timestamp = validRecentTimestamp(debt.end_date || debt.created_at, now);
-      if (timestamp) result.push({ id: `debt-paid:${debt.id}`, type: "debt", title: `${debt.name} is paid off`, body: "Your snowball can now roll this payment toward the next eligible debt.", timestamp, route: "/(tabs)/bills", params: { view: "debt" }, tone: "safe" });
     });
 
     return result.filter(item => !Number.isNaN(new Date(item.timestamp).getTime()));

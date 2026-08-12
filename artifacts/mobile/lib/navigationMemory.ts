@@ -14,7 +14,6 @@ const MAIN_APP_ROUTES = new Set([
   "/category-budget",
   "/accounts",
   "/zero-budget-lab",
-  "/how-flowledger-works",
   "/reports",
   "/review",
 ]);
@@ -39,6 +38,7 @@ export function normalizeRestorableRoute(route: string | null | undefined) {
   const pathOnly = questionAt >= 0 ? withoutHash.slice(0, questionAt) : withoutHash;
   const query = questionAt >= 0 ? withoutHash.slice(questionAt + 1) : "";
   const normalizedPath = pathOnly === "/(tabs)" || pathOnly === "/(tabs)/" ? "/" : pathOnly.replace("/(tabs)", "");
+  if (normalizedPath === "/how-flowledger-works") return "/(tabs)";
   if (!MAIN_APP_ROUTES.has(normalizedPath)) return null;
 
   const allowed = SAFE_QUERY_KEYS[normalizedPath];

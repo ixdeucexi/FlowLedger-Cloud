@@ -25,6 +25,7 @@ import colors from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import type { Bill, BillDateMove, DecisionRecord, Goal, IncomeItem, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
+import { useMembership } from "@/context/MembershipContext";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
@@ -32,7 +33,7 @@ import { DESKTOP_MODAL_HANDLE, DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR, DES
 import { confirmedBillMatchId, isConfirmedBillMatch } from "@/lib/billMatching";
 import { allocationLabel, groupPlannedExpenseAllocations, matchedOccurrenceAllocations, occurrenceKey, reviewSettlementSummary, transactionDisplayName } from "@/lib/reviewCenter";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
-import { buildDayForecastFloPrompt, groupForecastEvents } from "@/lib/forecastDisplay";
+import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, groupForecastEvents, plannedDebtEditorParams } from "@/lib/forecastDisplay";
 import type { FinancialEvent } from "@/lib/forecast";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { buildOverdueBillOccurrences } from "@/lib/overdueBills";
@@ -214,6 +215,7 @@ export default function MonthlyScreen() {
   const isDesktop = useDesktopExperience();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { isFeatureLocked } = useMembership();
   const routeParams = useLocalSearchParams<{ openDate?: string | string[]; openDateAt?: string | string[] }>();
   const { user } = useAuth();
   const {
@@ -565,7 +567,7 @@ export default function MonthlyScreen() {
   const selectedDay = selectedDate ? parseInt(selectedDate.split("-")[2]) : null;
   const selectedForecastDay = selectedDay === null ? undefined : dailyBalances.find(item => item.day === selectedDay);
   const selectedForecastGroups = useMemo(
-    () => groupForecastEvents(selectedForecastDay?.events ?? []),
+    () => groupForecastEvents(calendarVisibleForecastEvents(selectedForecastDay?.events)),
     [selectedForecastDay]
   );
   const selectedDebtPayments = useMemo(
@@ -601,10 +603,11 @@ export default function MonthlyScreen() {
     const occurrenceDate = `${selectedYear}-${String(month + 1).padStart(2, "0")}-${String(selectedDay).padStart(2, "0")}`;
     return monthBills.filter(bill => {
       if (!getBillOccurrencesInMonth(bill, month, selectedYear).includes(selectedDay)) return false;
+      if (bill.is_debt && selectedDebtPayments.some(payment => payment.event.sourceId === bill.id)) return false;
       const match = billOccurrenceMatches.get(occurrenceKey(bill.id, occurrenceDate));
       return !match || match.settlement === "partial";
     });
-  }, [monthBills, billOccurrenceMatches, getBillOccurrencesInMonth, selectedDay, month, selectedYear]);
+  }, [monthBills, billOccurrenceMatches, getBillOccurrencesInMonth, selectedDebtPayments, selectedDay, month, selectedYear]);
 
   const movedInByBillId = useMemo(() => {
     if (!selectedDate) return new Map<string, BillDateMove>();
@@ -1136,7 +1139,7 @@ export default function MonthlyScreen() {
     const itemLabel = bill.is_debt ? "debt" : "bill";
     setDayConfirmation({
       title: `Delete ${bill.is_debt ? "Debt" : "Bill"}`,
-      message: `Delete "${bill.name}" completely? This removes it from Bills and Monthly. Existing Activity entries stay for history.`,
+      message: `Delete "${bill.name}" completely? This removes it from Bills and Forecast. Existing Activity entries stay for history.`,
       confirmText: "Delete",
       destructive: true,
       onConfirm: async () => {
@@ -1177,7 +1180,7 @@ export default function MonthlyScreen() {
   const handleDeleteGoalFromDay = useCallback((goalId: string, goalName: string) => {
     setDayConfirmation({
       title: "Delete Bucket",
-      message: `Delete "${goalName}"? This removes the bucket from Monthly and your plan.`,
+      message: `Delete "${goalName}"? This removes the bucket from Forecast and your plan.`,
       confirmText: "Delete bucket",
       destructive: true,
       onConfirm: async () => {
@@ -1194,7 +1197,7 @@ export default function MonthlyScreen() {
   const openEditBucket = useCallback((goalId: string) => {
     const bucket = goals.find(goal => goal.id === goalId && goal.goal_type === "planned_expense");
     if (!bucket) {
-      Alert.alert("Bucket not found", "Refresh Monthly and try again.");
+      Alert.alert("Bucket not found", "Refresh Forecast and try again.");
       return;
     }
     setSelectedDate(null);
@@ -1425,6 +1428,14 @@ export default function MonthlyScreen() {
       return;
     }
     if (event.sourceType === "extra_payment") {
+      const editorParams = plannedDebtEditorParams(event);
+      if (editorParams) {
+        router.push({
+          pathname: "/planned-debt-payment",
+          params: editorParams,
+        } as never);
+        return;
+      }
       setSelectedDate(null);
       setSnowballModalVisible(true);
     }
@@ -1448,6 +1459,8 @@ export default function MonthlyScreen() {
           onPreviousMonth={() => changeMonth(-1)}
           onNextMonth={() => changeMonth(1)}
           onOpenMonthSelector={openMonthSearch}
+          simulatorLocked={isFeatureLocked("plan_simulator")}
+          onOpenPlanSimulator={() => router.push("/plan-simulator")}
           onAddTransaction={openAddTransaction}
           onSelectDate={setSelectedDate}
           onCloseSelectedDay={() => setSelectedDate(null)}
@@ -1459,10 +1472,22 @@ export default function MonthlyScreen() {
       <View style={[styles.header, isDesktop && styles.desktopHeader, { paddingTop: insets.top + 12 + webTopPad }]}>
         <View>
           <Text style={[styles.calendarBrand, { color: c.primary }]}>FLOWLEDGER ALGO</Text>
-          <Text style={[styles.calendarScreenLabel, { color: c.foreground }]}>Calendar</Text>
+          <Text style={[styles.calendarScreenLabel, { color: c.foreground }]}>Forecast</Text>
           {isFuture && <Text style={[styles.forecastTag, { color: c.primary }]}>Forecast Mode</Text>}
         </View>
         <View style={styles.headerActions}>
+          <Pressable
+            onPress={() => router.push("/plan-simulator")}
+            accessibilityRole="button"
+            accessibilityLabel={`${isFeatureLocked("plan_simulator") ? "Locked Pro " : ""}Plan Simulator`}
+            style={({ pressed }) => [
+              styles.simulatorButton,
+              { borderColor: c.primary + "55", backgroundColor: c.primary + "14", opacity: pressed ? 0.72 : 1 },
+            ]}
+          >
+            <Feather name={isFeatureLocked("plan_simulator") ? "lock" : "sliders"} size={15} color={c.primary} />
+            <Text style={[styles.simulatorButtonText, { color: c.primary }]}>Simulator</Text>
+          </Pressable>
           <Pressable
             onPress={jumpToToday}
             accessibilityRole="button"
@@ -1511,6 +1536,7 @@ export default function MonthlyScreen() {
           <Feather name="chevron-left" size={24} color={c.mutedForeground} />
         </Pressable>
         <Pressable
+          nativeID="guided-tour-monthly"
           onPress={openMonthSearch}
           accessibilityRole="button"
           accessibilityLabel={`Search months. Current month is ${MONTH_FULL[month]} ${selectedYear}`}
@@ -2107,7 +2133,9 @@ export default function MonthlyScreen() {
                       <View style={[styles.dayOverlaySection, { backgroundColor: c.card, borderColor: c.border }]}>
                         <Text style={[styles.dayOverlaySectionTitle, { color: c.foreground }]}>Planned debt payments</Text>
                         {selectedDebtPayments.map(payment => {
-                          const savedPayment = extraPayments.find(item => item.id === payment.event.sourceId);
+                          const savedPayment = payment.event.debtPlanSource === "canonical"
+                            ? undefined
+                            : extraPayments.find(item => item.id === payment.event.sourceId);
                           const amount = Math.abs(payment.event.amount);
                           const applied = payment.statusLabel.toLowerCase() === "applied";
                           const allocatedDebtIds = new Set(savedPayment?.allocations.map(allocation => allocation.billId) ?? []);
@@ -2138,6 +2166,11 @@ export default function MonthlyScreen() {
                                 router.push({
                                   pathname: "/snowball-plan",
                                   params: { paymentId: savedPayment.id },
+                                } as never);
+                              } : plannedDebtEditorParams(payment.event) ? () => {
+                                router.push({
+                                  pathname: "/planned-debt-payment",
+                                  params: plannedDebtEditorParams(payment.event),
                                 } as never);
                               } : undefined}
                               onRemove={savedPayment ? async () => {
@@ -2475,7 +2508,7 @@ export default function MonthlyScreen() {
           >
             <View style={styles.monthSearchHeader}>
               <View>
-                <Text style={[styles.monthSearchEyebrow, { color: c.primary }]}>Calendar search</Text>
+                <Text style={[styles.monthSearchEyebrow, { color: c.primary }]}>Forecast search</Text>
                 <Text style={[styles.monthSearchTitle, { color: c.foreground }]}>Jump to month</Text>
               </View>
               <Pressable
@@ -2902,6 +2935,8 @@ const styles = StyleSheet.create({
   calendarScreenLabel: { fontSize: 28, fontFamily: "Inter_700Bold", letterSpacing: -0.8 },
   forecastTag: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginTop: 1 },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 10 },
+  simulatorButton: { minHeight: 44, borderWidth: 1, borderRadius: 13, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  simulatorButtonText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   todayChip: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", borderWidth: 2 },
   todayChipText: { fontSize: 17, fontFamily: "Inter_800ExtraBold", lineHeight: 20 },
   calendarMonthBar: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginHorizontal: 22, marginTop: 0, marginBottom: 12, borderWidth: 1, borderColor: "rgba(148,163,184,0.12)", backgroundColor: "rgba(2,6,23,0.32)", borderRadius: 24, paddingHorizontal: 8, paddingVertical: 10 },

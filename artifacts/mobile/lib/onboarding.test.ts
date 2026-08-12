@@ -27,6 +27,29 @@ test("ignores an unknown starting point", () => {
   assert.equal(prefs.startingPoint, null);
 });
 
+test("normalizes household-scoped setup progress without losing explicit skips", () => {
+  const prefs = normalizeOnboardingPreferences({
+    setupProgressByScope: {
+      "household-1": {
+        version: 99,
+        currentStage: "cashflow",
+        confirmations: ["income_none", "income_none", "unknown"],
+        updatedAt: "2026-08-12T12:00:00.000Z",
+      },
+      broken: { currentStage: "hidden_stage" },
+    },
+  });
+  assert.deepEqual(prefs.setupProgressByScope, {
+    "household-1": {
+      version: 2,
+      currentStage: "cashflow",
+      confirmations: ["income_none"],
+      updatedAt: "2026-08-12T12:00:00.000Z",
+      completedAt: undefined,
+    },
+  });
+});
+
 test("asks the savings question only when savings is selected", () => {
   assert.equal(shouldAskSavingsGoal(normalizeOnboardingPreferences({ help: ["grow_savings"] })), true);
   assert.equal(shouldAskSavingsGoal(normalizeOnboardingPreferences({ goals: ["grow_savings"] })), true);

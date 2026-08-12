@@ -121,3 +121,17 @@ export function summarizeActivityRange(
   }
   return { income, out, net: income - out, transactions };
 }
+
+export function summarizeActivitySnapshot(
+  visibleRows: Array<{ amount: number; pending?: boolean; source?: string }>,
+  plannedMonth?: { income: number; out: number; net: number },
+) {
+  const visible = summarizeActivityRange(visibleRows);
+  if (!plannedMonth) return visible;
+  return {
+    ...visible,
+    income: plannedMonth.income,
+    out: plannedMonth.out,
+    net: plannedMonth.net,
+  };
+}

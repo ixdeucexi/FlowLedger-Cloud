@@ -26,6 +26,7 @@ import {
   type DesktopCalendarEventKind,
 } from "@/lib/desktopCalendar";
 import type { FinancialEvent } from "@/lib/forecast";
+import { calendarVisibleForecastEvents, formatEventStatus } from "@/lib/forecastDisplay";
 
 const MONTHS = [
   "January",
@@ -56,6 +57,8 @@ type DesktopCalendarPageProps = {
   onPreviousMonth: () => void;
   onNextMonth: () => void;
   onOpenMonthSelector: () => void;
+  simulatorLocked: boolean;
+  onOpenPlanSimulator: () => void;
   onAddTransaction: (date?: string | null) => void;
   onSelectDate: (date: string) => void;
   onCloseSelectedDay: () => void;
@@ -139,6 +142,8 @@ function CalendarHeader({
   onPreviousMonth,
   onNextMonth,
   onOpenMonthSelector,
+  simulatorLocked,
+  onOpenPlanSimulator,
   onAdd,
 }: Pick<
   DesktopCalendarPageProps,
@@ -148,16 +153,28 @@ function CalendarHeader({
   | "onPreviousMonth"
   | "onNextMonth"
   | "onOpenMonthSelector"
+  | "simulatorLocked"
+  | "onOpenPlanSimulator"
 > & { compact: boolean; onAdd: () => void }) {
   return (
     <View style={[styles.pageHeader, compact && styles.pageHeaderCompact]}>
       <View style={styles.pageHeaderCopy}>
-        <Text accessibilityRole="header" style={styles.pageTitle}>Calendar</Text>
+        <Text accessibilityRole="header" style={styles.pageTitle}>Forecast</Text>
         <Text style={styles.pageSubtitle}>
           View your month at a glance. Click any day to see details.
         </Text>
       </View>
       <View style={[styles.monthControls, compact && styles.monthControlsCompact]}>
+        <Pressable
+          nativeID="guided-tour-monthly"
+          accessibilityRole="button"
+          accessibilityLabel={`${simulatorLocked ? "Locked Pro " : ""}Plan Simulator`}
+          onPress={onOpenPlanSimulator}
+          style={({ pressed }) => [styles.simulatorButton, pressed && styles.pressed]}
+        >
+          <Feather name={simulatorLocked ? "lock" : "sliders"} size={15} color={palette.purple} />
+          <Text style={styles.simulatorButtonText}>Plan Simulator</Text>
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Go to today"
@@ -278,7 +295,7 @@ function DesktopMonthGrid({
       <View style={styles.calendarGrid}>
         {cells.map((cell) => {
           const balance = cell.inCurrentMonth ? balancesByDay.get(cell.day) : undefined;
-          const events = balance?.events ?? [];
+          const events = calendarVisibleForecastEvents(balance?.events);
           const visibleEvents = events.slice(0, compact ? 2 : 3);
           const hiddenCount = Math.max(0, events.length - visibleEvents.length);
           const selected = selectedDate === cell.date;
@@ -391,7 +408,7 @@ function SelectedDayPanel({
   onAddTransaction: () => void;
   onOpenEvent: (event: FinancialEvent) => void;
 }) {
-  const events = selectedDay?.events ?? [];
+  const events = calendarVisibleForecastEvents(selectedDay?.events);
   const daySummary = summarizeCalendarEvents(events, transferTransactionIds);
   const weekSummary = summarizeCalendarEvents(
     uniqueCalendarEvents(weekDays),
@@ -433,7 +450,7 @@ function SelectedDayPanel({
                 style={({ pressed }) => [styles.scheduledRow, pressed && styles.pressed]}
               >
                 <View style={[styles.scheduledIcon, { backgroundColor: tone.background }]}><View style={[styles.scheduledDot, { backgroundColor: tone.color }]} /></View>
-                <View style={styles.scheduledCopy}><Text numberOfLines={1} style={styles.scheduledName}>{eventLabel(event)}</Text><Text style={styles.scheduledCategory}>{kind.charAt(0).toUpperCase() + kind.slice(1)}</Text></View>
+                <View style={styles.scheduledCopy}><Text numberOfLines={1} style={styles.scheduledName}>{eventLabel(event)}</Text><Text style={styles.scheduledCategory}>{event.status === "pending" ? formatEventStatus(event.status) : kind.charAt(0).toUpperCase() + kind.slice(1)}</Text></View>
                 <Text style={[styles.scheduledAmount, { color: tone.color }]}>{money(event.amount, true)}</Text>
                 {canOpen ? <Feather name="chevron-right" size={16} color={palette.muted} /> : null}
               </Pressable>
@@ -508,6 +525,8 @@ export function DesktopCalendarPage(props: DesktopCalendarPageProps) {
             onPreviousMonth={props.onPreviousMonth}
             onNextMonth={props.onNextMonth}
             onOpenMonthSelector={props.onOpenMonthSelector}
+            simulatorLocked={props.simulatorLocked}
+            onOpenPlanSimulator={props.onOpenPlanSimulator}
             onAdd={() => props.onAddTransaction(props.selectedDate)}
           />
           <View style={[styles.metrics, compact && styles.metricsCompact]}>
@@ -581,6 +600,8 @@ const styles = StyleSheet.create({
   monthSelectorText: { color: palette.textSecondary, fontSize: 13, fontFamily: "Inter_600SemiBold" },
   addButton: { minHeight: 38, borderRadius: 7, backgroundColor: palette.purple, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
   addButtonText: { color: "#ffffff", fontSize: 13, fontFamily: "Inter_700Bold" },
+  simulatorButton: { minHeight: 44, borderRadius: 7, borderWidth: 1, borderColor: palette.purple + "55", backgroundColor: palette.purpleSoft, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
+  simulatorButtonText: { color: palette.purple, fontSize: 12, fontFamily: "Inter_700Bold" },
   pressed: { opacity: 0.72 },
   metrics: { flexDirection: "row", gap: 12, marginBottom: 14 },
   metricsCompact: { flexWrap: "wrap" },

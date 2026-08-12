@@ -16,7 +16,9 @@ import { DashboardUtilityWidgets } from "@/components/DashboardUtilityWidgets";
 import { FlowmentumHandoffModal } from "@/components/FlowmentumHandoffModal";
 import { GoalModal } from "@/components/GoalModal";
 import { HouseholdSwitcher } from "@/components/HouseholdSwitcher";
+import { MonthlyDebtCheckInModal } from "@/components/MonthlyDebtCheckInModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
+import { SavingsAccountNameModal } from "@/components/SavingsAccountNameModal";
 import { StabilityPathCard } from "@/components/StabilityPathCard";
 
 import colors from "@/constants/colors";
@@ -29,9 +31,10 @@ import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useDashboardLayoutPreferences } from "@/hooks/useDashboardLayoutPreferences";
+import { useSetupReadiness } from "@/hooks/useSetupReadiness";
 import { applyCategoryBudgetMove, buildZeroBudgetSummary } from "@/lib/categoryPlanning";
 import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets as saveCategoryBudgetsRemote, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
-import { buildDashboardFinancialModel } from "@/lib/dashboardFinancialModel";
+import { buildDashboardFinancialModel, type DashboardSavingsAccount } from "@/lib/dashboardFinancialModel";
 import { isCheckingBalanceTransaction } from "@/lib/billMatching";
 import { dateOnlyToLocalDate, localDateString } from "@/lib/dateLabels";
 import {
@@ -44,7 +47,8 @@ import {
 import { buildReviewQueue, transactionCategoryParts } from "@/lib/reviewCenter";
 import type { AlgorithmInsight } from "@/lib/algorithmSuite";
 import { unplannedPendingExpenses } from "@/lib/plaidActivity";
-import { buildTodaysDecisions } from "@/lib/todaysDecisions";
+import { buildTodaysDecisions, summarizeDatedDebtDecision } from "@/lib/todaysDecisions";
+import { buildFlowGuideRouteParams } from "@/lib/flowledgerGuide";
 
 const MONTH_FULL  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
@@ -194,7 +198,7 @@ export default function DashboardScreen() {
             style={styles.desktopLoadingLogo}
             resizeMode="cover"
           />
-          <Text style={styles.desktopLoadingText}>Opening your desktop workspace...</Text>
+          <Text style={styles.desktopLoadingText}>Loading Plan...</Text>
         </View>
       }
     >
@@ -220,14 +224,15 @@ function MobileDashboardScreen() {
   const { user } = useAuth();
   const { isAdmin } = useMembership();
   const {
-    bills, getPaidAmount, getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, selectedYear,
+    bills, getPaidAmount, getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, getRemainingDebtPlanForMonth, selectedYear,
     getMonthlyIncome,
     goals, addGoal, updateGoal, deleteGoal,
     getCashFlow, addBill, getDailyBalances, getTransactionsForMonth, settings,
-    accounts, connectedBankAccounts, incomes, updateSettings, forecastConfidence,
+    accounts, connectedBankAccounts, incomes, updateAccount, updateConnectedBankAccountDisplayName, forecastConfidence,
     categories, activeHousehold, canEditHousehold,
     pendingBankTransactions, pendingPlanMatches, transactions,
   } = useBudget();
+  const { readiness: setupReadiness } = useSetupReadiness();
   const categoryBudgetScope = useMemo(() => ({
     userId: user?.id,
     householdId: activeHousehold?.householdId,
@@ -240,6 +245,7 @@ function MobileDashboardScreen() {
 
   const [goalModalVisible, setGoalModalVisible]     = useState(false);
   const [editGoal, setEditGoal]                     = useState<Goal | null>(null);
+  const [savingsAccountNameTarget, setSavingsAccountNameTarget] = useState<DashboardSavingsAccount | null>(null);
   const [actionModalVisible, setActionModalVisible] = useState(false);
   const [addBillVisible, setAddBillVisible]         = useState(false);
   const [addBillForceDebt, setAddBillForceDebt]     = useState(false);
@@ -622,6 +628,7 @@ function MobileDashboardScreen() {
     decisionForecastDays,
     pendingCheckingSummary,
     savingsAccountBalance,
+    savingsAccounts,
   } = dashboardModel;
   const unplannedCheckingPending = useMemo(
     () => unplannedPendingExpenses(checkingPendingTransactions, activePendingMatchIds),
@@ -629,6 +636,34 @@ function MobileDashboardScreen() {
   );
   // The hero is a bank snapshot. Forecasted balances belong on Monthly only.
   const dashboardCheckingBalance = bankCurrentCheckingBalance;
+  const savingsAccountRowsHeight = savingsAccounts.length > 0
+    ? savingsAccounts.length * 36 + 8
+    : 44;
+  const compactSavingsFaceHeight = 92
+    + savingsAccountRowsHeight
+    + (currentGoals.length === 0
+      ? 80
+      : Math.min(currentGoals.length, 3) * 38 + (currentGoals.length > 3 ? 14 : 0));
+  const heroFrontFaceHeight = isCommandWide ? 260 : 250;
+  const heroCardVerticalPadding = isCommandWide ? 60 : 22;
+  const heroFrontCardHeight = heroFrontFaceHeight + heroCardVerticalPadding;
+  const heroBackCardHeight = Math.max(compactSavingsFaceHeight, heroFrontFaceHeight)
+    + heroCardVerticalPadding;
+
+  const saveSavingsAccountName = useCallback(async (account: DashboardSavingsAccount, name: string) => {
+    if (account.source === "connected") {
+      await updateConnectedBankAccountDisplayName(account.id, name);
+      return;
+    }
+    const manualAccount = accounts.find(item => item.id === account.id && item.account_type === "savings");
+    if (!manualAccount) throw new Error("Savings account not found.");
+    await updateAccount({ ...manualAccount, name });
+  }, [accounts, updateAccount, updateConnectedBankAccountDisplayName]);
+
+  const resetSavingsAccountName = useCallback(async (account: DashboardSavingsAccount) => {
+    if (account.source !== "connected") return;
+    await updateConnectedBankAccountDisplayName(account.id, null);
+  }, [updateConnectedBankAccountDisplayName]);
 
   // ── Savings summary for back of hero card ──────────────────────────────────
   // ── Affordability check (real calendar projection) ──────────────────────────
@@ -804,24 +839,25 @@ function MobileDashboardScreen() {
   const openStabilityGuide = useCallback(() => {
     router.push({
       pathname: "/(tabs)/how-flowledger-works",
-      params: {
+      params: buildFlowGuideRouteParams({
+        section: "overview",
         stage: algorithmSuite.stability.stage,
         stageLabel: algorithmSuite.stability.stageLabel,
-        protectedDays: String(algorithmSuite.stability.protectedDays),
-        protectedAmount: String(algorithmSuite.stability.protectedAmount),
-        reserveTarget: String(algorithmSuite.stability.reserveTarget),
-        backupTarget: String(algorithmSuite.stability.backupTarget),
-        safeUntilPayday: algorithmSuite.stability.safeUntilPayday === null ? "unknown" : String(algorithmSuite.stability.safeUntilPayday),
-        nextPaycheckLabel: algorithmSuite.stability.nextPaycheckLabel ?? "",
+        protectedDays: algorithmSuite.stability.protectedDays,
+        protectedAmount: algorithmSuite.stability.protectedAmount,
+        reserveTarget: algorithmSuite.stability.reserveTarget,
+        backupTarget: algorithmSuite.stability.backupTarget,
+        safeUntilPayday: algorithmSuite.stability.safeUntilPayday,
+        nextPaycheckLabel: algorithmSuite.stability.nextPaycheckLabel,
         nextAction: algorithmSuite.stability.nextAction,
         nextMilestone: algorithmSuite.stability.nextMilestone,
-        nextMilestoneAmount: String(algorithmSuite.stability.nextMilestoneAmount),
-        lowestBalance: String(algorithmSuite.safeCushion.lowestBalance),
-        safetyFloor: String(settings.safety_floor),
+        nextMilestoneAmount: algorithmSuite.stability.nextMilestoneAmount,
+        lowestBalance: algorithmSuite.safeCushion.lowestBalance,
+        safetyFloor: settings.safety_floor,
         confidence: forecastConfidence.label,
-        flowScore: String(algorithmSuite.flowScore.score),
+        flowScore: algorithmSuite.flowScore.score,
         flowScoreLabel: algorithmSuite.flowScore.label,
-      },
+      }),
     } as any);
   }, [algorithmSuite.flowScore.label, algorithmSuite.flowScore.score, algorithmSuite.safeCushion.lowestBalance, algorithmSuite.stability, forecastConfidence.label, router, settings.safety_floor]);
   const reviewCenterCount = useMemo(
@@ -848,6 +884,16 @@ function MobileDashboardScreen() {
       const priorityYear = priorityBill.dueDay >= today || currentMonth < 11 ? selectedYear : selectedYear + 1;
       priorityDate = new Date(priorityYear, priorityMonth, priorityBill.dueDay);
     }
+    const priorityBillRecord = priorityBill ? bills.find(bill => bill.id === priorityBill.id) : null;
+    const priorityMonth = priorityDate?.getMonth() ?? currentMonth;
+    const priorityYear = priorityDate?.getFullYear() ?? selectedYear;
+    const debtDecision = priorityBillRecord?.is_debt && priorityBill
+      ? summarizeDatedDebtDecision(
+        getRemainingDebtPlanForMonth(priorityMonth, priorityYear)?.allocations ?? [],
+        priorityBill.id,
+      )
+      : null;
+    if (debtDecision) priorityDate = dateOnlyToLocalDate(debtDecision.date);
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const daysAway = priorityDate ? Math.max(0, Math.round((priorityDate.getTime() - todayStart.getTime()) / 86_400_000)) : 0;
     const lowestDate = algorithmSuite.safeCushion.lowestDay
@@ -860,10 +906,15 @@ function MobileDashboardScreen() {
       safetyFloor: settings.safety_floor,
       safeToSpend: algorithmSuite.safeCushion.amount,
       nextBill: priorityBill && priorityDate ? {
-        name: priorityBill.name,
-        amount: priorityBill.amount,
+        id: priorityBill.id,
+        name: debtDecision?.name ?? priorityBill.name,
+        amount: debtDecision?.amount ?? priorityBill.amount,
         dateLabel: daysAway === 0 ? "today" : daysAway === 1 ? "tomorrow" : priorityDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
         daysAway,
+        isDebt: Boolean(priorityBillRecord?.is_debt),
+        frequency: priorityBillRecord?.frequency,
+        paidOff: debtDecision?.paidOff,
+        rollover: debtDecision?.rollover,
       } : null,
       snowballTarget: mobileSnowballTarget ? { name: mobileSnowballTarget.name, balance: mobileSnowballTarget.balance } : null,
       goal: mobileGoalNearCompletion ? {
@@ -872,7 +923,7 @@ function MobileDashboardScreen() {
         target: mobileGoalNearCompletion.target_amount,
       } : null,
     });
-  }, [algorithmSuite.billPriority.nextBill, algorithmSuite.safeCushion, currentMonth, mobileGoalNearCompletion, mobileSnowballTarget, now, reviewCenterCount, selectedYear, settings.safety_floor, today]);
+  }, [algorithmSuite.billPriority.nextBill, algorithmSuite.safeCushion, bills, currentMonth, getRemainingDebtPlanForMonth, mobileGoalNearCompletion, mobileSnowballTarget, now, reviewCenterCount, selectedYear, settings.safety_floor, today]);
   return (
     <ScrollView
       style={[styles.screen, styles.dashboardStage, { backgroundColor: dashboardTheme.screen }]}
@@ -980,21 +1031,25 @@ function MobileDashboardScreen() {
           </Pressable>
         </View>
       </View>
-      {!settings.onboarding_completed && (() => {
-        const steps = [
-          { label: "Add an account", done: accounts.some(account => account.is_active) },
-          { label: "Add income", done: incomes.length > 0 },
-          { label: "Add recurring bills", done: bills.some(bill => bill.is_recurring || bill.is_debt) },
-          { label: "Review safety settings", done: settings.safety_floor >= 0 && settings.forecast_horizon_months > 0 },
-          { label: "See your first forecast", done: accounts.length > 0 && incomes.length > 0 && bills.length > 0 },
-        ];
-        const complete = steps.every(step => step.done);
-        return <View style={[styles.setupCard, { backgroundColor: c.card, borderColor: c.border }]}>
-          <View style={styles.setupHeader}><View style={{ flex: 1 }}><Text style={[styles.setupTitle, { color: c.foreground }]}>Continue setup with Flo</Text><Text style={[styles.setupDesc, { color: c.mutedForeground }]}>Flo will pick up where you left off. {steps.filter(step => step.done).length} of {steps.length} setup steps complete</Text></View><Pressable onPress={() => void updateSettings({ onboarding_completed: true })}><Feather name="x" size={18} color={c.mutedForeground} /></Pressable></View>
-          {steps.map(step => <View key={step.label} style={styles.setupStep}><Feather name={step.done ? "check-circle" : "circle"} size={15} color={step.done ? c.success : c.mutedForeground} /><Text style={[styles.setupStepText, { color: step.done ? c.mutedForeground : c.foreground }]}>{step.label}</Text></View>)}
-          <Pressable onPress={() => complete ? void updateSettings({ onboarding_completed: true }) : router.push("/setup" as any)} style={[styles.setupButton, { backgroundColor: c.primary }]}><Text style={[styles.setupButtonText, { color: c.primaryForeground }]}>{complete ? "Finish Setup" : "Continue with Flo"}</Text></Pressable>
-        </View>;
-      })()}
+      {!settings.onboarding_completed && (
+        <View style={[styles.setupCard, { backgroundColor: c.card, borderColor: c.border }]}>
+          <View style={styles.setupHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.setupTitle, { color: c.foreground }]}>Continue setup with Flo</Text>
+              <Text style={[styles.setupDesc, { color: c.mutedForeground }]}>Flo will pick up where you left off. {setupReadiness.completeCount} of {setupReadiness.stages.length} stages complete</Text>
+            </View>
+          </View>
+          {setupReadiness.stages.map(stageItem => (
+            <View key={stageItem.id} style={styles.setupStep}>
+              <Feather name={stageItem.complete ? "check-circle" : "circle"} size={15} color={stageItem.complete ? c.success : c.mutedForeground} />
+              <Text style={[styles.setupStepText, { color: stageItem.complete ? c.mutedForeground : c.foreground }]}>{stageItem.label}</Text>
+            </View>
+          ))}
+          <Pressable accessibilityRole="button" onPress={() => router.push("/setup" as any)} style={[styles.setupButton, { backgroundColor: c.primary }]}>
+            <Text style={[styles.setupButtonText, { color: c.primaryForeground }]}>{setupReadiness.isComplete ? "Review and finish" : "Continue with Flo"}</Text>
+          </Pressable>
+        </View>
+      )}
 
       <Modal
         visible={startupAlertVisible && !!nextWeekRisk}
@@ -1125,21 +1180,41 @@ function MobileDashboardScreen() {
         onExplore={exploreFlowmentum}
       />
 
-      <View style={[
-        styles.referenceCommandHero,
-        isCommandWide && styles.referenceCommandHeroWide,
-        {
-          backgroundColor: dashboardTheme.hero,
-          borderColor: dashboardTheme.heroBorder,
-          shadowColor: dashboardTheme.heroShadow,
-          shadowOpacity: dashboardTheme.heroShadowOpacity,
-        },
-      ]}>
-        <View style={[styles.referenceHeroFlipShell, !isCommandWide && !flipped && styles.referenceHeroFlipShellCompact]}>
+      <MonthlyDebtCheckInModal
+        onReview={() => router.push({ pathname: "/(tabs)/bills", params: { view: "debt" } } as any)}
+      />
+
+      <SavingsAccountNameModal
+        account={savingsAccountNameTarget}
+        onClose={() => setSavingsAccountNameTarget(null)}
+        onSave={saveSavingsAccountName}
+        onReset={resetSavingsAccountName}
+      />
+
+      <View
+        style={[
+          styles.referenceCommandHeroFlipShell,
+          { minHeight: flipped ? heroBackCardHeight : heroFrontCardHeight },
+        ]}
+      >
           <Animated.View
             pointerEvents={flipped ? "none" : "auto"}
-            style={[styles.referenceHeroFace, !isCommandWide && !flipped && styles.referenceHeroFaceCompact, { transform: [{ perspective: 1000 }, { rotateY: frontRotate }] }]}
+            style={[
+              styles.referenceCommandHero,
+              isCommandWide && styles.referenceCommandHeroWide,
+              isCommandWide ? styles.referenceHeroFrontWide : styles.referenceHeroFaceCompact,
+              styles.referenceCommandHeroFlipFace,
+              {
+                minHeight: flipped ? heroBackCardHeight : heroFrontCardHeight,
+                backgroundColor: dashboardTheme.hero,
+                borderColor: dashboardTheme.heroBorder,
+                shadowColor: dashboardTheme.heroShadow,
+                shadowOpacity: dashboardTheme.heroShadowOpacity,
+              },
+              { transform: [{ perspective: 1000 }, { rotateY: frontRotate }] },
+            ]}
           >
+            <View style={[styles.referenceHeroMoneyPanel, isCommandWide && styles.referenceHeroMoneyPanelWide]}>
             <View style={styles.referenceMoneyHeader}>
               <View style={{ flex: 1 }}>
                 <AppText tone="title" style={[styles.referenceGreeting, { color: dashboardTheme.text }]}>{timeGreeting}</AppText>
@@ -1200,11 +1275,35 @@ function MobileDashboardScreen() {
                 <AppText tone="title" style={[styles.referenceHeroFloText, { color: dashboardTheme.text }]}>Flo</AppText>
               </Pressable>
             </View>
+            </View>
+
+            <Pressable
+              nativeID="guided-tour-index"
+              onPress={() => setFlowScoreVisible(true)}
+              style={({ pressed }) => [styles.referenceScorePanel, { opacity: pressed ? 0.86 : 1 }]}
+            >
+              <FlowScoreGauge score={algorithmSuite.flowScore.score} theme={dashboardTheme} />
+              <AppText tone="title" style={[styles.referenceScoreStatus, { color: dashboardTheme.scoreStatus }]}>{algorithmSuite.flowScore.label}</AppText>
+              <View style={[styles.referenceScoreUnderline, { backgroundColor: dashboardTheme.scoreStatus }]} />
+            </Pressable>
           </Animated.View>
 
           <Animated.View
             pointerEvents={flipped ? "auto" : "none"}
-            style={[styles.referenceHeroFace, styles.referenceHeroBackFace, { transform: [{ perspective: 1000 }, { rotateY: backRotate }] }]}
+            style={[
+              styles.referenceCommandHero,
+              isCommandWide && styles.referenceCommandHeroWide,
+              !isCommandWide && styles.referenceHeroFaceCompact,
+              styles.referenceCommandHeroFlipFace,
+              styles.referenceCommandHeroBackFace,
+              {
+                backgroundColor: dashboardTheme.hero,
+                borderColor: dashboardTheme.heroBorder,
+                shadowColor: dashboardTheme.heroShadow,
+                shadowOpacity: dashboardTheme.heroShadowOpacity,
+              },
+              { transform: [{ perspective: 1000 }, { rotateY: backRotate }] },
+            ]}
           >
             <View style={styles.referenceMoneyHeader}>
               <View style={{ flex: 1 }}>
@@ -1215,6 +1314,43 @@ function MobileDashboardScreen() {
                 <Feather name="repeat" size={13} color={dashboardTheme.purpleText} />
                 <AppText style={[styles.referenceFlipButtonText, { color: dashboardTheme.purpleText }]}>Checking</AppText>
               </Pressable>
+            </View>
+            <View style={styles.referenceSavingsList}>
+              {savingsAccounts.length > 0 ? savingsAccounts.map((account) => (
+                <View
+                  key={account.id}
+                  style={[styles.referenceSavingsItem, { backgroundColor: dashboardTheme.goalSurface, borderColor: dashboardTheme.goalBorder }]}
+                >
+                  <View style={styles.referenceSavingsIdentity}>
+                    <AppText style={[styles.referenceSavingsName, { color: dashboardTheme.mutedText }]} numberOfLines={1}>
+                      {account.name}
+                    </AppText>
+                    {account.mask ? (
+                      <AppText style={[styles.referenceSavingsMask, { color: dashboardTheme.subtleText }]}>•••• {account.mask}</AppText>
+                    ) : null}
+                  </View>
+                  <View style={styles.referenceSavingsValue}>
+                    <AppText tone="number" style={[styles.referenceSavingsBalance, { color: dashboardTheme.savings }]}>
+                      {formatDashboardCurrency(account.balance)}
+                    </AppText>
+                    {canEditHousehold ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Name ${account.name} savings account`}
+                        hitSlop={8}
+                        onPress={() => setSavingsAccountNameTarget(account)}
+                        style={({ pressed }) => [styles.referenceSavingsEdit, { backgroundColor: dashboardTheme.purpleSurface, borderColor: dashboardTheme.purpleBorder, opacity: pressed ? 0.68 : 1 }]}
+                      >
+                        <Feather name="edit-2" size={12} color={dashboardTheme.purpleText} />
+                      </Pressable>
+                    ) : null}
+                  </View>
+                </View>
+              )) : (
+                <View style={[styles.referenceSavingsEmpty, { backgroundColor: dashboardTheme.goalSurface, borderColor: dashboardTheme.goalBorder }]}>
+                  <AppText style={[styles.referenceSavingsEmptyText, { color: dashboardTheme.mutedText }]}>No savings accounts added.</AppText>
+                </View>
+              )}
             </View>
             <View style={styles.referenceGoalsHeader}>
               <AppText tone="title" style={[styles.referenceGoalsTitle, { color: dashboardTheme.text }]}>Current goals</AppText>
@@ -1248,16 +1384,6 @@ function MobileDashboardScreen() {
             )}
             {currentGoals.length > 3 && <AppText style={styles.referenceGoalsMore}>+{currentGoals.length - 3} more goal{currentGoals.length - 3 === 1 ? "" : "s"}</AppText>}
           </Animated.View>
-        </View>
-
-        <Pressable
-          onPress={() => setFlowScoreVisible(true)}
-          style={({ pressed }) => [styles.referenceScorePanel, { opacity: pressed ? 0.86 : 1 }]}
-        >
-          <FlowScoreGauge score={algorithmSuite.flowScore.score} theme={dashboardTheme} />
-          <AppText tone="title" style={[styles.referenceScoreStatus, { color: dashboardTheme.scoreStatus }]}>{algorithmSuite.flowScore.label}</AppText>
-          <View style={[styles.referenceScoreUnderline, { backgroundColor: dashboardTheme.scoreStatus }]} />
-        </Pressable>
       </View>
 
       <DashboardUtilityWidgets
@@ -1497,7 +1623,7 @@ function MobileDashboardScreen() {
               { id: "income",  icon: "trending-up" as const, label: "Add Income",        sub: "Log a salary, freelance, or other",    col: c.success     },
               { id: "expense", icon: "shopping-bag"as const, label: "Add a Transaction", sub: "Record a one-time expense or income",  col: c.warning     },
               { id: "goal",    icon: "target"      as const, label: "Set Aside Money",   sub: "Create a savings goal or spending bucket", col: "#8b5cf6" },
-              { id: "snowball", icon: "trending-down" as const, label: "Snowball Payment", sub: "Plan or change an extra debt payment", col: c.destructive },
+              { id: "snowball", icon: "trending-down" as const, label: "Debt Payoff Planner", sub: "See the payoff ladder or plan safe extra money", col: c.destructive },
             ].map(item => (
               <Pressable
                 accessibilityRole="button"
@@ -2008,12 +2134,14 @@ const styles = StyleSheet.create({
     shadowRadius: 34,
     elevation: 10,
   },
-  referenceCommandHeroWide: { flexDirection: "row", minHeight: 320, padding: 30, alignItems: "center", gap: 22 },
-  referenceHeroFlipShell: { flex: 1, minHeight: 210, position: "relative" },
-  referenceHeroFlipShellCompact: { minHeight: 118 },
-  referenceHeroFace: { minHeight: 210, backfaceVisibility: "hidden" },
-  referenceHeroFaceCompact: { minHeight: 118 },
-  referenceHeroBackFace: { ...StyleSheet.absoluteFillObject },
+  referenceCommandHeroWide: { minHeight: 320, padding: 30 },
+  referenceCommandHeroFlipShell: { width: "100%", position: "relative", marginBottom: 6 },
+  referenceCommandHeroFlipFace: { width: "100%", marginBottom: 0, backfaceVisibility: "hidden" },
+  referenceCommandHeroBackFace: { ...StyleSheet.absoluteFillObject, marginBottom: 0 },
+  referenceHeroFaceCompact: { minHeight: 250 },
+  referenceHeroFrontWide: { minHeight: 260, flexDirection: "row", alignItems: "center", gap: 22 },
+  referenceHeroMoneyPanel: { width: "100%" },
+  referenceHeroMoneyPanelWide: { flex: 1, width: "auto" },
   referenceMoneyHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   referenceBalanceRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   referenceBalanceAmount: { flex: 1, minWidth: 0 },
@@ -2027,6 +2155,16 @@ const styles = StyleSheet.create({
   referenceFlipButton: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, borderWidth: 1, borderColor: "rgba(196,181,253,0.28)", backgroundColor: "rgba(124,58,237,0.18)", paddingHorizontal: 9, paddingVertical: 6 },
   referenceFlipButtonText: { color: "#c4b5fd", fontSize: 9, fontFamily: "Inter_800ExtraBold", textTransform: "uppercase", letterSpacing: 0.5 },
   referenceSavingsAmount: { color: "#6ee7b7", fontSize: 34, lineHeight: 38, letterSpacing: -1.4 },
+  referenceSavingsList: { marginTop: 8, gap: 5 },
+  referenceSavingsItem: { minHeight: 31, borderRadius: 10, borderWidth: 1, paddingHorizontal: 9, paddingVertical: 6, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  referenceSavingsIdentity: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 },
+  referenceSavingsName: { flexShrink: 1, fontSize: 11, fontFamily: "Inter_700Bold" },
+  referenceSavingsMask: { fontSize: 9, fontFamily: "Inter_600SemiBold" },
+  referenceSavingsValue: { flexDirection: "row", alignItems: "center", gap: 6 },
+  referenceSavingsBalance: { fontSize: 12, lineHeight: 16, fontFamily: "Inter_800ExtraBold" },
+  referenceSavingsEdit: { width: 28, height: 28, borderRadius: 9, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  referenceSavingsEmpty: { minHeight: 36, borderRadius: 10, borderWidth: 1, borderStyle: "dashed", alignItems: "center", justifyContent: "center", paddingHorizontal: 9 },
+  referenceSavingsEmptyText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
   referenceGoalsHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8, marginBottom: 5 },
   referenceGoalsTitle: { color: "#f8fafc", fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   referenceGoalAddButton: { width: 28, height: 28, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(124,58,237,0.42)", borderWidth: 1, borderColor: "rgba(196,181,253,0.28)" },

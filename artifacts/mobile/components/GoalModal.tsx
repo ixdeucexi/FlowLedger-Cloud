@@ -131,7 +131,7 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
     const deleteLabel = deletingBucket ? "bucket" : "goal";
     setConfirmation({
       title: `Delete ${deletingBucket ? "Bucket" : "Goal"}`,
-      message: `Delete "${editGoal.name}"? This removes the ${deleteLabel} from Monthly and your plan.`,
+      message: `Delete "${editGoal.name}"? This removes the ${deleteLabel} from Forecast and your plan.`,
       confirmText: `Delete ${deleteLabel}`,
       destructive: true,
       onConfirm: async () => {

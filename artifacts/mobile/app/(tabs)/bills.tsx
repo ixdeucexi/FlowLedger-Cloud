@@ -1,6 +1,6 @@
 ﻿import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
@@ -99,6 +99,7 @@ export default function BillsScreen() {
   const isDesktop = useDesktopExperience();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const routeParams = useLocalSearchParams<{ view?: string; debtId?: string }>();
   const { user } = useAuth();
   const {
     bills,
@@ -117,6 +118,7 @@ export default function BillsScreen() {
     getBillOccurrencesInMonth,
     getBillMonthlyTotal,
     getBillEffectiveMonthlyTotal,
+    getDebtPlanForMonth,
     getPaidAmount,
     activeHousehold,
     pendingBankTransactions,
@@ -139,6 +141,20 @@ export default function BillsScreen() {
       setDashboardFilter(null);
     }
   }, [dashboardFilter]);
+
+  useEffect(() => {
+    if (routeParams.view === "debt") setActiveTab("debt");
+    else if (routeParams.view === "bills") setActiveTab("bills");
+
+    const debtId = routeParams.debtId;
+    if (!debtId) return;
+    const debt = bills.find((bill) => bill.id === debtId && bill.is_debt);
+    if (!debt) return;
+    setActiveTab("debt");
+    setEditBill(debt);
+    setModalVisible(true);
+    router.setParams({ debtId: "", view: "debt" } as never);
+  }, [bills, routeParams.debtId, routeParams.view, router]);
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
 
@@ -403,6 +419,7 @@ export default function BillsScreen() {
     [bills, debtPlanMonth, debtPlanYear, previewDebtSnowball],
   );
   const existingSnowball = getExtraPayment(debtPlanMonth, debtPlanYear);
+  const datedDebtPlan = getDebtPlanForMonth(debtPlanMonth, debtPlanYear);
   const cashFlowSafeSnowballAmount = baseSnowballPreview.safeMaximum;
 
   const debtPlanIds = new Set(
@@ -463,9 +480,6 @@ export default function BillsScreen() {
         Number(categoryBudgets.Debt ?? totalMinPayments) - totalMinPayments,
       )
     : cashFlowSafeSnowballAmount;
-  const highestAPR = debts.length
-    ? Math.max(...debts.map((b) => b.interest_rate))
-    : 0;
   const snowballTarget = snowballOrder[0] ?? null;
   const avalancheTarget = avalancheOrder[0] ?? null;
   const activeDebtTarget =
@@ -476,6 +490,25 @@ export default function BillsScreen() {
     ? debtMonthlyMinimum(activeDebtTarget)
     : 0;
   const nextStrategyTarget = strategyOrder[1] ?? null;
+  const activeDebtRollover = activeDebtTarget && datedDebtPlan
+    ? datedDebtPlan.allocations.filter(allocation =>
+      allocation.kind === "rollover"
+      && allocation.sourceBillId === activeDebtTarget.id
+      && allocation.targetBillId !== activeDebtTarget.id)
+    : [];
+  const activeDebtRolloverAmount = activeDebtRollover.reduce((sum, allocation) => sum + allocation.amount, 0);
+  const activeDebtRolloverNames = Array.from(new Set(activeDebtRollover.map(allocation => allocation.targetBillName))).join(", ");
+  const activeDebtRolloverDate = activeDebtRollover[0]?.date;
+  const forecastPaymentByDebtId = new Map(
+    datedDebtPlan?.payments.map(payment => [payment.billId, payment.totalPayment]) ?? [],
+  );
+  const forecastRolloverByDebtId = new Map<string, number>();
+  datedDebtPlan?.allocations.filter(allocation => allocation.kind === "rollover").forEach(allocation => {
+    forecastRolloverByDebtId.set(
+      allocation.targetBillId,
+      (forecastRolloverByDebtId.get(allocation.targetBillId) ?? 0) + allocation.amount,
+    );
+  });
 
   const priorityColors = [
     "#22c55e",
@@ -579,6 +612,7 @@ export default function BillsScreen() {
               {(["bills", "debt"] as Tab[]).map((t) => (
                 <Pressable
                   key={t}
+                  nativeID={t === "debt" ? "guided-tour-bills" : undefined}
                   accessibilityRole="tab"
                   accessibilityLabel={t === "bills" ? "Bills" : "Debt"}
                   accessibilityState={{ selected: activeTab === t }}
@@ -1101,62 +1135,6 @@ export default function BillsScreen() {
             <View style={[styles.list, isDesktop && styles.desktopList]}>
               <>
                 <PlanFeatureGate feature="debt_payoff" compact>
-                  {debts.length > 0 && (
-                    <View
-                      style={[
-                        styles.statsRow,
-                        { marginHorizontal: 0, gap: 10 },
-                      ]}
-                    >
-                      {[
-                        {
-                          label: "Total Debt",
-                          value: `$${totalDebt.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
-                          color: c.destructive,
-                          icon: "trending-down" as const,
-                        },
-                        {
-                          label: debtPlanIsFuture
-                            ? `${MONTH_FULL[debtPlanMonth].slice(0, 3)} Minimum`
-                            : "Min/Month",
-                          value: `$${totalMinPayments.toFixed(0)}`,
-                          color: c.warning,
-                          icon: "calendar" as const,
-                        },
-                        {
-                          label: "Highest APR",
-                          value: `${highestAPR}%`,
-                          color: c.primary,
-                          icon: "percent" as const,
-                        },
-                      ].map((s) => (
-                        <View
-                          key={s.label}
-                          style={[
-                            styles.statCard,
-                            {
-                              backgroundColor: c.card,
-                              borderRadius: colors.radius,
-                            },
-                          ]}
-                        >
-                          <Feather name={s.icon} size={14} color={s.color} />
-                          <Text style={[styles.statValue, { color: s.color }]}>
-                            {s.value}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.statLabel,
-                              { color: c.mutedForeground },
-                            ]}
-                          >
-                            {s.label}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
                   {settings.debtPayoffEnabled && debts.length > 0 && (
                     <View
                       style={[
@@ -1221,8 +1199,8 @@ export default function BillsScreen() {
                         accessibilityRole="button"
                         accessibilityLabel={
                           existingSnowball
-                            ? "View or change Snowball payment"
-                            : "Make a Snowball payment"
+                            ? "Open Debt Payoff Planner and review payment"
+                            : "Open Debt Payoff Planner"
                         }
                         onPress={openSnowballPlanner}
                         style={({ pressed }) => [
@@ -1245,8 +1223,8 @@ export default function BillsScreen() {
                           ]}
                         >
                           {existingSnowball
-                            ? "View or change Snowball payment"
-                            : "Make a Snowball Payment"}
+                            ? "Open Planner · plan saved"
+                            : "Open Debt Payoff Planner"}
                         </Text>
                       </Pressable>
                       {existingSnowball ? (
@@ -1314,7 +1292,7 @@ export default function BillsScreen() {
                           {MONTH_FULL[debtPlanMonth]} {debtPlanYear}.
                         </Text>
                       ) : null}
-                      {activeDebtTarget && nextStrategyTarget ? (
+                      {activeDebtTarget && activeDebtRolloverAmount > 0.005 ? (
                         <View
                           style={[
                             styles.rolloverCard,
@@ -1331,8 +1309,10 @@ export default function BillsScreen() {
                               { color: c.foreground },
                             ]}
                           >
-                            ${activeDebtMinimum.toFixed(0)}/mo rolls to{" "}
-                            {nextStrategyTarget.name} next.
+                            ${activeDebtRolloverAmount.toFixed(2)} rolls to {activeDebtRolloverNames} on{" "}
+                            {activeDebtRolloverDate
+                              ? `${MONTH_FULL[Number(activeDebtRolloverDate.slice(5, 7)) - 1]} ${Number(activeDebtRolloverDate.slice(8, 10))}`
+                              : "the same day"}.
                           </Text>
                         </View>
                       ) : null}
@@ -1476,6 +1456,8 @@ export default function BillsScreen() {
                         ] ?? c.primary);
                   const effectiveMinimum = debtMonthlyMinimum(item);
                   const requiredMinimum = debtRequiredMinimum(item);
+                  const forecastPayment = forecastPaymentByDebtId.get(item.id);
+                  const forecastRollover = forecastRolloverByDebtId.get(item.id) ?? 0;
                   const monthsToPayoff =
                     item.balance > 0 && effectiveMinimum > 0
                       ? Math.ceil(item.balance / effectiveMinimum)
@@ -1587,22 +1569,20 @@ export default function BillsScreen() {
                                   { color: c.mutedForeground },
                                 ]}
                               >
-                                ${requiredMinimum.toFixed(2)}/mo required
+                                {forecastPayment !== undefined
+                                  ? `$${forecastPayment.toFixed(2)} forecast payment`
+                                  : `$${requiredMinimum.toFixed(2)}/mo required`}
                               </Text>
                             )}
                             {!isPaidOff &&
-                              (item.snowball_minimum_boost ?? 0) > 0 && (
+                              forecastRollover > 0.005 && (
                                 <Text
                                   style={[
                                     styles.metaText,
                                     { color: c.success },
                                   ]}
                                 >
-                                  +$
-                                  {Number(item.snowball_minimum_boost).toFixed(
-                                    2,
-                                  )}{" "}
-                                  snowball rollover
+                                  Includes ${forecastRollover.toFixed(2)} rollover
                                 </Text>
                               )}
                           </View>
@@ -2095,15 +2075,6 @@ const styles = StyleSheet.create({
   amountSub: { fontSize: 10, fontFamily: "Inter_400Regular" },
 
   // Debt-specific
-  statsRow: { flexDirection: "row" },
-  statCard: { flex: 1, alignItems: "center", paddingVertical: 12, gap: 4 },
-  statValue: { fontSize: 16, fontFamily: "Inter_700Bold" },
-  statLabel: {
-    fontSize: 10,
-    fontFamily: "Inter_500Medium",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
   debtAlgoCard: {
     borderWidth: 1,
     padding: 14,

@@ -570,8 +570,8 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
       <View style={styles.filterRow}>
         {([
           ["all", "All"],
-          ["expense", "Money out"],
-          ["income", "Money in"],
+          ["expense", "Outflows"],
+          ["income", "Inflows"],
         ] as const).map(([value, label]) => {
           const selected = reviewFilter === value;
           const count = value === "all"

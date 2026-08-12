@@ -1,3 +1,5 @@
+import type { DatedDebtAllocation } from "./snowball";
+
 export type TodayDecisionTone = "safe" | "watch" | "risk" | "info";
 
 export type TodayDecision = {
@@ -15,11 +17,66 @@ export type TodayDecisionInput = {
   lowestBalance: number;
   lowestDate?: string | null;
   safetyFloor: number;
-  nextBill?: { name: string; amount: number; dateLabel: string; daysAway: number } | null;
+  nextBill?: {
+    id: string;
+    name: string;
+    amount: number;
+    dateLabel: string;
+    daysAway: number;
+    isDebt?: boolean;
+    frequency?: "monthly" | "quarterly" | "biweekly" | "weekly";
+    paidOff?: boolean;
+    rollover?: { name: string; amount: number } | null;
+  } | null;
   snowballTarget?: { name: string; balance: number } | null;
   goal?: { name: string; current: number; target: number } | null;
   safeToSpend: number;
 };
+
+export type DatedDebtDecisionPayment = {
+  date: string;
+  name: string;
+  amount: number;
+  paidOff: boolean;
+  rollover: { name: string; amount: number } | null;
+};
+
+/** Turns a source creditor's split dated allocations into one honest dashboard summary. */
+export function summarizeDatedDebtDecision(
+  allocations: readonly DatedDebtAllocation[],
+  sourceBillId: string,
+): DatedDebtDecisionPayment | null {
+  const sourced = allocations
+    .filter(allocation => allocation.sourceBillId === sourceBillId && allocation.amount > 0.005)
+    .sort((left, right) => left.date.localeCompare(right.date));
+  const date = sourced[0]?.date;
+  if (!date) return null;
+
+  const sameDay = sourced.filter(allocation => allocation.date === date);
+  const primary = sameDay.find(allocation => allocation.targetBillId === sourceBillId) ?? sameDay[0];
+  if (!primary) return null;
+
+  const rollovers = sameDay.filter(allocation => allocation.id !== primary.id && allocation.amount > 0.005);
+  const rolloverAmount = rollovers.reduce((sum, allocation) => sum + allocation.amount, 0);
+  const rolloverNames = [...new Set(rollovers.map(allocation => allocation.targetBillName))];
+  const rolloverName = rolloverNames.length === 1
+    ? rolloverNames[0]
+    : rolloverNames.length === 2
+      ? `${rolloverNames[0]} and ${rolloverNames[1]}`
+      : rolloverNames.length > 2
+        ? "your next debts"
+        : null;
+
+  return {
+    date,
+    name: primary.targetBillName,
+    amount: primary.amount,
+    paidOff: primary.paidOff,
+    rollover: rolloverName && rolloverAmount > 0.005
+      ? { name: rolloverName, amount: rolloverAmount }
+      : null,
+  };
+}
 
 function money(value: number) {
   return Math.max(0, Number.isFinite(value) ? value : 0).toLocaleString("en-US", {
@@ -27,6 +84,23 @@ function money(value: number) {
     currency: "USD",
     maximumFractionDigits: 0,
   });
+}
+
+function paymentCadenceLabel(
+  frequency?: "monthly" | "quarterly" | "biweekly" | "weekly",
+) {
+  switch (frequency) {
+    case "weekly":
+      return " weekly payment";
+    case "biweekly":
+      return " biweekly payment";
+    case "monthly":
+      return " monthly payment";
+    case "quarterly":
+      return " quarterly payment";
+    default:
+      return "";
+  }
 }
 
 export function buildTodaysDecisions(input: TodayDecisionInput): TodayDecision[] {
@@ -56,13 +130,22 @@ export function buildTodaysDecisions(input: TodayDecisionInput): TodayDecision[]
   }
 
   if (input.nextBill && input.nextBill.daysAway >= 0 && input.nextBill.daysAway <= 3) {
+    const debtPayoffWithRollover = Boolean(
+      input.nextBill.isDebt && input.nextBill.paidOff && input.nextBill.rollover,
+    );
     decisions.push({
       id: "bill-due",
-      title: `${input.nextBill.name} is coming up`,
-      reason: `${money(input.nextBill.amount)} is due ${input.nextBill.dateLabel}.`,
-      actionLabel: "Review Bills",
+      title: debtPayoffWithRollover
+        ? `${input.nextBill.name} payoff is coming up`
+        : `${input.nextBill.name} is coming up`,
+      reason: debtPayoffWithRollover && input.nextBill.rollover
+        ? `${money(input.nextBill.amount)} pays off ${input.nextBill.name} ${input.nextBill.dateLabel}. ${money(input.nextBill.rollover.amount)} rolls to ${input.nextBill.rollover.name} the same day.`
+        : `${money(input.nextBill.amount)}${paymentCadenceLabel(input.nextBill.frequency)} is due ${input.nextBill.dateLabel}.`,
+      actionLabel: input.nextBill.isDebt ? "Review Debt" : "Review Bills",
       route: "/(tabs)/bills",
-      params: { filter: "bills" },
+      params: input.nextBill.isDebt
+        ? { view: "debt", debtId: input.nextBill.id }
+        : { view: "bills" },
       tone: input.nextBill.daysAway <= 1 ? "watch" : "info",
     });
   }
@@ -72,9 +155,8 @@ export function buildTodaysDecisions(input: TodayDecisionInput): TodayDecision[]
       id: "snowball-target",
       title: `Keep targeting ${input.snowballTarget.name}`,
       reason: `${money(input.snowballTarget.balance)} remains on your current lowest-balance debt.`,
-      actionLabel: "View Snowball",
-      route: "/(tabs)/bills",
-      params: { filter: "debt" },
+      actionLabel: "Open Planner",
+      route: "/snowball-plan",
       tone: "info",
     });
   }

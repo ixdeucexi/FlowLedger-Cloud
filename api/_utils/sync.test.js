@@ -10,6 +10,7 @@ const {
   isCreditAccount,
   isCreditCardPaymentTransaction,
   isLiabilitiesUnavailable,
+  plaidTransactionImportPolicy,
   persistCanonicalPlaidTransaction,
   releasePlaidSyncLock,
   stablePlaidFingerprint,
@@ -314,10 +315,29 @@ test("Plaid fingerprints ignore only connection-specific IDs", () => {
   assert.notEqual(stablePlaidFingerprint(first), stablePlaidFingerprint({ ...copy, amount: 52.38 }));
 });
 
-test("only posted Plaid activity becomes a FlowLedger transaction", () => {
-  assert.equal(shouldImportPlaidTransaction({ pending: true }), false);
-  assert.equal(shouldImportPlaidTransaction({ pending: false }), true);
-  assert.equal(shouldImportPlaidTransaction({}), true);
+test("only posted non-credit Plaid activity becomes a FlowLedger transaction", () => {
+  const checking = { account_type: "depository", account_subtype: "checking" };
+  const credit = { account_type: "credit", account_subtype: "credit card" };
+  assert.equal(shouldImportPlaidTransaction(checking, { pending: true }), false);
+  assert.equal(shouldImportPlaidTransaction(checking, { pending: false }), true);
+  assert.equal(shouldImportPlaidTransaction(checking, {}), true);
+  assert.equal(shouldImportPlaidTransaction(credit, { pending: false }), false);
+  assert.deepEqual(plaidTransactionImportPolicy(credit, { pending: true }), {
+    importCanonical: false,
+    queuePendingNotification: false,
+  });
+  assert.deepEqual(plaidTransactionImportPolicy(credit, { pending: false }), {
+    importCanonical: false,
+    queuePendingNotification: false,
+  });
+  const creditImportResult = {
+    flowledgerId: null,
+    plaidTransactionId: "card-raw-only",
+    isNewPosted: false,
+    isNewPending: false,
+  };
+  assert.equal(shouldQueuePostedNotification("cursor-1", creditImportResult), false);
+  assert.equal(shouldQueuePendingNotification("cursor-1", creditImportResult), false);
 });
 
 test("later Plaid syncs preserve fields the user edited", () => {

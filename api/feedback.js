@@ -5,7 +5,7 @@ const {
   normalizeFeedbackManagementInput,
 } = require("./_utils/feedback");
 const { sendPushToUser } = require("./_utils/push");
-const { authenticatedUser, safeError, serviceSupabase } = require("./_utils/supabase");
+const { authenticatedUser, publicError, safeError, serviceSupabase } = require("./_utils/supabase");
 
 async function submitFeedback(db, auth, body, res) {
   let input;
@@ -138,7 +138,7 @@ module.exports = async function feedback(req, res) {
     const managing = Boolean(req.body?.action);
     return res.status(500).json({
       error: managing ? "FEEDBACK_MANAGE_FAILED" : "FEEDBACK_SUBMIT_FAILED",
-      message: safeError(error, managing ? "Could not update feedback." : "Could not send feedback."),
+      message: publicError(error, managing ? "Could not update feedback." : "Could not send feedback."),
     });
   }
 };

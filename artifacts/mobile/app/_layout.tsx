@@ -27,7 +27,6 @@ import { ThemeProvider, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { readLastAppRoute, rememberAppRoute } from "@/lib/navigationMemory";
-import { supabase } from "@/lib/supabase";
 import { WEB_VIEWPORT_CONTENT } from "@/lib/webViewport";
 
 SplashScreen.preventAutoHideAsync();
@@ -37,7 +36,7 @@ const PLAN_LOADING_MS = 220;
 
 function AuthObserver() {
   const { session, loading } = useAuth();
-  const { activeHousehold, loading: budgetLoading } = useBudget();
+  const { activeHousehold, loading: budgetLoading, settings } = useBudget();
   const router = useRouter();
   const segments = useSegments();
   const pathname = usePathname();
@@ -77,7 +76,7 @@ function AuthObserver() {
           if (requestedSetup) window.localStorage.removeItem("flowledger_show_setup_after_login");
         } catch {}
       }
-      if (!requestedSetup) {
+      if (!requestedSetup && settings.onboarding_completed) {
         const restoreKey = `${session.user.id}:${householdId}`;
         if (restoreAttemptRef.current === restoreKey) return;
         restoreAttemptRef.current = restoreKey;
@@ -89,28 +88,15 @@ function AuthObserver() {
           cancelled = true;
         };
       }
-      let cancelled = false;
-      void supabase
-        .from("settings")
-        .select("onboarding_completed")
-        .eq("user_id", session.user.id)
-        .maybeSingle()
-        .then(({ data }) => {
-          if (cancelled) return;
-          replaceRoute(data?.onboarding_completed ? "/(tabs)" : "/setup");
-        }, () => {
-          if (!cancelled) replaceRoute("/(tabs)");
-        });
-      return () => {
-        cancelled = true;
-      };
+      replaceRoute(settings.onboarding_completed ? "/(tabs)" : "/setup");
+      return;
     }
 
     if (session && !inAuth && !atRoot && !isPublicLegal) {
       restoreAttemptRef.current = null;
       void rememberAppRoute(session.user.id, householdId, currentRoute);
     }
-  }, [activeHousehold?.householdId, budgetLoading, currentRoute, loading, router, segments, session]);
+  }, [activeHousehold?.householdId, budgetLoading, currentRoute, loading, router, segments, session, settings.onboarding_completed]);
 
   useEffect(() => {
     if (loading || budgetLoading || !session || Platform.OS !== "web" || typeof window === "undefined" || typeof document === "undefined") {
@@ -146,7 +132,7 @@ function StartupScreen({ style }: { style?: StyleProp<ViewStyle> } = {}) {
         style={styles.startupIcon}
         resizeMode="contain"
       />
-      <Text style={[styles.startupStatus, { color: colors.mutedForeground }]}>Restoring your workspace…</Text>
+      <Text style={[styles.startupStatus, { color: colors.mutedForeground }]}>Loading Plan...</Text>
     </Animated.View>
   );
 }
@@ -241,9 +227,25 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
                 <Stack.Screen
                   name="snowball-plan"
                   options={{
-                    animation: "slide_from_bottom",
+                    animation: "slide_from_right",
                     animationTypeForReplace: "pop",
-                    presentation: "modal",
+                    presentation: "card",
+                  }}
+                />
+                <Stack.Screen
+                  name="planned-debt-payment"
+                  options={{
+                    animation: "slide_from_right",
+                    animationTypeForReplace: "pop",
+                    presentation: "card",
+                  }}
+                />
+                <Stack.Screen
+                  name="plan-simulator"
+                  options={{
+                    animation: "slide_from_right",
+                    animationTypeForReplace: "pop",
+                    presentation: "card",
                   }}
                 />
                 <Stack.Screen name="(tabs)" />

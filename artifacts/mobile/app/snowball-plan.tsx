@@ -2,29 +2,42 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { DatePickerField } from "@/components/DatePickerField";
 import { FloLogo } from "@/components/FloLogo";
 import { PlanFeatureGate } from "@/components/PlanFeatureGate";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
-import { confirmAction } from "@/lib/confirmAction";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
+import { useDesktopExperience } from "@/hooks/useDesktopExperience";
+import { confirmAction } from "@/lib/confirmAction";
 import {
-  buildDebtPaymentPlanSummary,
   isSnowballPaymentTransaction,
   replacementSnowballSafeMaximum,
   requiredDebtPlanTotal,
-  SNOWBALL_PLAN_SOURCE,
   snowballTransactionEditDraft,
 } from "@/lib/debtPaymentPlan";
-import { orderActiveDebtsForStrategy } from "@/lib/debtOrder";
+import { isValidExtraPaymentPlan } from "@/lib/debtPlanDomain";
 import { localDateString, MONTH_NAMES } from "@/lib/dateLabels";
+import { matchedOccurrenceAllocations } from "@/lib/reviewCenter";
+import {
+  buildSnowballPlannerRows,
+  buildSnowballTimeline,
+  payoffMonthsSooner,
+  snowballPlanHistoryStatus,
+} from "@/lib/snowballPlanner";
 
 function money(value: number) {
-  return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `$${Math.max(0, Number(value) || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function moneyOrDash(value: number) {
+  return value > 0.005 ? money(value) : "—";
 }
 
 function dateParts(value: string) {
@@ -38,10 +51,32 @@ function maximumPlanDate(start: string, horizonMonths: number) {
   return localDateString(end);
 }
 
+function readableDate(value: string) {
+  const parsed = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function readableMonth(value: string | null) {
+  if (!value) return "Not projected yet";
+  const parsed = new Date(`${value}-01T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return "Not projected yet";
+  return parsed.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+}
+
+function allocationLabel(kind: "required" | "rollover" | "extra") {
+  if (kind === "rollover") return "ROLLOVER";
+  if (kind === "extra") return "SAFE EXTRA";
+  return "SCHEDULED";
+}
+
 function SnowballPlanScreen() {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isDesktop = useDesktopExperience();
+  const twoColumn = isDesktop && width >= 1080;
   const params = useLocalSearchParams<{ paymentId?: string; suggested?: string; transactionId?: string }>();
   const {
     applyDebtSnowballPayment,
@@ -50,6 +85,9 @@ function SnowballPlanScreen() {
     deleteTransaction,
     extraPayments,
     getBillOccurrencesInMonth,
+    getDebtPlanForMonth,
+    getDebtMonthSettlements,
+    getRemainingDebtPlanForMonth,
     getExtraPayment,
     getMonthlyBills,
     previewDebtSnowball,
@@ -59,7 +97,11 @@ function SnowballPlanScreen() {
     updateTransaction,
   } = useBudget();
   const today = localDateString();
-  const firstUpcomingPlan = extraPayments
+  const validExtraPayments = useMemo(
+    () => extraPayments.filter(isValidExtraPaymentPlan),
+    [extraPayments],
+  );
+  const firstUpcomingPlan = validExtraPayments
     .filter(payment => (payment.payment_date ?? "") >= today)
     .slice()
     .sort((left, right) => (left.payment_date ?? "").localeCompare(right.payment_date ?? ""))[0];
@@ -76,20 +118,19 @@ function SnowballPlanScreen() {
     () => editTransaction ? snowballTransactionEditDraft(editTransaction) : null,
     [editTransaction],
   );
+  const hasResolvedTransactionEdit = Boolean(editTransaction && editDraft);
   const [paymentDate, setPaymentDate] = useState(today);
-  const [extraAmount, setExtraAmount] = useState(
-    suggestedAmount > 0 ? suggestedAmount.toFixed(2) : "",
-  );
+  const [extraAmount, setExtraAmount] = useState("");
   const [editingPaymentId, setEditingPaymentId] = useState<string | undefined>(paymentId);
   const [saving, setSaving] = useState(false);
   const hydratedTransactionRef = useRef<string | null>(null);
   const hydratedDefaultPlanRef = useRef(false);
   const editingPayment = editingPaymentId
-    ? extraPayments.find(payment => payment.id === editingPaymentId)
+    ? validExtraPayments.find(payment => payment.id === editingPaymentId)
     : undefined;
 
   useEffect(() => {
-    if (transactionId) {
+    if (hasResolvedTransactionEdit) {
       if (!editTransaction || !editDraft || hydratedTransactionRef.current === editTransaction.id) return;
       hydratedTransactionRef.current = editTransaction.id;
       setPaymentDate(editDraft.paymentDate);
@@ -101,50 +142,71 @@ function SnowballPlanScreen() {
       hydratedDefaultPlanRef.current = true;
       setEditingPaymentId(defaultPlan.id);
       setPaymentDate(defaultPlan.payment_date ?? today);
-      setExtraAmount((defaultPlan.amount + suggestedAmount).toFixed(2));
+      setExtraAmount(defaultPlan.amount.toFixed(2));
     }
-  }, [editDraft, editTransaction, editingPayment, firstUpcomingPlan, suggestedAmount, today, transactionId]);
+  }, [editDraft, editTransaction, editingPayment, firstUpcomingPlan, hasResolvedTransactionEdit, today]);
 
   const planDate = dateParts(paymentDate);
-  const targetMonthPayment = transactionId ? undefined : getExtraPayment(planDate.month, planDate.year);
-  const existingPayment = transactionId ? undefined : editingPayment ?? targetMonthPayment;
+  const targetMonthPayment = hasResolvedTransactionEdit ? undefined : getExtraPayment(planDate.month, planDate.year);
+  const existingPayment = hasResolvedTransactionEdit ? undefined : editingPayment ?? targetMonthPayment;
   const destinationConflict = Boolean(
     editingPayment
     && targetMonthPayment
     && targetMonthPayment.id !== editingPayment.id,
   );
   const requestedExtra = Math.max(0, Number.parseFloat(extraAmount) || 0);
-  const preview = previewDebtSnowball(
+  const preview = useMemo(() => previewDebtSnowball(
     planDate.month,
     planDate.year,
     requestedExtra,
     0,
     paymentDate,
     existingPayment?.id,
-  );
-  const monthDebts = getMonthlyBills(planDate.month, planDate.year)
-    .filter(debt => debt.is_debt);
-  const activeDebts = monthDebts
-    .filter(debt => debt.is_debt && debt.balance > 0.009);
-  const payoffOrder = orderActiveDebtsForStrategy(activeDebts, settings.paymentMethod);
-  const editTarget = editDraft
-    ? monthDebts.find(debt => debt.id === editDraft.debtId) ?? bills.find(debt => debt.id === editDraft.debtId && debt.is_debt)
-    : undefined;
-  const target = editTarget ?? payoffOrder[0] ?? null;
-  const requiredMinimum = activeDebts.reduce(
-    (total, debt) => total + requiredDebtPlanTotal(
-      debt,
-      getBillOccurrencesInMonth(debt, planDate.month, planDate.year).length,
-    ),
+  ), [existingPayment?.id, paymentDate, planDate.month, planDate.year, previewDebtSnowball, requestedExtra]);
+  const baselinePaymentDate = existingPayment?.payment_date ?? paymentDate;
+  const baselinePlanDate = dateParts(baselinePaymentDate);
+  const baselinePreview = useMemo(() => previewDebtSnowball(
+    baselinePlanDate.month,
+    baselinePlanDate.year,
+    existingPayment?.amount ?? 0,
     0,
+    baselinePaymentDate,
+    existingPayment?.id,
+  ), [baselinePaymentDate, baselinePlanDate.month, baselinePlanDate.year, existingPayment?.amount, existingPayment?.id, previewDebtSnowball]);
+  const monthDebts = getMonthlyBills(planDate.month, planDate.year).filter(debt => debt.is_debt);
+  const fullDatedPlan = getDebtPlanForMonth(planDate.month, planDate.year);
+  const remainingDatedPlan = getRemainingDebtPlanForMonth(planDate.month, planDate.year);
+  const debtMonthSettlements = getDebtMonthSettlements(planDate.month, planDate.year);
+  const plannerRows = buildSnowballPlannerRows(
+    monthDebts.map(debt => ({
+      id: debt.id,
+      name: debt.name,
+      balance: debt.balance,
+      minimum: requiredDebtPlanTotal(debt, getBillOccurrencesInMonth(debt, planDate.month, planDate.year).length),
+      apr: debt.interest_rate,
+      dueDay: debt.due_day,
+      included: debt.include_in_snowball !== false,
+    })),
+    settings.paymentMethod,
+    remainingDatedPlan,
+    fullDatedPlan,
+    debtMonthSettlements,
   );
-  const summary = buildDebtPaymentPlanSummary(requiredMinimum, requestedExtra);
+  const timeline = buildSnowballTimeline(remainingDatedPlan?.allocations ?? []);
+  const target = editDraft
+    ? monthDebts.find(debt => debt.id === editDraft.debtId) ?? bills.find(debt => debt.id === editDraft.debtId && debt.is_debt)
+    : plannerRows.find(row => row.settlement.status !== "settled") ?? null;
+  const scheduledForecast = (remainingDatedPlan?.allocations ?? [])
+    .filter(allocation => allocation.kind !== "extra")
+    .reduce((total, allocation) => total + allocation.amount, 0);
   const safeMaximum = editDraft
     ? replacementSnowballSafeMaximum(preview.safeMaximum, editDraft.amount)
     : preview.safeMaximum;
   const editTargetCapacity = editDraft && target
     ? Math.max(0, Number(target.balance) + Number(editTransaction?.debt_applied_amount ?? editDraft.amount))
     : Number.POSITIVE_INFINITY;
+  const draftExtra = editTransaction ? Math.min(requestedExtra, editTargetCapacity) : preview.selectedExtra;
+  const totalPlanned = scheduledForecast + draftExtra;
   const valid = canEditHousehold
     && requestedExtra > 0.005
     && requestedExtra <= safeMaximum + 0.005
@@ -152,10 +214,17 @@ function SnowballPlanScreen() {
     && !destinationConflict
     && (editTransaction ? Boolean(target) : preview.allocations.length > 0);
   const monthLabel = `${MONTH_NAMES[planDate.month]} ${planDate.year}`;
-  const scheduledPlans = useMemo(() => extraPayments
+  const strategyName = settings.paymentMethod === "snowball" ? "Snowball" : "Avalanche";
+  const totalDebt = plannerRows.reduce((sum, row) => sum + row.balance, 0);
+  const monthsSooner = payoffMonthsSooner(baselinePreview.debtFreeDate, preview.debtFreeDate);
+  const snowballMatches = useMemo(
+    () => matchedOccurrenceAllocations(transactions, "extra_principal", "snowball"),
+    [transactions],
+  );
+  const scheduledPlans = useMemo(() => validExtraPayments
     .slice()
     .sort((left, right) => (right.payment_date ?? "").localeCompare(left.payment_date ?? "")),
-  [extraPayments]);
+  [validExtraPayments]);
   const displayedAllocations = editTransaction && target
     ? [{
         billId: target.id,
@@ -164,6 +233,27 @@ function SnowballPlanScreen() {
         paidOff: requestedExtra >= editTargetCapacity - 0.005,
       }]
     : preview.allocations;
+
+  const openForecastAmountEditor = (debtId: string, fallbackDay: number) => {
+    const debt = monthDebts.find(item => item.id === debtId) ?? bills.find(item => item.id === debtId);
+    const occurrenceDay = debt
+      ? getBillOccurrencesInMonth(debt, planDate.month, planDate.year)[0]
+      : undefined;
+    const daysInMonth = new Date(planDate.year, planDate.month + 1, 0).getDate();
+    const day = Math.min(daysInMonth, Math.max(1, occurrenceDay ?? fallbackDay));
+    router.push({
+      pathname: "/planned-debt-payment",
+      params: {
+        billId: debtId,
+        date: `${planDate.year}-${String(planDate.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+      },
+    } as never);
+  };
+
+  const closePlanner = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace({ pathname: "/(tabs)/bills", params: { view: "debt" } } as never);
+  };
 
   const choosePlan = (id: string, date: string, amount: number) => {
     setEditingPaymentId(id);
@@ -183,13 +273,14 @@ function SnowballPlanScreen() {
           date: paymentDate,
           linked_bill_id: target.id,
           note: `${target.name} snowball`,
-          source: SNOWBALL_PLAN_SOURCE,
-          debt_applied_amount: 0,
+          source: editTransaction.source,
+          debt_applied_bill_id: editTransaction.debt_applied_bill_id,
+          debt_applied_amount: editTransaction.debt_applied_amount,
         });
       } else {
         await applyDebtSnowballPayment(preview, undefined, existingPayment?.id);
       }
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.dismissTo({
         pathname: "/(tabs)/monthly",
         params: { openDate: paymentDate, openDateAt: String(Date.now()) },
@@ -202,19 +293,19 @@ function SnowballPlanScreen() {
   };
 
   const removePlan = () => {
-    if ((!existingPayment && !editTransaction) || saving) return;
+    if ((!existingPayment && !editTransaction) || saving || !canEditHousehold) return;
     confirmAction({
-      title: "Remove this Snowball payment?",
-      message: "This removes the extra payment from your calendar. It does not change the debt’s required payment or balance.",
-      confirmText: "Remove",
+      title: "Remove saved extra payment?",
+      message: "This removes the saved extra payment and updates any amount previously applied to debt balances. Required debt payments stay unchanged.",
+      confirmText: "Remove plan",
       destructive: true,
       onConfirm: async () => {
         setSaving(true);
         try {
           if (editTransaction) await deleteTransaction(editTransaction.id);
-          else await removeDebtSnowballPayment(planDate.month, planDate.year);
+          else if (existingPayment) await removeDebtSnowballPayment(existingPayment.month, existingPayment.year);
           setExtraAmount("");
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (error) {
           Alert.alert("Couldn’t remove the extra payment", error instanceof Error ? error.message : "Try again.");
         } finally {
@@ -227,188 +318,415 @@ function SnowballPlanScreen() {
   return (
     <View style={[styles.screen, { backgroundColor: c.background }]}>
       <PremiumBackdrop variant="purple" />
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 36 }]}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          isDesktop && styles.desktopContent,
+          { paddingTop: insets.top + (isDesktop ? 24 : 12), paddingBottom: insets.bottom + 44 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.header}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={[styles.back, { backgroundColor: c.card, borderColor: c.border }]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            onPress={closePlanner}
+            style={({ pressed }) => [
+              styles.back,
+              { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.72 : 1 },
+            ]}
+          >
             <Feather name="chevron-left" size={22} color={c.foreground} />
           </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.eyebrow, { color: c.primary }]}>DEBT PAYOFF</Text>
-            <Text style={[styles.title, { color: c.foreground }]}>Snowball Planner</Text>
+          <View style={styles.headerCopy}>
+            <Text style={[styles.eyebrow, { color: c.primary }]}>DEBT PAYOFF PLAN</Text>
+            <Text style={[styles.title, isDesktop && styles.desktopTitle, { color: c.foreground }]}>Debt Payoff Planner</Text>
+            {isDesktop ? <Text style={[styles.headerSubtitle, { color: c.mutedForeground }]}>See the full payoff order, preview safe extra money, and follow the exact schedule used by Forecast.</Text> : null}
           </View>
+          {isDesktop ? (
+            <View style={[styles.forecastBadge, { backgroundColor: c.muted + "55", borderColor: c.border }]}>
+              <View style={[styles.liveDot, { backgroundColor: c.mutedForeground }]} />
+              <Text style={[styles.forecastBadgeText, { color: c.mutedForeground }]}>USES FORECAST SCHEDULE</Text>
+            </View>
+          ) : null}
         </View>
 
         <PlanFeatureGate feature="debt_payoff" compact>
-          <View style={[styles.hero, { backgroundColor: c.card, borderColor: c.border }]}>
-            <FloLogo size={58} />
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.heroTitle, { color: c.foreground }]}>Plan extra. Keep the minimum.</Text>
-              <Text style={[styles.heroCopy, { color: c.mutedForeground }]}>Your required payments stay unchanged. This adds a separate extra payment to Calendar.</Text>
+          <View style={[styles.hero, isDesktop && styles.heroDesktop, { backgroundColor: c.card, borderColor: c.primary + "55" }]}>
+            <View pointerEvents="none" style={[styles.heroGlow, { backgroundColor: c.primary + "24" }]} />
+            <View style={styles.heroTop}>
+              <View style={[styles.heroLogo, { backgroundColor: c.primary + "13" }]}>
+                <FloLogo size={isDesktop ? 64 : 52} />
+              </View>
+              <View style={styles.heroCopyWrap}>
+                <Text style={[styles.heroLabel, { color: c.primary }]}>CURRENT TARGET</Text>
+                <Text style={[styles.heroTitle, isDesktop && styles.heroTitleDesktop, { color: c.foreground }]}>{target?.name ?? "No active target"}</Text>
+                <Text style={[styles.heroCopy, { color: c.mutedForeground }]}>Your required payments stay intact. When one debt closes, unused money moves to the next debt on the same date.</Text>
+              </View>
+              <View style={[styles.strategyPill, { backgroundColor: c.primary + "18" }]}>
+                <Feather name={settings.paymentMethod === "snowball" ? "trending-down" : "percent"} size={14} color={c.primary} />
+                <Text style={[styles.strategyPillText, { color: c.primary }]}>{strategyName}</Text>
+              </View>
+            </View>
+            <View style={[styles.metrics, !isDesktop && styles.metricsMobile]}>
+              <View style={[styles.metric, !isDesktop && styles.metricMobile, { backgroundColor: c.background + "99", borderColor: c.border }]}>
+                <Text style={[styles.metricLabel, { color: c.mutedForeground }]}>ACTIVE DEBT</Text>
+                <Text style={[styles.metricValue, { color: c.foreground }]}>{money(totalDebt)}</Text>
+                <Text style={[styles.metricDetail, { color: c.mutedForeground }]}>{plannerRows.length} {plannerRows.length === 1 ? "debt" : "debts"} in plan</Text>
+              </View>
+              <View style={[styles.metric, !isDesktop && styles.metricMobile, { backgroundColor: c.background + "99", borderColor: c.border }]}>
+                <Text style={[styles.metricLabel, { color: c.mutedForeground }]}>MONTH PLAN PREVIEW</Text>
+                <Text style={[styles.metricValue, { color: c.success }]}>{money(totalPlanned)}</Text>
+                <Text style={[styles.metricDetail, { color: c.mutedForeground }]}>{money(scheduledForecast)} scheduled + {money(draftExtra)} extra</Text>
+              </View>
+              <View style={[styles.metric, !isDesktop && styles.metricMobile, { backgroundColor: c.background + "99", borderColor: c.border }]}>
+                <Text style={[styles.metricLabel, { color: c.mutedForeground }]}>PROJECTED PAYOFF</Text>
+                <Text style={[styles.metricValue, { color: c.primary }]}>{readableMonth(preview.debtFreeDate)}</Text>
+                <Text style={[styles.metricDetail, { color: c.mutedForeground }]}>{draftExtra > 0 ? `Includes ${money(draftExtra)} extra` : "Current plan"}</Text>
+              </View>
             </View>
           </View>
-
-          {target ? (
-            <View style={[styles.targetCard, { backgroundColor: c.card, borderColor: c.primary + "55" }]}>
-              <View style={[styles.targetIcon, { backgroundColor: c.primary + "18" }]}>
-                <Feather name="trending-down" size={19} color={c.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.cardLabel, { color: c.primary }]}>CURRENT TARGET</Text>
-                <Text style={[styles.targetName, { color: c.foreground }]}>{target.name}</Text>
-                <Text style={[styles.smallCopy, { color: c.mutedForeground }]}>{money(target.balance)} balance · {settings.paymentMethod === "snowball" ? "smallest balance first" : "highest interest first"}</Text>
-              </View>
-            </View>
-          ) : (
-            <View style={[styles.emptyCard, { backgroundColor: c.card, borderColor: c.border }]}>
-              <Text style={[styles.targetName, { color: c.foreground }]}>No active payoff target</Text>
-              <Text style={[styles.smallCopy, { color: c.mutedForeground }]}>Add or include a debt before planning extra money.</Text>
-            </View>
-          )}
 
           {suggestedAmount > 0 ? (
             <View style={[styles.suggestion, { backgroundColor: c.success + "12", borderColor: c.success + "45" }]}>
               <Feather name="gift" size={18} color={c.success} />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.suggestionTitle, { color: c.foreground }]}>Flo’s raise suggestion</Text>
-                <Text style={[styles.smallCopy, { color: c.mutedForeground }]}>Use the {money(suggestedAmount)} paycheck increase as extra debt money.</Text>
+              <View style={styles.flexOne}>
+                <Text style={[styles.suggestionTitle, { color: c.foreground }]}>Flo found {money(suggestedAmount)} of possible extra money</Text>
+                <Text style={[styles.smallCopy, { color: c.mutedForeground }]}>Preview the paycheck increase before adding it to Forecast.</Text>
               </View>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Add ${money(suggestedAmount)} raise difference`}
-                onPress={() => setExtraAmount((requestedExtra + suggestedAmount).toFixed(2))}
-                style={[styles.useSuggestion, { backgroundColor: c.success + "20" }]}
+                accessibilityLabel={`Preview the ${money(suggestedAmount)} suggestion`}
+                onPress={() => setExtraAmount(suggestedAmount.toFixed(2))}
+                style={({ pressed }) => [styles.useSuggestion, { backgroundColor: c.success + "20", opacity: pressed ? 0.72 : 1 }]}
               >
-                <Text style={[styles.useSuggestionText, { color: c.success }]}>{requestedExtra > 0 ? "Add" : "Use"}</Text>
+                <Text style={[styles.useSuggestionText, { color: c.success }]}>Use suggestion</Text>
               </Pressable>
             </View>
           ) : null}
 
-          <View style={[styles.plannerCard, { backgroundColor: c.card, borderColor: c.border }]}>
-            <View style={styles.safeRow}>
-              <View>
-                <Text style={[styles.cardLabel, { color: c.mutedForeground }]}>MAXIMUM SAFE EXTRA</Text>
-                <Text style={[styles.safeAmount, { color: c.success }]}>{money(safeMaximum)}</Text>
-              </View>
-              <View style={[styles.monthBadge, { backgroundColor: c.primary + "18" }]}>
-                <Text style={[styles.monthBadgeText, { color: c.primary }]}>{monthLabel}</Text>
-              </View>
-            </View>
-
-            <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>EXTRA PAYMENT</Text>
-            <View style={[styles.inputWrap, { backgroundColor: c.background, borderColor: requestedExtra > safeMaximum || requestedExtra > editTargetCapacity ? c.destructive : c.border }]}>
-              <Text style={[styles.dollar, { color: c.foreground }]}>$</Text>
-              <TextInput
-                accessibilityLabel="Extra debt payment"
-                value={extraAmount}
-                onChangeText={setExtraAmount}
-                keyboardType="decimal-pad"
-                placeholder="0.00"
-                placeholderTextColor={c.mutedForeground}
-                style={[styles.input, { color: c.foreground }]}
-              />
-            </View>
-            {requestedExtra > safeMaximum ? (
-              <Text style={[styles.error, { color: c.destructive }]}>Lower this to {money(safeMaximum)} or less to protect your safety floor.</Text>
-            ) : null}
-            {editTransaction && requestedExtra > editTargetCapacity ? (
-              <Text style={[styles.error, { color: c.destructive }]}>
-                {target?.name ?? "This debt"} has {money(editTargetCapacity)} available for this payment.
-              </Text>
-            ) : null}
-            {destinationConflict ? (
-              <Text style={[styles.error, { color: c.destructive }]}>
-                That month already has a Snowball plan. Edit that plan instead.
-              </Text>
-            ) : null}
-            {safeMaximum > 0 && requestedExtra <= 0 ? (
-              <Pressable accessibilityRole="button" onPress={() => setExtraAmount(safeMaximum.toFixed(2))} style={styles.safeLink}>
-                <Text style={[styles.safeLinkText, { color: c.primary }]}>Use maximum safe extra</Text>
-              </Pressable>
-            ) : null}
-
-            <DatePickerField
-              label="PAYMENT DATE"
-              value={paymentDate}
-              onChange={setPaymentDate}
-              minDate={today}
-              maxDate={maximumPlanDate(today, settings.forecast_horizon_months)}
-            />
-
-            <View style={[styles.equationCard, { backgroundColor: c.background, borderColor: c.border }]}>
-              <View style={styles.equationRow}>
-                <Text style={[styles.equationLabel, { color: c.mutedForeground }]}>Required minimums</Text>
-                <Text style={[styles.equationValue, { color: c.foreground }]}>{money(summary.requiredMinimum)}</Text>
-              </View>
-              <View style={styles.equationRow}>
-                <Text style={[styles.equationLabel, { color: c.mutedForeground }]}>Extra Snowball plan</Text>
-                <Text style={[styles.equationValue, { color: c.primary }]}>+{money(summary.extraPayment)}</Text>
-              </View>
-              <View style={[styles.totalRow, { borderTopColor: c.border }]}>
-                <Text style={[styles.totalLabel, { color: c.foreground }]}>Total debt planned</Text>
-                <Text style={[styles.totalValue, { color: c.success }]}>{money(summary.totalPlanned)}</Text>
-              </View>
-              <Text style={[styles.minimumNote, { color: c.mutedForeground }]}>The extra payment does not replace or increase any required minimum.</Text>
-            </View>
-
-            {displayedAllocations.length > 0 ? (
-              <View style={styles.allocations}>
-                <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>WHERE THE EXTRA GOES</Text>
-                {displayedAllocations.map(allocation => (
-                  <View key={allocation.billId} style={[styles.allocationRow, { borderTopColor: c.border }]}>
-                    <Feather name={allocation.paidOff ? "check-circle" : "arrow-right-circle"} size={16} color={allocation.paidOff ? c.success : c.primary} />
-                    <Text style={[styles.allocationName, { color: c.foreground }]}>{allocation.billName}</Text>
-                    <Text style={[styles.allocationAmount, { color: c.primary }]}>{money(allocation.payment)}</Text>
+          <View style={[styles.workspace, twoColumn && styles.workspaceDesktop]}>
+            <View style={[styles.primaryColumn, twoColumn && styles.primaryColumnDesktop]}>
+              <View style={[styles.sectionCard, { backgroundColor: c.card, borderColor: c.border }]}>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.flexOne}>
+                    <Text style={[styles.sectionEyebrow, { color: c.primary }]}>PAYOFF ORDER</Text>
+                    <Text style={[styles.sectionTitle, { color: c.foreground }]}>Your debt ladder</Text>
+                    <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>The ladder shows the full selected-month plan. The timeline shows what remains in Forecast.</Text>
                   </View>
-                ))}
-              </View>
-            ) : null}
+                  <View style={[styles.countBadge, { backgroundColor: c.primary + "18" }]}>
+                    <Text style={[styles.countBadgeText, { color: c.primary }]}>{plannerRows.length} ACTIVE</Text>
+                  </View>
+                </View>
 
-            {existingPayment ? (
-              <Text style={[styles.existingNote, { color: c.warning }]}>Saving updates this Snowball plan.</Text>
-            ) : null}
-            <View style={styles.actions}>
-              {existingPayment || editTransaction ? (
-                <Pressable accessibilityRole="button" disabled={saving} onPress={removePlan} style={[styles.removeButton, { borderColor: c.destructive }]}>
-                  <Feather name="trash-2" size={15} color={c.destructive} />
-                  <Text style={[styles.removeText, { color: c.destructive }]}>Remove</Text>
-                </Pressable>
-              ) : null}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={editTransaction ? "Update snowball payment" : existingPayment ? "Update extra payment on calendar" : "Add extra payment to calendar"}
-                disabled={!valid || saving}
-                onPress={savePlan}
-                style={[styles.saveButton, { backgroundColor: valid ? c.primary : c.muted, opacity: saving ? 0.7 : 1 }]}
-              >
-                <Feather name="calendar" size={16} color={valid ? c.primaryForeground : c.mutedForeground} />
-                <Text style={[styles.saveText, { color: valid ? c.primaryForeground : c.mutedForeground }]}>
-                  {saving ? "Saving…" : editTransaction ? "Update snowball payment" : existingPayment ? "Update calendar plan" : "Add to Calendar"}
-                </Text>
-              </Pressable>
+                {plannerRows.length ? plannerRows.map((row, index) => (
+                  <View key={row.id} style={styles.ladderItem}>
+                    <View style={styles.ladderRail}>
+                      <View style={[styles.rankBubble, { backgroundColor: row.id === target?.id ? c.primary : c.background, borderColor: row.id === target?.id ? c.primary : c.border }]}>
+                        {row.paidOffThisMonth || row.settlement.status === "settled"
+                          ? <Feather name="check" size={16} color={row.id === target?.id ? c.primaryForeground : c.success} />
+                          : <Text style={[styles.rankText, { color: row.id === target?.id ? c.primaryForeground : c.mutedForeground }]}>#{row.rank}</Text>}
+                      </View>
+                      {index < plannerRows.length - 1 ? <View style={[styles.railLine, { backgroundColor: c.border }]} /> : null}
+                    </View>
+                    <View style={[styles.debtCard, { backgroundColor: c.background + "88", borderColor: row.id === target?.id ? c.primary + "66" : c.border }]}>
+                      <View style={styles.debtHeader}>
+                        <View style={styles.flexOne}>
+                          <View style={styles.inlineBadges}>
+                            {row.id === target?.id ? <Text style={[styles.targetBadge, { color: c.primary }]}>TARGET NOW</Text> : null}
+                            {row.settlement.status === "settled" ? <Text style={[styles.paidBadge, { color: c.success }]}>PAID THIS MONTH</Text> : null}
+                            {row.settlement.status === "partial" ? <Text style={[styles.paidBadge, { color: c.warning }]}>PARTIALLY PAID</Text> : null}
+                            {row.settlement.plannedDebtAmount === 0 ? <Text style={[styles.paidBadge, { color: c.warning }]}>SKIPPED IN FORECAST</Text> : null}
+                            {(row.settlement.plannedDebtAmount ?? 0) > 0 ? <Text style={[styles.paidBadge, { color: c.primary }]}>CUSTOM FORECAST</Text> : null}
+                            {row.paidOffThisMonth ? <Text style={[styles.paidBadge, { color: c.success }]}>PAYS OFF THIS MONTH</Text> : null}
+                          </View>
+                          <Text style={[styles.debtName, { color: c.foreground }]}>{row.name}</Text>
+                        </View>
+                        <Text style={[styles.debtBalance, { color: row.paidOffThisMonth ? c.success : c.foreground }]}>{money(row.balance)}</Text>
+                      </View>
+                      <View style={styles.debtStats}>
+                        <View style={styles.debtStat}>
+                          <Text style={[styles.debtStatLabel, { color: c.mutedForeground }]}>{row.settlement.status === "settled" ? "PAID THIS MONTH" : row.settlement.status === "partial" ? "PAID TO DATE" : "REQUIRED MINIMUM"}</Text>
+                          <Text style={[styles.debtStatValue, { color: row.settlement.status === "settled" ? c.success : c.foreground }]}>{moneyOrDash(row.settlement.status === "scheduled" ? row.settlement.configuredObligation : row.settlement.paidAmount)}</Text>
+                        </View>
+                        <View style={styles.debtStat}>
+                          <Text style={[styles.debtStatLabel, { color: c.mutedForeground }]}>{row.settlement.status === "settled" ? "REMAINING REQUIRED" : row.settlement.status === "partial" ? "REMAINING SCHEDULED" : "PLANNED TO DEBT"}</Text>
+                          <Text style={[styles.debtStatValue, { color: c.primary }]}>{moneyOrDash(row.plannedToDebt)}</Text>
+                        </View>
+                        <View style={styles.debtStat}>
+                          <Text style={[styles.debtStatLabel, { color: c.mutedForeground }]}>EST. MONTH-END</Text>
+                          <Text style={[styles.debtStatValue, { color: row.balanceAfter <= 0.009 ? c.success : c.foreground }]}>{money(row.balanceAfter)}</Text>
+                        </View>
+                      </View>
+                      {row.plannedToDebt <= 0.005 ? (
+                        <Text style={[styles.sourceOutflow, { color: c.mutedForeground }]}>{row.settlement.status === "settled" ? `Required payment settled for ${monthLabel}.` : row.settlement.status === "partial" ? "Payment activity is recorded; no additional scheduled allocation is available." : "No required allocation is scheduled for this debt this month."}</Text>
+                      ) : null}
+                      {row.forecastPayment > 0.009 ? (
+                        <Text style={[styles.sourceOutflow, { color: c.mutedForeground }]}>Forecast source outflow: {money(row.forecastPayment)}</Text>
+                      ) : null}
+                      {row.settlement.plannedDebtAmount !== undefined ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Edit ${row.name} Forecast amount`}
+                          accessibilityState={{ disabled: !canEditHousehold }}
+                          disabled={!canEditHousehold}
+                          onPress={() => openForecastAmountEditor(row.id, row.dueDay)}
+                          style={({ pressed }) => [styles.forecastEditAction, { borderColor: c.primary + "55", opacity: !canEditHousehold ? 0.45 : pressed ? 0.72 : 1 }]}
+                        >
+                          <Feather name="edit-3" size={14} color={c.primary} />
+                          <Text style={[styles.forecastEditText, { color: c.primary }]}>{row.settlement.plannedDebtAmount === 0 ? "Restore or edit Forecast amount" : "Edit Forecast amount"}</Text>
+                        </Pressable>
+                      ) : null}
+                      {row.rolloverSent > 0.009 ? (
+                        <View style={[styles.rolloverCallout, { backgroundColor: c.success + "12", borderColor: c.success + "38" }]}>
+                          <Feather name="corner-down-right" size={15} color={c.success} />
+                          <View style={styles.flexOne}>
+                            {row.rolloverEvents.map(event => (
+                              <Text key={event.date} style={[styles.rolloverText, { color: c.foreground }]}><Text style={{ color: c.success }}>{money(event.amount)}</Text> continues to {event.targets.join(", ")} on {readableDate(event.date)}.</Text>
+                            ))}
+                          </View>
+                        </View>
+                      ) : row.rolloverReceived > 0.009 || row.extraReceived > 0.009 ? (
+                        <View style={[styles.rolloverCallout, { backgroundColor: c.primary + "10", borderColor: c.primary + "35" }]}>
+                          <Feather name="arrow-down-left" size={15} color={c.primary} />
+                          <Text style={[styles.rolloverText, { color: c.foreground }]}>
+                            {row.rolloverReceived > 0.009 ? `${money(row.rolloverReceived)} rollover` : ""}
+                            {row.rolloverReceived > 0.009 && row.extraReceived > 0.009 ? " + " : ""}
+                            {row.extraReceived > 0.009 ? `${money(row.extraReceived)} extra` : ""} lands here this month.
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </View>
+                )) : (
+                  <View style={[styles.emptyCard, { backgroundColor: c.background + "88", borderColor: c.border }]}>
+                    <Feather name="check-circle" size={24} color={c.success} />
+                    <View style={styles.flexOne}>
+                      <Text style={[styles.emptyTitle, { color: c.foreground }]}>No active payoff target</Text>
+                      <Text style={[styles.smallCopy, { color: c.mutedForeground }]}>Add a debt or include one in the payoff plan to build your ladder.</Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              <View style={[styles.sectionCard, { backgroundColor: c.card, borderColor: c.border }]}>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.flexOne}>
+                    <Text style={[styles.sectionEyebrow, { color: c.primary }]}>FORECAST SCHEDULE</Text>
+                    <Text style={[styles.sectionTitle, { color: c.foreground }]}>{monthLabel} payment timeline</Text>
+                    <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Payoffs and rollovers remain on the original payment date.</Text>
+                  </View>
+                  <Feather name="calendar" size={20} color={c.primary} />
+                </View>
+                {timeline.length ? timeline.map((group, groupIndex) => (
+                  <View key={group.date} style={styles.timelineGroup}>
+                    <View style={styles.timelineRail}>
+                      <View style={[styles.timelineDot, { backgroundColor: c.primary }]} />
+                      {groupIndex < timeline.length - 1 ? <View style={[styles.timelineLine, { backgroundColor: c.border }]} /> : null}
+                    </View>
+                    <View style={styles.timelineBody}>
+                      <View style={styles.timelineHeader}>
+                        <Text style={[styles.timelineDate, { color: c.foreground }]}>{readableDate(group.date)}</Text>
+                        <Text style={[styles.timelineTotal, { color: c.foreground }]}>{money(group.total)} planned</Text>
+                      </View>
+                      {group.allocations.map(allocation => (
+                        <View key={allocation.id} style={[styles.timelineAllocation, { borderTopColor: c.border }]}>
+                          <View style={[styles.kindBadge, { backgroundColor: allocation.kind === "rollover" ? c.success + "18" : allocation.kind === "extra" ? c.primary + "18" : c.background }]}>
+                            <Text style={[styles.kindBadgeText, { color: allocation.kind === "rollover" ? c.success : allocation.kind === "extra" ? c.primary : c.mutedForeground }]}>{allocationLabel(allocation.kind)}</Text>
+                          </View>
+                          <View style={styles.flexOne}>
+                            <Text style={[styles.allocationName, { color: c.foreground }]}>{allocation.targetBillName}</Text>
+                            <Text style={[styles.allocationDetail, { color: c.mutedForeground }]}>
+                              {allocation.kind === "rollover" && allocation.sourceBillName
+                                ? `Unused payment from ${allocation.sourceBillName}`
+                                : allocation.kind === "extra"
+                                  ? "Separate safe extra payment"
+                                  : allocation.paidOff
+                                    ? "Scheduled payment closes this balance"
+                                    : "Scheduled creditor payment"}
+                            </Text>
+                          </View>
+                          <Text style={[styles.allocationAmount, { color: allocation.kind === "rollover" ? c.success : c.foreground }]}>{money(allocation.amount)}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )) : (
+                  <View style={[styles.timelineEmpty, { backgroundColor: c.background + "88" }]}>
+                    <Text style={[styles.smallCopy, { color: c.mutedForeground }]}>No scheduled debt payments are available for this month.</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+
+            <View style={[styles.sideColumn, twoColumn && styles.sideColumnDesktop]}>
+              <View style={[styles.plannerCard, { backgroundColor: c.card, borderColor: c.primary + "55" }]}>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.flexOne}>
+                    <Text style={[styles.sectionEyebrow, { color: c.primary }]}>SAFE EXTRA SIMULATOR</Text>
+                    <Text style={[styles.sectionTitle, { color: c.foreground }]}>{existingPayment || editTransaction ? "Adjust your extra payment" : "Try an extra payment"}</Text>
+                    <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Nothing changes until you add the plan to Forecast.</Text>
+                  </View>
+                  <View style={[styles.shieldIcon, { backgroundColor: c.success + "18" }]}>
+                    <Feather name="shield" size={19} color={c.success} />
+                  </View>
+                </View>
+
+                <View style={[styles.safeMaximum, { backgroundColor: c.success + "10", borderColor: c.success + "38" }]}>
+                  <View>
+                    <Text style={[styles.cardLabel, { color: c.mutedForeground }]}>MAXIMUM SAFE EXTRA</Text>
+                    <Text style={[styles.safeAmount, { color: c.success }]}>{money(safeMaximum)}</Text>
+                  </View>
+                  <View style={[styles.monthBadge, { backgroundColor: c.primary + "18" }]}>
+                    <Text style={[styles.monthBadgeText, { color: c.primary }]}>{monthLabel}</Text>
+                  </View>
+                </View>
+
+                <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>EXTRA PAYMENT</Text>
+                <View style={[styles.inputWrap, { backgroundColor: c.background, borderColor: requestedExtra > safeMaximum || requestedExtra > editTargetCapacity ? c.destructive : c.border }]}>
+                  <Text style={[styles.dollar, { color: c.foreground }]}>$</Text>
+                  <TextInput
+                    accessibilityLabel="Extra debt payment"
+                    value={extraAmount}
+                    onChangeText={setExtraAmount}
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                    placeholderTextColor={c.mutedForeground}
+                    style={[styles.input, { color: c.foreground }]}
+                  />
+                </View>
+                {requestedExtra > safeMaximum ? <Text style={[styles.error, { color: c.destructive }]}>Lower this to {money(safeMaximum)} or less to protect your safety floor.</Text> : null}
+                {editTransaction && requestedExtra > editTargetCapacity ? <Text style={[styles.error, { color: c.destructive }]}>{target?.name ?? "This debt"} has {money(editTargetCapacity)} available for this payment.</Text> : null}
+                {destinationConflict ? <Text style={[styles.error, { color: c.destructive }]}>That month already has a payoff plan. Edit that plan instead.</Text> : null}
+                {safeMaximum > 0 && requestedExtra <= 0 ? (
+                  <Pressable accessibilityRole="button" onPress={() => setExtraAmount(safeMaximum.toFixed(2))} style={styles.safeLink}>
+                    <Text style={[styles.safeLinkText, { color: c.primary }]}>Preview maximum safe extra</Text>
+                  </Pressable>
+                ) : null}
+
+                <DatePickerField
+                  label="PAYMENT DATE"
+                  value={paymentDate}
+                  onChange={setPaymentDate}
+                  minDate={today}
+                  maxDate={maximumPlanDate(today, settings.forecast_horizon_months)}
+                />
+
+                <View style={[styles.impactCard, { backgroundColor: c.background, borderColor: c.border }]}>
+                  <Text style={[styles.cardLabel, { color: c.mutedForeground }]}>PAYOFF IMPACT</Text>
+                  {editTransaction ? (
+                    <Text style={[styles.impactSummary, { color: c.mutedForeground }]}>This adjusts an already applied payment. Payoff-date comparisons are available for saved Forecast plans.</Text>
+                  ) : (
+                    <>
+                      <View style={styles.impactDates}>
+                        <View style={styles.flexOne}>
+                          <Text style={[styles.impactLabel, { color: c.mutedForeground }]}>CURRENT PLAN</Text>
+                          <Text style={[styles.impactValue, { color: c.foreground }]}>{readableMonth(baselinePreview.debtFreeDate)}</Text>
+                        </View>
+                        <Feather name="arrow-right" size={18} color={c.primary} />
+                        <View style={[styles.flexOne, styles.impactRight]}>
+                          <Text style={[styles.impactLabel, { color: c.mutedForeground }]}>WITH THIS PLAN</Text>
+                          <Text style={[styles.impactValue, { color: monthsSooner !== null && monthsSooner < 0 ? c.destructive : requestedExtra > 0 ? c.success : c.foreground }]}>{readableMonth(preview.debtFreeDate)}</Text>
+                        </View>
+                      </View>
+                      <Text style={[styles.impactSummary, { color: monthsSooner !== null && monthsSooner > 0 ? c.success : monthsSooner !== null && monthsSooner < 0 ? c.destructive : c.mutedForeground }]}>
+                        {requestedExtra <= 0
+                          ? "Enter an amount to see the payoff impact."
+                          : monthsSooner === null
+                            ? "A payoff month is not projected for both plans yet."
+                            : monthsSooner > 0
+                              ? `${monthsSooner} ${monthsSooner === 1 ? "month" : "months"} sooner than the saved current plan.`
+                              : monthsSooner < 0
+                                ? `${Math.abs(monthsSooner)} ${Math.abs(monthsSooner) === 1 ? "month" : "months"} later than the saved current plan.`
+                                : "The projected payoff month stays the same."}
+                      </Text>
+                    </>
+                  )}
+                </View>
+
+                <View style={[styles.equationCard, { backgroundColor: c.background, borderColor: c.border }]}>
+                  <View style={styles.equationRow}>
+                    <Text style={[styles.equationLabel, { color: c.mutedForeground }]}>Scheduled Forecast</Text>
+                    <Text style={[styles.equationValue, { color: c.foreground }]}>{money(scheduledForecast)}</Text>
+                  </View>
+                  <View style={styles.equationRow}>
+                    <Text style={[styles.equationLabel, { color: c.mutedForeground }]}>Safe extra plan</Text>
+                    <Text style={[styles.equationValue, { color: c.primary }]}>+{money(draftExtra)}</Text>
+                  </View>
+                  <View style={[styles.totalRow, { borderTopColor: c.border }]}>
+                    <Text style={[styles.totalLabel, { color: c.foreground }]}>Total debt planned</Text>
+                    <Text style={[styles.totalValue, { color: c.success }]}>{money(totalPlanned)}</Text>
+                  </View>
+                </View>
+
+                {displayedAllocations.length > 0 ? (
+                  <View style={styles.allocations}>
+                    <Text style={[styles.fieldLabel, { color: c.mutedForeground }]}>THIS EXTRA GOES TO</Text>
+                    {displayedAllocations.map(allocation => (
+                      <View key={allocation.billId} style={[styles.previewAllocation, { borderTopColor: c.border }]}>
+                        <Feather name={allocation.paidOff ? "check-circle" : "arrow-right-circle"} size={16} color={allocation.paidOff ? c.success : c.primary} />
+                        <Text style={[styles.previewAllocationName, { color: c.foreground }]}>{allocation.billName}</Text>
+                        <Text style={[styles.previewAllocationAmount, { color: c.primary }]}>{money(allocation.payment)}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
+                <View style={styles.actions}>
+                  {existingPayment || editTransaction ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: saving || !canEditHousehold }}
+                      disabled={saving || !canEditHousehold}
+                      onPress={removePlan}
+                      style={({ pressed }) => [styles.removeButton, { borderColor: c.destructive, opacity: pressed || saving || !canEditHousehold ? 0.7 : 1 }]}
+                    >
+                      <Feather name="trash-2" size={15} color={c.destructive} />
+                      <Text style={[styles.removeText, { color: c.destructive }]}>Remove</Text>
+                    </Pressable>
+                  ) : null}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={editTransaction ? "Update snowball payment" : existingPayment ? "Update extra payment in Forecast" : "Add extra payment to Forecast"}
+                    accessibilityState={{ disabled: !valid || saving }}
+                    disabled={!valid || saving}
+                    onPress={savePlan}
+                    style={({ pressed }) => [styles.saveButton, { backgroundColor: valid ? c.primary : c.muted, opacity: pressed || saving ? 0.72 : 1 }]}
+                  >
+                    <Feather name="calendar" size={16} color={valid ? c.primaryForeground : c.mutedForeground} />
+                    <Text style={[styles.saveText, { color: valid ? c.primaryForeground : c.mutedForeground }]}>
+                      {saving ? "Saving…" : editTransaction ? "Save payment changes" : existingPayment ? "Save plan changes" : "Save plan"}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+
             </View>
           </View>
-
           {scheduledPlans.length > 0 ? (
-            <View style={[styles.historyCard, { backgroundColor: c.card, borderColor: c.border }]}>
-              <Text style={[styles.sectionTitle, { color: c.foreground }]}>Extra payment plans</Text>
-              <Text style={[styles.smallCopy, { color: c.mutedForeground }]}>Tap a future plan to review or change it.</Text>
+            <View style={[styles.sectionCard, { backgroundColor: c.card, borderColor: c.border }]}>
+              <Text style={[styles.sectionEyebrow, { color: c.primary }]}>SAVED PLANS</Text>
+              <Text style={[styles.sectionTitle, { color: c.foreground }]}>Extra payment history</Text>
+              <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Open a scheduled plan to review or change it.</Text>
               {scheduledPlans.map(plan => {
                 const date = plan.payment_date ?? `${plan.year}-${String(plan.month + 1).padStart(2, "0")}-01`;
                 const future = date >= today;
+                const status = snowballPlanHistoryStatus(plan, snowballMatches, today);
                 return (
                   <Pressable
                     accessibilityRole="button"
+                    accessibilityState={{ disabled: !future }}
                     disabled={!future}
                     key={plan.id}
                     onPress={() => choosePlan(plan.id, date, plan.amount)}
-                    style={[styles.planRow, { borderTopColor: c.border, opacity: future ? 1 : 0.6 }]}
+                    style={({ pressed }) => [styles.planRow, { borderTopColor: c.border, opacity: future ? pressed ? 0.72 : 1 : 0.55 }]}
                   >
                     <View style={[styles.planIcon, { backgroundColor: c.primary + "18" }]}>
-                      <Feather name={future ? "calendar" : "check"} size={15} color={future ? c.primary : c.success} />
+                      <Feather name={status === "Applied" ? "check" : status === "Scheduled" ? "calendar" : "clock"} size={15} color={status === "Applied" ? c.success : c.primary} />
                     </View>
-                    <View style={{ flex: 1 }}>
+                    <View style={styles.flexOne}>
                       <Text style={[styles.planAmount, { color: c.foreground }]}>{money(plan.amount)} extra</Text>
-                      <Text style={[styles.smallCopy, { color: c.mutedForeground }]}>{date} · {future ? "Planned" : "Applied"}</Text>
+                      <Text style={[styles.smallCopy, { color: c.mutedForeground }]}>{readableDate(date)} · {status}</Text>
                     </View>
                     {future ? <Feather name="chevron-right" size={18} color={c.mutedForeground} /> : null}
                   </Pressable>
@@ -428,56 +746,131 @@ export default function SnowballPlanRoute() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  content: { paddingHorizontal: 20, gap: 14 },
-  header: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 2 },
+  content: { width: "100%", paddingHorizontal: 20, gap: 16 },
+  desktopContent: { maxWidth: 1360, alignSelf: "center", paddingHorizontal: 34, gap: 20 },
+  flexOne: { flex: 1 },
+  header: { flexDirection: "row", alignItems: "center", gap: 12 },
+  headerCopy: { flex: 1 },
   back: { width: 44, height: 44, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  eyebrow: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1 },
+  eyebrow: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1.2 },
   title: { fontSize: 29, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.8 },
-  hero: { flexDirection: "row", alignItems: "center", gap: 14, borderWidth: 1, borderRadius: 22, padding: 16 },
-  heroTitle: { fontSize: 18, fontFamily: "Inter_800ExtraBold" },
-  heroCopy: { fontSize: 13, lineHeight: 18, marginTop: 3 },
-  targetCard: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 18, padding: 15 },
-  targetIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  cardLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.8 },
-  targetName: { fontSize: 18, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
-  smallCopy: { fontSize: 12, lineHeight: 17, marginTop: 2 },
-  emptyCard: { borderWidth: 1, borderRadius: 18, padding: 16 },
-  suggestion: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 17, padding: 13 },
+  desktopTitle: { fontSize: 40, letterSpacing: -1.2 },
+  headerSubtitle: { fontSize: 13, lineHeight: 19, marginTop: 3, maxWidth: 720 },
+  forecastBadge: { minHeight: 34, borderRadius: 999, borderWidth: 1, flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 12 },
+  forecastBadgeMobile: { minHeight: 30, paddingHorizontal: 9 },
+  liveDot: { width: 7, height: 7, borderRadius: 99 },
+  forecastBadgeText: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.8 },
+  hero: { borderWidth: 1, borderRadius: 24, padding: 17, overflow: "hidden" },
+  heroDesktop: { padding: 24, borderRadius: 28 },
+  heroGlow: { position: "absolute", width: 270, height: 270, borderRadius: 999, top: -150, right: -80 },
+  heroTop: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 14 },
+  heroLogo: { width: 72, height: 72, borderRadius: 22, alignItems: "center", justifyContent: "center" },
+  heroCopyWrap: { flex: 1 },
+  heroLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 1 },
+  heroTitle: { fontSize: 24, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.5, marginTop: 2 },
+  heroTitleDesktop: { fontSize: 31 },
+  heroCopy: { fontSize: 13, lineHeight: 19, marginTop: 5, maxWidth: 760 },
+  strategyPill: { minHeight: 36, borderRadius: 999, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 7 },
+  strategyPillText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
+  metrics: { flexDirection: "row", gap: 12, marginTop: 20 },
+  metricsMobile: { flexWrap: "wrap" },
+  metric: { flex: 1, minWidth: 180, borderWidth: 1, borderRadius: 17, padding: 14 },
+  metricMobile: { minWidth: 140 },
+  metricLabel: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.8 },
+  metricValue: { fontSize: 21, fontFamily: "Inter_800ExtraBold", marginTop: 4 },
+  metricDetail: { fontSize: 11, fontFamily: "Inter_500Medium", marginTop: 3 },
+  suggestion: { flexDirection: "row", alignItems: "center", gap: 11, borderWidth: 1, borderRadius: 18, padding: 14 },
   suggestionTitle: { fontSize: 14, fontFamily: "Inter_700Bold" },
-  useSuggestion: { minHeight: 38, borderRadius: 12, paddingHorizontal: 13, alignItems: "center", justifyContent: "center" },
+  smallCopy: { fontSize: 12, lineHeight: 17, marginTop: 2 },
+  useSuggestion: { minHeight: 44, borderRadius: 12, paddingHorizontal: 14, alignItems: "center", justifyContent: "center" },
   useSuggestionText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
-  plannerCard: { borderWidth: 1, borderRadius: 22, padding: 16 },
-  safeRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
-  safeAmount: { fontSize: 27, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
-  monthBadge: { borderRadius: 999, paddingHorizontal: 11, paddingVertical: 7 },
-  monthBadgeText: { fontSize: 11, fontFamily: "Inter_700Bold" },
-  fieldLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.8, marginTop: 16, marginBottom: 7 },
-  inputWrap: { flexDirection: "row", alignItems: "center", borderRadius: 13, borderWidth: 1.5 },
+  workspace: { gap: 16, flexDirection: "column-reverse" },
+  workspaceDesktop: { flexDirection: "row", alignItems: "flex-start", gap: 20 },
+  primaryColumn: { gap: 16 },
+  primaryColumnDesktop: { flex: 1.14 },
+  sideColumn: { gap: 16 },
+  sideColumnDesktop: { flex: 0.86 },
+  sectionCard: { borderWidth: 1, borderRadius: 23, padding: 17 },
+  sectionHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  sectionEyebrow: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 1 },
+  sectionTitle: { fontSize: 20, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.35, marginTop: 3 },
+  sectionCopy: { fontSize: 12, lineHeight: 17, marginTop: 4 },
+  countBadge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
+  countBadgeText: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.6 },
+  ladderItem: { flexDirection: "row", alignItems: "stretch", marginTop: 14 },
+  ladderRail: { width: 38, alignItems: "center" },
+  rankBubble: { width: 32, height: 32, borderRadius: 11, borderWidth: 1, alignItems: "center", justifyContent: "center", zIndex: 1 },
+  rankText: { fontSize: 10, fontFamily: "Inter_800ExtraBold" },
+  railLine: { width: 2, flex: 1, minHeight: 20 },
+  debtCard: { flex: 1, borderWidth: 1, borderRadius: 18, padding: 14, marginLeft: 5 },
+  debtHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  inlineBadges: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  targetBadge: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7 },
+  paidBadge: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.6 },
+  debtName: { fontSize: 17, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
+  debtBalance: { fontSize: 18, fontFamily: "Inter_800ExtraBold" },
+  debtStats: { flexDirection: "row", gap: 9, marginTop: 13 },
+  debtStat: { flex: 1 },
+  debtStatLabel: { fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.65 },
+  debtStatValue: { fontSize: 13, fontFamily: "Inter_700Bold", marginTop: 3 },
+  sourceOutflow: { fontSize: 10, lineHeight: 15, fontFamily: "Inter_600SemiBold", marginTop: 10 },
+  forecastEditAction: { alignSelf: "flex-start", minHeight: 44, borderWidth: 1, borderRadius: 12, flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 11, marginTop: 10 },
+  forecastEditText: { fontSize: 11, fontFamily: "Inter_700Bold" },
+  rolloverCallout: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 12, padding: 10, marginTop: 12 },
+  rolloverText: { flex: 1, fontSize: 11, lineHeight: 16, fontFamily: "Inter_600SemiBold" },
+  emptyCard: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 16, padding: 16, marginTop: 14 },
+  emptyTitle: { fontSize: 16, fontFamily: "Inter_800ExtraBold" },
+  timelineGroup: { flexDirection: "row", alignItems: "stretch", marginTop: 16 },
+  timelineRail: { width: 24, alignItems: "center" },
+  timelineDot: { width: 10, height: 10, borderRadius: 99, marginTop: 6 },
+  timelineLine: { width: 2, flex: 1, marginTop: 3 },
+  timelineBody: { flex: 1, paddingLeft: 8 },
+  timelineHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  timelineDate: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
+  timelineTotal: { fontSize: 12, fontFamily: "Inter_700Bold" },
+  timelineAllocation: { flexDirection: "row", alignItems: "center", gap: 9, borderTopWidth: 1, paddingVertical: 10, marginTop: 8 },
+  kindBadge: { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 5 },
+  kindBadgeText: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.45 },
+  allocationName: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  allocationDetail: { fontSize: 10, lineHeight: 14, marginTop: 2 },
+  allocationAmount: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  timelineEmpty: { borderRadius: 14, padding: 14, marginTop: 14 },
+  plannerCard: { borderWidth: 1, borderRadius: 23, padding: 17 },
+  shieldIcon: { width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  safeMaximum: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, borderWidth: 1, borderRadius: 16, padding: 13, marginTop: 16 },
+  cardLabel: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.8 },
+  safeAmount: { fontSize: 26, fontFamily: "Inter_800ExtraBold", marginTop: 2 },
+  monthBadge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
+  monthBadgeText: { fontSize: 10, fontFamily: "Inter_700Bold" },
+  fieldLabel: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.8, marginTop: 16, marginBottom: 7 },
+  inputWrap: { flexDirection: "row", alignItems: "center", borderRadius: 14, borderWidth: 1.5 },
   dollar: { fontSize: 21, paddingLeft: 14 },
   input: { flex: 1, height: 54, paddingHorizontal: 8, fontSize: 21, fontFamily: "Inter_700Bold" },
   error: { fontSize: 11, lineHeight: 16, marginTop: 6 },
   safeLink: { alignSelf: "flex-start", paddingVertical: 9 },
   safeLinkText: { fontSize: 12, fontFamily: "Inter_700Bold" },
-  equationCard: { borderWidth: 1, borderRadius: 16, padding: 13, marginTop: 16, gap: 9 },
+  impactCard: { borderWidth: 1, borderRadius: 16, padding: 13, marginTop: 16 },
+  impactDates: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 11 },
+  impactRight: { alignItems: "flex-end" },
+  impactLabel: { fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.6 },
+  impactValue: { fontSize: 14, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
+  impactSummary: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_600SemiBold", marginTop: 12 },
+  equationCard: { borderWidth: 1, borderRadius: 16, padding: 13, marginTop: 13, gap: 9 },
   equationRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 },
-  equationLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  equationValue: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  equationLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  equationValue: { fontSize: 13, fontFamily: "Inter_700Bold" },
   totalRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12, borderTopWidth: 1, paddingTop: 10 },
-  totalLabel: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
-  totalValue: { fontSize: 18, fontFamily: "Inter_800ExtraBold" },
-  minimumNote: { fontSize: 11, lineHeight: 16 },
-  allocations: { marginTop: 2 },
-  allocationRow: { flexDirection: "row", alignItems: "center", gap: 8, borderTopWidth: 1, paddingVertical: 10 },
-  allocationName: { flex: 1, fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  allocationAmount: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
-  existingNote: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginTop: 10 },
+  totalLabel: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  totalValue: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
+  allocations: { marginTop: 1 },
+  previewAllocation: { flexDirection: "row", alignItems: "center", gap: 8, borderTopWidth: 1, paddingVertical: 10 },
+  previewAllocationName: { flex: 1, fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  previewAllocationAmount: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   actions: { flexDirection: "row", gap: 10, marginTop: 16 },
   removeButton: { minWidth: 94, height: 52, borderRadius: 14, borderWidth: 1, flexDirection: "row", gap: 6, alignItems: "center", justifyContent: "center" },
   removeText: { fontSize: 13, fontFamily: "Inter_700Bold" },
   saveButton: { flex: 1, height: 52, borderRadius: 14, flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center" },
   saveText: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
-  historyCard: { borderWidth: 1, borderRadius: 22, padding: 16 },
-  sectionTitle: { fontSize: 18, fontFamily: "Inter_800ExtraBold" },
   planRow: { flexDirection: "row", alignItems: "center", gap: 10, borderTopWidth: 1, paddingVertical: 12, marginTop: 9 },
   planIcon: { width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center" },
   planAmount: { fontSize: 14, fontFamily: "Inter_700Bold" },

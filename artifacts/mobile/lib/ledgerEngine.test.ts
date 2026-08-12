@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildTransactionLedger, remainingPlannedAmount } from "./ledgerEngine";
+import { buildTransactionLedger, remainingPlannedAmount, selectFlowLedgerTransactions } from "./ledgerEngine";
 
 const checking = [{
   plaid_account_id: "checking-1",
@@ -40,6 +40,7 @@ test("a deleted posted bank row stays in cash history but not visible activity",
     amount: -287.52,
     source: "plaid",
     plaid_transaction_id: "geico",
+    plaid_account_id: "checking-1",
     deleted_at: "2026-07-21T00:00:00Z",
   };
   const ledger = buildTransactionLedger([hidden], [], checking);
@@ -78,7 +79,7 @@ test("transfer counts only on the checking side", () => {
   assert.equal(ledger.cashByDate.get("2026-07-28"), -100);
 });
 
-test("credit-card purchases remain visible spending without changing checking cash", () => {
+test("credit-card purchases stay out of Activity and checking cash before and after review", () => {
   const purchase = {
     id: "card-purchase",
     date: "2026-08-04",
@@ -93,10 +94,69 @@ test("credit-card purchases remain visible spending without changing checking ca
     account_subtype: "credit card",
     is_active: true,
   }]);
-  assert.deepEqual(ledger.visibleTransactions.map(transaction => transaction.id), ["card-purchase"]);
+  assert.deepEqual(ledger.visibleTransactions.map(transaction => transaction.id), []);
   assert.equal(ledger.visibleCheckingTransactions.length, 0);
   assert.equal(ledger.cashTransactions.length, 0);
   assert.equal(ledger.cashByDate.size, 0);
+});
+
+test("inactive and reconnected card identities remain excluded by the shared selector", () => {
+  const transactions = [
+    { id: "old-card", date: "2026-07-01", amount: -10, source: "plaid", plaid_account_id: "card-external-old", review_status: "needs_review" },
+    { id: "new-card", date: "2026-07-02", amount: -20, source: "plaid", plaid_account_id: "card-external-new", review_status: "categorized" },
+  ];
+  const selection = selectFlowLedgerTransactions(transactions, [
+    { id: "card-row-old", plaid_account_id: "card-external-old", account_type: "credit", account_subtype: "credit card", is_active: false },
+    { id: "card-row-new", plaid_account_id: "card-external-new", account_type: "credit", account_subtype: "credit card", is_active: true },
+  ]);
+  assert.equal(selection.included.length, 0);
+  assert.deepEqual(selection.excludedNonCash.map(transaction => transaction.id), ["old-card", "new-card"]);
+});
+
+test("unknown Plaid accounts fail closed with a ledger diagnostic", () => {
+  const unknown = { id: "unknown", date: "2026-07-03", amount: -40, source: "plaid", plaid_account_id: "not-loaded" };
+  const ledger = buildTransactionLedger([unknown], [unknown], checking);
+  assert.equal(ledger.cashTransactions.length, 0);
+  assert.equal(ledger.visibleTransactions.length, 0);
+  assert.deepEqual(ledger.issues.map(issue => issue.code), ["unknown_plaid_account"]);
+});
+
+test("thirteen card purchases add zero cash and Aug 10 closes at 2369.46", () => {
+  const legitimateChecking = {
+    id: "legitimate-net",
+    date: "2026-08-10",
+    amount: -638.30,
+    source: "plaid",
+    plaid_account_id: "checking-1",
+  };
+  const cardPurchases = Array.from({ length: 13 }, (_, index) => ({
+    id: `card-${index}`,
+    date: `2026-07-${String(index + 1).padStart(2, "0")}`,
+    amount: index === 12 ? -113.38 : -60,
+    source: "plaid",
+    plaid_account_id: "card-1",
+    review_status: index % 2 ? "categorized" : "needs_review",
+  }));
+  assert.equal(cardPurchases.reduce((sum, transaction) => sum + transaction.amount, 0), -833.38);
+  const ledger = buildTransactionLedger(
+    [legitimateChecking, ...cardPurchases],
+    [legitimateChecking, ...cardPurchases],
+    [...checking, { plaid_account_id: "card-1", account_type: "credit", account_subtype: "credit card", is_active: true }],
+  );
+  assert.equal(cardPurchases.reduce((sum, transaction) => sum + (ledger.cashTransactions.includes(transaction) ? transaction.amount : 0), 0), 0);
+  assert.equal(Math.round((3007.76 + [...ledger.cashByDate.values()].reduce((sum, amount) => sum + amount, 0)) * 100) / 100, 2369.46);
+});
+
+test("a card payment counts only on its checking side", () => {
+  const checkingSide = { id: "checking-payment", date: "2026-08-10", amount: -127, source: "plaid", plaid_account_id: "checking-1", review_status: "transfer" };
+  const cardSide = { id: "card-payment", date: "2026-08-10", amount: 127, source: "plaid", plaid_account_id: "card-1", review_status: "transfer" };
+  const ledger = buildTransactionLedger(
+    [checkingSide, cardSide],
+    [checkingSide, cardSide],
+    [...checking, { plaid_account_id: "card-1", account_type: "credit", account_subtype: "credit card", is_active: true }],
+  );
+  assert.deepEqual(ledger.cashTransactions.map(transaction => transaction.id), ["checking-payment"]);
+  assert.equal(ledger.cashByDate.get("2026-08-10"), -127);
 });
 
 test("matched plans are replaced and partial matches leave only the open amount", () => {
@@ -113,6 +173,7 @@ test("duplicate bank IDs and unbalanced splits are reported without double-count
     amount: -50,
     source: "plaid",
     plaid_transaction_id: "duplicate",
+    plaid_account_id: "checking-1",
     review_status: "matched",
     review_allocations: [{ amount: 20 }, { amount: 20 }],
   };

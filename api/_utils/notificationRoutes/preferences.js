@@ -3,7 +3,7 @@ const {
   normalizeNotificationPreferencePatch,
   normalizeNotificationPreferences,
 } = require("../notificationPreferences");
-const { authenticatedUser, safeError, serviceSupabase } = require("../supabase");
+const { authenticatedUser, publicError, safeError, serviceSupabase } = require("../supabase");
 
 function body(req) {
   if (!req.body) return {};
@@ -59,7 +59,7 @@ module.exports = async function notificationPreferences(req, res) {
   } catch (error) {
     return res.status(500).json({
       error: "NOTIFICATION_PREFERENCES_FAILED",
-      message: safeError(error, "Could not update notification choices."),
+      message: publicError(error, "Could not update notification choices."),
     });
   }
 };

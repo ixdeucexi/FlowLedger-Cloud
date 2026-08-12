@@ -61,6 +61,67 @@ export interface SnowballMonthPlanResult {
   endingDebt: number;
 }
 
+export type DatedDebtAllocationKind = "required" | "rollover" | "extra";
+
+export interface DatedDebtAllocation {
+  id: string;
+  date: string;
+  sourceBillId?: string;
+  sourceBillName?: string;
+  targetBillId: string;
+  targetBillName: string;
+  kind: DatedDebtAllocationKind;
+  amount: number;
+  sourceAmount: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  paidOff: boolean;
+}
+
+export interface DatedSnowballMonthPlanResult extends SnowballMonthPlanResult {
+  allocations: DatedDebtAllocation[];
+  plannedPayment: number;
+  unusedAmount: number;
+}
+
+export interface DatedDebtSettlement {
+  sourceType: "bill" | "extra";
+  billId: string;
+  date: string;
+  amount: number;
+}
+
+function datedSettlementKey(sourceType: DatedDebtSettlement["sourceType"], billId: string, date: string) {
+  return `${sourceType}:${billId}:${date}`;
+}
+
+/** Removes cash already represented by matched bank activity from a dated plan. */
+export function remainingDatedDebtAllocations(
+  allocations: readonly DatedDebtAllocation[],
+  settlements: readonly DatedDebtSettlement[],
+): DatedDebtAllocation[] {
+  const remainingSettledByKey = new Map<string, number>();
+  settlements.forEach(settlement => {
+    const key = datedSettlementKey(settlement.sourceType, settlement.billId, settlement.date);
+    remainingSettledByKey.set(key, cents((remainingSettledByKey.get(key) ?? 0) + Math.max(0, settlement.amount)));
+  });
+
+  return allocations.flatMap(allocation => {
+    const key = allocation.kind === "extra"
+      ? datedSettlementKey("extra", allocation.targetBillId, allocation.date)
+      : allocation.sourceBillId
+        ? datedSettlementKey("bill", allocation.sourceBillId, allocation.date)
+        : undefined;
+    if (!key) return [allocation];
+    const settled = remainingSettledByKey.get(key) ?? 0;
+    if (settled <= 0.009) return [allocation];
+    const absorbed = cents(Math.min(settled, allocation.amount));
+    remainingSettledByKey.set(key, cents(settled - absorbed));
+    const remaining = cents(allocation.amount - absorbed);
+    return remaining > 0.009 ? [{ ...allocation, amount: remaining }] : [];
+  });
+}
+
 export interface SnowballProjectionResult {
   safeMaximum: number;
   selectedExtra: number;
@@ -222,6 +283,7 @@ export function projectSnowballMonth(options: {
   startingBalances?: Map<string, number>;
   rolledPayment?: number;
   extraPayment?: number;
+  applyInterest?: boolean;
 }): SnowballMonthPlanResult {
   const balances = new Map(
     options.debts.map(debt => [
@@ -237,12 +299,14 @@ export function projectSnowballMonth(options: {
   );
   let interest = 0;
 
-  for (const debt of options.debts) {
-    const before = balances.get(debt.id) ?? 0;
-    if (before <= 0.009) continue;
-    const charge = monthlyInterestCharge(before, debt.apr);
-    balances.set(debt.id, cents(before + charge));
-    interest = cents(interest + charge);
+  if (options.applyInterest !== false) {
+    for (const debt of options.debts) {
+      const before = balances.get(debt.id) ?? 0;
+      if (before <= 0.009) continue;
+      const charge = monthlyInterestCharge(before, debt.apr);
+      balances.set(debt.id, cents(before + charge));
+      interest = cents(interest + charge);
+    }
   }
 
   let minimumPayments = 0;
@@ -300,6 +364,243 @@ export function projectSnowballMonth(options: {
     extraPayment,
     interest,
     endingDebt,
+  };
+}
+
+function isoMonthDate(year: number, month: number, day: number): string {
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  return `${year}-${String(month + 1).padStart(2, "0")}-${String(Math.min(lastDay, Math.max(1, day))).padStart(2, "0")}`;
+}
+
+function splitCents(total: number, parts: number): number[] {
+  if (parts <= 0) return [];
+  const totalCents = Math.round(cents(total) * 100);
+  const base = Math.floor(totalCents / parts);
+  const remainder = totalCents - base * parts;
+  return Array.from({ length: parts }, (_, index) => (base + (index < remainder ? 1 : 0)) / 100);
+}
+
+/**
+ * Builds the canonical dated debt plan used by every forecast surface.
+ *
+ * Required payments stay with their creditor first. Any amount above the
+ * creditor's remaining balance becomes a same-day rollover pool for the next
+ * eligible debt. The parent amount is never emitted alongside its child
+ * allocations, so the returned rows are the complete cash-impact schedule.
+ */
+export function projectDatedSnowballMonth(options: {
+  debts: SnowballDebtInput[];
+  method: DebtMethod;
+  month: number;
+  year: number;
+  paymentDatesByDebtId?: ReadonlyMap<string, readonly string[]>;
+  startingBalances?: Map<string, number>;
+  rolledPayment?: number;
+  extraPayment?: { amount: number; date: string };
+}): DatedSnowballMonthPlanResult {
+  const balances = new Map(
+    options.debts.map(debt => [
+      debt.id,
+      cents(Math.max(0, options.startingBalances?.get(debt.id) ?? debt.balance)),
+    ]),
+  );
+  const payments = new Map<string, SnowballMonthPayment>();
+  const allocations: DatedDebtAllocation[] = [];
+  const activeIncludedAtStart = new Set(
+    options.debts
+      .filter(debt => debt.included && (balances.get(debt.id) ?? 0) > 0.009)
+      .map(debt => debt.id),
+  );
+  let interest = 0;
+  let minimumPayments = 0;
+  let unusedAmount = 0;
+  let sequence = 0;
+
+  for (const debt of options.debts) {
+    const before = balances.get(debt.id) ?? 0;
+    if (before <= 0.009) continue;
+    const charge = monthlyInterestCharge(before, debt.apr);
+    balances.set(debt.id, cents(before + charge));
+    interest = cents(interest + charge);
+  }
+
+  type RequiredEvent = { date: string; debt: SnowballDebtInput; amount: number };
+  type PoolEvent = {
+    date: string;
+    amount: number;
+    kind: Exclude<DatedDebtAllocationKind, "required">;
+    sourceBillId?: string;
+    sourceBillName?: string;
+  };
+  const requiredEvents: RequiredEvent[] = [];
+  const poolEvents: PoolEvent[] = [];
+
+  for (const debt of options.debts) {
+    if (!activeIncludedAtStart.has(debt.id) && (balances.get(debt.id) ?? 0) <= 0.009) continue;
+    const configuredDates = options.paymentDatesByDebtId?.get(debt.id) ?? [];
+    const dates = configuredDates.length
+      ? [...configuredDates].sort()
+      : [isoMonthDate(options.year, options.month, debt.dueDay)];
+    const amounts = splitCents(Math.max(0, debt.minimum), dates.length);
+    dates.forEach((date, index) => {
+      if ((amounts[index] ?? 0) > 0.009) requiredEvents.push({ date, debt, amount: amounts[index] ?? 0 });
+    });
+  }
+
+  const firstTarget = orderDebts(
+    options.debts
+      .filter(debt => debt.included && (balances.get(debt.id) ?? 0) > 0.009)
+      .map(debt => ({ ...debt, balance: balances.get(debt.id) ?? 0 })),
+    options.method,
+  )[0];
+  const firstTargetDates = firstTarget
+    ? options.paymentDatesByDebtId?.get(firstTarget.id) ?? []
+    : [];
+  if ((options.rolledPayment ?? 0) > 0.009) {
+    poolEvents.push({
+      date: firstTargetDates[0] ?? isoMonthDate(options.year, options.month, firstTarget?.dueDay ?? 1),
+      amount: cents(Math.max(0, options.rolledPayment ?? 0)),
+      kind: "rollover",
+    });
+  }
+  if ((options.extraPayment?.amount ?? 0) > 0.009) {
+    poolEvents.push({
+      date: options.extraPayment?.date ?? isoMonthDate(options.year, options.month, 1),
+      amount: cents(Math.max(0, options.extraPayment?.amount ?? 0)),
+      kind: "extra",
+    });
+  }
+
+  const addAllocation = (
+    target: SnowballDebtInput,
+    amount: number,
+    date: string,
+    kind: DatedDebtAllocationKind,
+    sourceAmount: number,
+    source?: SnowballDebtInput,
+  ) => {
+    const payment = cents(amount);
+    if (payment <= 0.009) return;
+    const before = cents(balances.get(target.id) ?? 0);
+    const applied = cents(Math.min(before, payment));
+    if (applied <= 0.009) return;
+    const after = cents(Math.max(0, before - applied));
+    balances.set(target.id, after);
+    addMonthPayment(payments, target, applied, kind === "extra" ? "extra" : "scheduled", before, after);
+    allocations.push({
+      id: `debt-plan:${date}:${source?.id ?? kind}:${target.id}:${kind}:${sequence++}`,
+      date,
+      sourceBillId: source?.id,
+      sourceBillName: source?.name,
+      targetBillId: target.id,
+      targetBillName: target.name,
+      kind,
+      amount: applied,
+      sourceAmount: cents(sourceAmount),
+      balanceBefore: before,
+      balanceAfter: after,
+      paidOff: after <= 0.009,
+    });
+  };
+
+  const applyPool = (event: PoolEvent) => {
+    let remaining = cents(event.amount);
+    while (remaining > 0.009) {
+      const target = orderDebts(
+        options.debts
+          .filter(debt => debt.included && (balances.get(debt.id) ?? 0) > 0.009)
+          .map(debt => ({ ...debt, balance: balances.get(debt.id) ?? 0 })),
+        options.method,
+      )[0];
+      if (!target) break;
+      const original = options.debts.find(debt => debt.id === target.id) ?? target;
+      const before = balances.get(target.id) ?? 0;
+      const applied = cents(Math.min(before, remaining));
+      addAllocation(original, applied, event.date, event.kind, event.amount,
+        event.sourceBillId ? options.debts.find(debt => debt.id === event.sourceBillId) : undefined);
+      remaining = cents(remaining - applied);
+    }
+    unusedAmount = cents(unusedAmount + remaining);
+  };
+
+  const dates = [...new Set([
+    ...requiredEvents.map(event => event.date),
+    ...poolEvents.map(event => event.date),
+  ])].sort();
+
+  for (const date of dates) {
+    const overflowPools: PoolEvent[] = [];
+    requiredEvents
+      .filter(event => event.date === date)
+      .sort((left, right) => left.debt.id.localeCompare(right.debt.id))
+      .forEach(event => {
+        const before = cents(balances.get(event.debt.id) ?? 0);
+        const ownPayment = cents(Math.min(before, event.amount));
+        if (ownPayment > 0.009) {
+          addAllocation(event.debt, ownPayment, date, "required", event.amount, event.debt);
+          minimumPayments = cents(minimumPayments + ownPayment);
+        }
+        const overflow = cents(event.amount - ownPayment);
+        if (overflow <= 0.009) return;
+        if (event.debt.included) {
+          overflowPools.push({
+            date,
+            amount: overflow,
+            kind: "rollover",
+            sourceBillId: event.debt.id,
+            sourceBillName: event.debt.name,
+          });
+        } else {
+          unusedAmount = cents(unusedAmount + overflow);
+        }
+      });
+    overflowPools.forEach(applyPool);
+    poolEvents.filter(event => event.date === date).forEach(applyPool);
+  }
+
+  const paidOffNames = options.debts
+    .filter(debt => activeIncludedAtStart.has(debt.id) && (balances.get(debt.id) ?? 0) <= 0.009)
+    .map(debt => debt.name);
+  const paidOffIds = new Set(options.debts
+    .filter(debt => activeIncludedAtStart.has(debt.id) && (balances.get(debt.id) ?? 0) <= 0.009)
+    .map(debt => debt.id));
+  const rolledPayment = cents(
+    Math.max(0, options.rolledPayment ?? 0) +
+    options.debts.reduce((sum, debt) => sum + (paidOffIds.has(debt.id) ? Math.max(0, debt.minimum) : 0), 0),
+  );
+  const endingDebt = cents(options.debts
+    .filter(debt => debt.included)
+    .reduce((sum, debt) => sum + (balances.get(debt.id) ?? 0), 0));
+  const paymentList = Array.from(payments.values()).map(payment => ({
+    ...payment,
+    scheduledPayment: cents(payment.scheduledPayment),
+    extraPayment: cents(payment.extraPayment),
+    totalPayment: cents(payment.totalPayment),
+    balanceAfter: cents(balances.get(payment.billId) ?? payment.balanceAfter),
+    paidOff: (balances.get(payment.billId) ?? payment.balanceAfter) <= 0.009,
+  }));
+  const scheduledPayments = cents(allocations
+    .filter(allocation => allocation.kind !== "extra")
+    .reduce((sum, allocation) => sum + allocation.amount, 0));
+  const extraPayment = cents(allocations
+    .filter(allocation => allocation.kind === "extra")
+    .reduce((sum, allocation) => sum + allocation.amount, 0));
+  const plannedPayment = cents(scheduledPayments + extraPayment);
+
+  return {
+    payments: paymentList,
+    balances,
+    payoffOrder: paidOffNames,
+    paidOffNames,
+    rolledPayment,
+    minimumPayments,
+    scheduledPayments,
+    extraPayment,
+    interest,
+    endingDebt,
+    allocations,
+    plannedPayment,
+    unusedAmount,
   };
 }
 

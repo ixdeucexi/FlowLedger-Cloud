@@ -34,4 +34,9 @@ function safeError(error, fallback = "Request failed.") {
   return message.length > 240 ? `${message.slice(0, 237)}...` : message;
 }
 
-module.exports = { serviceSupabase, bearerToken, authenticatedUser, safeError };
+function publicError(_error, fallback = "Request failed.") {
+  const message = String(fallback || "Request failed.").trim() || "Request failed.";
+  return message.length > 240 ? `${message.slice(0, 237)}...` : message;
+}
+
+module.exports = { serviceSupabase, bearerToken, authenticatedUser, safeError, publicError };

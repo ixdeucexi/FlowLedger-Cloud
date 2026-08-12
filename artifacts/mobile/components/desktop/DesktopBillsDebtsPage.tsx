@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { AddBillModal } from "@/components/AddBillModal";
@@ -112,7 +112,7 @@ type BillRow = {
 };
 
 export function DesktopBillsDebtsPage() {
-  const params = useLocalSearchParams<{ view?: string }>();
+  const params = useLocalSearchParams<{ view?: string; debtId?: string }>();
   const router = useRouter();
   const {
     bills,
@@ -128,7 +128,7 @@ export function DesktopBillsDebtsPage() {
     getBillMonthlyTotal,
     getBillEffectiveMonthlyTotal,
     getPaidAmount,
-    previewDebtSnowball,
+    getDebtPlanForMonth,
   } = useBudget();
   const isDebt = params.view === "debt";
   const now = useMemo(() => new Date(), []);
@@ -146,6 +146,15 @@ export function DesktopBillsDebtsPage() {
     month: now.getMonth(),
     year: now.getFullYear(),
   });
+
+  useEffect(() => {
+    if (!params.debtId) return;
+    const debt = bills.find((bill) => bill.id === params.debtId && bill.is_debt);
+    if (!debt) return;
+    setEditingBill(debt);
+    setModalVisible(true);
+    router.setParams({ debtId: "", view: "debt" } as never);
+  }, [bills, params.debtId, router]);
 
   const nonDebtBills = useMemo(
     () => bills.filter((bill) => !bill.is_debt && !bill.end_date),
@@ -334,7 +343,7 @@ export function DesktopBillsDebtsPage() {
             onOpen={openBill}
             onPlan={() => router.push("/snowball-plan" as never)}
             getOccurrences={getBillOccurrencesInMonth}
-            preview={previewDebtSnowball(now.getMonth(), now.getFullYear())}
+            datedPlan={getDebtPlanForMonth(now.getMonth(), now.getFullYear())}
             now={now}
           />
         ) : (
@@ -800,7 +809,7 @@ function DebtsDesktop({
   onOpen,
   onPlan,
   getOccurrences,
-  preview,
+  datedPlan,
   now,
 }: {
   bills: Bill[];
@@ -814,7 +823,7 @@ function DebtsDesktop({
   onOpen: (bill: Bill) => void;
   onPlan: () => void;
   getOccurrences: (bill: Bill, month: number, year: number) => number[];
-  preview: ReturnType<ReturnType<typeof useBudget>["previewDebtSnowball"]>;
+  datedPlan: ReturnType<ReturnType<typeof useBudget>["getDebtPlanForMonth"]>;
   now: Date;
 }) {
   const active = bills.filter((bill) => bill.balance > 0.005);
@@ -822,17 +831,9 @@ function DebtsDesktop({
   const ordered = orderActiveDebtsForStrategy(active, strategy);
   const rank = new Map(ordered.map((bill, index) => [bill.id, index + 1]));
   const total = active.reduce((sum, bill) => sum + bill.balance, 0);
-  const monthly = active.reduce(
-    (sum, bill) =>
-      sum + effectiveDebtMinimum(bill.amount, bill.snowball_minimum_boost ?? 0),
-    0,
+  const forecastPaymentByDebtId = new Map(
+    datedPlan?.payments.map(payment => [payment.billId, payment.totalPayment]) ?? [],
   );
-  const nextDue = active
-    .flatMap((bill) => {
-      const next = nextOccurrenceFor(bill, getOccurrences, now);
-      return next ? [{ bill, ...next }] : [];
-    })
-    .sort((a, b) => a.date.getTime() - b.date.getTime())[0];
   const categories = Array.from(
     new Set(active.map((bill) => bill.category)),
   ).map((category, index) => ({
@@ -858,66 +859,26 @@ function DebtsDesktop({
       if (sort === "balance") return left.balance - right.balance;
       return (rank.get(left.id) ?? 999) - (rank.get(right.id) ?? 999);
     });
-  const projected = preview.debtFreeDate
-    ? new Date(`${preview.debtFreeDate}-01T12:00:00`).toLocaleDateString(
-        undefined,
-        { month: "short", year: "numeric" },
-      )
-    : "Add safe extra";
   const completedCount = bills.filter((bill) => bill.balance <= 0.005).length;
   const progress = bills.length
     ? Math.round((completedCount / bills.length) * 100)
     : 0;
   return (
     <DesktopPage style={styles.pageReset}>
-      <PageHeader
-        title="Debts"
-        description="Track and pay off your debt with purpose."
-        actions={<PrimaryButton label="Add Debt" onPress={onAdd} />}
-      />
-      <View style={styles.metrics}>
-        <SummaryMetricCard
-          label="Total Due"
-          value={money(total)}
-          detail="All active debts combined"
-          icon="credit-card"
-        />
-        <SummaryMetricCard
-          label="Monthly Payments"
-          value={money(monthly)}
-          detail="Minimums and rollovers"
-          icon="calendar"
-          tone="green"
-        />
-        <SummaryMetricCard
-          label="Next Due"
-          value={
-            nextDue
-              ? displayDate(nextDue.year, nextDue.month, nextDue.day)
-              : "No due date"
-          }
-          detail={nextDue?.bill.name ?? "No active debts"}
-          icon="calendar"
-          tone="red"
-        />
-        <SummaryMetricCard
-          label="Projected Payoff"
-          value={projected}
-          detail={
-            preview.debtFreeDate
-              ? "Using your current plan"
-              : "No projection yet"
-          }
-          icon="target"
+      <View nativeID="guided-tour-bills">
+        <PageHeader
+          title="Debts"
+          description={`${active.length} debt${active.length === 1 ? "" : "s"} · $${total.toLocaleString(undefined, { maximumFractionDigits: 0 })} total`}
+          actions={<PrimaryButton label="Add Debt" onPress={onAdd} />}
         />
       </View>
       <View style={styles.debtOverviewRow}>
         <DesktopCard style={styles.debtOverviewCard}>
           <CardHeader
-            title="Debt Snowball Progress"
+            title="Debt Payoff Progress"
             action={
               <Pressable onPress={onPlan}>
-                <Text style={styles.textLink}>Open plan</Text>
+                <Text style={styles.textLink}>Open Debt Payoff Planner</Text>
               </Pressable>
             }
           />
@@ -1018,7 +979,7 @@ function DebtsDesktop({
             Interest Rate
           </Text>
           <Text style={[table.headerText, styles.debtColMinimum]}>
-            Min. Payment
+            Forecast Payment
           </Text>
           <Text style={[table.headerText, styles.debtColDue]}>Due Date</Text>
           <Text style={[table.headerText, styles.debtColStatus]}>
@@ -1072,12 +1033,8 @@ function DebtsDesktop({
                   {bill.interest_rate.toFixed(2)}%
                 </Text>
                 <Text style={[table.cellStrong, styles.debtColMinimum]}>
-                  {money(
-                    effectiveDebtMinimum(
-                      bill.amount,
-                      bill.snowball_minimum_boost ?? 0,
-                    ),
-                  )}
+                  {money(forecastPaymentByDebtId.get(bill.id)
+                    ?? effectiveDebtMinimum(bill.amount, bill.snowball_minimum_boost ?? 0))}
                 </Text>
                 <Text style={[table.cellText, styles.debtColDue]}>
                   {next ? displayDate(next.year, next.month, next.day) : "—"}

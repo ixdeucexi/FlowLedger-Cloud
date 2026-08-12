@@ -2,7 +2,7 @@ const { isAuthorizedCron } = require("../_utils/cronAuth");
 const { optional } = require("../_utils/env");
 const { runMoneyHealthCheck } = require("../_utils/moneyHealth");
 const { sendPushToUser } = require("../_utils/push");
-const { safeError, serviceSupabase } = require("../_utils/supabase");
+const { publicError, serviceSupabase } = require("../_utils/supabase");
 
 module.exports = async function nightlyMoneyHealth(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "METHOD_NOT_ALLOWED" });
@@ -42,11 +42,11 @@ module.exports = async function nightlyMoneyHealth(req, res) {
           await db.from("money_health_runs").update({ notified_at: new Date().toISOString() }).eq("id", run.id);
         }
       } catch (error) {
-        results.push({ householdId: row.household_id, status: "failed", error: safeError(error) });
+        results.push({ householdId: row.household_id, status: "failed", error: publicError(error, "Money Health check failed.") });
       }
     }
     return res.status(200).json({ ok: true, checked: results.length, results });
   } catch (error) {
-    return res.status(500).json({ error: "MONEY_HEALTH_NIGHTLY_FAILED", message: safeError(error) });
+    return res.status(500).json({ error: "MONEY_HEALTH_NIGHTLY_FAILED", message: publicError(error, "Money Health checks failed.") });
   }
 };

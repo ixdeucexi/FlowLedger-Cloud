@@ -28,6 +28,7 @@ export interface DashboardConnectedBankAccount {
   id: string;
   plaid_account_id?: string;
   name: string;
+  display_name?: string;
   official_name?: string;
   mask?: string;
   persistent_account_id?: string;
@@ -37,6 +38,15 @@ export interface DashboardConnectedBankAccount {
   available_balance?: number;
   is_active: boolean;
   updated_at?: string;
+}
+
+export interface DashboardSavingsAccount {
+  id: string;
+  name: string;
+  balance: number;
+  mask?: string;
+  source: "connected" | "manual";
+  providerName?: string;
 }
 
 export interface DashboardPendingTransaction {
@@ -162,6 +172,42 @@ function localDateLabel(date: string): string {
   });
 }
 
+export function buildDashboardSavingsAccounts(
+  accounts: DashboardAccount[],
+  connectedBankAccounts: DashboardConnectedBankAccount[],
+): DashboardSavingsAccount[] {
+  const connectedSavings = canonicalConnectedAccounts(
+    connectedBankAccounts.filter(
+      (account) => account.is_active && account.account_subtype === "savings",
+    ),
+  );
+
+  const savingsAccounts = connectedSavings.length
+    ? connectedSavings.map((account) => {
+        const providerName = account.name.trim() || account.official_name?.trim() || "Savings account";
+        return {
+          id: account.id,
+          name: account.display_name?.trim() || providerName,
+          providerName,
+          balance: account.current_balance,
+          source: "connected" as const,
+          ...(account.mask ? { mask: account.mask } : {}),
+        };
+      })
+    : accounts
+        .filter((account) => account.is_active && account.account_type === "savings")
+        .map((account) => ({
+          id: account.id,
+          name: account.name.trim() || "Savings account",
+          balance: account.current_balance,
+          source: "manual" as const,
+        }));
+
+  return savingsAccounts.sort((left, right) =>
+    left.name.localeCompare(right.name) || left.id.localeCompare(right.id),
+  );
+}
+
 /**
  * The single financial projection used by both dashboard presentations.
  * Desktop and mobile may render these values differently, but neither view
@@ -231,15 +277,12 @@ export function buildDashboardFinancialModel(input: DashboardFinancialModelInput
       (account) => account.is_active && account.account_subtype === "savings",
     ),
   );
+  const savingsAccounts = buildDashboardSavingsAccounts(accounts, connectedBankAccounts);
   const connectedBalance = connectedCheckingBalance(connectedCheckingAccounts);
   const checkingAccountBalance = connectedBalance ?? accounts
     .filter((account) => account.is_active && account.account_type === "checking")
     .reduce((sum, account) => sum + account.current_balance, 0);
-  const savingsAccountBalance = connectedSavingsAccounts.length
-    ? connectedSavingsAccounts.reduce((sum, account) => sum + account.current_balance, 0)
-    : accounts
-        .filter((account) => account.is_active && account.account_type === "savings")
-        .reduce((sum, account) => sum + account.current_balance, 0);
+  const savingsAccountBalance = savingsAccounts.reduce((sum, account) => sum + account.balance, 0);
 
   const checkingIds = new Set(connectedCheckingAccounts.map((account) => account.id));
   const checkingPendingTransactions = pendingBankTransactions.filter((transaction) =>
@@ -415,6 +458,7 @@ export function buildDashboardFinancialModel(input: DashboardFinancialModelInput
     currentGoals,
     connectedCheckingAccounts,
     connectedSavingsAccounts,
+    savingsAccounts,
     checkingAccountBalance,
     bankCurrentCheckingBalance,
     savingsAccountBalance,

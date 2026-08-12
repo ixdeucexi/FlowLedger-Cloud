@@ -7,7 +7,8 @@ export type PlanFeature =
   | "debt_payoff"
   | "plaid_sync"
   | "transaction_matching"
-  | "connected_insights";
+  | "connected_insights"
+  | "plan_simulator";
 
 export interface HouseholdPlan {
   householdId: string;
@@ -63,6 +64,7 @@ export const PLAN_CATALOG: Record<PlanTier, PlanDefinition> = {
       "plaid_sync",
       "transaction_matching",
       "connected_insights",
+      "plan_simulator",
     ],
     highlights: [
       "Account-aware Flo",
@@ -70,6 +72,7 @@ export const PLAN_CATALOG: Record<PlanTier, PlanDefinition> = {
       "Snowball and avalanche payoff tools",
       "Bank sync and matching",
       "Automatic review and insights",
+      "Saved what-if Plan Simulator scenarios",
     ],
   },
 };
@@ -94,6 +97,10 @@ export const PLAN_FEATURE_COPY: Record<Exclude<PlanFeature, "manual_budgeting" |
   connected_insights: {
     title: "Connected insights are Pro",
     description: "Get automatic review, categories, and insights.",
+  },
+  plan_simulator: {
+    title: "Plan Simulator is Pro",
+    description: "Compare saved what-if scenarios with your real Forecast without changing your plan.",
   },
 };
 

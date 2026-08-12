@@ -9,6 +9,7 @@ export const overridesTable = pgTable("monthly_overrides", {
   month: integer("month").notNull(),
   year: integer("year").notNull(),
   customAmount: numeric("custom_amount", { precision: 12, scale: 2 }),
+  plannedDebtAmount: numeric("planned_debt_amount", { precision: 12, scale: 2 }),
   customDueDay: integer("custom_due_day"),
   paidAmount: numeric("paid_amount", { precision: 12, scale: 2 }).notNull().default("0"),
   actualAmount: numeric("actual_amount", { precision: 12, scale: 2 }),

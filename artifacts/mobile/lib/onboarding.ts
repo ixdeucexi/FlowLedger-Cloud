@@ -49,7 +49,19 @@ export interface OnboardingPreferences {
   help: SetupHelpOption[];
   goals: SetupGoalOption[];
   savingsGoal: SavingsGoalOption | null;
+  setupProgressByScope?: Record<string, SetupScopeProgress>;
   updatedAt?: string;
+}
+
+export type SetupStageId = "priorities" | "starting_money" | "cashflow" | "debt_savings" | "review";
+export type SetupConfirmationId = "income_none" | "bills_none" | "debts_none" | "goals_none" | "safety_reviewed";
+
+export interface SetupScopeProgress {
+  version: 2;
+  currentStage: SetupStageId;
+  confirmations: SetupConfirmationId[];
+  updatedAt: string;
+  completedAt?: string;
 }
 
 export const DEFAULT_ONBOARDING_PREFERENCES: OnboardingPreferences = {
@@ -91,6 +103,32 @@ const SAVINGS_OPTIONS = new Set<SavingsGoalOption>([
   "something_else",
 ]);
 
+const SETUP_STAGES = new Set<SetupStageId>(["priorities", "starting_money", "cashflow", "debt_savings", "review"]);
+const SETUP_CONFIRMATIONS = new Set<SetupConfirmationId>(["income_none", "bills_none", "debts_none", "goals_none", "safety_reviewed"]);
+
+function normalizeSetupProgress(value: unknown): Record<string, SetupScopeProgress> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const entries = Object.entries(value as Record<string, unknown>).slice(0, 12);
+  const normalized: Record<string, SetupScopeProgress> = {};
+  for (const [scope, raw] of entries) {
+    if (!scope || scope.length > 100 || !raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const parsed = raw as Partial<SetupScopeProgress>;
+    if (typeof parsed.currentStage !== "string" || !SETUP_STAGES.has(parsed.currentStage as SetupStageId)) continue;
+    normalized[scope] = {
+      version: 2,
+      currentStage: parsed.currentStage as SetupStageId,
+      confirmations: Array.from(new Set(
+        Array.isArray(parsed.confirmations)
+          ? parsed.confirmations.filter((item): item is SetupConfirmationId => typeof item === "string" && SETUP_CONFIRMATIONS.has(item as SetupConfirmationId))
+          : [],
+      )),
+      updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : new Date(0).toISOString(),
+      completedAt: typeof parsed.completedAt === "string" ? parsed.completedAt : undefined,
+    };
+  }
+  return Object.keys(normalized).length ? normalized : undefined;
+}
+
 function normalizeArray<T extends string>(value: unknown, valid: Set<T>): T[] {
   if (!Array.isArray(value)) return [];
   return Array.from(new Set(value.filter((item): item is T => typeof item === "string" && valid.has(item as T))));
@@ -108,8 +146,31 @@ export function normalizeOnboardingPreferences(value: unknown): OnboardingPrefer
     help: normalizeArray(parsed.help, HELP_OPTIONS),
     goals: normalizeArray(parsed.goals, GOAL_OPTIONS),
     savingsGoal,
+    setupProgressByScope: normalizeSetupProgress(parsed.setupProgressByScope),
     updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : undefined,
   };
+}
+
+export function defaultSetupScopeProgress(now = new Date().toISOString()): SetupScopeProgress {
+  return { version: 2, currentStage: "priorities", confirmations: [], updatedAt: now };
+}
+
+export function setupScopeProgress(preferences: OnboardingPreferences, scopeKey: string): SetupScopeProgress {
+  return preferences.setupProgressByScope?.[scopeKey] ?? defaultSetupScopeProgress();
+}
+
+export function withSetupScopeProgress(
+  preferences: OnboardingPreferences,
+  scopeKey: string,
+  progress: SetupScopeProgress,
+): OnboardingPreferences {
+  return normalizeOnboardingPreferences({
+    ...preferences,
+    setupProgressByScope: {
+      ...(preferences.setupProgressByScope ?? {}),
+      [scopeKey]: progress,
+    },
+  });
 }
 
 export function shouldAskSavingsGoal(preferences: OnboardingPreferences): boolean {

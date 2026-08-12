@@ -29,6 +29,7 @@ const GROUP_TITLES: Record<ForecastEventGroupKey, string> = {
 const STATUS_LABELS: Record<FinancialEventStatus, string> = {
   planned: "planned",
   scheduled: "scheduled",
+  pending: "PAYMENT PENDING",
   finalized: "finalized",
   actual: "actual",
   applied: "applied",
@@ -70,6 +71,10 @@ export function formatEventStatus(status: FinancialEventStatus): string {
   return STATUS_LABELS[status] ?? status;
 }
 
+export function calendarVisibleForecastEvents(events: FinancialEvent[] = []): FinancialEvent[] {
+  return events.filter(event => event.sourceType !== "reconciliation" && event.kind !== "bank_adjustment");
+}
+
 export function describeForecastEvent(event: FinancialEvent): ForecastEventDisplay {
   return {
     event,
@@ -77,6 +82,11 @@ export function describeForecastEvent(event: FinancialEvent): ForecastEventDispl
     statusLabel: formatEventStatus(event.status),
     amountLabel: formatEventAmount(event.amount),
   };
+}
+
+export function plannedDebtEditorParams(event: FinancialEvent): { billId: string; date: string } | undefined {
+  if (event.sourceType !== "extra_payment" || event.debtPlanSource !== "canonical" || !event.sourceId || !event.date) return undefined;
+  return { billId: event.sourceId, date: event.date };
 }
 
 export function groupForecastEvents(events: FinancialEvent[] = []): ForecastEventGroup[] {

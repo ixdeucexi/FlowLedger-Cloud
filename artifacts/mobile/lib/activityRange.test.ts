@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { dateIsInActivityRange, resolveActivityDateRange, summarizeActivityRange } from "./activityRange";
+import { dateIsInActivityRange, resolveActivityDateRange, summarizeActivityRange, summarizeActivitySnapshot } from "./activityRange";
 
 const today = new Date(2026, 7, 5, 12);
 
@@ -30,4 +30,22 @@ test("range totals exclude pending rows and transfers", () => {
     { amount: -50, source: "transfer" },
     { amount: -75, pending: true },
   ]), { income: 1200, out: 200, net: 1000, transactions: 3 });
+});
+
+test("the unfiltered monthly snapshot uses the full plan instead of one visible bill", () => {
+  const visibleRows = [{ amount: -150, source: "bill_payment" }];
+  const plannedMonth = { income: 4000, out: 1350, net: 2650 };
+
+  assert.deepEqual(summarizeActivitySnapshot(visibleRows, plannedMonth), {
+    income: 4000,
+    out: 1350,
+    net: 2650,
+    transactions: 1,
+  });
+  assert.deepEqual(summarizeActivitySnapshot(visibleRows), {
+    income: 0,
+    out: 150,
+    net: -150,
+    transactions: 1,
+  });
 });

@@ -253,11 +253,11 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
         <View style={[styles.icon, { backgroundColor: `${colors.success}22` }]}><Feather name="link" size={20} color={colors.success} /></View>
         <View style={{ flex: 1 }}>
           <Text style={[styles.title, { color: colors.foreground }]}>{connected ? (item?.institution_name || "Bank connected") : "Connect your bank"}</Text>
-          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{connected ? `${status.accounts?.length || 0} account${status.accounts?.length === 1 ? "" : "s"} linked` : "Import recent activity securely through Plaid."}</Text>
+          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{connected ? `${status.accounts?.length || 0} account${status.accounts?.length === 1 ? "" : "s"} linked` : "Connect balances and checking activity securely through Plaid."}</Text>
         </View>
         {connected && <View style={[styles.status, { backgroundColor: `${colors.success}22` }]}><Text style={[styles.statusText, { color: colors.success }]}>Connected</Text></View>}
       </View>
-      <Text style={[styles.note, { color: colors.mutedForeground }]}>Plaid keeps credentials with your bank. FlowLedger receives only the account and transaction data you approve.</Text>
+      <Text style={[styles.note, { color: colors.mutedForeground }]}>Plaid keeps credentials with your bank. FlowLedger imports checking activity; credit-card purchases stay out of Activity and Forecast.</Text>
       {(status.accounts || []).filter(account => account.account_type === "credit").map((account, index) => {
         const attached = Boolean(account.linked_debt_id && account.include_in_snowball);
         const attaching = activeAction === `attach:${account.id}`;
@@ -312,7 +312,7 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
           </View>
         );
       })}
-      {connected && <Text style={[styles.note, { color: colors.mutedForeground }]}>Connected credit cards update Debt and Snowball. Card purchases stay in category activity but do not reduce checking cash.</Text>}
+      {connected && <Text style={[styles.note, { color: colors.mutedForeground }]}>Connected credit cards update Debt and Snowball. Card purchases are not imported into FlowLedger Activity or Forecast.</Text>}
       <View style={styles.connectHeading}>
         <Text style={[styles.connectTitle, { color: colors.foreground }]}>Add a new connection</Text>
         <Text style={[styles.connectCopy, { color: colors.mutedForeground }]}>Choose what you want Plaid to connect. This does not replace or merely refresh your existing accounts.</Text>

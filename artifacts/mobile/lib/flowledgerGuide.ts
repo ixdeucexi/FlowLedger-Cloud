@@ -14,13 +14,13 @@ export interface AlgorithmGuideItem {
 }
 
 export const FLOW_GUIDE_SECTIONS = [
-  { id: "overview", title: "Overview", description: "The plan in one clear picture" },
+  { id: "overview", title: "Overview", description: "Where you stand, what is protected, and what comes next." },
   { id: "flow-score", title: "Flow Score", description: "What is helping or lowering your score" },
-  { id: "protected-days", title: "Protected Days", description: "How backup days are measured" },
+  { id: "protected-days", title: "Protected Days", description: "How your backup becomes days of Must Pay protection" },
   { id: "stability", title: "Stability Path", description: "The steps from today to a stronger buffer" },
   { id: "backup", title: "Backup Goal", description: "Your next milestone and long-term target" },
-  { id: "algorithms", title: "Algorithms", description: "The engines behind each recommendation" },
-  { id: "faq", title: "Frequently Asked Questions", description: "Straight answers about the calculation rules" },
+  { id: "algorithms", title: "How calculations work", description: "How FlowLedger builds your guidance" },
+  { id: "faq", title: "FAQs", description: "Straight answers about the calculation rules" },
 ] as const;
 
 export type FlowGuideSectionId = (typeof FLOW_GUIDE_SECTIONS)[number]["id"];
@@ -29,6 +29,53 @@ export function flowGuideSectionIndex(value?: string) {
   const normalized = value === "path" ? "stability" : value;
   const index = FLOW_GUIDE_SECTIONS.findIndex(section => section.id === normalized);
   return index >= 0 ? index : 0;
+}
+
+export function guideTabScrollOffset(itemStart: number, itemSize: number, viewportSize: number) {
+  return Math.max(0, itemStart - Math.max(0, (viewportSize - itemSize) / 2));
+}
+
+export interface FlowGuideRouteFacts {
+  section?: FlowGuideSectionId;
+  stage: StabilityStage;
+  stageLabel: string;
+  protectedDays: number;
+  protectedAmount: number;
+  reserveTarget: number;
+  backupTarget: number;
+  safeUntilPayday: boolean | null;
+  nextPaycheckLabel: string | null;
+  nextAction: string;
+  nextMilestone: string;
+  nextMilestoneAmount: number;
+  lowestBalance: number;
+  safetyFloor: number;
+  confidence: string;
+  flowScore: number;
+  flowScoreLabel: string;
+}
+
+/** Keeps both dashboard launchers on the same primitive-only route contract. */
+export function buildFlowGuideRouteParams(facts: FlowGuideRouteFacts): Record<string, string> {
+  return {
+    ...(facts.section ? { section: facts.section } : {}),
+    stage: facts.stage,
+    stageLabel: facts.stageLabel,
+    protectedDays: String(facts.protectedDays),
+    protectedAmount: String(facts.protectedAmount),
+    reserveTarget: String(facts.reserveTarget),
+    backupTarget: String(facts.backupTarget),
+    safeUntilPayday: facts.safeUntilPayday === null ? "unknown" : String(facts.safeUntilPayday),
+    nextPaycheckLabel: facts.nextPaycheckLabel ?? "",
+    nextAction: facts.nextAction,
+    nextMilestone: facts.nextMilestone,
+    nextMilestoneAmount: String(facts.nextMilestoneAmount),
+    lowestBalance: String(facts.lowestBalance),
+    safetyFloor: String(facts.safetyFloor),
+    confidence: facts.confidence,
+    flowScore: String(facts.flowScore),
+    flowScoreLabel: facts.flowScoreLabel,
+  };
 }
 
 export const STABILITY_PATH_GUIDE: readonly StabilityPathGuideStep[] = [

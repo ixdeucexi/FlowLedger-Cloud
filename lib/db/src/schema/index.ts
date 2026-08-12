@@ -7,3 +7,4 @@ export * from "./goals";
 export * from "./settings";
 export * from "./categories";
 export * from "./extra_payments";
+export * from "./plan_simulations";

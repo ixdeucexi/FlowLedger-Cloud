@@ -211,14 +211,15 @@ export function isCashFlowTransaction(transaction: {
     && transaction.review_status !== "transfer";
 }
 
-interface ConnectedTransactionAccount {
+export interface ConnectedTransactionAccount {
+  id?: string | null;
   plaid_account_id?: string | null;
   account_type?: string | null;
   account_subtype?: string | null;
   is_active?: boolean | null;
 }
 
-interface CheckingLedgerTransaction {
+export interface CheckingLedgerTransaction {
   source?: string | null;
   import_hash?: string | null;
   plaid_account_id?: string | null;
@@ -234,7 +235,8 @@ function connectedTransactionAccount(
 ): ConnectedTransactionAccount | undefined {
   if (transaction.source !== "plaid" || !transaction.plaid_account_id) return undefined;
   return connectedAccounts.find(account =>
-    account.is_active !== false && account.plaid_account_id === transaction.plaid_account_id
+    account.plaid_account_id === transaction.plaid_account_id
+    || account.id === transaction.plaid_account_id
   );
 }
 
@@ -243,6 +245,23 @@ function isCheckingConnectedAccount(sourceAccount?: ConnectedTransactionAccount)
   const type = String(sourceAccount.account_type || "").trim().toLowerCase();
   const subtype = String(sourceAccount.account_subtype || "").trim().toLowerCase();
   return type === "depository" && subtype === "checking";
+}
+
+export type PlaidTransactionAccountKind = "checking" | "non_cash" | "unknown" | "not_plaid";
+
+/**
+ * Plaid rows are classified against every retained account identity, including
+ * inactive/reconnected accounts. Unknown Plaid identities fail closed so card
+ * or savings activity can never be assumed to be checking cash.
+ */
+export function plaidTransactionAccountKind(
+  transaction: CheckingLedgerTransaction,
+  connectedAccounts: readonly ConnectedTransactionAccount[],
+): PlaidTransactionAccountKind {
+  if (transaction.source !== "plaid") return "not_plaid";
+  const sourceAccount = connectedTransactionAccount(transaction, [...connectedAccounts]);
+  if (!sourceAccount) return "unknown";
+  return isCheckingConnectedAccount(sourceAccount) ? "checking" : "non_cash";
 }
 
 /**
@@ -256,8 +275,9 @@ export function isCheckingBalanceTransaction(
   connectedAccounts: ConnectedTransactionAccount[],
 ): boolean {
   if (!isActiveTransaction(transaction)) return false;
-  const sourceAccount = connectedTransactionAccount(transaction, connectedAccounts);
-  if (sourceAccount) return isCheckingConnectedAccount(sourceAccount);
+  if (transaction.source === "plaid") {
+    return plaidTransactionAccountKind(transaction, connectedAccounts) === "checking";
+  }
   if (transaction.review_status !== "transfer") return true;
   return false;
 }
@@ -275,8 +295,9 @@ export function isCheckingForecastLedgerTransaction(
     && !transaction.removed_at
     && transaction.pending !== true;
   if (!transaction.deleted_at || !isPostedBankRow) return false;
-  const sourceAccount = connectedTransactionAccount(transaction, connectedAccounts);
-  if (sourceAccount) return isCheckingConnectedAccount(sourceAccount);
+  if (transaction.source === "plaid") {
+    return plaidTransactionAccountKind(transaction, connectedAccounts) === "checking";
+  }
   if (transaction.review_status !== "transfer") return true;
   return false;
 }

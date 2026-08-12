@@ -73,6 +73,20 @@ test("credit-card and savings activity stays out of checking cash", () => {
   assert.equal(isCheckingForecastLedgerTransaction({ source: "plaid", plaid_account_id: "card-1", review_status: "categorized" }, accounts), false);
 });
 
+test("Plaid classification retains inactive identities and fails closed for unknown accounts", () => {
+  const accounts = [
+    { id: "internal-checking", plaid_account_id: "checking-old", account_type: "depository", account_subtype: "checking", is_active: false },
+    { id: "internal-card", plaid_account_id: "card-old", account_type: "credit", account_subtype: "credit card", is_active: false },
+  ];
+  assert.equal(isCheckingBalanceTransaction({ source: "plaid", plaid_account_id: "checking-old" }, accounts), true);
+  assert.equal(isCheckingBalanceTransaction({ source: "plaid", plaid_account_id: "internal-checking" }, accounts), true);
+  assert.equal(isCheckingBalanceTransaction({ source: "plaid", plaid_account_id: "card-old" }, accounts), false);
+  assert.equal(isCheckingBalanceTransaction({ source: "plaid", plaid_account_id: "missing" }, accounts), false);
+  assert.equal(isCheckingForecastLedgerTransaction({ source: "plaid", plaid_account_id: "missing", deleted_at: "2026-08-01T00:00:00Z" }, accounts), false);
+  assert.equal(isCheckingBalanceTransaction({ source: "manual", review_status: "categorized" }, accounts), true);
+  assert.equal(isCheckingBalanceTransaction({ source: "statement", import_hash: "statement-row", review_status: "categorized" }, accounts), true);
+});
+
 test("forecast ledger keeps hidden posted bank money without reviving manual or pending rows", () => {
   const accounts = [
     { plaid_account_id: "checking-1", account_type: "depository", account_subtype: "checking", is_active: true },

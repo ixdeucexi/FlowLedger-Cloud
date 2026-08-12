@@ -2,6 +2,7 @@ import {
   isActiveTransaction,
   isCheckingBalanceTransaction,
   isCheckingForecastLedgerTransaction,
+  plaidTransactionAccountKind,
 } from "./billMatching";
 
 export interface LedgerAllocationLike {
@@ -26,6 +27,7 @@ export interface LedgerTransactionLike {
 }
 
 export interface LedgerConnectedAccountLike {
+  id?: string | null;
   plaid_account_id?: string | null;
   account_type?: string | null;
   account_subtype?: string | null;
@@ -33,7 +35,7 @@ export interface LedgerConnectedAccountLike {
 }
 
 export interface LedgerIssue {
-  code: "duplicate_transaction_id" | "duplicate_plaid_transaction_id" | "allocation_mismatch";
+  code: "duplicate_transaction_id" | "duplicate_plaid_transaction_id" | "allocation_mismatch" | "unknown_plaid_account";
   transactionId: string;
   detail: string;
 }
@@ -50,6 +52,27 @@ export interface TransactionLedgerSnapshot<T extends LedgerTransactionLike> {
 }
 
 const CENT_TOLERANCE = 0.005;
+
+export interface AccountAwareTransactionSelection<T> {
+  included: T[];
+  excludedNonCash: T[];
+  unknownPlaid: T[];
+}
+
+/** Shared Activity/Review selector. Plaid rows appear only when their retained
+ * account identity is checking; non-Plaid imports keep their existing behavior. */
+export function selectFlowLedgerTransactions<T extends LedgerTransactionLike>(
+  transactions: readonly T[],
+  connectedAccounts: readonly LedgerConnectedAccountLike[],
+): AccountAwareTransactionSelection<T> {
+  return transactions.reduce<AccountAwareTransactionSelection<T>>((result, transaction) => {
+    const kind = plaidTransactionAccountKind(transaction, connectedAccounts);
+    if (kind === "checking" || kind === "not_plaid") result.included.push(transaction);
+    else if (kind === "unknown") result.unknownPlaid.push(transaction);
+    else result.excludedNonCash.push(transaction);
+    return result;
+  }, { included: [], excludedNonCash: [], unknownPlaid: [] });
+}
 
 function allocationTotal(transaction: LedgerTransactionLike): number {
   return (transaction.review_allocations ?? []).reduce(
@@ -112,12 +135,21 @@ export function buildTransactionLedger<T extends LedgerTransactionLike>(
   });
 
   const uniqueTransactions = [...uniqueById.values()];
+  const accountSelection = selectFlowLedgerTransactions(uniqueTransactions, connectedAccounts);
+  accountSelection.unknownPlaid.forEach(transaction => {
+    issues.push({
+      code: "unknown_plaid_account",
+      transactionId: transaction.id,
+      detail: "Plaid transaction account identity is unavailable; cash impact was excluded.",
+    });
+  });
   const cashTransactions = uniqueTransactions.filter(transaction =>
     isCheckingForecastLedgerTransaction(transaction, [...connectedAccounts])
   );
   const visibleIds = new Set(visibleTransactions.map(transaction => transaction.id));
+  const includedIds = new Set(accountSelection.included.map(transaction => transaction.id));
   const visible = uniqueTransactions.filter(transaction =>
-    visibleIds.has(transaction.id) && isActiveTransaction(transaction)
+    includedIds.has(transaction.id) && visibleIds.has(transaction.id) && isActiveTransaction(transaction)
   );
   const visibleChecking = visible.filter(transaction =>
     isCheckingBalanceTransaction(transaction, [...connectedAccounts])

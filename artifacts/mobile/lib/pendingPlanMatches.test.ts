@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   activePendingPlanMatches,
+  debtSourceCommitmentsFromPendingMatches,
+  livePendingPlanMatchForOccurrence,
   pendingPlanMatchForOccurrence,
   pendingMatchStatusLabel,
   prioritizePendingPlanTarget,
@@ -32,6 +34,34 @@ test("a live pending match protects only its exact bill occurrence", () => {
   const pending = [{ plaid_transaction_id: "pending-1" }];
   assert.equal(pendingPlanMatchForOccurrence(matches, pending, "bill-1", "2026-07-29")?.id, "match-1");
   assert.equal(pendingPlanMatchForOccurrence(matches, pending, "bill-1", "2026-08-29"), undefined);
+  assert.equal(livePendingPlanMatchForOccurrence(matches, pending, "bill-1", "2026-07-29")?.pending_amount, 98);
+});
+
+test("debt source commitments distinguish live pending, vanished, and posted review states", () => {
+  const pending = [{ plaid_transaction_id: "pending-1" }];
+  assert.deepEqual(debtSourceCommitmentsFromPendingMatches([match({ pending_amount: 42.81 })], pending, []), [{
+    sourceBillId: "bill-1", sourceBillName: "Electric", date: "2026-07-29", amount: 42.81, state: "pending",
+  }]);
+  assert.deepEqual(debtSourceCommitmentsFromPendingMatches([match()], [], []), []);
+  assert.deepEqual(debtSourceCommitmentsFromPendingMatches([
+    match({ status: "ready_review", posted_transaction_id: "posted-1" }),
+  ], [], [{ id: "posted-1" }]), [{
+    sourceBillId: "bill-1", sourceBillName: "Electric", date: "2026-07-29", amount: 0, state: "posted",
+  }]);
+});
+
+test("same-occurrence pending matches aggregate and a posted replacement wins deterministically", () => {
+  const pending = [{ plaid_transaction_id: "pending-1" }, { plaid_transaction_id: "pending-2" }];
+  const first = match({ id: "first", pending_amount: 20 });
+  const second = match({ id: "second", pending_plaid_transaction_id: "pending-2", pending_amount: 22.81 });
+  assert.deepEqual(debtSourceCommitmentsFromPendingMatches([first, second], pending, []), [{
+    sourceBillId: "bill-1", sourceBillName: "Electric", date: "2026-07-29", amount: 42.81, state: "pending",
+  }]);
+
+  const posted = match({ id: "posted", status: "ready_review", posted_transaction_id: "posted-1" });
+  assert.deepEqual(debtSourceCommitmentsFromPendingMatches([second, posted, first], pending, [{ id: "posted-1" }]), [{
+    sourceBillId: "bill-1", sourceBillName: "Electric", date: "2026-07-29", amount: 0, state: "posted",
+  }]);
 });
 
 test("a vanished pending charge stops suppressing overdue", () => {

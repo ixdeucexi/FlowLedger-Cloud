@@ -271,7 +271,38 @@ test("future recurring occurrences do not make a current bill overdue", () => {
 
   assert.ok(suite.flowScore.negativeFactors.every(factor => !/overdue bill/i.test(factor)));
   assert.equal(suite.billPriority.nextBill?.dueDay, 15);
+  assert.equal(suite.billPriority.nextBill?.amount, 100);
   assert.doesNotMatch(suite.stability.headline, /needs attention|still needs/i);
+});
+
+test("Next Bill uses one occurrence amount for every supported bill cadence", () => {
+  const cases = [
+    { frequency: "weekly", amount: 450, occurrenceDays: [12, 19, 26], expected: 150 },
+    { frequency: "biweekly", amount: 300, occurrenceDays: [12, 26], expected: 150 },
+    { frequency: "monthly", amount: 120, occurrenceDays: [12], expected: 120 },
+    { frequency: "quarterly", amount: 600, occurrenceDays: [12], expected: 600 },
+  ] as const;
+
+  cases.forEach(({ frequency, amount, occurrenceDays, expected }) => {
+    const suite = buildAlgorithmSuite(baseInput({
+      todayDay: 11,
+      bills: [{
+        id: frequency,
+        name: `${frequency} bill`,
+        amount,
+        frequency,
+        category: "Other",
+        due_day: occurrenceDays[0],
+        occurrenceDays: [...occurrenceDays],
+        is_debt: false,
+        is_recurring: true,
+        paidAmount: 0,
+      }],
+    }));
+
+    assert.equal(suite.billPriority.nextBill?.dueDay, 12, frequency);
+    assert.equal(suite.billPriority.nextBill?.amount, expected, frequency);
+  });
 });
 
 test("Stability Path explains one overdue weekly occurrence without calling it the full month", () => {

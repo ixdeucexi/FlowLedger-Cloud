@@ -22,14 +22,17 @@ import Svg, {
 } from "react-native-svg";
 
 import { AddBillModal } from "@/components/AddBillModal";
+import { AppText } from "@/components/AppText";
 import { DashboardCustomizer } from "@/components/DashboardCustomizer";
 import { DashboardUtilityWidgets } from "@/components/DashboardUtilityWidgets";
 import { DesktopAddMenu } from "@/components/desktop/DesktopAddMenu";
 import { GoalModal } from "@/components/GoalModal";
 import { IncomeModal } from "@/components/IncomeModal";
+import { MonthlyDebtCheckInModal } from "@/components/MonthlyDebtCheckInModal";
 import { useAuth } from "@/context/AuthContext";
 import { useBudget, type Bill, type Goal, type IncomeItem } from "@/context/BudgetContext";
 import { useDashboardLayoutPreferences } from "@/hooks/useDashboardLayoutPreferences";
+import { useSetupReadiness } from "@/hooks/useSetupReadiness";
 import { isActiveTransaction } from "@/lib/billMatching";
 import {
   categoryBudgetStorageKey,
@@ -43,6 +46,7 @@ import { WIDE_DESKTOP_BREAKPOINT } from "@/lib/desktopExperience";
 import { transactionDebt } from "@/lib/transactionDebt";
 import { buildReviewQueue } from "@/lib/reviewCenter";
 import { buildTodaysDecisions } from "@/lib/todaysDecisions";
+import { buildFlowGuideRouteParams } from "@/lib/flowledgerGuide";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 type Accent = "cyan" | "purple" | "green" | "amber" | "blue" | "neutral";
@@ -57,7 +61,11 @@ type UpcomingBill = {
   month: number;
   year: number;
   isDebt: boolean;
+  frequency?: "monthly" | "quarterly" | "biweekly" | "weekly";
   pending: boolean;
+  sourceId?: string;
+  kind?: "required" | "rollover" | "extra";
+  paidOff?: boolean;
 };
 
 const BRAND = {
@@ -495,6 +503,7 @@ export function DesktopDashboard() {
     getBillOccurrencesInMonth,
     getCashFlow,
     getDailyBalances,
+    getRemainingDebtPlanForMonth,
     getMonthlyBills,
     getMonthlyIncome,
     getPaidAmount,
@@ -514,6 +523,7 @@ export function DesktopDashboard() {
     updateBill,
     updateGoal,
   } = useBudget();
+  const { readiness: setupReadiness } = useSetupReadiness();
 
   const [pageAddOpen, setPageAddOpen] = useState(false);
   const [billEditor, setBillEditor] = useState<{ bill: Bill | null; debt: boolean } | null>(null);
@@ -664,7 +674,8 @@ export function DesktopDashboard() {
   const upcoming = useMemo(() => {
     const candidates: UpcomingBill[] = [];
     const appendMonth = (month: number, year: number, minimumDay: number) => {
-      getMonthlyBills(month, year).forEach((bill) => {
+      const debtPlan = getRemainingDebtPlanForMonth(month, year);
+      getMonthlyBills(month, year).filter(bill => !bill.is_debt || !debtPlan).forEach((bill) => {
         const days = getBillOccurrencesInMonth(bill, month, year).sort((a, b) => a - b);
         if (!days.length) return;
         const monthlyTotal = getBillMonthlyTotal(bill, month, year);
@@ -686,11 +697,34 @@ export function DesktopDashboard() {
             month,
             year,
             isDebt: bill.is_debt,
+            frequency: bill.frequency,
             pending: activePendingMatches.some(
               (match) =>
                 match.target_id === bill.id && match.occurrence_date === occurrenceDate,
             ),
           });
+        });
+      });
+      debtPlan?.allocations.forEach(allocation => {
+        const [allocationYear, allocationMonth, allocationDay] = allocation.date.split("-").map(Number);
+        if (allocationYear !== year || allocationMonth !== month + 1 || allocationDay < minimumDay || allocation.amount <= 0.005) return;
+        const pendingTargetId = allocation.sourceBillId ?? allocation.targetBillId;
+        candidates.push({
+          key: allocation.id,
+          id: allocation.targetBillId,
+          name: allocation.targetBillName,
+          category: allocation.kind === "rollover" ? "Snowball rollover" : "Debt payment",
+          amount: allocation.amount,
+          day: allocationDay,
+          month,
+          year,
+          isDebt: true,
+          pending: activePendingMatches.some(
+            match => match.target_id === pendingTargetId && match.occurrence_date === allocation.date,
+          ),
+          sourceId: allocation.sourceBillId,
+          kind: allocation.kind,
+          paidOff: allocation.paidOff,
         });
       });
     };
@@ -714,6 +748,7 @@ export function DesktopDashboard() {
     getBillOccurrencesInMonth,
     getMonthlyBills,
     getPaidAmount,
+    getRemainingDebtPlanForMonth,
     selectedYear,
     today,
   ]);
@@ -739,6 +774,19 @@ export function DesktopDashboard() {
       .sort((left, right) => left.balance - right.balance || left.priority - right.priority)[0] ?? null,
     [bills],
   );
+  const payoffDebts = useMemo(
+    () => bills.filter(bill => bill.is_debt && bill.balance > 0.005 && bill.include_in_snowball !== false),
+    [bills],
+  );
+  const payoffBalance = payoffDebts.reduce((sum, bill) => sum + bill.balance, 0);
+  const payoffTarget = useMemo(
+    () => payoffDebts.slice().sort((left, right) => (
+      settings.paymentMethod === "avalanche"
+        ? right.interest_rate - left.interest_rate || left.balance - right.balance
+        : left.balance - right.balance || left.priority - right.priority
+    ))[0] ?? null,
+    [payoffDebts, settings.paymentMethod],
+  );
   const nearlyCompleteGoal = useMemo(
     () => activeGoals
       .filter(goal => goal.target_amount > 0 && goal.current_amount < goal.target_amount)
@@ -753,6 +801,18 @@ export function DesktopDashboard() {
     const lowestDate = algorithmSuite.safeCushion.lowestDay
       ? new Date(selectedYear, currentMonth, algorithmSuite.safeCushion.lowestDay).toLocaleDateString("en-US", { month: "short", day: "numeric" })
       : null;
+    const sameSourceRollovers = next?.isDebt && next.sourceId
+      ? upcoming.filter(candidate =>
+        candidate.key !== next.key
+        && candidate.sourceId === next.sourceId
+        && candidate.year === next.year
+        && candidate.month === next.month
+        && candidate.day === next.day
+        && candidate.kind === "rollover",
+      )
+      : [];
+    const rolloverAmount = sameSourceRollovers.reduce((sum, candidate) => sum + candidate.amount, 0);
+    const rolloverNames = [...new Set(sameSourceRollovers.map(candidate => candidate.name))];
     return buildTodaysDecisions({
       reviewCount,
       lowestBalance: algorithmSuite.safeCushion.lowestBalance,
@@ -760,10 +820,18 @@ export function DesktopDashboard() {
       safetyFloor: settings.safety_floor,
       safeToSpend: algorithmSuite.safeCushion.amount,
       nextBill: next && nextDate ? {
+        id: next.id,
         name: next.name,
         amount: next.amount,
         dateLabel: daysAway === 0 ? "today" : daysAway === 1 ? "tomorrow" : nextDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
         daysAway,
+        isDebt: next.isDebt,
+        frequency: next.frequency,
+        paidOff: next.paidOff,
+        rollover: rolloverAmount > 0.005 ? {
+          name: rolloverNames.length === 1 ? rolloverNames[0] : "your next debts",
+          amount: rolloverAmount,
+        } : null,
       } : null,
       snowballTarget: snowballTarget ? { name: snowballTarget.name, balance: snowballTarget.balance } : null,
       goal: nearlyCompleteGoal ? { name: nearlyCompleteGoal.name, current: nearlyCompleteGoal.current_amount, target: nearlyCompleteGoal.target_amount } : null,
@@ -776,9 +844,31 @@ export function DesktopDashboard() {
 
   const go = (pathname: string, params?: Record<string, string>) =>
     router.push({ pathname: pathname as never, params } as never);
+  const openStabilityGuide = () => go(
+    "/(tabs)/how-flowledger-works",
+    buildFlowGuideRouteParams({
+      section: "overview",
+      stage: progress.stage,
+      stageLabel: progress.stageLabel,
+      protectedDays: progress.protectedDays,
+      protectedAmount: progress.protectedAmount,
+      reserveTarget: progress.reserveTarget,
+      backupTarget: progress.backupTarget,
+      safeUntilPayday: progress.safeUntilPayday,
+      nextPaycheckLabel: progress.nextPaycheckLabel,
+      nextAction: progress.nextAction,
+      nextMilestone: progress.nextMilestone,
+      nextMilestoneAmount: progress.nextMilestoneAmount,
+      lowestBalance: algorithmSuite.safeCushion.lowestBalance,
+      safetyFloor: settings.safety_floor,
+      confidence: forecastConfidence.label,
+      flowScore: algorithmSuite.flowScore.score,
+      flowScoreLabel: algorithmSuite.flowScore.label,
+    }),
+  );
   const openBills = (filter: "bills" | "debt" = "bills") => {
     setDashboardFilter(filter);
-    go("/(tabs)/bills");
+    go("/(tabs)/bills", { view: filter });
   };
   const askFlo = (prompt: string) => go("/(tabs)/flo", { prompt });
 
@@ -788,6 +878,7 @@ export function DesktopDashboard() {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
+      <MonthlyDebtCheckInModal onReview={() => openBills("debt")} />
       <View pointerEvents="none" style={styles.ambientLayer}>
         <View style={styles.ambientPurple} />
         <View style={styles.ambientBlue} />
@@ -837,6 +928,34 @@ export function DesktopDashboard() {
         </View>
       </View>
 
+      {!settings.onboarding_completed ? (
+        <View style={styles.setupCard}>
+          <View style={styles.setupIcon}>
+            <Feather name="compass" size={20} color="#c4b5fd" />
+          </View>
+          <View style={styles.setupBody}>
+            <Text style={styles.setupTitle}>Continue setup with Flo</Text>
+            <Text style={styles.setupCopy}>{setupReadiness.completeCount} of {setupReadiness.stages.length} stages complete. Your place is saved for this household.</Text>
+            <View style={styles.setupStages}>
+              {setupReadiness.stages.map(stageItem => (
+                <View key={stageItem.id} style={styles.setupStage}>
+                  <Feather name={stageItem.complete ? "check-circle" : "circle"} size={14} color={stageItem.complete ? BRAND.green : BRAND.subtle} />
+                  <Text style={[styles.setupStageText, stageItem.complete && styles.setupStageDone]}>{stageItem.shortLabel}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => go("/setup")}
+            style={({ pressed }) => [styles.setupButton, { opacity: pressed ? 0.78 : 1 }]}
+          >
+            <Text style={styles.setupButtonText}>{setupReadiness.isComplete ? "Review and finish" : "Continue setup"}</Text>
+            <Feather name="arrow-right" size={16} color="#ffffff" />
+          </Pressable>
+        </View>
+      ) : null}
+
       <View style={styles.metricGrid}>
         <MetricCard
           label="Available to Spend"
@@ -879,6 +998,43 @@ export function DesktopDashboard() {
           onPress={() => go("/(tabs)/more", { section: "goals" })}
         />
       </View>
+
+      <SurfaceCard
+        accent="purple"
+        style={styles.debtPlannerCardWrap}
+        accessibilityLabel="Open Debt Payoff Planner"
+        onPress={() => go("/snowball-plan")}
+      >
+        <View style={styles.debtPlannerCard}>
+          <View style={styles.debtPlannerIcon}>
+            <Feather name="trending-down" size={23} color="#d8b4fe" />
+          </View>
+          <View style={styles.debtPlannerCopy}>
+            <Text style={styles.debtPlannerEyebrow}>DEBT PAYOFF</Text>
+            <Text style={styles.debtPlannerTitle}>Debt Payoff Planner</Text>
+            <Text style={styles.debtPlannerDescription}>
+              See your payoff order, forecast payments, rollovers, and safe extra-payment options.
+            </Text>
+          </View>
+          <View style={styles.debtPlannerStatus}>
+            <Text style={styles.debtPlannerStatusLabel}>
+              {payoffTarget ? "CURRENT TARGET" : "GET STARTED"}
+            </Text>
+            <Text style={styles.debtPlannerStatusValue} numberOfLines={1}>
+              {payoffTarget ? payoffTarget.name : "Build your plan"}
+            </Text>
+            <Text style={styles.debtPlannerStatusMeta} numberOfLines={1}>
+              {payoffTarget
+                ? `${payoffDebts.length} active ${payoffDebts.length === 1 ? "debt" : "debts"} · ${currency(payoffBalance)} remaining`
+                : "Add a debt to preview your payoff path"}
+            </Text>
+          </View>
+          <View style={styles.debtPlannerAction}>
+            <Text style={styles.debtPlannerActionText}>Open planner</Text>
+            <Feather name="arrow-right" size={17} color="#ffffff" />
+          </View>
+        </View>
+      </SurfaceCard>
 
       <DashboardUtilityWidgets
         layout={dashboardLayout}
@@ -951,6 +1107,7 @@ export function DesktopDashboard() {
                 </View>
 
                 <Pressable
+                  nativeID="guided-tour-index"
                   accessibilityRole="button"
                   accessibilityLabel={`Flow Score ${algorithmSuite.flowScore.score}. ${algorithmSuite.flowScore.label}.`}
                   onPress={() => askFlo(`Why is my Flow Score ${algorithmSuite.flowScore.score}?`)}
@@ -1115,9 +1272,9 @@ export function DesktopDashboard() {
 
               <View style={styles.pathHeader}>
                 <Text style={styles.pathLabel}>180-day path</Text>
-                <Text style={styles.pathPercent}>{Math.round(progress.reserveProgress * 100)}%</Text>
+                <Text style={styles.pathPercent}>{Math.round(progress.backupProgress * 100)}%</Text>
               </View>
-              <ProgressBar percent={progress.reserveProgress * 100} color={BRAND.purple} height={7} />
+              <ProgressBar percent={progress.backupProgress * 100} color={BRAND.purple} height={7} />
               <View style={styles.pathMilestones}>
                 {[7, 30, 60, 90, 180].map((day) => (
                   <Text key={day} style={styles.pathMilestone}>{day}d</Text>
@@ -1135,11 +1292,13 @@ export function DesktopDashboard() {
               </View>
 
               <Pressable
-                onPress={() => go("/(tabs)/how-flowledger-works", { section: "stability" })}
+                accessibilityRole="button"
+                accessibilityLabel="See how your Stability Path works"
+                onPress={openStabilityGuide}
                 style={({ pressed }) => [styles.howItWorks, { opacity: pressed ? 0.7 : 1 }]}
               >
-                <Feather name="book-open" size={14} color="#9db2d0" />
-                <Text style={styles.howItWorksText}>How Stability Path works</Text>
+                <Feather name="map" size={16} color="#bfd2f2" />
+                <AppText tone="button" style={styles.howItWorksText}>See how your Stability Path works</AppText>
               </Pressable>
             </View>
           </SurfaceCard>
@@ -1220,8 +1379,8 @@ export function DesktopDashboard() {
         >
           <View style={styles.sectionCardContent}>
             <SectionHeader
-              title="Upcoming Bills"
-              subtitle="The next unpaid occurrences"
+              title="Upcoming Payments"
+              subtitle="The next unpaid bills and debt allocations"
               action="Manage"
               onAction={() => openBills("bills")}
             />
@@ -1601,6 +1760,56 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
     paddingRight: 76,
   },
+  debtPlannerCardWrap: { minHeight: 132 },
+  debtPlannerCard: {
+    flex: 1,
+    minHeight: 132,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    paddingHorizontal: 21,
+    paddingVertical: 18,
+  },
+  debtPlannerIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(159,92,255,0.3)",
+    backgroundColor: "rgba(124,58,237,0.16)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  debtPlannerCopy: { flex: 1, minWidth: 240 },
+  debtPlannerEyebrow: { color: "#b78aff", fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.95 },
+  debtPlannerTitle: { color: BRAND.text, fontSize: 21, lineHeight: 27, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.35, marginTop: 3 },
+  debtPlannerDescription: { color: "#8493aa", fontSize: 12, lineHeight: 18, fontFamily: "Inter_500Medium", marginTop: 3 },
+  debtPlannerStatus: {
+    width: 250,
+    minWidth: 0,
+    borderLeftWidth: 1,
+    borderLeftColor: "rgba(159,92,255,0.18)",
+    paddingLeft: 19,
+  },
+  debtPlannerStatusLabel: { color: "#9b7acb", fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.75 },
+  debtPlannerStatusValue: { color: "#f1e8ff", fontSize: 15, fontFamily: "Inter_800ExtraBold", marginTop: 5 },
+  debtPlannerStatusMeta: { color: "#7f8da3", fontSize: 11, fontFamily: "Inter_600SemiBold", marginTop: 4 },
+  debtPlannerAction: {
+    minWidth: 132,
+    height: 44,
+    borderRadius: 13,
+    backgroundColor: BRAND.purple,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 15,
+    shadowColor: BRAND.purple,
+    shadowOpacity: 0.28,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 7 },
+  },
+  debtPlannerActionText: { color: "#ffffff", fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   progressTrack: {
     width: "100%",
     borderRadius: 999,
@@ -1876,8 +2085,9 @@ const styles = StyleSheet.create({
   },
   floButtonText: { color: "#ffffff", fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   howItWorks: {
-    minHeight: 30,
-    borderRadius: 10,
+    width: "100%",
+    minHeight: 44,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(47,111,255,0.17)",
     backgroundColor: "rgba(47,111,255,0.05)",
@@ -1885,9 +2095,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 7,
-    marginTop: 7,
+    marginTop: 9,
+    paddingHorizontal: 12,
   },
-  howItWorksText: { color: "#9db2d0", fontSize: 11, fontFamily: "Inter_700Bold" },
+  howItWorksText: { color: "#bfd2f2", fontSize: 13, fontFamily: "Inter_700Bold" },
   quickCardWrap: { minHeight: 153 },
   quickGrid: { flexDirection: "row", gap: 9 },
   quickAction: {
@@ -1964,4 +2175,25 @@ const styles = StyleSheet.create({
   footerLinks: { marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 28 },
   footerText: { color: "#5f6d82", fontSize: 11, fontFamily: "Inter_600SemiBold" },
   footerMeta: { color: "#5f6d82", fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  setupCard: {
+    minHeight: 118,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(159,92,255,0.30)",
+    backgroundColor: "rgba(45,23,88,0.32)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    padding: 18,
+  },
+  setupIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(159,92,255,0.18)" },
+  setupBody: { flex: 1, minWidth: 0 },
+  setupTitle: { color: BRAND.text, fontSize: 17, fontFamily: "Inter_800ExtraBold" },
+  setupCopy: { color: BRAND.muted, fontSize: 12, lineHeight: 17, marginTop: 3, fontFamily: "Inter_500Medium" },
+  setupStages: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 10 },
+  setupStage: { flexDirection: "row", alignItems: "center", gap: 5 },
+  setupStageText: { color: "#cbd5e1", fontSize: 11, fontFamily: "Inter_700Bold" },
+  setupStageDone: { color: BRAND.subtle },
+  setupButton: { minHeight: 46, borderRadius: 14, backgroundColor: BRAND.purple, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 18 },
+  setupButtonText: { color: "#ffffff", fontSize: 12, fontFamily: "Inter_800ExtraBold" },
 });

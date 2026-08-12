@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  buildDashboardSavingsAccounts,
   buildDashboardFinancialModel,
   type DashboardAccount as Account,
   type DashboardBill as Bill,
@@ -179,6 +180,13 @@ test("builds the one financial model consumed by desktop and mobile dashboards",
   assert.equal(model.bankCurrentCheckingBalance, 2_243);
   assert.equal(model.connectedCheckingAccounts.length, 1);
   assert.equal(model.savingsAccountBalance, 900);
+  assert.deepEqual(model.savingsAccounts, [{
+    id: "connected-savings",
+    name: "Savings",
+    balance: 900,
+    providerName: "Savings",
+    source: "connected",
+  }]);
   assert.equal(model.pendingCheckingSummary?.availableBalance, 2_100);
   assert.equal(model.monthlyIncome, 3_000);
   assert.equal(model.unpaidTotal, 1_000);
@@ -189,6 +197,56 @@ test("builds the one financial model consumed by desktop and mobile dashboards",
   assert.equal(model.categoryPlan.find((row) => row.category === "Food")?.budgeted, 500);
   assert.equal(model.categoryPlan.find((row) => row.category === "Food")?.spent, 125);
   assert.ok(Number.isFinite(model.algorithmSuite.flowScore.score));
+});
+
+test("lists each canonical savings account once and uses manual savings as a fallback", () => {
+  const manualSavings: Account[] = [{
+    id: "manual-savings",
+    name: "Rainy day",
+    account_type: "savings",
+    current_balance: 250,
+    balance_as_of: "2026-07-10",
+    is_active: true,
+    created_at: "2026-01-01T00:00:00.000Z",
+  }];
+  const connectedSavings: ConnectedBankAccount[] = [
+    {
+      id: "current-savings",
+      persistent_account_id: "bank-savings-1",
+      name: "Emergency savings",
+      display_name: "House fund",
+      mask: "4321",
+      account_subtype: "savings",
+      current_balance: 900,
+      is_active: true,
+      updated_at: "2026-07-10T12:00:00.000Z",
+    },
+    {
+      id: "reconnected-savings",
+      persistent_account_id: "bank-savings-1",
+      name: "Emergency savings",
+      mask: "4321",
+      account_subtype: "savings",
+      current_balance: 850,
+      is_active: true,
+      updated_at: "2026-07-09T12:00:00.000Z",
+    },
+  ];
+
+  assert.deepEqual(buildDashboardSavingsAccounts(manualSavings, connectedSavings), [{
+    id: "current-savings",
+    name: "House fund",
+    balance: 900,
+    mask: "4321",
+    providerName: "Emergency savings",
+    source: "connected",
+  }]);
+  assert.deepEqual(buildDashboardSavingsAccounts(manualSavings, []), [{
+    id: "manual-savings",
+    name: "Rainy day",
+    balance: 250,
+    source: "manual",
+  }]);
 });
 
 test("keeps both dashboard presentations on the shared calculation model", () => {
@@ -203,6 +261,44 @@ test("keeps both dashboard presentations on the shared calculation model", () =>
     assert.doesNotMatch(source, /import \{ buildAlgorithmSuite/);
     assert.doesNotMatch(source, /connectedCheckingBalance\(/);
   }
+});
+
+test("both dashboards resume the same canonical setup walkthrough", () => {
+  const mobileDashboard = readFileSync("app/(tabs)/index.tsx", "utf8");
+  const desktopDashboard = readFileSync("components/desktop/DesktopDashboard.tsx", "utf8");
+
+  for (const source of [mobileDashboard, desktopDashboard]) {
+    assert.match(source, /useSetupReadiness\(\)/);
+    assert.match(source, /Continue setup with Flo/);
+    assert.match(source, /router\.push\("\/setup"|go\("\/setup"/);
+  }
+  assert.doesNotMatch(mobileDashboard, /onboarding_completed: true/);
+});
+
+test("the flipped savings card lists canonical accounts and exposes the naming editor", () => {
+  const mobileDashboard = readFileSync("app/(tabs)/index.tsx", "utf8");
+
+  assert.match(mobileDashboard, /savingsAccounts\.map/);
+  assert.match(mobileDashboard, /SavingsAccountNameModal/);
+  assert.match(mobileDashboard, /updateConnectedBankAccountDisplayName/);
+  assert.match(mobileDashboard, /canEditHousehold \?/);
+});
+
+test("the dashboard flip keeps Flow Score on the animated checking face", () => {
+  const mobileDashboard = readFileSync("app/(tabs)/index.tsx", "utf8");
+  const checkingFace = mobileDashboard.indexOf('pointerEvents={flipped ? "none" : "auto"}');
+  const checkingCard = mobileDashboard.indexOf("styles.referenceCommandHero,", checkingFace);
+  const scorePanel = mobileDashboard.indexOf("styles.referenceScorePanel", checkingFace);
+  const savingsFace = mobileDashboard.indexOf('pointerEvents={flipped ? "auto" : "none"}', checkingFace);
+  const savingsCard = mobileDashboard.indexOf("styles.referenceCommandHero,", savingsFace);
+
+  assert.ok(checkingFace >= 0);
+  assert.ok(checkingCard > checkingFace);
+  assert.ok(scorePanel > checkingFace);
+  assert.ok(scorePanel < savingsFace);
+  assert.ok(savingsCard > savingsFace);
+  assert.match(mobileDashboard, /styles\.referenceCommandHeroBackFace/);
+  assert.match(mobileDashboard, /heroBackCardHeight/);
 });
 
 test("uses one Plaid connection action and keeps syncing separate", () => {
@@ -226,4 +322,28 @@ test("uses one Plaid connection action and keeps syncing separate", () => {
   assert.match(plaidOAuthResume, /exchange-public-token/);
   assert.match(desktopDashboard, /Connections/);
   assert.match(desktopDashboard, /section: "plaid"/);
+});
+
+test("desktop dashboard presents the debt payoff planner as a first-class card", () => {
+  const desktopDashboard = readFileSync("components/desktop/DesktopDashboard.tsx", "utf8");
+
+  assert.match(desktopDashboard, /Debt Payoff Planner/);
+  assert.match(desktopDashboard, /accessibilityLabel="Open Debt Payoff Planner"/);
+  assert.match(desktopDashboard, /onPress=\{\(\) => go\("\/snowball-plan"\)\}/);
+  assert.match(desktopDashboard, /CURRENT TARGET/);
+});
+
+test("activity surfaces use Inflows and Outflows wording across layouts", () => {
+  const activitySources = [
+    readFileSync("app/(tabs)/transactions.tsx", "utf8"),
+    readFileSync("components/ReportsInsightsView.tsx", "utf8"),
+    readFileSync("components/ReviewCenter.tsx", "utf8"),
+    readFileSync("components/desktop/DesktopWorkspacePage.tsx", "utf8"),
+  ];
+
+  for (const source of activitySources) {
+    assert.doesNotMatch(source, /Money in|Money out/);
+  }
+  assert.match(activitySources[0], /label: "Inflows"/);
+  assert.match(activitySources[0], /label: "Outflows"/);
 });

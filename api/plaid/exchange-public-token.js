@@ -1,5 +1,5 @@
 const { plaid } = require("../_utils/plaid");
-const { authenticatedUser, safeError } = require("../_utils/supabase");
+const { authenticatedUser, publicError } = require("../_utils/supabase");
 const { PlaidItemConflictError } = require("../_utils/plaidItemStore");
 const { connectPlaidPublicToken } = require("../_utils/plaidConnect");
 const { hostedLinkCompletion, validateHostedLinkSession } = require("../_utils/plaidHostedLink");
@@ -69,7 +69,7 @@ module.exports = async function exchangePublicToken(req, res) {
     }
     const code = error && error.response && error.response.data && error.response.data.error_code || error.code || "PUBLIC_TOKEN_EXCHANGE_FAILED";
     const status = code === "PLAID_LINK_SESSION_INVALID" ? 400 : 500;
-    return res.status(status).json({ error: code, message: safeError(error, "Could not finish connecting this bank.") });
+    return res.status(status).json({ error: code, message: publicError(error, "Could not finish connecting this bank.") });
   }
 };
 

@@ -4,8 +4,12 @@
   "license": "MIT",
   "scripts": {
     "preinstall": "node scripts/enforce-pnpm.cjs",
-    "build": "pnpm run typecheck && pnpm -r --if-present run build",
-    "typecheck:libs": "tsc --build",
+    "test:api": "node --test api/_utils/*.test.js",
+    "test:mobile": "pnpm --filter @workspace/mobile run test",
+    "test": "pnpm run test:api && pnpm run test:mobile",
+    "build": "pnpm run test && pnpm run typecheck && pnpm -r --if-present run build",
+    "verify": "pnpm run build && pnpm audit --prod --audit-level high",
+    "typecheck:libs": "tsc --build --force",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
   "private": true,
@@ -19,6 +23,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "2.108.0",
+    "jose": "6.2.3",
     "plaid": "43.0.0",
     "web-push": "3.6.7"
   }
