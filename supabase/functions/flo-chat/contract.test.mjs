@@ -149,6 +149,7 @@ test("followups cannot carry ungrounded financial figures or judgments", () => {
 test("v3 endpoint enforces privacy, legacy rejection, and server-owned persistence", async () => {
   const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
   const migration = await readFile(new URL("../../migrations/20260812152444_flo_v3_account_intelligence.sql", import.meta.url), "utf8");
+  const guardMigration = await readFile(new URL("../../migrations/20260812171000_fix_flo_server_owned_write_guards.sql", import.meta.url), "utf8");
   assert.match(source, /body\.version !== 3/);
   assert.match(source, /store: false/);
   assert.match(source, /crypto\.subtle\.sign\("HMAC"/);
@@ -174,6 +175,9 @@ test("v3 endpoint enforces privacy, legacy rejection, and server-owned persisten
   assert.match(source, /filter\(\(row: any\) => row\.role === "user"\)/);
   assert.doesNotMatch(source, /LEGACY DETERMINISTIC SNAPSHOT|body\.snapshot|legacyResponse/);
   assert.match(migration, /revoke insert on table public\.flo_usage from authenticated/i);
+  assert.match(guardMigration, /current_user in \('authenticated', 'anon'\)/i);
+  assert.doesNotMatch(guardMigration, /auth\.role\(\)/i);
+  assert.match(guardMigration, /revoke all on function public\.guard_flo_ephemeral_conversations\(\)/i);
   assert.match(migration, /revoke all on table public\.flo_audit_events from public, anon, authenticated/i);
   assert.match(migration, /revoke all on table public\.flo_memory from authenticated/i);
   assert.match(migration, /confirm_flo_recurring_bill_proposal/);
