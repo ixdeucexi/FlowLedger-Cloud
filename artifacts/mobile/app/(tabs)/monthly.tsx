@@ -1864,7 +1864,11 @@ export default function MonthlyScreen() {
             }}
           />
       ) : (
-        <View style={[styles.calFixed, isDesktop && styles.desktopCalFixed, { paddingBottom: isDesktop ? 24 : insets.bottom + 92 }]}>
+        <ScrollView
+          style={[styles.calFixed, isDesktop && styles.desktopCalFixed]}
+          contentContainerStyle={[styles.calScrollContent, { paddingBottom: isDesktop ? 24 : insets.bottom + 108 }]}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={[styles.calInner, isDesktop && styles.desktopCalInner]}>
             <View {...(Platform.OS === "web" ? {} : calendarSwipeResponder.panHandlers)}>
               <CalendarView
@@ -2483,7 +2487,7 @@ export default function MonthlyScreen() {
             </Modal>
 
           </View>
-        </View>
+        </ScrollView>
       )}
         </>
       )}
@@ -3009,7 +3013,8 @@ const styles = StyleSheet.create({
   dueDayRow: { flexDirection: "row", alignItems: "center", marginHorizontal: 12, marginBottom: 10 },
   dueDayInput: { width: 42, height: 30, borderRadius: 6, textAlign: "center", fontSize: 14, fontFamily: "Inter_600SemiBold", borderWidth: 1 },
   calFixed: { flex: 1, paddingTop: 8 },
-  calInner: { flex: 1, paddingHorizontal: 12 },
+  calScrollContent: { flexGrow: 1 },
+  calInner: { paddingHorizontal: 12 },
   desktopCalFixed: { paddingTop: 0 },
   desktopCalInner: { width: "96%", maxWidth: 1440, alignSelf: "center", paddingHorizontal: 0 },
   weeklyChip: { flexDirection: "row", alignItems: "center", gap: 5, marginHorizontal: 12, marginTop: 2, marginBottom: 6, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },

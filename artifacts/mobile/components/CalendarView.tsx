@@ -1,5 +1,5 @@
 import React from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 import type { DailyBalance, DecisionRecord, Goal, GoalExpense, Transaction } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
@@ -27,27 +27,6 @@ const CALENDAR = {
   amber: "#fbbf24",
   red: "#fb7185",
 };
-
-function CalendarGridViewport({
-  children,
-  scrollable,
-}: {
-  children: React.ReactNode;
-  scrollable: boolean;
-}) {
-  if (!scrollable) return <>{children}</>;
-
-  return (
-    <ScrollView
-      nestedScrollEnabled
-      showsVerticalScrollIndicator
-      style={styles.gridScroll}
-      contentContainerStyle={styles.gridScrollContent}
-    >
-      {children}
-    </ScrollView>
-  );
-}
 
 type ChipKind = "income" | "bill" | "debt" | "expense" | "goal" | "plan" | "risk";
 type CalendarGoalExpense = GoalExpense & { goal_type?: Goal["goal_type"] };
@@ -191,7 +170,6 @@ export function CalendarView({
   for (let i = 0; i < firstDay; i += 1) cells.push(null);
   for (let d = 1; d <= daysInMonth; d += 1) cells.push(d);
   while (cells.length % 7 !== 0) cells.push(null);
-  const hasSixRows = cells.length / 7 > 5;
   const calendarRowCount = cells.length / 7;
   const desktopCellHeight = Math.max(72, Math.min(118, Math.floor((viewportHeight - 250) / calendarRowCount)));
 
@@ -215,7 +193,7 @@ export function CalendarView({
         ))}
       </View>
 
-      <CalendarGridViewport scrollable={hasSixRows && Platform.OS !== "web"}>
+      <>
         <View style={[styles.grid, { backgroundColor: calendarTheme.surface }]}>
           {cells.map((day, i) => {
           if (!day) return <View key={`empty-${i}`} style={[styles.cellOuter, styles.emptyCell, { borderColor: calendarTheme.line }]} />;
@@ -366,7 +344,7 @@ export function CalendarView({
           );
           })}
         </View>
-      </CalendarGridViewport>
+      </>
       <View style={styles.legendRow}>
         {[
           { label: "Income", color: CALENDAR.green },
@@ -407,8 +385,6 @@ const styles = StyleSheet.create({
     borderBottomColor: CALENDAR.line,
   },
   dayName: { flex: 1, textAlign: "center", fontSize: 11, fontFamily: "Inter_800ExtraBold", color: CALENDAR.muted, letterSpacing: 1.1 },
-  gridScroll: { maxHeight: 530 },
-  gridScrollContent: { paddingBottom: 6 },
   grid: { flexDirection: "row", flexWrap: "wrap", backgroundColor: CALENDAR.surface },
   cellOuter: {
     width: "14.285714%",
