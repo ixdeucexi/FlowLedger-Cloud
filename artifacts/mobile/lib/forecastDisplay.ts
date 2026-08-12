@@ -71,6 +71,10 @@ export function formatEventStatus(status: FinancialEventStatus): string {
   return STATUS_LABELS[status] ?? status;
 }
 
+export function calendarVisibleForecastEvents(events: FinancialEvent[] = []): FinancialEvent[] {
+  return events.filter(event => event.sourceType !== "reconciliation" && event.kind !== "bank_adjustment");
+}
+
 export function describeForecastEvent(event: FinancialEvent): ForecastEventDisplay {
   return {
     event,

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildDayForecastFloPrompt, debtPaymentStatusLabel, formatCalendarBalance, groupForecastEvents, plannedDebtEditorParams } from "./forecastDisplay";
+import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, debtPaymentStatusLabel, formatCalendarBalance, groupForecastEvents, plannedDebtEditorParams } from "./forecastDisplay";
 import type { FinancialEvent } from "./forecast";
 
 const event = (overrides: Partial<FinancialEvent> & Pick<FinancialEvent, "id" | "sourceType" | "sourceId" | "kind" | "date" | "amount" | "status">): FinancialEvent => ({
@@ -39,6 +39,15 @@ test("labels an authoritative bank commitment as payment pending", () => {
   assert.equal(groups[0].events[0].statusLabel, "PAYMENT PENDING");
   assert.equal(groups[0].events[0].event.sourceId, "camera");
   assert.equal(groups[0].events[0].event.debtPlanSource, "canonical");
+});
+
+test("keeps bank synchronization out of calendar items without removing real activity", () => {
+  const events = calendarVisibleForecastEvents([
+    event({ id: "bank-anchor", sourceType: "reconciliation", sourceId: "2026-08-11", kind: "bank_adjustment", date: "2026-08-11", amount: 205.78, status: "actual", name: "Bank balance update" }),
+    event({ id: "car-wash", sourceType: "transaction", sourceId: "car-wash", kind: "transaction_expense", date: "2026-08-11", amount: -49.97, status: "actual", name: "Car Wash" }),
+  ]);
+
+  assert.deepEqual(events.map(item => item.id), ["car-wash"]);
 });
 
 test("a canonical child opens the editor for its source debt and occurrence", () => {

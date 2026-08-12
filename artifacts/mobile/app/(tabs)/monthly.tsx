@@ -33,7 +33,7 @@ import { DESKTOP_MODAL_HANDLE, DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR, DES
 import { confirmedBillMatchId, isConfirmedBillMatch } from "@/lib/billMatching";
 import { allocationLabel, groupPlannedExpenseAllocations, matchedOccurrenceAllocations, occurrenceKey, reviewSettlementSummary, transactionDisplayName } from "@/lib/reviewCenter";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
-import { buildDayForecastFloPrompt, groupForecastEvents, plannedDebtEditorParams } from "@/lib/forecastDisplay";
+import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, groupForecastEvents, plannedDebtEditorParams } from "@/lib/forecastDisplay";
 import type { FinancialEvent } from "@/lib/forecast";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { buildOverdueBillOccurrences } from "@/lib/overdueBills";
@@ -567,7 +567,7 @@ export default function MonthlyScreen() {
   const selectedDay = selectedDate ? parseInt(selectedDate.split("-")[2]) : null;
   const selectedForecastDay = selectedDay === null ? undefined : dailyBalances.find(item => item.day === selectedDay);
   const selectedForecastGroups = useMemo(
-    () => groupForecastEvents(selectedForecastDay?.events ?? []),
+    () => groupForecastEvents(calendarVisibleForecastEvents(selectedForecastDay?.events)),
     [selectedForecastDay]
   );
   const selectedDebtPayments = useMemo(
