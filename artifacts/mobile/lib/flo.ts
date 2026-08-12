@@ -26,17 +26,3 @@ export async function askFlo(message: string, facts: FloFacts, summary: string, 
   if (data?.error === "flo_not_connected") return FLO_CONNECTION_ERROR_MESSAGE;
   return normalizeFloReply(data?.reply);
 }
-
-export async function loadFloMemory(userId: string): Promise<string> {
-  const { data } = await supabase.from("flo_memory").select("summary").eq("user_id", userId).maybeSingle();
-  return data?.summary ?? "";
-}
-
-export async function updateFloMemory(userId: string, message: string): Promise<void> {
-  const summary = `Recent topic: ${sanitizeFloSummary(message)}`;
-  await supabase.from("flo_memory").upsert({ user_id: userId, summary, updated_at: new Date().toISOString() });
-}
-
-export async function resetFloMemory(userId: string): Promise<void> {
-  await supabase.from("flo_memory").delete().eq("user_id", userId);
-}

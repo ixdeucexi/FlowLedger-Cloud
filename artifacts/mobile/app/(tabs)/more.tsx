@@ -73,7 +73,8 @@ import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { localDateString } from "@/lib/dateLabels";
 import { parseStatementCsv } from "@/lib/accounts";
 import { orderActiveDebtsForStrategy } from "@/lib/debtOrder";
-import { resetFloMemory } from "@/lib/flo";
+import { resetFloHouseholdMemory } from "@/lib/floChat";
+import { DEFAULT_FLO_PREFERENCES, saveFloPreferences } from "@/lib/floPreferences";
 import {
   getLatestIncomeChange,
   getLatestRecordedIncomeAmount,
@@ -1958,7 +1959,7 @@ export default function MoreScreen({
   };
 
   const handleResetFlo = () => {
-    if (!user) return;
+    if (!user || !activeHousehold?.householdId) return;
     confirmAction({
       title: "Reset Flo Memory?",
       message:
@@ -1966,7 +1967,8 @@ export default function MoreScreen({
       confirmText: "Reset",
       destructive: true,
       onConfirm: async () => {
-        await resetFloMemory(user.id);
+        await resetFloHouseholdMemory(activeHousehold.householdId, user.id);
+        await saveFloPreferences(user.id, activeHousehold.householdId, DEFAULT_FLO_PREFERENCES);
         Alert.alert("Flo Memory Reset", "Flo's saved memory was removed.");
       },
     });

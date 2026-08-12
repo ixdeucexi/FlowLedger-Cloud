@@ -154,5 +154,7 @@
     ,"lib/resumePolicy.test.ts"
     ,"lib/planSimulator.ts"
     ,"lib/planSimulator.test.ts"
+    ,"lib/floExperience.ts"
+    ,"lib/floExperience.test.ts"
   ]
 }

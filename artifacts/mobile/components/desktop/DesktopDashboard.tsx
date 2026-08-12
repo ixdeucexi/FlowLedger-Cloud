@@ -1079,7 +1079,7 @@ export function DesktopDashboard() {
                     <Text style={styles.accountPillText}>Accounts</Text>
                   </Pressable>
                   <Pressable
-                    onPress={() => askFlo("Explain my checking balance and what is safe to spend.")}
+                    onPress={() => askFlo("Explain my checking balance and show which records you used.")}
                     style={({ pressed }) => [styles.accountPill, styles.floPill, { opacity: pressed ? 0.7 : 1 }]}
                   >
                     <Feather name="message-circle" size={12} color="#d8b4fe" />

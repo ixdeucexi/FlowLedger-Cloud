@@ -14,6 +14,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { FloLauncher } from "@/components/FloLauncher";
 import { BiometricLockGate } from "@/components/BiometricLockGate";
 import { ConfirmActionModal } from "@/components/ConfirmActionModal";
 import { LegalAcceptanceGate } from "@/components/LegalAcceptanceGate";
@@ -25,6 +26,7 @@ import { BudgetProvider, useBudget } from "@/context/BudgetContext";
 import { MembershipProvider } from "@/context/MembershipContext";
 import { ThemeProvider, useThemeMode } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
+import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { readLastAppRoute, rememberAppRoute } from "@/lib/navigationMemory";
 import { WEB_VIEWPORT_CONTENT } from "@/lib/webViewport";
@@ -144,6 +146,8 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
   const { ready: themeReady } = useThemeMode();
   const reduceMotion = useReducedMotion();
   const router = useRouter();
+  const pathname = usePathname();
+  const isDesktop = useDesktopExperience();
   const [minimumStartupReady, setMinimumStartupReady] = useState(false);
   const [showStartupOverlay, setShowStartupOverlay] = useState(true);
   const startupOpacity = useRef(new Animated.Value(1)).current;
@@ -253,6 +257,7 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
               <PwaInstallPrompt />
               <PlaidOAuthResume />
               <ConfirmActionModal />
+              {!biometricLocked && ["/snowball-plan", "/planned-debt-payment", "/plan-simulator"].includes(pathname) ? <FloLauncher desktop={isDesktop} /> : null}
             </GestureHandlerRootView>
             <LegalAcceptanceGate />
           </>

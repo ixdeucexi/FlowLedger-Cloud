@@ -2,8 +2,8 @@ import { fetch as expoFetch } from "expo/fetch";
 
 import { supabase, supabaseAnonKey, supabaseUrl } from "@/lib/supabase";
 import { humanizeFloText } from "@/lib/floLanguage";
-import type { FloFacts } from "@/lib/floPolicy";
-import { parseFloSseChunk, type FloSource, type FloStreamEvent } from "@/lib/floStream";
+import { collectFloHistoryPages, type FloReviewProposal } from "@/lib/floExperience";
+import { isFloTerminalEvent, parseFloSseChunk, type FloSource, type FloStreamEvent } from "@/lib/floStream";
 
 export { parseFloSseChunk } from "@/lib/floStream";
 export type { FloSource, FloStreamEvent } from "@/lib/floStream";
@@ -24,6 +24,12 @@ export interface FloStoredMessage {
   text: string;
   status: "pending" | "streaming" | "completed" | "error" | "stopped";
   sources: FloSource[];
+  followUps: string[];
+  proposal: FloReviewProposal | null;
+  dataAsOf?: string;
+  coverage?: Record<string, unknown>;
+  partial?: boolean;
+  caveat?: string;
   createdAt: string;
 }
 
@@ -48,14 +54,40 @@ function mapConversation(row: Record<string, unknown>): FloConversation {
 }
 
 export async function listFloConversations(householdId: string): Promise<FloConversation[]> {
-  const { data, error } = await supabase
-    .from("flo_conversations")
-    .select("id,household_id,title,summary,message_count,created_at,updated_at")
-    .eq("household_id", householdId)
-    .order("updated_at", { ascending: false })
-    .limit(50);
-  if (error) throw error;
-  return (data ?? []).map(row => mapConversation(row as Record<string, unknown>));
+  return collectFloHistoryPages(async (from, to) => {
+    const { data, error } = await supabase
+      .from("flo_conversations")
+      .select("id,household_id,title,summary,message_count,created_at,updated_at")
+      .eq("household_id", householdId)
+      .order("updated_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(from, to);
+    if (error) throw error;
+    return (data ?? []).map(row => mapConversation(row as Record<string, unknown>));
+  });
+}
+
+export async function searchFloConversationContent(conversationIds: string[], query: string): Promise<Set<string>> {
+  const needle = query.trim().toLocaleLowerCase().slice(0, 100);
+  if (!needle || !conversationIds.length) return new Set();
+  const matches = new Set<string>();
+  for (let start = 0; start < conversationIds.length; start += 100) {
+    const ids = conversationIds.slice(start, start + 100);
+    const rows = await collectFloHistoryPages(async (from, to) => {
+      const { data, error } = await supabase
+        .from("flo_messages")
+        .select("conversation_id,content")
+        .in("conversation_id", ids)
+        .order("id", { ascending: true })
+        .range(from, to);
+      if (error) throw error;
+      return data ?? [];
+    }, 200);
+    rows.forEach(row => {
+      if (String(row.content ?? "").toLocaleLowerCase().includes(needle)) matches.add(String(row.conversation_id));
+    });
+  }
+  return matches;
 }
 
 export async function createFloConversation(userId: string, householdId: string, firstPrompt: string): Promise<FloConversation> {
@@ -90,13 +122,118 @@ export async function deleteFloConversation(conversationId: string): Promise<voi
   if (!data?.length) throw new Error("Flo chat was not found or could not be deleted.");
 }
 
+export async function deleteAllFloConversations(householdId: string): Promise<void> {
+  const { error } = await supabase
+    .from("flo_conversations")
+    .delete()
+    .eq("household_id", householdId);
+  if (error) throw error;
+  const { count, error: verifyError } = await supabase
+    .from("flo_conversations")
+    .select("id", { count: "exact", head: true })
+    .eq("household_id", householdId);
+  if (verifyError) throw verifyError;
+  if ((count ?? 0) > 0) throw new Error("Some Flo conversations could not be deleted.");
+}
+
+export async function updateFloHouseholdMemory(input: {
+  householdId: string;
+  userId: string;
+  enabled: boolean;
+  preferences?: Record<string, unknown>;
+}): Promise<void> {
+  const { error } = await supabase.from("flo_household_memory").upsert({
+    household_id: input.householdId,
+    user_id: input.userId,
+    enabled: input.enabled,
+    preferences: input.enabled ? input.preferences ?? {} : {},
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "household_id,user_id" });
+  if (error) throw error;
+}
+
+export async function readFloHouseholdMemory(householdId: string, userId: string): Promise<{ enabled: boolean; note: string }> {
+  const { data, error } = await supabase
+    .from("flo_household_memory")
+    .select("enabled,preferences")
+    .eq("household_id", householdId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  const preferences = data?.preferences && typeof data.preferences === "object" ? data.preferences as Record<string, unknown> : {};
+  return {
+    enabled: data?.enabled === true,
+    note: typeof preferences.note === "string" ? preferences.note.trim().slice(0, 240) : "",
+  };
+}
+
+export async function resetFloHouseholdMemory(householdId: string, userId: string): Promise<void> {
+  const { error } = await supabase
+    .from("flo_household_memory")
+    .delete()
+    .eq("household_id", householdId)
+    .eq("user_id", userId);
+  if (error) throw error;
+  const { data, error: verifyError } = await supabase
+    .from("flo_household_memory")
+    .select("household_id")
+    .eq("household_id", householdId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (verifyError) throw verifyError;
+  if (data) throw new Error("Flo memory could not be reset.");
+}
+
+export async function confirmFloRecurringBillProposal(proposalId: string): Promise<{
+  billId: string;
+  previousAmount: number;
+  newAmount: number;
+  confirmedAt: string;
+  auditId: number;
+}> {
+  const { data, error } = await supabase.rpc("confirm_flo_recurring_bill_proposal", { p_proposal_id: proposalId });
+  if (error) throw error;
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null;
+  if (!row || typeof row.billId !== "string") throw new Error("proposal_confirmation_invalid");
+  const receipt = {
+    billId: row.billId,
+    previousAmount: Number(row.previousAmount),
+    newAmount: Number(row.newAmount),
+    confirmedAt: String(row.confirmedAt),
+    auditId: Number(row.auditId),
+  };
+  if (!receipt.billId || !Number.isFinite(receipt.previousAmount) || receipt.previousAmount < 0 || !Number.isFinite(receipt.newAmount) || receipt.newAmount <= 0 || !Number.isFinite(receipt.auditId) || !Number.isFinite(Date.parse(receipt.confirmedAt))) {
+    throw new Error("proposal_confirmation_invalid");
+  }
+  return receipt;
+}
+
+export async function readAuthoritativeFloProposal(proposalId: string): Promise<FloReviewProposal> {
+  const { data, error } = await supabase
+    .from("flo_proposals")
+    .select("id,kind,title,summary,payload,reversible,status,expires_at")
+    .eq("id", proposalId)
+    .single();
+  if (error) throw error;
+  return {
+    id: String(data.id),
+    kind: String(data.kind),
+    title: String(data.title),
+    summary: String(data.summary ?? ""),
+    payload: data.payload && typeof data.payload === "object" ? data.payload as Record<string, unknown> : {},
+    reversible: data.reversible === true,
+    status: String(data.status ?? "review"),
+    expiresAt: String(data.expires_at),
+  };
+}
+
 export async function listFloMessages(
   conversationId: string,
   before?: string,
 ): Promise<{ messages: FloStoredMessage[]; nextCursor: string | null }> {
   let query = supabase
     .from("flo_messages")
-    .select("id,role,content,status,source_refs,created_at")
+    .select("id,role,content,status,source_refs,proposal,answer,followups,data_as_of,coverage,partial,created_at")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
@@ -111,6 +248,14 @@ export async function listFloMessages(
     text: row.role === "assistant" ? humanizeFloText(String(row.content ?? "")) : String(row.content ?? ""),
     status: String(row.status ?? "completed") as FloStoredMessage["status"],
     sources: Array.isArray(row.source_refs) ? row.source_refs as FloSource[] : [],
+    followUps: Array.isArray(row.followups) ? row.followups.filter(item => typeof item === "string") as string[] : [],
+    proposal: row.proposal && typeof row.proposal === "object" ? row.proposal as FloReviewProposal : null,
+    dataAsOf: typeof row.data_as_of === "string" ? row.data_as_of : undefined,
+    coverage: row.coverage && typeof row.coverage === "object" ? row.coverage as Record<string, unknown> : undefined,
+    partial: row.partial === true,
+    caveat: row.answer && typeof row.answer === "object" && typeof (row.answer as Record<string, unknown>).caveat === "string"
+      ? String((row.answer as Record<string, unknown>).caveat).trim().slice(0, 500)
+      : undefined,
     createdAt: String(row.created_at),
   })).reverse();
   return {
@@ -120,14 +265,14 @@ export async function listFloMessages(
 }
 
 export async function streamFloChat(input: {
-  conversationId: string;
+  conversationId?: string;
   householdId: string;
   userMessageId: string;
   assistantMessageId: string;
   text: string;
-  facts: FloFacts;
-  asOf: string;
   timezone: string;
+  context?: { route?: string; entityType?: string; entityId?: string; date?: string; label?: string };
+  historyEnabled?: boolean;
   previewTier?: "free" | "pro" | null;
   signal?: AbortSignal;
   onEvent: (event: FloStreamEvent) => void;
@@ -144,12 +289,13 @@ export async function streamFloChat(input: {
       Accept: "text/event-stream",
     },
     body: JSON.stringify({
-      version: 2,
-      conversationId: input.conversationId,
+      version: 3,
+      ...(input.conversationId ? { conversationId: input.conversationId } : {}),
       householdId: input.householdId,
       userMessage: { id: input.userMessageId, text: input.text },
       assistantMessageId: input.assistantMessageId,
-      snapshot: { asOf: input.asOf, facts: input.facts },
+      context: input.context,
+      historyEnabled: input.historyEnabled !== false,
       timezone: input.timezone,
       previewTier: input.previewTier ?? null,
     }),
@@ -162,33 +308,52 @@ export async function streamFloChat(input: {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let pending = "";
+  let terminal = false;
+  let ephemeralCleaned = input.historyEnabled !== false;
+  const emit = (event: FloStreamEvent) => {
+    if (isFloTerminalEvent(event)) terminal = true;
+    if (event.type === "ephemeral-cleanup" && event.status === "completed") ephemeralCleaned = true;
+    input.onEvent(event);
+  };
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
     const parsed = parseFloSseChunk(pending, decoder.decode(value, { stream: true }));
     pending = parsed.pending;
-    parsed.events.forEach(input.onEvent);
+    parsed.events.forEach(emit);
   }
   const final = parseFloSseChunk(pending, "\n\n");
-  final.events.forEach(input.onEvent);
+  final.events.forEach(emit);
+  if (!terminal) throw new Error("flo_stream_incomplete");
+  if (!ephemeralCleaned) throw new Error("ephemeral_cleanup_failed");
 }
 
-export async function persistFloFallback(input: {
-  id: string;
-  conversationId: string;
-  householdId: string;
-  userId: string;
-  text: string;
-}): Promise<void> {
-  await supabase.from("flo_messages").upsert({
-    id: input.id,
-    conversation_id: input.conversationId,
-    household_id: input.householdId,
-    created_by: input.userId,
-    role: "assistant",
-    content: input.text,
-    status: "completed",
-    source_refs: [{ type: "deterministic", label: "FlowLedger calculation", asOf: new Date().toISOString() }],
-    completed_at: new Date().toISOString(),
-  }, { onConflict: "id" });
+export async function listAllFloMessages(conversationId: string): Promise<FloStoredMessage[]> {
+  const rows = await collectFloHistoryPages(async (from, to) => {
+    const { data, error } = await supabase
+      .from("flo_messages")
+      .select("id,role,content,status,source_refs,proposal,answer,followups,data_as_of,coverage,partial,created_at")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to);
+    if (error) throw error;
+    return data ?? [];
+  });
+  return rows.map(row => ({
+    id: String(row.id),
+    role: row.role === "assistant" ? "flo" as const : "user" as const,
+    text: row.role === "assistant" ? humanizeFloText(String(row.content ?? "")) : String(row.content ?? ""),
+    status: String(row.status ?? "completed") as FloStoredMessage["status"],
+    sources: Array.isArray(row.source_refs) ? row.source_refs as FloSource[] : [],
+    followUps: Array.isArray(row.followups) ? row.followups.filter(item => typeof item === "string") as string[] : [],
+    proposal: row.proposal && typeof row.proposal === "object" ? row.proposal as FloReviewProposal : null,
+    dataAsOf: typeof row.data_as_of === "string" ? row.data_as_of : undefined,
+    coverage: row.coverage && typeof row.coverage === "object" ? row.coverage as Record<string, unknown> : undefined,
+    partial: row.partial === true,
+    caveat: row.answer && typeof row.answer === "object" && typeof (row.answer as Record<string, unknown>).caveat === "string"
+      ? String((row.answer as Record<string, unknown>).caveat).trim().slice(0, 500)
+      : undefined,
+    createdAt: String(row.created_at),
+  }));
 }

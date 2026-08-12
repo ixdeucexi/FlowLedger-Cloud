@@ -21,6 +21,7 @@ import { SaveStatusBanner } from "@/components/SaveStatusBanner";
 import { ConnectivityBanner } from "@/components/ConnectivityBanner";
 import { DecisionDueModal } from "@/components/DecisionDueModal";
 import { FloLogo } from "@/components/FloLogo";
+import { FloLauncher } from "@/components/FloLauncher";
 import { PlanPreviewBanner } from "@/components/PlanPreviewBanner";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
@@ -260,7 +261,7 @@ function DemoModeBanner() {
   const askSampleQuestion = () => {
     router.push({
       pathname: "/(tabs)/flo",
-      params: { prompt: "Can I afford $500 next Friday?" },
+      params: { prompt: "Which account records can you explain?" },
     } as any);
   };
 
@@ -838,6 +839,7 @@ function TabContent() {
             />
           </Tabs>
           {loading ? <PlanRestoreOverlay isDesktop={isDesktop} /> : null}
+          {!loading ? <FloLauncher desktop={isDesktop} /> : null}
           </View>
           )}
         </ResponsiveDesktopChrome>

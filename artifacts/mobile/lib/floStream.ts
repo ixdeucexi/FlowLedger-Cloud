@@ -1,13 +1,46 @@
-export type FloSource = { type: string; label: string; asOf?: string };
+import type { FloReviewProposal } from "./floExperience";
+
+export type FloSource = {
+  id?: string;
+  type: string;
+  label: string;
+  recordId?: string;
+  route?: string;
+  asOf?: string | null;
+  freshness?: "current" | "stale" | "unknown" | string;
+  startDate?: string;
+  endDate?: string;
+};
+
+export type FloGroundedAnswer = {
+  answer: string;
+  claims?: Array<{ kind: string; label: string; value: string; evidenceIds: string[] }>;
+  caveat?: string | null;
+  evidenceIds?: string[];
+  followups?: string[];
+  dataAsOf?: string | null;
+  coverage?: Record<string, unknown>;
+  partial?: boolean;
+};
 
 export type FloStreamEvent =
-  | { type: "meta"; conversationId: string; assistantMessageId: string; model?: string; asOf?: string }
+  | { type: "meta"; version?: number; conversationId: string; assistantMessageId: string; model?: string; asOf?: string; dataAsOf?: string | null; coverage?: Record<string, unknown>; partial?: boolean }
   | { type: "status"; message: string }
   | { type: "text-delta"; delta: string }
   | { type: "sources"; sources: FloSource[] }
-  | { type: "proposal"; proposal: Record<string, unknown> | null }
-  | { type: "done"; messageId: string; text?: string }
+  | { type: "followups"; items: string[] }
+  | { type: "proposal"; proposal: FloReviewProposal | null }
+  | { type: "ephemeral-cleanup"; status: "completed" }
+  | { type: "done"; messageId: string; text?: string; answer?: FloGroundedAnswer }
   | { type: "error"; code: string; message: string };
+
+export function isFloTerminalEvent(event: FloStreamEvent): boolean {
+  return event.type === "done" || event.type === "error";
+}
+
+export function floStreamErrorCode(event: FloStreamEvent): string | null {
+  return event.type === "error" ? event.code : null;
+}
 
 export function parseFloSseChunk(
   pending: string,

@@ -1,13 +1,14 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useLocalSearchParams } from "expo-router";
-import React, { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
+  Share,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,84 +18,79 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useMembership } from "@/context/MembershipContext";
-import { useBudget, type DecisionRecord } from "@/context/BudgetContext";
+import { useBudget } from "@/context/BudgetContext";
 import { BasicFlo } from "@/components/BasicFlo";
-import { DatePickerField } from "@/components/DatePickerField";
 import { FloConversationBar } from "@/components/FloConversationBar";
+import { FloGroundedAnswer } from "@/components/FloGroundedAnswer";
 import { FloLogo } from "@/components/FloLogo";
-import { FloSafetyStopModal } from "@/components/FloSafetyStopModal";
 import { PremiumBackdrop } from "@/components/PremiumBackdrop";
-import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
+import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { isCashFlowTransaction } from "@/lib/billMatching";
-import { updateFloMemory, type FloFacts } from "@/lib/flo";
-import { humanizeFloText, isWeakFloReply } from "@/lib/floLanguage";
+import { type FloFacts } from "@/lib/flo";
+import { humanizeFloText } from "@/lib/floLanguage";
+import { exportFloHistoryText, floConversationForRequest, floProposalMatchesAuthoritative, isFloRequestGenerationCurrent, nextFloRequestGeneration, type FloReviewProposal } from "@/lib/floExperience";
+import { DEFAULT_FLO_PREFERENCES, readFloPreferences, saveFloPreferences, type FloPreferences } from "@/lib/floPreferences";
 import {
   createFloConversation,
   createFloId,
+  confirmFloRecurringBillProposal,
+  deleteAllFloConversations,
   deleteFloConversation,
+  listAllFloMessages,
   listFloConversations,
   listFloMessages,
-  persistFloFallback,
+  readFloHouseholdMemory,
+  readAuthoritativeFloProposal,
   renameFloConversation,
+  searchFloConversationContent,
   streamFloChat,
+  updateFloHouseholdMemory,
   type FloConversation,
   type FloSource,
 } from "@/lib/floChat";
 import {
-  buildDebtPaymentScenario,
   buildFloCategoryQuickPrompts,
-  buildFloDecisionScenario,
-  evaluateFloBillDateMove,
-  evaluateFloBillMoveUndo,
-  evaluateFloDebtPayment,
-  evaluateFloRecurringBillChange,
-  evaluateFloCategoryMove,
-  floResponseCards,
-  isFloPlanCreateCommand,
-  fallbackFloAnswer,
-  localFloAnswer,
   reduceFloChat,
-  type FloCategoryMoveResult,
-  type FloBillDateMoveResult,
-  type FloBillMoveFact,
-  type FloDebtPaymentResult,
-  type FloRecurringBillChangeResult,
-  type FloResponseCard,
   type FloChatState,
 } from "@/lib/floPolicy";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
-import { evaluateDecision, type DecisionResult, type DecisionScenario } from "@/lib/decisions";
-import { buildDecisionHistory, type DecisionHistoryItem } from "@/lib/decisionHistory";
+import { buildDecisionHistory } from "@/lib/decisionHistory";
 import { buildDecisionRiskAlerts } from "@/lib/decisionRisk";
-import { applyCategoryBudgetMove, buildCategoryPlan } from "@/lib/categoryPlanning";
-import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
+import { buildCategoryPlan } from "@/lib/categoryPlanning";
+import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
 import { DEFAULT_DECISION_HUB_SETTINGS } from "@/lib/decisionHubSettings";
-import { dateOnlyToLocalDate, localDateString } from "@/lib/dateLabels";
+import { localDateString } from "@/lib/dateLabels";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { buildAlgorithmSuite } from "@/lib/algorithmSuite";
 import { calendarVisibleForecastEvents, groupForecastEvents } from "@/lib/forecastDisplay";
 import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
-import type { SafetyStopWarning } from "@/lib/safetyStop";
 
 const sampleQuestions = [
   "Ask Flo anything…",
-  "Can I afford $500?",
   "Which bills are due next?",
-  "Why is my balance getting low?",
+  "Which records did you use?",
+  "What account data needs attention?",
   "How do I add income?",
 ];
 
 const initialChat: FloChatState = { messages: [], sending: false };
 
+function moneyValue(value: unknown): string {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount.toLocaleString(undefined, { style: "currency", currency: "USD" }) : "Unavailable";
+}
+
 export default function FloScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ prompt?: string; promptId?: string }>();
+  const params = useLocalSearchParams<{ prompt?: string; promptId?: string; sourceRoute?: string; entityType?: string; entityId?: string; date?: string; label?: string }>();
+  const router = useRouter();
+  const isDesktop = useDesktopExperience();
   const { user } = useAuth();
   const { isFeatureLocked, previewTier } = useMembership();
-  const { activeHousehold, bills, billDateMoves, transactions, decisions, settings, forecastConfidence, getDailyBalances, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getPaidAmount, moveBillOccurrence, removeBillOccurrenceMove, saveDecision, updateDecision, updateBill, setCustomAmount, saveExtraPayment, getTransactionsForMonth, categories, incomes, goals } = useBudget();
+  const { activeHousehold, bills, billDateMoves, transactions, decisions, settings, forecastConfidence, retryBudgetLoad, getDailyBalances, getCashFlow, getMonthlyBills, getBillMonthlyTotal, getBillOccurrencesInMonth, getIncomeOccurrencesInMonth, getPaidAmount, getTransactionsForMonth, categories, incomes, goals } = useBudget();
   const categoryBudgetScope = useMemo(() => ({
     userId: user?.id,
     householdId: activeHousehold?.householdId,
@@ -102,19 +98,6 @@ export default function FloScreen() {
   }), [activeHousehold?.budgetId, activeHousehold?.householdId, user?.id]);
   const floProLocked = isFeatureLocked("flo_account_chat");
   const [chat, dispatch] = useReducer(reduceFloChat, initialChat);
-  const [cardsByMessageId, setCardsByMessageId] = useState<Record<string, FloResponseCard[]>>({});
-  const [decisionByMessageId, setDecisionByMessageId] = useState<Record<string, { scenario: DecisionScenario; result: DecisionResult }>>({});
-  const [decisionSaveState, setDecisionSaveState] = useState<Record<string, "idle" | "saving" | "saved" | "failed">>({});
-  const [categoryMoveByMessageId, setCategoryMoveByMessageId] = useState<Record<string, FloCategoryMoveResult>>({});
-  const [categoryMoveState, setCategoryMoveState] = useState<Record<string, "idle" | "saving" | "saved" | "failed">>({});
-  const [billDateMoveByMessageId, setBillDateMoveByMessageId] = useState<Record<string, FloBillDateMoveResult>>({});
-  const [billDateMoveState, setBillDateMoveState] = useState<Record<string, "idle" | "saving" | "saved" | "failed">>({});
-  const [billMoveUndoByMessageId, setBillMoveUndoByMessageId] = useState<Record<string, FloBillMoveFact>>({});
-  const [billMoveUndoState, setBillMoveUndoState] = useState<Record<string, "idle" | "saving" | "saved" | "failed">>({});
-  const [debtPaymentByMessageId, setDebtPaymentByMessageId] = useState<Record<string, FloDebtPaymentResult>>({});
-  const [debtPaymentState, setDebtPaymentState] = useState<Record<string, "idle" | "saving" | "saved" | "failed">>({});
-  const [billChangeByMessageId, setBillChangeByMessageId] = useState<Record<string, FloRecurringBillChangeResult>>({});
-  const [billChangeState, setBillChangeState] = useState<Record<string, "idle" | "saving" | "saved" | "failed">>({});
   const [categoryBudgets, setCategoryBudgets] = useState<Record<string, number>>({});
   const decisionHubSettings = DEFAULT_DECISION_HUB_SETTINGS;
   const [onboardingPreferences, setOnboardingPreferences] = useState(() => readOnboardingPreferences());
@@ -123,34 +106,37 @@ export default function FloScreen() {
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [olderMessageCursor, setOlderMessageCursor] = useState<string | null>(null);
   const [sourcesByMessageId, setSourcesByMessageId] = useState<Record<string, FloSource[]>>({});
+  const [followUpsByMessageId, setFollowUpsByMessageId] = useState<Record<string, string[]>>({});
+  const [proposalByMessageId, setProposalByMessageId] = useState<Record<string, FloReviewProposal | null>>({});
+  const [confirmedProposalIds, setConfirmedProposalIds] = useState<Set<string>>(new Set());
+  const [groundingByMessageId, setGroundingByMessageId] = useState<Record<string, { dataAsOf?: string | null; coverage?: string; partial?: boolean; caveat?: string }>>({});
+  const [floPreferences, setFloPreferences] = useState<FloPreferences>(DEFAULT_FLO_PREFERENCES);
+  const [reviewProposal, setReviewProposal] = useState<FloReviewProposal | null>(null);
+  const [proposalConfirmState, setProposalConfirmState] = useState<"idle" | "reviewing" | "confirming" | "failed">("idle");
+  const [proposalConfirmError, setProposalConfirmError] = useState("");
+  const [proposalReceipt, setProposalReceipt] = useState<{ previousAmount: number; newAmount: number; confirmedAt: string } | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
   const [lastPrompt, setLastPrompt] = useState("");
   const [sampleIndex, setSampleIndex] = useState(0);
-  const [postponePlan, setPostponePlan] = useState<DecisionRecord | null>(null);
-  const [postponeDate, setPostponeDate] = useState("");
-  const [lowerPlan, setLowerPlan] = useState<DecisionRecord | null>(null);
-  const [lowerAmount, setLowerAmount] = useState("");
-  const [historyActionState, setHistoryActionState] = useState<Record<string, "saving" | "failed">>({});
-  const [reducePlanByMessageId, setReducePlanByMessageId] = useState<Record<string, DecisionHistoryItem>>({});
-  const [decisionSafetyStop, setDecisionSafetyStop] = useState<SafetyStopWarning | null>(null);
-  const [pendingUnsafeDecisionMessageId, setPendingUnsafeDecisionMessageId] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const handledPromptRef = useRef<string | null>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
   const skipConversationLoadRef = useRef<string | null>(null);
   const retryRequestRef = useRef<{ text: string; userMessageId: string; assistantMessageId: string; conversationId: string | null } | null>(null);
+  const requestGenerationRef = useRef(0);
   const now = useMemo(() => new Date(), []);
   const today = localDateString(now);
 
-  useBackDismiss(Boolean(postponePlan), () => setPostponePlan(null));
-  useBackDismiss(Boolean(lowerPlan), () => setLowerPlan(null));
-
   useEffect(() => {
     let cancelled = false;
+    requestGenerationRef.current = nextFloRequestGeneration(requestGenerationRef.current);
     streamAbortRef.current?.abort();
     streamAbortRef.current = null;
     dispatch({ type: "hydrate", messages: [] });
     setSourcesByMessageId({});
+    setFollowUpsByMessageId({});
+    setProposalByMessageId({});
+    setGroundingByMessageId({});
     setOlderMessageCursor(null);
     setChatError(null);
     if (!user?.id || !activeHousehold?.householdId || floProLocked) {
@@ -170,6 +156,18 @@ export default function FloScreen() {
 
   useEffect(() => {
     let cancelled = false;
+    if (!user?.id || !activeHousehold?.householdId) return () => { cancelled = true; };
+    void Promise.all([
+      readFloPreferences(user.id, activeHousehold.householdId),
+      readFloHouseholdMemory(activeHousehold.householdId, user.id).catch(() => ({ enabled: false, note: "" })),
+    ]).then(([preferences, memory]) => {
+      if (!cancelled) setFloPreferences({ ...preferences, rememberPreferences: memory.enabled, preferenceNote: memory.enabled ? memory.note : "" });
+    });
+    return () => { cancelled = true; };
+  }, [activeHousehold?.householdId, user?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
     if (!activeConversationId || floProLocked) return () => { cancelled = true; };
     if (skipConversationLoadRef.current === activeConversationId) {
       skipConversationLoadRef.current = null;
@@ -179,6 +177,12 @@ export default function FloScreen() {
       if (cancelled) return;
       dispatch({ type: "hydrate", messages: page.messages.map(message => ({ id: message.id, role: message.role, text: message.text })) });
       setSourcesByMessageId(Object.fromEntries(page.messages.filter(message => message.sources.length).map(message => [message.id, message.sources])));
+      setFollowUpsByMessageId(Object.fromEntries(page.messages.filter(message => message.followUps.length).map(message => [message.id, message.followUps])));
+      void Promise.all(page.messages.filter(message => message.proposal?.kind === "recurring_bill_change").map(async message => {
+        const authoritative = await readAuthoritativeFloProposal(message.proposal!.id);
+        return floProposalMatchesAuthoritative(message.proposal!, authoritative) ? [message.id, authoritative] as const : null;
+      })).then(rows => { if (!cancelled) setProposalByMessageId(Object.fromEntries(rows.filter((row): row is readonly [string, FloReviewProposal] => Boolean(row)))); }).catch(() => { if (!cancelled) setProposalByMessageId({}); });
+      setGroundingByMessageId(Object.fromEntries(page.messages.filter(message => message.dataAsOf || message.partial || message.coverage || message.caveat).map(message => [message.id, { dataAsOf: message.dataAsOf, partial: message.partial, coverage: describeCoverage(message.coverage), caveat: message.caveat }])));
       setOlderMessageCursor(page.nextCursor);
     }).catch(() => {
       if (!cancelled) setChatError("This private chat could not be loaded.");
@@ -255,11 +259,6 @@ export default function FloScreen() {
       unsubscribe();
     };
   }, [categoryBudgetKey, categoryBudgetScope, now]);
-
-  const writeCategoryBudgets = (budgets: Record<string, number>) => {
-    setCategoryBudgets(budgets);
-    void saveCategoryBudgets(categoryBudgetScope, now.getMonth(), now.getFullYear(), budgets).catch(() => undefined);
-  };
 
   const categoryPlan = useMemo(() => {
     if (!settings.zeroBasedBudgetEnabled) return [];
@@ -358,16 +357,6 @@ export default function FloScreen() {
 
     return buildPaycheckPlan(incomeEvents, billEvents, balanceEvents, settings.safety_floor, today);
   }, [getBillMonthlyTotal, getBillOccurrencesInMonth, getDailyBalances, getIncomeOccurrencesInMonth, getMonthlyBills, getPaidAmount, now, settings.forecast_horizon_months, settings.safety_floor, today]);
-  const riskyDecisionItems = useMemo<DecisionHistoryItem[]>(() => decisionRiskAlerts.map(alert => ({
-    id: alert.id,
-    name: alert.name,
-    date: alert.date,
-    status: "upcoming",
-    plannedAmount: alert.plannedAmount,
-    amountLabel: `Planned $${alert.plannedAmount.toFixed(2)}`,
-    varianceLabel: `$${alert.shortfall.toFixed(2)} below floor`,
-  })), [decisionRiskAlerts]);
-
   const facts = useMemo<FloFacts>(() => {
     const lowest = baseline.reduce(
       (best, day) => day.balance < best.balance ? day : best,
@@ -636,85 +625,36 @@ export default function FloScreen() {
 
   const quickPrompts = useMemo(() => {
     const categoryPrompts = buildFloCategoryQuickPrompts(categoryPlan);
-    const paycheckPrompts = ["What can I spend until payday?", "Which bill should I move?"];
-    const gapPrompts = ["When is my lowest-balance stretch?"];
+    const planningPrompts = ["Which bills are due next?", "What account data needs attention?"];
     return Array.from(new Set([
       ...(hasSetupAnswers ? setupPersonalization.quickPrompts : []),
       ...(decisionHistory.due.length ? ["Which decisions need review?"] : []),
       ...(decisionRiskAlerts.length ? ["Are any planned decisions no longer safe?"] : []),
       ...(decisionHistory.upcoming.length ? ["Which planned decisions are coming up?"] : []),
-      ...paycheckPrompts,
-      ...gapPrompts,
+      ...planningPrompts,
       ...categoryPrompts,
-      "Can I afford $500?",
       "Which bills are due next?",
-      "Why is my balance getting low?",
+      "Which records did you use?",
     ])).slice(0, 2);
   }, [categoryPlan, decisionHistory, decisionRiskAlerts, hasSetupAnswers, setupPersonalization]);
 
-  const buildCalendarDayReply = (prompt: string) => {
-    const date = prompt.match(/\b(20\d{2}-\d{2}-\d{2})\b/)?.[1];
-    if (!date || !/\b(calendar|day|date|know|balance)\b/i.test(prompt)) return null;
-    const [year, monthNumber, day] = date.split("-").map(Number);
-    if (!year || !monthNumber || !day) return null;
-    const month = monthNumber - 1;
-    const dayBalance = getDailyBalances(month, year).find(item => item.day === day)?.balance ?? null;
-    const incomesDue = getIncomeOccurrencesInMonth(month, year)
-      .filter(({ days }) => days.includes(day))
-      .map(({ income, effectiveAmount }) => `${income.name} +${formatMoney(effectiveAmount)}`);
-    const billsDue: string[] = [];
-    getMonthlyBills(month, year).forEach(bill => {
-      const occurrences = getBillOccurrencesInMonth(bill, month, year);
-      if (!occurrences.includes(day)) return;
-      const monthlyTotal = getBillMonthlyTotal(bill, month, year);
-      const perOccurrence = occurrences.length ? monthlyTotal / occurrences.length : monthlyTotal;
-      let paidRemaining = getPaidAmount(bill.id, month, year);
-      occurrences.forEach(occurrenceDay => {
-        const appliedPaid = Math.min(perOccurrence, Math.max(0, paidRemaining));
-        paidRemaining = Math.max(0, paidRemaining - perOccurrence);
-        if (occurrenceDay === day) {
-          const left = Math.max(0, perOccurrence - appliedPaid);
-          billsDue.push(`${bill.name} ${left > 0.005 ? `${formatMoney(left)} left` : "paid"}`);
-        }
-      });
-    });
-    const dayTransactions = transactions
-      .filter(transaction => transaction.date === date)
-      .map(transaction => `${transaction.note?.trim() || transaction.category || "Transaction"} ${formatSignedMoney(transaction.amount)}`);
-    const dayPlans = decisions
-      .filter(decision => (decision.status === "planned" || decision.status === "calendar") && (decision.calendar_date || decision.scenario.date) === date)
-      .map(decision => `${decision.name} ${formatMoney(decision.scenario.amount)}`);
-    const parts = [
-      `For ${formatDisplayDate(date)}, your projected close is ${dayBalance === null ? "not available yet" : formatMoney(dayBalance)}.`,
-    ];
-    if (incomesDue.length) parts.push(`Income: ${incomesDue.join(", ")}.`);
-    if (billsDue.length) parts.push(`Bills due: ${billsDue.join(", ")}.`);
-    if (dayTransactions.length) parts.push(`Transactions: ${dayTransactions.join(", ")}.`);
-    if (dayPlans.length) parts.push(`Planned decisions: ${dayPlans.join(", ")}.`);
-    if (!incomesDue.length && !billsDue.length && !dayTransactions.length && !dayPlans.length) {
-      parts.push("I don't see any dated items on that day yet.");
-    }
-    if (dayBalance !== null) {
-      const cushion = dayBalance - settings.safety_floor;
-      parts.push(cushion >= 0
-        ? `That leaves ${formatMoney(cushion)} above your safety floor.`
-        : `That is ${formatMoney(Math.abs(cushion))} below your safety floor, so this day needs attention.`);
-    }
-    return parts.join(" ");
-  };
-
   const startNewConversation = () => {
+    requestGenerationRef.current = nextFloRequestGeneration(requestGenerationRef.current);
     streamAbortRef.current?.abort();
     streamAbortRef.current = null;
     setActiveConversationId(null);
     setOlderMessageCursor(null);
     setSourcesByMessageId({});
+    setFollowUpsByMessageId({});
+    setProposalByMessageId({});
+    setGroundingByMessageId({});
     setChatError(null);
     retryRequestRef.current = null;
     dispatch({ type: "hydrate", messages: [] });
   };
 
   const selectConversation = (conversationId: string) => {
+    requestGenerationRef.current = nextFloRequestGeneration(requestGenerationRef.current);
     streamAbortRef.current?.abort();
     streamAbortRef.current = null;
     setChatError(null);
@@ -728,6 +668,11 @@ export default function FloScreen() {
   };
 
   const removeConversation = async (conversationId: string) => {
+    if (conversationId === activeConversationId) {
+      requestGenerationRef.current = nextFloRequestGeneration(requestGenerationRef.current);
+      streamAbortRef.current?.abort();
+      streamAbortRef.current = null;
+    }
     await deleteFloConversation(conversationId);
     const remaining = conversations.filter(conversation => conversation.id !== conversationId);
     setConversations(remaining);
@@ -735,11 +680,102 @@ export default function FloScreen() {
     if (!remaining.length) dispatch({ type: "hydrate", messages: [] });
   };
 
+  const removeAllConversations = async () => {
+    if (!activeHousehold?.householdId) throw new Error("An active household is required.");
+    await deleteAllFloConversations(activeHousehold.householdId);
+    requestGenerationRef.current = nextFloRequestGeneration(requestGenerationRef.current);
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = null;
+    setConversations([]);
+    setActiveConversationId(null);
+    setSourcesByMessageId({});
+    setFollowUpsByMessageId({});
+    setProposalByMessageId({});
+    setGroundingByMessageId({});
+    dispatch({ type: "hydrate", messages: [] });
+  };
+
+  const exportConversations = async () => {
+    const sections: string[] = [];
+    for (const conversation of conversations) {
+      const messages = await listAllFloMessages(conversation.id);
+      sections.push(`${conversation.title}\n${messages.map(message => `${message.role === "flo" ? "Flo" : "You"}: ${message.text}${message.caveat ? `\nCaveat: ${message.caveat}` : ""}`).join("\n\n")}`);
+    }
+    const content = `${exportFloHistoryText(activeHousehold?.name ?? "Personal household", [])}\n${sections.join("\n\n---\n\n")}`;
+    await Share.share({ title: "FlowLedger Flo history", message: content });
+  };
+
+  const updatePreferences = (preferences: FloPreferences) => {
+    setFloPreferences(preferences);
+    if (user?.id && activeHousehold?.householdId) {
+      void Promise.all([
+        saveFloPreferences(user.id, activeHousehold.householdId, preferences),
+        updateFloHouseholdMemory({ householdId: activeHousehold.householdId, userId: user.id, enabled: preferences.rememberPreferences, preferences: { note: preferences.preferenceNote.trim().slice(0, 240) } }),
+      ]).catch(() => setChatError("Flo privacy preferences could not be saved."));
+    }
+  };
+
+  const openProposalReview = (proposal: FloReviewProposal) => {
+    if (proposal.kind !== "recurring_bill_change") return;
+    setProposalConfirmState("reviewing");
+    setProposalConfirmError("");
+    setProposalReceipt(null);
+    setReviewProposal(null);
+    void readAuthoritativeFloProposal(proposal.id).then(authoritative => {
+      if (!floProposalMatchesAuthoritative(proposal, authoritative) || authoritative.kind !== "recurring_bill_change") {
+        throw new Error("proposal_review_mismatch");
+      }
+      setReviewProposal(authoritative);
+      setProposalConfirmState("idle");
+    }).catch(() => {
+      setReviewProposal(null);
+      setChatError("Flo could not verify this proposed change. Your plan was not changed.");
+      setProposalConfirmState("failed");
+    });
+  };
+
+  const confirmProposal = async () => {
+    if (!reviewProposal || reviewProposal.kind !== "recurring_bill_change" || proposalConfirmState === "confirming") return;
+    setProposalConfirmState("confirming");
+    setProposalConfirmError("");
+    try {
+      const authoritative = await readAuthoritativeFloProposal(reviewProposal.id);
+      if (!floProposalMatchesAuthoritative(reviewProposal, authoritative) || authoritative.status !== "review") throw new Error("proposal_review_mismatch");
+      const receipt = await confirmFloRecurringBillProposal(reviewProposal.id);
+      setProposalReceipt(receipt);
+      setConfirmedProposalIds(previous => new Set(previous).add(reviewProposal.id));
+      setProposalConfirmState("idle");
+      retryBudgetLoad();
+    } catch (error) {
+      const code = error instanceof Error ? error.message.toLocaleLowerCase() : "";
+      const message = code.includes("proposal_stale")
+        ? "This bill changed since Flo prepared the review. Ask Flo to create a fresh change."
+        : code.includes("proposal_expired") || code.includes("proposal_not_reviewable")
+          ? "This review expired. Ask Flo to prepare it again."
+          : code.includes("proposal_role_denied") || code.includes("proposal_access_denied")
+            ? "Your household role cannot confirm this change."
+            : code.includes("proposal_pro_required")
+              ? "A Pro membership is required to confirm this Flo change."
+              : "This change could not be confirmed. Your plan was not changed.";
+      setProposalConfirmError(message);
+      setProposalConfirmState("failed");
+    }
+  };
+
+  const searchHistory = useCallback((query: string) => searchFloConversationContent(conversations.map(item => item.id), query), [conversations]);
+
   const loadOlderMessages = async () => {
     if (!activeConversationId || !olderMessageCursor) return;
     const page = await listFloMessages(activeConversationId, olderMessageCursor);
     dispatch({ type: "prepend", messages: page.messages.map(message => ({ id: message.id, role: message.role, text: message.text })) });
     setSourcesByMessageId(previous => ({ ...previous, ...Object.fromEntries(page.messages.filter(message => message.sources.length).map(message => [message.id, message.sources])) }));
+    setFollowUpsByMessageId(previous => ({ ...previous, ...Object.fromEntries(page.messages.filter(message => message.followUps.length).map(message => [message.id, message.followUps])) }));
+    const verifiedProposals = await Promise.all(page.messages.filter(message => message.proposal?.kind === "recurring_bill_change").map(async message => {
+      const authoritative = await readAuthoritativeFloProposal(message.proposal!.id);
+      return floProposalMatchesAuthoritative(message.proposal!, authoritative) ? [message.id, authoritative] as const : null;
+    }));
+    setProposalByMessageId(previous => ({ ...previous, ...Object.fromEntries(verifiedProposals.filter((row): row is readonly [string, FloReviewProposal] => Boolean(row))) }));
+    setGroundingByMessageId(previous => ({ ...previous, ...Object.fromEntries(page.messages.filter(message => message.dataAsOf || message.partial || message.coverage || message.caveat).map(message => [message.id, { dataAsOf: message.dataAsOf, partial: message.partial, coverage: describeCoverage(message.coverage), caveat: message.caveat }])) }));
     setOlderMessageCursor(page.nextCursor);
   };
 
@@ -753,6 +789,10 @@ export default function FloScreen() {
   const send = async (text = input, retry = false) => {
     const clean = text.trim();
     if (!clean || chat.sending || floProLocked || !user?.id || !activeHousehold?.householdId) return;
+    const requestGeneration = requestGenerationRef.current;
+    const requestUserId = user.id;
+    const requestHouseholdId = activeHousehold.householdId;
+    const requestIsCurrent = () => isFloRequestGenerationCurrent(requestGeneration, requestGenerationRef.current);
     setInput("");
     setChatError(null);
     setLastPrompt(clean);
@@ -760,13 +800,14 @@ export default function FloScreen() {
     const userMessageId = priorRequest?.userMessageId ?? createFloId();
     const assistantMessageId = priorRequest?.assistantMessageId ?? createFloId();
     dispatch({ type: "submit", id: userMessageId, assistantId: assistantMessageId, text: clean });
-    let conversationId = priorRequest?.conversationId ?? activeConversationId;
+    let conversationId = priorRequest?.conversationId ?? floConversationForRequest(floPreferences.historyEnabled, activeConversationId);
     retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId };
     let reply = "";
-    let streamError: string | null = null;
+    const streamFailure: { current: { code: string; message: string } | null } = { current: null };
     try {
-      if (!conversationId) {
-        const created = await createFloConversation(user.id, activeHousehold.householdId, clean);
+      if (!conversationId && floPreferences.historyEnabled) {
+        const created = await createFloConversation(requestUserId, requestHouseholdId, clean);
+        if (!requestIsCurrent()) return;
         conversationId = created.id;
         skipConversationLoadRef.current = created.id;
         setConversations(previous => [created, ...previous]);
@@ -776,96 +817,81 @@ export default function FloScreen() {
       const controller = new AbortController();
       streamAbortRef.current = controller;
       await streamFloChat({
-        conversationId,
-        householdId: activeHousehold.householdId,
+        conversationId: conversationId ?? undefined,
+        householdId: requestHouseholdId,
         userMessageId,
         assistantMessageId,
         text: clean,
-        facts,
-        asOf: new Date().toISOString(),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
         previewTier,
+        context: {
+          route: Array.isArray(params.sourceRoute) ? params.sourceRoute[0] : params.sourceRoute,
+          entityType: Array.isArray(params.entityType) ? params.entityType[0] : params.entityType,
+          entityId: Array.isArray(params.entityId) ? params.entityId[0] : params.entityId,
+          date: Array.isArray(params.date) ? params.date[0] : params.date,
+          label: Array.isArray(params.label) ? params.label[0] : params.label,
+        },
+        historyEnabled: floPreferences.historyEnabled,
         signal: controller.signal,
         onEvent: event => {
-          if (event.type === "text-delta") {
+          if (!requestIsCurrent()) return;
+          if (event.type === "meta") {
+            setGroundingByMessageId(previous => ({ ...previous, [assistantMessageId]: { dataAsOf: event.dataAsOf, partial: event.partial, coverage: describeCoverage(event.coverage) } }));
+          } else if (event.type === "text-delta") {
             reply += event.delta;
             dispatch({ type: "stream-delta", id: assistantMessageId, delta: event.delta });
           } else if (event.type === "sources") {
             setSourcesByMessageId(previous => ({ ...previous, [assistantMessageId]: event.sources }));
+          } else if (event.type === "followups") {
+            setFollowUpsByMessageId(previous => ({ ...previous, [assistantMessageId]: event.items }));
+          } else if (event.type === "proposal" && event.proposal?.kind === "recurring_bill_change") {
+            setProposalByMessageId(previous => ({ ...previous, [assistantMessageId]: event.proposal }));
           } else if (event.type === "error") {
-            streamError = event.message;
-          } else if (event.type === "done" && event.text) {
-            reply = isWeakFloReply(event.text)
-              ? buildCalendarDayReply(clean) ?? localFloAnswer(clean, facts, baseline) ?? fallbackFloAnswer(clean, facts)
-              : event.text;
+            streamFailure.current = { code: event.code, message: event.message };
+          } else if (event.type === "done") {
+            reply = event.answer?.answer ?? event.text ?? reply;
             dispatch({ type: "replace", id: assistantMessageId, text: reply });
+            if (event.answer) setGroundingByMessageId(previous => ({ ...previous, [assistantMessageId]: {
+              ...previous[assistantMessageId],
+              dataAsOf: event.answer?.dataAsOf ?? previous[assistantMessageId]?.dataAsOf,
+              coverage: describeCoverage(event.answer?.coverage) ?? previous[assistantMessageId]?.coverage,
+              partial: event.answer?.partial ?? previous[assistantMessageId]?.partial,
+              caveat: event.answer?.caveat ?? undefined,
+            } }));
           }
         },
       });
+      if (!requestIsCurrent()) return;
       streamAbortRef.current = null;
-      if (streamError) throw new Error(streamError);
+      if (streamFailure.current) throw new Error(streamFailure.current.code);
       dispatch({ type: "stop" });
     } catch (error) {
+      if (!requestIsCurrent()) return;
       streamAbortRef.current = null;
-      if (reply) {
-        dispatch({ type: "stop" });
-        setChatError(error instanceof Error && error.name === "AbortError" ? "Response stopped. You can retry the last question." : "Flo's response was interrupted. Retry to continue.");
-      } else {
-        reply = buildCalendarDayReply(clean) ?? localFloAnswer(clean, facts, baseline) ?? fallbackFloAnswer(clean, facts);
-        dispatch({ type: "reply", id: assistantMessageId, text: reply });
-        setSourcesByMessageId(previous => ({ ...previous, [assistantMessageId]: [{ type: "deterministic", label: "FlowLedger calculation", asOf: new Date().toISOString() }] }));
-        if (conversationId) {
-          void persistFloFallback({ id: assistantMessageId, conversationId, householdId: activeHousehold.householdId, userId: user.id, text: reply });
-        }
-        setChatError("Flo was offline, so this answer used your FlowLedger calculation.");
+      const stopped = error instanceof Error && error.name === "AbortError";
+      const cleanupFailed = error instanceof Error && error.message.includes("ephemeral_cleanup_failed");
+      if (cleanupFailed) {
+        dispatch({ type: "hydrate", messages: [] });
+        setSourcesByMessageId({});
+        setFollowUpsByMessageId({});
+        setProposalByMessageId({});
+        setGroundingByMessageId({});
+        setChatError("Flo couldn't clear this no-history chat. Local content was cleared; please try again.");
+        retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: null };
+        return;
       }
+      reply = stopped
+        ? "Response stopped before Flo could verify an answer."
+        : "I couldn't verify an answer from your account just now.";
+      dispatch({ type: "replace", id: assistantMessageId, text: reply });
+      setSourcesByMessageId(previous => ({ ...previous, [assistantMessageId]: [] }));
+      setFollowUpsByMessageId(previous => ({ ...previous, [assistantMessageId]: [] }));
+      setProposalByMessageId(previous => ({ ...previous, [assistantMessageId]: null }));
+      setGroundingByMessageId(previous => ({ ...previous, [assistantMessageId]: { partial: true, coverage: "No verified account data" } }));
+      setChatError(stopped ? "Response stopped. You can retry the last question." : "Flo couldn't verify this answer. Retry to check your account again.");
     }
-    const replyId = assistantMessageId;
-    const cards = floResponseCards(clean, facts, baseline);
-    if (cards.length) setCardsByMessageId(previous => ({ ...previous, [replyId]: cards }));
-    const debtPayment = evaluateFloDebtPayment(clean, facts, today);
-    if (settings.debtPayoffEnabled && debtPayment?.allowed) {
-      const result = evaluateDecision(baseline, buildDebtPaymentScenario(debtPayment), settings.safety_floor);
-      if (result.verdict !== "unsafe") {
-        setDebtPaymentByMessageId(previous => ({ ...previous, [replyId]: debtPayment }));
-        setDebtPaymentState(previous => ({ ...previous, [replyId]: "idle" }));
-      }
-    }
-    const billChange = evaluateFloRecurringBillChange(clean, facts, today);
-    if (billChange?.allowed) {
-      setBillChangeByMessageId(previous => ({ ...previous, [replyId]: billChange }));
-      setBillChangeState(previous => ({ ...previous, [replyId]: "idle" }));
-    }
-    const scenario = buildFloDecisionScenario(clean, today);
-    if (scenario) {
-      const result = evaluateDecision(baseline, scenario, settings.safety_floor);
-      setDecisionByMessageId(previous => ({ ...previous, [replyId]: { scenario, result } }));
-      if (isFloPlanCreateCommand(clean)) {
-        setDecisionSaveState(previous => ({ ...previous, [replyId]: "idle" as const }));
-      }
-    }
-    const categoryMove = evaluateFloCategoryMove(clean, facts);
-    if (categoryMove?.allowed) {
-      setCategoryMoveByMessageId(previous => ({ ...previous, [replyId]: categoryMove }));
-      setCategoryMoveState(previous => ({ ...previous, [replyId]: "idle" }));
-    }
-    const billDateMove = evaluateFloBillDateMove(clean, facts, today);
-    if (billDateMove?.allowed) {
-      setBillDateMoveByMessageId(previous => ({ ...previous, [replyId]: billDateMove }));
-      setBillDateMoveState(previous => ({ ...previous, [replyId]: "idle" }));
-    }
-    const undoBillMove = evaluateFloBillMoveUndo(clean, facts);
-    if (undoBillMove) {
-      setBillMoveUndoByMessageId(previous => ({ ...previous, [replyId]: undoBillMove }));
-      setBillMoveUndoState(previous => ({ ...previous, [replyId]: "idle" }));
-    }
-    const reductionTarget = pickReductionTarget(clean);
-    if (reductionTarget) {
-      setReducePlanByMessageId(previous => ({ ...previous, [replyId]: reductionTarget }));
-    }
-    if (user) {
-      void updateFloMemory(user.id, clean);
-    }
+    if (!requestIsCurrent()) return;
+    if (!floPreferences.historyEnabled) retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: null };
   };
 
   useEffect(() => {
@@ -877,224 +903,6 @@ export default function FloScreen() {
     handledPromptRef.current = promptKey;
     void send(cleanPrompt);
   }, [params.prompt, params.promptId, chat.sending]);
-
-  const addDecisionToCalendar = async (messageId: string, allowUnsafe = false) => {
-    const decision = decisionByMessageId[messageId];
-    if (!decision || decisionSaveState[messageId] === "saving" || decisionSaveState[messageId] === "saved") return;
-    if (!allowUnsafe && decision.result.verdict === "unsafe") {
-      setPendingUnsafeDecisionMessageId(messageId);
-      setDecisionSafetyStop({
-        itemName: decision.scenario.name || "this plan",
-        amount: Math.abs(decision.scenario.amount),
-        scheduledDate: decision.scenario.date,
-        lowestBalance: decision.result.lowestBalance,
-        lowestBalanceDate: decision.result.lowestBalanceDate,
-        safetyFloor: settings.safety_floor,
-        shortfall: Math.max(0, settings.safety_floor - decision.result.lowestBalance),
-      });
-      return;
-    }
-    setDecisionSaveState(previous => ({ ...previous, [messageId]: "saving" }));
-    try {
-      await saveDecision(decision.scenario, decision.result, "planned");
-      setPendingUnsafeDecisionMessageId(null);
-      setDecisionSafetyStop(null);
-      setDecisionSaveState(previous => ({ ...previous, [messageId]: "saved" }));
-    } catch {
-      setDecisionSaveState(previous => ({ ...previous, [messageId]: "failed" }));
-    }
-  };
-
-  const findDecision = (id: string) => decisions.find(decision => decision.id === id) ?? null;
-
-  const openPostponePlan = (id: string) => {
-    const decision = findDecision(id);
-    if (!decision) return;
-    const currentDate = decision.next_due_date ?? decision.calendar_date ?? decision.scenario.date ?? today;
-    setPostponePlan(decision);
-    setPostponeDate(currentDate > today ? currentDate : today);
-  };
-
-  const openLowerPlan = (id: string) => {
-    const decision = findDecision(id);
-    if (!decision) return;
-    setLowerPlan(decision);
-    setLowerAmount(String(Math.abs(decision.scenario.amount)));
-  };
-
-  const saveLowerPlanAmount = async () => {
-    if (!lowerPlan) return;
-    const amount = Math.abs(Number(lowerAmount));
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    setHistoryActionState(previous => ({ ...previous, [lowerPlan.id]: "saving" }));
-    try {
-      const scenario = { ...lowerPlan.scenario, amount };
-      const scenarioDate = scenario.date ?? lowerPlan.calendar_date ?? today;
-      const forecast = baseline.filter(day => day.date >= scenarioDate);
-      const result = evaluateDecision(forecast.length ? forecast : [{ date: scenarioDate, balance: 0 }], scenario, settings.safety_floor);
-      await updateDecision({
-        ...lowerPlan,
-        scenario,
-        result,
-        calendar_date: scenarioDate,
-        next_due_date: scenarioDate,
-        applied_change: { ...(lowerPlan.applied_change ?? {}), kind: "decision_amount_reduced", amount },
-      });
-      setLowerPlan(null);
-      setLowerAmount("");
-      setHistoryActionState(previous => {
-        const next = { ...previous };
-        delete next[lowerPlan.id];
-        return next;
-      });
-    } catch {
-      setHistoryActionState(previous => ({ ...previous, [lowerPlan.id]: "failed" }));
-    }
-  };
-
-  const postponeSelectedPlan = async () => {
-    if (!postponePlan || !postponeDate) return;
-    setHistoryActionState(previous => ({ ...previous, [postponePlan.id]: "saving" }));
-    try {
-      const scenario = { ...postponePlan.scenario, date: postponeDate };
-      await updateDecision({
-        ...postponePlan,
-        scenario,
-        status: "planned",
-        calendar_date: postponeDate,
-        next_due_date: postponeDate,
-        remind_at: `${postponeDate}T12:00:00.000Z`,
-      });
-      setPostponePlan(null);
-      setPostponeDate("");
-      setHistoryActionState(previous => {
-        const next = { ...previous };
-        delete next[postponePlan.id];
-        return next;
-      });
-    } catch {
-      setHistoryActionState(previous => ({ ...previous, [postponePlan.id]: "failed" }));
-    }
-  };
-
-  const cancelPlan = async (id: string) => {
-    const decision = findDecision(id);
-    if (!decision || historyActionState[id] === "saving") return;
-    setHistoryActionState(previous => ({ ...previous, [id]: "saving" }));
-    try {
-      await updateDecision({ ...decision, status: "cancelled" });
-      setHistoryActionState(previous => {
-        const next = { ...previous };
-        delete next[id];
-        return next;
-      });
-    } catch {
-      setHistoryActionState(previous => ({ ...previous, [id]: "failed" }));
-    }
-  };
-
-  const pickReductionTarget = (message: string): DecisionHistoryItem | null => {
-    if (!/(reduce|lower|cut|postpone|planned spending|spending)/i.test(message) || !/(plan|planned|decision|spending)/i.test(message)) return null;
-    const candidates = [
-      ...riskyDecisionItems,
-      ...decisionHistory.due,
-      ...decisionHistory.upcoming,
-    ];
-    return candidates
-      .filter(item => item.status === "upcoming" || item.status === "due" || item.status === "saved")
-      .sort((left, right) => right.plannedAmount - left.plannedAmount || left.date.localeCompare(right.date))[0] ?? null;
-  };
-
-  const applyCategoryMoveFromFlo = (messageId: string) => {
-    const move = categoryMoveByMessageId[messageId];
-    if (!move || categoryMoveState[messageId] === "saving" || categoryMoveState[messageId] === "saved") return;
-    setCategoryMoveState(previous => ({ ...previous, [messageId]: "saving" }));
-    try {
-      const currentBudgets = categoryBudgets;
-      const rows = categoryPlan.map(row => ({
-        category: row.category,
-        budgeted: row.budgeted,
-        spent: row.spent,
-        remaining: row.remaining,
-        status: row.status,
-        percentUsed: row.percentUsed,
-      }));
-      const next = applyCategoryBudgetMove(currentBudgets, rows, move.from, move.to, move.amount);
-      writeCategoryBudgets(next);
-      setCategoryMoveState(previous => ({ ...previous, [messageId]: "saved" }));
-    } catch {
-      setCategoryMoveState(previous => ({ ...previous, [messageId]: "failed" }));
-    }
-  };
-
-  const applyBillDateMoveFromFlo = async (messageId: string) => {
-    const move = billDateMoveByMessageId[messageId];
-    if (!move || billDateMoveState[messageId] === "saving" || billDateMoveState[messageId] === "saved") return;
-    setBillDateMoveState(previous => ({ ...previous, [messageId]: "saving" }));
-    try {
-      await moveBillOccurrence(move.billId, move.fromDate, move.toDate);
-      setBillDateMoveState(previous => ({ ...previous, [messageId]: "saved" }));
-    } catch {
-      setBillDateMoveState(previous => ({ ...previous, [messageId]: "failed" }));
-    }
-  };
-
-  const undoBillMoveFromFlo = async (messageId: string) => {
-    const move = billMoveUndoByMessageId[messageId];
-    if (!move || billMoveUndoState[messageId] === "saving" || billMoveUndoState[messageId] === "saved") return;
-    setBillMoveUndoState(previous => ({ ...previous, [messageId]: "saving" }));
-    try {
-      await removeBillOccurrenceMove(move.id);
-      setBillMoveUndoState(previous => ({ ...previous, [messageId]: "saved" }));
-    } catch {
-      setBillMoveUndoState(previous => ({ ...previous, [messageId]: "failed" }));
-    }
-  };
-
-  const applyDebtPaymentFromFlo = async (messageId: string) => {
-    const payment = debtPaymentByMessageId[messageId];
-    if (!payment || debtPaymentState[messageId] === "saving" || debtPaymentState[messageId] === "saved") return;
-    setDebtPaymentState(previous => ({ ...previous, [messageId]: "saving" }));
-    try {
-      const [yearValue, monthValue] = payment.date.split("-").map(Number);
-      await saveExtraPayment(
-        monthValue - 1,
-        yearValue,
-        payment.amount,
-        [{
-          billId: payment.debtId,
-          billName: payment.debtName,
-          payment: payment.amount,
-          balanceBefore: payment.balanceBefore,
-          balanceAfter: payment.balanceAfter,
-          paidOff: payment.balanceAfter <= 0.005,
-          paymentDate: payment.date,
-        }],
-        payment.date,
-        [{ type: "manual", amount: payment.amount, pendingBalanceApply: payment.date > today }],
-      );
-      setDebtPaymentState(previous => ({ ...previous, [messageId]: "saved" }));
-    } catch {
-      setDebtPaymentState(previous => ({ ...previous, [messageId]: "failed" }));
-    }
-  };
-
-  const applyBillChangeFromFlo = async (messageId: string) => {
-    const change = billChangeByMessageId[messageId];
-    if (!change || billChangeState[messageId] === "saving" || billChangeState[messageId] === "saved") return;
-    const bill = bills.find(item => item.id === change.billId);
-    if (!bill) return;
-    setBillChangeState(previous => ({ ...previous, [messageId]: "saving" }));
-    try {
-      if (change.preserveCurrentMonth) {
-        await setCustomAmount(bill.id, now.getMonth(), now.getFullYear(), bill.amount);
-      }
-      await updateBill({ ...bill, amount: change.newAmount });
-      setBillChangeState(previous => ({ ...previous, [messageId]: "saved" }));
-    } catch {
-      setBillChangeState(previous => ({ ...previous, [messageId]: "failed" }));
-    }
-  };
 
   const composerBottom = Platform.OS === "web" ? 88 : Math.max(insets.bottom, 8) + 54;
 
@@ -1117,25 +925,17 @@ export default function FloScreen() {
         <FloLogo size={48} />
         <View style={styles.headerText}>
           <Text style={[styles.title, { color: colors.foreground }]}>Ask Flo</Text>
-          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Your private place to plan with Flo</Text>
+          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{activeHousehold?.name ?? "Personal household"} · {floFreshnessSummary(groundingByMessageId)}</Text>
         </View>
         <Feather name="message-circle" size={24} color={colors.primaryForeground} />
       </LinearGradient>
 
-      <FloConversationBar
-        conversations={conversations}
-        activeId={activeConversationId}
-        disabled={chat.sending}
-        onNew={startNewConversation}
-        onSelect={selectConversation}
-        onRename={renameConversation}
-        onDelete={removeConversation}
-      />
+      {isDesktop ? <View style={styles.desktopHistoryLayer}><FloConversationBar desktop conversations={conversations} activeId={activeConversationId} disabled={chat.sending} householdName={activeHousehold?.name ?? "Personal household"} preferences={floPreferences} onNew={startNewConversation} onSelect={selectConversation} onRename={renameConversation} onDelete={removeConversation} onDeleteAll={removeAllConversations} onExport={exportConversations} onSearchHistory={searchHistory} onPreferencesChange={updatePreferences} /></View> : <FloConversationBar conversations={conversations} activeId={activeConversationId} disabled={chat.sending} householdName={activeHousehold?.name ?? "Personal household"} preferences={floPreferences} onNew={startNewConversation} onSelect={selectConversation} onRename={renameConversation} onDelete={removeConversation} onDeleteAll={removeAllConversations} onExport={exportConversations} onSearchHistory={searchHistory} onPreferencesChange={updatePreferences} />}
 
       <ScrollView
         ref={scrollRef}
-        style={styles.conversation}
-        contentContainerStyle={styles.conversationContent}
+        style={[styles.conversation, isDesktop && styles.conversationDesktop]}
+        contentContainerStyle={[styles.conversationContent, isDesktop && styles.conversationContentDesktop]}
         keyboardShouldPersistTaps="handled"
         onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
       >
@@ -1146,6 +946,7 @@ export default function FloScreen() {
         ) : null}
         <View style={[styles.bubble, styles.floBubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.bubbleText, { color: colors.foreground }]}>Hi, I&apos;m Flo. What would you like to know?</Text>
+          <Text style={[styles.trustLine, { color: colors.mutedForeground }]}>AI explanations use verified records from this household. Flo cannot move money, and important plan changes always require your review and confirmation.</Text>
         </View>
 
         {chat.messages.map(message => (
@@ -1161,338 +962,34 @@ export default function FloScreen() {
           >
             <View style={message.thinking ? styles.thinkingRow : undefined}>
               {message.thinking ? <ActivityIndicator size="small" color={colors.primary} /> : null}
-              <Text style={[styles.bubbleText, { color: message.role === "user" ? colors.primaryForeground : message.thinking ? colors.mutedForeground : colors.foreground }]}>
-                {message.role === "flo" ? humanizeFloText(message.text) : message.text}
-              </Text>
+              {message.role === "flo" && !message.thinking ? <FloGroundedAnswer text={humanizeFloText(message.text)} sources={sourcesByMessageId[message.id] ?? []} dataAsOf={groundingByMessageId[message.id]?.dataAsOf} coverage={groundingByMessageId[message.id]?.coverage} partial={groundingByMessageId[message.id]?.partial} caveat={groundingByMessageId[message.id]?.caveat} followUps={followUpsByMessageId[message.id]} proposal={proposalByMessageId[message.id]} proposalConfirmed={Boolean(proposalByMessageId[message.id]?.status === "confirmed" || (proposalByMessageId[message.id] && confirmedProposalIds.has(proposalByMessageId[message.id]!.id)))} onOpenSource={route => router.push(route as never)} onFollowUp={question => void send(question)} onReviewProposal={openProposalReview} /> : <Text style={[styles.bubbleText, { color: message.role === "user" ? colors.primaryForeground : colors.mutedForeground }]}>{message.text}</Text>}
             </View>
-            {message.role === "flo" && cardsByMessageId[message.id]?.length ? (
-              <View style={styles.cardGrid}>
-                {cardsByMessageId[message.id].map(card => (
-                  <View key={`${message.id}-${card.title}`} style={[styles.insightCard, { borderColor: toneColor(card.tone, colors), backgroundColor: toneColor(card.tone, colors) + "12" }]}>
-                    <Text style={[styles.insightTitle, { color: colors.mutedForeground }]}>{card.title}</Text>
-                    <Text style={[styles.insightValue, { color: toneColor(card.tone, colors) }]}>{card.value}</Text>
-                    <Text style={[styles.insightDetail, { color: colors.mutedForeground }]}>{card.detail}</Text>
-                  </View>
-                ))}
-              </View>
-            ) : null}
-            {message.role === "flo" && sourcesByMessageId[message.id]?.length ? (
-              <View style={styles.sourceRow}>
-                {sourcesByMessageId[message.id].map(source => (
-                  <View key={`${message.id}-${source.type}-${source.label}`} style={[styles.sourceChip, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-                    <Feather name="database" size={11} color={colors.mutedForeground} />
-                    <Text style={[styles.sourceText, { color: colors.mutedForeground }]}>{source.label}</Text>
-                  </View>
-                ))}
-              </View>
-            ) : null}
-            {message.role === "flo" && decisionByMessageId[message.id] ? (
-              <View style={styles.decisionActions}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Save this Flo plan to calendar"
-                  disabled={decisionSaveState[message.id] === "saving" || decisionSaveState[message.id] === "saved"}
-                  onPress={() => void addDecisionToCalendar(message.id)}
-                  style={[
-                    styles.saveDecisionButton,
-                    { backgroundColor: colors.primary, opacity: decisionSaveState[message.id] === "saved" ? 0.7 : 1 },
-                  ]}
-                >
-                  <Feather
-                    name={decisionSaveState[message.id] === "saved" ? "check-circle" : "calendar"}
-                    size={16}
-                    color="#fff"
-                  />
-                  <Text style={styles.saveDecisionText}>
-                    {decisionSaveState[message.id] === "saving"
-                      ? "Saving..."
-                      : decisionSaveState[message.id] === "saved"
-                        ? `Saved for ${formatDisplayDate(decisionByMessageId[message.id].scenario.date)}`
-                        : `Save this plan · ${formatDisplayDate(decisionByMessageId[message.id].scenario.date)}`}
-                  </Text>
-                </Pressable>
-                <Text style={[styles.saveDecisionHint, { color: colors.mutedForeground }]}>
-                  Saves to your calendar as a planned decision.
-                </Text>
-                {decisionSaveState[message.id] === "failed" ? (
-                  <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t save this plan. Try again.</Text>
-                ) : null}
-              </View>
-            ) : null}
-            {message.role === "flo" && categoryMoveByMessageId[message.id] ? (
-              <View style={styles.decisionActions}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Apply this category budget move"
-                  disabled={categoryMoveState[message.id] === "saving" || categoryMoveState[message.id] === "saved"}
-                  onPress={() => applyCategoryMoveFromFlo(message.id)}
-                  style={[
-                    styles.saveDecisionButton,
-                    { backgroundColor: colors.success, opacity: categoryMoveState[message.id] === "saved" ? 0.7 : 1 },
-                  ]}
-                >
-                  <Feather
-                    name={categoryMoveState[message.id] === "saved" ? "check-circle" : "repeat"}
-                    size={16}
-                    color="#fff"
-                  />
-                  <Text style={styles.saveDecisionText}>
-                    {categoryMoveState[message.id] === "saving"
-                      ? "Applying..."
-                      : categoryMoveState[message.id] === "saved"
-                        ? "Move applied"
-                        : `Apply $${categoryMoveByMessageId[message.id].amount.toFixed(2)} move`}
-                  </Text>
-                </Pressable>
-                <Text style={[styles.saveDecisionHint, { color: colors.mutedForeground }]}>
-                  Moves budget from {categoryMoveByMessageId[message.id].from} to {categoryMoveByMessageId[message.id].to} for this month.
-                </Text>
-                {categoryMoveState[message.id] === "failed" ? (
-                  <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t apply this move. Try again.</Text>
-                ) : null}
-              </View>
-            ) : null}
-            {message.role === "flo" && billDateMoveByMessageId[message.id] ? (
-              <View style={styles.decisionActions}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Apply this bill due date move"
-                  disabled={billDateMoveState[message.id] === "saving" || billDateMoveState[message.id] === "saved"}
-                  onPress={() => void applyBillDateMoveFromFlo(message.id)}
-                  style={[
-                    styles.saveDecisionButton,
-                    { backgroundColor: colors.primary, opacity: billDateMoveState[message.id] === "saved" ? 0.7 : 1 },
-                  ]}
-                >
-                  <Feather
-                    name={billDateMoveState[message.id] === "saved" ? "check-circle" : "calendar"}
-                    size={16}
-                    color="#fff"
-                  />
-                  <Text style={styles.saveDecisionText}>
-                    {billDateMoveState[message.id] === "saving"
-                      ? "Applying..."
-                      : billDateMoveState[message.id] === "saved"
-                        ? "Due date moved"
-                        : `Move ${billDateMoveByMessageId[message.id].billName}`}
-                  </Text>
-                </Pressable>
-                <Text style={[styles.saveDecisionHint, { color: colors.mutedForeground }]}>
-                  Moves this one bill occurrence from {formatDisplayDate(billDateMoveByMessageId[message.id].fromDate)} to {formatDisplayDate(billDateMoveByMessageId[message.id].toDate)}.
-                </Text>
-                {billDateMoveState[message.id] === "failed" ? (
-                  <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t move this bill. Try again.</Text>
-                ) : null}
-              </View>
-            ) : null}
-            {message.role === "flo" && debtPaymentByMessageId[message.id] ? (
-              <View style={styles.decisionActions}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Apply this extra debt payment"
-                  disabled={debtPaymentState[message.id] === "saving" || debtPaymentState[message.id] === "saved"}
-                  onPress={() => void applyDebtPaymentFromFlo(message.id)}
-                  style={[
-                    styles.saveDecisionButton,
-                    { backgroundColor: colors.success, opacity: debtPaymentState[message.id] === "saved" ? 0.7 : 1 },
-                  ]}
-                >
-                  <Feather
-                    name={debtPaymentState[message.id] === "saved" ? "check-circle" : "zap"}
-                    size={16}
-                    color="#fff"
-                  />
-                  <Text style={styles.saveDecisionText}>
-                    {debtPaymentState[message.id] === "saving"
-                      ? "Applying..."
-                      : debtPaymentState[message.id] === "saved"
-                        ? "Debt payment scheduled"
-                        : `Apply $${debtPaymentByMessageId[message.id].amount.toFixed(2)} to ${debtPaymentByMessageId[message.id].debtName}`}
-                  </Text>
-                </Pressable>
-                <Text style={[styles.saveDecisionHint, { color: colors.mutedForeground }]}>
-                  Adds an extra debt payment on {formatDisplayDate(debtPaymentByMessageId[message.id].date)} and updates the debt when that date arrives.
-                </Text>
-                {debtPaymentState[message.id] === "failed" ? (
-                  <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t schedule this debt payment. Try again.</Text>
-                ) : null}
-              </View>
-            ) : null}
-            {message.role === "flo" && billChangeByMessageId[message.id] ? (
-              <View style={styles.decisionActions}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Apply this recurring bill change"
-                  disabled={billChangeState[message.id] === "saving" || billChangeState[message.id] === "saved"}
-                  onPress={() => void applyBillChangeFromFlo(message.id)}
-                  style={[
-                    styles.saveDecisionButton,
-                    { backgroundColor: colors.primary, opacity: billChangeState[message.id] === "saved" ? 0.7 : 1 },
-                  ]}
-                >
-                  <Feather
-                    name={billChangeState[message.id] === "saved" ? "check-circle" : "edit-3"}
-                    size={16}
-                    color="#fff"
-                  />
-                  <Text style={styles.saveDecisionText}>
-                    {billChangeState[message.id] === "saving"
-                      ? "Applying..."
-                      : billChangeState[message.id] === "saved"
-                        ? "Bill updated"
-                        : `Update ${billChangeByMessageId[message.id].billName} to $${billChangeByMessageId[message.id].newAmount.toFixed(2)}`}
-                  </Text>
-                </Pressable>
-                <Text style={[styles.saveDecisionHint, { color: colors.mutedForeground }]}>
-                  Starts {formatDisplayDate(billChangeByMessageId[message.id].startDate)}{billChangeByMessageId[message.id].preserveCurrentMonth ? " and keeps this month unchanged." : "."}
-                </Text>
-                {billChangeState[message.id] === "failed" ? (
-                  <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t update this bill. Try again.</Text>
-                ) : null}
-              </View>
-            ) : null}
-            {message.role === "flo" && billMoveUndoByMessageId[message.id] ? (
-              <View style={styles.decisionActions}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Undo this bill move"
-                  disabled={billMoveUndoState[message.id] === "saving" || billMoveUndoState[message.id] === "saved"}
-                  onPress={() => void undoBillMoveFromFlo(message.id)}
-                  style={[
-                    styles.saveDecisionButton,
-                    { backgroundColor: colors.warning, opacity: billMoveUndoState[message.id] === "saved" ? 0.7 : 1 },
-                  ]}
-                >
-                  <Feather
-                    name={billMoveUndoState[message.id] === "saved" ? "check-circle" : "rotate-ccw"}
-                    size={16}
-                    color="#fff"
-                  />
-                  <Text style={styles.saveDecisionText}>
-                    {billMoveUndoState[message.id] === "saving"
-                      ? "Restoring..."
-                      : billMoveUndoState[message.id] === "saved"
-                        ? "Move restored"
-                        : `Undo ${billMoveUndoByMessageId[message.id].billName} move`}
-                  </Text>
-                </Pressable>
-                <Text style={[styles.saveDecisionHint, { color: colors.mutedForeground }]}>
-                  Restores this bill from {formatDisplayDate(billMoveUndoByMessageId[message.id].toDate)} back to {formatDisplayDate(billMoveUndoByMessageId[message.id].fromDate)}.
-                </Text>
-                {billMoveUndoState[message.id] === "failed" ? (
-                  <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t restore this bill. Try again.</Text>
-                ) : null}
-              </View>
-            ) : null}
-            {message.role === "flo" && reducePlanByMessageId[message.id] ? (
-              <View style={styles.decisionActions}>
-                <View style={[styles.reductionTargetCard, { borderColor: colors.border, backgroundColor: colors.muted }]}>
-                  <Text style={[styles.reductionTargetLabel, { color: colors.mutedForeground }]}>Recommended plan to adjust</Text>
-                  <Text style={[styles.reductionTargetName, { color: colors.foreground }]} numberOfLines={1}>{reducePlanByMessageId[message.id].name}</Text>
-                  <Text style={[styles.reductionTargetMeta, { color: colors.mutedForeground }]}>
-                    {reducePlanByMessageId[message.id].amountLabel} · {formatDisplayDate(reducePlanByMessageId[message.id].date)}
-                  </Text>
-                </View>
-                <View style={styles.reductionActions}>
-                  <Pressable
-                    onPress={() => openPostponePlan(reducePlanByMessageId[message.id].id)}
-                    style={({ pressed }) => [styles.reductionButton, { backgroundColor: colors.primary + "18", opacity: pressed ? 0.75 : 1 }]}
-                  >
-                    <Text style={[styles.reductionButtonText, { color: colors.primary }]}>Postpone</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => openLowerPlan(reducePlanByMessageId[message.id].id)}
-                    style={({ pressed }) => [styles.reductionButton, { backgroundColor: colors.warning + "18", opacity: pressed ? 0.75 : 1 }]}
-                  >
-                    <Text style={[styles.reductionButtonText, { color: colors.warning }]}>Lower amount</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => void cancelPlan(reducePlanByMessageId[message.id].id)}
-                    style={({ pressed }) => [styles.reductionButton, { backgroundColor: colors.destructive + "14", opacity: pressed ? 0.75 : 1 }]}
-                  >
-                    <Text style={[styles.reductionButtonText, { color: colors.destructive }]}>
-                      {historyActionState[reducePlanByMessageId[message.id].id] === "saving" ? "Saving" : "Cancel plan"}
-                    </Text>
-                  </Pressable>
-                </View>
-                <Text style={[styles.saveDecisionHint, { color: colors.mutedForeground }]}>
-                  Each option updates the saved plan and recalculates the forecast.
-                </Text>
-              </View>
-            ) : null}
           </View>
         ))}
       </ScrollView>
 
-      <Modal visible={!!postponePlan} transparent animationType="slide" onRequestClose={() => setPostponePlan(null)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setPostponePlan(null)}>
-          <Pressable style={[styles.followSheet, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => {}}>
+      <Modal visible={Boolean(reviewProposal)} transparent animationType={isDesktop ? "fade" : "slide"} onRequestClose={() => proposalConfirmState !== "confirming" && setReviewProposal(null)}>
+        <Pressable style={[styles.modalOverlay, isDesktop && styles.reviewOverlayDesktop]} onPress={() => proposalConfirmState !== "confirming" && setReviewProposal(null)}>
+          <Pressable style={[styles.followSheet, isDesktop && styles.reviewDialogDesktop, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => undefined}>
             <View style={[styles.sheetHandle, { backgroundColor: colors.mutedForeground }]} />
-            <Text style={[styles.followTitle, { color: colors.foreground }]}>Postpone plan</Text>
-            <Text style={[styles.followSub, { color: colors.mutedForeground }]}>
-              Pick the new date for {postponePlan?.name ?? "this plan"}.
-            </Text>
-            <DatePickerField value={postponeDate} onChange={setPostponeDate} minDate={today} label="New planned date" />
-            {postponePlan && historyActionState[postponePlan.id] === "failed" ? (
-              <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t postpone this plan. Try again.</Text>
-            ) : null}
+            <View style={[styles.reviewProposalIcon, { backgroundColor: proposalReceipt ? colors.success + "18" : colors.primary + "18" }]}><Feather name={proposalReceipt ? "check" : "shield"} size={20} color={proposalReceipt ? colors.success : colors.primary} /></View>
+            <Text style={[styles.followTitle, { color: colors.foreground }]}>{proposalReceipt ? "Change confirmed" : "Review bill change"}</Text>
+            <Text style={[styles.followSub, { color: colors.mutedForeground }]}>{proposalReceipt ? "FlowLedger confirmed the database change and refreshed your plan." : reviewProposal?.summary}</Text>
+            <View style={[styles.reviewImpact, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+              <Text style={[styles.reviewImpactLabel, { color: colors.mutedForeground }]}>PLANNED PAYMENT AMOUNT</Text>
+              <Text style={[styles.reviewImpactText, { color: colors.foreground }]}>{moneyValue(proposalReceipt?.previousAmount ?? reviewProposal?.payload?.expectedAmount)} → {moneyValue(proposalReceipt?.newAmount ?? reviewProposal?.payload?.newAmount)}</Text>
+            </View>
+            {proposalConfirmError ? <Text accessibilityRole="alert" style={[styles.saveDecisionError, { color: colors.destructive }]}>{proposalConfirmError}</Text> : null}
+            <Text style={[styles.reviewSafety, { color: colors.mutedForeground }]}>{proposalReceipt ? `Confirmed ${new Date(proposalReceipt.confirmedAt).toLocaleString()}` : "Nothing changes until you press Confirm change."}</Text>
             <View style={styles.followActions}>
-              <Pressable onPress={() => setPostponePlan(null)} style={[styles.followButton, { backgroundColor: colors.muted }]}>
-                <Text style={[styles.followButtonText, { color: colors.mutedForeground }]}>Cancel</Text>
-              </Pressable>
-              <Pressable onPress={() => void postponeSelectedPlan()} style={[styles.followButton, { backgroundColor: colors.primary }]}>
-                <Text style={styles.followPrimaryText}>Save date</Text>
-              </Pressable>
+              <Pressable accessibilityRole="button" disabled={proposalConfirmState === "confirming"} onPress={() => setReviewProposal(null)} style={[styles.followButton, { backgroundColor: colors.muted, opacity: proposalConfirmState === "confirming" ? 0.5 : 1 }]}><Text style={[styles.followButtonText, { color: colors.foreground }]}>{proposalReceipt ? "Done" : "Cancel"}</Text></Pressable>
+              {!proposalReceipt ? <Pressable accessibilityRole="button" disabled={proposalConfirmState === "confirming"} onPress={() => void confirmProposal()} style={[styles.followButton, { backgroundColor: colors.primary, opacity: proposalConfirmState === "confirming" ? 0.6 : 1 }]}><Text style={styles.followPrimaryText}>{proposalConfirmState === "confirming" ? "Confirming..." : "Confirm change"}</Text></Pressable> : null}
             </View>
           </Pressable>
         </Pressable>
       </Modal>
 
-      <Modal visible={!!lowerPlan} transparent animationType="slide" onRequestClose={() => setLowerPlan(null)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setLowerPlan(null)}>
-          <Pressable style={[styles.followSheet, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => {}}>
-            <View style={[styles.sheetHandle, { backgroundColor: colors.mutedForeground }]} />
-            <Text style={[styles.followTitle, { color: colors.foreground }]}>Lower planned amount</Text>
-            <Text style={[styles.followSub, { color: colors.mutedForeground }]}>
-              Enter the new amount for {lowerPlan?.name ?? "this plan"}. Flo will recalculate the forecast before saving.
-            </Text>
-            <View style={[styles.actualInputWrap, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-              <Text style={[styles.actualPrefix, { color: colors.mutedForeground }]}>$</Text>
-              <TextInput
-                value={lowerAmount}
-                onChangeText={setLowerAmount}
-                keyboardType="decimal-pad"
-                placeholder="0.00"
-                placeholderTextColor={colors.mutedForeground}
-                style={[styles.actualInput, { color: colors.foreground }]}
-              />
-            </View>
-            {lowerPlan && historyActionState[lowerPlan.id] === "failed" ? (
-              <Text style={[styles.saveDecisionError, { color: colors.destructive }]}>Couldn&apos;t lower this plan. Try again.</Text>
-            ) : null}
-            <View style={styles.followActions}>
-              <Pressable onPress={() => setLowerPlan(null)} style={[styles.followButton, { backgroundColor: colors.muted }]}>
-                <Text style={[styles.followButtonText, { color: colors.mutedForeground }]}>Cancel</Text>
-              </Pressable>
-              <Pressable onPress={() => void saveLowerPlanAmount()} style={[styles.followButton, { backgroundColor: colors.warning }]}>
-                <Text style={styles.followPrimaryText}>Save lower amount</Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      <FloSafetyStopModal
-        visible={Boolean(decisionSafetyStop)}
-        warning={decisionSafetyStop}
-        onKeepEditing={() => {
-          setDecisionSafetyStop(null);
-          setPendingUnsafeDecisionMessageId(null);
-        }}
-        onScheduleAnyway={pendingUnsafeDecisionMessageId ? () => { void addDecisionToCalendar(pendingUnsafeDecisionMessageId, true); } : undefined}
-      />
-
-      <View style={[styles.composerArea, { backgroundColor: colors.background, borderColor: colors.border, paddingBottom: composerBottom }]}>
+      <View style={[styles.composerArea, isDesktop && styles.composerAreaDesktop, { backgroundColor: colors.background, borderColor: colors.border, paddingBottom: isDesktop ? 16 : composerBottom }]}>
         {chatError ? (
           <View style={styles.errorRow}>
             <Text style={[styles.chatError, { color: colors.mutedForeground }]}>{chatError}</Text>
@@ -1563,19 +1060,20 @@ export default function FloScreen() {
   );
 }
 
-function formatDisplayDate(date: string): string {
-  const parsed = dateOnlyToLocalDate(date);
-  if (!parsed) return date;
-  return parsed.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+function describeCoverage(coverage?: Record<string, unknown>): string | undefined {
+  if (!coverage) return undefined;
+  if (coverage.complete === false) return "Partial account coverage";
+  const tools = Number(coverage.tools);
+  if (Number.isFinite(tools) && tools > 0) return `${tools} account source${tools === 1 ? "" : "s"} checked`;
+  return coverage.complete === true ? "Complete for this question" : undefined;
 }
 
-function formatMoney(amount: number): string {
-  return `$${Math.abs(amount).toFixed(2)}`;
-}
-
-function formatSignedMoney(amount: number): string {
-  const sign = amount < 0 ? "-" : "+";
-  return `${sign}${formatMoney(amount)}`;
+function floFreshnessSummary(rows: Record<string, { dataAsOf?: string | null }>): string {
+  const latest = Object.values(rows).map(row => row.dataAsOf).filter((value): value is string => Boolean(value)).sort().at(-1);
+  if (!latest) return "account-aware answers";
+  const date = new Date(latest);
+  if (!Number.isFinite(date.getTime())) return "account-aware answers";
+  return `data checked ${date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
 }
 
 function decisionStillHasSource(decision: { status: string; scenario: { type?: string }; applied_change?: Record<string, unknown> | null; actual_amount?: number | null }, transactions: { id: string }[]) {
@@ -1596,13 +1094,6 @@ function decisionStillHasSource(decision: { status: string; scenario: { type?: s
   return !!linkedTransactionId && transactions.some(transaction => transaction.id === linkedTransactionId);
 }
 
-function toneColor(tone: FloResponseCard["tone"], colors: ReturnType<typeof useColors>) {
-  if (tone === "safe") return colors.success;
-  if (tone === "caution") return colors.warning;
-  if (tone === "risk") return colors.destructive;
-  return colors.primary;
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   header: {
@@ -1619,6 +1110,9 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 12, lineHeight: 17, marginTop: 3 },
   conversation: { flex: 1 },
   conversationContent: { paddingHorizontal: 18, paddingTop: 18, paddingBottom: 28, gap: 16 },
+  desktopHistoryLayer: { position: "absolute", left: 0, top: 92, bottom: 0, width: 292, zIndex: 4 },
+  conversationDesktop: { marginLeft: 292 },
+  conversationContentDesktop: { width: "100%", maxWidth: 820, alignSelf: "center", paddingHorizontal: 28, paddingTop: 24 },
   loadOlderButton: { alignSelf: "center", minHeight: 36, borderRadius: 999, justifyContent: "center", paddingHorizontal: 14 },
   loadOlderText: { fontSize: 11, fontFamily: "Inter_700Bold" },
   modalOverlay: { flex: 1, backgroundColor: "rgba(2,6,23,0.68)", justifyContent: "flex-end" },
@@ -1638,6 +1132,7 @@ const styles = StyleSheet.create({
   userBubble: { alignSelf: "flex-end", borderTopRightRadius: 6 },
   thinkingRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   bubbleText: { fontSize: 15, lineHeight: 23, fontFamily: "Inter_400Regular" },
+  trustLine: { marginTop: 8, fontSize: 10, lineHeight: 15, fontFamily: "Inter_500Medium" },
   cardGrid: { marginTop: 10, gap: 8 },
   insightCard: { borderWidth: 1, borderRadius: 12, padding: 10 },
   insightTitle: { fontSize: 10, fontFamily: "Inter_600SemiBold", textTransform: "uppercase", letterSpacing: 0.5 },
@@ -1659,6 +1154,7 @@ const styles = StyleSheet.create({
   reductionButton: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 8 },
   reductionButtonText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
   composerArea: { borderTopWidth: 1, paddingHorizontal: 14, paddingTop: 12 },
+  composerAreaDesktop: { marginLeft: 292, paddingHorizontal: 28, alignItems: "center" },
   errorRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
   chatError: { flex: 1, fontSize: 11, lineHeight: 15, fontFamily: "Inter_500Medium" },
   retryButton: { minHeight: 34, borderRadius: 999, flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 11 },
@@ -1668,6 +1164,8 @@ const styles = StyleSheet.create({
   quickPromptChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 13, paddingVertical: 9 },
   quickPromptText: { fontSize: 12, fontFamily: "Inter_700Bold" },
   composer: {
+    width: "100%",
+    maxWidth: 820,
     minHeight: 62,
     maxHeight: 112,
     borderRadius: 20,
@@ -1682,4 +1180,11 @@ const styles = StyleSheet.create({
   input: { flex: 1, minHeight: 44, maxHeight: 96, paddingTop: 11, paddingBottom: 10, fontSize: 15 },
   send: { minWidth: 70, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", paddingHorizontal: 15 },
   sendText: { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold" },
+  reviewOverlayDesktop: { justifyContent: "center", alignItems: "center", padding: 24 },
+  reviewDialogDesktop: { width: "100%", maxWidth: 520, borderRadius: 24 },
+  reviewProposalIcon: { alignSelf: "center", width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  reviewImpact: { borderWidth: 1, borderRadius: 13, padding: 11 },
+  reviewImpactLabel: { fontSize: 9, letterSpacing: 0.8, fontFamily: "Inter_800ExtraBold" },
+  reviewImpactText: { fontSize: 11, lineHeight: 16, marginTop: 4, fontFamily: "Inter_600SemiBold" },
+  reviewSafety: { fontSize: 10, lineHeight: 15, textAlign: "center", fontFamily: "Inter_500Medium" },
 });
