@@ -1,7 +1,7 @@
 const {
   authenticatedUser,
+  publicError,
   serviceSupabase,
-  safeError,
 } = require("../_utils/supabase");
 const { syncItem } = require("../_utils/sync");
 const {
@@ -77,7 +77,7 @@ async function updateSavingsAccountNickname(req, res) {
   } catch (error) {
     return res.status(500).json({
       error: "ACCOUNT_NAME_UPDATE_FAILED",
-      message: safeError(error, "Could not update the account name."),
+      message: publicError(error, "Could not update the account name."),
     });
   }
 }
@@ -166,7 +166,7 @@ module.exports = async function plaidSync(req, res) {
       .status(500)
       .json({
         error: code,
-        message: safeError(error, "Could not sync bank activity."),
+        message: publicError(error, "Could not sync bank activity."),
       });
   }
 };

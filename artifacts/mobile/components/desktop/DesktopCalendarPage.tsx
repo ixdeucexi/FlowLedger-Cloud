@@ -26,7 +26,7 @@ import {
   type DesktopCalendarEventKind,
 } from "@/lib/desktopCalendar";
 import type { FinancialEvent } from "@/lib/forecast";
-import { formatEventStatus } from "@/lib/forecastDisplay";
+import { calendarVisibleForecastEvents, formatEventStatus } from "@/lib/forecastDisplay";
 
 const MONTHS = [
   "January",
@@ -294,7 +294,7 @@ function DesktopMonthGrid({
       <View style={styles.calendarGrid}>
         {cells.map((cell) => {
           const balance = cell.inCurrentMonth ? balancesByDay.get(cell.day) : undefined;
-          const events = balance?.events ?? [];
+          const events = calendarVisibleForecastEvents(balance?.events);
           const visibleEvents = events.slice(0, compact ? 2 : 3);
           const hiddenCount = Math.max(0, events.length - visibleEvents.length);
           const selected = selectedDate === cell.date;
@@ -407,7 +407,7 @@ function SelectedDayPanel({
   onAddTransaction: () => void;
   onOpenEvent: (event: FinancialEvent) => void;
 }) {
-  const events = selectedDay?.events ?? [];
+  const events = calendarVisibleForecastEvents(selectedDay?.events);
   const daySummary = summarizeCalendarEvents(events, transferTransactionIds);
   const weekSummary = summarizeCalendarEvents(
     uniqueCalendarEvents(weekDays),

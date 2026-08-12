@@ -1,4 +1,4 @@
-const { authenticatedUser, serviceSupabase, safeError } = require("./supabase");
+const { authenticatedUser, serviceSupabase, publicError } = require("./supabase");
 const { authorizeProHousehold, requestedHouseholdId } = require("./plaidAccess");
 const { defaultBudgetId, findConnectedCardDebt, recalculateSnowballMinimums, syncItem } = require("./sync");
 
@@ -152,6 +152,6 @@ module.exports = async function attachCreditCard(req, res) {
 
     return res.status(200).json({ ok: true, debt_id: targetDebt.id, debt_name: targetDebt.name || name, include_in_snowball: true });
   } catch (error) {
-    return res.status(500).json({ error: error.code || "CARD_ATTACH_FAILED", message: safeError(error, "Could not add this card to Debt and Snowball.") });
+    return res.status(500).json({ error: error.code || "CARD_ATTACH_FAILED", message: publicError(error, "Could not add this card to Debt and Snowball.") });
   }
 };

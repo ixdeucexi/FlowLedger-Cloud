@@ -1,6 +1,6 @@
 const { sendPushToUser } = require("../push");
 const { notificationTestPayload } = require("../notificationTest");
-const { authenticatedUser, safeError, serviceSupabase } = require("../supabase");
+const { authenticatedUser, publicError, safeError, serviceSupabase } = require("../supabase");
 
 function body(req) {
   if (!req.body) return {};
@@ -43,6 +43,6 @@ module.exports = async function testNotification(req, res) {
     }
     return res.status(200).json({ ok: true, delivered: result.delivered, type });
   } catch (error) {
-    return res.status(500).json({ error: "PUSH_TEST_FAILED", message: safeError(error, "Could not send the test notification.") });
+    return res.status(500).json({ error: "PUSH_TEST_FAILED", message: publicError(error, "Could not send the test notification.") });
   }
 };

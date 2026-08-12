@@ -1,4 +1,4 @@
-const { authenticatedUser, safeError, serviceSupabase } = require("../supabase");
+const { authenticatedUser, publicError, serviceSupabase } = require("../supabase");
 const { validPushEndpoint, validPushKey } = require("../pushValidation");
 
 function body(req) {
@@ -51,6 +51,6 @@ module.exports = async function notificationSubscription(req, res) {
     if (error) throw error;
     return res.status(200).json({ ok: true });
   } catch (error) {
-    return res.status(500).json({ error: "PUSH_SUBSCRIPTION_FAILED", message: safeError(error, "Could not update notifications.") });
+    return res.status(500).json({ error: "PUSH_SUBSCRIPTION_FAILED", message: publicError(error, "Could not update notifications.") });
   }
 };

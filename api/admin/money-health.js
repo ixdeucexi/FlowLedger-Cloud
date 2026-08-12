@@ -1,4 +1,4 @@
-const { authenticatedUser, safeError, serviceSupabase } = require("../_utils/supabase");
+const { authenticatedUser, publicError, serviceSupabase } = require("../_utils/supabase");
 const { runMoneyHealthCheck } = require("../_utils/moneyHealth");
 
 async function approvedAdmin(db, userId) {
@@ -77,7 +77,7 @@ module.exports = async function moneyHealth(req, res) {
   } catch (error) {
     return res.status(500).json({
       error: "MONEY_HEALTH_FAILED",
-      message: safeError(error, "Could not check Money Health."),
+      message: publicError(error, "Could not check Money Health."),
     });
   }
 };

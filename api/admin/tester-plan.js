@@ -1,4 +1,4 @@
-const { authenticatedUser, safeError, serviceSupabase } = require("../_utils/supabase");
+const { authenticatedUser, publicError, serviceSupabase } = require("../_utils/supabase");
 
 function requestBody(req) {
   if (!req.body) return {};
@@ -31,7 +31,7 @@ module.exports = async function testerPlan(req, res) {
     .select("user_id")
     .eq("user_id", auth.user.id)
     .maybeSingle();
-  if (adminError) return res.status(500).json({ error: "ADMIN_CHECK_FAILED", message: safeError(adminError) });
+  if (adminError) return res.status(500).json({ error: "ADMIN_CHECK_FAILED", message: publicError(adminError, "Could not verify admin access.") });
   if (!admin) return res.status(403).json({ error: "ADMIN_REQUIRED", message: "Admin access is required." });
 
   const payload = requestBody(req);
@@ -99,6 +99,6 @@ module.exports = async function testerPlan(req, res) {
       tier,
     });
   } catch (error) {
-    return res.status(500).json({ error: "TESTER_PLAN_FAILED", message: safeError(error, "Could not update tester access.") });
+    return res.status(500).json({ error: "TESTER_PLAN_FAILED", message: publicError(error, "Could not update tester access.") });
   }
 };

@@ -73,7 +73,7 @@ import { DEFAULT_DECISION_HUB_SETTINGS } from "@/lib/decisionHubSettings";
 import { dateOnlyToLocalDate, localDateString } from "@/lib/dateLabels";
 import { buildPaycheckPlan, makeDateKey } from "@/lib/paycheckPlanning";
 import { buildAlgorithmSuite } from "@/lib/algorithmSuite";
-import { groupForecastEvents } from "@/lib/forecastDisplay";
+import { calendarVisibleForecastEvents, groupForecastEvents } from "@/lib/forecastDisplay";
 import { loadOnboardingPreferences, readOnboardingPreferences } from "@/lib/onboardingPreferences";
 import { buildSetupPersonalization } from "@/lib/onboardingPersonalization";
 import type { SafetyStopWarning } from "@/lib/safetyStop";
@@ -388,7 +388,7 @@ export default function FloScreen() {
     const month = now.getMonth();
     const year = now.getFullYear();
     const todayForecastDay = getDailyBalances(month, year).find(day => day.day === now.getDate());
-    const todayForecastGroups = groupForecastEvents(todayForecastDay?.events ?? []);
+    const todayForecastGroups = groupForecastEvents(calendarVisibleForecastEvents(todayForecastDay?.events));
     const algorithmSuite = buildAlgorithmSuite({
       month,
       year,

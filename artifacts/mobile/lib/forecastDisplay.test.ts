@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
 
 import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, debtPaymentStatusLabel, formatCalendarBalance, groupForecastEvents, plannedDebtEditorParams } from "./forecastDisplay";
@@ -48,6 +50,15 @@ test("keeps bank synchronization out of calendar items without removing real act
   ]);
 
   assert.deepEqual(events.map(item => item.id), ["car-wash"]);
+});
+
+test("desktop Forecast and Flo consume only calendar-visible event sources", () => {
+  const desktop = readFileSync(path.resolve(process.cwd(), "components/desktop/DesktopCalendarPage.tsx"), "utf8");
+  const flo = readFileSync(path.resolve(process.cwd(), "app/(tabs)/flo.tsx"), "utf8");
+
+  assert.match(desktop, /calendarVisibleForecastEvents\(balance\?\.events\)/);
+  assert.match(desktop, /calendarVisibleForecastEvents\(selectedDay\?\.events\)/);
+  assert.match(flo, /groupForecastEvents\(calendarVisibleForecastEvents\(todayForecastDay\?\.events\)\)/);
 });
 
 test("a canonical child opens the editor for its source debt and occurrence", () => {
