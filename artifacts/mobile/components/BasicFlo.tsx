@@ -81,6 +81,7 @@ export function BasicFlo({ facts, baseline, asOf }: { facts: FloFacts; baseline:
           {BASIC_PROMPTS.map(prompt => (
             <Pressable
               key={prompt.id}
+              nativeID={prompt.id === "afford" ? "guided-tour-flo" : undefined}
               accessibilityRole="button"
               accessibilityLabel={prompt.title}
               onPress={() => runPrompt(prompt)}

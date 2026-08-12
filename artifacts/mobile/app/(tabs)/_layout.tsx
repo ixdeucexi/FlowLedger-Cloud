@@ -354,7 +354,7 @@ function GuidedTour() {
   const router = useRouter();
   const segments = useSegments();
   const insets = useSafeAreaInsets();
-  const { width: viewportWidth } = useWindowDimensions();
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
   const [state, setState] = React.useState(readLearningTourState);
   const [collapsed, setCollapsed] = React.useState(false);
   const [targetRect, setTargetRect] = React.useState<{ top: number; left: number; width: number; height: number } | null>(null);
@@ -448,7 +448,13 @@ function GuidedTour() {
           : { bottom: 116, left: 32 };
   const sheetPosition: ViewStyle = viewportWidth >= 900
     ? { top: insets.top + 18, right: 20, left: "auto" as any, width: 380 }
-    : { bottom: insets.bottom + 92, left: 12, right: 12 };
+    : activeStep.route === "flo"
+      ? {
+          top: Math.max(insets.top + 12, Math.min(150, viewportHeight * 0.2)),
+          left: 12,
+          right: 12,
+        }
+      : { bottom: insets.bottom + 92, left: 12, right: 12 };
 
   return (
     <View pointerEvents="box-none" style={styles.learningLayer}>
