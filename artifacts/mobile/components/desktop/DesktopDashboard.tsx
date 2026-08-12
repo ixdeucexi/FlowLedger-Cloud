@@ -32,6 +32,7 @@ import { MonthlyDebtCheckInModal } from "@/components/MonthlyDebtCheckInModal";
 import { useAuth } from "@/context/AuthContext";
 import { useBudget, type Bill, type Goal, type IncomeItem } from "@/context/BudgetContext";
 import { useDashboardLayoutPreferences } from "@/hooks/useDashboardLayoutPreferences";
+import { useSetupReadiness } from "@/hooks/useSetupReadiness";
 import { isActiveTransaction } from "@/lib/billMatching";
 import {
   categoryBudgetStorageKey,
@@ -522,6 +523,7 @@ export function DesktopDashboard() {
     updateBill,
     updateGoal,
   } = useBudget();
+  const { readiness: setupReadiness } = useSetupReadiness();
 
   const [pageAddOpen, setPageAddOpen] = useState(false);
   const [billEditor, setBillEditor] = useState<{ bill: Bill | null; debt: boolean } | null>(null);
@@ -926,6 +928,34 @@ export function DesktopDashboard() {
         </View>
       </View>
 
+      {!settings.onboarding_completed ? (
+        <View style={styles.setupCard}>
+          <View style={styles.setupIcon}>
+            <Feather name="compass" size={20} color="#c4b5fd" />
+          </View>
+          <View style={styles.setupBody}>
+            <Text style={styles.setupTitle}>Continue setup with Flo</Text>
+            <Text style={styles.setupCopy}>{setupReadiness.completeCount} of {setupReadiness.stages.length} stages complete. Your place is saved for this household.</Text>
+            <View style={styles.setupStages}>
+              {setupReadiness.stages.map(stageItem => (
+                <View key={stageItem.id} style={styles.setupStage}>
+                  <Feather name={stageItem.complete ? "check-circle" : "circle"} size={14} color={stageItem.complete ? BRAND.green : BRAND.subtle} />
+                  <Text style={[styles.setupStageText, stageItem.complete && styles.setupStageDone]}>{stageItem.shortLabel}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => go("/setup")}
+            style={({ pressed }) => [styles.setupButton, { opacity: pressed ? 0.78 : 1 }]}
+          >
+            <Text style={styles.setupButtonText}>{setupReadiness.isComplete ? "Review and finish" : "Continue setup"}</Text>
+            <Feather name="arrow-right" size={16} color="#ffffff" />
+          </Pressable>
+        </View>
+      ) : null}
+
       <View style={styles.metricGrid}>
         <MetricCard
           label="Available to Spend"
@@ -1077,6 +1107,7 @@ export function DesktopDashboard() {
                 </View>
 
                 <Pressable
+                  nativeID="guided-tour-index"
                   accessibilityRole="button"
                   accessibilityLabel={`Flow Score ${algorithmSuite.flowScore.score}. ${algorithmSuite.flowScore.label}.`}
                   onPress={() => askFlo(`Why is my Flow Score ${algorithmSuite.flowScore.score}?`)}
@@ -2144,4 +2175,25 @@ const styles = StyleSheet.create({
   footerLinks: { marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 28 },
   footerText: { color: "#5f6d82", fontSize: 11, fontFamily: "Inter_600SemiBold" },
   footerMeta: { color: "#5f6d82", fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  setupCard: {
+    minHeight: 118,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(159,92,255,0.30)",
+    backgroundColor: "rgba(45,23,88,0.32)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    padding: 18,
+  },
+  setupIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(159,92,255,0.18)" },
+  setupBody: { flex: 1, minWidth: 0 },
+  setupTitle: { color: BRAND.text, fontSize: 17, fontFamily: "Inter_800ExtraBold" },
+  setupCopy: { color: BRAND.muted, fontSize: 12, lineHeight: 17, marginTop: 3, fontFamily: "Inter_500Medium" },
+  setupStages: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 10 },
+  setupStage: { flexDirection: "row", alignItems: "center", gap: 5 },
+  setupStageText: { color: "#cbd5e1", fontSize: 11, fontFamily: "Inter_700Bold" },
+  setupStageDone: { color: BRAND.subtle },
+  setupButton: { minHeight: 46, borderRadius: 14, backgroundColor: BRAND.purple, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 18 },
+  setupButtonText: { color: "#ffffff", fontSize: 12, fontFamily: "Inter_800ExtraBold" },
 });

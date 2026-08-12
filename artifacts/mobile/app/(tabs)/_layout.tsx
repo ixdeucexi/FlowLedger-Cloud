@@ -260,7 +260,7 @@ function DemoModeBanner() {
   const askSampleQuestion = () => {
     router.push({
       pathname: "/(tabs)/flo",
-      params: { prompt: "Can I afford $500 on July 15?" },
+      params: { prompt: "Can I afford $500 next Friday?" },
     } as any);
   };
 
@@ -284,7 +284,7 @@ function DemoModeBanner() {
       >
         <View style={styles.demoBadge}>
           <Feather name="play" size={13} color="#bae6fd" />
-          <Text style={styles.demoBadgeText}>Live demo</Text>
+          <Text style={styles.demoBadgeText}>Sample plan</Text>
         </View>
         <Text style={styles.demoBannerTitle}>
           {expanded
@@ -332,7 +332,7 @@ function DemoModeBanner() {
           </View>
           <View style={styles.demoButtonRow}>
             <Pressable onPress={resetDemo} style={styles.demoSmallButton}>
-              <Text style={styles.demoSmallButtonText}>Reset demo</Text>
+              <Text style={styles.demoSmallButtonText}>Reset sample</Text>
             </Pressable>
             <Pressable
               onPress={startRealSetup}
@@ -349,13 +349,15 @@ function DemoModeBanner() {
   );
 }
 
-function FloDemo() {
+function GuidedTour() {
   const colors = useColors();
   const router = useRouter();
   const segments = useSegments();
   const insets = useSafeAreaInsets();
+  const { width: viewportWidth } = useWindowDimensions();
   const [state, setState] = React.useState(readLearningTourState);
   const [collapsed, setCollapsed] = React.useState(false);
+  const [targetRect, setTargetRect] = React.useState<{ top: number; left: number; width: number; height: number } | null>(null);
   const activeStep =
     LEARNING_TOUR_STEPS[state.stepIndex] ?? LEARNING_TOUR_STEPS[0];
   const currentRoute = routeKeyFromSegments(segments.map(String));
@@ -380,6 +382,26 @@ function FloDemo() {
     window.addEventListener(LEARNING_TOUR_EVENT, onStart);
     return () => window.removeEventListener(LEARNING_TOUR_EVENT, onStart);
   }, [router]);
+
+  React.useEffect(() => {
+    setTargetRect(null);
+    if (!state.active || !isOnStepRoute || Platform.OS !== "web" || typeof document === "undefined") return;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const measure = () => {
+      const element = document.getElementById(`guided-tour-${activeStep.route}`);
+      if (!element) return;
+      const rect = element.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setTargetRect({ top: rect.top, left: rect.left, width: rect.width, height: rect.height });
+      }
+    };
+    [0, 180, 520].forEach(delay => timers.push(setTimeout(measure, delay)));
+    window.addEventListener("resize", measure);
+    return () => {
+      timers.forEach(clearTimeout);
+      window.removeEventListener("resize", measure);
+    };
+  }, [activeStep.route, isOnStepRoute, state.active, state.stepIndex, viewportWidth]);
 
   React.useEffect(() => {
     if (!state.active || isOnStepRoute) return;
@@ -410,18 +432,23 @@ function FloDemo() {
 
   if (!state.active) return null;
 
-  const targetPosition: ViewStyle =
-    activeStep.route === "index"
+  const targetPosition: ViewStyle = targetRect
+    ? {
+        top: Math.max(4, targetRect.top - 6),
+        left: Math.max(4, targetRect.left - 6),
+        width: targetRect.width + 12,
+        height: targetRect.height + 12,
+      }
+    : activeStep.route === "index"
       ? { top: "48%", right: 34 }
       : activeStep.route === "monthly"
-        ? { top: "40%", left: "44%" }
+        ? { top: 176, left: "42%" }
         : activeStep.route === "bills"
-          ? { top: "34%", left: "66%" }
-          : activeStep.route === "transactions"
-            ? { top: 286, right: 28 }
-            : activeStep.route === "flo"
-              ? { bottom: 116, left: 32 }
-              : { top: 176, left: "42%" };
+          ? { top: 188, right: 24 }
+          : { bottom: 116, left: 32 };
+  const sheetPosition: ViewStyle = viewportWidth >= 900
+    ? { top: insets.top + 18, right: 20, left: "auto" as any, width: 380 }
+    : { bottom: insets.bottom + 92, left: 12, right: 12 };
 
   return (
     <View pointerEvents="box-none" style={styles.learningLayer}>
@@ -442,14 +469,15 @@ function FloDemo() {
         style={[
           styles.learningSheet,
           collapsed && styles.learningSheetCollapsed,
-          { top: insets.top + 10, borderColor: colors.primary + "55" },
+          sheetPosition,
+          { borderColor: colors.primary + "55" },
         ]}
       >
         <View style={styles.learningHeader}>
           <FloLogo size={36} />
           <View style={{ flex: 1 }}>
             <Text style={styles.learningEyebrow}>
-              Flo Demo · {state.stepIndex + 1} of {LEARNING_TOUR_STEPS.length}
+              Guided Tour · {state.stepIndex + 1} of {LEARNING_TOUR_STEPS.length}
             </Text>
             <Text style={styles.learningTitle}>
               {activeStep.title} - {activeStep.focus}
@@ -460,7 +488,7 @@ function FloDemo() {
             style={styles.learningClose}
             hitSlop={8}
             accessibilityLabel={
-              collapsed ? "Expand Flo Demo" : "Minimize Flo Demo"
+              collapsed ? "Expand Guided Tour" : "Minimize Guided Tour"
             }
           >
             <Feather
@@ -473,7 +501,7 @@ function FloDemo() {
             onPress={closeTour}
             style={styles.learningClose}
             hitSlop={8}
-            accessibilityLabel="Close Flo Demo"
+            accessibilityLabel="Close Guided Tour"
           >
             <Feather name="x" size={18} color="#cbd5e1" />
           </Pressable>
@@ -812,7 +840,7 @@ function TabContent() {
         <PlanPreviewBanner />
         <SaveStatusBanner />
         <DecisionDueModal />
-        <FloDemo />
+        <GuidedTour />
       </View>
     </View>
   );
@@ -1098,17 +1126,14 @@ const styles = StyleSheet.create({
   learningTarget: {
     position: "absolute",
     width: 66,
-    height: 78,
+    height: 66,
     alignItems: "center",
     justifyContent: "center",
     zIndex: 111,
   },
   learningTargetRing: {
-    position: "absolute",
-    top: 0,
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 18,
     borderWidth: 3,
     borderColor: "#38bdf8",
     backgroundColor: "rgba(56,189,248,0.14)",
@@ -1126,7 +1151,7 @@ const styles = StyleSheet.create({
   },
   learningTargetText: {
     position: "absolute",
-    bottom: 0,
+    bottom: -24,
     color: "#e0f2fe",
     backgroundColor: "rgba(2,6,23,0.88)",
     borderRadius: 999,

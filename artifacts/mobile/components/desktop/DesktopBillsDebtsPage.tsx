@@ -865,11 +865,13 @@ function DebtsDesktop({
     : 0;
   return (
     <DesktopPage style={styles.pageReset}>
-      <PageHeader
-        title="Debts"
-        description={`${active.length} debt${active.length === 1 ? "" : "s"} · $${total.toLocaleString(undefined, { maximumFractionDigits: 0 })} total`}
-        actions={<PrimaryButton label="Add Debt" onPress={onAdd} />}
-      />
+      <View nativeID="guided-tour-bills">
+        <PageHeader
+          title="Debts"
+          description={`${active.length} debt${active.length === 1 ? "" : "s"} · $${total.toLocaleString(undefined, { maximumFractionDigits: 0 })} total`}
+          actions={<PrimaryButton label="Add Debt" onPress={onAdd} />}
+        />
+      </View>
       <View style={styles.debtOverviewRow}>
         <DesktopCard style={styles.debtOverviewCard}>
           <CardHeader

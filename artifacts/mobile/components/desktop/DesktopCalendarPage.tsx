@@ -166,6 +166,7 @@ function CalendarHeader({
       </View>
       <View style={[styles.monthControls, compact && styles.monthControlsCompact]}>
         <Pressable
+          nativeID="guided-tour-monthly"
           accessibilityRole="button"
           accessibilityLabel={`${simulatorLocked ? "Locked Pro " : ""}Plan Simulator`}
           onPress={onOpenPlanSimulator}

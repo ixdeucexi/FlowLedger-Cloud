@@ -63,6 +63,8 @@
     ,"lib/onboarding.test.ts"
     ,"lib/onboardingPersonalization.ts"
     ,"lib/onboardingPersonalization.test.ts"
+    ,"lib/setupReadiness.ts"
+    ,"lib/setupReadiness.test.ts"
     ,"lib/learningTour.ts"
     ,"lib/learningTour.test.ts"
     ,"lib/householdPermissions.ts"

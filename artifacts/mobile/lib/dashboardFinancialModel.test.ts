@@ -263,6 +263,18 @@ test("keeps both dashboard presentations on the shared calculation model", () =>
   }
 });
 
+test("both dashboards resume the same canonical setup walkthrough", () => {
+  const mobileDashboard = readFileSync("app/(tabs)/index.tsx", "utf8");
+  const desktopDashboard = readFileSync("components/desktop/DesktopDashboard.tsx", "utf8");
+
+  for (const source of [mobileDashboard, desktopDashboard]) {
+    assert.match(source, /useSetupReadiness\(\)/);
+    assert.match(source, /Continue setup with Flo/);
+    assert.match(source, /router\.push\("\/setup"|go\("\/setup"/);
+  }
+  assert.doesNotMatch(mobileDashboard, /onboarding_completed: true/);
+});
+
 test("the flipped savings card lists canonical accounts and exposes the naming editor", () => {
   const mobileDashboard = readFileSync("app/(tabs)/index.tsx", "utf8");
 

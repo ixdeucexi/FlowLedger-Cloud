@@ -31,6 +31,7 @@ import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useDashboardLayoutPreferences } from "@/hooks/useDashboardLayoutPreferences";
+import { useSetupReadiness } from "@/hooks/useSetupReadiness";
 import { applyCategoryBudgetMove, buildZeroBudgetSummary } from "@/lib/categoryPlanning";
 import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets as saveCategoryBudgetsRemote, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
 import { buildDashboardFinancialModel, type DashboardSavingsAccount } from "@/lib/dashboardFinancialModel";
@@ -227,10 +228,11 @@ function MobileDashboardScreen() {
     getMonthlyIncome,
     goals, addGoal, updateGoal, deleteGoal,
     getCashFlow, addBill, getDailyBalances, getTransactionsForMonth, settings,
-    accounts, connectedBankAccounts, incomes, updateSettings, updateAccount, updateConnectedBankAccountDisplayName, forecastConfidence,
+    accounts, connectedBankAccounts, incomes, updateAccount, updateConnectedBankAccountDisplayName, forecastConfidence,
     categories, activeHousehold, canEditHousehold,
     pendingBankTransactions, pendingPlanMatches, transactions,
   } = useBudget();
+  const { readiness: setupReadiness } = useSetupReadiness();
   const categoryBudgetScope = useMemo(() => ({
     userId: user?.id,
     householdId: activeHousehold?.householdId,
@@ -1029,21 +1031,25 @@ function MobileDashboardScreen() {
           </Pressable>
         </View>
       </View>
-      {!settings.onboarding_completed && (() => {
-        const steps = [
-          { label: "Add an account", done: accounts.some(account => account.is_active) },
-          { label: "Add income", done: incomes.length > 0 },
-          { label: "Add recurring bills", done: bills.some(bill => bill.is_recurring || bill.is_debt) },
-          { label: "Review safety settings", done: settings.safety_floor >= 0 && settings.forecast_horizon_months > 0 },
-          { label: "See your first forecast", done: accounts.length > 0 && incomes.length > 0 && bills.length > 0 },
-        ];
-        const complete = steps.every(step => step.done);
-        return <View style={[styles.setupCard, { backgroundColor: c.card, borderColor: c.border }]}>
-          <View style={styles.setupHeader}><View style={{ flex: 1 }}><Text style={[styles.setupTitle, { color: c.foreground }]}>Continue setup with Flo</Text><Text style={[styles.setupDesc, { color: c.mutedForeground }]}>Flo will pick up where you left off. {steps.filter(step => step.done).length} of {steps.length} setup steps complete</Text></View><Pressable onPress={() => void updateSettings({ onboarding_completed: true })}><Feather name="x" size={18} color={c.mutedForeground} /></Pressable></View>
-          {steps.map(step => <View key={step.label} style={styles.setupStep}><Feather name={step.done ? "check-circle" : "circle"} size={15} color={step.done ? c.success : c.mutedForeground} /><Text style={[styles.setupStepText, { color: step.done ? c.mutedForeground : c.foreground }]}>{step.label}</Text></View>)}
-          <Pressable onPress={() => complete ? void updateSettings({ onboarding_completed: true }) : router.push("/setup" as any)} style={[styles.setupButton, { backgroundColor: c.primary }]}><Text style={[styles.setupButtonText, { color: c.primaryForeground }]}>{complete ? "Finish Setup" : "Continue with Flo"}</Text></Pressable>
-        </View>;
-      })()}
+      {!settings.onboarding_completed && (
+        <View style={[styles.setupCard, { backgroundColor: c.card, borderColor: c.border }]}>
+          <View style={styles.setupHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.setupTitle, { color: c.foreground }]}>Continue setup with Flo</Text>
+              <Text style={[styles.setupDesc, { color: c.mutedForeground }]}>Flo will pick up where you left off. {setupReadiness.completeCount} of {setupReadiness.stages.length} stages complete</Text>
+            </View>
+          </View>
+          {setupReadiness.stages.map(stageItem => (
+            <View key={stageItem.id} style={styles.setupStep}>
+              <Feather name={stageItem.complete ? "check-circle" : "circle"} size={15} color={stageItem.complete ? c.success : c.mutedForeground} />
+              <Text style={[styles.setupStepText, { color: stageItem.complete ? c.mutedForeground : c.foreground }]}>{stageItem.label}</Text>
+            </View>
+          ))}
+          <Pressable accessibilityRole="button" onPress={() => router.push("/setup" as any)} style={[styles.setupButton, { backgroundColor: c.primary }]}>
+            <Text style={[styles.setupButtonText, { color: c.primaryForeground }]}>{setupReadiness.isComplete ? "Review and finish" : "Continue with Flo"}</Text>
+          </Pressable>
+        </View>
+      )}
 
       <Modal
         visible={startupAlertVisible && !!nextWeekRisk}
@@ -1272,6 +1278,7 @@ function MobileDashboardScreen() {
             </View>
 
             <Pressable
+              nativeID="guided-tour-index"
               onPress={() => setFlowScoreVisible(true)}
               style={({ pressed }) => [styles.referenceScorePanel, { opacity: pressed ? 0.86 : 1 }]}
             >

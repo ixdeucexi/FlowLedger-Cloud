@@ -67,6 +67,7 @@ import {
 import { useFeedbackBadge } from "@/context/FeedbackBadgeContext";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
+import { useSetupReadiness } from "@/hooks/useSetupReadiness";
 import { isCashFlowTransaction } from "@/lib/billMatching";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { localDateString } from "@/lib/dateLabels";
@@ -90,13 +91,10 @@ import {
   householdRoleLabel,
 } from "@/lib/householdPermissions";
 
-import { DEFAULT_ONBOARDING_PREFERENCES } from "@/lib/onboarding";
 import {
   loadOnboardingPreferences,
   readOnboardingPreferences,
-  saveOnboardingPreferences,
 } from "@/lib/onboardingPreferences";
-import { clearStoredSetupStep } from "@/lib/setupProgress";
 import { readInterfacePreferences, updateInterfacePreferences } from "@/lib/interfacePreferences";
 import {
   getForecastSafetyLayout,
@@ -466,6 +464,7 @@ export default function MoreScreen({
     leaveActiveHousehold,
     refreshBankData,
   } = useBudget();
+  const { readiness: setupReadiness } = useSetupReadiness();
 
   const [incomeModalVisible, setIncomeModalVisible] = useState(false);
   const [zeroBudgetIntroVisible, setZeroBudgetIntroVisible] = useState(false);
@@ -1100,79 +1099,17 @@ export default function MoreScreen({
   };
 
   const totalMonthlyIncome = getMonthlyIncome();
-  const setupSteps = [
-    {
-      key: "account",
-      label: "What account should I track first?",
-      detail:
-        "Tell me about your checking, savings, or cash account so I know where your money starts.",
-      done: accounts.some((account) => account.is_active),
-      action: "Answer",
-    },
-    {
-      key: "money",
-      label: "How much money is in that account today?",
-      detail:
-        "Give me the current balance and date so my forecast starts from the right number.",
-      done: accounts.some(
-        (account) => account.is_active && Math.abs(account.current_balance) > 0,
-      ),
-      action: "Answer",
-    },
-    {
-      key: "income",
-      label: "When does money come in?",
-      detail:
-        "Add paychecks, side income, or recurring deposits so I can look ahead.",
-      done: incomes.length > 0,
-      action: "Answer",
-    },
-    {
-      key: "bills",
-      label: "Which bills need to be paid?",
-      detail:
-        "Add recurring bills and due days so I can protect the month before decisions.",
-      done: bills.some((bill) => bill.is_recurring && !bill.is_debt),
-      action: "Answer",
-    },
-    {
-      key: "debts",
-      label: "What debts should I include?",
-      detail:
-        "Add balances, minimums, APRs, and snowball settings so payoff advice is accurate.",
-      done: bills.some((bill) => bill.is_debt),
-      action: "Answer",
-    },
-    {
-      key: "safety",
-      label: "How much cushion should I protect?",
-      detail: `Right now I protect $${settings.safety_floor.toFixed(0)} across ${settings.forecast_horizon_months} months.`,
-      done: settings.safety_floor >= 0 && settings.forecast_horizon_months > 0,
-      action: "Review",
-    },
-    {
-      key: "reconcile",
-      label: "Can we confirm the balance matches your bank?",
-      detail:
-        "Reconcile once so you can trust the forecast before making decisions.",
-      done:
-        forecastConfidence.level === "high" ||
-        accounts.some((account) => account.last_reconciled_at),
-      action: "Answer",
-    },
-    {
-      key: "backup",
-      label: "Want to save a backup before we move on?",
-      detail: "Export a CSV backup after setup so your data has a safety net.",
-      done: backupExported,
-      action: "Export",
-    },
-  ];
-  const setupComplete = setupSteps.filter((step) => step.done).length;
+  const setupSteps = setupReadiness.stages.map(stageItem => ({
+    key: stageItem.id,
+    label: stageItem.label,
+    detail: stageItem.detail,
+    done: stageItem.complete,
+    action: "Continue",
+  }));
+  const setupComplete = setupReadiness.completeCount;
   const currentSetupStep =
     setupSteps.find((step) => !step.done) ?? setupSteps[setupSteps.length - 1];
-  const setupIsComplete =
-    settings.onboarding_completed || setupComplete >= setupSteps.length;
+  const setupIsComplete = settings.onboarding_completed;
   const shouldShowFloSetup = !setupIsComplete;
   const currentMonthPrefix = localDateString().slice(0, 7);
   const accountMonthDeltas = useMemo(() => {
@@ -2046,36 +1983,9 @@ export default function MoreScreen({
     );
   };
 
-  const handleSetupStep = (key: string) => {
-    switch (key) {
-      case "account":
-        openAccount("add");
-        break;
-      case "money":
-      case "reconcile": {
-        const firstActive =
-          accounts.find((account) => account.is_active) ?? null;
-        if (firstActive)
-          openAccount(key === "money" ? "edit" : "reconcile", firstActive);
-        else openAccount("add");
-        break;
-      }
-      case "income":
-        setEditIncome(null);
-        setIncomeModalVisible(true);
-        break;
-      case "bills":
-      case "debts":
-        router.push("/(tabs)/bills" as any);
-        break;
-      case "backup":
-        void handleExport();
-        break;
-      case "safety":
-      default:
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        break;
-    }
+  const handleSetupStep = (_key: string) => {
+    router.push("/setup" as any);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
@@ -2327,15 +2237,7 @@ export default function MoreScreen({
                 </Text>
               </View>
               <Pressable
-                onPress={async () => {
-                  clearStoredSetupStep();
-                  await Promise.all([
-                    updateSettings({ onboarding_completed: false }),
-                    saveOnboardingPreferences(
-                      user?.id,
-                      DEFAULT_ONBOARDING_PREFERENCES,
-                    ),
-                  ]);
+                onPress={() => {
                   router.push("/setup" as any);
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 }}
@@ -2346,7 +2248,7 @@ export default function MoreScreen({
               >
                 <Feather name="refresh-cw" size={14} color={c.primary} />
                 <Text style={[styles.setupRestartText, { color: c.primary }]}>
-                  Restart setup walkthrough for testing
+                  Continue setup walkthrough
                 </Text>
               </Pressable>
             </View>
@@ -2374,20 +2276,12 @@ export default function MoreScreen({
                   Setup is complete
                 </Text>
                 <Text style={[styles.switchDesc, { color: c.mutedForeground }]}>
-                  Restart setup or replay the demo.
+                  Review setup or replay the Guided Tour.
                 </Text>
               </View>
             </View>
             <Pressable
-              onPress={async () => {
-                clearStoredSetupStep();
-                await Promise.all([
-                  updateSettings({ onboarding_completed: false }),
-                  saveOnboardingPreferences(
-                    user?.id,
-                    DEFAULT_ONBOARDING_PREFERENCES,
-                  ),
-                ]);
+              onPress={() => {
                 router.push("/setup" as any);
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               }}
@@ -2402,7 +2296,7 @@ export default function MoreScreen({
             >
               <Feather name="refresh-cw" size={16} color={c.primary} />
               <Text style={[styles.addBtnText, { color: c.primary }]}>
-                Restart setup walkthrough
+                Review setup walkthrough
               </Text>
             </Pressable>
             <Pressable
@@ -2422,7 +2316,7 @@ export default function MoreScreen({
             >
               <Feather name="compass" size={16} color={c.primary} />
               <Text style={[styles.addBtnText, { color: c.primary }]}>
-                Replay Demo
+                Replay Guided Tour
               </Text>
             </Pressable>
           </View>

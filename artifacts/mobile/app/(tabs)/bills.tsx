@@ -612,6 +612,7 @@ export default function BillsScreen() {
               {(["bills", "debt"] as Tab[]).map((t) => (
                 <Pressable
                   key={t}
+                  nativeID={t === "debt" ? "guided-tour-bills" : undefined}
                   accessibilityRole="tab"
                   accessibilityLabel={t === "bills" ? "Bills" : "Debt"}
                   accessibilityState={{ selected: activeTab === t }}

@@ -1533,6 +1533,7 @@ export default function FloScreen() {
         </ScrollView>
         <View style={[styles.composer, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <TextInput
+            nativeID="guided-tour-flo"
             accessibilityLabel="Ask Flo anything"
             value={input}
             onChangeText={setInput}

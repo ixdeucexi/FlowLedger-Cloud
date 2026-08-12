@@ -1536,6 +1536,7 @@ export default function MonthlyScreen() {
           <Feather name="chevron-left" size={24} color={c.mutedForeground} />
         </Pressable>
         <Pressable
+          nativeID="guided-tour-monthly"
           onPress={openMonthSearch}
           accessibilityRole="button"
           accessibilityLabel={`Search months. Current month is ${MONTH_FULL[month]} ${selectedYear}`}
