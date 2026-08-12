@@ -1,3 +1,5 @@
+import { isBillEligibleForUpcomingPlan } from "./billEligibility";
+
 export type InAppNotificationTone = "safe" | "watch" | "risk" | "info";
 
 export type InAppNotification = {
@@ -19,7 +21,7 @@ export type NotificationCenterState = {
 export const EMPTY_NOTIFICATION_STATE: NotificationCenterState = { readIds: [], dismissedIds: [] };
 
 export function isBillEligibleForDueNotification(bill: { is_debt: boolean; balance: number }) {
-  return !bill.is_debt || Number(bill.balance) > 0.009;
+  return isBillEligibleForUpcomingPlan(bill);
 }
 
 function uniqueStrings(value: unknown) {

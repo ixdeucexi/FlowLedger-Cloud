@@ -1,6 +1,7 @@
 import { ALGORITHM_CATALOG, type AlgorithmId, type AlgorithmSettingsShape } from "./algorithmCatalog";
 import { buildStabilityProgress, STABILITY_POLICY, type StabilityProgress } from "./stability";
 import { isRequiredBill, normalizeBillImportance, type BillImportance } from "./billImportance";
+import { isBillEligibleForUpcomingPlan } from "./billEligibility";
 import {
   FLOW_SCORE_CONFIDENCE_POINTS,
   FLOW_SCORE_OVERDUE_BILL_PENALTY,
@@ -474,7 +475,11 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
 function prioritizeBills(bills: AlgorithmBill[], todayDay: number, safetyFloor: number, lowestDay: number | null, input: AlgorithmSuiteInput) {
   const ranked = bills
     .map(bill => ({ bill, status: buildBillScheduleStatus(bill, todayDay) }))
-    .filter(({ status }) => status.remainingAmount > 0.005 && status.nextDueDay !== null)
+    .filter(({ bill, status }) =>
+      isBillEligibleForUpcomingPlan(bill)
+      && status.remainingAmount > 0.005
+      && status.nextDueDay !== null
+    )
     .map(({ bill, status }) => {
       const dueDay = status.nextDueDay ?? bill.due_day;
       const daysUntilDue = Math.max(0, dueDay - todayDay);

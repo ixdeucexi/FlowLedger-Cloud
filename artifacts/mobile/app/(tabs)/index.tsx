@@ -912,6 +912,7 @@ function MobileDashboardScreen() {
         dateLabel: daysAway === 0 ? "today" : daysAway === 1 ? "tomorrow" : priorityDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
         daysAway,
         isDebt: Boolean(priorityBillRecord?.is_debt),
+        closed: Boolean(priorityBillRecord?.is_debt && priorityBillRecord.balance <= 0.009),
         frequency: priorityBillRecord?.frequency,
         paidOff: debtDecision?.paidOff,
         rollover: debtDecision?.rollover,

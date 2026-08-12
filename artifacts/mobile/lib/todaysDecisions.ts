@@ -26,6 +26,7 @@ export type TodayDecisionInput = {
     isDebt?: boolean;
     frequency?: "monthly" | "quarterly" | "biweekly" | "weekly";
     paidOff?: boolean;
+    closed?: boolean;
     rollover?: { name: string; amount: number } | null;
   } | null;
   snowballTarget?: { name: string; balance: number } | null;
@@ -129,7 +130,7 @@ export function buildTodaysDecisions(input: TodayDecisionInput): TodayDecision[]
     });
   }
 
-  if (input.nextBill && input.nextBill.daysAway >= 0 && input.nextBill.daysAway <= 3) {
+  if (input.nextBill && !input.nextBill.closed && input.nextBill.daysAway >= 0 && input.nextBill.daysAway <= 3) {
     const debtPayoffWithRollover = Boolean(
       input.nextBill.isDebt && input.nextBill.paidOff && input.nextBill.rollover,
     );

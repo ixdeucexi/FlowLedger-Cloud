@@ -110,6 +110,40 @@ test("a bank-pending bill occurrence is not treated as paid or overdue", () => {
   assert.ok(suite.flowScore.negativeFactors.every(factor => !/overdue bill/i.test(factor)));
 });
 
+test("closed debts never become the next payment", () => {
+  const suite = buildAlgorithmSuite(baseInput({
+    todayDay: 12,
+    bills: [
+      {
+        id: "tia-khols",
+        name: "Tia Khols",
+        amount: 29,
+        category: "Debt",
+        due_day: 15,
+        occurrenceDays: [15],
+        is_debt: true,
+        is_recurring: true,
+        balance: 0,
+        paidAmount: 0,
+      },
+      {
+        id: "internet",
+        name: "Internet",
+        amount: 110,
+        category: "Utilities",
+        due_day: 16,
+        occurrenceDays: [16],
+        is_debt: false,
+        is_recurring: true,
+        paidAmount: 0,
+      },
+    ],
+  }));
+
+  assert.equal(suite.billPriority.nextBill?.id, "internet");
+  assert.ok(suite.billPriority.bills.every(bill => bill.id !== "tia-khols"));
+});
+
 test("every active algorithm exposes a decision-engine detail", () => {
   const suite = buildAlgorithmSuite(baseInput());
 

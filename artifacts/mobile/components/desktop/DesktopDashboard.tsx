@@ -41,6 +41,7 @@ import {
   subscribeCategoryBudgets,
 } from "@/lib/categoryBudgetStore";
 import { buildDashboardFinancialModel } from "@/lib/dashboardFinancialModel";
+import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
 import { desktopActivityDestination, isDesktopAddAction, type DesktopAddAction } from "@/lib/desktopActions";
 import { WIDE_DESKTOP_BREAKPOINT } from "@/lib/desktopExperience";
 import { transactionDebt } from "@/lib/transactionDebt";
@@ -675,36 +676,39 @@ export function DesktopDashboard() {
     const candidates: UpcomingBill[] = [];
     const appendMonth = (month: number, year: number, minimumDay: number) => {
       const debtPlan = getRemainingDebtPlanForMonth(month, year);
-      getMonthlyBills(month, year).filter(bill => !bill.is_debt || !debtPlan).forEach((bill) => {
-        const days = getBillOccurrencesInMonth(bill, month, year).sort((a, b) => a - b);
-        if (!days.length) return;
-        const monthlyTotal = getBillMonthlyTotal(bill, month, year);
-        const occurrenceAmount = monthlyTotal / days.length;
-        let paidRemaining = getPaidAmount(bill.id, month, year);
-        days.forEach((day) => {
-          const paid = Math.min(occurrenceAmount, Math.max(0, paidRemaining));
-          paidRemaining = Math.max(0, paidRemaining - paid);
-          const remaining = Math.max(0, occurrenceAmount - paid);
-          if (remaining <= 0.005 || day < minimumDay) return;
-          const occurrenceDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-          candidates.push({
-            key: `${bill.id}:${occurrenceDate}`,
-            id: bill.id,
-            name: bill.name,
-            category: bill.is_debt ? "Debt payment" : bill.category || "Bill",
-            amount: remaining,
-            day,
-            month,
-            year,
-            isDebt: bill.is_debt,
-            frequency: bill.frequency,
-            pending: activePendingMatches.some(
-              (match) =>
-                match.target_id === bill.id && match.occurrence_date === occurrenceDate,
-            ),
+      getMonthlyBills(month, year)
+        .filter(isBillEligibleForUpcomingPlan)
+        .filter(bill => !bill.is_debt || !debtPlan)
+        .forEach((bill) => {
+          const days = getBillOccurrencesInMonth(bill, month, year).sort((a, b) => a - b);
+          if (!days.length) return;
+          const monthlyTotal = getBillMonthlyTotal(bill, month, year);
+          const occurrenceAmount = monthlyTotal / days.length;
+          let paidRemaining = getPaidAmount(bill.id, month, year);
+          days.forEach((day) => {
+            const paid = Math.min(occurrenceAmount, Math.max(0, paidRemaining));
+            paidRemaining = Math.max(0, paidRemaining - paid);
+            const remaining = Math.max(0, occurrenceAmount - paid);
+            if (remaining <= 0.005 || day < minimumDay) return;
+            const occurrenceDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+            candidates.push({
+              key: `${bill.id}:${occurrenceDate}`,
+              id: bill.id,
+              name: bill.name,
+              category: bill.is_debt ? "Debt payment" : bill.category || "Bill",
+              amount: remaining,
+              day,
+              month,
+              year,
+              isDebt: bill.is_debt,
+              frequency: bill.frequency,
+              pending: activePendingMatches.some(
+                (match) =>
+                  match.target_id === bill.id && match.occurrence_date === occurrenceDate,
+              ),
+            });
           });
         });
-      });
       debtPlan?.allocations.forEach(allocation => {
         const [allocationYear, allocationMonth, allocationDay] = allocation.date.split("-").map(Number);
         if (allocationYear !== year || allocationMonth !== month + 1 || allocationDay < minimumDay || allocation.amount <= 0.005) return;

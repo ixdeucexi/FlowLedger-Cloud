@@ -62,6 +62,24 @@ test("transient financial data is not required for a stable empty state", () => 
   assert.equal(decisions[0].id, "check-plan");
 });
 
+test("closed debts never create a due decision", () => {
+  const decisions = buildTodaysDecisions({
+    ...base,
+    nextBill: {
+      id: "tia-khols",
+      name: "Tia Khols",
+      amount: 29,
+      dateLabel: "Aug 15",
+      daysAway: 3,
+      isDebt: true,
+      closed: true,
+      frequency: "monthly",
+    },
+  });
+
+  assert.ok(decisions.every(decision => decision.id !== "bill-due"));
+});
+
 test("the snowball decision opens the dedicated planner", () => {
   const decision = buildTodaysDecisions({
     ...base,
