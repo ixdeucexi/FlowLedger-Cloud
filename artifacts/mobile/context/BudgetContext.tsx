@@ -65,7 +65,7 @@ import { spendingBucketSummary } from "@/lib/spendingBuckets";
 import { canonicalConnectedAccounts, pendingPlaidActivityWithBalanceHolds } from "@/lib/plaidActivity";
 import { normalizeBillImportance, type BillImportance } from "@/lib/billImportance";
 import { buildTransactionLedger, remainingPlannedAmount, selectFlowLedgerTransactions } from "@/lib/ledgerEngine";
-import { debtSourceCommitmentsFromPendingMatches, type PendingPlanMatch } from "@/lib/pendingPlanMatches";
+import { debtSourceCommitmentsForDebts, type PendingPlanMatch } from "@/lib/pendingPlanMatches";
 import { shouldRefreshPlanOnResume } from "@/lib/resumePolicy";
 import {
   buildCanonicalPlanSimulationBaseline,
@@ -1931,14 +1931,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     () => reviewedBillMonthSettlements(transactions),
     [transactions],
   );
-  const debtSourceCommitments = useMemo(() => debtSourceCommitmentsFromPendingMatches(
+  const debtSourceCommitments = useMemo(() => debtSourceCommitmentsForDebts(
     pendingPlanMatches,
     pendingBankTransactions,
     transactions,
-  ).map(commitment => ({
-    ...commitment,
-    sourceBalance: bills.find(bill => bill.id === commitment.sourceBillId)?.balance,
-  })), [bills, pendingBankTransactions, pendingPlanMatches, transactions]);
+    bills,
+  ), [bills, pendingBankTransactions, pendingPlanMatches, transactions]);
   const getDebtSourceCommitment = useCallback(
     (billId: string, occurrenceDate: string) => debtSourceCommitments.find(commitment =>
       commitment.sourceBillId === billId && commitment.date === occurrenceDate),

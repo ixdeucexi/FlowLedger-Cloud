@@ -30,6 +30,13 @@ export interface PostedTransactionIdentity {
   plaid_transaction_id?: string;
 }
 
+export interface DebtSourceIdentity {
+  id: string;
+  name?: string;
+  balance: number;
+  is_debt: boolean;
+}
+
 export function livePendingPlanMatchForOccurrence(
   matches: PendingPlanMatch[],
   pendingTransactions: PendingTransactionIdentity[],
@@ -80,6 +87,29 @@ export function debtSourceCommitmentsFromPendingMatches(
       state: "pending" as const,
     };
   }).sort((left, right) => left.date.localeCompare(right.date) || left.sourceBillId.localeCompare(right.sourceBillId));
+}
+
+/** Keeps ordinary matched bills out of the canonical debt-payment projection. */
+export function debtSourceCommitmentsForDebts(
+  matches: PendingPlanMatch[],
+  pendingTransactions: PendingTransactionIdentity[],
+  postedTransactions: PostedTransactionIdentity[],
+  sources: DebtSourceIdentity[],
+): DebtSourceCommitment[] {
+  const debtById = new Map(sources
+    .filter(source => source.is_debt)
+    .map(source => [source.id, source]));
+
+  return debtSourceCommitmentsFromPendingMatches(matches, pendingTransactions, postedTransactions)
+    .flatMap(commitment => {
+      const source = debtById.get(commitment.sourceBillId);
+      if (!source) return [];
+      return [{
+        ...commitment,
+        sourceBillName: commitment.sourceBillName || source.name,
+        sourceBalance: source.balance,
+      }];
+    });
 }
 
 export function debtSourceCommitmentForOccurrence(

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   activePendingPlanMatches,
+  debtSourceCommitmentsForDebts,
   debtSourceCommitmentsFromPendingMatches,
   livePendingPlanMatchForOccurrence,
   pendingPlanMatchForOccurrence,
@@ -62,6 +63,28 @@ test("same-occurrence pending matches aggregate and a posted replacement wins de
   assert.deepEqual(debtSourceCommitmentsFromPendingMatches([second, posted, first], pending, [{ id: "posted-1" }]), [{
     sourceBillId: "bill-1", sourceBillName: "Electric", date: "2026-07-29", amount: 0, state: "posted",
   }]);
+});
+
+test("only matched debts become debt-plan commitments", () => {
+  const pending = [{ plaid_transaction_id: "pending-1" }];
+  const ordinaryBill = { id: "bill-1", name: "YMCA", balance: 0, is_debt: false };
+  assert.deepEqual(
+    debtSourceCommitmentsForDebts([match({ target_name: "YMCA" })], pending, [], [ordinaryBill]),
+    [],
+  );
+
+  const debt = { ...ordinaryBill, name: "Camera", balance: 42.81, is_debt: true };
+  assert.deepEqual(
+    debtSourceCommitmentsForDebts([match({ target_name: "Camera", pending_amount: 42.81 })], pending, [], [debt]),
+    [{
+      sourceBillId: "bill-1",
+      sourceBillName: "Camera",
+      sourceBalance: 42.81,
+      date: "2026-07-29",
+      amount: 42.81,
+      state: "pending",
+    }],
+  );
 });
 
 test("a vanished pending charge stops suppressing overdue", () => {
