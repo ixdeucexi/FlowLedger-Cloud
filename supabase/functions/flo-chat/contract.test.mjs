@@ -158,6 +158,7 @@ test("v3 endpoint enforces privacy, legacy rejection, and server-owned persisten
   assert.match(source, /FLO_DAILY_REQUEST_LIMIT/);
   assert.match(source, /withApprovedCors\(await handleV3/);
   assert.match(source, /FLO_ALLOWED_ORIGINS/);
+  assert.match(source, /"Access-Control-Allow-Methods":\s*"POST, OPTIONS"/);
   assert.match(source, /FLO_SAFETY_IDENTIFIER_SECRET/);
   assert.match(source, /requestedConversationId != null/);
   assert.match(source, /is_ephemeral", true/);

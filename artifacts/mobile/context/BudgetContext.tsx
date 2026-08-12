@@ -1118,7 +1118,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       memberships[0];
     setActiveHouseholdId(next.householdId);
     householdScopeRef.current = next;
-    void writeStoredActiveHouseholdId(uid, next.householdId);
+    if (remoteActive !== next.householdId) {
+      await saveActiveHouseholdId(uid, next.householdId);
+    } else {
+      void writeStoredActiveHouseholdId(uid, next.householdId);
+    }
     void refreshHouseholdDetails(next);
     return next;
   }, [refreshHouseholdDetails]);

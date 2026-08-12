@@ -21,6 +21,7 @@ import { createFloTools, summarizeToolPayload, type FloToolRuntime } from "./too
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, accept",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 const jsonHeaders = { ...cors, "Content-Type": "application/json" };
 const streamHeaders = {
