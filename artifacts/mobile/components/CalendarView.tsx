@@ -8,7 +8,7 @@ import { isConfirmedBillMatch } from "@/lib/billMatching";
 import { isSnowballPaymentTransaction, snowballPaymentName } from "@/lib/debtPaymentPlan";
 import { allocationLabel, groupPlannedExpenseAllocations, occurrenceKey } from "@/lib/reviewCenter";
 import { scenarioDates } from "@/lib/decisions";
-import { formatCalendarBalance } from "@/lib/forecastDisplay";
+import { combineSameDayDebtPaymentEvents, formatCalendarBalance } from "@/lib/forecastDisplay";
 
 const DAY_NAMES = ["S", "M", "T", "W", "T", "F", "S"];
 const EMPTY_OVERDUE_BILL_KEYS: ReadonlySet<string> = new Set();
@@ -208,10 +208,11 @@ export function CalendarView({
           const ungroupedDayTxs = dayTxs.filter(transaction => !groupedPlannedExpenseTransactionIds.has(transaction.id));
           const snowballTransactions = ungroupedDayTxs.filter(isSnowballPaymentTransaction);
           const ordinaryDayTxs = ungroupedDayTxs.filter(transaction => !isSnowballPaymentTransaction(transaction));
-          const billEvents = (db?.events ?? [])
+          const displayEvents = combineSameDayDebtPaymentEvents(db?.events ?? []);
+          const billEvents = displayEvents
             .filter(event => event.amount < 0 && (event.sourceType === "bill" || event.kind === "bill"))
             .slice(0, 3);
-          const debtEvents = (db?.events ?? [])
+          const debtEvents = displayEvents
             .filter(event => event.amount < 0 && (event.sourceType === "extra_payment" || event.kind === "debt_payment"))
             .slice(0, 2);
           const calendarGoals: CalendarGoalExpense[] = (db?.goalExpenses ?? []).map(goal => ({

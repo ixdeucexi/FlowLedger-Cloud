@@ -45,6 +45,50 @@ const KIND_LABELS: Record<FinancialEventKind, string> = {
   bank_adjustment: "Bank balance update",
 };
 
+const DEBT_STATUS_PRIORITY: Record<FinancialEventStatus, number> = {
+  pending: 6,
+  scheduled: 5,
+  planned: 4,
+  finalized: 3,
+  actual: 2,
+  applied: 1,
+};
+
+const cents = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
+
+/** Combines same-debt, same-date canonical and saved-extra rows for display only. */
+export function combineSameDayDebtPaymentEvents(events: FinancialEvent[] = []): FinancialEvent[] {
+  const groups = new Map<string, { firstIndex: number; events: FinancialEvent[] }>();
+  events.forEach((event, index) => {
+    const isDebtPayment = event.kind === "debt_payment" || event.sourceType === "extra_payment";
+    const key = isDebtPayment && event.debtTargetBillId
+      ? `${event.date}:${event.debtTargetBillId}`
+      : `event:${index}:${event.id}`;
+    const group = groups.get(key) ?? { firstIndex: index, events: [] };
+    group.events.push(event);
+    groups.set(key, group);
+  });
+
+  return [...groups.entries()]
+    .sort((left, right) => left[1].firstIndex - right[1].firstIndex)
+    .map(([key, group]) => {
+      if (group.events.length === 1) return group.events[0];
+      const savedExtra = group.events.find(event => event.debtPlanSource === "saved_extra");
+      const representative = savedExtra ?? group.events[0];
+      const status = group.events.reduce((selected, event) =>
+        DEBT_STATUS_PRIORITY[event.status] > DEBT_STATUS_PRIORITY[selected] ? event.status : selected,
+      representative.status);
+      return {
+        ...representative,
+        id: `combined:${key}`,
+        amount: cents(group.events.reduce((total, event) => total + event.amount, 0)),
+        status,
+        debtPlanSource: savedExtra ? "saved_extra" : representative.debtPlanSource,
+        sourceId: savedExtra?.sourceId ?? representative.sourceId,
+      };
+    });
+}
+
 function groupKeyForEvent(event: FinancialEvent): ForecastEventGroupKey {
   if (event.sourceType === "reconciliation") return "plans";
   if (event.sourceType === "decision") return "plans";
@@ -72,7 +116,9 @@ export function formatEventStatus(status: FinancialEventStatus): string {
 }
 
 export function calendarVisibleForecastEvents(events: FinancialEvent[] = []): FinancialEvent[] {
-  return events.filter(event => event.sourceType !== "reconciliation" && event.kind !== "bank_adjustment");
+  return combineSameDayDebtPaymentEvents(
+    events.filter(event => event.sourceType !== "reconciliation" && event.kind !== "bank_adjustment"),
+  );
 }
 
 export function describeForecastEvent(event: FinancialEvent): ForecastEventDisplay {
@@ -91,7 +137,7 @@ export function plannedDebtEditorParams(event: FinancialEvent): { billId: string
 
 export function groupForecastEvents(events: FinancialEvent[] = []): ForecastEventGroup[] {
   const grouped = new Map<ForecastEventGroupKey, ForecastEventDisplay[]>();
-  events.forEach(event => {
+  combineSameDayDebtPaymentEvents(events).forEach(event => {
     const key = groupKeyForEvent(event);
     grouped.set(key, [...(grouped.get(key) ?? []), describeForecastEvent(event)]);
   });

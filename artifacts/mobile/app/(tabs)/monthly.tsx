@@ -31,6 +31,7 @@ import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { DESKTOP_MODAL_HANDLE, DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR, DESKTOP_MODAL_WIDE } from "@/lib/desktopModal";
 import { confirmedBillMatchId, isConfirmedBillMatch } from "@/lib/billMatching";
+import { nextPlannedDebtPayment } from "@/lib/billSurplusRouting";
 import { allocationLabel, groupPlannedExpenseAllocations, matchedOccurrenceAllocations, occurrenceKey, reviewSettlementSummary, transactionDisplayName } from "@/lib/reviewCenter";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
 import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, groupForecastEvents, plannedDebtEditorParams } from "@/lib/forecastDisplay";
@@ -226,7 +227,7 @@ export default function MonthlyScreen() {
     selectedYear, setSelectedYear, dashboardFilter, setDashboardFilter,
     getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill, deleteBill, updateIncome,
     getCashFlow, getMonthlyIncome, getDailyBalances, getIncomeOccurrencesInMonth,
-    previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, finalizeBillPayment, getExtraPayment,
+    previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, finalizeBillPayment, getExtraPayment, getRemainingDebtPlanForMonth,
     updateDecision, deleteDecision, updateGoal, deleteGoal, activeHousehold,
   } = useBudget();
 
@@ -319,6 +320,7 @@ export default function MonthlyScreen() {
   const [fullPaymentPrompt, setFullPaymentPrompt] = useState<FullPaymentPromptState | null>(null);
   const [surplusPrompt, setSurplusPrompt] = useState<{ bill: Bill; budgeted: number; actual: number; paidDate: string; matchAmountToActual?: boolean } | null>(null);
   const [surplusPaymentDate, setSurplusPaymentDate] = useState("");
+  const [surplusRouteMode, setSurplusRouteMode] = useState<"next" | "date">("next");
   const [debtPaymentNotice, setDebtPaymentNotice] = useState<DebtPaymentAppliedDetail | null>(null);
   const [editPlan, setEditPlan] = useState<DecisionRecord | null>(null);
   const [editPlanName, setEditPlanName] = useState("");
@@ -603,7 +605,9 @@ export default function MonthlyScreen() {
     const occurrenceDate = `${selectedYear}-${String(month + 1).padStart(2, "0")}-${String(selectedDay).padStart(2, "0")}`;
     return monthBills.filter(bill => {
       if (!getBillOccurrencesInMonth(bill, month, selectedYear).includes(selectedDay)) return false;
-      if (bill.is_debt && selectedDebtPayments.some(payment => payment.event.sourceId === bill.id)) return false;
+      if (bill.is_debt && selectedDebtPayments.some(payment =>
+        payment.event.sourceId === bill.id || payment.event.debtTargetBillId === bill.id
+      )) return false;
       const match = billOccurrenceMatches.get(occurrenceKey(bill.id, occurrenceDate));
       return !match || match.settlement === "partial";
     });
@@ -687,10 +691,26 @@ export default function MonthlyScreen() {
     const existing = getExtraPayment(month, selectedYear);
     const previousSource = existing?.sources?.find(source => source.type === "bill_surplus" && source.billId === surplusPrompt.bill.id)?.amount ?? 0;
     const total = Math.max(0, (existing?.amount ?? 0) - previousSource + surplus);
-    const validDate = isValidDateInMonth(surplusPaymentDate, month, selectedYear);
-    const preview = previewDebtSnowball(month, selectedYear, total, surplus - previousSource, validDate ? surplusPaymentDate : undefined);
-    return { preview, total, targetDebt: preview.months[0]?.targetName ?? preview.allocations[0]?.billName, dateValid: validDate, safe: validDate && preview.selectedExtra + 0.005 >= total };
-  }, [surplusPrompt, surplusPaymentDate, getExtraPayment, previewDebtSnowball, month, selectedYear, settings.debtPayoffEnabled]);
+    const targetPreview = previewDebtSnowball(month, selectedYear, total, surplus - previousSource);
+    const targetDebtId = targetPreview.allocations[0]?.billId;
+    const nextPayment = nextPlannedDebtPayment(
+      getRemainingDebtPlanForMonth(month, selectedYear)?.allocations ?? [],
+      targetDebtId,
+      surplusPrompt.paidDate,
+    );
+    const selectedPaymentDate = surplusRouteMode === "next" ? nextPayment?.date ?? "" : surplusPaymentDate;
+    const validDate = isValidDateInMonth(selectedPaymentDate, month, selectedYear);
+    const preview = previewDebtSnowball(month, selectedYear, total, surplus - previousSource, validDate ? selectedPaymentDate : undefined);
+    return {
+      preview,
+      total,
+      targetDebt: preview.months[0]?.targetName ?? preview.allocations[0]?.billName,
+      dateValid: validDate,
+      nextPayment,
+      paymentDate: selectedPaymentDate,
+      safe: validDate && preview.selectedExtra + 0.005 >= total,
+    };
+  }, [surplusPrompt, surplusPaymentDate, surplusRouteMode, getExtraPayment, getRemainingDebtPlanForMonth, previewDebtSnowball, month, selectedYear, settings.debtPayoffEnabled]);
 
   const askToTreatPaidAsFullPayment = useCallback((prompt: { bill: Bill; budgeted: number; actual: number; paidDate: string }) => {
     const { bill, budgeted, actual, paidDate } = prompt;
@@ -773,6 +793,7 @@ export default function MonthlyScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSurplusPrompt({ bill, budgeted, actual, paidDate, matchAmountToActual: true });
     setSurplusPaymentDate(paidDate);
+    setSurplusRouteMode("next");
     setSelectedDate(null);
     paidSaveSnapshotRef.current = { ...paidSaveSnapshotRef.current, [paidKey]: { value: editValue, at: Date.now() } };
     clearPaidEditForKey(paidKey);
@@ -961,7 +982,7 @@ export default function MonthlyScreen() {
           scheduled: false,
           balanceBefore: surplusPrompt.bill.balance,
           extraMessage: snowballAdded
-            ? `I also added $${surplus.toFixed(2)} to ${target.billName} for ${formatShortDate(surplusPaymentDate)}.`
+            ? `I also added $${surplus.toFixed(2)} to ${target.billName} for ${formatShortDate(surplusSnowballOffer.paymentDate)}.`
             : undefined,
         });
       }
@@ -2147,9 +2168,12 @@ export default function MonthlyScreen() {
                           const amount = Math.abs(payment.event.amount);
                           const applied = payment.statusLabel.toLowerCase() === "applied";
                           const allocatedDebtIds = new Set(savedPayment?.allocations.map(allocation => allocation.billId) ?? []);
+                          const displayedDebtIds = payment.event.debtTargetBillId
+                            ? new Set([payment.event.debtTargetBillId])
+                            : allocatedDebtIds;
                           const requiredMinimum = savedPayment
                             ? bills
-                              .filter(bill => bill.is_debt && allocatedDebtIds.has(bill.id))
+                              .filter(bill => bill.is_debt && displayedDebtIds.has(bill.id))
                               .reduce(
                                 (total, bill) => total + requiredDebtPlanTotal(
                                   bill,
@@ -2159,7 +2183,9 @@ export default function MonthlyScreen() {
                               )
                             : undefined;
                           const paymentDate = savedPayment?.payment_date ?? payment.event.date;
-                          const snowballMonthToDate = snowballPlanTotalThroughDate(snowballPlanEntries, paymentDate);
+                          const snowballMonthToDate = payment.event.id.startsWith("combined:") && requiredMinimum !== undefined
+                            ? Math.max(0, amount - requiredMinimum)
+                            : snowballPlanTotalThroughDate(snowballPlanEntries, paymentDate);
                           const editorParams = plannedDebtEditorParams(payment.event);
                           return (
                             <CalendarDebtPaymentCard
@@ -2924,6 +2950,10 @@ export default function MonthlyScreen() {
         paymentDateValid={surplusSnowballOffer?.dateValid ?? false}
         paymentDateMin={`${selectedYear}-${String(month + 1).padStart(2, "0")}-01`}
         paymentDateMax={`${selectedYear}-${String(month + 1).padStart(2, "0")}-${String(new Date(selectedYear, month + 1, 0).getDate()).padStart(2, "0")}`}
+        routeMode={surplusRouteMode}
+        nextPaymentDate={surplusSnowballOffer?.nextPayment?.date}
+        nextPaymentAmount={surplusSnowballOffer?.nextPayment?.amount}
+        onRouteModeChange={setSurplusRouteMode}
         onPaymentDateChange={setSurplusPaymentDate}
         onKeep={keepBillSurplus}
         onSnowball={addBillSurplusToSnowball}

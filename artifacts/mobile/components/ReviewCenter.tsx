@@ -12,6 +12,7 @@ import type { Bill, Goal, ReconcileTransactionInput, Transaction } from "@/conte
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { manualActivityMatchCandidates } from "@/lib/billMatching";
+import { nextPlannedDebtPayment } from "@/lib/billSurplusRouting";
 import { confirmAction } from "@/lib/confirmAction";
 import { applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupReviewTargets, incomeReviewTargets, matchedOccurrenceAllocations, occurrenceKey, prioritizeReviewTransaction, rankReviewTargets, reviewQueueAfterSkips, scheduledSnowballReviewTargets, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
 import { prioritizePendingPlanTarget } from "@/lib/pendingPlanMatches";
@@ -78,7 +79,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
     addBill, addGoal, updateGoal, deleteGoal, closeSpendingBucket, reopenSpendingBucket,
     archiveSpendingBucket, restoreArchivedSpendingBucket,
     deleteBillMistake, reconcileTransaction, undoTransactionReconciliation, refreshBankData,
-    getExtraPayment, previewDebtSnowball, applyDebtSnowballPayment, removeReviewSurplusFunding,
+    getExtraPayment, getRemainingDebtPlanForMonth, previewDebtSnowball, applyDebtSnowballPayment, removeReviewSurplusFunding,
   } = useBudget();
   useEffect(() => {
     void refreshBankData();
@@ -105,6 +106,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
   const [redoAction, setRedoAction] = useState<CompletedReviewAction | null>(null);
   const [surplusPrompt, setSurplusPrompt] = useState<ReviewSurplusPrompt | null>(null);
   const [surplusPaymentDate, setSurplusPaymentDate] = useState(todayIso());
+  const [surplusRouteMode, setSurplusRouteMode] = useState<"next" | "date">("next");
   const [completedThisVisit, setCompletedThisVisit] = useState(0);
   const availableQueue = useMemo(() => reviewQueueAfterSkips(queue, skippedIds), [queue, skippedIds]);
   const current = availableQueue[0] ?? null;
@@ -218,8 +220,16 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
     const existing = getExtraPayment(month, year);
     const previousSource = existing?.sources?.find(source => source.type === "bill_surplus" && source.reviewTransactionId === surplusPrompt.transaction.id)?.amount ?? 0;
     const total = Math.max(0, (existing?.amount ?? 0) - previousSource + surplus);
-    const dateValid = isValidDateInMonth(surplusPaymentDate, month, year);
-    const preview = previewDebtSnowball(month, year, total, surplus - previousSource, dateValid ? surplusPaymentDate : undefined);
+    const targetPreview = previewDebtSnowball(month, year, total, surplus - previousSource);
+    const targetDebtId = targetPreview.allocations[0]?.billId;
+    const nextPayment = nextPlannedDebtPayment(
+      getRemainingDebtPlanForMonth(month, year)?.allocations ?? [],
+      targetDebtId,
+      surplusPrompt.transaction.date,
+    );
+    const selectedPaymentDate = surplusRouteMode === "next" ? nextPayment?.date ?? "" : surplusPaymentDate;
+    const dateValid = isValidDateInMonth(selectedPaymentDate, month, year);
+    const preview = previewDebtSnowball(month, year, total, surplus - previousSource, dateValid ? selectedPaymentDate : undefined);
     return {
       month,
       year,
@@ -227,9 +237,11 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
       preview,
       targetDebt: preview.months[0]?.targetName ?? preview.allocations[0]?.billName,
       dateValid,
+      nextPayment,
+      paymentDate: selectedPaymentDate,
       safe: dateValid && preview.selectedExtra + 0.005 >= total,
     };
-  }, [getExtraPayment, previewDebtSnowball, settings.debtPayoffEnabled, surplusPaymentDate, surplusPrompt]);
+  }, [getExtraPayment, getRemainingDebtPlanForMonth, previewDebtSnowball, settings.debtPayoffEnabled, surplusPaymentDate, surplusPrompt, surplusRouteMode]);
 
   const closeBucket = (goal: Goal) => {
     const { spent } = spendingBucketSummary(goal);
@@ -493,6 +505,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
     const completed = await resolveTarget(choice.target, "full");
     if (!completed || choice.target.type !== "bill") return;
     setSurplusPaymentDate(choice.transaction.date);
+    setSurplusRouteMode("next");
     setSurplusPrompt({ transaction: choice.transaction, target: choice.target });
   };
 
@@ -509,7 +522,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
       amount: surplusSnowballOffer.surplus,
       month: surplusSnowballOffer.month,
       year: surplusSnowballOffer.year,
-      paymentDate: surplusPaymentDate,
+      paymentDate: surplusSnowballOffer.paymentDate,
     };
     setSaving(true);
     try {
@@ -926,7 +939,11 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
         paymentDateValid={Boolean(surplusSnowballOffer?.dateValid)}
         paymentDateMin={`${surplusYear}-${surplusMonthText}-01`}
         paymentDateMax={`${surplusYear}-${surplusMonthText}-${surplusMonthLastDay}`}
+        routeMode={surplusRouteMode}
+        nextPaymentDate={surplusSnowballOffer?.nextPayment?.date}
+        nextPaymentAmount={surplusSnowballOffer?.nextPayment?.amount}
         saving={saving}
+        onRouteModeChange={setSurplusRouteMode}
         onPaymentDateChange={setSurplusPaymentDate}
         onKeep={keepSurplusAvailable}
         onSnowball={() => void routeSurplusToPayoff()}

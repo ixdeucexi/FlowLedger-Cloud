@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, debtPaymentStatusLabel, formatCalendarBalance, groupForecastEvents, plannedDebtEditorParams } from "./forecastDisplay";
+import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, combineSameDayDebtPaymentEvents, debtPaymentStatusLabel, formatCalendarBalance, groupForecastEvents, plannedDebtEditorParams } from "./forecastDisplay";
 import type { FinancialEvent } from "./forecast";
 
 const event = (overrides: Partial<FinancialEvent> & Pick<FinancialEvent, "id" | "sourceType" | "sourceId" | "kind" | "date" | "amount" | "status">): FinancialEvent => ({
@@ -76,6 +76,51 @@ test("a canonical child opens the editor for its source debt and occurrence", ()
   });
   assert.deepEqual(plannedDebtEditorParams(rolloverChild), { billId: "camera", date: "2026-08-11" });
   assert.equal(plannedDebtEditorParams({ ...rolloverChild, debtPlanSource: "saved_extra" }), undefined);
+});
+
+test("combines a routed surplus with the same debt's planned payment on that date", () => {
+  const combined = combineSameDayDebtPaymentEvents([
+    event({
+      id: "concert-required",
+      sourceType: "extra_payment",
+      sourceId: "concert",
+      kind: "debt_payment",
+      date: "2026-08-29",
+      amount: -103,
+      status: "scheduled",
+      name: "Concert debt payment",
+      debtPlanSource: "canonical",
+      debtTargetBillId: "concert",
+    }),
+    event({
+      id: "concert-surplus",
+      sourceType: "extra_payment",
+      sourceId: "extra-plan-august",
+      kind: "debt_payment",
+      date: "2026-08-29",
+      amount: -9.11,
+      status: "planned",
+      name: "Concert debt payment",
+      debtPlanSource: "saved_extra",
+      debtTargetBillId: "concert",
+    }),
+  ]);
+
+  assert.equal(combined.length, 1);
+  assert.equal(combined[0].amount, -112.11);
+  assert.equal(combined[0].status, "scheduled");
+  assert.equal(combined[0].sourceId, "extra-plan-august");
+  assert.equal(combined[0].debtPlanSource, "saved_extra");
+});
+
+test("does not combine debt payments for different dates or debts", () => {
+  const combined = combineSameDayDebtPaymentEvents([
+    event({ id: "concert", sourceType: "extra_payment", sourceId: "concert", kind: "debt_payment", date: "2026-08-29", amount: -35, status: "scheduled", debtTargetBillId: "concert" }),
+    event({ id: "discover", sourceType: "extra_payment", sourceId: "discover", kind: "debt_payment", date: "2026-08-29", amount: -113, status: "scheduled", debtTargetBillId: "discover" }),
+    event({ id: "concert-later", sourceType: "extra_payment", sourceId: "concert", kind: "debt_payment", date: "2026-09-29", amount: -35, status: "scheduled", debtTargetBillId: "concert" }),
+  ]);
+
+  assert.equal(combined.length, 3);
 });
 
 test("Forecast closes the selected-day modal before opening a planned debt editor", () => {

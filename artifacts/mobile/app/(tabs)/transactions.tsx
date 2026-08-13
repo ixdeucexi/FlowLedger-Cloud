@@ -54,6 +54,7 @@ import { useMembership } from "@/context/MembershipContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
+import { nextPlannedDebtPayment } from "@/lib/billSurplusRouting";
 import {
   DESKTOP_MODAL_HANDLE,
   DESKTOP_MODAL_MATCH,
@@ -467,6 +468,7 @@ export function ActivityScreen() {
   const [queuedSurplusPrompt, setQueuedSurplusPrompt] =
     useState<MatchedPaymentPrompt | null>(null);
   const [surplusPaymentDate, setSurplusPaymentDate] = useState(todayIsoDate());
+  const [surplusRouteMode, setSurplusRouteMode] = useState<"next" | "date">("next");
   const [editExtraPayment, setEditExtraPayment] = useState<ExtraPayment | null>(
     null,
   );
@@ -1477,8 +1479,23 @@ export function ActivityScreen() {
       0,
       (existing?.amount ?? 0) - previousSource + surplus,
     );
+    const targetPreview = previewDebtSnowball(
+      surplusPrompt.month,
+      surplusPrompt.year,
+      total,
+      surplus - previousSource,
+    );
+    const targetDebtId = targetPreview.allocations[0]?.billId;
+    const nextPayment = nextPlannedDebtPayment(
+      getRemainingDebtPlanForMonth(surplusPrompt.month, surplusPrompt.year)?.allocations ?? [],
+      targetDebtId,
+      surplusPrompt.transaction.date,
+    );
+    const selectedPaymentDate = surplusRouteMode === "next"
+      ? nextPayment?.date ?? ""
+      : surplusPaymentDate;
     const dateValid = isValidDateInMonth(
-      surplusPaymentDate,
+      selectedPaymentDate,
       surplusPrompt.month,
       surplusPrompt.year,
     );
@@ -1487,21 +1504,25 @@ export function ActivityScreen() {
       surplusPrompt.year,
       total,
       surplus - previousSource,
-      dateValid ? surplusPaymentDate : undefined,
+      dateValid ? selectedPaymentDate : undefined,
     );
     return {
       preview,
       targetDebt:
         preview.months[0]?.targetName ?? preview.allocations[0]?.billName,
       dateValid,
+      nextPayment,
+      paymentDate: selectedPaymentDate,
       safe: dateValid && preview.selectedExtra + 0.005 >= total,
     };
   }, [
     getExtraPayment,
+    getRemainingDebtPlanForMonth,
     previewDebtSnowball,
     settings.debtPayoffEnabled,
     surplusPaymentDate,
     surplusPrompt,
+    surplusRouteMode,
   ]);
   const surplusMonth = surplusPrompt?.month ?? new Date().getMonth();
   const surplusYear = surplusPrompt?.year ?? new Date().getFullYear();
@@ -1753,6 +1774,7 @@ export function ActivityScreen() {
         settlement: "full",
       });
       setSurplusPaymentDate(prompt.transaction.date);
+      setSurplusRouteMode("next");
       setQueuedSurplusPrompt(prompt);
       setFullPaymentPrompt(null);
     } catch (error) {
@@ -3726,6 +3748,10 @@ export function ActivityScreen() {
         paymentDateValid={surplusSnowballOffer?.dateValid ?? false}
         paymentDateMin={`${surplusYear}-${surplusMonthText}-01`}
         paymentDateMax={`${surplusYear}-${surplusMonthText}-${surplusMonthLastDay}`}
+        routeMode={surplusRouteMode}
+        nextPaymentDate={surplusSnowballOffer?.nextPayment?.date}
+        nextPaymentAmount={surplusSnowballOffer?.nextPayment?.amount}
+        onRouteModeChange={setSurplusRouteMode}
         onPaymentDateChange={setSurplusPaymentDate}
         onKeep={() => void keepMatchedSurplusAvailable()}
         onSnowball={() => void addMatchedSurplusToSnowball()}
