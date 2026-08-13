@@ -18,6 +18,19 @@ export type FlowLedgerUserGuideTarget =
   | { kind: "mobile"; href: typeof FLOWLEDGER_USER_GUIDE_ROUTE }
   | { kind: "pdf"; href: string };
 
+export function flowLedgerUserGuidePageFromOffset(
+  offsetX: number,
+  pageWidth: number,
+  pageCount: number = FLOWLEDGER_USER_GUIDE_PAGE_TITLES.length,
+) {
+  if (!Number.isFinite(offsetX) || !Number.isFinite(pageWidth) || pageWidth <= 0) {
+    return 0;
+  }
+
+  const lastPage = Math.max(0, Math.trunc(pageCount) - 1);
+  return Math.max(0, Math.min(lastPage, Math.round(offsetX / pageWidth)));
+}
+
 export function flowLedgerUserGuideUrl(origin = FLOWLEDGER_PRODUCTION_ORIGIN) {
   return `${origin.replace(/\/+$/, "")}${FLOWLEDGER_USER_GUIDE_PATH}`;
 }

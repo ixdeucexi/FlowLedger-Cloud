@@ -6,6 +6,7 @@ import {
   FLOWLEDGER_USER_GUIDE_PAGE_TITLES,
   FLOWLEDGER_USER_GUIDE_PATH,
   FLOWLEDGER_USER_GUIDE_ROUTE,
+  flowLedgerUserGuidePageFromOffset,
   flowLedgerUserGuideTarget,
   flowLedgerUserGuideUrl,
 } from "./userGuide";
@@ -42,4 +43,12 @@ test("the website keeps opening the PDF", () => {
       href: "https://preview.example.com/FlowLedger-User-Guide.pdf",
     },
   );
+});
+
+test("the swipe guide derives its footer page from the actual scroll position", () => {
+  assert.equal(flowLedgerUserGuidePageFromOffset(0, 390), 0);
+  assert.equal(flowLedgerUserGuidePageFromOffset(390, 390), 1);
+  assert.equal(flowLedgerUserGuidePageFromOffset(390 * 5, 390), 5);
+  assert.equal(flowLedgerUserGuidePageFromOffset(390 * 20, 390), 7);
+  assert.equal(flowLedgerUserGuidePageFromOffset(-390, 390), 0);
 });

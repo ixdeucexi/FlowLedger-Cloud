@@ -21,6 +21,7 @@ import {
 } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
+import { flowLedgerUserGuidePageFromOffset } from "@/lib/userGuide";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 
@@ -739,17 +740,16 @@ export default function UserGuideScreen() {
     goToPage(currentPage + 1);
   }, [closeGuide, currentPage, goToPage]);
 
-  const handleMomentumEnd = useCallback(
+  const handleHorizontalScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const nextPage = Math.round(
-        event.nativeEvent.contentOffset.x / pageWidth,
+      const nextPage = flowLedgerUserGuidePageFromOffset(
+        event.nativeEvent.contentOffset.x,
+        pageWidth,
+        GUIDE_SLIDES.length,
       );
-      const boundedPage = Math.max(
-        0,
-        Math.min(GUIDE_SLIDES.length - 1, nextPage),
-      );
-      currentPageRef.current = boundedPage;
-      setCurrentPage(boundedPage);
+      if (nextPage === currentPageRef.current) return;
+      currentPageRef.current = nextPage;
+      setCurrentPage(nextPage);
     },
     [pageWidth],
   );
@@ -816,9 +816,10 @@ export default function UserGuideScreen() {
         keyExtractor={(index) => String(index)}
         maxToRenderPerBatch={2}
         nestedScrollEnabled
-        onMomentumScrollEnd={handleMomentumEnd}
+        onScroll={handleHorizontalScroll}
         pagingEnabled
         renderItem={renderSlide}
+        scrollEventThrottle={16}
         showsHorizontalScrollIndicator={false}
         style={styles.pager}
         windowSize={3}
