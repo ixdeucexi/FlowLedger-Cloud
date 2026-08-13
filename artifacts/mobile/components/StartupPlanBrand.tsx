@@ -21,6 +21,7 @@ export function StartupPlanBrand() {
 const styles = StyleSheet.create({
   brand: {
     alignItems: "center",
+    flexShrink: 0,
   },
   logo: {
     width: STARTUP_LOGO_SIZE,

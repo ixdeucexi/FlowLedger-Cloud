@@ -36,6 +36,8 @@ SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 const PLAN_LOADING_MS = 220;
+const STARTUP_BRAND_FADE_MS = 360;
+const APP_REVEAL_MS = 160;
 
 function AuthObserver() {
   const { session, loading } = useAuth();
@@ -124,15 +126,23 @@ function AuthObserver() {
   return null;
 }
 
-function StartupScreen({ style }: { style?: StyleProp<ViewStyle> } = {}) {
+function StartupScreen({
+  style,
+  brandOpacity,
+}: {
+  style?: StyleProp<ViewStyle>;
+  brandOpacity: Animated.Value;
+}) {
   return (
     <Animated.View style={[styles.startup, style]}>
-      <StartupPlanBrand />
+      <Animated.View style={[styles.startupBrand, { opacity: brandOpacity }]}>
+        <StartupPlanBrand />
+      </Animated.View>
     </Animated.View>
   );
 }
 
-function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSplash: () => void }) {
+function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSplash: () => Promise<void> }) {
   const colors = useColors();
   const { session, loading: authLoading } = useAuth();
   const { loading: budgetLoading } = useBudget();
@@ -143,12 +153,15 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
   const pathname = usePathname();
   const isDesktop = useDesktopExperience();
   const [minimumStartupReady, setMinimumStartupReady] = useState(false);
+  const [brandEntranceReady, setBrandEntranceReady] = useState(false);
   const [showStartupOverlay, setShowStartupOverlay] = useState(true);
+  const brandEntranceStartedRef = useRef(false);
+  const brandEntranceOpacity = useRef(new Animated.Value(0)).current;
   const startupOpacity = useRef(new Animated.Value(1)).current;
   const appOpacity = useRef(new Animated.Value(0)).current;
   const coreReady = fontsReady && !authLoading && biometricLockReady && themeReady;
   const planReady = !session || !budgetLoading;
-  const appReady = coreReady && planReady && minimumStartupReady;
+  const appReady = coreReady && planReady && minimumStartupReady && brandEntranceReady;
 
   useEffect(() => {
     if (!coreReady || biometricLocked) return;
@@ -157,8 +170,36 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
   }, [biometricLocked, coreReady]);
 
   useEffect(() => {
-    if (coreReady) hideSplash();
-  }, [coreReady, hideSplash]);
+    if (!coreReady) return;
+
+    let active = true;
+    void hideSplash().then(() => {
+      if (!active) return;
+
+      if (reduceMotion) {
+        brandEntranceOpacity.stopAnimation();
+        brandEntranceOpacity.setValue(1);
+        brandEntranceStartedRef.current = true;
+        setBrandEntranceReady(true);
+        return;
+      }
+
+      if (brandEntranceStartedRef.current) return;
+      brandEntranceStartedRef.current = true;
+      Animated.timing(brandEntranceOpacity, {
+        toValue: 1,
+        duration: STARTUP_BRAND_FADE_MS,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: Platform.OS !== "web",
+      }).start(({ finished }) => {
+        if (active && finished) setBrandEntranceReady(true);
+      });
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [brandEntranceOpacity, coreReady, hideSplash, reduceMotion]);
 
   useEffect(() => {
     if (!appReady) {
@@ -168,7 +209,6 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
       return;
     }
 
-    hideSplash();
     if (reduceMotion) {
       startupOpacity.setValue(0);
       appOpacity.setValue(1);
@@ -179,18 +219,18 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
     Animated.parallel([
       Animated.timing(startupOpacity, {
         toValue: 0,
-        duration: 160,
+        duration: APP_REVEAL_MS,
         easing: Easing.inOut(Easing.cubic),
         useNativeDriver: Platform.OS !== "web",
       }),
       Animated.timing(appOpacity, {
         toValue: 1,
-        duration: 160,
+        duration: APP_REVEAL_MS,
         easing: Easing.inOut(Easing.cubic),
         useNativeDriver: Platform.OS !== "web",
       }),
     ]).start(() => setShowStartupOverlay(false));
-  }, [appReady, appOpacity, hideSplash, reduceMotion, startupOpacity]);
+  }, [appReady, appOpacity, reduceMotion, startupOpacity]);
 
   useEffect(() => {
     if (!appReady || Platform.OS === "web") return;
@@ -267,7 +307,10 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
         ) : null}
       </Animated.View>
       {showStartupOverlay ? (
-        <StartupScreen style={[styles.startupOverlay, { opacity: startupOpacity }]} />
+        <StartupScreen
+          brandOpacity={brandEntranceOpacity}
+          style={[styles.startupOverlay, { opacity: startupOpacity }]}
+        />
       ) : null}
       {coreReady ? <BiometricLockGate /> : null}
     </View>
@@ -285,11 +328,14 @@ export default function RootLayout() {
   });
   const fontsReady = fontsLoaded || !!fontError;
 
-  const hiddenRef = useRef(false);
+  const hideSplashPromiseRef = useRef<Promise<void> | null>(null);
   const hideSplash = useCallback(() => {
-    if (hiddenRef.current) return;
-    hiddenRef.current = true;
-    SplashScreen.hideAsync();
+    if (!hideSplashPromiseRef.current) {
+      hideSplashPromiseRef.current = SplashScreen.hideAsync()
+        .then(() => undefined)
+        .catch(() => undefined);
+    }
+    return hideSplashPromiseRef.current;
   }, []);
 
   useEffect(() => {
@@ -342,5 +388,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#050816",
+  },
+  startupBrand: {
+    alignItems: "center",
+    flexShrink: 0,
   },
 });

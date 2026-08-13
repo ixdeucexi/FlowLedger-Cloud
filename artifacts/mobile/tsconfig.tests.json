@@ -163,5 +163,6 @@
     ,"lib/encouragingLanguage.test.ts"
     ,"lib/userGuide.ts"
     ,"lib/userGuide.test.ts"
+    ,"lib/startupBrand.test.ts"
   ]
 }
