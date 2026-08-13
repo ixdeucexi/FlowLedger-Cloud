@@ -22,7 +22,8 @@ export type PlanSimulationChange =
   | (ChangeBase & { type: "bill_move"; billId: string; occurrenceDate: string; newDate: string })
   | (ChangeBase & { type: "spending_once"; name: string; amount: number; date: string })
   | (ChangeBase & { type: "savings_once"; name: string; amount: number; date: string })
-  | (ChangeBase & { type: "debt_extra"; amount: number; date: string });
+  | (ChangeBase & { type: "debt_extra"; amount: number; date: string })
+  | (ChangeBase & { type: "debt_payoff"; debtId: string; date: string });
 
 export interface PlanSimulationDefinition {
   id: string;
@@ -149,7 +150,7 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const CHANGE_TYPES = new Set<PlanSimulationChange["type"]>([
   "income_add", "income_edit", "income_pause", "income_once",
   "bill_add", "bill_edit", "bill_pause", "bill_move",
-  "spending_once", "savings_once", "debt_extra",
+  "spending_once", "savings_once", "debt_extra", "debt_payoff",
 ]);
 
 function cents(value: number): number {
@@ -244,6 +245,11 @@ function decodeChange(value: unknown): PlanSimulationChange | null {
       return hasExactKeys(row, ["id", "type", "amount", "date"])
         && isAmount(row.amount) && isValidPlanSimulationDate(row.date)
         ? { id: row.id, type: row.type, amount: cents(row.amount), date: row.date }
+        : null;
+    case "debt_payoff":
+      return hasExactKeys(row, ["id", "type", "debtId", "date"])
+        && isId(row.debtId) && isValidPlanSimulationDate(row.date)
+        ? { id: row.id, type: row.type, debtId: row.debtId, date: row.date }
         : null;
   }
   return null;
@@ -417,6 +423,7 @@ function comparablePayoffDate(input: {
   baseline: PlanSimulationBaseline;
   references: PlanSimulationReferences;
   scenarioExtrasByMonth?: ReadonlyMap<string, number>;
+  scenarioTargetedPaymentsByMonth?: ReadonlyMap<string, ReadonlyArray<{ debtId: string; amount: number }>>;
 }): string | null {
   const debts = input.references.debts.map(debt => ({ ...debt, balance: cents(Math.max(0, debt.balance)) }));
   const payoffDebts = debts.filter(debt => debt.included && (!debt.endDate || debt.endDate.slice(0, 10) >= input.baseline.startDate));
@@ -464,6 +471,9 @@ function comparablePayoffDate(input: {
       applyInterest: offset > 0,
     });
     plan.balances.forEach((balance, id) => balances.set(id, balance));
+    input.scenarioTargetedPaymentsByMonth?.get(key)?.forEach(payment => {
+      balances.set(payment.debtId, cents(Math.max(0, (balances.get(payment.debtId) ?? 0) - payment.amount)));
+    });
     rolledPayment = plan.rolledPayment;
     const remainingEligibleDebt = payoffDebts.reduce((sum, debt) => sum + (balances.get(debt.id) ?? 0), 0);
     if (remainingEligibleDebt <= 0.009) return key;
@@ -566,7 +576,7 @@ export function projectPlanSimulation(input: {
   const addIssue = (changeId: string, message: string) => issues.push({ changeId, message });
 
   const nonDebtChanges = input.changes
-    .filter(change => change.type !== "debt_extra")
+    .filter(change => change.type !== "debt_extra" && change.type !== "debt_payoff")
     .slice()
     .sort((left, right) => changeEffectiveDate(left).localeCompare(changeEffectiveDate(right)));
   nonDebtChanges.forEach(change => {
@@ -648,11 +658,12 @@ export function projectPlanSimulation(input: {
   });
 
   const debtChanges = input.changes
-    .filter((change): change is Extract<PlanSimulationChange, { type: "debt_extra" }> => change.type === "debt_extra")
+    .filter((change): change is Extract<PlanSimulationChange, { type: "debt_extra" | "debt_payoff" }> => change.type === "debt_extra" || change.type === "debt_payoff")
     .slice()
     .sort((left, right) => left.date.localeCompare(right.date) || left.id.localeCompare(right.id));
   let allocationDebts = input.references.debts.map(debt => ({ ...debt, balance: cents(Math.max(0, debt.balance)) }));
   const scenarioExtrasByMonth = new Map<string, number>();
+  const scenarioTargetedPaymentsByMonth = new Map<string, Array<{ debtId: string; amount: number }>>();
   const canonicalDebtEvents = baselineDays
     .flatMap(day => day.events)
     .filter(event => event.kind === "debt_payment" && event.debtTargetBillId && (event.status === "planned" || event.status === "scheduled" || event.status === "pending"))
@@ -684,8 +695,21 @@ export function projectPlanSimulation(input: {
   };
   debtChanges.forEach(change => {
       advanceCanonicalDebtThrough(change.date);
-      if (!dayByDate.has(change.date)) { addIssue(change.id, "The extra debt payment date is outside this scenario horizon."); return; }
+      if (!dayByDate.has(change.date)) { addIssue(change.id, `The debt ${change.type === "debt_payoff" ? "payoff" : "payment"} date is outside this scenario horizon.`); return; }
       const activeDebts = allocationDebts.filter(debt => isDebtActiveOnDate(debt, change.date));
+      if (change.type === "debt_payoff") {
+        const target = activeDebts.find(debt => debt.id === change.debtId);
+        if (!target) { addIssue(change.id, "This debt is closed, inactive, or no longer exists in the live plan."); return; }
+        const applied = cents(Math.max(0, target.balance));
+        if (applied <= 0.005) { addIssue(change.id, `${target.name} is already paid off by this date.`); return; }
+        addEvent(simulationEvent(change, change.date, -applied, "debt_payment", `Pay off ${target.name}`));
+        debtExtraApplied = cents(debtExtraApplied + applied);
+        debtAllocations.push({ changeId: change.id, billId: target.id, billName: target.name, amount: applied, date: change.date });
+        const key = change.date.slice(0, 7);
+        scenarioTargetedPaymentsByMonth.set(key, [...(scenarioTargetedPaymentsByMonth.get(key) ?? []), { debtId: target.id, amount: applied }]);
+        allocationDebts = allocationDebts.map(debt => debt.id === target.id ? { ...debt, balance: 0 } : debt);
+        return;
+      }
       if (!activeDebts.some(debt => debt.included && debt.balance > 0.005)) { addIssue(change.id, "There is no remaining eligible debt for this payment."); return; }
       const allocation = allocateSnowballExtra(activeDebts, change.amount, input.references.debtMethod, change.date);
       const applied = cents(allocation.allocations.reduce((sum, item) => sum + item.payment, 0));
@@ -734,6 +758,7 @@ export function projectPlanSimulation(input: {
     baseline: input.baseline,
     references: input.references,
     scenarioExtrasByMonth,
+    scenarioTargetedPaymentsByMonth,
   });
   return summarizeProjection({
     baselineDays,

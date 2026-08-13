@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppText } from "@/components/AppText";
+import { DatePickerField } from "@/components/DatePickerField";
 import { PlanFeatureGate } from "@/components/PlanFeatureGate";
 import { useAuth } from "@/context/AuthContext";
 import { useBudget } from "@/context/BudgetContext";
@@ -65,6 +66,7 @@ const CHANGE_OPTIONS: Array<{ type: ChangeKind; label: string; detail: string; i
   { type: "spending_once", label: "One-time spending", detail: "Test a future purchase", icon: "shopping-bag" },
   { type: "savings_once", label: "Add to savings", detail: "Move checking money once", icon: "archive" },
   { type: "debt_extra", label: "Extra debt payment", detail: "Use your payoff method", icon: "trending-down" },
+  { type: "debt_payoff", label: "Pay off a debt", detail: "Close one selected balance", icon: "check-circle" },
 ];
 
 function todayString() {
@@ -206,10 +208,12 @@ function ChoiceChips({
 function ChangeComposer({
   references,
   startDate,
+  endDate,
   onAdd,
 }: {
   references: PlanSimulationReferences;
   startDate: string;
+  endDate: string;
   onAdd: (change: PlanSimulationChange) => void;
 }) {
   const c = useColors();
@@ -224,19 +228,23 @@ function ChangeComposer({
 
   const needsIncome = type === "income_edit" || type === "income_pause";
   const needsBill = type === "bill_edit" || type === "bill_pause" || type === "bill_move";
+  const needsDebt = type === "debt_payoff";
   const needsName = type === "income_add" || type === "income_once" || type === "bill_add" || type === "spending_once" || type === "savings_once";
-  const needsAmount = type !== "income_pause" && type !== "bill_pause" && type !== "bill_move";
+  const needsAmount = type !== "income_pause" && type !== "bill_pause" && type !== "bill_move" && type !== "debt_payoff";
   const isRecurringAdd = type === "income_add" || type === "bill_add";
   const billChoices = references.bills.filter(bill => !bill.isDebt).map(bill => ({ id: bill.id, label: bill.name }));
   const incomeChoices = references.incomes.map(income => ({ id: income.id, label: income.name }));
-  const targetChoices = needsIncome ? incomeChoices : needsBill ? billChoices : [];
+  const debtChoices = references.debts
+    .filter(debt => debt.balance > 0.005 && (!debt.endDate || debt.endDate.slice(0, 10) >= startDate))
+    .map(debt => ({ id: debt.id, label: `${debt.name} · ${money(debt.balance)}` }));
+  const targetChoices = needsIncome ? incomeChoices : needsBill ? billChoices : needsDebt ? debtChoices : [];
   const selectedTarget = targetId || targetChoices[0]?.id || "";
 
   const add = () => {
     const parsedAmount = needsAmount ? parseMoney(amount) : null;
     if (needsAmount && parsedAmount === null) { setError("Enter a valid amount with up to two decimal places."); return; }
     if (needsName && !safePlanSimulationName(name)) { setError("Enter a name between 1 and 80 characters."); return; }
-    if ((needsIncome || needsBill) && !selectedTarget) { setError(`Add an eligible ${needsIncome ? "income" : "non-debt bill"} to the live plan first.`); return; }
+    if ((needsIncome || needsBill || needsDebt) && !selectedTarget) { setError(`Add an eligible ${needsIncome ? "income" : needsDebt ? "open debt" : "non-debt bill"} to the live plan first.`); return; }
     const id = nextLocalId();
     let candidate: PlanSimulationChange;
     switch (type) {
@@ -251,6 +259,7 @@ function ChangeComposer({
       case "spending_once": candidate = { id, type, name: name.trim(), amount: parsedAmount!, date }; break;
       case "savings_once": candidate = { id, type, name: name.trim(), amount: parsedAmount!, date }; break;
       case "debt_extra": candidate = { id, type, amount: parsedAmount!, date }; break;
+      case "debt_payoff": candidate = { id, type, debtId: selectedTarget, date }; break;
     }
     if (!decodePlanSimulationChanges([candidate])) { setError("Check the date and amount, then try again."); return; }
     setError("");
@@ -284,14 +293,15 @@ function ChangeComposer({
         })}
       </View>
 
-      {targetChoices.length ? <View style={styles.field}><FieldLabel>{needsIncome ? "Income" : "Bill"}</FieldLabel><ChoiceChips values={targetChoices} selected={selectedTarget} onSelect={setTargetId} /></View> : null}
+      {targetChoices.length ? <View style={styles.field}><FieldLabel>{needsIncome ? "Income" : needsDebt ? "Debt" : "Bill"}</FieldLabel><ChoiceChips values={targetChoices} selected={selectedTarget} onSelect={setTargetId} /></View> : null}
       {needsName ? <View style={styles.field}><FieldLabel>Name</FieldLabel><Input label="Change name" value={name} onChangeText={setName} placeholder={type === "savings_once" ? "Emergency fund" : "Name"} /></View> : null}
       {needsAmount ? <View style={styles.field}><FieldLabel>Amount</FieldLabel><Input label="Change amount" value={amount} onChangeText={setAmount} placeholder="0.00" keyboardType="decimal-pad" /></View> : null}
       {isRecurringAdd ? <View style={styles.field}><FieldLabel>Frequency</FieldLabel><ChoiceChips values={(type === "bill_add" ? ["monthly", "quarterly", "biweekly", "weekly"] : ["monthly", "biweekly", "weekly"]).map(id => ({ id, label: id[0].toUpperCase() + id.slice(1) }))} selected={frequency} onSelect={setFrequency} /></View> : null}
-      <View style={styles.field}><FieldLabel>{type === "bill_move" ? "Occurrence date" : type.endsWith("_pause") || type.endsWith("_edit") ? "Effective date" : "Date"}</FieldLabel><Input label="Change date in YYYY-MM-DD format" value={date} onChangeText={setDate} placeholder="YYYY-MM-DD" /></View>
-      {type === "bill_move" ? <View style={styles.field}><FieldLabel>New date</FieldLabel><Input label="New bill date in YYYY-MM-DD format" value={newDate} onChangeText={setNewDate} placeholder="YYYY-MM-DD" /></View> : null}
+      <View style={styles.field}><FieldLabel>{type === "bill_move" ? "Occurrence date" : type.endsWith("_pause") || type.endsWith("_edit") ? "Effective date" : "Date"}</FieldLabel><DatePickerField value={date} onChange={setDate} minDate={startDate} maxDate={endDate} placeholder="Choose a date" /></View>
+      {type === "bill_move" ? <View style={styles.field}><FieldLabel>New date</FieldLabel><DatePickerField value={newDate} onChange={setNewDate} minDate={startDate} maxDate={endDate} placeholder="Choose a new date" /></View> : null}
       {error ? <AppText accessibilityRole="alert" style={[styles.errorText, { color: c.destructive }]}>{error}</AppText> : null}
       {type === "income_edit" || type === "bill_edit" ? <AppText style={[styles.editSemantics, { color: c.mutedForeground }]}>The new amount is the full intended occurrence total. Any amount already settled stays unchanged; only the remaining Forecast amount is replaced.</AppText> : null}
+      {type === "debt_payoff" ? <AppText style={[styles.editSemantics, { color: c.mutedForeground }]}>The simulator calculates that debt’s remaining balance on the selected date and tests paying it in full. It does not change the real debt or schedule a payment.</AppText> : null}
       <Button label="Add to scenario" icon="plus" onPress={add} primary />
     </View>
   );
@@ -301,6 +311,7 @@ function changeLabel(change: PlanSimulationChange, references: PlanSimulationRef
   const option = CHANGE_OPTIONS.find(item => item.type === change.type)?.label ?? "Scenario change";
   if ("incomeId" in change) return `${option}: ${references.incomes.find(item => item.id === change.incomeId)?.name ?? "Missing income"}`;
   if ("billId" in change) return `${option}: ${references.bills.find(item => item.id === change.billId)?.name ?? "Missing bill"}`;
+  if ("debtId" in change) return `${option}: ${references.debts.find(item => item.id === change.debtId)?.name ?? "Missing debt"}`;
   if ("name" in change) return `${option}: ${change.name}`;
   return `${option}: ${money(change.amount)}`;
 }
@@ -648,7 +659,7 @@ function PlanSimulatorWorkspace() {
               <View style={styles.actionWrap}><Button label={selectedScenario ? "Save changes" : "Save"} icon="save" onPress={() => void saveDraft()} disabled={!canEditHousehold || saving || demoMode || Boolean(draft.invalidDefinition)} primary /><Button label="Rename" icon="type" onPress={() => void saveDraft()} disabled={!selectedScenario || !canEditHousehold || saving || demoMode || Boolean(draft.invalidDefinition)} /><Button label="Duplicate" icon="copy" onPress={() => void duplicate()} disabled={!canEditHousehold || saving || demoMode || Boolean(draft.invalidDefinition)} /><Button label={draft.invalidDefinition ? "Reset unsupported changes" : "Reset"} icon="rotate-ccw" onPress={resetDraft} disabled={saving} /><Button label="Delete" icon="trash-2" onPress={removeScenario} disabled={!selectedScenario || !canEditHousehold || saving || demoMode} danger /></View>
               {saving ? <View style={styles.savingRow}><ActivityIndicator size="small" color={c.primary} /><AppText style={[styles.savingText, { color: c.mutedForeground }]}>Saving scenario…</AppText></View> : null}
             </View>
-            <ChangeComposer references={references} startDate={startDate} onAdd={addChange} />
+            <ChangeComposer references={references} startDate={startDate} endDate={baseline.endDate} onAdd={addChange} />
             <View><AppText tone="title" style={[styles.sectionTitle, { color: c.foreground }]}>Scenario changes</AppText><ChangeList changes={draft.changes} references={references} issues={scenarioResult.issues} onRemove={removeChange} /></View>
           </View>
           <View style={[styles.resultsColumn, desktop && styles.resultsColumnDesktop]}><ResultsPanel baseline={baselineResult} scenario={scenarioResult} safetyFloor={settings.safety_floor} /></View>

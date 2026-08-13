@@ -62,6 +62,7 @@ test("strictly decodes every supported version-one change and rejects loose or d
     { id: "9", type: "spending_once", name: "Trip", amount: 200, date: "2026-08-14" },
     { id: "10", type: "savings_once", name: "Emergency fund", amount: 50, date: "2026-08-14" },
     { id: "11", type: "debt_extra", amount: 100, date: "2026-08-14" },
+    { id: "12", type: "debt_payoff", debtId: "concert", date: "2026-08-14" },
   ];
   assert.deepEqual(decodePlanSimulationChanges(changes), changes);
   assert.equal(decodePlanSimulationChanges([{ ...changes[0], unexpected: true }]), null);
@@ -136,6 +137,33 @@ test("extra debt uses the debt remaining after earlier canonical payments and ke
   assert.equal(result.debtExtraApplied, 60.19);
   assert.deepEqual(result.debtAllocations.map(item => [item.billId, item.amount]), [["concert", 60.19]]);
   assert.equal(result.days.find(day => day.date === "2026-08-14")?.outflow, 60.19);
+});
+
+test("targeted payoff closes only the selected open debt at its remaining balance", () => {
+  const result = projectPlanSimulation({
+    baseline: { startDate: "2026-08-12", endDate: "2026-08-16", openingBalance: 1000, days: baselineDays() },
+    changes: [{ id: "payoff", type: "debt_payoff", debtId: "concert", date: "2026-08-14" }],
+    references,
+    metrics,
+    safetyFloor: 200,
+  });
+  assert.equal(result.debtExtraApplied, 60.19);
+  assert.deepEqual(result.debtAllocations, [{ changeId: "payoff", billId: "concert", billName: "Concert", amount: 60.19, date: "2026-08-14" }]);
+  assert.equal(result.days.find(day => day.date === "2026-08-14")?.outflow, 60.19);
+  assert.ok(result.days.find(day => day.date === "2026-08-14")?.events.some(item => item.name === "Pay off Concert"));
+});
+
+test("targeted payoff fails closed for a closed or missing debt", () => {
+  const result = projectPlanSimulation({
+    baseline: { startDate: "2026-08-12", endDate: "2026-08-16", openingBalance: 1000, days: baselineDays() },
+    changes: [{ id: "payoff", type: "debt_payoff", debtId: "missing", date: "2026-08-14" }],
+    references,
+    metrics,
+    safetyFloor: 200,
+  });
+  assert.equal(result.debtExtraApplied, 0);
+  assert.equal(result.complete, false);
+  assert.match(result.issues[0]?.message ?? "", /closed, inactive, or no longer exists/i);
 });
 
 test("actual, finalized, and pending occurrences are immutable and stale references need attention", () => {
@@ -429,6 +457,9 @@ test("Plan Simulator is a direct Pro route launched only from mobile and desktop
   assert.doesNotMatch(route, /chip:\s*\{[^}]*minHeight:\s*40/);
   assert.match(route, /Reset unsupported changes/);
   assert.match(route, /Boolean\(draft\.invalidDefinition\)/);
+  assert.match(route, /DatePickerField value=\{date\}/);
+  assert.match(route, /label: "Pay off a debt"/);
+  assert.match(route, /type: "debt_payoff"/);
   assert.doesNotMatch(route, /label=["']Apply["']/);
   assert.match(forecast, /router\.push\("\/plan-simulator"\)/);
   assert.match(desktopForecast, /Plan Simulator/);
