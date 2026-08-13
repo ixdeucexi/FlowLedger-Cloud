@@ -105,7 +105,10 @@ export async function saveActiveHouseholdId(userId: string | undefined | null, h
   if (error) {
     const message = error.message.toLowerCase();
     if (message.includes("active_household_id") || message.includes("schema cache") || message.includes("user_preferences")) return;
-    throw new Error(`Save active household: ${error.message}`);
+    // The local preference was already saved above. A remote preference sync is
+    // cross-device convenience and must never prevent a valid plan from loading
+    // when a mobile browser is still reconnecting after resume.
+    console.warn("Active household preference sync deferred", error.message);
   }
 }
 

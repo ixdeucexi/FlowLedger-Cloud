@@ -66,7 +66,7 @@ import { canonicalConnectedAccounts, pendingPlaidActivityWithBalanceHolds } from
 import { normalizeBillImportance, type BillImportance } from "@/lib/billImportance";
 import { buildTransactionLedger, remainingPlannedAmount, selectFlowLedgerTransactions } from "@/lib/ledgerEngine";
 import { debtSourceCommitmentsForDebts, type PendingPlanMatch } from "@/lib/pendingPlanMatches";
-import { shouldRefreshPlanOnResume } from "@/lib/resumePolicy";
+import { chooseRestoredHousehold, shouldRefreshPlanOnResume } from "@/lib/resumePolicy";
 import {
   buildCanonicalPlanSimulationBaseline,
   type PlanSimulationBaseline,
@@ -1109,17 +1109,24 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setHouseholdActivity([]);
       return null;
     }
-    const remoteActive = await loadRemoteActiveHouseholdId(uid);
-    const storedActive = await readStoredActiveHouseholdId(uid);
-    const next =
-      memberships.find(item => item.householdId === remoteActive) ??
-      memberships.find(item => item.householdId === storedActive) ??
-      memberships.find(item => item.isPersonal) ??
-      memberships[0];
+    const [storedActive, remoteActive] = await Promise.all([
+      readStoredActiveHouseholdId(uid),
+      loadRemoteActiveHouseholdId(uid),
+    ]);
+    const next = chooseRestoredHousehold({
+      households: memberships,
+      storedHouseholdId: storedActive,
+      remoteHouseholdId: remoteActive,
+    });
+    if (!next) return null;
     setActiveHouseholdId(next.householdId);
     householdScopeRef.current = next;
     if (remoteActive !== next.householdId) {
-      await saveActiveHouseholdId(uid, next.householdId);
+      // Local selection is authoritative on this device. Syncing that preference
+      // to another device is useful, but it is not part of loading financial data.
+      void saveActiveHouseholdId(uid, next.householdId).catch(error => {
+        console.warn("Active household preference sync deferred", error);
+      });
     } else {
       void writeStoredActiveHouseholdId(uid, next.householdId);
     }
