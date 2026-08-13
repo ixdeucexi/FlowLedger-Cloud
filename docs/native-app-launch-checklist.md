@@ -37,7 +37,7 @@ Release FlowLedger as a signed iOS and Android app while keeping the existing PW
 - [x] Dashboard no longer presents automatic low-balance warnings or low-balance decision comments
 - [x] Flow Score, Forecast, Flo, setup, guides, and desktop views use encouraging breathing-room language instead of low- or negative-balance wording
 - [x] Flo shows live account-check progress, keeps its Edge stream active, and ends stalled requests with a clear Retry instead of spinning indefinitely
-- [x] Flo recovers from interrupted AI explanations with verified tool guidance, completes stale reply records, and never reloads an empty response bubble
+- [x] Flo finishes paid account answers in a bounded foreground request, falls back to verified multi-source guidance, atomically records completion/usage/audit, reconciles stale replies, and never reloads an empty response bubble
 - [x] In-app Terms of Service and Privacy Policy screens
 - [x] Financial calculation and regression test coverage
 - [x] Expo Doctor passes all 18 checks

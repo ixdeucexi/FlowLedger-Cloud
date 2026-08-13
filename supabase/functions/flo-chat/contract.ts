@@ -1,5 +1,7 @@
 export const FLO_V3_POLICY_VERSION = "flo-v3.0.0";
-export const FLO_V3_MAX_TOOL_STEPS = 8;
+// Three bounded tool rounds plus the final structured-output round and one
+// safety round. Parallel tool calls are disabled by the provider options.
+export const FLO_V3_MAX_TOOL_STEPS = 5;
 export const FLO_V3_MAX_ROWS = 200;
 export const FLO_V3_MAX_BODY_BYTES = 65_536;
 
@@ -114,10 +116,39 @@ export function verifiedFallbackForTool(
   payload: FloToolEnvelope,
 ): FloVerifiedFallback {
   const normalized = question.toLowerCase();
+  const formatCurrency = (value: unknown) => {
+    const parsed = money(value);
+    return parsed === null ? null : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(parsed);
+  };
+  const accountSummary = toolName === "getAccountOverview" && payload.summary && typeof payload.summary === "object"
+    ? payload.summary as Record<string, unknown>
+    : null;
+  const accountRows = toolName === "getAccountOverview"
+    ? (payload.records as Array<Record<string, unknown>>).filter(record => record.record_kind !== "canonical_account_summary")
+    : [];
+  const accountBalances = accountRows
+    .map(record => {
+      const balance = formatCurrency(record.current_balance);
+      const name = String(record.display_name ?? record.name ?? record.official_name ?? "Account").trim();
+      return balance ? `${name}: ${balance}` : null;
+    })
+    .filter((value): value is string => Boolean(value));
+  const accountTotals = accountSummary
+    ? [
+        ["checking", formatCurrency(accountSummary.checkingBalance)],
+        ["savings", formatCurrency(accountSummary.savingsBalance)],
+        ["liabilities", formatCurrency(accountSummary.liabilities)],
+      ].filter((entry): entry is [string, string] => Boolean(entry[1])).map(([label, value]) => `${label}: ${value}`)
+    : [];
+  const verifiedAccountAnswer = payload.status === "unavailable"
+    ? "I couldn't retrieve a verified account balance just now. Open Accounts to review the connection, or tap Retry."
+    : accountBalances.length
+    ? `I found ${accountBalances.length} active account${accountBalances.length === 1 ? "" : "s"}: ${accountBalances.join("; ")}.${accountTotals.length ? ` Verified totals — ${accountTotals.join(", ")}.` : ""}`
+    : "I checked your active accounts. No verified account balance was available to list right now. Open Accounts to review the connection, or tap Retry.";
   const safeDebtQuestion = toolName === "getBillsAndDebt"
     && (/\b(?:safe|safely|afford|extra)\b.*\bdebt\b/.test(normalized) || /\bdebt\b.*\b(?:safe|safely|afford|extra)\b/.test(normalized));
   const routes: Record<string, { label: string; route: string; answer: string }> = {
-    getAccountOverview: { label: "Accounts", route: "/(tabs)/more", answer: "I checked your account records, but the full explanation did not finish. Open Accounts to review the verified balances, or tap Retry." },
+    getAccountOverview: { label: "Accounts", route: "/(tabs)/more", answer: verifiedAccountAnswer },
     searchTransactions: { label: "Activity", route: "/(tabs)/transactions", answer: "I checked your recent Activity records, but the full explanation did not finish. Open Activity to review them, or tap Retry." },
     getBillsAndDebt: { label: "Bills and debt", route: "/(tabs)/bills", answer: "I checked your bills and debt records, but the full explanation did not finish. Open Bills to review them, or tap Retry." },
     getBillPlanDetails: { label: "Forecast", route: "/(tabs)/monthly", answer: "I checked the planned payment records, but the full explanation did not finish. Open Forecast to review the plan, or tap Retry." },
@@ -153,8 +184,38 @@ export function verifiedFallbackForTool(
         : [],
     },
     partial: true,
-    caveat: "Flo completed the account check, but used a verified recovery answer because the full explanation was interrupted.",
+    caveat: payload.status !== "ok" || !payload.coverage.complete
+      ? "Flo answered from the verified records that were available. Some records may still need a refresh."
+      : "Flo verified the records, then used a reliable account answer because the full explanation needed more time.",
     followups: [],
+  };
+}
+
+export function verifiedFallbackFromTools(
+  question: string,
+  toolNames: string[],
+  payloads: FloToolEnvelope[],
+): FloVerifiedFallback | null {
+  if (!payloads.length || toolNames.length !== payloads.length) return null;
+  const individual = payloads.map((payload, index) => verifiedFallbackForTool(question, toolNames[index], payload));
+  const primary = individual[individual.length - 1];
+  const combinedAnswer = Array.from(new Set(individual.map(item => item.answer))).join(" ");
+  const sources = Array.from(new Map(individual.flatMap(item => item.sources).map(source => [source.id, source])).values()).slice(0, 40);
+  const aggregate = aggregateCoverage(payloads);
+  return {
+    ...primary,
+    answer: combinedAnswer,
+    sources,
+    dataAsOf: aggregate.dataAsOf,
+    coverage: {
+      ...aggregate.coverage,
+      complete: false,
+      reasons: Array.from(new Set(["assistant_synthesis_unavailable", ...(aggregate.coverage.reasons ?? [])])),
+    },
+    partial: true,
+    caveat: payloads.some(payload => payload.status !== "ok" || !payload.coverage.complete)
+      ? "Flo answered from the verified records that were available. Some records may still need a refresh."
+      : "Flo verified the requested account sections, then used a reliable account answer because the full explanation needed more time.",
   };
 }
 

@@ -19,7 +19,9 @@ export type FloToolRuntime = {
   userId: string;
   now: string;
   toolResults: FloToolEnvelope[];
+  toolResultNames: string[];
   toolNames: string[];
+  toolCache: Map<string, FloToolEnvelope>;
   memberRole?: string;
   proposalDraft?: {
     kind: "recurring_bill_change";
@@ -30,6 +32,17 @@ export type FloToolRuntime = {
   };
   onToolResult?: (name: string, result: FloToolEnvelope, parameters: Record<string, unknown>) => Promise<void>;
 };
+
+function canonicalToolKey(name: string, parameters: Record<string, unknown>): string {
+  const normalize = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(normalize);
+    if (!value || typeof value !== "object") return value;
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => [key, normalize(item)]));
+  };
+  return `${name}:${JSON.stringify(normalize(parameters))}`;
+}
 
 type QueryResult = { data: any[] | null; error: { code?: string; message?: string } | null; count?: number | null };
 
@@ -88,6 +101,9 @@ async function tracked(
   parameters: Record<string, unknown>,
   run: () => Promise<FloToolEnvelope>,
 ) {
+  const cacheKey = canonicalToolKey(name, parameters);
+  const cached = runtime.toolCache.get(cacheKey);
+  if (cached) return cached;
   const result = await run().catch((): FloToolEnvelope => ({
     status: "unavailable",
     dataAsOf: null,
@@ -96,7 +112,9 @@ async function tracked(
     records: [],
     message: "This part of your account is temporarily unavailable.",
   }));
+  runtime.toolCache.set(cacheKey, result);
   runtime.toolNames.push(name);
+  runtime.toolResultNames.push(name);
   runtime.toolResults.push(result);
   await runtime.onToolResult?.(name, result, parameters);
   return result;

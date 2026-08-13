@@ -9,6 +9,7 @@ import {
   money,
   sanitizeContext,
   validateGroundedAnswer,
+  verifiedFallbackFromTools,
   verifiedFallbackForTool,
 } from "./contract.ts";
 
@@ -138,8 +139,39 @@ test("a completed account tool provides a verified recovery answer", () => {
   });
   assert.match(result.answer, /Debt Payoff Planner/);
   assert.equal(result.partial, true);
-  assert.equal(result.coverage.reasons.includes("assistant_synthesis_unavailable"), true);
+  assert.deepEqual(result.coverage.reasons, ["assistant_synthesis_unavailable"]);
   assert.equal(result.sources.some(source => source.route === "/snowball-plan"), true);
+});
+
+test("multi-tool recovery preserves every verified source without synthesizing new facts", () => {
+  const secondSource = { id: "bill:b", type: "bill", label: "Rent", recordId: "b", asOf: "2026-08-13T12:00:00.000Z", freshness: "current" };
+  const result = verifiedFallbackFromTools(
+    "What affects my plan?",
+    ["getAccountOverview", "getBillsAndDebt"],
+    [payload, { ...payload, evidence: [secondSource], records: [{ id: "b", name: "Rent", amount: 100 }] }],
+  );
+  assert.ok(result);
+  assert.equal(result.sources.some(source => source.id === "account:a"), true);
+  assert.equal(result.sources.some(source => source.id === "bill:b"), true);
+  assert.equal(result.coverage.tools, 2);
+  assert.equal(result.partial, true);
+  assert.match(result.answer, /I found 1 active account: Checking: \$42\.81/);
+  assert.match(result.answer, /I checked your bills and debt records/);
+});
+
+test("account recovery returns verified balances without waiting for model prose", () => {
+  const result = verifiedFallbackForTool("What are my current account balances?", "getAccountOverview", {
+    ...payload,
+    dataAsOf: "2026-08-13T12:00:00.000Z",
+    evidence: [{ ...evidence[0], type: "account", recordId: "checking", route: "/(tabs)/more" }],
+    records: [
+      { id: "checking", name: "Everyday checking", account_type: "checking", current_balance: 1250.5 },
+      { id: "summary", record_kind: "canonical_account_summary", checkingBalance: 1250.5, savingsBalance: 400, liabilities: 0 },
+    ],
+    summary: { id: "summary", checkingBalance: 1250.5, savingsBalance: 400, liabilities: 0 },
+  });
+  assert.match(result.answer, /Everyday checking: \$1,250\.50/);
+  assert.match(result.answer, /checking: \$1,250\.50, savings: \$400\.00, liabilities: \$0\.00/);
 });
 
 test("empty query evidence keeps a null timestamp", async () => {
@@ -170,6 +202,8 @@ test("v3 endpoint enforces privacy, legacy rejection, and server-owned persisten
   const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
   const migration = await readFile(new URL("../../migrations/20260812152444_flo_v3_account_intelligence.sql", import.meta.url), "utf8");
   const guardMigration = await readFile(new URL("../../migrations/20260812171000_fix_flo_server_owned_write_guards.sql", import.meta.url), "utf8");
+  const terminalMigration = await readFile(new URL("../../migrations/20260813203000_finalize_flo_responses_atomically.sql", import.meta.url), "utf8");
+  const toolsSource = await readFile(new URL("./tools.ts", import.meta.url), "utf8");
   assert.match(source, /body\.version !== 3/);
   assert.match(source, /store: false/);
   assert.match(source, /crypto\.subtle\.sign\("HMAC"/);
@@ -193,14 +227,22 @@ test("v3 endpoint enforces privacy, legacy rejection, and server-owned persisten
   assert.match(source, /publicFailureCode\(error\)/);
   assert.match(source, /const answerTimeoutMs = 18_000/);
   assert.match(source, /const hardAnswerDeadlineMs = 20_000/);
+  assert.match(source, /const postToolSynthesisDeadlineMs = 4_000/);
   assert.match(source, /timeout: \{ totalMs: answerTimeoutMs, stepMs: 12_000, toolMs: 5_000 \}/);
-  assert.match(source, /withinHardDeadline\(agent\.generate/);
-  assert.match(source, /EdgeRuntime\.waitUntil\(task\)/);
-  assert.doesNotMatch(source, /EdgeRuntime\.waitUntil\(task\);\s*return task/);
-  assert.match(source, /setInterval\(\(\) => emitProgress\(currentStatus\), 8_000\)/);
+  assert.match(source, /const result = await withinHardDeadline\(agent\.generate/);
+  assert.match(source, /synthesisAbort\?\.abort\("verified_tool_ready"\)/);
+  assert.match(source, /const bufferedEvents: Uint8Array\[\] = \[\]/);
+  assert.ok(source.indexOf("await withinHardDeadline(agent.generate") < source.indexOf("const output = new ReadableStream", source.indexOf("await withinHardDeadline(agent.generate")));
+  assert.doesNotMatch(source, /EdgeRuntime\.waitUntil|abortProvider|deliverVerifiedFallback|verified_tool_fallback/);
+  assert.match(source, /maxRetries: 0/);
+  assert.match(source, /toolRuntime\.toolNames\.length >= 3/);
+  assert.match(source, /await finalizeFloResponse\(server!/);
+  assert.match(source, /request_in_progress/);
+  assert.match(source, /reconcile_stale_flo_responses/);
+  assert.match(source, /request_id: requestId, processing_started_at: now/);
   assert.match(source, /verified-fallback/);
-  assert.match(source, /verifiedFallbackForTool\(message, toolName, result\)/);
-  assert.match(source, /error_code: "response_interrupted"/);
+  assert.match(source, /verifiedFallbackFromTools\(message, toolRuntime\.toolResultNames, toolRuntime\.toolResults\)/);
+  assert.match(terminalMigration, /error_code = 'response_interrupted'/);
   assert.match(source, /code === "answer_timeout"/);
   assert.doesNotMatch(source, /error\.message\.slice\(0, 80\)/);
   assert.match(source, /filter\(\(row: any\) => row\.role === "user"\)/);
@@ -218,5 +260,18 @@ test("v3 endpoint enforces privacy, legacy rejection, and server-owned persisten
   assert.match(migration, /ephemeral_conversations_are_server_owned/);
   assert.match(migration, /old\.is_ephemeral or new\.is_ephemeral or old\.is_ephemeral is distinct from new\.is_ephemeral/);
   assert.doesNotMatch(migration, /\(v_proposal\.payload ->> 'billId'\)::uuid/);
+  assert.match(toolsSource, /toolCache: Map<string, FloToolEnvelope>/);
+  assert.match(toolsSource, /toolResultNames: string\[\]/);
+  assert.match(toolsSource, /const cached = runtime\.toolCache\.get\(cacheKey\)/);
+  assert.match(terminalMigration, /create or replace function public\.finalize_flo_response/);
+  assert.match(terminalMigration, /and status = 'streaming'/);
+  assert.match(terminalMigration, /insert into public\.flo_usage/);
+  assert.match(terminalMigration, /insert into public\.flo_audit_events/);
+  assert.match(terminalMigration, /where event_type in \('answer', 'failure'\)/);
+  assert.match(terminalMigration, /if p_ephemeral then[\s\S]*delete from public\.flo_conversations/);
+  assert.match(terminalMigration, /create or replace function public\.reconcile_stale_flo_responses/);
+  assert.match(terminalMigration, /error_code = 'response_interrupted'/);
+  assert.match(terminalMigration, /for update of message skip locked/);
+  assert.match(terminalMigration, /revoke all on function public\.finalize_flo_response[\s\S]*from public, anon, authenticated/);
 });
 
