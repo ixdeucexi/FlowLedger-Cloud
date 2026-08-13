@@ -94,9 +94,9 @@ const GUIDE_SLIDES: readonly GuideSlide[] = [
     intro: "Set up recurring money once, then review it whenever life changes.",
     icon: "check-circle",
     accent: "#22C7D6",
-    image: require("../assets/images/user-guide/stability.jpg"),
+    image: require("../assets/images/user-guide/stability-sample.png"),
     imageLabel: "Example FlowLedger dashboard plan",
-    imageCaption: "Example plan values—your household will be different.",
+    imageCaption: "Fictional sample plan—your household will be different.",
     sections: [
       {
         title: "Setup checklist",
@@ -146,10 +146,10 @@ const GUIDE_SLIDES: readonly GuideSlide[] = [
       "Use the same short path each day. Go deeper only when something changed or needs review.",
     icon: "clock",
     accent: "#25D39B",
-    image: require("../assets/images/user-guide/dashboard.jpg"),
+    image: require("../assets/images/user-guide/dashboard-sample.png"),
     imageLabel: "FlowLedger Dashboard and Today's Decisions",
     imageCaption:
-      "Start on Dashboard, then follow the items that need attention.",
+      "Fictional sample data. Start on Dashboard, then follow the items that need attention.",
     sections: [
       {
         title: "Check these four places",
@@ -189,10 +189,10 @@ const GUIDE_SLIDES: readonly GuideSlide[] = [
       "Use Bills for recurring obligations. Switch to Debt to manage balances, minimums, or payoff order.",
     icon: "file-text",
     accent: "#F5B82E",
-    image: require("../assets/images/user-guide/bills-debt.jpg"),
+    image: require("../assets/images/user-guide/bills-debt-sample.png"),
     imageLabel: "FlowLedger Debt view and payoff planner",
     imageCaption:
-      "Debt view shows payoff order, rollover, and the planner entry.",
+      "Fictional sample data showing payoff order, rollover, and the planner entry.",
     sections: [
       {
         title: "Bills",
@@ -247,10 +247,10 @@ const GUIDE_SLIDES: readonly GuideSlide[] = [
       "Forecast shows when money should move and what each day's projected close will be.",
     icon: "calendar",
     accent: "#5CA6FF",
-    image: require("../assets/images/user-guide/forecast.jpg"),
+    image: require("../assets/images/user-guide/forecast-sample.png"),
     imageLabel: "FlowLedger Forecast calendar",
     imageCaption:
-      "Open a day to review the activity behind its projected close.",
+      "Fictional sample calendar. Open a day to review its projected close.",
     sections: [
       {
         title: "Read the calendar",
@@ -310,9 +310,9 @@ const GUIDE_SLIDES: readonly GuideSlide[] = [
       "Use savings for purpose-based balances. Use Flo for explanations and guided next steps.",
     icon: "message-circle",
     accent: "#A76DFF",
-    image: require("../assets/images/user-guide/flo.jpg"),
+    image: require("../assets/images/user-guide/flo-sample.png"),
     imageLabel: "Ask Flo conversation screen",
-    imageCaption: "Flo is a private place to ask about the household plan.",
+    imageCaption: "Fictional example of asking Flo about a household plan.",
     sections: [
       {
         title: "Savings",
@@ -372,9 +372,9 @@ const GUIDE_SLIDES: readonly GuideSlide[] = [
       "Use reminders to catch upcoming items and How It Works for a quick refresher.",
     icon: "bell",
     accent: "#FF9D4D",
-    image: require("../assets/images/user-guide/notifications.jpg"),
+    image: require("../assets/images/user-guide/notifications-sample.png"),
     imageLabel: "FlowLedger notifications panel",
-    imageCaption: "Notifications group upcoming items that may need review.",
+    imageCaption: "Fictional reminders show how upcoming items are grouped.",
     sections: [
       {
         title: "Keep reminders useful",

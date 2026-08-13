@@ -134,7 +134,8 @@ Do not run FORGE and SENTINEL as parallel writers.
 
 ## Branch and release policy
 - Work from `dev` unless the user explicitly instructs otherwise.
-- A request that says only `fix`, `implement`, `change`, or similar means complete and verify the work on `dev`; it does not authorize production deployment.
+- The owner has given standing production authorization: after a requested FlowLedger change is complete and its required verification passes, deploy it live by default unless the owner explicitly says not to deploy that change.
+- A request that says only `fix`, `implement`, `change`, or similar means complete and verify the work on `dev`, then follow the owner's standing production authorization unless the owner explicitly opts out.
 - A request that explicitly includes `go live`, `deploy`, `push live`, `make it live`, or equivalent authorizes the production release workflow after the required FAST PATH or FULL CORE verification passes.
 - Before every production/live deployment, create and clearly name a rollback point that captures the currently live production state before the new release is applied.
 - The rollback point must be created before production is changed, and the release report must state its exact branch/tag/commit reference.
