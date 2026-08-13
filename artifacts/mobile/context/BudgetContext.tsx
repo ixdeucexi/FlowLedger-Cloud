@@ -596,7 +596,7 @@ function endOfCurrentMonthYMD() {
 }
 
 function reorderDebtPriorities(bills: Bill[]): Bill[] {
-  // Assign priorities based on balance ascending: lowest balance = #1 (snowball order)
+  // Assign priorities by ascending debt balance: smallest debt = #1 (snowball order)
   const activeDebts = bills
     .filter(b => b.is_debt && b.balance > 0.009)
     .sort((a, b) => a.balance - b.balance);

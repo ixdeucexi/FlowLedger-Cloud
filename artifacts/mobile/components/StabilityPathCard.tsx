@@ -58,7 +58,7 @@ function StabilityPathCardView({ progress, onViewGuide }: StabilityPathCardProps
   const paydayTitle = progress.safeUntilPayday === true
     ? `Safe until ${progress.nextPaycheckLabel ?? "payday"}`
     : progress.safeUntilPayday === false
-      ? `${currency(progress.paydayShortfall)} short before ${progress.nextPaycheckLabel ?? "payday"}`
+      ? `${currency(progress.paydayShortfall)} to add before ${progress.nextPaycheckLabel ?? "payday"}`
       : "Next payday not confirmed";
   const paydayAccessibilityDetail = progress.safeUntilPayday === true
     ? "Your forecast keeps Must Pay bills and the safety floor covered until income arrives."

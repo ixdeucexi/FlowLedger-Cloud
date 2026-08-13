@@ -228,7 +228,7 @@ test("uses the scheduled debt minimum for rollover even when this month's settle
   assert.equal(suite.debtPayoff.totalMonthlyMinimum, 102.68);
 });
 
-test("cash-flow gap wording handles a one-day low-balance stretch", () => {
+test("cash-flow gap wording handles a one-day tight cash-flow point", () => {
   const suite = buildAlgorithmSuite(baseInput({
     dailyBalances: [
       { day: 1, income: 3000, bills: 0, expense: 0, net: 3000, balance: 3000 },
@@ -239,7 +239,7 @@ test("cash-flow gap wording handles a one-day low-balance stretch", () => {
 
   assert.equal(suite.cashFlowGap.startDay, 8);
   assert.equal(suite.cashFlowGap.endDay, 8);
-  assert.equal(suite.cashFlowGap.detail, "Lowest-balance stretch is July 8, 2026. Main pressure: Phone $100.");
+  assert.equal(suite.cashFlowGap.detail, "Tightest point in your cash flow is July 8, 2026. Main pressure: Phone $100.");
   assert.deepEqual(suite.cashFlowGap.causes.map(cause => cause.label), ["Phone"]);
   assert.equal(suite.algorithmDetails.cashFlowGap.sourceNumbers.find(item => item.label === "Main pressure")?.value, "Phone");
 });
@@ -489,7 +489,7 @@ test("legacy disabled toggle values do not disable calculations", () => {
   assert.ok(suite.insights.some(insight => insight.id === "safeCushion"));
 });
 
-test("flags risk days and low balance warnings deterministically", () => {
+test("flags days that can use more breathing room deterministically", () => {
   const suite = buildAlgorithmSuite(baseInput({
     dailyBalances: [
       { day: 1, income: 0, bills: 0, expense: 0, net: 0, balance: 500 },
@@ -501,7 +501,7 @@ test("flags risk days and low balance warnings deterministically", () => {
   assert.equal(suite.lowBalanceWarning.day, 2);
   assert.equal(suite.riskDay.risk, 1);
   assert.ok(suite.flowScore.score < 70);
-  assert.match(suite.flowScore.topReason, /floor|negative|risk/i);
+  assert.match(suite.flowScore.topReason, /breathing room|floor/i);
   assert.equal(suite.safeCushion.amount, 0);
   assert.equal(suite.safeCushion.status, "risk");
   assert.match(suite.safeCushion.topAction, /protect/i);
@@ -517,5 +517,5 @@ test("Safe Cushion enters watch status when only a small amount remains above th
 
   assert.equal(suite.safeCushion.amount, 125);
   assert.equal(suite.safeCushion.status, "watch");
-  assert.match(suite.safeCushion.topReason, /only \$125/);
+  assert.match(suite.safeCushion.topReason, /\$125 of breathing room/);
 });

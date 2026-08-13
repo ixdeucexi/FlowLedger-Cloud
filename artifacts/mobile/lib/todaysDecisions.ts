@@ -110,9 +110,9 @@ export function buildTodaysDecisions(input: TodayDecisionInput): TodayDecision[]
   if (input.lowestBalance < input.safetyFloor) {
     const shortfall = input.safetyFloor - input.lowestBalance;
     decisions.push({
-      id: "low-balance-risk",
+      id: "breathing-room-opportunity",
       title: "Protect your forecast",
-      reason: `Your projected balance falls ${money(shortfall)} below your safety floor${input.lowestDate ? ` on ${input.lowestDate}` : ""}.`,
+      reason: `Add ${money(shortfall)} more breathing room${input.lowestDate ? ` by ${input.lowestDate}` : ""} to keep your safety floor protected.`,
       actionLabel: "Review Monthly",
       route: "/(tabs)/monthly",
       tone: "risk",
@@ -192,7 +192,7 @@ export function buildTodaysDecisions(input: TodayDecisionInput): TodayDecision[]
     decisions.push({
       id: "check-plan",
       title: "No urgent action right now",
-      reason: "Your current records do not show a supported action that needs attention today.",
+      reason: "Your current records are ready for the next helpful step when you are.",
       actionLabel: "Review Monthly",
       route: "/(tabs)/monthly",
       tone: "safe",

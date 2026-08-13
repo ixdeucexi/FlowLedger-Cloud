@@ -236,7 +236,7 @@ export function getSetupPathItem(key: MoneySetupKey): SetupPathItem {
       key,
       title: "Map monthly obligations",
       shortLabel: "Bills",
-      detail: "Add recurring bills so low-balance dates show early.",
+      detail: "Add recurring bills so Forecast can show where to build more room.",
     },
     debts: {
       key,
@@ -303,7 +303,7 @@ export function describeStartingPoint(startingPoint: SetupStartingPoint | null):
     case "switching_apps":
       return "I'll keep setup efficient and help you confirm imported or existing information instead of making you start over.";
     case "catching_up":
-      return "I'll put overdue necessities and the next low-balance day first.";
+      return "I'll protect urgent necessities first, then help you build breathing room.";
     case "paycheck_to_paycheck":
       return "I'll focus first on reaching the next paycheck safely, then building protected days.";
     case "building_room":

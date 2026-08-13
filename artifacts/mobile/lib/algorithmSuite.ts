@@ -442,7 +442,7 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
       confidence: input.forecastConfidence.level,
       factors: [
       `Forecast confidence: ${input.forecastConfidence.label}`,
-      `Lowest balance: $${lowestBalance.toFixed(0)}${lowestDay ? ` on ${formatMonthDay(input, lowestDay)}` : ""}`,
+      `Tightest forecast point: $${lowestBalance.toFixed(0)}${lowestDay ? ` on ${formatMonthDay(input, lowestDay)}` : ""}`,
       dueBills.length ? `${paidDueBills}/${dueBills.length} due bills cleared` : "No bills are due yet",
       ],
     },
@@ -465,7 +465,7 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     extraMoneyRouter,
     riskDay: riskDayCounts,
     smartReminder: { reminders },
-    monthlyHealth: { score: flowScore, grade: flowGrade, summary: `${flowLabel} plan based on cushion, bills, forecast confidence, and risk days.` },
+    monthlyHealth: { score: flowScore, grade: flowGrade, summary: `${flowLabel} plan based on cushion, bills, forecast confidence, and days to strengthen.` },
     spendingLimit: spendingLimits,
     planDelay: { day: planDelayDay, detail: planDelayDay ? `The next safer purchase window appears around ${formatMonthDay(input, planDelayDay)}.` : "No safer date appears inside this month yet." },
     insights: insights.slice(0, 4),
@@ -573,17 +573,17 @@ function buildBillScheduleStatus(bill: AlgorithmBill, todayDay: number): BillSch
 }
 
 function buildLowBalanceWarning(lowestBalance: number, lowestDay: number | null, safetyFloor: number, input: AlgorithmSuiteInput): AlgorithmSuiteResult["lowBalanceWarning"] {
-  const dateLabel = lowestDay ? formatMonthDay(input, lowestDay) : "the low point";
+  const dateLabel = lowestDay ? formatMonthDay(input, lowestDay) : "the tightest forecast point";
   if (lowestBalance < 0) {
-    return { status: "risk", day: lowestDay, balance: lowestBalance, message: `Projected negative balance on ${dateLabel}.` };
+    return { status: "risk", day: lowestDay, balance: lowestBalance, message: `Build $${Math.abs(lowestBalance).toFixed(0)} more breathing room by ${dateLabel}.` };
   }
   if (lowestBalance < safetyFloor) {
-    return { status: "risk", day: lowestDay, balance: lowestBalance, message: `Projected below your $${safetyFloor.toFixed(0)} floor on ${dateLabel}.` };
+    return { status: "risk", day: lowestDay, balance: lowestBalance, message: `Add $${(safetyFloor - lowestBalance).toFixed(0)} of breathing room by ${dateLabel} to protect your $${safetyFloor.toFixed(0)} safety floor.` };
   }
   if (lowestBalance < safetyFloor + STABILITY_POLICY.watchCushion) {
-    return { status: "watch", day: lowestDay, balance: lowestBalance, message: `Lowest projected balance leaves less than $${STABILITY_POLICY.watchCushion} of breathing room.` };
+    return { status: "watch", day: lowestDay, balance: lowestBalance, message: `Your tightest forecast point keeps less than $${STABILITY_POLICY.watchCushion} of breathing room.` };
   }
-  return { status: "safe", day: lowestDay, balance: lowestBalance, message: "No low-balance risk detected in this month." };
+  return { status: "safe", day: lowestDay, balance: lowestBalance, message: "Your current month keeps your safety floor protected." };
 }
 
 function buildPaydaySplit(
@@ -734,9 +734,9 @@ function buildSpendingLimitDetails(
   const daily = roundCurrency(safeCushionAmount / remainingDays);
   const weekly = roundCurrency(daily * 7);
   const status: AlgorithmSuiteResult["spendingLimit"]["status"] = safeCushionAmount <= 0 ? "risk" : daily < STABILITY_POLICY.spendingWatchPerDay ? "watch" : "safe";
-  const paceLabel = status === "safe" ? "safe pace" : status === "watch" ? "low-balance pace" : "pause spending";
+  const paceLabel = status === "safe" ? "safe pace" : status === "watch" ? "building pace" : "protect the plan";
   const detail = status === "risk"
-    ? "I would pause extra spending until the cushion improves."
+    ? "Keep extra spending on hold while you build more breathing room."
     : `To stay safe, keep extra spending near $${daily.toFixed(0)}/day or $${weekly.toFixed(0)}/week.`;
   return { daily, weekly, status, paceLabel, remainingDays, detail };
 }
@@ -945,13 +945,13 @@ function buildAlgorithmDecisionDetails(
       status: flowStatus,
       headline: `${facts.flowScore} - ${facts.flowLabel}`,
       whatIFound: facts.flowScoreDetails.topReason,
-      whyItMatters: "This is your money weather report. I check cushion, bills, debt, confidence, and risk days so you know what to fix first.",
+      whyItMatters: "This is your money weather report. I check cushion, bills, debt, confidence, and days to strengthen so you always have a useful next step.",
       nextAction: facts.flowScoreDetails.topAction,
       floPrompt: `Why is my Flow Score ${facts.flowScore}?`,
       sourceNumbers: [
         { label: "Flow Score", value: `${facts.flowScore}`, tone: flowStatus },
         { label: "Breathing room", value: money(facts.safeCushionAmount), tone: facts.safeCushionDetails.status },
-        { label: "Risk days", value: `${facts.riskDayCounts.risk}`, tone: facts.riskDayCounts.risk ? "risk" : "safe" },
+        { label: "Days to strengthen", value: `${facts.riskDayCounts.risk}`, tone: facts.riskDayCounts.risk ? "watch" : "safe" },
         { label: "Forecast confidence", value: input.forecastConfidence.label, tone: input.forecastConfidence.level === "high" ? "safe" : input.forecastConfidence.level === "medium" ? "watch" : "risk" },
       ],
     },
@@ -960,11 +960,11 @@ function buildAlgorithmDecisionDetails(
       status: facts.safeCushionDetails.status,
       headline: `Breathing Room: ${money(facts.safeCushionAmount)}`,
       whatIFound: facts.safeCushionDetails.topReason,
-      whyItMatters: "This is the money I’m protecting for you. If it is thin, I should not suggest spending, extra debt payments, or savings moves that break your floor.",
+      whyItMatters: "This is the money I’m protecting for you. As it grows, FlowLedger can safely open more options for spending, debt payments, and savings.",
       nextAction: facts.safeCushionDetails.topAction,
       floPrompt: `Why is my breathing room ${money(facts.safeCushionAmount)}?`,
       sourceNumbers: [
-        { label: "Lowest forecast", value: `${money(facts.lowestBalance)} on ${lowestDate}`, tone: facts.lowestBalance < input.safetyFloor ? "risk" : "info" },
+        { label: "Tightest forecast point", value: `${money(facts.lowestBalance)} on ${lowestDate}`, tone: facts.lowestBalance < input.safetyFloor ? "watch" : "info" },
         { label: "Safety floor", value: money(input.safetyFloor), tone: "info" },
         { label: "Protected room", value: money(facts.safeCushionAmount), tone: facts.safeCushionDetails.status },
         { label: "Reserved plan", value: money(facts.safeCushionDetails.reservedAmount), tone: "info" },
@@ -990,7 +990,7 @@ function buildAlgorithmDecisionDetails(
       status: billStatus,
       headline: bill ? `Bill Priority: ${bill.name}` : "Bill Priority: On track",
       whatIFound: facts.billPriority.summary,
-      whyItMatters: "Bills are normal. I just show which one needs attention first so it does not surprise the forecast or hit before cash is ready.",
+      whyItMatters: "Bills are normal. I show which one to handle first so the forecast stays prepared and cash is ready.",
       nextAction: facts.billPriority.nextMove,
       floPrompt: bill ? `Why is ${bill.name} my priority bill?` : "What bills need attention?",
       sourceNumbers: [
@@ -1022,11 +1022,11 @@ function buildAlgorithmDecisionDetails(
         ? `Cash Flow Gap: ${formatMonthDay(input, facts.cashFlowGap.startDay)}`
         : "Cash Flow Gap",
       whatIFound: facts.cashFlowGap.detail,
-      whyItMatters: "Paycheck-to-paycheck stress usually comes from a few low-balance days. I find those days so you can improve the timing.",
-      nextAction: gapStatus === "safe" ? "Keep this schedule and review again after new bills or plans are added." : "Review the bills, plans, or debt moves around the low-balance stretch.",
-      floPrompt: "Why is my balance running low?",
+      whyItMatters: "The tightest cash-flow days show where small timing changes can create more breathing room and help you move beyond paycheck-to-paycheck cycles.",
+      nextAction: gapStatus === "safe" ? "Keep this schedule and review again after new bills or plans are added." : "Review the bills, plans, or debt moves around the tightest cash-flow stretch.",
+      floPrompt: "How can I build more breathing room in my plan?",
       sourceNumbers: [
-        { label: "Low point", value: money(facts.cashFlowGap.lowestBalance), tone: gapStatus },
+        { label: "Tightest point", value: money(facts.cashFlowGap.lowestBalance), tone: gapStatus },
         { label: "Safety floor", value: money(input.safetyFloor), tone: "info" },
         { label: "Start", value: facts.cashFlowGap.startDay ? formatMonthDay(input, facts.cashFlowGap.startDay) : "None", tone: "info" },
         { label: "End", value: facts.cashFlowGap.endDay ? formatMonthDay(input, facts.cashFlowGap.endDay) : "None", tone: "info" },
@@ -1164,7 +1164,7 @@ function summarizeSpendingPattern(categoryPlan: AlgorithmCategoryRow[], transact
   const pressure = categoryPlan.filter(row => row.status !== "available");
   if (pressure.length) {
     const top = pressure.sort((a, b) => a.remaining - b.remaining)[0];
-    return { topCategory: top.category, spikeCount: pressure.length, detail: `${top.category} needs attention with $${Math.abs(top.remaining).toFixed(0)} ${top.remaining < 0 ? "over plan" : "left"}.` };
+    return { topCategory: top.category, spikeCount: pressure.length, detail: top.remaining < 0 ? `${top.category} can come back into the plan by adding $${Math.abs(top.remaining).toFixed(0)} of room.` : `${top.category} has $${Math.abs(top.remaining).toFixed(0)} left.` };
   }
   const spendByCategory = new Map<string, number>();
   transactions.filter(tx => tx.amount < 0).forEach(tx => {
@@ -1223,9 +1223,9 @@ function findCashFlowGap(balances: AlgorithmDailyBalance[], safetyFloor: number,
     lowestBalance: lowest?.balance ?? 0,
     detail: stretchLabel
       ? startDay === endDay
-        ? `Lowest-balance stretch is ${stretchLabel}.${causeLabel}`
-        : `Lowest-balance stretch runs ${stretchLabel}.${causeLabel}`
-      : "No low-balance cash-flow stretch detected.",
+        ? `Tightest point in your cash flow is ${stretchLabel}.${causeLabel}`
+        : `Tightest cash-flow stretch runs ${stretchLabel}.${causeLabel}`
+      : "Your current schedule keeps steady breathing room throughout the forecast.",
     causes,
   };
 }
@@ -1267,7 +1267,7 @@ function findPlanDelayDay(balances: AlgorithmDailyBalance[], safetyFloor: number
 
 function buildSmartReminders(lowBalance: AlgorithmSuiteResult["lowBalanceWarning"], bills: AlgorithmSuiteResult["billPriority"]["bills"], goalName: string | null, input: AlgorithmSuiteInput) {
   const reminders: string[] = [];
-  if (lowBalance.status !== "safe" && lowBalance.day) reminders.push(`Review low balance risk before ${formatMonthDay(input, lowBalance.day)}.`);
+  if (lowBalance.status !== "safe" && lowBalance.day) reminders.push(`Build more breathing room before ${formatMonthDay(input, lowBalance.day)}.`);
   bills.slice(0, 2).forEach(bill => reminders.push(`Confirm ${bill.name} before ${formatMonthDay(input, bill.dueDay)}.`));
   if (goalName) reminders.push(`Check if extra savings can go to ${goalName}.`);
   return reminders.slice(0, 4);
@@ -1285,35 +1285,35 @@ function buildSafeCushionDetails(
   const remainingBills = Math.max(0, input.cashFlow.totalBillsDue - input.cashFlow.totalPaid);
   const plannedOutflow = Math.max(0, -input.cashFlow.netTransactions) + Math.max(0, input.cashFlow.goalAllocations);
   const reservedAmount = roundCurrency(remainingBills + plannedOutflow);
-  const lowestLabel = facts.lowestDay ? formatMonthDay(input, facts.lowestDay) : "the low point";
+  const lowestLabel = facts.lowestDay ? formatMonthDay(input, facts.lowestDay) : "the tightest forecast point";
   const floorGap = roundCurrency(facts.lowestBalance - input.safetyFloor);
   const status: AlgorithmSuiteResult["safeCushion"]["status"] = facts.safeCushionAmount <= 0
     ? "risk"
     : facts.safeCushionAmount < STABILITY_POLICY.watchCushion
       ? "watch"
       : "safe";
-  const label = status === "safe" ? "healthy cushion" : status === "watch" ? "thin cushion" : "no safe cushion";
+  const label = status === "safe" ? "strong cushion" : status === "watch" ? "growing cushion" : "ready to build";
   const reservedLabel = reservedAmount > 0
     ? `$${reservedAmount.toFixed(0)} is already reserved for bills, spending, and goals in this month.`
     : "No remaining planned outflow is reserved in this month.";
   const compactReason = status === "safe"
     ? `${lowestLabel} stays protected`
     : status === "watch"
-      ? `Lowest on ${lowestLabel}`
-      : `Below floor on ${lowestLabel}`;
+      ? `Build room by ${lowestLabel}`
+      : `Protect the floor by ${lowestLabel}`;
   const calendarHint = facts.lowestDay
-    ? `Forecast will point you to ${formatMonthDay(input, facts.lowestDay)}, where the balance is lowest.`
-    : "Forecast will show the first date that starts to pressure your cushion.";
+    ? `Forecast will point you to ${formatMonthDay(input, facts.lowestDay)}, where an adjustment can create the most breathing room.`
+    : "Forecast will show the first date where an adjustment can strengthen your cushion.";
   const topReason = status === "safe"
-    ? `Your lowest forecast stays $${facts.safeCushionAmount.toFixed(0)} above the $${input.safetyFloor.toFixed(0)} floor.`
+    ? `Your tightest forecast point stays $${facts.safeCushionAmount.toFixed(0)} above the $${input.safetyFloor.toFixed(0)} floor.`
     : status === "watch"
-      ? `Your lowest forecast leaves only $${facts.safeCushionAmount.toFixed(0)} above the $${input.safetyFloor.toFixed(0)} floor.`
+      ? `Your plan keeps $${facts.safeCushionAmount.toFixed(0)} of breathing room above the $${input.safetyFloor.toFixed(0)} floor at its tightest point.`
       : facts.lowBalanceWarning.message;
   const topAction = status === "safe"
     ? "Use this as the limit before adding new spending, extra debt payments, or savings moves."
     : status === "watch"
-      ? "Keep extra money available until the lowest-balance day passes, or find a safer date."
-      : "Pause new spending and protect the floor from the bill, plan, or debt move creating pressure.";
+      ? "Keep extra money available through the tightest forecast date, or choose a date that builds more room."
+      : "Protect the floor now, then use Forecast to find the bill, plan, or debt move that can create more room.";
   return {
     label,
     status,
@@ -1328,7 +1328,7 @@ function buildSafeCushionDetails(
     topAction,
     breakdownItems: [
       { label: "Safe amount", value: `$${facts.safeCushionAmount.toFixed(0)}`, tone: status },
-      { label: "Lowest balance", value: `$${facts.lowestBalance.toFixed(0)}${facts.lowestDay ? ` ${formatMonthDay(input, facts.lowestDay)}` : ""}`, tone: facts.lowestBalance < input.safetyFloor ? "risk" : "info" },
+      { label: "Tightest forecast point", value: `$${facts.lowestBalance.toFixed(0)}${facts.lowestDay ? ` ${formatMonthDay(input, facts.lowestDay)}` : ""}`, tone: facts.lowestBalance < input.safetyFloor ? "risk" : "info" },
       { label: "Safety floor", value: `$${input.safetyFloor.toFixed(0)}`, tone: "info" },
       { label: "Room vs floor", value: floorGap >= 0 ? `+$${floorGap.toFixed(0)}` : `-$${Math.abs(floorGap).toFixed(0)}`, tone: floorGap > STABILITY_POLICY.watchCushion ? "safe" : floorGap > 0 ? "watch" : "risk" },
       { label: "Reserved plan", value: `$${reservedAmount.toFixed(0)}`, tone: reservedAmount > facts.safeCushionAmount ? "watch" : "info" },
@@ -1364,16 +1364,16 @@ function buildFlowScoreDetails(
   const breakdownItems: AlgorithmSuiteResult["flowScore"]["breakdownItems"] = [];
 
   if (facts.safeCushionAmount >= STABILITY_POLICY.watchCushion) positiveFactors.push(`You have $${facts.safeCushionAmount.toFixed(0)} of breathing room above your floor.`);
-  else if (facts.safeCushionAmount > 0) negativeFactors.push(`Breathing room is thin at $${facts.safeCushionAmount.toFixed(0)} above your floor.`);
-  else negativeFactors.push("The forecast does not have extra room above your safety floor.");
+  else if (facts.safeCushionAmount > 0) negativeFactors.push(`You have $${facts.safeCushionAmount.toFixed(0)} above your floor; the next win is growing that breathing room.`);
+  else negativeFactors.push("Your next step is creating breathing room above your safety floor.");
 
-  if (facts.lowBalanceWarning.status === "safe") positiveFactors.push("No low-balance risk is showing in this month.");
+  if (facts.lowBalanceWarning.status === "safe") positiveFactors.push("Your safety floor stays protected throughout this month.");
   else negativeFactors.push(facts.lowBalanceWarning.message);
 
   if (facts.overdueBillsCount > 0) {
-    negativeFactors.push(`${facts.overdueBillsCount} overdue bill${facts.overdueBillsCount === 1 ? "" : "s"} need attention.`);
+    negativeFactors.push(`${facts.overdueBillsCount} overdue bill${facts.overdueBillsCount === 1 ? " is" : "s are"} next to bring current.`);
   } else if (facts.dueBillsCount > 0 && facts.billReadiness < 1) {
-    negativeFactors.push(`${facts.dueBillsCount - facts.paidDueBills} bill${facts.dueBillsCount - facts.paidDueBills === 1 ? "" : "s"} due so far still need attention.`);
+    negativeFactors.push(`${facts.dueBillsCount - facts.paidDueBills} bill${facts.dueBillsCount - facts.paidDueBills === 1 ? " remains" : "s remain"} to clear.`);
   } else if (facts.dueBillsCount > 0) {
     positiveFactors.push(`${facts.paidDueBills}/${facts.dueBillsCount} due bills are cleared.`);
   } else if (input.bills.length > 0) {
@@ -1389,14 +1389,14 @@ function buildFlowScoreDetails(
   }
 
   if (input.forecastConfidence.level === "high") positiveFactors.push("Forecast confidence is high.");
-  else negativeFactors.push(`Forecast confidence is ${input.forecastConfidence.label.toLowerCase()}.`);
+  else negativeFactors.push(`Confirm current balances and dates to grow forecast confidence from ${input.forecastConfidence.label.toLowerCase()}.`);
 
-  if (facts.debtPressure > 15) negativeFactors.push(`Debt minimums use about $${facts.monthlyDebtMinimums.toFixed(0)} of monthly income.`);
+  if (facts.debtPressure > 15) negativeFactors.push(`Each debt payoff will free part of the $${facts.monthlyDebtMinimums.toFixed(0)} currently going to monthly minimums.`);
   else if (input.bills.some(bill => bill.is_debt)) positiveFactors.push("Debt pressure is manageable in this plan.");
 
   if (facts.categoryPressure.length) {
     const top = facts.categoryPressure.slice().sort((a, b) => a.remaining - b.remaining)[0];
-    negativeFactors.push(`${top.category} is ${top.remaining < 0 ? `$${Math.abs(top.remaining).toFixed(0)} over plan` : "close to its limit"}.`);
+    negativeFactors.push(top.remaining < 0 ? `${top.category} can return to plan with $${Math.abs(top.remaining).toFixed(0)} more room.` : `${top.category} is the next category to keep steady.`);
   }
 
   breakdownItems.push({
@@ -1449,7 +1449,7 @@ function flowScoreAction(
   },
   input: AlgorithmSuiteInput,
 ) {
-  if (facts.lowBalanceWarning.status !== "safe" && facts.lowBalanceWarning.day) return `Review why ${formatMonthDay(input, facts.lowBalanceWarning.day)} has a low balance.`;
+  if (facts.lowBalanceWarning.status !== "safe" && facts.lowBalanceWarning.day) return `Open ${formatMonthDay(input, facts.lowBalanceWarning.day)} to see how you can build more breathing room.`;
   if (facts.safeCushionAmount <= 0) return "Protect your safety floor before adding new spending.";
   const priorityBill = prioritizeBills(input.bills, input.todayDay, input.safetyFloor, facts.lowBalanceWarning.day, input).bills[0];
   if (priorityBill && facts.overdueBillsCount > 0) return `Review ${priorityBill.name} first.`;
@@ -1478,7 +1478,7 @@ function buildInsights(
       id: "flowScore",
       algorithm: "Flow Score",
       title: `${facts.flowScore} · ${facts.flowLabel}`,
-      detail: `Plan health uses cushion, bills, risk days, and forecast confidence.`,
+      detail: `Plan health uses cushion, bills, days to strengthen, and forecast confidence.`,
       tone: facts.flowScore >= 75 ? "safe" : facts.flowScore >= 55 ? "watch" : "risk",
     },
     {
@@ -1492,8 +1492,8 @@ function buildInsights(
   if (facts.lowBalanceWarning.status !== "safe") {
     insights.push({
       id: "lowBalanceWarning",
-      algorithm: "Low Balance Warning",
-      title: "Low balance risk",
+      algorithm: "Breathing Room Builder",
+      title: "Build more breathing room",
       detail: facts.lowBalanceWarning.message,
       tone: facts.lowBalanceWarning.status === "risk" ? "risk" : "watch",
     });
@@ -1565,8 +1565,8 @@ function scoreLabel(score: number) {
   if (score >= 90) return "Excellent";
   if (score >= 80) return "Strong";
   if (score >= 65) return "Stable";
-  if (score >= 45) return "Low balance";
-  return "Needs attention";
+  if (score >= 45) return "Building";
+  return "Getting started";
 }
 
 function minBy<T>(items: T[], selector: (item: T) => number): T | null {
@@ -1599,7 +1599,7 @@ const MONTH_FULL = [
 ];
 
 function formatMonthDay(input: Pick<AlgorithmSuiteInput, "month" | "year">, day: number | null | undefined) {
-  if (!day) return "the low point";
+  if (!day) return "the tightest forecast point";
   return `${MONTH_FULL[input.month] ?? "Month"} ${day}, ${input.year}`;
 }
 

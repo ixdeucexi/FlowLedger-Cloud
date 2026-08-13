@@ -111,18 +111,18 @@ const facts: FloFacts = {
     label: "Stable",
     topReason: "July 8 is tight because bills hit before payday.",
     topAction: "Ask Flo why Jul 8 is tight.",
-    positiveFactors: ["No negative days are showing."],
-    negativeFactors: ["Safe Cushion is thin."],
+    positiveFactors: ["Your safety floor stays protected this month."],
+    negativeFactors: ["Your next win is growing your breathing room."],
   },
   safeCushion: {
     amount: 600,
-    label: "healthy cushion",
+    label: "strong cushion",
     status: "safe",
     lowestBalance: 800,
     lowestDay: 1,
     safetyFloor: 200,
     reservedAmount: 1520,
-    topReason: "Your lowest forecast stays $600 above the $200 floor.",
+    topReason: "Your tightest forecast point stays $600 above the $200 floor.",
     topAction: "Ask Flo what this cushion can safely do.",
   },
   purchaseDecision: {
@@ -186,27 +186,27 @@ const facts: FloFacts = {
     summary: "The month is stable, but the cushion is still thin before payday.",
   },
   smartReminder: {
-    reminders: ["Review low balance risk before Jul 8.", "Confirm Power before Jul 28."],
+    reminders: ["Build more breathing room before Jul 8.", "Confirm Power before Jul 28."],
   },
 };
 const days = [{ date: "2026-06-24", balance: 1000 }, { date: "2026-07-01", balance: 800 }];
 
 test("Flo affordability uses deterministic result", () => {
-  assert.match(localFloAnswer("Can I afford $700 on 2026-06-24?", facts, days) ?? "", /^Not safely\./);
+  assert.match(localFloAnswer("Can I afford $700 on 2026-06-24?", facts, days) ?? "", /^This plan needs more breathing room first\./);
 });
 
 test("Flo explains the stability path from verified facts", () => {
   const answer = localFloAnswer("Explain my stability path and protected days.", facts, days) ?? "";
-  assert.match(answer, /15 days now, on the way to 7, 30, 60, then 90/);
+  assert.match(answer, /15 protected days, building toward 30, 60, then 90/);
   assert.match(answer, /safe through June 28, 2026/);
-  assert.match(answer, /lowest upcoming balance is \$800/);
-  assert.match(answer, /next action/i);
+  assert.match(answer, /tightest upcoming forecast point is \$800/i);
+  assert.match(answer, /next step/i);
 });
 
 test("all Flo quick prompts work without AI", () => {
   assert.match(localFloAnswer("Can I afford $500?", facts, days) ?? "", /Yes/);
   assert.match(localFloAnswer("Which bills are due next?", facts, days) ?? "", /Power/);
-  assert.match(localFloAnswer("Why is my balance getting low?", facts, days) ?? "", /lowest point/);
+  assert.match(localFloAnswer("Why is my balance getting low?", facts, days) ?? "", /tightest forecast point/);
   assert.match(localFloAnswer("How do I add income?", facts, days) ?? "", /Add Income/);
 });
 
@@ -250,14 +250,14 @@ test("Flo answers phase 2 planning questions without AI", () => {
 test("Flo explains Flow Score from deterministic facts", () => {
   assert.match(localFloAnswer("Why is my Flow Score 72?", facts, days) ?? "", /72 - Stable/);
   assert.match(localFloAnswer("How do I improve my Flow Score?", facts, days) ?? "", /ask me why July 8, 2026 is tight/i);
-  assert.match(localFloAnswer("What hurt my Flow Score?", facts, days) ?? "", /Safe Cushion is thin/);
-  assert.match(localFloAnswer("What helped my Flow Score?", facts, days) ?? "", /No negative days/);
+  assert.match(localFloAnswer("What hurt my Flow Score?", facts, days) ?? "", /next win is growing your breathing room/i);
+  assert.match(localFloAnswer("What helped my Flow Score?", facts, days) ?? "", /safety floor stays protected/i);
 });
 
 test("Flo explains Safe Cushion from deterministic facts", () => {
   assert.match(localFloAnswer("What is my Safe Cushion?", facts, days) ?? "", /\$600/);
   assert.match(localFloAnswer("How much can I safely spend?", facts, days) ?? "", /reserving/);
-  assert.match(localFloAnswer("Why is my cushion low?", { ...facts, safeCushion: { ...facts.safeCushion!, amount: 80, label: "thin cushion", status: "watch" } }, days) ?? "", /lowest projected balance/i);
+  assert.match(localFloAnswer("Why is my cushion low?", { ...facts, safeCushion: { ...facts.safeCushion!, amount: 80, label: "growing cushion", status: "watch" } }, days) ?? "", /tightest forecast point/i);
 });
 
 test("Flo explains how purchase decision safe amount is calculated", () => {
@@ -307,12 +307,12 @@ test("Flo explains cash-flow pressure and review list from deterministic facts",
   assert.doesNotMatch(oneDayGap, /July 8, 2026 through July 8, 2026|July 8-8/);
 
   const review = localFloAnswer("What needs attention?", facts, days) ?? "";
-  assert.match(review, /Review low balance risk/);
+  assert.match(review, /Build more breathing room/);
   assert.match(review, /Confirm Power/);
 });
 
 test("Flo answers category budget questions from verified facts", () => {
-  assert.match(localFloAnswer("Why is Food over?", facts, days) ?? "", /Food is over by \$60\.00/);
+  assert.match(localFloAnswer("Why is Food over?", facts, days) ?? "", /Food can return to plan with \$60\.00 more room/);
   assert.match(localFloAnswer("How much do I have left for Utilities?", facts, days) ?? "", /Utilities has \$40\.00 left/);
   assert.match(localFloAnswer("Which categories need attention?", facts, days) ?? "", /Food/);
   assert.match(localFloAnswer("Which category has the most room left?", facts, days) ?? "", /Entertainment/);
@@ -369,8 +369,8 @@ test("Flo shows and can undo moved bill facts", () => {
 
 test("Flo evaluates category budget moves from verified facts", () => {
   assert.match(localFloAnswer("Can I move $60 from Entertainment to Food?", facts, days) ?? "", /Yes/);
-  assert.match(localFloAnswer("Can I move $50 from Entertainment to Food?", facts, days) ?? "", /still leave Food \$10\.00 over plan/);
-  assert.match(localFloAnswer("Can I move $500 from Entertainment to Food?", facts, days) ?? "", /only has \$150\.00 left/);
+  assert.match(localFloAnswer("Can I move $50 from Entertainment to Food?", facts, days) ?? "", /Food would still need \$10\.00 more room/);
+  assert.match(localFloAnswer("Can I move $500 from Entertainment to Food?", facts, days) ?? "", /Entertainment has \$150\.00 available/);
   assert.match(localFloAnswer("Can I move $100 from Entertainment to Debt?", facts, days) ?? "", /reserved for debt payoff/);
 
   const move = evaluateFloCategoryMove("Can I move $60 from Entertainment to Food?", facts);
@@ -410,7 +410,7 @@ test("Flo does not recommend partial moves that leave the target category negati
 
   const move = evaluateFloCategoryMove("Can I move $291 from Insurance to Other?", partialFacts);
   assert.equal(move?.allowed, false);
-  assert.match(move?.reason ?? "", /still leave Other \$377\.62 over plan/);
+  assert.match(move?.reason ?? "", /Other would still need \$377\.62 more room/);
   assert.equal(buildFloCategoryQuickPrompts(partialFacts.categoryPlan ?? []).includes("Can I move $669 from Insurance to Other?"), false);
 });
 
@@ -425,7 +425,7 @@ test("Flo creates deterministic response cards for supported finance questions",
 
   const categoryCards = floResponseCards("Why is Food over?", facts, days);
   assert.equal(categoryCards[0]?.title, "Category Status");
-  assert.equal(categoryCards[0]?.value, "OVER");
+  assert.equal(categoryCards[0]?.value, "BUILD ROOM");
 
   const categoryMoveCards = floResponseCards("Can I move $100 from Entertainment to Debt?", facts, days);
   assert.equal(categoryMoveCards[0]?.title, "Budget Move");

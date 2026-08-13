@@ -304,7 +304,7 @@ function GuideSection({ id, c, facts, currentStageIndex }: { id: (typeof FLOW_GU
       {facts ? <View style={styles.metricGrid}><Metric c={c} label="Safe to payday" value={facts.safeUntilPayday === true ? `Yes - ${facts.nextPaycheckLabel ?? "next payday"}` : facts.safeUntilPayday === false ? "Not yet" : "Needs pay date"} /><Metric c={c} label="Protected Days" value={`${facts.protectedDays} days`} /><Metric c={c} label="Forecast confidence" value={facts.confidence} /></View> : <AppText style={[styles.bodyText, { color: c.mutedForeground }]}>Add Must Pay bills, income, and current balances to see where you stand without guessing.</AppText>}
     </InfoCard>
     <SectionTitle c={c} title="One plan, one forecast" description="The same balances, bills, income, and plan shape every view." />
-    <InfoCard c={c} title="How FlowLedger builds your guidance" icon="layers"><Bullet c={c} text="Posted bank activity and your saved plan feed one forecast." /><Bullet c={c} text="The lowest upcoming checking balance shows how much breathing room is protected." /><Bullet c={c} text="Guidance protects Must Pay bills and your safety floor first." /></InfoCard>
+    <InfoCard c={c} title="How FlowLedger builds your guidance" icon="layers"><Bullet c={c} text="Posted bank activity and your saved plan feed one forecast." /><Bullet c={c} text="The tightest upcoming forecast point shows how much breathing room is protected." /><Bullet c={c} text="Guidance protects Must Pay bills and your safety floor first." /></InfoCard>
   </>;
 
   if (id === "flow-score") return <>
@@ -318,7 +318,7 @@ function GuideSection({ id, c, facts, currentStageIndex }: { id: (typeof FLOW_GU
     <SectionTitle c={c} title="How the calculation works" description={facts ? "These values come directly from your active forecast." : "Your live amounts appear after your plan and forecast are ready."} />
     <InfoCard c={c}>
       {facts ? <>
-        <Calculation c={c} label="Lowest upcoming checking balance" value={currency(facts.lowestBalance)} />
+        <Calculation c={c} label="Tightest upcoming forecast point" value={currency(facts.lowestBalance)} />
         <Calculation c={c} label="Minus safety floor" value={`- ${currency(facts.safetyFloor)}`} />
         <Calculation c={c} label="Backup money" value={currency(facts.protectedAmount)} emphasized />
         <Calculation c={c} label="30 days of Must Pay expenses" value={currency(facts.reserveTarget)} />

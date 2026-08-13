@@ -839,7 +839,7 @@ export function DesktopDashboard() {
       } : null,
       snowballTarget: snowballTarget ? { name: snowballTarget.name, balance: snowballTarget.balance } : null,
       goal: nearlyCompleteGoal ? { name: nearlyCompleteGoal.name, current: nearlyCompleteGoal.current_amount, target: nearlyCompleteGoal.target_amount } : null,
-    });
+    }).filter(decision => decision.id !== "breathing-room-opportunity");
   }, [algorithmSuite.safeCushion, currentMonth, nearlyCompleteGoal, now, reviewCount, selectedYear, settings.safety_floor, snowballTarget, upcoming]);
   const available = algorithmSuite.safeCushion.amount;
   const progress = algorithmSuite.stability;
@@ -967,7 +967,7 @@ export function DesktopDashboard() {
           detail={
             algorithmSuite.safeCushion.status === "safe"
               ? "Safe above your protection floor"
-              : "Review the lowest projected balance"
+              : "Keep building breathing room"
           }
           accent="green"
           width={metricWidth}

@@ -82,8 +82,8 @@ export const STABILITY_PATH_GUIDE: readonly StabilityPathGuideStep[] = [
   {
     id: "stabilize",
     title: "Protect the plan",
-    range: "When a required bill is overdue or a forecast day falls below the safety floor",
-    description: "FlowLedger first identifies the bill, spending, or timing issue creating the shortfall.",
+    range: "When a required bill still needs to clear or a forecast day can use more breathing room",
+    description: "FlowLedger identifies the bill, spending, or timing change that can strengthen the plan.",
   },
   {
     id: "next_paycheck",
@@ -127,12 +127,12 @@ export const ALGORITHM_GUIDE: readonly AlgorithmGuideItem[] = [
   { id: "forecast", title: "Daily Forecast", description: "Projects checking money day by day from posted activity, planned income, bills, and spending." },
   { id: "stability", title: "Stability Path", description: "Checks safety through payday, then turns backup money into 7, 30, 60, 90, and 180 days of Must Pay protection." },
   { id: "flow-score", title: "Flow Score", description: "Summarizes cushion, bill readiness, forecast risk, spending pressure, and data confidence." },
-  { id: "breathing-room", title: "Breathing Room", description: "Shows money remaining above the safety floor at the lowest point in the forecast." },
-  { id: "bill-priority", title: "Bill Priority", description: "Ranks required bills by due date, payment status, and their effect on upcoming low-balance days." },
+  { id: "breathing-room", title: "Breathing Room", description: "Shows money remaining above the safety floor at the tightest point in the forecast." },
+  { id: "bill-priority", title: "Bill Priority", description: "Ranks required bills by due date, payment status, and their effect on the tightest cash-flow days." },
   { id: "spending-pace", title: "Spending Pace", description: "Estimates a safe daily and weekly pace only after bills and the safety floor remain protected." },
   { id: "next-dollar", title: "Next Dollar", description: "Suggests whether safe extra money should remain available or go toward bills, savings, or debt." },
   { id: "debt-payoff", title: "Debt Payoff", description: "Models minimum payments and snowball or avalanche progress without spending protected money." },
-  { id: "risk-alerts", title: "Risk Alerts", description: "Calls attention to low-balance days, unusual bill pressure, and changes that need review." },
+  { id: "risk-alerts", title: "Plan Opportunities", description: "Highlights dates where bill timing or a small adjustment can create more breathing room." },
 ] as const;
 
 export const FLOWLEDGER_MONEY_RULES = [

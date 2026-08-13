@@ -485,7 +485,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
                   <Text style={[styles.infoText, { color: c.primary }]}>
                     {settings.paymentMethod === "avalanche"
                       ? "Avalanche priority: highest APR = #1."
-                      : "Snowball priority: lowest balance = #1."}
+                      : "Snowball priority: smallest debt balance = #1."}
                   </Text>
                 </View>}
               </>

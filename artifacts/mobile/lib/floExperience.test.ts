@@ -5,7 +5,7 @@ import { collectFloHistoryPages, floConversationForRequest, floEphemeralCleanupE
 
 test("searchFloHistory matches titles and summaries without changing order", () => {
   const rows = [
-    { id: "1", title: "August forecast", summary: "Lowest balance", updatedAt: "2026-08-12" },
+    { id: "1", title: "August forecast", summary: "Tightest forecast point", updatedAt: "2026-08-12" },
     { id: "2", title: "Debt plan", summary: "Camera payoff", updatedAt: "2026-08-11" },
   ];
   assert.deepEqual(searchFloHistory(rows, "camera"), [rows[1]]);

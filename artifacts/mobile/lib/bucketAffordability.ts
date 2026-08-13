@@ -39,7 +39,7 @@ export function buildBucketAffordabilitySummary(
   }
 
   return {
-    title: "This is not safe yet.",
+    title: "Let’s adjust this plan.",
     message: `I checked ${bucketName}. To protect your safety floor, lower the amount, move the date, or free up ${money(result.shortfall)} first.`,
     statusLabel: "More room needed",
     statusValue: money(result.shortfall),

@@ -37,7 +37,7 @@ export const APP_COMMANDS: readonly UniversalSearchResult[] = [
   { id: "open-calendar", kind: "Command", title: "Open Calendar", subtitle: "View your monthly forecast", icon: "calendar", route: "/(tabs)/monthly" },
   { id: "open-activity", kind: "Command", title: "Search Activity", subtitle: "Browse posted transaction history", icon: "repeat", route: "/(tabs)/transactions" },
   { id: "open-reports", kind: "Command", title: "Open Reports", subtitle: "View reports and insights", icon: "bar-chart-2", route: "/(tabs)/reports" },
-  { id: "open-review", kind: "Command", title: "Open Review Center", subtitle: "Resolve activity that needs attention", icon: "check-square", route: "/(tabs)/review" },
+  { id: "open-review", kind: "Command", title: "Open Review Center", subtitle: "Confirm activity and keep the plan current", icon: "check-square", route: "/(tabs)/review" },
   { id: "open-snowball", kind: "Command", title: "Open Debt Payoff Planner", subtitle: "Preview your payoff order and safe extra payments", icon: "trending-down", route: "/snowball-plan", keywords: "debt snowball payoff avalanche planner" },
   { id: "open-settings", kind: "Command", title: "Open Settings", subtitle: "Manage your app and account", icon: "settings", route: "/(tabs)/more" },
 ] as const;

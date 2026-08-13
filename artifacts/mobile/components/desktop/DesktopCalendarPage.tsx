@@ -338,7 +338,7 @@ function DesktopMonthGrid({
               {isLowest ? (
                 <View style={[styles.lowestCellBadge, isRisk && styles.riskCellBadge]}>
                   <Text style={[styles.lowestCellLabel, isRisk && styles.riskCellLabel]}>
-                    {isRisk ? "Risk · Lowest balance" : "Lowest balance"}
+                    {isRisk ? "Build room · Tightest point" : "Tightest forecast point"}
                   </Text>
                   <Text style={[styles.lowestCellValue, isRisk && styles.riskCellValue]}>{money(lowestBalance)}</Text>
                 </View>
@@ -540,7 +540,7 @@ export function DesktopCalendarPage(props: DesktopCalendarPageProps) {
               <SummaryMetricCard label="Net Flow" value={money(summary.net, true)} detail="Income - Expenses" icon="trending-up" tone="purple" />
             </View>
             <View style={[styles.metricItem, compact && styles.metricItemCompact]}>
-              <SummaryMetricCard label="Lowest Balance" value={money(summary.lowestBalance)} detail={shortDate(summary.lowestBalanceDate)} icon="shield" tone="blue" />
+              <SummaryMetricCard label="Tightest Forecast Point" value={money(summary.lowestBalance)} detail={shortDate(summary.lowestBalanceDate)} icon="shield" tone="blue" />
             </View>
           </View>
           <View style={styles.mainRow}>

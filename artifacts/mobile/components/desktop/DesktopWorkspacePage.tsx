@@ -314,7 +314,7 @@ function CalendarPage({ onOpenPlanner }: { onOpenPlanner: () => void }) {
       <View style={styles.statGrid}>
         <Stat label="Monthly income" value={currency(monthlyIncome)} detail="Scheduled inflows" icon="trending-up" tone="green" />
         <Stat label="Planned bills" value={currency(plannedBills)} detail={`${bills.length} commitments`} icon="calendar" tone="purple" />
-        <Stat label="Lowest balance" value={currency(lowest)} detail="Forecast low point" icon="trending-down" tone={lowest >= 0 ? "blue" : "amber"} />
+        <Stat label="Tightest forecast point" value={currency(lowest)} detail="Use this to build more room" icon="trending-up" tone={lowest >= 0 ? "blue" : "amber"} />
         <Stat label="Forecast days" value={String(balances.length)} detail="Shared with the PWA forecast" icon="activity" tone="blue" />
       </View>
       <Panel title="Upcoming balance path" subtitle="The next forecasted days and the events that change them" aside={<StatusPill label="Live forecast" tone="green" />}>

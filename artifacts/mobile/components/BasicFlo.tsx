@@ -23,7 +23,7 @@ interface BasicPrompt {
 const BASIC_PROMPTS: readonly BasicPrompt[] = [
   { id: "snapshot", title: "Money snapshot", prompt: "Give me my money snapshot", icon: "activity", route: "/(tabs)" },
   { id: "bills", title: "Bills due next", prompt: "Which bills are due next?", icon: "calendar", route: "/(tabs)/bills" },
-  { id: "low", title: "Why balance gets low", prompt: "Why is my balance getting low?", icon: "trending-down", route: "/(tabs)/monthly" },
+  { id: "low", title: "Build more breathing room", prompt: "How can I build more breathing room in my plan?", icon: "trending-up", route: "/(tabs)/monthly" },
   { id: "remaining", title: "Money left this month", prompt: "How much money is left this month?", icon: "dollar-sign", route: "/(tabs)/monthly" },
   { id: "categories", title: "Categories needing attention", prompt: "Which categories need attention?", icon: "pie-chart", route: "/(tabs)/category-budget" },
   { id: "debt", title: "Debt balance snapshot", prompt: "Show my debt balance snapshot", icon: "credit-card", route: "/(tabs)/bills" },

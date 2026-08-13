@@ -2,7 +2,7 @@ export const ALGORITHM_CATALOG = [
   { id: "flowScore", name: "Flow Score", icon: "activity", desc: "A 0–100 view of protected days, required bills, reserve progress, and forecast confidence." },
   { id: "safeCushion", name: "Breathing Room", icon: "shield", desc: "Money left after your upcoming plan and safety floor stay protected." },
   { id: "purchaseDecision", name: "Purchase Check", icon: "shopping-bag", desc: "Tests an amount and date before you commit to spending." },
-  { id: "billPriority", name: "Next Bill", icon: "file-text", desc: "Shows which required bill needs attention first and why." },
+  { id: "billPriority", name: "Next Bill", icon: "file-text", desc: "Shows which required bill to handle first and why." },
 
   { id: "paydaySplit", name: "Paycheck Plan", icon: "git-branch", desc: "Protects bills and minimum payments before assigning flexible spending." },
   { id: "cashFlowGap", name: "Lowest-Balance Stretch", icon: "clock", desc: "Finds the upcoming days where timing puts the most pressure on your plan." },

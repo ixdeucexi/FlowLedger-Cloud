@@ -68,7 +68,7 @@ const GUIDE_SLIDES: readonly GuideSlide[] = [
           },
           {
             title: "Today's Decisions",
-            body: "Handle only what needs attention.",
+            body: "Handle one useful next step at a time.",
             icon: "sun",
           },
           {
@@ -387,7 +387,7 @@ const GUIDE_SLIDES: readonly GuideSlide[] = [
           },
           {
             title: "Dismiss finished work",
-            body: "Remove a reminder when it no longer needs attention.",
+            body: "Remove a reminder when it is complete.",
             icon: "x",
           },
           {

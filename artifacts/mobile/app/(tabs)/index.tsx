@@ -399,7 +399,7 @@ function MobileDashboardScreen() {
     };
   }, [getDailyBalances, currentMonth, selectedYear, isFocused, settings.forecast_horizon_months]);
 
-  // First month (across all 12) that goes negative
+  // First month (across all 12) that needs added breathing room
   const firstYearNegEntry = yearNegSchedule.find(e => e.firstNegDay !== null) ?? null;
 
   const categoryBudgetKey = useMemo(
@@ -888,7 +888,7 @@ function MobileDashboardScreen() {
         current: mobileGoalNearCompletion.current_amount,
         target: mobileGoalNearCompletion.target_amount,
       } : null,
-    }).filter(decision => decision.id !== "low-balance-risk");
+    }).filter(decision => decision.id !== "breathing-room-opportunity");
   }, [algorithmSuite.billPriority.nextBill, algorithmSuite.safeCushion, bills, currentMonth, getRemainingDebtPlanForMonth, mobileGoalNearCompletion, mobileSnowballTarget, now, reviewCenterCount, selectedYear, settings.safety_floor, today]);
   return (
     <ScrollView
@@ -1363,21 +1363,21 @@ function MobileDashboardScreen() {
       {/* Row 2: Debt — full width */}
 
 
-      {/* ── Negative date warning (tappable → 12-month outlook) ── */}
+      {/* ── Breathing-room opportunity (tappable → 12-month outlook) ── */}
       {isCommandWide && firstYearNegEntry && (
         <Pressable
           onPress={() => setNegCalendarVisible(true)}
-          style={({ pressed }) => [styles.negWarning, { backgroundColor: c.destructive + "18", borderRadius: colors.radius, opacity: pressed ? 0.8 : 1 }]}
+          style={({ pressed }) => [styles.negWarning, { backgroundColor: c.primary + "18", borderRadius: colors.radius, opacity: pressed ? 0.8 : 1 }]}
         >
-          <Feather name="alert-triangle" size={15} color={c.destructive} />
-          <Text style={[styles.negWarningText, { color: c.destructive }]}>
-            Your balance goes negative on{" "}
+          <Feather name="trending-up" size={15} color={c.primary} />
+          <Text style={[styles.negWarningText, { color: c.primary }]}>
+            Build more breathing room by{" "}
             <Text style={{ fontFamily: "Inter_700Bold" }}>
               {formatMonthDay(firstYearNegEntry.month, firstYearNegEntry.year, firstYearNegEntry.firstNegDay)}
             </Text>
             {" "}— tap to see full outlook
           </Text>
-          <Feather name="chevron-right" size={14} color={c.destructive} />
+          <Feather name="chevron-right" size={14} color={c.primary} />
         </Pressable>
       )}
 
@@ -1408,14 +1408,14 @@ function MobileDashboardScreen() {
 
             <View style={styles.flowScoreColumns}>
               <View style={[styles.flowScoreColumn, { backgroundColor: c.muted }]}>
-                <Text style={[styles.flowScoreColumnTitle, { color: c.success }]}>Working</Text>
+                <Text style={[styles.flowScoreColumnTitle, { color: c.success }]}>Your progress</Text>
                 {(algorithmSuite.flowScore.positiveFactors.length ? algorithmSuite.flowScore.positiveFactors : ["Your plan has enough data to create a Flow Score."]).slice(0, 3).map(item => (
                   <Text key={item} style={[styles.flowScoreFactor, { color: c.foreground }]}>- {item}</Text>
                 ))}
               </View>
               <View style={[styles.flowScoreColumn, { backgroundColor: c.muted }]}>
-                <Text style={[styles.flowScoreColumnTitle, { color: c.warning }]}>Needs attention</Text>
-                {(algorithmSuite.flowScore.negativeFactors.length ? algorithmSuite.flowScore.negativeFactors : ["No major pressure points are showing right now."]).slice(0, 3).map(item => (
+                <Text style={[styles.flowScoreColumnTitle, { color: c.primary }]}>Next opportunities</Text>
+                {(algorithmSuite.flowScore.negativeFactors.length ? algorithmSuite.flowScore.negativeFactors : ["Your plan is ready for the next step."]).slice(0, 3).map(item => (
                   <Text key={item} style={[styles.flowScoreFactor, { color: c.foreground }]}>- {item}</Text>
                 ))}
               </View>
@@ -1848,18 +1848,18 @@ function MobileDashboardScreen() {
           <Pressable style={[styles.negSheet, { backgroundColor: c.card }]} onPress={() => {}}>
             {/* Handle */}
             <View style={[styles.negSheetHandle, { backgroundColor: c.border }]} />
-              <Text style={[styles.negSheetTitle, { color: c.foreground }]}>{settings.forecast_horizon_months}-Month Balance Outlook</Text>
+              <Text style={[styles.negSheetTitle, { color: c.foreground }]}>{settings.forecast_horizon_months}-Month Breathing Room Outlook</Text>
             <Text style={[styles.negSheetSub, { color: c.mutedForeground }]}>
-              Projected first negative date each month
+              See where small changes can strengthen each month
             </Text>
 
             <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
               {yearNegSchedule.map(entry => {
                 const isNeg = entry.firstNegDay !== null;
                 const isLow = !isNeg && entry.lowestBalance < settings.safety_floor;
-                const iconName = isNeg ? "x-circle" as const : isLow ? "alert-circle" as const : "check-circle" as const;
-                const iconColor = isNeg ? c.destructive : isLow ? "#f0b429" : c.success;
-                const bgColor  = isNeg ? c.destructive + "12" : isLow ? "#f0b42912" : c.success + "0a";
+                const iconName = isNeg ? "trending-up" as const : isLow ? "target" as const : "check-circle" as const;
+                const iconColor = isNeg ? c.primary : isLow ? "#f0b429" : c.success;
+                const bgColor  = isNeg ? c.primary + "12" : isLow ? "#f0b42912" : c.success + "0a";
                 return (
                   <View
                     key={`${entry.year}-${entry.month}`}
@@ -1872,22 +1872,22 @@ function MobileDashboardScreen() {
                     <Feather name={iconName} size={20} color={iconColor} />
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.negSheetRowMonth, { color: c.foreground }]}>{entry.label}</Text>
-                      <Text style={[styles.negSheetRowDetail, { color: isNeg ? c.destructive : isLow ? "#f0b429" : c.mutedForeground }]}>
+                      <Text style={[styles.negSheetRowDetail, { color: isNeg ? c.primary : isLow ? "#f0b429" : c.mutedForeground }]}>
                         {isNeg
-                          ? `Goes negative on ${formatMonthDay(entry.month, entry.year, entry.firstNegDay)}`
+                          ? `Build more room by ${formatMonthDay(entry.month, entry.year, entry.firstNegDay)}`
                           : isLow
-                          ? `Low — floor $${entry.lowestBalance.toFixed(0)}`
-                          : `Safe — floor $${entry.lowestBalance.toFixed(0)}`}
+                          ? `Growing cushion · $${entry.lowestBalance.toFixed(0)}`
+                          : `Protected · $${entry.lowestBalance.toFixed(0)}`}
                       </Text>
                     </View>
                     {isNeg && (
-                      <View style={[styles.negSheetBadge, { backgroundColor: c.destructive }]}>
-                        <Text style={styles.negSheetBadgeText}>NEG</Text>
+                      <View style={[styles.negSheetBadge, { backgroundColor: c.primary }]}>
+                        <Text style={styles.negSheetBadgeText}>BUILD</Text>
                       </View>
                     )}
                     {isLow && !isNeg && (
                       <View style={[styles.negSheetBadge, { backgroundColor: "#f0b429" }]}>
-                        <Text style={styles.negSheetBadgeText}>LOW</Text>
+                        <Text style={styles.negSheetBadgeText}>GROW</Text>
                       </View>
                     )}
                   </View>

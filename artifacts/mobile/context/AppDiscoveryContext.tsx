@@ -306,7 +306,7 @@ export function AppDiscoveryProvider({ children }: { children: React.ReactNode }
       .reduce<{ day: number; balance: number } | null>((current, day) => !current || day.balance < current.balance ? { day: day.day, balance: day.balance } : current, null);
     if (lowest && lowest.balance < settings.safety_floor) {
       const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(lowest.day).padStart(2, "0")}`;
-      result.push({ id: `forecast-low:${date}`, type: "forecast", title: "Low-balance forecast", body: `The current forecast falls ${currency(settings.safety_floor - lowest.balance)} below your safety floor on ${new Date(year, month, lowest.day).toLocaleDateString(undefined, { month: "short", day: "numeric" })}.`, timestamp: localNoonIso(year, month, lowest.day), route: "/(tabs)/monthly", params: { openDate: date }, tone: "risk" });
+      result.push({ id: `forecast-room:${date}`, type: "forecast", title: "Build more breathing room", body: `Adding ${currency(settings.safety_floor - lowest.balance)} of room by ${new Date(year, month, lowest.day).toLocaleDateString(undefined, { month: "short", day: "numeric" })} would protect your safety floor. Open Forecast to see your options.`, timestamp: localNoonIso(year, month, lowest.day), route: "/(tabs)/monthly", params: { openDate: date }, tone: "watch" });
     }
 
     goals.filter(goal => !goal.archived_at && goal.target_amount > 0 && goal.current_amount >= goal.target_amount).forEach(goal => {

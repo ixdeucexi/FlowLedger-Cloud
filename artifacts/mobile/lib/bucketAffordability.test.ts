@@ -28,7 +28,7 @@ test("explains how much room an unsafe spending bucket needs", () => {
   );
 
   assert.equal(summary.safe, false);
-  assert.equal(summary.title, "This is not safe yet.");
+  assert.equal(summary.title, "Let’s adjust this plan.");
   assert.equal(summary.statusValue, "$450");
   assert.match(summary.message, /free up \$450 first/);
 });

@@ -471,11 +471,11 @@ export function buildSmartReminders(input: {
     });
   if ((input.lowestBalance ?? input.safetyFloor) < input.safetyFloor) {
     reminders.push({
-      id: "low-balance",
+      id: "breathing-room",
       type: "low_balance",
-      title: "Low balance risk",
-      message: "I found a date that may drop below your safety floor.",
-      severity: "risk",
+      title: "Breathing room opportunity",
+      message: "I found a date where a small change can help protect your safety floor.",
+      severity: "watch",
     });
   }
   if (input.reviewCount > 0) {
@@ -509,7 +509,7 @@ export function buildSmartReminders(input: {
     reminders.push({
       id: `goal-${goal.goalId}`,
       type: "goal_behind",
-      title: "Goal needs attention",
+      title: "Goal ready for a check-in",
       message: goal.message,
       severity: goal.status === "unsafe" ? "risk" : "watch",
     });

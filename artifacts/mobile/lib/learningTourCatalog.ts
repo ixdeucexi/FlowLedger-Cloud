@@ -24,7 +24,7 @@ export const LEARNING_TOUR_STEPS: LearningTourStep[] = [
     title: "Forecast",
     focus: "See the plan by day",
     floSays: "I show your projected balance for each day.",
-    tryThis: "Tap a low-balance day to see why.",
+    tryThis: "Tap the tightest forecast day to see how you can build more room.",
   },
   {
     route: "bills",

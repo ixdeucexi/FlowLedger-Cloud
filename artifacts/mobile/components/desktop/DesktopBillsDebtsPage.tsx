@@ -948,7 +948,7 @@ function DebtsDesktop({
               sort === "snowball"
                 ? "Snowball order"
                 : sort === "balance"
-                  ? "Lowest balance"
+                  ? "Smallest debt balance"
                   : "Highest interest"
             }
             onPress={() =>

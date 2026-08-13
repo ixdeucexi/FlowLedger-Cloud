@@ -961,7 +961,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
                   ? variance.target.type === "goal" || variance.target.type === "decision"
                     ? `How should this purchase use ${variance.target.name}?`
                     : `Was ${money(variance.transaction.amount)} the full ${variance.target.type === "income" ? "deposit" : "payment"} for ${variance.target.name}?`
-                  : `${variance.target.name} was ${money(Math.abs(variance.transaction.amount) - variance.target.plannedAmount)} over plan`}
+                  : `${variance.target.name} was ${money(Math.abs(variance.transaction.amount) - variance.target.plannedAmount)} above the planned amount`}
               </Text>
               {variance.direction === "lower" && (variance.target.type === "goal" || variance.target.type === "decision") ? (
                 <Text style={[styles.modalDescription, { color: c.mutedForeground }]}>Keep the rest set aside or close the bucket.</Text>
@@ -969,7 +969,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
               <View style={[styles.amountBox, { backgroundColor: c.muted }]}>
                 <View style={styles.amountLine}><Text style={[styles.amountLabel, { color: c.mutedForeground }]}>{variance.target.type === "goal" || variance.target.type === "decision" ? "Bucket remaining" : "Plan amount"}</Text><Text style={[styles.amountValue, { color: c.foreground }]}>{money(variance.target.plannedAmount)}</Text></View>
                 <View style={styles.amountLine}><Text style={[styles.amountLabel, { color: c.mutedForeground }]}>{variance.target.type === "goal" || variance.target.type === "decision" ? "This purchase" : "Bank amount"}</Text><Text style={[styles.amountValue, { color: c.foreground }]}>{money(variance.transaction.amount)}</Text></View>
-                <View style={styles.amountLine}><Text style={[styles.amountLabel, { color: variance.direction === "higher" ? c.destructive : c.success }]}>{variance.direction === "higher" ? "Over plan" : variance.target.type === "goal" || variance.target.type === "decision" ? "Left in bucket" : "Money left"}</Text><Text style={[styles.amountValue, { color: variance.direction === "higher" ? c.destructive : c.success }]}>{money(Math.abs(Math.abs(variance.transaction.amount) - variance.target.plannedAmount))}</Text></View>
+                <View style={styles.amountLine}><Text style={[styles.amountLabel, { color: variance.direction === "higher" ? c.warning : c.success }]}>{variance.direction === "higher" ? "Above planned amount" : variance.target.type === "goal" || variance.target.type === "decision" ? "Left in bucket" : "Money left"}</Text><Text style={[styles.amountValue, { color: variance.direction === "higher" ? c.warning : c.success }]}>{money(Math.abs(Math.abs(variance.transaction.amount) - variance.target.plannedAmount))}</Text></View>
               </View>
 
               {variance.direction === "lower" ? variance.target.type === "goal" || variance.target.type === "decision" ? <>

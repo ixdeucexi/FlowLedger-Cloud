@@ -71,7 +71,7 @@ const STARTING_POINT_OPTIONS: {
 }[] = [
   { id: "first_budget", label: "This is my first budget", description: "Explain the essentials as we build the plan.", icon: "book-open" },
   { id: "switching_apps", label: "I'm switching apps", description: "Help me confirm what I already know.", icon: "refresh-cw" },
-  { id: "catching_up", label: "I need to catch up", description: "Put urgent bills and low-balance days first.", icon: "alert-circle" },
+  { id: "catching_up", label: "I need to catch up", description: "Protect urgent bills first and start building breathing room.", icon: "trending-up" },
   { id: "paycheck_to_paycheck", label: "I run out before payday", description: "Focus on reaching the next paycheck safely.", icon: "calendar" },
   { id: "building_room", label: "I want to get further ahead", description: "Build protected days and breathing room.", icon: "trending-up" },
 ];
@@ -483,7 +483,7 @@ function SetupWizard() {
           <NoneButton label="I don't have income" selected={hasSetupConfirmation(progress, "income_none")} onPress={() => void setConfirmation("income_none", !hasSetupConfirmation(progress, "income_none"))} />
         </View>
       </SectionCard>
-      <SectionCard title="Bills" subtitle="Add recurring obligations so Forecast can find low-balance dates.">
+      <SectionCard title="Bills" subtitle="Add recurring obligations so Forecast can show where to build more room.">
         {recurringBills.map(item => (
           <DataRow key={item.id} icon="file-text" title={item.name} detail={item.frequency} value={`$${Number(item.amount).toFixed(2)}`} action="Edit" onPress={() => { setEditBill(item); setBillModalVisible(true); }} />
         ))}

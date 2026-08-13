@@ -105,7 +105,7 @@ export function ZeroBudgetLabDashboard({
                 ? "Strong"
                 : score >= 65
                   ? "Stable"
-                  : "Needs attention"}
+                  : "Getting started"}
             </Text>
             <Text
               style={[styles.scoreDescription, { color: c.mutedForeground }]}

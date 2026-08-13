@@ -20,7 +20,7 @@ test("today decisions prioritize forecast risk and never exceed three items", ()
     snowballTarget: { name: "Card", balance: 900 },
   });
   assert.equal(decisions.length, 3);
-  assert.equal(decisions[0].id, "low-balance-risk");
+  assert.equal(decisions[0].id, "breathing-room-opportunity");
   assert.equal(decisions[1].id, "review-center");
   assert.equal(decisions[2].id, "bill-due");
 });

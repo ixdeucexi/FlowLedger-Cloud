@@ -15,7 +15,7 @@ export const BILL_IMPORTANCE_OPTIONS: readonly {
   {
     value: "flexible",
     label: "Flexible",
-    description: "You need it, but the date or amount can change when the balance is low.",
+    description: "You need it, and the date or amount can flex to help build more breathing room.",
     icon: "sliders",
   },
   {

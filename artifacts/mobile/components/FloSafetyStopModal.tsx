@@ -42,9 +42,9 @@ export function FloSafetyStopModal({ visible, warning, onKeepEditing, onSchedule
             </View>
           </View>
           <Text style={styles.eyebrow}>Flo safety stop</Text>
-          <Text style={[styles.title, { color: c.foreground }]}>This would go below your safety floor.</Text>
+          <Text style={[styles.title, { color: c.foreground }]}>Let&apos;s protect your safety floor.</Text>
           <Text style={[styles.message, { color: c.mutedForeground }]}>
-            I’m stopping here because scheduling {warning.itemName} for {formatDate(warning.scheduledDate)} would drop your forecast to {formatMoney(warning.lowestBalance)} on {formatDate(warning.lowestBalanceDate)}. Your safety floor is {formatMoney(warning.safetyFloor)}.
+            Scheduling {warning.itemName} for {formatDate(warning.scheduledDate)} would leave {formatMoney(warning.lowestBalance)} on {formatDate(warning.lowestBalanceDate)}. Add {formatMoney(warning.shortfall)} more breathing room or choose a later date to keep your {formatMoney(warning.safetyFloor)} floor protected.
           </Text>
           <View style={[styles.breakdown, { backgroundColor: c.background, borderColor: c.border }]}>
             <View style={styles.row}>
@@ -52,11 +52,11 @@ export function FloSafetyStopModal({ visible, warning, onKeepEditing, onSchedule
               <Text style={[styles.rowValue, { color: c.foreground }]}>{formatMoney(warning.safetyFloor)}</Text>
             </View>
             <View style={styles.row}>
-              <Text style={[styles.rowLabel, { color: c.mutedForeground }]}>Lowest forecast</Text>
+              <Text style={[styles.rowLabel, { color: c.mutedForeground }]}>Forecast on that date</Text>
               <Text style={[styles.rowValue, { color: "#fb7185" }]}>{formatMoney(warning.lowestBalance)}</Text>
             </View>
             <View style={styles.row}>
-              <Text style={[styles.rowLabel, { color: c.mutedForeground }]}>Short by</Text>
+              <Text style={[styles.rowLabel, { color: c.mutedForeground }]}>Room to add</Text>
               <Text style={[styles.rowValue, { color: "#fb7185" }]}>{formatMoney(warning.shortfall)}</Text>
             </View>
           </View>

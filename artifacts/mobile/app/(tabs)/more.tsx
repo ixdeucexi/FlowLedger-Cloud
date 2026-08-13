@@ -2241,7 +2241,7 @@ export default function MoreScreen({
                   ]}
                 >
                   Once these are done, ask Flo things like “Can I afford $500?”
-                  or “Why is next week a low-balance week?” and she&apos;ll use
+                  or “How can I build more breathing room next week?” and she&apos;ll use
                   your real setup.
                 </Text>
               </View>

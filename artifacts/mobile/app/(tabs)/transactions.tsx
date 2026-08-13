@@ -2705,7 +2705,7 @@ export function ActivityScreen() {
                 { color: activitySummary.net >= 0 ? c.success : c.destructive },
               ]}
             >
-              {activitySummary.net >= 0 ? "Positive" : "Negative"}
+              {activitySummary.net >= 0 ? "Ahead" : "Building"}
             </Text>
           </View>
         </View>

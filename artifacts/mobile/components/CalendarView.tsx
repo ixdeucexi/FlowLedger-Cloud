@@ -262,7 +262,7 @@ export function CalendarView({
             kind: goal.goal_type === "planned_expense" ? "plan" : "goal",
           }));
           if (decisionAmount > 0) chips.push({ label: `Plan $${fmt(decisionAmount)}`, kind: "plan" });
-          if (isLowRiskDay) chips.push({ label: db && db.balance < 0 ? "Negative" : "Low balance", kind: "risk" });
+          if (isLowRiskDay) chips.push({ label: "Build cushion", kind: "risk" });
 
           const visibleChips = chips.slice(0, 3);
           const hiddenCount = chips.length - visibleChips.length;

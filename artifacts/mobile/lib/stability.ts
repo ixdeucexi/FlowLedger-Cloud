@@ -125,7 +125,7 @@ export function buildStabilityProgress(input: StabilityProgressInput): Stability
       stageLabel: "Protect the plan",
       status: "risk",
       headline: riskDays > 0
-        ? `${riskDays} upcoming day${riskDays === 1 ? " falls" : "s fall"} below your safety floor.`
+        ? `${riskDays} upcoming day${riskDays === 1 ? " is" : "s are"} ready for more breathing room.`
         : attentionBill
           ? recurringAttention
             ? (attentionBill.overdueOccurrenceCount ?? 0) === 1
@@ -139,7 +139,7 @@ export function buildStabilityProgress(input: StabilityProgressInput): Stability
             ? `This only counts the ${recurringLabel} payment due ${attentionBill.dueLabel}. Future payments stay on their own dates.`
             : `This only counts ${attentionBill.overdueOccurrenceCount} ${recurringLabel} payments whose dates have passed. Future payments stay on their own dates.`
           : `${attentionBill.dueLabel} has passed and this amount is still open. Clear it or correct the payment if it already posted.`
-        : "Fix the shortfall before building backup days.",
+        : "Build the needed breathing room, then keep growing your backup days.",
       nextAction: input.overdueBills > 0
         ? attentionBill ? `Review ${attentionBill.name} first.` : "Handle the most urgent Must Pay bill first."
         : "Review what is pulling the forecast below your floor.",

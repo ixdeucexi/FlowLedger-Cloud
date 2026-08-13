@@ -160,6 +160,7 @@
     ,"lib/floExperience.test.ts"
     ,"lib/floLauncherVisibility.ts"
     ,"lib/floLauncherVisibility.test.ts"
+    ,"lib/encouragingLanguage.test.ts"
     ,"lib/userGuide.ts"
     ,"lib/userGuide.test.ts"
   ]

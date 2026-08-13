@@ -71,7 +71,7 @@ const sampleQuestions = [
   "Ask Flo anything…",
   "Which bills are due next?",
   "Which records did you use?",
-  "What account data needs attention?",
+  "What account data can I improve?",
   "How do I add income?",
 ];
 
@@ -611,7 +611,7 @@ export default function FloScreen() {
           date: alert.date,
           plannedAmount: alert.plannedAmount,
           status: "upcoming",
-          varianceLabel: `$${alert.shortfall.toFixed(2)} below floor`,
+          varianceLabel: `$${alert.shortfall.toFixed(2)} more room to add`,
         })),
       },
     };
@@ -625,7 +625,7 @@ export default function FloScreen() {
 
   const quickPrompts = useMemo(() => {
     const categoryPrompts = buildFloCategoryQuickPrompts(categoryPlan);
-    const planningPrompts = ["Which bills are due next?", "What account data needs attention?"];
+    const planningPrompts = ["Which bills are due next?", "What account data can I improve?"];
     return Array.from(new Set([
       ...(hasSetupAnswers ? setupPersonalization.quickPrompts : []),
       ...(decisionHistory.due.length ? ["Which decisions need review?"] : []),

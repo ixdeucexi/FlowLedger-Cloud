@@ -115,7 +115,7 @@ export function NotificationCenterModal({ visible, notifications, readIds, onOpe
             {notifications.length === 0 ? (
               <View style={styles.empty}>
                 <View style={[styles.emptyIcon, { backgroundColor: c.success + "16" }]}><Feather name="check-circle" size={26} color={c.success} /></View>
-                <Text style={[styles.emptyTitle, { color: c.foreground }]}>Nothing needs attention</Text>
+                <Text style={[styles.emptyTitle, { color: c.foreground }]}>You&apos;re all caught up</Text>
                 <Text style={[styles.emptyBody, { color: c.mutedForeground }]}>New bill reminders, forecast warnings, milestones, and Review Center items will appear here.</Text>
               </View>
             ) : null}

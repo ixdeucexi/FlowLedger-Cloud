@@ -86,7 +86,7 @@ export function buildSetupPersonalization(preferences: OnboardingPreferences): S
         quickPrompts: [
           "Where am I spending the most?",
           "What can I spend until payday?",
-          "Which category needs attention?",
+          "Which category can I strengthen next?",
         ],
         recommendedAlgorithms: ["spendingLimit", "purchaseDecision", "safeCushion", "flowScore"],
       };
@@ -132,7 +132,7 @@ export function buildSetupPersonalization(preferences: OnboardingPreferences): S
         quickPrompts: [
           "Walk me through the next setup step.",
           "Can I afford $500?",
-          "Why is my balance getting low?",
+          "How can I build more breathing room?",
         ],
         recommendedAlgorithms: ["flowScore", "safeCushion", "purchaseDecision", "billPriority"],
       };
