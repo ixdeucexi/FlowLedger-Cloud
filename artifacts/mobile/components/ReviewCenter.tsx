@@ -11,6 +11,7 @@ import { UnplannedChargeModal } from "@/components/UnplannedChargeModal";
 import type { Bill, Goal, ReconcileTransactionInput, Transaction } from "@/context/BudgetContext";
 import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
+import { manualActivityMatchCandidates } from "@/lib/billMatching";
 import { confirmAction } from "@/lib/confirmAction";
 import { applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupReviewTargets, incomeReviewTargets, matchedOccurrenceAllocations, occurrenceKey, prioritizeReviewTransaction, rankReviewTargets, reviewQueueAfterSkips, scheduledSnowballReviewTargets, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
 import { prioritizePendingPlanTarget } from "@/lib/pendingPlanMatches";
@@ -171,6 +172,16 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
         snowballTargets.set(occurrenceKey(target.id, target.occurrenceDate), target);
       });
       candidates.push(...snowballTargets.values());
+      manualActivityMatchCandidates(transactions, current.date, current.id)
+        .forEach(target => candidates.push({
+          type: "manual",
+          id: target.billId,
+          name: target.name,
+          category: target.category,
+          plannedAmount: target.plannedAmount,
+          occurrenceDate: target.occurrenceDates[0],
+          isDebt: Boolean(transactions.find(transaction => transaction.id === target.billId)?.debt_applied_bill_id),
+        }));
       goals.filter(goal => goal.goal_type === "planned_expense" && isOpenSpendingBucket(goal) && goal.target_date?.startsWith(`${year}-${String(month + 1).padStart(2, "0")}`))
         .forEach(goal => candidates.push({
           type: "goal", id: goal.id, name: goal.name, category: "Planned spending",
@@ -397,7 +408,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
       transactionId: current.id,
       resolution: target.type,
       targetId: target.id,
-      occurrenceDate: target.occurrenceDate,
+      occurrenceDate: target.type === "manual" ? current.date : target.occurrenceDate,
       plannedAmount: target.plannedAmount,
       settlement,
       extraCategory,
@@ -539,12 +550,12 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
   const renderTarget = (target: RankedReviewTarget, index: number) => current ? (
     <Pressable accessibilityRole="button" accessibilityLabel={`Match ${transactionName(current)} to ${target.name}`} key={`${target.type}-${target.id}-${target.occurrenceDate}`} disabled={saving} onPress={() => chooseTarget(target)} style={({ pressed }) => [styles.targetRow, { backgroundColor: c.muted, borderColor: index === 0 && target.score >= 48 ? c.success + "66" : c.border, opacity: saving ? 0.55 : pressed ? 0.8 : 1 }]}>
       <View style={[styles.targetIcon, { backgroundColor: (target.type === "income" ? c.success : target.isDebt ? c.warning : c.primary) + "18" }]}>
-        <Feather name={target.type === "income" ? "trending-up" : target.type === "bill" ? "file-text" : target.type === "snowball" ? "target" : "shopping-bag"} size={17} color={target.type === "income" ? c.success : target.isDebt ? c.warning : c.primary} />
+        <Feather name={target.type === "income" ? "trending-up" : target.type === "bill" ? "file-text" : target.type === "snowball" ? "target" : target.type === "manual" ? "edit-3" : "shopping-bag"} size={17} color={target.type === "income" ? c.success : target.isDebt ? c.warning : c.primary} />
       </View>
       <View style={{ flex: 1 }}>
         <View style={styles.targetHeading}><Text style={[styles.targetName, { color: c.foreground }]} numberOfLines={2}>{target.name}</Text>{index === 0 && target.score >= 48 ? <Text style={[styles.suggested, { color: c.success }]}>SUGGESTED</Text> : null}</View>
         <Text style={[styles.targetMeta, { color: c.mutedForeground }]}>
-          {target.type === "income" ? "Expected income" : target.type === "bill" ? "Bill" : target.type === "snowball" ? "Snowball plan" : "Set-aside bucket"}: {money(target.plannedAmount)} · {displayDate(target.occurrenceDate)}
+          {target.type === "income" ? "Expected income" : target.type === "bill" ? "Bill" : target.type === "snowball" ? "Snowball plan" : target.type === "manual" ? "Manual Activity" : "Set-aside bucket"}: {money(target.plannedAmount)} · {displayDate(target.occurrenceDate)}
         </Text>
         {target.reasons.length ? <Text style={[styles.targetReason, { color: c.success }]}>{target.reasons.slice(0, 2).join(" · ")}</Text> : null}
       </View>
@@ -814,6 +825,11 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
               <Text style={[styles.subsectionTitle, { color: c.foreground }]}>Bills and debt</Text>
               <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Choose the bill or debt this paid.</Text>
               {groupedTargets.bills.map(renderTarget)}
+            </> : null}
+            {groupedTargets.manual.length ? <>
+              <Text style={[styles.subsectionTitle, { color: c.foreground }]}>Manual Activity</Text>
+              <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>Replace the manual entry with this posted bank charge so it is counted once.</Text>
+              {groupedTargets.manual.map(renderTarget)}
             </> : null}
           </>}
 

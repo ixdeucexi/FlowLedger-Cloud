@@ -347,6 +347,7 @@ export default function BillsScreen() {
   const pendingByBill = useMemo(() => {
     const result = new Map<string, (typeof livePendingMatches)[number]>();
     livePendingMatches.forEach((match) => {
+      if (match.target_type !== "bill") return;
       if (!result.has(match.target_id)) result.set(match.target_id, match);
     });
     return result;

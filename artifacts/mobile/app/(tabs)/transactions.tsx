@@ -69,6 +69,7 @@ import {
   isCheckingBalanceTransaction,
   isConfirmedBillMatch,
   isMatchedPaymentLowerThanPlanned,
+  manualActivityMatchCandidates,
   rankBillMatches,
   resolveMatchedBillBudget,
 } from "@/lib/billMatching";
@@ -344,6 +345,7 @@ export function ActivityScreen() {
     matchTransactionToBill,
     unmatchTransactionFromBill,
     matchPendingTransactionToBill,
+    matchPendingTransactionToManual,
     removePendingPlanMatch,
     reconcileTransaction,
     undoTransactionReconciliation,
@@ -1333,33 +1335,11 @@ export function ActivityScreen() {
   const manualMatchOptions = useMemo(() => {
     if (!matchTx || matchTx.source !== "plaid" || matchTx.amount >= 0)
       return [];
-    const monthPrefix = matchTx.date.slice(0, 7);
-    const candidates = transactions
-      .filter(
-        (transaction) =>
-          transaction.id !== matchTx.id &&
-          transaction.source !== "plaid" &&
-          transaction.amount < 0 &&
-          transaction.date.startsWith(monthPrefix) &&
-          !transaction.pending &&
-          !transaction.removed_at &&
-          !transaction.deleted_at &&
-          !transaction.linked_bill_id &&
-          !transaction.debt_applied_bill_id &&
-          !transaction.linked_plan_id &&
-          transaction.review_status !== "matched" &&
-          transaction.category !== "Transfer",
-      )
-      .map((transaction) => ({
-        billId: transaction.id,
-        name:
-          transaction.note?.trim() ||
-          transaction.category ||
-          "Manual transaction",
-        category: transaction.category,
-        plannedAmount: Math.abs(transaction.amount),
-        occurrenceDates: [transaction.date],
-      }));
+    const candidates = manualActivityMatchCandidates(
+      transactions,
+      matchTx.date,
+      matchTx.id,
+    );
     return rankBillMatches(
       {
         date: matchTx.date,
@@ -1370,6 +1350,33 @@ export function ActivityScreen() {
       candidates,
     );
   }, [matchTx, transactions]);
+  const pendingManualMatchOptions = useMemo(() => {
+    if (!pendingMatchTx || pendingMatchTx.amount >= 0) return [];
+    return rankBillMatches(
+      {
+        date: pendingMatchTx.transaction_date,
+        amount: pendingMatchTx.amount,
+        description:
+          pendingMatchTx.merchant_name ||
+          pendingMatchTx.name ||
+          pendingMatchTx.category,
+        category: pendingMatchTx.category,
+      },
+      manualActivityMatchCandidates(
+        transactions,
+        pendingMatchTx.transaction_date,
+      ),
+    );
+  }, [pendingMatchTx, transactions]);
+  const pendingMatchOptions = useMemo(
+    () => [
+      ...pendingBillMatchOptions.map(option => ({ ...option, targetType: "bill" as const })),
+      ...pendingManualMatchOptions.map(option => ({ ...option, targetType: "manual" as const })),
+    ].sort((left, right) =>
+      right.score - left.score
+      || (left.daysApart ?? 999) - (right.daysApart ?? 999)),
+    [pendingBillMatchOptions, pendingManualMatchOptions],
+  );
   const bucketMatchOptions = useMemo(() => {
     if (!matchTx || matchTx.amount >= 0) return [];
     const candidates = goals
@@ -1564,6 +1571,34 @@ export function ActivityScreen() {
       Alert.alert(
         "Payment pending",
         `${option.name} will not show overdue while this bank charge is pending. Confirm it after it posts.`,
+      );
+    } catch (error) {
+      Alert.alert(
+        "Could not match pending payment",
+        error instanceof Error ? error.message : "Please try again.",
+      );
+    } finally {
+      setSavingMatch(false);
+    }
+  };
+
+  const handleMatchPendingManual = async (transactionId: string) => {
+    if (!pendingMatchTx || savingMatch) return;
+    const option = pendingManualMatchOptions.find(
+      item => item.billId === transactionId,
+    );
+    if (!option) return;
+    setSavingMatch(true);
+    try {
+      await matchPendingTransactionToManual(
+        pendingMatchTx.plaid_transaction_id,
+        transactionId,
+      );
+      setPendingMatchTx(null);
+      setDetailItem(null);
+      Alert.alert(
+        "Payment pending",
+        `${option.name} is linked to this pending charge. It will be replaced by the bank-backed Activity entry after the charge posts and you confirm it.`,
       );
     } catch (error) {
       Alert.alert(
@@ -2367,7 +2402,7 @@ export function ActivityScreen() {
                   {detailItem.source === "bill_payment"
                     ? "Edit this entry by adjusting the paid amount in Monthly view."
                     : detailItem.pending
-                      ? "This is a bank preview. A temporary bill match prevents a false overdue warning, but nothing is paid until it posts."
+                      ? "This is a bank preview. A temporary match can connect it to a bill or manual Activity entry, but the bank charge is not counted until it posts."
                       : detailItem.source === "income"
                         ? "Edit this entry by updating your income in More → Income Sources."
                         : "Edit this entry from the Bills → Debt tab."}
@@ -2377,13 +2412,13 @@ export function ActivityScreen() {
               {detailItem.pending && isExpense ? (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`Match pending ${detailItem.label} to a planned bill`}
+                  accessibilityLabel={`Match pending ${detailItem.label} to a bill or manual Activity entry`}
                   onPress={() => {
                     if (!detailItem.rawPending) return;
                     if (isFeatureLocked("transaction_matching")) {
                       Alert.alert(
                         "Pending matching is a Pro feature",
-                        "Upgrade to Pro to connect pending bank charges to planned bills.",
+                        "Upgrade to Pro to connect pending bank charges to bills or manual Activity.",
                       );
                       return;
                     }
@@ -2411,7 +2446,7 @@ export function ActivityScreen() {
                         { color: c.foreground },
                       ]}
                     >
-                      Match to a planned bill
+                      Match to bill or manual Activity
                     </Text>
                     <Text
                       style={[
@@ -2419,7 +2454,7 @@ export function ActivityScreen() {
                         { color: c.mutedForeground },
                       ]}
                     >
-                      Show Payment pending instead of overdue
+                      Avoid duplicate Activity and false overdue warnings
                     </Text>
                   </View>
                   <Feather
@@ -3144,8 +3179,9 @@ export function ActivityScreen() {
                         { color: c.mutedForeground },
                       ]}
                     >
-                      Not paid or counted yet. FlowLedger will ask you to
-                      confirm when it posts.
+                      {selectedPendingPlanMatch.target_type === "manual"
+                        ? "The manual entry stays in your plan until this posts. FlowLedger will then ask you to replace it with the bank-backed entry."
+                        : "Not paid or counted yet. FlowLedger will ask you to confirm when it posts."}
                     </Text>
                   </View>
                 </View>
@@ -3172,7 +3208,7 @@ export function ActivityScreen() {
             ) : (
               <>
                 <Text style={[styles.matchIntro, { color: c.mutedForeground }]}>
-                  Choose the bill this pending payment is expected to cover.
+                  Choose the bill or manual Activity entry this pending payment is expected to cover.
                 </Text>
                 <ScrollView
                   style={[
@@ -3181,16 +3217,16 @@ export function ActivityScreen() {
                   ]}
                   showsVerticalScrollIndicator={isDesktop}
                 >
-                  {pendingBillMatchOptions.length > 0 ? (
-                    pendingBillMatchOptions.map((option, index) => (
+                  {pendingMatchOptions.length > 0 ? (
+                    pendingMatchOptions.map((option, index) => (
                       <Pressable
-                        key={`${option.billId}-${option.nearestOccurrenceDate}`}
+                        key={`${option.targetType}-${option.billId}-${option.nearestOccurrenceDate}`}
                         accessibilityRole="button"
                         accessibilityLabel={`Temporarily match pending payment to ${option.name}`}
                         disabled={savingMatch}
-                        onPress={() =>
-                          void handleMatchPendingBill(option.billId)
-                        }
+                        onPress={() => void (option.targetType === "manual"
+                          ? handleMatchPendingManual(option.billId)
+                          : handleMatchPendingBill(option.billId))}
                         style={({ pressed }) => [
                           styles.matchRow,
                           {
@@ -3215,7 +3251,7 @@ export function ActivityScreen() {
                           ]}
                         >
                           <Feather
-                            name="file-text"
+                            name={option.targetType === "manual" ? "edit-3" : "file-text"}
                             size={17}
                             color={
                               index === 0 && option.score >= 48
@@ -3259,7 +3295,7 @@ export function ActivityScreen() {
                               { color: c.mutedForeground },
                             ]}
                           >
-                            Planned ${option.plannedAmount.toFixed(2)} ·{" "}
+                            {option.targetType === "manual" ? "Manual Activity" : "Planned bill"} · ${option.plannedAmount.toFixed(2)} ·{" "}
                             {option.daysApart === 0
                               ? "same day"
                               : option.daysApart === 1
@@ -3291,7 +3327,7 @@ export function ActivityScreen() {
                       <Text
                         style={[styles.matchRowTitle, { color: c.foreground }]}
                       >
-                        No bill found
+                        No planned or manual match found
                       </Text>
                       <Text
                         style={[
@@ -3299,7 +3335,7 @@ export function ActivityScreen() {
                           { color: c.mutedForeground },
                         ]}
                       >
-                        Add the bill first, then return to this pending charge.
+                        Add a bill or manual Activity entry first, then return to this pending charge.
                       </Text>
                     </View>
                   )}
@@ -3513,7 +3549,7 @@ export function ActivityScreen() {
                             ]}
                           >
                             {option.targetType === "manual"
-                              ? "Manual plan"
+                              ? "Manual Activity"
                               : option.targetType === "bucket"
                                 ? "Spending bucket"
                                 : "Bill"}{" "}

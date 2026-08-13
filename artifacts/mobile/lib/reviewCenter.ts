@@ -55,7 +55,7 @@ export interface ForgottenBillDefaults {
   frequency: "monthly";
 }
 
-export type ReviewTargetType = "bill" | "income" | "goal" | "decision" | "snowball";
+export type ReviewTargetType = "bill" | "income" | "goal" | "decision" | "snowball" | "manual";
 
 export interface ReviewTarget {
   type: ReviewTargetType;
@@ -236,6 +236,9 @@ function allocationMatchesTarget(allocation: ReviewAllocationLike, target: Revie
   if (target.type === "bill") return allocation.type === "bill";
   if (target.type === "income") return allocation.type === "income";
   if (target.type === "snowball") return allocation.type === "extra_principal";
+  if (target.type === "manual") {
+    return allocation.type === "planned_expense" && allocation.source === "transaction";
+  }
   if (target.type === "goal" || target.type === "decision") {
     return allocation.type === "planned_expense" && allocation.source === target.type;
   }
@@ -391,6 +394,7 @@ export function groupReviewTargets(targets: RankedReviewTarget[]) {
   return {
     setAside: targets.filter(target => target.type === "goal" || target.type === "decision"),
     bills: targets.filter(target => target.type === "bill" || target.type === "snowball"),
+    manual: targets.filter(target => target.type === "manual"),
     income: targets.filter(target => target.type === "income"),
   };
 }

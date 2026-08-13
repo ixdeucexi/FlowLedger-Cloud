@@ -32,6 +32,7 @@ Release FlowLedger as a signed iOS and Android app while keeping the existing PW
 - [x] Debt Payoff Planner extra-payment field stays within its card on phone layouts
 - [x] PWA resume restores the locally selected household without blocking plan load on a temporary preference-sync failure
 - [x] Forecast closes its selected-day modal before opening the planned debt-payment editor
+- [x] Pending and posted Plaid charges can match manual Activity entries, including debt-applied entries, without double-counting cash or applying debt twice
 - [x] In-app Terms of Service and Privacy Policy screens
 - [x] Financial calculation and regression test coverage
 - [x] Expo Doctor passes all 18 checks

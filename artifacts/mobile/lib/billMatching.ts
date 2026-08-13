@@ -13,6 +13,60 @@ export interface BillMatchCandidate {
   occurrenceDates: string[];
 }
 
+export interface ManualActivityMatchCandidate {
+  id: string;
+  date: string;
+  amount: number;
+  category: string;
+  note?: string | null;
+  source?: string | null;
+  import_hash?: string | null;
+  transfer_group_id?: string | null;
+  pending?: boolean | null;
+  removed_at?: string | null;
+  deleted_at?: string | null;
+  linked_bill_id?: string | null;
+  debt_applied_bill_id?: string | null;
+  debt_applied_amount?: number | null;
+  linked_plan_id?: string | null;
+  review_status?: string | null;
+}
+
+/**
+ * Manual Activity can be replaced by the matching posted Plaid row. A debt
+ * application is intentionally allowed: reconciliation transfers that audit
+ * link to the bank-backed row without applying the balance change twice.
+ */
+export function manualActivityMatchCandidates(
+  transactions: ManualActivityMatchCandidate[],
+  transactionDate: string,
+  excludedTransactionId?: string,
+): BillMatchCandidate[] {
+  const monthPrefix = transactionDate.slice(0, 7);
+  return transactions
+    .filter(transaction =>
+      transaction.id !== excludedTransactionId
+      && transaction.source !== "plaid"
+      && !transaction.import_hash
+      && !transaction.transfer_group_id
+      && transaction.amount < 0
+      && transaction.date.startsWith(monthPrefix)
+      && transaction.pending !== true
+      && !transaction.removed_at
+      && !transaction.deleted_at
+      && !transaction.linked_bill_id
+      && !transaction.linked_plan_id
+      && transaction.review_status !== "matched"
+      && transaction.category !== "Transfer")
+    .map(transaction => ({
+      billId: transaction.id,
+      name: transaction.note?.trim() || transaction.category || "Manual activity",
+      category: transaction.category,
+      plannedAmount: Math.abs(transaction.amount),
+      occurrenceDates: [transaction.date],
+    }));
+}
+
 export interface RankedBillMatch extends BillMatchCandidate {
   score: number;
   confidence: "strong" | "likely" | "possible";

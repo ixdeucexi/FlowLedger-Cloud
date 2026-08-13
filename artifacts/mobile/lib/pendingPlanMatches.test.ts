@@ -87,6 +87,14 @@ test("only matched debts become debt-plan commitments", () => {
   );
 });
 
+test("a pending manual Activity match never becomes a second debt-plan commitment", () => {
+  const pending = [{ plaid_transaction_id: "pending-1" }];
+  const manual = match({ target_type: "manual", target_id: "manual-57", target_name: "James shoes" });
+  assert.deepEqual(debtSourceCommitmentsFromPendingMatches([manual], pending, []), []);
+  assert.equal(livePendingPlanMatchForOccurrence([manual], pending, "manual-57", "2026-07-29"), undefined);
+  assert.deepEqual(unmatchedPendingTransactions([manual], pending), []);
+});
+
 test("a vanished pending charge stops suppressing overdue", () => {
   assert.deepEqual(activePendingPlanMatches([match()], []), []);
 });

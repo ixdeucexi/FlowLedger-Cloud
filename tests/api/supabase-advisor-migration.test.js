@@ -194,3 +194,32 @@ test("pending plan match updates preserve source identity and trusted lifecycle 
     /with check \([\s\S]*status in \('active', 'cancelled'\)[\s\S]*pt\.pending = true[\s\S]*pt\.removed_at is null/i,
   );
 });
+
+test("manual pending matches stay provisional and transfer debt metadata without reapplying it", async () => {
+  const migration = await readFile(
+    path.join(migrationsDir, "20260813173723_allow_manual_pending_activity_matches.sql"),
+    "utf8",
+  );
+
+  assert.match(migration, /check \(target_type in \('bill', 'manual'\)\)/i);
+  assert.match(
+    migration,
+    /target_type = 'manual'[\s\S]*manual\.source is distinct from 'plaid'[\s\S]*manual\.category is distinct from 'Transfer'/i,
+  );
+  assert.match(
+    migration,
+    /create or replace function private\.transfer_manual_activity_metadata\(\)[\s\S]*security definer[\s\S]*set search_path = ''/i,
+  );
+  assert.match(
+    migration,
+    /new\.debt_applied_amount := coalesce\(v_manual\.debt_applied_amount, 0\)[\s\S]*new\.debt_applied_bill_id := v_manual\.debt_applied_bill_id/i,
+  );
+  assert.doesNotMatch(
+    migration,
+    /set balance\s*=/i,
+  );
+  assert.match(
+    migration,
+    /old\.review_allocations->0->'restoreBankActivity'[\s\S]*new\.debt_applied_bill_id := nullif/i,
+  );
+});

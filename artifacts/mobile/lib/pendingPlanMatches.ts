@@ -6,7 +6,7 @@ export interface PendingPlanMatch {
   id: string;
   pending_plaid_transaction_id: string;
   pending_account_id?: string;
-  target_type: "bill";
+  target_type: "bill" | "manual";
   target_id: string;
   target_name: string;
   occurrence_date: string;
@@ -45,6 +45,7 @@ export function livePendingPlanMatchForOccurrence(
 ): PendingPlanMatch | undefined {
   const liveIds = new Set(pendingTransactions.map(transaction => transaction.plaid_transaction_id));
   return matches.find(match => match.status === "active"
+    && match.target_type === "bill"
     && liveIds.has(match.pending_plaid_transaction_id)
     && match.target_id === billId
     && match.occurrence_date === occurrenceDate);
@@ -61,6 +62,7 @@ export function debtSourceCommitmentsFromPendingMatches(
     ...(transaction.plaid_transaction_id ? [transaction.plaid_transaction_id] : []),
   ]));
   const candidates = matches.flatMap<DebtSourceCommitment>(match => {
+    if (match.target_type !== "bill") return [];
     if (match.status === "active" && livePendingIds.has(match.pending_plaid_transaction_id)) {
       return [{ sourceBillId: match.target_id, sourceBillName: match.target_name, date: match.occurrence_date, amount: match.pending_amount, state: "pending" as const }];
     }
@@ -174,6 +176,7 @@ export function pendingOccurrenceKeySet(
   pendingTransactions: PendingTransactionIdentity[],
 ): Set<string> {
   return new Set(activePendingPlanMatches(matches, pendingTransactions)
+    .filter(match => match.target_type === "bill")
     .map(match => `${match.target_id}:${match.occurrence_date}`));
 }
 

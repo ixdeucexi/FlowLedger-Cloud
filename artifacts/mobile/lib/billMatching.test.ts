@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { canMatchExpenseToBill, confirmedBillMatchId, confirmedBillMatchOccurrenceDate, isActiveTransaction, isCashFlowTransaction, isCheckingBalanceTransaction, isCheckingForecastLedgerTransaction, isConfirmedBillMatch, isDeletedTransaction, isMatchedPaymentLowerThanPlanned, rankBillMatches, resolveMatchedBillBudget } from "./billMatching";
+import { canMatchExpenseToBill, confirmedBillMatchId, confirmedBillMatchOccurrenceDate, isActiveTransaction, isCashFlowTransaction, isCheckingBalanceTransaction, isCheckingForecastLedgerTransaction, isConfirmedBillMatch, isDeletedTransaction, isMatchedPaymentLowerThanPlanned, manualActivityMatchCandidates, rankBillMatches, resolveMatchedBillBudget } from "./billMatching";
 
 test("ranks an exact nearby utility payment above unrelated bills", () => {
   const ranked = rankBillMatches(
@@ -28,6 +28,23 @@ test("uses each occurrence amount for weekly bills", () => {
   assert.equal(ranked[0].daysApart, 0);
   assert.equal(ranked[0].nearestOccurrenceDate, "2026-07-15");
   assert.equal(ranked[0].confidence, "strong");
+});
+
+test("offers a debt-applied manual activity as a Plaid match without exposing generated rows", () => {
+  const candidates = manualActivityMatchCandidates([
+    { id: "manual-debt", date: "2026-08-13", amount: -57, category: "Debt", note: "James shoes", source: "manual", debt_applied_bill_id: "discover", debt_applied_amount: 57 },
+    { id: "generated", date: "2026-08-13", amount: -57, category: "Debt", note: "Generated", source: "manual", import_hash: "generated-row" },
+    { id: "other-month", date: "2026-07-13", amount: -57, category: "Debt", note: "Old", source: "manual" },
+    { id: "bill-linked", date: "2026-08-13", amount: -57, category: "Debt", note: "Bill", source: "manual", linked_bill_id: "discover" },
+  ], "2026-08-13");
+
+  assert.deepEqual(candidates, [{
+    billId: "manual-debt",
+    name: "James shoes",
+    category: "Debt",
+    plannedAmount: 57,
+    occurrenceDates: ["2026-08-13"],
+  }]);
 });
 
 test("removed, deleted, or pending rows are not active", () => {

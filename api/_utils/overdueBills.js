@@ -128,13 +128,14 @@ function suppressPendingMatchedOccurrences(overdue, pendingMatches, livePendingT
       `${transaction.household_id || ""}:${transaction.plaid_transaction_id || ""}`));
   const protectedKeys = new Set((pendingMatches || [])
     .filter(match =>
-      match.status === "ready_review"
+      match.target_type !== "manual"
+      && (match.status === "ready_review"
       || (
         match.status === "active"
         && livePendingKeys.has(
           `${match.household_id || ""}:${match.pending_plaid_transaction_id || ""}`,
         )
-      ))
+      )))
     .map(match => `${match.household_id || ""}:${match.target_id}:${String(match.occurrence_date).slice(0, 10)}`));
   return (overdue || []).filter(alert =>
     !protectedKeys.has(`${alert.householdId || ""}:${alert.billId}:${alert.occurrenceDate}`));

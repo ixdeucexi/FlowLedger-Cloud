@@ -229,6 +229,19 @@ test("Snowball plans appear with bills and debt in Review Center", () => {
   assert.equal(grouped.bills[0]?.type, "snowball");
 });
 
+test("manual Activity matches have their own Review Center group", () => {
+  const grouped = groupReviewTargets(rankReviewTargets(
+    { amount: -57, date: "2026-08-13", note: "Discover payment", category: "Debt" },
+    [
+      { type: "manual", id: "manual-57", name: "James shoes", category: "Debt", plannedAmount: 57, occurrenceDate: "2026-08-13", isDebt: true },
+      { type: "bill", id: "discover", name: "Discover", category: "Debt", plannedAmount: 113, occurrenceDate: "2026-08-22", isDebt: true },
+    ],
+  ));
+
+  assert.deepEqual(grouped.manual.map(target => target.id), ["manual-57"]);
+  assert.deepEqual(grouped.bills.map(target => target.id), ["discover"]);
+});
+
 test("scheduled Snowball calendar transactions are available to match", () => {
   const targets = scheduledSnowballReviewTargets([
     {

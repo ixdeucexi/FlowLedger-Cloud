@@ -52,7 +52,7 @@ module.exports = async function overdueBillNotifications(req, res) {
     const billIds = bills.map(bill => bill.id);
     const pendingMatchesRequest = householdIds.length
       ? db.from("pending_plan_matches")
-        .select("household_id,pending_plaid_transaction_id,target_id,occurrence_date,status")
+        .select("household_id,pending_plaid_transaction_id,target_type,target_id,occurrence_date,status")
         .in("household_id", householdIds)
         .in("status", ["active", "ready_review"])
       : Promise.resolve({ data: [], error: null });

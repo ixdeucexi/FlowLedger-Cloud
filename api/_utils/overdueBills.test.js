@@ -94,6 +94,20 @@ test("a posted replacement stays protected while it waits for review", () => {
   assert.deepEqual(visible, []);
 });
 
+test("a pending manual Activity link never suppresses a bill occurrence", () => {
+  const overdue = [{ householdId: "home", billId: "manual-57", occurrenceDate: "2026-07-02", remainingAmount: 100 }];
+  const visible = suppressPendingMatchedOccurrences(overdue, [{
+    pending_plaid_transaction_id: "pending-manual",
+    target_type: "manual",
+    target_id: "manual-57",
+    occurrence_date: "2026-07-02",
+    household_id: "home",
+    status: "active",
+  }], [{ household_id: "home", plaid_transaction_id: "pending-manual" }]);
+
+  assert.deepEqual(visible, overdue);
+});
+
 test("a bill due today is not past due", () => {
   const alerts = buildOverdueOccurrences({
     today: "2026-07-21",

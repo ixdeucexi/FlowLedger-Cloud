@@ -362,7 +362,7 @@ export function buildDashboardFinancialModel(input: DashboardFinancialModelInput
       occurrenceDays: getBillOccurrencesInMonth(bill, currentMonth, selectedYear),
       pendingDays: activePendingMatches
         .filter(
-          (match) => match.target_id === bill.id
+          (match) => match.target_type === "bill" && match.target_id === bill.id
             && match.occurrence_date.startsWith(
               `${selectedYear}-${String(currentMonth + 1).padStart(2, "0")}-`,
             ),
