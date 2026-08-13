@@ -15,7 +15,10 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
 
@@ -505,12 +508,14 @@ const GUIDE_SLIDE_INDEXES = GUIDE_SLIDES.map((_, index) => index);
 interface GuideSlidePageProps {
   index: number;
   pageWidth: number;
+  pageHeight: number;
   colors: ReturnType<typeof useColors>;
 }
 
 const GuideSlidePage = memo(function GuideSlidePage({
   index,
   pageWidth,
+  pageHeight,
   colors,
 }: GuideSlidePageProps) {
   const slide = GUIDE_SLIDES[index];
@@ -522,7 +527,7 @@ const GuideSlidePage = memo(function GuideSlidePage({
       directionalLockEnabled
       nestedScrollEnabled
       showsVerticalScrollIndicator={false}
-      style={{ width: pageWidth }}
+      style={{ width: pageWidth, height: pageHeight }}
       contentContainerStyle={styles.slideScrollContent}
     >
       <View style={styles.slideInner}>
@@ -667,8 +672,10 @@ const GuideSlidePage = memo(function GuideSlidePage({
 export default function UserGuideScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
   const pageWidth = Math.max(width, 1);
+  const pageHeight = Math.max(240, height - insets.top - insets.bottom - 184);
   const listRef = useRef<FlatList<number>>(null);
   const currentPageRef = useRef(0);
   const [currentPage, setCurrentPage] = useState(0);
@@ -730,9 +737,14 @@ export default function UserGuideScreen() {
 
   const renderSlide = useCallback(
     ({ item: index }: ListRenderItemInfo<number>) => (
-      <GuideSlidePage index={index} pageWidth={pageWidth} colors={colors} />
+      <GuideSlidePage
+        index={index}
+        pageWidth={pageWidth}
+        pageHeight={pageHeight}
+        colors={colors}
+      />
     ),
-    [colors, pageWidth],
+    [colors, pageHeight, pageWidth],
   );
 
   return (
@@ -789,6 +801,7 @@ export default function UserGuideScreen() {
         pagingEnabled
         renderItem={renderSlide}
         showsHorizontalScrollIndicator={false}
+        style={styles.pager}
         windowSize={3}
       />
 
@@ -896,6 +909,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  pager: { flex: 1, minHeight: 0 },
   slideScrollContent: {
     flexGrow: 1,
     paddingHorizontal: 16,
