@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { FLO_CLIENT_RESPONSE_TIMEOUT_MS, floStreamErrorCode, isFloTerminalEvent, isFloTimeoutCode, parseFloSseChunk } from "./floStream";
@@ -44,4 +45,18 @@ test("Flo has a bounded client response window and recognizes timeout failures",
   assert.equal(isFloTimeoutCode("answer_timeout"), true);
   assert.equal(isFloTimeoutCode("flo_timeout"), true);
   assert.equal(isFloTimeoutCode("answer_failed"), false);
+});
+
+test("parses a verified recovery answer without treating it as terminal", () => {
+  const parsed = parseFloSseChunk("", 'data: {"type":"verified-fallback","fallback":{"answer":"Open the planner.","sources":[{"type":"help","label":"Debt Payoff Planner","route":"/snowball-plan"}],"partial":true}}\n\n');
+  assert.equal(parsed.events[0]?.type, "verified-fallback");
+  assert.equal(parsed.events[0]?.type === "verified-fallback" ? parsed.events[0].fallback.answer : null, "Open the planner.");
+  assert.equal(isFloTerminalEvent(parsed.events[0]!), false);
+});
+
+test("saved interrupted Flo streams render a useful message instead of an empty bubble", () => {
+  const source = readFileSync("lib/floChat.ts", "utf8");
+  assert.match(source, /That earlier Flo check was interrupted/);
+  assert.match(source, /Flo is finishing this account check/);
+  assert.match(source, /staleStream \? "error" : status/);
 });

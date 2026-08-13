@@ -33,6 +33,40 @@ export interface FloStoredMessage {
   createdAt: string;
 }
 
+export const FLO_STALE_STREAM_MS = 60_000;
+
+export function mapFloStoredMessage(row: Record<string, any>, now = Date.now()): FloStoredMessage {
+  const assistant = row.role === "assistant";
+  const createdAt = String(row.created_at);
+  const status = String(row.status ?? "completed") as FloStoredMessage["status"];
+  const createdTime = Date.parse(createdAt);
+  const staleStream = assistant && status === "streaming" && Number.isFinite(createdTime) && now - createdTime >= FLO_STALE_STREAM_MS;
+  const storedText = String(row.content ?? "");
+  const text = assistant
+    ? staleStream
+      ? "That earlier Flo check was interrupted. Ask again when you're ready."
+      : status === "streaming" && !storedText.trim()
+        ? "Flo is finishing this account check..."
+        : humanizeFloText(storedText)
+    : storedText;
+  return {
+    id: String(row.id),
+    role: assistant ? "flo" : "user",
+    text,
+    status: staleStream ? "error" : status,
+    sources: Array.isArray(row.source_refs) ? row.source_refs as FloSource[] : [],
+    followUps: Array.isArray(row.followups) ? row.followups.filter((item: unknown) => typeof item === "string") as string[] : [],
+    proposal: row.proposal && typeof row.proposal === "object" ? row.proposal as FloReviewProposal : null,
+    dataAsOf: typeof row.data_as_of === "string" ? row.data_as_of : undefined,
+    coverage: row.coverage && typeof row.coverage === "object" ? row.coverage as Record<string, unknown> : undefined,
+    partial: staleStream || row.partial === true,
+    caveat: row.answer && typeof row.answer === "object" && typeof (row.answer as Record<string, unknown>).caveat === "string"
+      ? String((row.answer as Record<string, unknown>).caveat).trim().slice(0, 500)
+      : undefined,
+    createdAt,
+  };
+}
+
 export function createFloId(): string {
   if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, token => {
@@ -242,22 +276,7 @@ export async function listFloMessages(
   const { data, error } = await query;
   if (error) throw error;
   const rows = data ?? [];
-  const messages = rows.map(row => ({
-    id: String(row.id),
-    role: row.role === "assistant" ? "flo" as const : "user" as const,
-    text: row.role === "assistant" ? humanizeFloText(String(row.content ?? "")) : String(row.content ?? ""),
-    status: String(row.status ?? "completed") as FloStoredMessage["status"],
-    sources: Array.isArray(row.source_refs) ? row.source_refs as FloSource[] : [],
-    followUps: Array.isArray(row.followups) ? row.followups.filter(item => typeof item === "string") as string[] : [],
-    proposal: row.proposal && typeof row.proposal === "object" ? row.proposal as FloReviewProposal : null,
-    dataAsOf: typeof row.data_as_of === "string" ? row.data_as_of : undefined,
-    coverage: row.coverage && typeof row.coverage === "object" ? row.coverage as Record<string, unknown> : undefined,
-    partial: row.partial === true,
-    caveat: row.answer && typeof row.answer === "object" && typeof (row.answer as Record<string, unknown>).caveat === "string"
-      ? String((row.answer as Record<string, unknown>).caveat).trim().slice(0, 500)
-      : undefined,
-    createdAt: String(row.created_at),
-  })).reverse();
+  const messages = rows.map(row => mapFloStoredMessage(row as Record<string, any>)).reverse();
   return {
     messages,
     nextCursor: rows.length === 50 ? String(rows[rows.length - 1]?.created_at) : null,
@@ -358,20 +377,5 @@ export async function listAllFloMessages(conversationId: string): Promise<FloSto
     if (error) throw error;
     return data ?? [];
   });
-  return rows.map(row => ({
-    id: String(row.id),
-    role: row.role === "assistant" ? "flo" as const : "user" as const,
-    text: row.role === "assistant" ? humanizeFloText(String(row.content ?? "")) : String(row.content ?? ""),
-    status: String(row.status ?? "completed") as FloStoredMessage["status"],
-    sources: Array.isArray(row.source_refs) ? row.source_refs as FloSource[] : [],
-    followUps: Array.isArray(row.followups) ? row.followups.filter(item => typeof item === "string") as string[] : [],
-    proposal: row.proposal && typeof row.proposal === "object" ? row.proposal as FloReviewProposal : null,
-    dataAsOf: typeof row.data_as_of === "string" ? row.data_as_of : undefined,
-    coverage: row.coverage && typeof row.coverage === "object" ? row.coverage as Record<string, unknown> : undefined,
-    partial: row.partial === true,
-    caveat: row.answer && typeof row.answer === "object" && typeof (row.answer as Record<string, unknown>).caveat === "string"
-      ? String((row.answer as Record<string, unknown>).caveat).trim().slice(0, 500)
-      : undefined,
-    createdAt: String(row.created_at),
-  }));
+  return rows.map(row => mapFloStoredMessage(row as Record<string, any>));
 }

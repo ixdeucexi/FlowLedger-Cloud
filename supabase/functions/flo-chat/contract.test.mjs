@@ -5,9 +5,11 @@ import test from "node:test";
 import {
   aggregateCoverage,
   boundedLimit,
+  floCapabilityGuidance,
   money,
   sanitizeContext,
   validateGroundedAnswer,
+  verifiedFallbackForTool,
 } from "./contract.ts";
 
 const evidence = [{ id: "account:a", type: "account", label: "Checking", recordId: "a", asOf: "2026-08-12T00:00:00.000Z", freshness: "current" }];
@@ -122,6 +124,24 @@ test("missing source timestamps stay unknown instead of becoming request time", 
   assert.equal(result.dataAsOf, null);
 });
 
+test("unsupported canonical calculations return immediate truthful app guidance", () => {
+  assert.equal(floCapabilityGuidance("Why is my Flow Score 54?")?.source.route, "/(tabs)/how-flowledger-works");
+  assert.match(floCapabilityGuidance("Can I send extra money to debt safely?")?.answer ?? "", /Debt Payoff Planner/);
+  assert.equal(floCapabilityGuidance("Can I afford a purchase next week?")?.source.route, "/plan-simulator");
+  assert.equal(floCapabilityGuidance("Which bills are due next?") , null);
+});
+
+test("a completed account tool provides a verified recovery answer", () => {
+  const result = verifiedFallbackForTool("Can I send extra money to debt safely?", "getBillsAndDebt", {
+    ...payload,
+    evidence: [{ ...evidence[0], type: "debt", route: "/(tabs)/bills" }],
+  });
+  assert.match(result.answer, /Debt Payoff Planner/);
+  assert.equal(result.partial, true);
+  assert.equal(result.coverage.reasons.includes("assistant_synthesis_unavailable"), true);
+  assert.equal(result.sources.some(source => source.route === "/snowball-plan"), true);
+});
+
 test("empty query evidence keeps a null timestamp", async () => {
   const source = await readFile(new URL("./tools.ts", import.meta.url), "utf8");
   assert.match(source, /id: `\$\{name\}:query`[\s\S]{0,100}asOf: null/);
@@ -171,10 +191,16 @@ test("v3 endpoint enforces privacy, legacy rejection, and server-owned persisten
   assert.ok(source.indexOf("existingRowsError") < source.indexOf('title: "Ephemeral Flo chat"'));
   assert.match(source, /failAfterConversation\(jsonError\("message_persistence_failed"/);
   assert.match(source, /publicFailureCode\(error\)/);
-  assert.match(source, /const answerTimeoutMs = 22_000/);
-  assert.match(source, /timeout: \{ totalMs: answerTimeoutMs \}/);
+  assert.match(source, /const answerTimeoutMs = 18_000/);
+  assert.match(source, /const hardAnswerDeadlineMs = 20_000/);
+  assert.match(source, /timeout: \{ totalMs: answerTimeoutMs, stepMs: 12_000, toolMs: 5_000 \}/);
+  assert.match(source, /withinHardDeadline\(agent\.generate/);
   assert.match(source, /EdgeRuntime\.waitUntil\(task\)/);
+  assert.doesNotMatch(source, /EdgeRuntime\.waitUntil\(task\);\s*return task/);
   assert.match(source, /setInterval\(\(\) => emitProgress\(currentStatus\), 8_000\)/);
+  assert.match(source, /verified-fallback/);
+  assert.match(source, /verifiedFallbackForTool\(message, toolName, result\)/);
+  assert.match(source, /error_code: "response_interrupted"/);
   assert.match(source, /code === "answer_timeout"/);
   assert.doesNotMatch(source, /error\.message\.slice\(0, 80\)/);
   assert.match(source, /filter\(\(row: any\) => row\.role === "user"\)/);

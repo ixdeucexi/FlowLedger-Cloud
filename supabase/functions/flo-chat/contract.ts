@@ -61,6 +61,103 @@ export type FloGroundedAnswer = {
   followups: string[];
 };
 
+export type FloCapabilityGuidance = {
+  answer: string;
+  source: FloSourceRef;
+};
+
+export type FloVerifiedFallback = {
+  answer: string;
+  sources: FloSourceRef[];
+  dataAsOf: string | null;
+  coverage: Record<string, unknown>;
+  partial: true;
+  caveat: string;
+  followups: string[];
+};
+
+const helpSource = (id: string, label: string, route: string): FloSourceRef => ({
+  id: `help:${id}`,
+  type: "help",
+  label,
+  route,
+  asOf: null,
+  freshness: "unknown",
+});
+
+export function floCapabilityGuidance(question: string): FloCapabilityGuidance | null {
+  const normalized = question.trim().toLowerCase();
+  if (/\bflow\s*score\b/.test(normalized)) {
+    return {
+      answer: "Flo cannot verify the exact Flow Score breakdown in chat yet. Open How FlowLedger Works to see the factors the live Dashboard uses and what each part means.",
+      source: helpSource("flow-score", "How FlowLedger Works", "/(tabs)/how-flowledger-works"),
+    };
+  }
+  if ((/\b(?:safe|safely|afford|extra)\b.*\bdebt\b/.test(normalized) || /\bdebt\b.*\b(?:safe|safely|afford|extra)\b/.test(normalized))) {
+    return {
+      answer: "The Debt Payoff Planner is the verified place to test a safe extra debt payment because it uses your full Forecast. Open the planner to preview the amount and date without changing your plan.",
+      source: helpSource("debt-payoff-planner", "Debt Payoff Planner", "/snowball-plan"),
+    };
+  }
+  if (/\b(?:can i afford|safe to spend|spend safely|safe cushion|lowest (?:projected )?balance|until payday|through payday)\b/.test(normalized)) {
+    return {
+      answer: "Use Plan Simulator to test this against the live Forecast without changing your real plan. Flo cannot reproduce that full safety calculation in chat yet.",
+      source: helpSource("plan-simulator", "Plan Simulator", "/plan-simulator"),
+    };
+  }
+  return null;
+}
+
+export function verifiedFallbackForTool(
+  question: string,
+  toolName: string,
+  payload: FloToolEnvelope,
+): FloVerifiedFallback {
+  const normalized = question.toLowerCase();
+  const safeDebtQuestion = toolName === "getBillsAndDebt"
+    && (/\b(?:safe|safely|afford|extra)\b.*\bdebt\b/.test(normalized) || /\bdebt\b.*\b(?:safe|safely|afford|extra)\b/.test(normalized));
+  const routes: Record<string, { label: string; route: string; answer: string }> = {
+    getAccountOverview: { label: "Accounts", route: "/(tabs)/more", answer: "I checked your account records, but the full explanation did not finish. Open Accounts to review the verified balances, or tap Retry." },
+    searchTransactions: { label: "Activity", route: "/(tabs)/transactions", answer: "I checked your recent Activity records, but the full explanation did not finish. Open Activity to review them, or tap Retry." },
+    getBillsAndDebt: { label: "Bills and debt", route: "/(tabs)/bills", answer: "I checked your bills and debt records, but the full explanation did not finish. Open Bills to review them, or tap Retry." },
+    getBillPlanDetails: { label: "Forecast", route: "/(tabs)/monthly", answer: "I checked the planned payment records, but the full explanation did not finish. Open Forecast to review the plan, or tap Retry." },
+    getIncomeSchedule: { label: "Income", route: "/(tabs)/bills", answer: "I checked your income schedule, but the full explanation did not finish. Open Bills to review it, or tap Retry." },
+    getBudgetsAndGoals: { label: "Budgets and goals", route: "/(tabs)/bills", answer: "I checked your budgets and goals, but the full explanation did not finish. Open Bills to review them, or tap Retry." },
+    getDecisionsAndSimulations: { label: "Plan Simulator", route: "/plan-simulator", answer: "I checked your saved plans and simulations, but the full explanation did not finish. Open Plan Simulator to review them, or tap Retry." },
+    getDebtPlanHistory: { label: "Debt Payoff Planner", route: "/snowball-plan", answer: "I checked your debt-plan history, but the full explanation did not finish. Open the Debt Payoff Planner to review it, or tap Retry." },
+    getConnectionHealth: { label: "Connected accounts", route: "/(tabs)/more", answer: "I checked your connection records, but the full explanation did not finish. Open Accounts to review connection status, or tap Retry." },
+    getHouseholdAndSettings: { label: "Settings", route: "/(tabs)/more", answer: "I checked your household settings, but the full explanation did not finish. Open Settings to review them, or tap Retry." },
+    getFlowLedgerHelp: { label: "FlowLedger guide", route: "/(tabs)/more", answer: "I found the FlowLedger guidance, but the full explanation did not finish. Open Settings and the User Guide, or tap Retry." },
+  };
+  const destination = safeDebtQuestion
+    ? { label: "Debt Payoff Planner", route: "/snowball-plan", answer: "The Debt Payoff Planner is the verified place to test a safe extra debt payment because it uses your full Forecast. Open the planner to preview the amount and date without changing your plan." }
+    : routes[toolName] ?? { label: "FlowLedger", route: "/(tabs)/index", answer: "I checked the requested FlowLedger records, but the full explanation did not finish. Tap Retry to check again." };
+  const sources = payload.evidence.length
+    ? payload.evidence.slice(0, 12)
+    : [helpSource(`recovery-${toolName}`, destination.label, destination.route)];
+  if (!sources.some(source => source.route === destination.route)) {
+    sources.push(helpSource(`recovery-${toolName}`, destination.label, destination.route));
+  }
+  return {
+    answer: destination.answer,
+    sources,
+    dataAsOf: payload.dataAsOf,
+    coverage: {
+      complete: false,
+      tools: 1,
+      partialTools: payload.status === "ok" && payload.coverage.complete ? 0 : 1,
+      exclusions: payload.coverage.exclusions ?? [],
+      reasons: ["assistant_synthesis_unavailable", ...(payload.coverage.reason ? [payload.coverage.reason] : [])],
+      dateRanges: payload.coverage.startDate || payload.coverage.endDate
+        ? [{ startDate: payload.coverage.startDate, endDate: payload.coverage.endDate }]
+        : [],
+    },
+    partial: true,
+    caveat: "Flo completed the account check, but used a verified recovery answer because the full explanation was interrupted.",
+    followups: [],
+  };
+}
+
 export function isUuid(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }

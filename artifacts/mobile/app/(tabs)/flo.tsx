@@ -54,7 +54,7 @@ import {
   reduceFloChat,
   type FloChatState,
 } from "@/lib/floPolicy";
-import { isFloTimeoutCode } from "@/lib/floStream";
+import { isFloTimeoutCode, type FloVerifiedFallback } from "@/lib/floStream";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { buildDecisionHistory } from "@/lib/decisionHistory";
 import { buildDecisionRiskAlerts } from "@/lib/decisionRisk";
@@ -804,6 +804,7 @@ export default function FloScreen() {
     let conversationId = priorRequest?.conversationId ?? floConversationForRequest(floPreferences.historyEnabled, activeConversationId);
     retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId };
     let reply = "";
+    const verifiedFallback: { current: FloVerifiedFallback | null } = { current: null };
     const streamFailure: { current: { code: string; message: string } | null } = { current: null };
     try {
       if (!conversationId && floPreferences.historyEnabled) {
@@ -840,6 +841,8 @@ export default function FloScreen() {
             setGroundingByMessageId(previous => ({ ...previous, [assistantMessageId]: { dataAsOf: event.dataAsOf, partial: event.partial, coverage: describeCoverage(event.coverage) } }));
           } else if (event.type === "status") {
             dispatch({ type: "status", id: assistantMessageId, text: event.message });
+          } else if (event.type === "verified-fallback") {
+            verifiedFallback.current = event.fallback;
           } else if (event.type === "text-delta") {
             reply += event.delta;
             dispatch({ type: "stream-delta", id: assistantMessageId, delta: event.delta });
@@ -885,21 +888,37 @@ export default function FloScreen() {
         retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: null };
         return;
       }
-      reply = stopped
-        ? "Response stopped before Flo could verify an answer."
-        : timeout
-          ? "Flo needed more time to verify this answer. Nothing changed in your plan."
-          : "I couldn't verify an answer from your account just now.";
-      dispatch({ type: "replace", id: assistantMessageId, text: reply });
-      setSourcesByMessageId(previous => ({ ...previous, [assistantMessageId]: [] }));
-      setFollowUpsByMessageId(previous => ({ ...previous, [assistantMessageId]: [] }));
-      setProposalByMessageId(previous => ({ ...previous, [assistantMessageId]: null }));
-      setGroundingByMessageId(previous => ({ ...previous, [assistantMessageId]: { partial: true, coverage: "No verified account data" } }));
-      setChatError(stopped
-        ? "Response stopped. You can retry the last question."
-        : timeout
-          ? "That check took longer than expected. Tap Retry to ask again."
-          : "Flo couldn't verify this answer. Retry to check your account again.");
+      const recovery = verifiedFallback.current;
+      if (recovery && !stopped) {
+        reply = recovery.answer;
+        dispatch({ type: "replace", id: assistantMessageId, text: reply });
+        setSourcesByMessageId(previous => ({ ...previous, [assistantMessageId]: recovery.sources ?? [] }));
+        setFollowUpsByMessageId(previous => ({ ...previous, [assistantMessageId]: recovery.followups ?? [] }));
+        setProposalByMessageId(previous => ({ ...previous, [assistantMessageId]: null }));
+        setGroundingByMessageId(previous => ({ ...previous, [assistantMessageId]: {
+          dataAsOf: recovery.dataAsOf,
+          partial: true,
+          coverage: describeCoverage(recovery.coverage),
+          caveat: recovery.caveat,
+        } }));
+        setChatError(null);
+      } else {
+        reply = stopped
+          ? "Response stopped before Flo could verify an answer."
+          : timeout
+            ? "Flo needed more time to verify this answer. Nothing changed in your plan."
+            : "I couldn't verify an answer from your account just now.";
+        dispatch({ type: "replace", id: assistantMessageId, text: reply });
+        setSourcesByMessageId(previous => ({ ...previous, [assistantMessageId]: [] }));
+        setFollowUpsByMessageId(previous => ({ ...previous, [assistantMessageId]: [] }));
+        setProposalByMessageId(previous => ({ ...previous, [assistantMessageId]: null }));
+        setGroundingByMessageId(previous => ({ ...previous, [assistantMessageId]: { partial: true, coverage: "No verified account data" } }));
+        setChatError(stopped
+          ? "Response stopped. You can retry the last question."
+          : timeout
+            ? "That check took longer than expected. Tap Retry to ask again."
+            : "Flo couldn't verify this answer. Retry to check your account again.");
+      }
     }
     if (!requestIsCurrent()) return;
     if (!floPreferences.historyEnabled) retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: null };

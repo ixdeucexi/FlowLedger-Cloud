@@ -29,9 +29,20 @@ export type FloGroundedAnswer = {
   partial?: boolean;
 };
 
+export type FloVerifiedFallback = {
+  answer: string;
+  sources: FloSource[];
+  dataAsOf?: string | null;
+  coverage?: Record<string, unknown>;
+  partial: true;
+  caveat?: string;
+  followups?: string[];
+};
+
 export type FloStreamEvent =
   | { type: "meta"; version?: number; conversationId: string; assistantMessageId: string; model?: string; asOf?: string; dataAsOf?: string | null; coverage?: Record<string, unknown>; partial?: boolean }
   | { type: "status"; message: string }
+  | { type: "verified-fallback"; fallback: FloVerifiedFallback }
   | { type: "text-delta"; delta: string }
   | { type: "sources"; sources: FloSource[] }
   | { type: "followups"; items: string[] }
