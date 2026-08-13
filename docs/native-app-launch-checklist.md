@@ -27,7 +27,7 @@ Release FlowLedger as a signed iOS and Android app while keeping the existing PW
 - [x] Safe-area handling and Android hardware-back handling
 - [x] Responsive phone, tablet, and desktop layouts
 - [x] Setup walkthrough and demo mode
-- [x] Illustrated user guide linked from Settings with mobile page swiping and the full website PDF
+- [x] Interactive app-style user guide linked from Settings with mobile/PWA slide navigation and the full desktop PDF
 - [x] In-app Terms of Service and Privacy Policy screens
 - [x] Financial calculation and regression test coverage
 - [x] Expo Doctor passes all 18 checks
