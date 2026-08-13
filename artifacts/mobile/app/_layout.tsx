@@ -252,6 +252,14 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
                     presentation: "card",
                   }}
                 />
+                <Stack.Screen
+                  name="user-guide"
+                  options={{
+                    animation: "slide_from_right",
+                    animationTypeForReplace: "pop",
+                    presentation: "card",
+                  }}
+                />
                 <Stack.Screen name="(tabs)" />
               </Stack>
               <PwaInstallPrompt />

@@ -16,7 +16,6 @@ import React, {
 } from "react";
 import {
   Alert,
-  Linking,
   Modal,
   Platform,
   Pressable,
@@ -114,7 +113,7 @@ import {
 } from "@/lib/settingsHub";
 import { supabase } from "@/lib/supabase";
 import { transactionCategoryParts } from "@/lib/reviewCenter";
-import { flowLedgerUserGuideUrl } from "@/lib/userGuide";
+import { flowLedgerUserGuideTarget } from "@/lib/userGuide";
 import {
   type AppFeedbackRow,
   type FeedbackAdminFilter,
@@ -1993,18 +1992,10 @@ export default function MoreScreen({
   };
 
   const openUserGuide = useCallback(() => {
-    const origin =
-      Platform.OS === "web" && typeof window !== "undefined"
-        ? window.location.origin
-        : undefined;
-    void Linking.openURL(flowLedgerUserGuideUrl(origin)).catch(() => {
-      Alert.alert(
-        "User Guide",
-        "The FlowLedger User Guide could not be opened. Please try again.",
-      );
-    });
+    const target = flowLedgerUserGuideTarget("mobile");
+    router.push(target.href as never);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }, []);
+  }, [router]);
 
   const webTopPad = Platform.OS === "web" ? 4 : 0;
   const activeSettingsMeta = VISIBLE_SETTINGS_SECTIONS.find(

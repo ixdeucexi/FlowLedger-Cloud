@@ -37,7 +37,7 @@ import {
   useThemeMode,
 } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
-import { flowLedgerUserGuideUrl } from "@/lib/userGuide";
+import { flowLedgerUserGuideTarget } from "@/lib/userGuide";
 
 export type DesktopSettingsSection =
   | "Profile"
@@ -185,7 +185,8 @@ export function DesktopSettingsPage({
   };
 
   const openUserGuide = () => {
-    void Linking.openURL(flowLedgerUserGuideUrl()).catch(() => {
+    const target = flowLedgerUserGuideTarget("website");
+    void Linking.openURL(target.href).catch(() => {
       setMessage(
         "The FlowLedger User Guide could not be opened. Please try again.",
       );
