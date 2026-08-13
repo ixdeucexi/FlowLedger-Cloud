@@ -261,13 +261,11 @@ function MobileDashboardScreen() {
   const [moveError, setMoveError] = useState("");
   const [flowScoreVisible, setFlowScoreVisible] = useState(false);
   const [safeCushionVisible, setSafeCushionVisible] = useState(false);
-  const [startupAlertVisible, setStartupAlertVisible] = useState(false);
   const [flowmentumVisible, setFlowmentumVisible] = useState(false);
   const [flowmentumAdminPreview, setFlowmentumAdminPreview] = useState(false);
   const [pendingFloCharge, setPendingFloCharge] = useState<PendingBankTransaction | null>(null);
   const [customizerOpen, setCustomizerOpen] = useState(false);
   const { layout: dashboardLayout, updateLayout: updateDashboardLayout, resetLayout: resetDashboardLayout } = useDashboardLayoutPreferences();
-  const startupAlertShownRef = useRef(false);
   const checkedPendingSignatureRef = useRef("");
   const flowScoreSwipeResponder = useMemo(() => PanResponder.create({
     onMoveShouldSetPanResponder: (_event, gesture) => gesture.dy > 10 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
@@ -283,7 +281,6 @@ function MobileDashboardScreen() {
   useBackDismiss(moveMoneyVisible, () => setMoveMoneyVisible(false));
   useBackDismiss(flowScoreVisible, () => setFlowScoreVisible(false));
   useBackDismiss(safeCushionVisible, () => setSafeCushionVisible(false));
-  useBackDismiss(startupAlertVisible, () => setStartupAlertVisible(false));
   useEffect(() => {
     const requestedAdd = Array.isArray(routeParams.add)
       ? routeParams.add[0]
@@ -347,7 +344,6 @@ function MobileDashboardScreen() {
   const now          = new Date();
   const currentMonth = now.getMonth();
   const today        = now.getDate();
-  const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const timeGreeting = now.getHours() < 5
     ? "Good night"
     : now.getHours() < 12
@@ -625,7 +621,6 @@ function MobileDashboardScreen() {
     bankCurrentCheckingBalance,
     checkingPendingTransactions,
     currentGoals,
-    decisionForecastDays,
     pendingCheckingSummary,
     savingsAccountBalance,
     savingsAccounts,
@@ -708,34 +703,6 @@ function MobileDashboardScreen() {
       if (timer) clearTimeout(timer);
     };
   }, [flowmentumEligible, flowmentumPreviewKey, flowmentumSeenKey, isAdmin]));
-  const nextWeekRisk = useMemo(() => {
-    const weekEndDate = new Date(now);
-    weekEndDate.setDate(now.getDate() + 7);
-    const weekEnd = `${weekEndDate.getFullYear()}-${String(weekEndDate.getMonth() + 1).padStart(2, "0")}-${String(weekEndDate.getDate()).padStart(2, "0")}`;
-    const weekDays = decisionForecastDays.filter(day => day.date >= todayIso && day.date <= weekEnd);
-    const lowest = weekDays.reduce<{ date: string; balance: number } | null>(
-      (best, day) => !best || day.balance < best.balance ? day : best,
-      null,
-    );
-    const sensitivityBuffer = 150;
-    if (!lowest || lowest.balance >= settings.safety_floor + sensitivityBuffer) return null;
-    const tone = lowest.balance < settings.safety_floor ? "risk" : "tight";
-    const prompt = `Why is my balance low next week? My lowest projected balance is $${lowest.balance.toFixed(0)} on ${lowest.date}.`;
-    return {
-      tone,
-      title: tone === "risk" ? "Next week has a low balance risk" : "Next week has a low balance",
-      detail: `Lowest projected balance: $${lowest.balance.toFixed(0)} on ${formatShortDate(lowest.date)}. Review the reason before changing the plan.`,
-      prompt,
-      saferBillPrompt: "Which bill should I move?",
-    };
-  }, [decisionForecastDays, now, settings.safety_floor, todayIso]);
-  useEffect(() => {
-    if (nextWeekRisk && !startupAlertShownRef.current) {
-      startupAlertShownRef.current = true;
-      const timer = setTimeout(() => setStartupAlertVisible(true), 1150);
-      return () => clearTimeout(timer);
-    }
-  }, [nextWeekRisk]);
   const openFloWithPrompt = useCallback((prompt: string) => {
     router.push({ pathname: "/(tabs)/flo", params: { prompt } } as any);
   }, [router]);
@@ -780,8 +747,7 @@ function MobileDashboardScreen() {
     [unplannedCheckingPending],
   );
   useEffect(() => {
-    const anotherModalIsOpen = startupAlertVisible
-      || flowmentumVisible
+    const anotherModalIsOpen = flowmentumVisible
       || actionModalVisible
       || goalModalVisible
       || addBillVisible
@@ -833,7 +799,6 @@ function MobileDashboardScreen() {
     pendingInsightSignature,
     safeCushionVisible,
     selectedCategory,
-    startupAlertVisible,
     unplannedCheckingPending,
   ]);
   const openStabilityGuide = useCallback(() => {
@@ -923,7 +888,7 @@ function MobileDashboardScreen() {
         current: mobileGoalNearCompletion.current_amount,
         target: mobileGoalNearCompletion.target_amount,
       } : null,
-    });
+    }).filter(decision => decision.id !== "low-balance-risk");
   }, [algorithmSuite.billPriority.nextBill, algorithmSuite.safeCushion, bills, currentMonth, getRemainingDebtPlanForMonth, mobileGoalNearCompletion, mobileSnowballTarget, now, reviewCenterCount, selectedYear, settings.safety_floor, today]);
   return (
     <ScrollView
@@ -1051,59 +1016,6 @@ function MobileDashboardScreen() {
           </Pressable>
         </View>
       )}
-
-      <Modal
-        visible={startupAlertVisible && !!nextWeekRisk}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setStartupAlertVisible(false)}
-      >
-        <View style={styles.startupAlertBackdrop}>
-          {nextWeekRisk && (
-            <View style={[styles.startupAlertCard, { borderColor: nextWeekRisk.tone === "risk" ? c.destructive + "80" : c.warning + "80" }]}>
-              <View style={styles.startupAlertHandle} />
-              <View style={styles.startupAlertHeader}>
-                <View style={[styles.proactiveAlertIcon, { backgroundColor: nextWeekRisk.tone === "risk" ? c.destructive + "18" : c.warning + "18" }]}>
-                  <Feather name="alert-triangle" size={18} color={nextWeekRisk.tone === "risk" ? c.destructive : c.warning} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.proactiveAlertTitle, { color: c.foreground }]}>{nextWeekRisk.title}</Text>
-                  <Text style={[styles.proactiveAlertText, { color: c.mutedForeground }]}>{nextWeekRisk.detail}</Text>
-                </View>
-                <Pressable onPress={() => setStartupAlertVisible(false)} hitSlop={10}>
-                  <Feather name="x" size={20} color={c.mutedForeground} />
-                </Pressable>
-              </View>
-              <View style={styles.proactiveActionRow}>
-                <Pressable
-                  onPress={() => {
-                    setStartupAlertVisible(false);
-                    openFloWithPrompt(nextWeekRisk.prompt);
-                  }}
-                  style={({ pressed }) => [styles.proactiveActionButton, { backgroundColor: c.primary + "18", opacity: pressed ? 0.75 : 1 }]}
-                >
-                  <Text style={[styles.proactiveActionText, { color: c.primary }]}>Show why</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => {
-                    setStartupAlertVisible(false);
-                    openFloWithPrompt(nextWeekRisk.saferBillPrompt);
-                  }}
-                  style={({ pressed }) => [styles.proactiveActionButton, { backgroundColor: c.warning + "18", opacity: pressed ? 0.75 : 1 }]}
-                >
-                  <Text style={[styles.proactiveActionText, { color: c.warning }]}>Find safer bill date</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setStartupAlertVisible(false)}
-                  style={({ pressed }) => [styles.proactiveActionButton, { backgroundColor: "rgba(148,163,184,0.12)", opacity: pressed ? 0.75 : 1 }]}
-                >
-                  <Text style={[styles.proactiveActionText, { color: c.mutedForeground }]}>Not now</Text>
-                </Pressable>
-              </View>
-            </View>
-          )}
-        </View>
-      </Modal>
 
       <Modal
         visible={Boolean(pendingFloCharge)}
@@ -1998,12 +1910,6 @@ function MobileDashboardScreen() {
   );
 }
 
-function formatShortDate(date: string): string {
-  const parsed = dateOnlyToLocalDate(date);
-  if (!parsed) return date;
-  return parsed.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
-}
-
 function formatMonthDay(month: number, year: number, day: number | null | undefined): string {
   if (!day) return `${MONTH_FULL[month] ?? "Month"} ${year}`;
   return `${MONTH_FULL[month] ?? "Month"} ${day}, ${year}`;
@@ -2091,16 +1997,6 @@ const styles = StyleSheet.create({
   dashboardQuickCopy: { flex: 1, minWidth: 0 },
   dashboardQuickLabel: { fontSize: 13, fontFamily: "Inter_700Bold" },
   dashboardQuickMeta: { fontSize: 11, lineHeight: 15, fontFamily: "Inter_500Medium", marginTop: 2 },
-  proactiveAlertIcon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
-  proactiveAlertTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
-  proactiveAlertText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17, marginTop: 2 },
-  proactiveActionRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
-  proactiveActionButton: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999 },
-  proactiveActionText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
-  startupAlertBackdrop: { flex: 1, backgroundColor: "rgba(2,6,23,0.72)", alignItems: "center", justifyContent: "center", padding: 22 },
-  startupAlertCard: { width: "100%", maxWidth: 480, borderRadius: 28, borderWidth: 1, backgroundColor: "rgba(15,23,42,0.96)", padding: 18, shadowColor: "#000", shadowOffset: { width: 0, height: 22 }, shadowOpacity: 0.38, shadowRadius: 34, elevation: 16 },
-  startupAlertHandle: { alignSelf: "center", width: 44, height: 4, borderRadius: 999, backgroundColor: "rgba(148,163,184,0.45)", marginBottom: 16 },
-  startupAlertHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   pendingFloBackdrop: { flex: 1, backgroundColor: "rgba(2,6,23,0.78)", alignItems: "center", justifyContent: "center", padding: 20 },
   pendingFloCard: { width: "100%", maxWidth: 480, borderRadius: 28, borderWidth: 1, padding: 18, shadowColor: "#000", shadowOffset: { width: 0, height: 22 }, shadowOpacity: 0.42, shadowRadius: 34, elevation: 18 },
   pendingFloHandle: { alignSelf: "center", width: 42, height: 4, borderRadius: 999, backgroundColor: "rgba(148,163,184,0.42)", marginBottom: 15 },

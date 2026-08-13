@@ -34,6 +34,7 @@ Release FlowLedger as a signed iOS and Android app while keeping the existing PW
 - [x] Forecast closes its selected-day modal before opening the planned debt-payment editor
 - [x] Pending and posted Plaid charges can match manual Activity entries, including debt-applied entries, without double-counting cash or applying debt twice
 - [x] Flo under-budget bill routing can merge the leftover into the next planned debt payment or use a chosen date, with one combined same-day Forecast item
+- [x] Dashboard no longer presents automatic low-balance warnings or low-balance decision comments
 - [x] In-app Terms of Service and Privacy Policy screens
 - [x] Financial calculation and regression test coverage
 - [x] Expo Doctor passes all 18 checks
