@@ -1,5 +1,11 @@
 import type { FloReviewProposal } from "./floExperience";
 
+export const FLO_CLIENT_RESPONSE_TIMEOUT_MS = 35_000;
+
+export function isFloTimeoutCode(value: unknown): boolean {
+  return value === "answer_timeout" || value === "flo_timeout";
+}
+
 export type FloSource = {
   id?: string;
   type: string;

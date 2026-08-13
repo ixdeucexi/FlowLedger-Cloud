@@ -171,6 +171,11 @@ test("v3 endpoint enforces privacy, legacy rejection, and server-owned persisten
   assert.ok(source.indexOf("existingRowsError") < source.indexOf('title: "Ephemeral Flo chat"'));
   assert.match(source, /failAfterConversation\(jsonError\("message_persistence_failed"/);
   assert.match(source, /publicFailureCode\(error\)/);
+  assert.match(source, /const answerTimeoutMs = 22_000/);
+  assert.match(source, /timeout: \{ totalMs: answerTimeoutMs \}/);
+  assert.match(source, /EdgeRuntime\.waitUntil\(task\)/);
+  assert.match(source, /setInterval\(\(\) => emitProgress\(currentStatus\), 8_000\)/);
+  assert.match(source, /code === "answer_timeout"/);
   assert.doesNotMatch(source, /error\.message\.slice\(0, 80\)/);
   assert.match(source, /filter\(\(row: any\) => row\.role === "user"\)/);
   assert.doesNotMatch(source, /LEGACY DETERMINISTIC SNAPSHOT|body\.snapshot|legacyResponse/);

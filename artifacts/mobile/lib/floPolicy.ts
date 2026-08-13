@@ -265,6 +265,7 @@ export type FloChatAction =
   | { type: "reply"; id: string; text: string }
   | { type: "hydrate"; messages: FloChatMessage[] }
   | { type: "prepend"; messages: FloChatMessage[] }
+  | { type: "status"; id: string; text: string }
   | { type: "stream-delta"; id: string; delta: string }
   | { type: "replace"; id: string; text: string }
   | { type: "stop" };
@@ -316,6 +317,14 @@ export function reduceFloChat(state: FloChatState, action: FloChatAction): FloCh
     return {
       messages: state.messages.map(message => message.id === action.id
         ? { ...message, text: message.thinking ? action.delta : `${message.text}${action.delta}`, thinking: false }
+        : message),
+      sending: true,
+    };
+  }
+  if (action.type === "status") {
+    return {
+      messages: state.messages.map(message => message.id === action.id && message.thinking
+        ? { ...message, text: action.text }
         : message),
       sending: true,
     };

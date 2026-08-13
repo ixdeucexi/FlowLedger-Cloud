@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { floStreamErrorCode, isFloTerminalEvent, parseFloSseChunk } from "./floStream";
+import { FLO_CLIENT_RESPONSE_TIMEOUT_MS, floStreamErrorCode, isFloTerminalEvent, isFloTimeoutCode, parseFloSseChunk } from "./floStream";
 
 test("parses grounded Flo v3 events split across arbitrary chunks", () => {
   const first = parseFloSseChunk("", 'data: {"type":"meta","version":3,"conversationId":"c","assistantMessageId":"a","dataAsOf":"2026-08-12T12:00:00Z","partial":false}\n\ndata: {"type":"text-');
@@ -37,4 +37,11 @@ test("preserves typed cleanup failure after a completed answer", () => {
   const parsed = parseFloSseChunk("", 'data: {"type":"done","messageId":"a","text":"Answer"}\n\ndata: {"type":"error","code":"ephemeral_cleanup_failed","message":"Flo could not clear this no-history chat."}\n\n');
   assert.deepEqual(parsed.events.map(event => event.type), ["done", "error"]);
   assert.equal(floStreamErrorCode(parsed.events[1]!), "ephemeral_cleanup_failed");
+});
+
+test("Flo has a bounded client response window and recognizes timeout failures", () => {
+  assert.equal(FLO_CLIENT_RESPONSE_TIMEOUT_MS, 35_000);
+  assert.equal(isFloTimeoutCode("answer_timeout"), true);
+  assert.equal(isFloTimeoutCode("flo_timeout"), true);
+  assert.equal(isFloTimeoutCode("answer_failed"), false);
 });

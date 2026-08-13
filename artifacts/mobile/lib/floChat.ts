@@ -3,7 +3,7 @@ import { fetch as expoFetch } from "expo/fetch";
 import { supabase, supabaseAnonKey, supabaseUrl } from "@/lib/supabase";
 import { humanizeFloText } from "@/lib/floLanguage";
 import { collectFloHistoryPages, type FloReviewProposal } from "@/lib/floExperience";
-import { isFloTerminalEvent, parseFloSseChunk, type FloSource, type FloStreamEvent } from "@/lib/floStream";
+import { FLO_CLIENT_RESPONSE_TIMEOUT_MS, isFloTerminalEvent, parseFloSseChunk, type FloSource, type FloStreamEvent } from "@/lib/floStream";
 
 export { parseFloSseChunk } from "@/lib/floStream";
 export type { FloSource, FloStreamEvent } from "@/lib/floStream";
@@ -277,55 +277,73 @@ export async function streamFloChat(input: {
   signal?: AbortSignal;
   onEvent: (event: FloStreamEvent) => void;
 }): Promise<void> {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const accessToken = sessionData.session?.access_token;
-  if (!accessToken) throw new Error("session_required");
-  const response = await expoFetch(`${supabaseUrl}/functions/v1/flo-chat`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      apikey: supabaseAnonKey,
-      "Content-Type": "application/json",
-      Accept: "text/event-stream",
-    },
-    body: JSON.stringify({
-      version: 3,
-      ...(input.conversationId ? { conversationId: input.conversationId } : {}),
-      householdId: input.householdId,
-      userMessage: { id: input.userMessageId, text: input.text },
-      assistantMessageId: input.assistantMessageId,
-      context: input.context,
-      historyEnabled: input.historyEnabled !== false,
-      timezone: input.timezone,
-      previewTier: input.previewTier ?? null,
-    }),
-    signal: input.signal,
-  });
-  if (!response.ok || !response.body) {
-    const payload = await response.json().catch(() => ({})) as { error?: string; message?: string };
-    throw new Error(payload.error || payload.message || `flo_http_${response.status}`);
+  const requestController = new AbortController();
+  let timedOut = false;
+  const stopForCaller = () => requestController.abort();
+  if (input.signal?.aborted) stopForCaller();
+  else input.signal?.addEventListener("abort", stopForCaller, { once: true });
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    requestController.abort();
+  }, FLO_CLIENT_RESPONSE_TIMEOUT_MS);
+
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) throw new Error("session_required");
+    const response = await expoFetch(`${supabaseUrl}/functions/v1/flo-chat`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        apikey: supabaseAnonKey,
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      },
+      body: JSON.stringify({
+        version: 3,
+        ...(input.conversationId ? { conversationId: input.conversationId } : {}),
+        householdId: input.householdId,
+        userMessage: { id: input.userMessageId, text: input.text },
+        assistantMessageId: input.assistantMessageId,
+        context: input.context,
+        historyEnabled: input.historyEnabled !== false,
+        timezone: input.timezone,
+        previewTier: input.previewTier ?? null,
+      }),
+      signal: requestController.signal,
+    });
+    if (!response.ok || !response.body) {
+      const payload = await response.json().catch(() => ({})) as { error?: string; message?: string };
+      throw new Error(payload.error || payload.message || `flo_http_${response.status}`);
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let pending = "";
+    let terminal = false;
+    let ephemeralCleaned = input.historyEnabled !== false;
+    const emit = (event: FloStreamEvent) => {
+      if (isFloTerminalEvent(event)) terminal = true;
+      if (event.type === "ephemeral-cleanup" && event.status === "completed") ephemeralCleaned = true;
+      input.onEvent(event);
+    };
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const parsed = parseFloSseChunk(pending, decoder.decode(value, { stream: true }));
+      pending = parsed.pending;
+      parsed.events.forEach(emit);
+    }
+    const final = parseFloSseChunk(pending, "\n\n");
+    final.events.forEach(emit);
+    if (!terminal) throw new Error("flo_stream_incomplete");
+    if (!ephemeralCleaned) throw new Error("ephemeral_cleanup_failed");
+  } catch (error) {
+    if (timedOut) throw new Error("flo_timeout");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+    input.signal?.removeEventListener("abort", stopForCaller);
   }
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let pending = "";
-  let terminal = false;
-  let ephemeralCleaned = input.historyEnabled !== false;
-  const emit = (event: FloStreamEvent) => {
-    if (isFloTerminalEvent(event)) terminal = true;
-    if (event.type === "ephemeral-cleanup" && event.status === "completed") ephemeralCleaned = true;
-    input.onEvent(event);
-  };
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const parsed = parseFloSseChunk(pending, decoder.decode(value, { stream: true }));
-    pending = parsed.pending;
-    parsed.events.forEach(emit);
-  }
-  const final = parseFloSseChunk(pending, "\n\n");
-  final.events.forEach(emit);
-  if (!terminal) throw new Error("flo_stream_incomplete");
-  if (!ephemeralCleaned) throw new Error("ephemeral_cleanup_failed");
 }
 
 export async function listAllFloMessages(conversationId: string): Promise<FloStoredMessage[]> {

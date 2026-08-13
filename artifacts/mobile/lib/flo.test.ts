@@ -522,6 +522,15 @@ test("streamed Flo replies can be replaced with a concise final answer", () => {
   assert.equal(replaced.sending, false);
 });
 
+test("Flo progress updates replace the spinner label without ending the request", () => {
+  const start: FloChatState = { messages: [], sending: false };
+  const sending = reduceFloChat(start, { type: "submit", id: "user-1", assistantId: "flo-1", text: "Which bills are next?" });
+  const checking = reduceFloChat(sending, { type: "status", id: "flo-1", text: "Reviewing your bills and debt" });
+  assert.equal(checking.messages.find(message => message.id === "flo-1")?.text, "Reviewing your bills and debt");
+  assert.equal(checking.messages.find(message => message.id === "flo-1")?.thinking, true);
+  assert.equal(checking.sending, true);
+});
+
 test("every unmatched Flo question gets a useful account fallback", () => {
   const answer = fallbackFloAnswer("Tell me what matters", facts);
   assert.match(answer, /projected balance/i);
