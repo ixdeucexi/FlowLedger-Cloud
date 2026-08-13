@@ -124,9 +124,8 @@ function AuthObserver() {
 }
 
 function StartupScreen({ style }: { style?: StyleProp<ViewStyle> } = {}) {
-  const colors = useColors();
   return (
-    <Animated.View style={[styles.startup, { backgroundColor: colors.background }, style]}>
+    <Animated.View style={[styles.startup, style]}>
       <Image
         accessibilityIgnoresInvertColors
         accessibilityLabel="FlowLedger"
@@ -134,14 +133,15 @@ function StartupScreen({ style }: { style?: StyleProp<ViewStyle> } = {}) {
         style={styles.startupIcon}
         resizeMode="contain"
       />
-      <Text style={[styles.startupStatus, { color: colors.mutedForeground }]}>Loading Plan...</Text>
+      <Text style={styles.startupStatus}>Loading Plan...</Text>
     </Animated.View>
   );
 }
 
 function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSplash: () => void }) {
   const colors = useColors();
-  const { loading: authLoading } = useAuth();
+  const { session, loading: authLoading } = useAuth();
+  const { loading: budgetLoading } = useBudget();
   const { ready: biometricLockReady, locked: biometricLocked } = useBiometricLock();
   const { ready: themeReady } = useThemeMode();
   const reduceMotion = useReducedMotion();
@@ -153,7 +153,8 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
   const startupOpacity = useRef(new Animated.Value(1)).current;
   const appOpacity = useRef(new Animated.Value(0)).current;
   const coreReady = fontsReady && !authLoading && biometricLockReady && themeReady;
-  const appReady = coreReady && minimumStartupReady;
+  const planReady = !session || !budgetLoading;
+  const appReady = coreReady && planReady && minimumStartupReady;
 
   useEffect(() => {
     if (!coreReady || biometricLocked) return;
@@ -359,9 +360,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
   },
   startupStatus: {
-    marginTop: 2,
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 14,
-    letterSpacing: 0.2,
+    color: "#f8fafc",
+    fontFamily: "Inter_800ExtraBold",
+    fontSize: 20,
+    fontWeight: "800",
   },
 });
