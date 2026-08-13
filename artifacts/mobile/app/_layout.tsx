@@ -36,7 +36,7 @@ SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 const PLAN_LOADING_MS = 220;
-const STARTUP_BRAND_FADE_MS = 360;
+const STARTUP_BRAND_FADE_MS = 1200;
 const APP_REVEAL_MS = 160;
 
 function AuthObserver() {
@@ -189,7 +189,7 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
       Animated.timing(brandEntranceOpacity, {
         toValue: 1,
         duration: STARTUP_BRAND_FADE_MS,
-        easing: Easing.out(Easing.cubic),
+        easing: Easing.inOut(Easing.quad),
         useNativeDriver: Platform.OS !== "web",
       }).start(({ finished }) => {
         if (active && finished) setBrandEntranceReady(true);

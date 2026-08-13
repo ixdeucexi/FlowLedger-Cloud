@@ -39,7 +39,7 @@ Release FlowLedger as a signed iOS and Android app while keeping the existing PW
 - [x] Flo shows live account-check progress, keeps its Edge stream active, and ends stalled requests with a clear Retry instead of spinning indefinitely
 - [x] Flo finishes paid account answers in a bounded foreground request, falls back to verified multi-source guidance, atomically records completion/usage/audit, reconciles stale replies, and never reloads an empty response bubble
 - [x] Keep the large 200dp branded “Loading Plan...” screen visible without shrinking, resizing, or swapping until the signed-in household plan finishes loading
-- [x] Fade in the complete fixed-size startup brand once after the native splash, render it immediately for reduced motion, and never replay the entrance during the root-route handoff
+- [x] Fade in the complete fixed-size startup brand once over 1.2 seconds after the native splash, render it immediately for reduced motion, and never replay the entrance during the root-route handoff
 - [x] In-app Terms of Service and Privacy Policy screens
 - [x] Financial calculation and regression test coverage
 - [x] Expo Doctor passes all 18 checks

@@ -8,7 +8,9 @@ test("startup brand uses one root-owned opacity entrance without resizing", () =
   const index = readFileSync("app/index.tsx", "utf8");
 
   assert.match(layout, /brandEntranceOpacity = useRef\(new Animated\.Value\(0\)\)/);
+  assert.match(layout, /const STARTUP_BRAND_FADE_MS = 1200/);
   assert.match(layout, /duration: STARTUP_BRAND_FADE_MS/);
+  assert.match(layout, /easing: Easing\.inOut\(Easing\.quad\)/);
   assert.match(layout, /if \(reduceMotion\)[\s\S]*brandEntranceOpacity\.setValue\(1\)/);
   assert.match(layout, /const appReady = coreReady && planReady && minimumStartupReady && brandEntranceReady/);
   assert.doesNotMatch(layout, /brandEntranceOpacity[\s\S]{0,160}(scale|width|height)/);
