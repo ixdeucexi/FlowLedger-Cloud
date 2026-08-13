@@ -1394,6 +1394,17 @@ export default function MonthlyScreen() {
     setSelectedDate(isoDateForMonthDay(nextYear, month, 1));
   }, [month, selectedYear, setSelectedYear]);
 
+  const openPlannedDebtPaymentEditor = useCallback((event: FinancialEvent) => {
+    const editorParams = plannedDebtEditorParams(event);
+    if (!editorParams) return false;
+    setSelectedDate(null);
+    router.push({
+      pathname: "/planned-debt-payment",
+      params: editorParams,
+    } as never);
+    return true;
+  }, [router]);
+
   const openDesktopCalendarEvent = (event: FinancialEvent) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (event.sourceType === "transaction") {
@@ -1428,14 +1439,7 @@ export default function MonthlyScreen() {
       return;
     }
     if (event.sourceType === "extra_payment") {
-      const editorParams = plannedDebtEditorParams(event);
-      if (editorParams) {
-        router.push({
-          pathname: "/planned-debt-payment",
-          params: editorParams,
-        } as never);
-        return;
-      }
+      if (openPlannedDebtPaymentEditor(event)) return;
       setSelectedDate(null);
       setSnowballModalVisible(true);
     }
@@ -2156,6 +2160,7 @@ export default function MonthlyScreen() {
                             : undefined;
                           const paymentDate = savedPayment?.payment_date ?? payment.event.date;
                           const snowballMonthToDate = snowballPlanTotalThroughDate(snowballPlanEntries, paymentDate);
+                          const editorParams = plannedDebtEditorParams(payment.event);
                           return (
                             <CalendarDebtPaymentCard
                               key={`overlay-debt-${payment.event.id}`}
@@ -2171,11 +2176,8 @@ export default function MonthlyScreen() {
                                   pathname: "/snowball-plan",
                                   params: { paymentId: savedPayment.id },
                                 } as never);
-                              } : plannedDebtEditorParams(payment.event) ? () => {
-                                router.push({
-                                  pathname: "/planned-debt-payment",
-                                  params: plannedDebtEditorParams(payment.event),
-                                } as never);
+                              } : editorParams ? () => {
+                                openPlannedDebtPaymentEditor(payment.event);
                               } : undefined}
                               onRemove={savedPayment ? async () => {
                                 await removeDebtSnowballPayment(savedPayment.month, savedPayment.year);
