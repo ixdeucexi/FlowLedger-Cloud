@@ -1,15 +1,12 @@
 import React from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+
+import { StartupPlanBrand } from "@/components/StartupPlanBrand";
 
 export default function StartupRoute() {
   return (
     <View style={styles.root}>
-      <Image
-        source={require("../assets/images/startup_f_transparent.png")}
-        style={styles.logo}
-        resizeMode="contain"
-      />
-      <Text style={styles.appName}>Loading Plan...</Text>
+      <StartupPlanBrand />
     </View>
   );
 }
@@ -20,20 +17,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#050816",
-  },
-  logo: {
-    width: 118,
-    height: 118,
-    borderRadius: 30,
-    marginBottom: 14,
-    shadowColor: "#38bdf8",
-    shadowOpacity: 0.22,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-  },
-  appName: {
-    color: "#f8fafc",
-    fontSize: 20,
-    fontWeight: "800",
   },
 });

@@ -9,7 +9,7 @@ import { useFonts } from "expo-font";
 import { Stack, useGlobalSearchParams, usePathname, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, BackHandler, Easing, Image, Platform, StyleSheet, StyleProp, Text, View, ViewStyle } from "react-native";
+import { Animated, BackHandler, Easing, Platform, StyleSheet, StyleProp, View, ViewStyle } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -20,6 +20,7 @@ import { ConfirmActionModal } from "@/components/ConfirmActionModal";
 import { LegalAcceptanceGate } from "@/components/LegalAcceptanceGate";
 import { PwaInstallPrompt } from "@/components/PwaInstallPrompt";
 import { PlaidOAuthResume } from "@/components/PlaidOAuthResume";
+import { StartupPlanBrand } from "@/components/StartupPlanBrand";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { BiometricLockProvider, useBiometricLock } from "@/context/BiometricLockContext";
 import { BudgetProvider, useBudget } from "@/context/BudgetContext";
@@ -126,14 +127,7 @@ function AuthObserver() {
 function StartupScreen({ style }: { style?: StyleProp<ViewStyle> } = {}) {
   return (
     <Animated.View style={[styles.startup, style]}>
-      <Image
-        accessibilityIgnoresInvertColors
-        accessibilityLabel="FlowLedger"
-        source={require("../assets/images/startup_f_transparent.png")}
-        style={styles.startupIcon}
-        resizeMode="contain"
-      />
-      <Text style={styles.startupStatus}>Loading Plan...</Text>
+      <StartupPlanBrand />
     </Animated.View>
   );
 }
@@ -348,21 +342,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#050816",
-  },
-  startupIcon: {
-    width: 118,
-    height: 118,
-    borderRadius: 30,
-    marginBottom: 14,
-    shadowColor: "#38bdf8",
-    shadowOpacity: 0.22,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-  },
-  startupStatus: {
-    color: "#f8fafc",
-    fontFamily: "Inter_800ExtraBold",
-    fontSize: 20,
-    fontWeight: "800",
   },
 });
