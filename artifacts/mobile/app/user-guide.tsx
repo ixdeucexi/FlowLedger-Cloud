@@ -534,6 +534,7 @@ const GuideSlidePage = memo(function GuideSlidePage({
         <View
           style={[
             styles.heroCard,
+            !isCover ? styles.compactHeroCard : null,
             {
               backgroundColor: colors.card,
               borderColor: slide.accent + "55",
@@ -555,6 +556,7 @@ const GuideSlidePage = memo(function GuideSlidePage({
             <View
               style={[
                 styles.heroIcon,
+                styles.compactHeroIcon,
                 {
                   backgroundColor: slide.accent + "20",
                   borderColor: slide.accent + "55",
@@ -567,10 +569,22 @@ const GuideSlidePage = memo(function GuideSlidePage({
           <Text style={[styles.eyebrow, { color: slide.accent }]}>
             {slide.eyebrow}
           </Text>
-          <Text style={[styles.slideTitle, { color: colors.foreground }]}>
+          <Text
+            style={[
+              styles.slideTitle,
+              !isCover ? styles.compactSlideTitle : null,
+              { color: colors.foreground },
+            ]}
+          >
             {slide.title}
           </Text>
-          <Text style={[styles.intro, { color: colors.mutedForeground }]}>
+          <Text
+            style={[
+              styles.intro,
+              !isCover ? styles.compactIntro : null,
+              { color: colors.mutedForeground },
+            ]}
+          >
             {slide.intro}
           </Text>
         </View>
@@ -587,7 +601,12 @@ const GuideSlidePage = memo(function GuideSlidePage({
               source={slide.image}
               contentFit="contain"
               transition={140}
-              style={styles.previewImage}
+              style={[
+                styles.previewImage,
+                {
+                  height: Math.min(540, Math.max(430, pageWidth * 1.15)),
+                },
+              ]}
             />
             <Text
               style={[styles.previewCaption, { color: colors.mutedForeground }]}
@@ -923,6 +942,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     padding: 20,
   },
+  compactHeroCard: { minHeight: 0, padding: 14 },
   heroGlow: {
     position: "absolute",
     width: 220,
@@ -940,6 +960,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 14,
   },
+  compactHeroIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    marginBottom: 8,
+  },
   logo: { width: 72, height: 72, borderRadius: 20, marginBottom: 14 },
   eyebrow: {
     fontFamily: "Inter_800ExtraBold",
@@ -953,6 +979,11 @@ const styles = StyleSheet.create({
     marginTop: 5,
     maxWidth: 560,
   },
+  compactSlideTitle: {
+    fontSize: 22,
+    lineHeight: 26,
+    marginTop: 3,
+  },
   intro: {
     fontFamily: "Inter_500Medium",
     fontSize: 14,
@@ -960,13 +991,14 @@ const styles = StyleSheet.create({
     marginTop: 8,
     maxWidth: 600,
   },
+  compactIntro: { fontSize: 13, lineHeight: 19, marginTop: 6 },
   previewCard: {
     borderWidth: 1,
     borderRadius: 22,
-    padding: 12,
+    padding: 9,
     alignItems: "center",
   },
-  previewImage: { width: "100%", height: 290, borderRadius: 14 },
+  previewImage: { width: "100%", borderRadius: 14 },
   previewCaption: {
     fontFamily: "Inter_500Medium",
     fontSize: 11,
