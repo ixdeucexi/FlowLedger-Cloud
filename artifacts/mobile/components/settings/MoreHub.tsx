@@ -65,7 +65,7 @@ export function MoreHub({
           {[
             { label: "Search", description: "Find anything", icon: "search" as const, onPress: onOpenSearch },
             { label: "Quick Actions", description: "Add or navigate", icon: "zap" as const, onPress: onOpenCommands },
-            { label: "Notifications", description: unreadNotificationCount ? `${unreadNotificationCount} unread` : "All caught up", icon: "bell" as const, onPress: onOpenNotifications },
+            { label: "Alerts", description: unreadNotificationCount ? `${unreadNotificationCount} unread` : "All caught up", icon: "bell" as const, onPress: onOpenNotifications },
           ].map(action => (
             <Pressable
               key={action.label}
