@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "@/lib/haptics";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import React, { memo, useCallback, useEffect, useRef, useState } from "react";

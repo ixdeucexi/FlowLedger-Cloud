@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "@/lib/haptics";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert, KeyboardAvoidingView, Modal, Platform,

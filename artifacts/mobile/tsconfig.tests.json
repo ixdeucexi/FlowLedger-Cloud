@@ -164,5 +164,6 @@
     ,"lib/userGuide.ts"
     ,"lib/userGuide.test.ts"
     ,"lib/startupBrand.test.ts"
+    ,"lib/hapticsPreference.test.ts"
   ]
 }

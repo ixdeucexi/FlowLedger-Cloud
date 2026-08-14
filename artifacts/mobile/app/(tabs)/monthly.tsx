@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "@/lib/haptics";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert, BackHandler, FlatList, Keyboard, Modal, PanResponder, Platform,

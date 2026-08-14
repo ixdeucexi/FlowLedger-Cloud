@@ -4,7 +4,7 @@ import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "@/lib/haptics";
 import * as Sharing from "expo-sharing";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, {
@@ -415,6 +415,11 @@ export default function MoreScreen({
     reviewTransactionId?: string;
   }>();
   const { themeMode, setThemeMode, fontStyle, setFontStyle } = useThemeMode();
+  const {
+    enabled: hapticsEnabled,
+    ready: hapticsReady,
+    setEnabled: setHapticsEnabled,
+  } = Haptics.useHapticsPreference();
   const { signOut, user } = useAuth();
   const { newFeedbackCount, refreshFeedbackCount } = useFeedbackBadge();
   const {
@@ -2491,6 +2496,16 @@ export default function MoreScreen({
                 );
               })}
             </View>
+            <SLabel c={c} text="Touch feedback" />
+            <PlanningToolToggle
+              c={c}
+              icon="smartphone"
+              label="Haptic feedback"
+              description="Gentle feedback for navigation, saves, and confirmations on this device."
+              enabled={hapticsEnabled}
+              disabled={!hapticsReady}
+              onPress={() => void setHapticsEnabled(!hapticsEnabled)}
+            />
           </>
         )}
 

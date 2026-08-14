@@ -56,6 +56,7 @@ import {
   syncAppBadge,
 } from "@/lib/appBadge";
 import { MOBILE_RIBBON_ITEMS } from "@/lib/mobileRibbon";
+import * as Haptics from "@/lib/haptics";
 
 function todayIsoDate() {
   const now = new Date();
@@ -662,6 +663,11 @@ function TabContent() {
           <Tabs
             backBehavior="history"
             detachInactiveScreens={false}
+            screenListeners={{
+              tabPress: () => {
+                void Haptics.selectionAsync();
+              },
+            }}
             screenOptions={{
               animation: "none",
               freezeOnBlur: !isWeb,
@@ -781,12 +787,13 @@ function TabContent() {
                           <Pressable
                             accessibilityRole="button"
                             accessibilityLabel="Add to FlowLedger"
-                            onPress={() =>
+                            onPress={() => {
+                              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                               router.push({
                                 pathname: "/(tabs)",
                                 params: { add: "1" },
                               } as any)
-                            }
+                            }}
                             style={({ pressed }) => [
                               styles.addTabSlot,
                               { opacity: pressed ? 0.78 : 1 },

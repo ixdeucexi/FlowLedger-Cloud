@@ -38,6 +38,7 @@ import {
 } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
 import { flowLedgerUserGuideTarget } from "@/lib/userGuide";
+import * as Haptics from "@/lib/haptics";
 
 export type DesktopSettingsSection =
   | "Profile"
@@ -141,6 +142,11 @@ export function DesktopSettingsPage({
   const { accounts, connectedBankAccounts, activeHousehold } = useBudget();
   const { actualPlan, loading: membershipLoading } = useMembership();
   const { themeMode, setThemeMode, fontStyle, setFontStyle } = useThemeMode();
+  const {
+    enabled: hapticsEnabled,
+    ready: hapticsReady,
+    setEnabled: setHapticsEnabled,
+  } = Haptics.useHapticsPreference();
   const [section, setSection] = useState<DesktopSettingsSection>("Profile");
   const [fullName, setFullName] = useState(() => nameFor(user));
   const [savingName, setSavingName] = useState(false);
@@ -410,6 +416,20 @@ export function DesktopSettingsPage({
                     ]}
                     onChange={(value) =>
                       void setFontStyle(value as AppFontStyle)
+                    }
+                  />
+                  <SettingsLine
+                    icon="smartphone"
+                    title="Haptic feedback"
+                    description="Gentle feedback for navigation, saves, and confirmations on this device."
+                    action={
+                      <SecondaryButton
+                        label={hapticsReady ? (hapticsEnabled ? "On" : "Off") : "Loading..."}
+                        icon={hapticsEnabled ? "toggle-right" : "toggle-left"}
+                        onPress={() => {
+                          if (hapticsReady) void setHapticsEnabled(!hapticsEnabled);
+                        }}
+                      />
                     }
                   />
                   <Text style={styles.supportNote}>
