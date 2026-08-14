@@ -198,7 +198,6 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
     if (!coreReady) return;
 
     let active = true;
-    let webEntranceTimer: ReturnType<typeof setTimeout> | undefined;
     void hideSplash().then(() => {
       if (!active) return;
 
@@ -216,9 +215,6 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
       setBrandEntranceStarted(true);
 
       if (Platform.OS === "web") {
-        webEntranceTimer = setTimeout(() => {
-          if (active) setBrandEntranceReady(true);
-        }, STARTUP_BRAND_FADE_MS + STARTUP_BRAND_HOLD_MS);
         return;
       }
 
@@ -237,9 +233,23 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
 
     return () => {
       active = false;
-      if (webEntranceTimer) clearTimeout(webEntranceTimer);
     };
   }, [brandEntranceOpacity, coreReady, hideSplash, reduceMotion]);
+
+  useEffect(() => {
+    if (
+      Platform.OS !== "web"
+      || !brandEntranceStarted
+      || brandEntranceReady
+      || reduceMotion
+    ) return;
+
+    const webEntranceTimer = setTimeout(
+      () => setBrandEntranceReady(true),
+      STARTUP_BRAND_FADE_MS + STARTUP_BRAND_HOLD_MS,
+    );
+    return () => clearTimeout(webEntranceTimer);
+  }, [brandEntranceReady, brandEntranceStarted, reduceMotion]);
 
   useEffect(() => {
     if (!appReady) {
