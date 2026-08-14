@@ -179,6 +179,7 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
   const [minimumStartupReady, setMinimumStartupReady] = useState(false);
   const [brandEntranceStarted, setBrandEntranceStarted] = useState(false);
   const [brandEntranceReady, setBrandEntranceReady] = useState(false);
+  const [appReady, setAppReady] = useState(false);
   const [showStartupOverlay, setShowStartupOverlay] = useState(true);
   const [webExitStarted, setWebExitStarted] = useState(false);
   const brandEntranceStartedRef = useRef(false);
@@ -187,7 +188,11 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
   const appOpacity = useRef(new Animated.Value(0)).current;
   const coreReady = fontsReady && !authLoading && biometricLockReady && themeReady;
   const planReady = !session || !budgetLoading;
-  const appReady = coreReady && planReady && minimumStartupReady && brandEntranceReady;
+  const initialAppReady = coreReady && planReady && minimumStartupReady && brandEntranceReady;
+
+  useEffect(() => {
+    if (initialAppReady) setAppReady(true);
+  }, [initialAppReady]);
 
   useEffect(() => {
     if (!coreReady || biometricLocked) return;

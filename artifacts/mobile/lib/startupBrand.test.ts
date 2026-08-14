@@ -23,7 +23,9 @@ test("startup brand uses one root-owned opacity entrance without resizing", () =
   assert.match(layout, /APP_REVEAL_MS \+ 80/);
   assert.match(layout, /leaving=\{webExitStarted\}/);
   assert.match(layout, /if \(reduceMotion\)[\s\S]*brandEntranceOpacity\.setValue\(1\)/);
-  assert.match(layout, /const appReady = coreReady && planReady && minimumStartupReady && brandEntranceReady/);
+  assert.match(layout, /const initialAppReady = coreReady && planReady && minimumStartupReady && brandEntranceReady/);
+  assert.match(layout, /if \(initialAppReady\) setAppReady\(true\)/);
+  assert.doesNotMatch(layout, /setAppReady\(false\)/);
   assert.doesNotMatch(layout, /brandEntranceOpacity[\s\S]{0,160}(scale|width|height)/);
 
   assert.match(brand, /const STARTUP_LOGO_SIZE = 200/);
