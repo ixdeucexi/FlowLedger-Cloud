@@ -35,7 +35,7 @@ import { confirmedBillMatchId, isConfirmedBillMatch } from "@/lib/billMatching";
 import { nextPlannedDebtPayment } from "@/lib/billSurplusRouting";
 import { allocationLabel, groupPlannedExpenseAllocations, matchedOccurrenceAllocations, occurrenceKey, reviewSettlementSummary, transactionDisplayName } from "@/lib/reviewCenter";
 import { evaluateDecision, scenarioDates } from "@/lib/decisions";
-import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, groupForecastEvents, plannedDebtEditorParams } from "@/lib/forecastDisplay";
+import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, forecastItemBadgeLabel, forecastItemTypeLabel, groupForecastEvents, plannedDebtEditorParams } from "@/lib/forecastDisplay";
 import type { FinancialEvent } from "@/lib/forecast";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { buildOverdueBillOccurrences } from "@/lib/overdueBills";
@@ -103,13 +103,13 @@ function PayStatus({
   paid,
   partial,
   overdue = false,
-  scheduled = false,
+  scheduledLabel,
   pendingLabel,
 }: {
   paid: boolean;
   partial: boolean;
   overdue?: boolean;
-  scheduled?: boolean;
+  scheduledLabel?: string;
   pendingLabel?: string;
 }) {
   const c = useColors();
@@ -117,7 +117,7 @@ function PayStatus({
   if (paid) return <View style={[ps.badge, { backgroundColor: c.success + "25" }]}><Text style={[ps.text, { color: c.success }]}>PAID</Text></View>;
   if (overdue) return <View style={[ps.badge, { backgroundColor: c.destructive + "25" }]}><Text style={[ps.text, { color: c.destructive }]}>OVERDUE</Text></View>;
   if (partial) return <View style={[ps.badge, { backgroundColor: c.warning + "25" }]}><Text style={[ps.text, { color: c.warning }]}>PARTIAL</Text></View>;
-  if (scheduled) return <View style={[ps.badge, { backgroundColor: c.primary + "20" }]}><Text style={[ps.text, { color: c.primary }]}>SCHEDULED</Text></View>;
+  if (scheduledLabel) return <View style={[ps.badge, { backgroundColor: c.primary + "20" }]}><Text style={[ps.text, { color: c.primary }]}>{scheduledLabel.toUpperCase()}</Text></View>;
   return <View style={[ps.badge, { backgroundColor: c.destructive + "20" }]}><Text style={[ps.text, { color: c.destructive }]}>UNPAID</Text></View>;
 }
 const ps = StyleSheet.create({
@@ -130,6 +130,7 @@ function CalendarDebtPaymentCard({
   amount,
   applied,
   statusLabel,
+  paymentType,
   requiredMinimum,
   snowballMonthToDate,
   onEdit,
@@ -140,6 +141,7 @@ function CalendarDebtPaymentCard({
   amount: number;
   applied: boolean;
   statusLabel: string;
+  paymentType: string;
   requiredMinimum?: number;
   snowballMonthToDate?: number;
   onEdit?: () => void;
@@ -198,7 +200,7 @@ function CalendarDebtPaymentCard({
       <View style={styles.dayBillTop}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text numberOfLines={1} style={[styles.dayBillName, { color: c.foreground }]}>{name}</Text>
-          <Text style={[styles.dayBillMeta, { color: c.mutedForeground }]}>Snowball payment</Text>
+          <Text style={[styles.dayBillMeta, { color: c.mutedForeground }]}>{paymentType} payment</Text>
         </View>
         <View style={[styles.dayTransactionBadge, { backgroundColor: "#3b82f620" }]}>
           <Text style={[styles.dayTransactionBadgeText, { color: "#3b82f6" }]}>{statusLabel.toUpperCase()}</Text>
@@ -2189,7 +2191,7 @@ export default function MonthlyScreen() {
                                   paid={isPaid}
                                   partial={isPartial}
                                   overdue={Boolean(overdueOccurrence)}
-                                  scheduled={occurrenceDate > todayIsoDate()}
+                                  scheduledLabel={occurrenceDate > todayIsoDate() ? bill.is_debt ? "Debt" : "Bill" : undefined}
                                   pendingLabel={pendingMatch ? pendingMatchStatusLabel(pendingMatch) : undefined}
                                 />
                               </View>
@@ -2351,7 +2353,8 @@ export default function MonthlyScreen() {
                               name={payment.label.replace(/ debt payment$/i, "")}
                               amount={amount}
                               applied={applied}
-                              statusLabel={payment.statusLabel}
+                              statusLabel={forecastItemBadgeLabel(payment.event, payment.statusLabel)}
+                              paymentType={forecastItemTypeLabel(payment.event)}
                               requiredMinimum={requiredMinimum}
                               snowballMonthToDate={snowballMonthToDate}
                               onEdit={savedPayment ? () => {
@@ -2413,7 +2416,8 @@ export default function MonthlyScreen() {
                               name={name}
                               amount={amount}
                               applied={applied}
-                              statusLabel={applied ? "Applied" : "Scheduled"}
+                              statusLabel={applied ? "Applied" : "Snowball"}
+                              paymentType="Snowball"
                               requiredMinimum={requiredMinimum}
                               snowballMonthToDate={snowballMonthToDate}
                               onEdit={reviewedSnowball ? undefined : () => {

@@ -115,6 +115,24 @@ export function formatEventStatus(status: FinancialEventStatus): string {
   return STATUS_LABELS[status] ?? status;
 }
 
+export function forecastItemTypeLabel(event: FinancialEvent): string {
+  if (event.kind === "debt_payment" || event.sourceType === "extra_payment") {
+    return event.debtPlanAllocationKind === "required" ? "Debt" : "Snowball";
+  }
+  if (event.kind === "bill" || event.sourceType === "bill") return "Bill";
+  if (event.kind === "scheduled_income" || event.kind === "transaction_income" || event.sourceType === "income") return "Income";
+  if (event.kind === "goal" || event.sourceType === "goal") return "Goal";
+  if (event.sourceType === "decision") return "Plan";
+  return "Activity";
+}
+
+export function forecastItemBadgeLabel(event: FinancialEvent, statusLabel: string): string {
+  const normalizedStatus = statusLabel.trim().toLowerCase();
+  return normalizedStatus === "scheduled" || normalizedStatus === "planned"
+    ? forecastItemTypeLabel(event)
+    : statusLabel;
+}
+
 export function calendarVisibleForecastEvents(events: FinancialEvent[] = []): FinancialEvent[] {
   return combineSameDayDebtPaymentEvents(
     events.filter(event => event.sourceType !== "reconciliation" && event.kind !== "bank_adjustment"),

@@ -3975,6 +3975,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           status: sourceCommitment?.state === "pending" ? "pending" : allocation.date > localDateString() ? "scheduled" : "planned",
           name: `${allocation.targetBillName} debt payment`,
           debtPlanSource: allocation.kind === "extra" ? "saved_extra" : "canonical",
+          debtPlanAllocationKind: allocation.kind,
           debtTargetBillId: allocation.targetBillId,
         });
       });

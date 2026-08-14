@@ -23,6 +23,7 @@ export interface FinancialEvent {
   configuredOccurrenceAmount?: number;
   settledOccurrenceAmount?: number;
   debtPlanSource?: "canonical" | "saved_extra";
+  debtPlanAllocationKind?: "required" | "rollover" | "extra";
   debtTargetBillId?: string;
 }
 

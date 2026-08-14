@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, combineSameDayDebtPaymentEvents, debtPaymentStatusLabel, formatCalendarBalance, groupForecastEvents, plannedDebtEditorParams } from "./forecastDisplay";
+import { buildDayForecastFloPrompt, calendarVisibleForecastEvents, combineSameDayDebtPaymentEvents, debtPaymentStatusLabel, forecastItemBadgeLabel, forecastItemTypeLabel, formatCalendarBalance, groupForecastEvents, plannedDebtEditorParams } from "./forecastDisplay";
 import type { FinancialEvent } from "./forecast";
 
 const event = (overrides: Partial<FinancialEvent> & Pick<FinancialEvent, "id" | "sourceType" | "sourceId" | "kind" | "date" | "amount" | "status">): FinancialEvent => ({
@@ -76,6 +76,18 @@ test("a canonical child opens the editor for its source debt and occurrence", ()
   });
   assert.deepEqual(plannedDebtEditorParams(rolloverChild), { billId: "camera", date: "2026-08-11" });
   assert.equal(plannedDebtEditorParams({ ...rolloverChild, debtPlanSource: "saved_extra" }), undefined);
+});
+
+test("planned badges name the money type while real statuses stay intact", () => {
+  const bill = event({ id: "apple", sourceType: "bill", sourceId: "apple", kind: "bill", date: "2026-08-28", amount: -10.99, status: "scheduled" });
+  const debt = event({ id: "tesla-required", sourceType: "extra_payment", sourceId: "tesla", kind: "debt_payment", date: "2026-08-28", amount: -695.51, status: "scheduled", debtPlanAllocationKind: "required" });
+  const snowball = event({ id: "tesla-extra", sourceType: "extra_payment", sourceId: "tesla", kind: "debt_payment", date: "2026-08-28", amount: -50, status: "planned", debtPlanAllocationKind: "extra" });
+
+  assert.equal(forecastItemBadgeLabel(bill, "scheduled"), "Bill");
+  assert.equal(forecastItemTypeLabel(debt), "Debt");
+  assert.equal(forecastItemBadgeLabel(debt, "scheduled"), "Debt");
+  assert.equal(forecastItemBadgeLabel(snowball, "planned"), "Snowball");
+  assert.equal(forecastItemBadgeLabel(debt, "PAYMENT PENDING"), "PAYMENT PENDING");
 });
 
 test("combines a routed surplus with the same debt's planned payment on that date", () => {
