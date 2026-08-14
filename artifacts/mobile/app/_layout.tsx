@@ -180,6 +180,7 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
   const [brandEntranceStarted, setBrandEntranceStarted] = useState(false);
   const [brandEntranceReady, setBrandEntranceReady] = useState(false);
   const [showStartupOverlay, setShowStartupOverlay] = useState(true);
+  const [webExitStarted, setWebExitStarted] = useState(false);
   const brandEntranceStartedRef = useRef(false);
   const brandEntranceOpacity = useRef(new Animated.Value(0)).current;
   const startupOpacity = useRef(new Animated.Value(1)).current;
@@ -255,6 +256,7 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
     if (!appReady) {
       startupOpacity.setValue(1);
       appOpacity.setValue(0);
+      setWebExitStarted(false);
       setShowStartupOverlay(true);
       return;
     }
@@ -270,8 +272,14 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
       startupOpacity.setValue(1);
       appOpacity.setValue(1);
       setShowStartupOverlay(true);
-      const webExitTimer = setTimeout(() => setShowStartupOverlay(false), APP_REVEAL_MS);
-      return () => clearTimeout(webExitTimer);
+      let secondFrame: number | undefined;
+      const firstFrame = window.requestAnimationFrame(() => {
+        secondFrame = window.requestAnimationFrame(() => setWebExitStarted(true));
+      });
+      return () => {
+        window.cancelAnimationFrame(firstFrame);
+        if (secondFrame !== undefined) window.cancelAnimationFrame(secondFrame);
+      };
     }
 
     setShowStartupOverlay(true);
@@ -290,6 +298,16 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
       }),
     ]).start(() => setShowStartupOverlay(false));
   }, [appReady, appOpacity, reduceMotion, startupOpacity]);
+
+  useEffect(() => {
+    if (Platform.OS !== "web" || !appReady || !webExitStarted || reduceMotion) return;
+
+    const webExitTimer = setTimeout(
+      () => setShowStartupOverlay(false),
+      APP_REVEAL_MS + 80,
+    );
+    return () => clearTimeout(webExitTimer);
+  }, [appReady, reduceMotion, webExitStarted]);
 
   useEffect(() => {
     if (!appReady || Platform.OS === "web") return;
@@ -369,7 +387,7 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
         <StartupScreen
           brandOpacity={brandEntranceOpacity}
           brandEntranceStarted={brandEntranceStarted}
-          leaving={appReady}
+          leaving={webExitStarted}
           reduceMotion={reduceMotion}
           style={[styles.startupOverlay, Platform.OS === "web" ? undefined : { opacity: startupOpacity }]}
         />
