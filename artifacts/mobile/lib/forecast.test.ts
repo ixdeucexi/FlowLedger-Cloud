@@ -6,6 +6,7 @@ import {
   buildFinancialEvents,
   evaluateAffordability,
   forecastBalances,
+  suppressDebtBillPlanDuplicates,
   type FinancialEvent,
 } from "./forecast";
 
@@ -18,6 +19,54 @@ const event = (overrides: Partial<FinancialEvent> & Pick<FinancialEvent, "id" | 
 });
 
 describe("forecastBalances", () => {
+  it("keeps one remaining outflow for a partially paid edited debt", () => {
+    const events = suppressDebtBillPlanDuplicates([
+      event({
+        id: "discover-paid",
+        sourceType: "transaction",
+        sourceId: "discover-paid",
+        date: "2026-08-13",
+        kind: "transaction_expense",
+        amount: -57,
+        status: "actual",
+        name: "Discover payment",
+      }),
+      event({
+        id: "legacy-discover-bill",
+        sourceType: "bill",
+        sourceId: "discover",
+        date: "2026-08-22",
+        kind: "bill",
+        amount: -56,
+        status: "planned",
+        name: "Discover",
+      }),
+      event({
+        id: "discover-required",
+        sourceType: "extra_payment",
+        sourceId: "discover",
+        date: "2026-08-22",
+        kind: "debt_payment",
+        amount: -113,
+        status: "scheduled",
+        name: "Discover debt payment",
+        debtPlanSource: "canonical",
+        debtPlanAllocationKind: "required",
+        debtTargetBillId: "discover",
+      }),
+    ]);
+
+    assert.deepEqual(events.map(item => item.id), ["discover-paid", "discover-required"]);
+    const result = forecastBalances({
+      openingBalance: 1000,
+      startDate: "2026-08-01",
+      endDate: "2026-08-31",
+      events,
+    });
+    assert.equal(result.days.find(day => day.date === "2026-08-22")?.events.length, 1);
+    assert.equal(result.endingBalance, 830);
+  });
+
   it("preserves dated income, bills, transactions, goals and debt payments", () => {
     const result = forecastBalances({
       openingBalance: 500,

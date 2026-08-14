@@ -29,7 +29,7 @@ import {
   type DebtSourceCommitment,
   type DebtMonthSettlement,
 } from "@/lib/debtPlanDomain";
-import { anchorForecastToBankBalance, forecastBalances, type FinancialEvent } from "@/lib/forecast";
+import { anchorForecastToBankBalance, forecastBalances, suppressDebtBillPlanDuplicates, type FinancialEvent } from "@/lib/forecast";
 import { diagnosticErrorCode } from "@/lib/diagnosticPolicy";
 import { decisionDbPayload } from "@/lib/decisionPersistence";
 import { recordDiagnostic } from "@/lib/diagnostics";
@@ -3607,8 +3607,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         const inc = incomes.reduce((s, i) => s + getIncomeOccurrenceDays(i, m, y).length * getEffectiveIncomeAmount(i, m, y), 0);
         const debtPlan = getRemainingDebtPlanForMonth(m, y);
         const bil = bills.filter(b => b.is_recurring || b.is_debt).reduce((s, b) => {
-          const monthOverride = overrides.find(item => item.bill_id === b.id && item.month === m && item.year === y);
-          if (b.is_debt && debtPlan && monthOverride?.actual_amount === undefined) return s;
+          if (b.is_debt && debtPlan) return s;
           const occ = getBillOccurrencesInMonth(b, m, y);
           if (occ.length === 0) return s;
           return s + getBillEffectiveMonthlyTotal(b, m, y);
@@ -3693,8 +3692,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const activeBills = getMonthlyBills(month, year);
     const debtPlan = getRemainingDebtPlanForMonth(month, year);
     const totalBillsDue = activeBills.reduce((sum, bill) => {
-      const monthOverride = overrides.find(item => item.bill_id === bill.id && item.month === month && item.year === year);
-      if (bill.is_debt && debtPlan && monthOverride?.actual_amount === undefined) return sum;
+      if (bill.is_debt && debtPlan) return sum;
       const occurrences = getBillOccurrencesInMonth(bill, month, year);
       const amount = occurrences.length > 0 ? getBillMonthlyTotal(bill, month, year) / occurrences.length : 0;
       return sum + occurrences.reduce((occurrenceSum, day) => {
@@ -3782,9 +3780,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const bil = bills.filter(b => b.is_recurring || b.is_debt).reduce((s, b) => {
         const occ = getBillOccurrencesInMonth(b, m, y);
         if (occ.length === 0) return s;
-        const override = overrides.find(item => item.bill_id === b.id && item.month === m && item.year === y);
         const hasReviewedOccurrence = Array.from(billMatches.keys()).some(key => key.startsWith(`${b.id}:${monthPrefix}`));
-        if (b.is_debt && debtPlan && override?.actual_amount === undefined) return s;
+        if (b.is_debt && debtPlan) return s;
         const total = hasReviewedOccurrence
           ? getBillMonthlyTotal(b, m, y)
           : getBillEffectiveMonthlyTotal(b, m, y);
@@ -3916,7 +3913,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       if (occ.length === 0) return;
       const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
       const hasReviewedOccurrence = Array.from(billMatches.keys()).some(key => key.startsWith(`${b.id}:${year}-${String(month + 1).padStart(2, "0")}`));
-      if (b.is_debt && debtPlan && o?.actual_amount === undefined) return;
+      if (b.is_debt && debtPlan) return;
       const total = hasReviewedOccurrence
         ? getBillMonthlyTotal(b, month, year)
         : getBillEffectiveMonthlyTotal(b, month, year);
@@ -4035,13 +4032,13 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     });
     const currentMonthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
     let openingBalance = carryover;
-    let balanceEvents = financialEvents;
+    let balanceEvents = suppressDebtBillPlanDuplicates(financialEvents);
     if (connectedBankAnchor?.date.startsWith(currentMonthPrefix)) {
       const settledTransactionEventIds = new Set(monthTxs
         .filter(transaction => transaction.source === "plaid" || transaction.source === "statement" || Boolean(transaction.import_hash))
         .map(transaction => `transaction:${transaction.id}`));
       const anchored = anchorForecastToBankBalance(
-        financialEvents,
+        balanceEvents,
         connectedBankAnchor.balance,
         connectedBankAnchor.date,
         settledTransactionEventIds,
@@ -4054,9 +4051,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       openingBalance = anchored.openingBalance;
       balanceEvents = anchored.events;
     } else if (bankAnchor?.date.startsWith(currentMonthPrefix)) {
-      const adjustment = bankBalanceAdjustment(openingBalance, bankAnchor.balance, bankAnchor.date, financialEvents);
+      const adjustment = bankBalanceAdjustment(openingBalance, bankAnchor.balance, bankAnchor.date, balanceEvents);
       if (Math.abs(adjustment) >= 0.005) {
-        financialEvents.push({
+        balanceEvents.push({
           id: `bank-adjustment:${bankAnchor.date}`,
           sourceType: "reconciliation",
           sourceId: bankAnchor.date,

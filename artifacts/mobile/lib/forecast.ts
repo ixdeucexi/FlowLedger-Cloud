@@ -40,6 +40,23 @@ export interface BankAnchoredForecast {
 }
 
 /**
+ * A canonical debt projection already owns the remaining payment for its source
+ * debt and date. Drop any legacy bill-plan row for that same occurrence so one
+ * obligation can never reduce Forecast twice or render two calendar chips.
+ */
+export function suppressDebtBillPlanDuplicates(events: readonly FinancialEvent[]): FinancialEvent[] {
+  const canonicalDebtOccurrenceKeys = new Set(events
+    .filter(event => (event.kind === "debt_payment" || event.sourceType === "extra_payment")
+      && Boolean(event.debtTargetBillId))
+    .map(event => `${event.date}:${event.debtTargetBillId}`));
+
+  return events.filter(event => !(
+    (event.kind === "bill" || event.sourceType === "bill")
+    && canonicalDebtOccurrenceKeys.has(`${event.date}:${event.sourceId}`)
+  ));
+}
+
+/**
  * Builds the balance side of a connected-bank forecast.
  *
  * Before the bank's as-of date, only settled ledger events may move the balance.
@@ -150,7 +167,7 @@ export function buildFinancialEvents(events: FinancialEvent[]): {
 } {
   const diagnostics: ForecastDiagnostic[] = [];
   const seen = new Set<string>();
-  const valid = events.filter(event => {
+  const valid = suppressDebtBillPlanDuplicates(events).filter(event => {
     if (!event.id || !event.sourceId || !parseDateOnly(event.date) || !Number.isFinite(event.amount)) {
       diagnostics.push({ code: "invalid_event", eventId: event.id || "unknown" });
       return false;
