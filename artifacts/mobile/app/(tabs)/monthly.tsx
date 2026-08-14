@@ -49,6 +49,7 @@ import {
   isScheduledSnowballPlanTransaction,
   isSnowballPaymentTransaction,
   requiredDebtPlanTotal,
+  retainedDebtPaymentBreakdown,
   snowballPaymentName,
   snowballPlanTotalThroughDate,
 } from "@/lib/debtPaymentPlan";
@@ -136,6 +137,7 @@ function CalendarDebtPaymentCard({
   onEdit,
   onRemove,
   inlineEdit,
+  retainedPayment,
 }: {
   name: string;
   amount: number;
@@ -146,6 +148,7 @@ function CalendarDebtPaymentCard({
   snowballMonthToDate?: number;
   onEdit?: () => void;
   onRemove?: () => void;
+  retainedPayment?: ReturnType<typeof retainedDebtPaymentBreakdown>;
   inlineEdit?: {
     canEdit: boolean;
     alreadyPaid: number;
@@ -159,6 +162,7 @@ function CalendarDebtPaymentCard({
   const [draft, setDraft] = useState(amount.toFixed(2));
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState<string>();
+  const [showRetainedPaymentInfo, setShowRetainedPaymentInfo] = useState(false);
   const parsedDraft = parsePlannedDebtAmount(draft);
 
   useEffect(() => {
@@ -202,8 +206,21 @@ function CalendarDebtPaymentCard({
           <Text numberOfLines={1} style={[styles.dayBillName, { color: c.foreground }]}>{name}</Text>
           <Text style={[styles.dayBillMeta, { color: c.mutedForeground }]}>{paymentType} payment</Text>
         </View>
-        <View style={[styles.dayTransactionBadge, { backgroundColor: "#3b82f620" }]}>
-          <Text style={[styles.dayTransactionBadgeText, { color: "#3b82f6" }]}>{statusLabel.toUpperCase()}</Text>
+        <View style={styles.dayDebtBadgeRow}>
+          {retainedPayment ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Why $${retainedPayment.scheduledPayment.toFixed(2)} is still planned for ${name}`}
+              accessibilityState={{ expanded: showRetainedPaymentInfo }}
+              onPress={() => setShowRetainedPaymentInfo(current => !current)}
+              style={({ pressed }) => [styles.dayDebtInfoButton, { backgroundColor: c.primary + "18", borderColor: c.primary + "42", opacity: pressed ? 0.7 : 1 }]}
+            >
+              <Feather name="info" size={16} color={c.primary} />
+            </Pressable>
+          ) : null}
+          <View style={[styles.dayTransactionBadge, { backgroundColor: "#3b82f620" }]}>
+            <Text style={[styles.dayTransactionBadgeText, { color: "#3b82f6" }]}>{statusLabel.toUpperCase()}</Text>
+          </View>
         </View>
       </View>
 
@@ -221,6 +238,18 @@ function CalendarDebtPaymentCard({
           <Text style={[styles.dayBillNumberValue, { color: applied ? c.success : c.warning }]}>${(applied ? 0 : amount).toFixed(2)}</Text>
         </View>
       </View>
+
+      {retainedPayment && showRetainedPaymentInfo ? (
+        <View style={[styles.retainedDebtInfo, { backgroundColor: c.primary + "10", borderColor: c.primary + "38" }]}>
+          <Text style={[styles.retainedDebtInfoTitle, { color: c.foreground }]}>{`Why $${retainedPayment.scheduledPayment.toFixed(2)} is still planned`}</Text>
+          <Text style={[styles.retainedDebtInfoText, { color: c.mutedForeground }]}>
+            {`You already paid $${retainedPayment.alreadyPaid.toFixed(2)}. That leaves $${retainedPayment.minimumRemaining.toFixed(2)} of this month’s $${retainedPayment.minimumRequired.toFixed(2)} minimum.`}
+          </Text>
+          <Text style={[styles.retainedDebtInfoHighlight, { color: c.primary }]}>
+            {`You chose to keep the full $${retainedPayment.scheduledPayment.toFixed(2)} payment. $${retainedPayment.minimumRemaining.toFixed(2)} completes the minimum and $${retainedPayment.extraPrincipal.toFixed(2)} goes toward extra principal.`}
+          </Text>
+        </View>
+      ) : null}
 
       {requiredMinimum !== undefined ? (
         <View style={[styles.dayDebtPlanSummary, { backgroundColor: c.background + "66", borderColor: c.border }]}>
@@ -2347,6 +2376,17 @@ export default function MonthlyScreen() {
                           const settledForOccurrence = editorParams
                             ? Math.max(0, originalPlannedForOccurrence - remainingForOccurrence)
                             : 0;
+                          const sourceDebt = editorParams
+                            ? bills.find(bill => bill.is_debt && bill.id === editorParams.billId)
+                            : undefined;
+                          const retainedPayment = sourceDebt
+                            && payment.event.debtTargetBillId === editorParams?.billId
+                            ? retainedDebtPaymentBreakdown(
+                              amount,
+                              requiredDebtPlanTotal(sourceDebt),
+                              settledForOccurrence,
+                            )
+                            : null;
                           return (
                             <CalendarDebtPaymentCard
                               key={`overlay-debt-${payment.event.id}`}
@@ -2379,6 +2419,7 @@ export default function MonthlyScreen() {
                                   );
                                 },
                               } : undefined}
+                              retainedPayment={retainedPayment}
                               onRemove={savedPayment ? async () => {
                                 await removeDebtSnowballPayment(savedPayment.month, savedPayment.year);
                                 setSelectedDate(null);
@@ -3269,6 +3310,12 @@ const styles = StyleSheet.create({
   dayDebtPlanText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   dayDebtPlanTotal: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   dayDebtPlanNote: { fontSize: 10, fontFamily: "Inter_500Medium" },
+  dayDebtBadgeRow: { flexDirection: "row", alignItems: "center", gap: 7 },
+  dayDebtInfoButton: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  retainedDebtInfo: { borderWidth: 1, borderRadius: 12, padding: 11, gap: 5 },
+  retainedDebtInfoTitle: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
+  retainedDebtInfoText: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_500Medium" },
+  retainedDebtInfoHighlight: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_700Bold" },
   inlineDebtEditor: { borderWidth: 1, borderRadius: 13, padding: 11, gap: 7 },
   inlineDebtEditorLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.6 },
   inlineDebtEditorInputWrap: { minHeight: 48, borderWidth: 1.5, borderRadius: 12, flexDirection: "row", alignItems: "center" },

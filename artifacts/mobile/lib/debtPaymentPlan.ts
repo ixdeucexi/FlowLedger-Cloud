@@ -4,6 +4,14 @@ export type DebtPaymentPlanSummary = {
   totalPlanned: number;
 };
 
+export type RetainedDebtPaymentBreakdown = {
+  alreadyPaid: number;
+  minimumRequired: number;
+  minimumRemaining: number;
+  scheduledPayment: number;
+  extraPrincipal: number;
+};
+
 export type SnowballPaymentTransactionLike = {
   amount: number;
   date?: string | null;
@@ -46,6 +54,27 @@ export function buildDebtPaymentPlanSummary(requiredMinimum: number, extraPaymen
     extraPayment: extra,
     requiredMinimum: minimum,
     totalPlanned: money(minimum + extra),
+  };
+}
+
+/** Explains a choice to keep the original payment after an earlier payment. */
+export function retainedDebtPaymentBreakdown(
+  scheduledPayment: number,
+  minimumRequired: number,
+  alreadyPaid: number,
+): RetainedDebtPaymentBreakdown | null {
+  const scheduled = money(scheduledPayment);
+  const minimum = money(minimumRequired);
+  const paid = money(alreadyPaid);
+  const minimumRemaining = money(minimum - paid);
+  const extraPrincipal = money(scheduled - minimumRemaining);
+  if (scheduled <= 0.005 || minimum <= 0.005 || paid <= 0.005 || extraPrincipal <= 0.005) return null;
+  return {
+    alreadyPaid: paid,
+    minimumRequired: minimum,
+    minimumRemaining,
+    scheduledPayment: scheduled,
+    extraPrincipal,
   };
 }
 

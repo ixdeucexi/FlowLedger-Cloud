@@ -7,12 +7,25 @@ import {
   isSnowballPaymentTransaction,
   replacementSnowballSafeMaximum,
   requiredDebtPlanTotal,
+  retainedDebtPaymentBreakdown,
   SNOWBALL_PLAN_SOURCE,
   snowballPaymentName,
   snowballPlanTotalThroughDate,
   snowballTransactionEditDraft,
   upsertSnowballPlanById,
 } from "./debtPaymentPlan";
+
+it("explains the remaining minimum and extra principal when a payment is kept", () => {
+  assert.deepEqual(retainedDebtPaymentBreakdown(113, 113, 57), {
+    alreadyPaid: 57,
+    minimumRequired: 113,
+    minimumRemaining: 56,
+    scheduledPayment: 113,
+    extraPrincipal: 57,
+  });
+  assert.equal(retainedDebtPaymentBreakdown(56, 113, 57), null);
+  assert.equal(retainedDebtPaymentBreakdown(113, 113, 0), null);
+});
 
 describe("extra debt payment plan", () => {
   it("keeps the required minimum separate from the optional extra", () => {
