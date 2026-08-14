@@ -41,15 +41,13 @@ import { flowLedgerUserGuideTarget } from "@/lib/userGuide";
 import * as Haptics from "@/lib/haptics";
 
 export type DesktopSettingsSection =
-  | "Profile"
-  | "Account"
-  | "Preferences"
+  | "Account & household"
+  | "Appearance & feedback"
   | "Notifications"
-  | "Security"
-  | "Data & Privacy"
-  | "Connections"
-  | "Subscription"
-  | "About"
+  | "Accounts & connections"
+  | "Data & privacy"
+  | "Membership"
+  | "Help & legal"
   | "Admin";
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
 
@@ -58,15 +56,14 @@ const SECTIONS: Array<{
   description: string;
   icon: FeatherName;
 }> = [
-  { label: "Profile", description: "Your personal information", icon: "user" },
   {
-    label: "Account",
-    description: "Account details and email",
-    icon: "user-check",
+    label: "Account & household",
+    description: "Profile, household, and sign-in",
+    icon: "users",
   },
   {
-    label: "Preferences",
-    description: "App display preferences",
+    label: "Appearance & feedback",
+    description: "Theme, text, and haptics",
     icon: "sliders",
   },
   {
@@ -74,19 +71,22 @@ const SECTIONS: Array<{
     description: "Manage notification settings",
     icon: "bell",
   },
-  { label: "Security", description: "Device authentication", icon: "shield" },
   {
-    label: "Data & Privacy",
-    description: "Data, export, and privacy",
+    label: "Accounts & connections",
+    description: "Connected and manual accounts",
+    icon: "link",
+  },
+  {
+    label: "Data & privacy",
+    description: "Security, export, and privacy",
     icon: "lock",
   },
-  { label: "Connections", description: "Connected accounts", icon: "link" },
   {
-    label: "Subscription",
+    label: "Membership",
     description: "Plan information",
     icon: "credit-card",
   },
-  { label: "About", description: "About FlowLedger Algo", icon: "info" },
+  { label: "Help & legal", description: "Guide, support, terms, and privacy", icon: "help-circle" },
   { label: "Admin", description: "Authorized administration", icon: "shield" },
 ];
 
@@ -125,7 +125,7 @@ function initialsFor(name: string, email?: string) {
 }
 
 export function DesktopSettingsPage({
-  initialSection = "Profile",
+  initialSection = "Account & household",
   onExport,
   onSync,
   isAdmin = false,
@@ -147,7 +147,7 @@ export function DesktopSettingsPage({
     ready: hapticsReady,
     setEnabled: setHapticsEnabled,
   } = Haptics.useHapticsPreference();
-  const [section, setSection] = useState<DesktopSettingsSection>("Profile");
+  const [section, setSection] = useState<DesktopSettingsSection>("Account & household");
   const [fullName, setFullName] = useState(() => nameFor(user));
   const [savingName, setSavingName] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -208,7 +208,7 @@ export function DesktopSettingsPage({
       >
         <PageHeader
           title="Settings"
-          description="Manage your account, preferences, and security."
+          description="Manage your household, app preferences, data, and support."
         />
         <View style={styles.settingsLayout}>
           <DesktopCard style={styles.secondaryNav}>
@@ -260,7 +260,7 @@ export function DesktopSettingsPage({
                 <Text style={styles.messageText}>{message}</Text>
               </View>
             ) : null}
-            {section === "Profile" ? (
+            {section === "Account & household" ? (
               <>
                 <DesktopCard>
                   <CardHeader title="Profile Information" />
@@ -313,10 +313,10 @@ export function DesktopSettingsPage({
                 </DesktopCard>
                 <View style={styles.previewGrid}>
                   <SettingsPreview
-                    title="Preferences"
+                    title="Appearance & feedback"
                     rows={[`Theme: ${themeMode}`, `Text style: ${fontStyle}`]}
                     action="Manage preferences"
-                    onPress={() => setSection("Preferences")}
+                    onPress={() => setSection("Appearance & feedback")}
                   />
                   <SettingsPreview
                     title="Notifications"
@@ -328,22 +328,17 @@ export function DesktopSettingsPage({
                     onPress={() => setSection("Notifications")}
                   />
                   <SettingsPreview
-                    title="Security"
-                    rows={["Biometric app lock", "Device-specific protection"]}
-                    action="Manage security"
-                    onPress={() => setSection("Security")}
-                  />
-                  <SettingsPreview
-                    title="Data & Privacy"
+                    title="Data & privacy"
                     rows={[
+                      "Biometric app lock",
                       "Export your FlowLedger data",
                       "Review privacy terms",
                     ]}
                     action="Manage data"
-                    onPress={() => setSection("Data & Privacy")}
+                    onPress={() => setSection("Data & privacy")}
                   />
                   <SettingsPreview
-                    title="Subscription"
+                    title="Membership"
                     rows={[
                       membershipLoading
                         ? "Loading plan..."
@@ -353,13 +348,13 @@ export function DesktopSettingsPage({
                         : `Source: ${actualPlan.source}`,
                     ]}
                     action="View plan"
-                    onPress={() => setSection("Subscription")}
+                    onPress={() => setSection("Membership")}
                   />
                 </View>
               </>
             ) : null}
 
-            {section === "Account" ? (
+            {section === "Account & household" ? (
               <DesktopCard>
                 <CardHeader title="Account" />
                 <View style={styles.sectionBody}>
@@ -390,7 +385,7 @@ export function DesktopSettingsPage({
               </DesktopCard>
             ) : null}
 
-            {section === "Preferences" ? (
+            {section === "Appearance & feedback" ? (
               <DesktopCard>
                 <CardHeader title="Preferences" />
                 <View style={styles.sectionBody}>
@@ -443,7 +438,7 @@ export function DesktopSettingsPage({
             {section === "Notifications" ? (
               <NotificationSettings appearance="desktop" />
             ) : null}
-            {section === "Security" ? (
+            {section === "Data & privacy" ? (
               <>
                 <BiometricLockSettings appearance="desktop" />
                 <DesktopCard>
@@ -458,7 +453,7 @@ export function DesktopSettingsPage({
               </>
             ) : null}
 
-            {section === "Data & Privacy" ? (
+            {section === "Data & privacy" ? (
               <DesktopCard>
                 <CardHeader title="Data & Privacy" />
                 <View style={styles.sectionBody}>
@@ -502,7 +497,7 @@ export function DesktopSettingsPage({
               </DesktopCard>
             ) : null}
 
-            {section === "Connections" ? (
+            {section === "Accounts & connections" ? (
               <>
                 <DesktopCard>
                   <CardHeader title="Bank Connections" />
@@ -573,7 +568,7 @@ export function DesktopSettingsPage({
               </>
             ) : null}
 
-            {section === "Subscription" ? (
+            {section === "Membership" ? (
               <DesktopCard>
                 <CardHeader title="Subscription" />
                 <View style={styles.planBody}>
@@ -605,7 +600,7 @@ export function DesktopSettingsPage({
               </DesktopCard>
             ) : null}
 
-            {section === "About" ? (
+            {section === "Help & legal" ? (
               <DesktopCard>
                 <CardHeader title="About FlowLedger Algo" />
                 <View style={styles.sectionBody}>

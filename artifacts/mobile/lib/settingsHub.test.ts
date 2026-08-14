@@ -12,23 +12,24 @@ import {
   visibleSettingsGroups,
 } from "./settingsHub";
 
-test("settings hub places every destination in exactly one group", () => {
+test("settings hub places every true setting in exactly one group", () => {
   const groupedIds = SETTINGS_GROUPS.flatMap(group => group.sectionIds);
-  const sectionIds = SETTINGS_SECTIONS.map(section => section.id);
+  const featureDestinations = ["goals", "review", "subscriptions", "reports"];
 
   assert.equal(new Set(groupedIds).size, groupedIds.length);
-  assert.deepEqual([...groupedIds].sort(), [...sectionIds].sort());
+  assert.equal(groupedIds.some(sectionId => featureDestinations.includes(sectionId)), false);
+  assert.equal(groupedIds.every(sectionId => SETTINGS_SECTIONS.some(section => section.id === sectionId)), true);
 });
 
 test("settings hub preserves the intended group order", () => {
   assert.deepEqual(SETTINGS_GROUPS.map(group => group.sectionIds), [
-    ["money", "accounts", "plaid", "goals"],
-    ["review", "subscriptions", "reports"],
-    ["appearance", "notifications", "setup", "backup", "deleted"],
-    ["membership", "security", "help", "legal"],
+    ["money", "accounts", "plaid"],
+    ["appearance", "notifications", "setup"],
+    ["backup", "deleted", "security", "legal"],
+    ["membership", "help"],
     ["admin"],
   ]);
-  assert.equal(settingsSectionById("setup").label, "Flo setup & demo");
+  assert.equal(settingsSectionById("setup").label, "Setup & walkthrough");
 });
 
 test("count statuses handle zero, singular, and larger values", () => {
@@ -44,11 +45,11 @@ test("attention statuses only highlight positive counts", () => {
 });
 
 test("settings group lookups preserve the destination hierarchy", () => {
-  assert.equal(settingsGroupById("money").label, "Plan");
+  assert.equal(settingsGroupById("money").label, "Money & household");
   assert.equal(settingsGroupForSection("accounts").id, "money");
   assert.equal(settingsGroupForSection("appearance").id, "preferences");
-  assert.equal(settingsGroupForSection("deleted").id, "preferences");
-  assert.equal(settingsGroupForSection("legal").id, "account");
+  assert.equal(settingsGroupForSection("deleted").id, "data");
+  assert.equal(settingsGroupForSection("legal").id, "data");
   assert.equal(settingsGroupForSection("admin").id, "admin");
 });
 

@@ -87,6 +87,7 @@ export function MoreHub({
       {visibleSettingsGroups(isAdmin).map(group => (
         <View key={group.id} style={styles.groupBlock}>
           <Text style={[styles.groupTitle, { color: colors.foreground }]}>{group.label}</Text>
+          <Text style={[styles.groupDescription, { color: colors.mutedForeground }]}>{group.description}</Text>
           <View style={[styles.groupCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             {group.sectionIds.map((sectionId, index) => {
               const section = settingsSectionById(sectionId);
@@ -112,8 +113,11 @@ export function MoreHub({
                   <View style={[styles.rowIcon, compactLayout && styles.rowIconCompact, { backgroundColor: colors.primary + "11" }]}>
                     <Feather name={section.icon as ComponentProps<typeof Feather>["name"]} size={19} color={colors.primary} />
                   </View>
-                  <View style={[styles.rowMain, compactLayout && styles.rowMainCompact]}>
-                    <Text style={[styles.rowTitle, { color: colors.foreground }]}>{section.label}</Text>
+                  <View style={styles.rowMain}>
+                    <View style={styles.rowCopy}>
+                      <Text style={[styles.rowTitle, { color: colors.foreground }]}>{section.label}</Text>
+                      <Text style={[styles.rowDescription, { color: colors.mutedForeground }]}>{section.description}</Text>
+                    </View>
                     {status ? (
                       <View style={[
                         styles.statusPill,
@@ -154,15 +158,17 @@ const styles = StyleSheet.create({
   quickIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center", marginBottom: 10 },
   quickLabel: { fontFamily: "Inter_700Bold", fontSize: 14 },
   quickDescription: { fontFamily: "Inter_500Medium", fontSize: 11, marginTop: 3 },
-  groupTitle: { fontSize: 20, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.35, marginBottom: 9, paddingHorizontal: 12 },
+  groupTitle: { fontSize: 20, fontFamily: "Inter_800ExtraBold", letterSpacing: -0.35, marginBottom: 3, paddingHorizontal: 12 },
+  groupDescription: { fontSize: 12, lineHeight: 17, fontFamily: "Inter_500Medium", marginBottom: 10, paddingHorizontal: 12 },
   groupCard: { borderWidth: 1, borderRadius: 22, overflow: "hidden" },
-  row: { minHeight: 64, paddingHorizontal: 14, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 12 },
+  row: { minHeight: 76, paddingHorizontal: 14, paddingVertical: 11, flexDirection: "row", alignItems: "center", gap: 12 },
   rowCompact: { paddingHorizontal: 10, gap: 8 },
   rowIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   rowIconCompact: { width: 34, height: 34 },
   rowMain: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 8 },
-  rowMainCompact: { alignItems: "flex-start", flexDirection: "column", gap: 4 },
-  rowTitle: { flex: 1, minWidth: 0, fontSize: 15, fontFamily: "Inter_700Bold" },
+  rowCopy: { flex: 1, minWidth: 0 },
+  rowTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  rowDescription: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_500Medium", marginTop: 2 },
   statusPill: { maxWidth: 108, borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5 },
   statusText: { fontSize: 9, fontFamily: "Inter_800ExtraBold" },
 });

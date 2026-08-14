@@ -39,10 +39,6 @@ import { IncomeModal } from "@/components/IncomeModal";
 import { HouseholdMemberActionsModal } from "@/components/HouseholdMemberActionsModal";
 import { LegalDocumentModal } from "@/components/LegalDocumentModal";
 import { MembershipPanel } from "@/components/MembershipPanel";
-import {
-  DesktopSettingsPage,
-  type DesktopSettingsSection,
-} from "@/components/desktop/DesktopSettingsPage";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { PayRaiseCelebrationModal } from "@/components/PayRaiseCelebrationModal";
 import { MoreHub } from "@/components/settings/MoreHub";
@@ -66,7 +62,6 @@ import {
 } from "@/context/ThemeContext";
 import { useFeedbackBadge } from "@/context/FeedbackBadgeContext";
 import { useColors } from "@/hooks/useColors";
-import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { useSetupReadiness } from "@/hooks/useSetupReadiness";
 import { isCashFlowTransaction } from "@/lib/billMatching";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
@@ -397,7 +392,6 @@ export default function MoreScreen({
   initialSection?: SettingsSectionId;
 } = {}) {
   const c = useColors();
-  const isDesktop = useDesktopExperience();
   const insets = useSafeAreaInsets();
   const { width: viewportWidth } = useWindowDimensions();
   const stackCompactAccountControls = shouldStackAccountControls(viewportWidth);
@@ -2006,35 +2000,6 @@ export default function MoreScreen({
   const activeSettingsMeta = VISIBLE_SETTINGS_SECTIONS.find(
     (section) => section.id === activeSettingsSection,
   );
-  const desktopSettingsSection: DesktopSettingsSection | null =
-    (
-      {
-        overview: "Profile",
-        accounts: "Account",
-        appearance: "Preferences",
-        notifications: "Notifications",
-        security: "Security",
-        backup: "Data & Privacy",
-        plaid: "Connections",
-        membership: "Subscription",
-        legal: "About",
-      } as Partial<Record<SettingsSectionId, DesktopSettingsSection>>
-    )[activeSettingsSection] ?? null;
-
-  if (isDesktop && desktopSettingsSection) {
-    return (
-      <DesktopSettingsPage
-        initialSection={desktopSettingsSection}
-        isAdmin={feedbackAdmin}
-        onOpenAdmin={() => openSettingsSection("admin")}
-        onExport={() => {
-          void handleExport();
-        }}
-        onSync={refreshBankData}
-      />
-    );
-  }
-
   return (
     <View style={[styles.screen, { backgroundColor: c.background }]}>
       <PremiumBackdrop variant="blue" />

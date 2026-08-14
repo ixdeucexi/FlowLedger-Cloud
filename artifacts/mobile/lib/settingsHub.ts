@@ -28,8 +28,9 @@ export interface SettingsSectionMeta {
 }
 
 export interface SettingsGroup {
-  id: "money" | "insights" | "preferences" | "account" | "admin";
+  id: "money" | "preferences" | "data" | "account" | "admin";
   label: string;
+  description: string;
   sectionIds: readonly SettingsDestinationId[];
 }
 
@@ -39,31 +40,51 @@ export interface SettingsStatus {
 }
 
 export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
-  { id: "accounts", label: "Accounts & household", description: "Balances and sharing", icon: "users" },
-  { id: "plaid", label: "Bank connections", description: "Add cards, banks, and sync", icon: "credit-card" },
-  { id: "money", label: "Money plan", description: "Income, safety, and payoff", icon: "sliders" },
+  { id: "accounts", label: "Household & accounts", description: "Balances, savings names, and household access", icon: "users" },
+  { id: "plaid", label: "Bank connections", description: "Connect, sync, and manage linked institutions", icon: "credit-card" },
+  { id: "money", label: "Plan settings", description: "Income timing, planning preferences, and payoff rules", icon: "sliders" },
   { id: "goals", label: "Goals", description: "Savings plans", icon: "target" },
   { id: "review", label: "Review Center", description: "Match bank activity", icon: "check-square" },
   { id: "subscriptions", label: "Subscriptions", description: "Recurring charges", icon: "repeat" },
   { id: "reports", label: "Reports & insights", description: "Monthly results and next steps", icon: "bar-chart-2" },
-  { id: "setup", label: "Flo setup & demo", description: "Setup and demo", icon: "message-circle" },
-  { id: "notifications", label: "Notifications", description: "Alert preferences", icon: "bell" },
-  { id: "appearance", label: "Display options", description: "Theme and text", icon: "sliders" },
-  { id: "backup", label: "Backup & data", description: "Import and export", icon: "download" },
+  { id: "setup", label: "Setup & walkthrough", description: "Run setup again or explore the demo", icon: "compass" },
+  { id: "notifications", label: "Notifications", description: "Choose the reminders you receive", icon: "bell" },
+  { id: "appearance", label: "Appearance & feedback", description: "Theme, text style, and haptic feedback", icon: "sliders" },
+  { id: "backup", label: "Data & backup", description: "Import, export, install, and reset Flo memory", icon: "download" },
   { id: "deleted", label: "Recently deleted", description: "Restore transactions", icon: "trash-2" },
   { id: "membership", label: "Membership", description: "Plan and pricing", icon: "award" },
-  { id: "security", label: "Account & security", description: "App lock and account controls", icon: "shield" },
-  { id: "help", label: "Help & feedback", description: "Support and feedback", icon: "message-square" },
-  { id: "legal", label: "Legal & privacy", description: "Terms and privacy", icon: "file-text" },
+  { id: "security", label: "Security & sign-in", description: "App lock, identity, and sign-out controls", icon: "shield" },
+  { id: "help", label: "Help & user guide", description: "Illustrated guidance, support, and feedback", icon: "book-open" },
+  { id: "legal", label: "Privacy & legal", description: "Privacy policy, terms, and disclosures", icon: "file-text" },
   { id: "admin", label: "Admin", description: "Testing and tester management", icon: "shield" },
 ] as const;
 
 export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
-  { id: "money", label: "Plan", sectionIds: ["money", "accounts", "plaid", "goals"] },
-  { id: "insights", label: "Review & insights", sectionIds: ["review", "subscriptions", "reports"] },
-  { id: "preferences", label: "App", sectionIds: ["appearance", "notifications", "setup", "backup", "deleted"] },
-  { id: "account", label: "Account & support", sectionIds: ["membership", "security", "help", "legal"] },
-  { id: "admin", label: "Admin", sectionIds: ["admin"] },
+  {
+    id: "money",
+    label: "Money & household",
+    description: "Set up the information that powers your plan",
+    sectionIds: ["money", "accounts", "plaid"],
+  },
+  {
+    id: "preferences",
+    label: "App preferences",
+    description: "Choose how FlowLedger looks, feels, and alerts you",
+    sectionIds: ["appearance", "notifications", "setup"],
+  },
+  {
+    id: "data",
+    label: "Data & privacy",
+    description: "Control your data, security, and privacy",
+    sectionIds: ["backup", "deleted", "security", "legal"],
+  },
+  {
+    id: "account",
+    label: "Account & support",
+    description: "Manage your plan and get help",
+    sectionIds: ["membership", "help"],
+  },
+  { id: "admin", label: "Admin", description: "Testing and app administration", sectionIds: ["admin"] },
 ] as const;
 
 export function visibleSettingsGroups(isAdmin: boolean): readonly SettingsGroup[] {

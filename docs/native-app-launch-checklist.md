@@ -42,6 +42,7 @@ Release FlowLedger as a signed iOS and Android app while keeping the existing PW
 - [x] Keep the large 200dp branded “Loading Plan...” screen visible without shrinking, resizing, or swapping until the signed-in household plan finishes loading
 - [x] Use a real browser opacity transition to fade in the complete fixed-size startup brand over 1.2 seconds, hold it briefly, and fade it out over 700ms without replaying or blinking; reduced motion remains immediate
 - [x] Route navigation, save, confirmation, and picker haptics through one device-level preference with an on-by-default Settings toggle
+- [x] Settings uses one responsive mobile/PWA structure organized by Money & household, App preferences, Data & privacy, and Account & support; full app tools stay in their primary screens instead of duplicating the Settings hub
 - [x] In-app Terms of Service and Privacy Policy screens
 - [x] Financial calculation and regression test coverage
 - [x] Expo Doctor passes all 18 checks
