@@ -6,8 +6,13 @@ import {
   normalizeHouseholdRole,
 } from "@/lib/householdPermissions";
 import { supabase } from "@/lib/supabase";
+import {
+  summarizeHouseholdActivity,
+  type HouseholdActivity,
+} from "@/lib/householdActivity";
 
 export type { HouseholdInviteRole, HouseholdRole };
+export type { HouseholdActivity } from "@/lib/householdActivity";
 
 export interface HouseholdMembership {
   householdId: string;
@@ -35,19 +40,6 @@ export interface HouseholdMember {
   email?: string | null;
   displayName?: string | null;
   isCurrentUser?: boolean;
-}
-
-export interface HouseholdActivity {
-  id: string;
-  householdId: string;
-  actorUserId?: string | null;
-  actorEmail?: string | null;
-  actorName?: string | null;
-  action: "created" | "updated" | "deleted" | "joined" | "invited" | "changed_role" | "removed" | string;
-  entityType: string;
-  entityId?: string | null;
-  entityLabel?: string | null;
-  createdAt: string;
 }
 
 const ACTIVE_HOUSEHOLD_KEY = "flowledger-active-household";
@@ -242,27 +234,32 @@ export async function loadHouseholdMembers(householdId?: string | null): Promise
 
 export async function loadHouseholdActivity(householdId?: string | null, limit = 12): Promise<HouseholdActivity[]> {
   if (!householdId) return [];
+  const targetLimit = Math.max(0, Math.floor(limit));
+  if (targetLimit === 0) return [];
+  const rawLimit = Math.min(100, Math.max(targetLimit, targetLimit * 8));
 
   const { data, error } = await supabase
     .from("household_activity")
-    .select("id, household_id, actor_user_id, actor_email, actor_name, action, entity_type, entity_id, entity_label, created_at")
+    .select("id, household_id, actor_user_id, actor_email, actor_name, actor_verified, action, entity_type, entity_id, entity_label, created_at")
     .eq("household_id", householdId)
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .limit(rawLimit);
 
   if (error) return [];
-  return (data ?? []).map((row: any): HouseholdActivity => ({
+  const activity = (data ?? []).map((row: any): HouseholdActivity => ({
     id: String(row.id),
     householdId: String(row.household_id),
     actorUserId: row.actor_user_id ?? null,
     actorEmail: row.actor_email ?? null,
     actorName: row.actor_name ?? row.actor_email ?? null,
+    actorVerified: row.actor_verified === true,
     action: String(row.action ?? "updated"),
     entityType: String(row.entity_type ?? "item"),
     entityId: row.entity_id ?? null,
     entityLabel: row.entity_label ?? null,
     createdAt: String(row.created_at),
   }));
+  return summarizeHouseholdActivity(activity, targetLimit);
 }
 
 export async function updateHouseholdMemberRole(

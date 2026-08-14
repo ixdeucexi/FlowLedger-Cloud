@@ -66,6 +66,7 @@ import { useSetupReadiness } from "@/hooks/useSetupReadiness";
 import { isCashFlowTransaction } from "@/lib/billMatching";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { localDateString } from "@/lib/dateLabels";
+import { householdActivityHeadline } from "@/lib/householdActivity";
 import { parseStatementCsv } from "@/lib/accounts";
 import { orderActiveDebtsForStrategy } from "@/lib/debtOrder";
 import { resetFloHouseholdMemory } from "@/lib/floChat";
@@ -352,38 +353,6 @@ function recurringBillCadenceLabel(frequency?: string | null) {
   if (frequency === "weekly") return "weekly";
   if (frequency === "biweekly") return "biweekly";
   return "monthly";
-}
-
-function humanizeEntityType(value: string) {
-  return value
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function activitySentence(
-  action: string,
-  entityType: string,
-  entityLabel?: string | null,
-) {
-  const item = entityLabel || humanizeEntityType(entityType);
-  switch (action) {
-    case "created":
-      return `created ${item}`;
-    case "updated":
-      return `updated ${item}`;
-    case "deleted":
-      return `removed ${item}`;
-    case "joined":
-      return "joined the household";
-    case "invited":
-      return `created a ${item} invite`;
-    case "changed_role":
-      return `changed access for ${item}`;
-    case "removed":
-      return `removed ${item} from the household`;
-    default:
-      return `${action.replace(/_/g, " ")} ${item}`.trim();
-  }
 }
 
 export default function MoreScreen({
@@ -2956,7 +2925,7 @@ export default function MoreScreen({
                     <Text
                       style={[styles.switchDesc, { color: c.mutedForeground }]}
                     >
-                      See who changed what and when.
+                      A clear summary of household changes.
                     </Text>
                   </View>
                   <Pressable
@@ -2978,10 +2947,6 @@ export default function MoreScreen({
                   </Text>
                 ) : (
                   householdActivity.slice(0, 12).map((activity) => {
-                    const actor =
-                      activity.actorName ||
-                      activity.actorEmail ||
-                      "A household member";
                     return (
                       <View
                         key={activity.id}
@@ -3020,12 +2985,7 @@ export default function MoreScreen({
                             ]}
                             numberOfLines={2}
                           >
-                            {actor}{" "}
-                            {activitySentence(
-                              activity.action,
-                              activity.entityType,
-                              activity.entityLabel,
-                            )}
+                            {householdActivityHeadline(activity)}
                           </Text>
                           <Text
                             style={[

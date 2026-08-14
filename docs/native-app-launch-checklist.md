@@ -397,3 +397,7 @@ Official references:
 ## Final launch gate
 
 Do not release publicly until every item marked **BLOCKER** is complete, a signed production build has passed authenticated physical-device testing, account deletion works, the billing decision is implemented consistently, and store declarations match actual FlowLedger behavior.
+
+## Completed reliability fixes
+
+- [x] Keep household activity concise, collapse duplicate item saves, and never attribute background database updates to the record creator

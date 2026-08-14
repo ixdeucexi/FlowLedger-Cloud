@@ -165,5 +165,7 @@
     ,"lib/userGuide.test.ts"
     ,"lib/startupBrand.test.ts"
     ,"lib/hapticsPreference.test.ts"
+    ,"lib/householdActivity.ts"
+    ,"lib/householdActivity.test.ts"
   ]
 }
