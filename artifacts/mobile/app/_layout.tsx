@@ -160,7 +160,7 @@ function StartupScreen({
   return (
     <Animated.View style={[styles.startup, style, webOverlayTransition]}>
       <Animated.View style={[styles.startupBrand, webBrandTransition]}>
-        <StartupPlanBrand />
+        <StartupPlanBrand cinematic={brandEntranceStarted && !reduceMotion} />
       </Animated.View>
     </Animated.View>
   );
