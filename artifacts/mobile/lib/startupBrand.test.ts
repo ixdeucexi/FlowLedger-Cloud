@@ -29,16 +29,9 @@ test("startup brand uses one root-owned opacity entrance without resizing", () =
   assert.doesNotMatch(layout, /brandEntranceOpacity[\s\S]{0,160}(scale|width|height)/);
 
   assert.match(brand, /const STARTUP_LOGO_SIZE = 200/);
-  assert.match(brand, /cinematic = false/);
-  assert.match(brand, /transitionProperty: "opacity, transform"/);
-  assert.match(brand, /outputRange: \[-185, 185\]/);
-  assert.match(brand, /styles\.shineMask/);
   assert.match(brand, /width: STARTUP_LOGO_SIZE/);
   assert.match(brand, /height: STARTUP_LOGO_SIZE/);
   assert.match(brand, /flexShrink: 0/);
-  assert.doesNotMatch(brand, /\bscale(?:X|Y)?\b/);
-
-  assert.match(layout, /<StartupPlanBrand cinematic=\{brandEntranceStarted && !reduceMotion\} \/>/);
 
   assert.match(index, /<StartupPlanBrand \/>/);
   assert.doesNotMatch(index, /Animated|timing|opacity/);
