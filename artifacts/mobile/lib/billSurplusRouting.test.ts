@@ -25,17 +25,18 @@ function allocation(
   };
 }
 
-test("bill surplus can route to the target debt's next canonical payment", () => {
+test("bill surplus uses the full amount already planned on the target debt's next date", () => {
   const result = nextPlannedDebtPayment([
     allocation("past", "2026-08-11", "required"),
-    allocation("saved-extra", "2026-08-20", "extra", "concert", 9.11),
+    allocation("other-date-extra", "2026-08-20", "extra", "concert", 5),
     allocation("other-debt", "2026-08-22", "required", "discover", 113),
     allocation("next-required", "2026-08-29", "required", "concert", 35.41),
     allocation("same-day-rollover", "2026-08-29", "rollover", "concert", 67.59),
+    allocation("same-day-extra", "2026-08-29", "extra", "concert", 9.11),
   ], "concert", "2026-08-13");
 
   assert.deepEqual(result, {
-    amount: 103,
+    amount: 112.11,
     date: "2026-08-29",
     debtId: "concert",
     debtName: "Concert",

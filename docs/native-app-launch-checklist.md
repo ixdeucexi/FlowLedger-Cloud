@@ -405,3 +405,4 @@ Do not release publicly until every item marked **BLOCKER** is complete, a signe
 - [x] Label planned Forecast items by money type—Bill, Debt, Snowball, Income, Goal, or Plan—while preserving real payment statuses
 - [x] Keep each remaining debt occurrence authoritative in one Forecast source so partial payments and edited plans never duplicate a creditor or outflow
 - [x] Explain retained debt payments in Forecast with the amount already paid, minimum still remaining, and extra principal preserved by the user’s choice
+- [x] Show the full amount already planned on a debt payment date before routing bill surplus to that next payment
