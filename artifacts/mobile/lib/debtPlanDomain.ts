@@ -44,6 +44,14 @@ export function plannedDebtAmountError(amount: number, pendingAmount = 0): strin
   return undefined;
 }
 
+/** Converts an edited remaining payment back to the configured occurrence total. */
+export function configuredDebtAmountForRemainingPayment(
+  remainingPayment: number,
+  settledPayment: number,
+): number {
+  return cents(Math.max(0, remainingPayment) + Math.max(0, settledPayment));
+}
+
 export function parsePlannedDebtAmount(value: string): number | undefined {
   const normalized = value.trim();
   if (!/^(?:\d+|\d+\.\d{1,2}|\.\d{1,2})$/.test(normalized)) return undefined;

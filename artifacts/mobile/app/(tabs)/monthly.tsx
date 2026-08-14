@@ -30,6 +30,7 @@ import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { DESKTOP_MODAL_HANDLE, DESKTOP_MODAL_OVERLAY, DESKTOP_MODAL_REGULAR, DESKTOP_MODAL_WIDE } from "@/lib/desktopModal";
+import { configuredDebtAmountForRemainingPayment, parsePlannedDebtAmount } from "@/lib/debtPlanDomain";
 import { confirmedBillMatchId, isConfirmedBillMatch } from "@/lib/billMatching";
 import { nextPlannedDebtPayment } from "@/lib/billSurplusRouting";
 import { allocationLabel, groupPlannedExpenseAllocations, matchedOccurrenceAllocations, occurrenceKey, reviewSettlementSummary, transactionDisplayName } from "@/lib/reviewCenter";
@@ -129,6 +130,7 @@ function CalendarDebtPaymentCard({
   snowballMonthToDate,
   onEdit,
   onRemove,
+  inlineEdit,
 }: {
   name: string;
   amount: number;
@@ -138,9 +140,52 @@ function CalendarDebtPaymentCard({
   snowballMonthToDate?: number;
   onEdit?: () => void;
   onRemove?: () => void;
+  inlineEdit?: {
+    canEdit: boolean;
+    alreadyPaid: number;
+    originalPlanned: number;
+    onSave: (remainingAmount: number) => Promise<void>;
+  };
 }) {
   const c = useColors();
   const paymentPlan = buildDebtPaymentPlanSummary(requiredMinimum ?? 0, snowballMonthToDate ?? amount);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(amount.toFixed(2));
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState<string>();
+  const parsedDraft = parsePlannedDebtAmount(draft);
+
+  useEffect(() => {
+    if (!editing) setDraft(amount.toFixed(2));
+  }, [amount, editing]);
+
+  const beginEdit = () => {
+    if (inlineEdit) {
+      setDraft(amount.toFixed(2));
+      setEditError(undefined);
+      setEditing(true);
+      return;
+    }
+    onEdit?.();
+  };
+
+  const saveRemainingPayment = async () => {
+    if (!inlineEdit || !inlineEdit.canEdit || saving) return;
+    if (parsedDraft === undefined) {
+      setEditError("Enter a valid amount with no more than two decimal places.");
+      return;
+    }
+    setSaving(true);
+    setEditError(undefined);
+    try {
+      await inlineEdit.onSave(parsedDraft);
+      setEditing(false);
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : "The planned payment could not be saved.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <View
@@ -181,13 +226,86 @@ function CalendarDebtPaymentCard({
         </View>
       ) : null}
 
-      {onEdit || onRemove ? (
+      {editing && inlineEdit ? (
+        <View style={[styles.inlineDebtEditor, { backgroundColor: c.background + "88", borderColor: c.primary + "45" }]}>
+          <Text style={[styles.inlineDebtEditorLabel, { color: c.primary }]}>PAYMENT STILL PLANNED</Text>
+          <View style={[styles.inlineDebtEditorInputWrap, { borderColor: editError ? c.destructive : c.border, backgroundColor: c.background }]}>
+            <Text style={[styles.inlineDebtEditorDollar, { color: c.mutedForeground }]}>$</Text>
+            <TextInput
+              accessibilityLabel={`Remaining planned payment for ${name}`}
+              editable={inlineEdit.canEdit && !saving}
+              inputMode="decimal"
+              keyboardType="decimal-pad"
+              selectTextOnFocus
+              value={draft}
+              onChangeText={value => {
+                setDraft(value);
+                setEditError(undefined);
+              }}
+              style={[styles.inlineDebtEditorInput, { color: c.foreground }]}
+            />
+          </View>
+          <Text style={[styles.inlineDebtEditorCopy, { color: c.mutedForeground }]}>
+            {inlineEdit.alreadyPaid > 0.005
+              ? `Your $${inlineEdit.alreadyPaid.toFixed(2)} payment already made stays recorded. Enter what you still want scheduled.`
+              : "Enter what you still want scheduled for this payment."}
+          </Text>
+          {inlineEdit.alreadyPaid > 0.005 && inlineEdit.originalPlanned > 0.005 ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Keep the original $${inlineEdit.originalPlanned.toFixed(2)} payment scheduled`}
+              disabled={!inlineEdit.canEdit || saving}
+              onPress={() => {
+                setDraft(inlineEdit.originalPlanned.toFixed(2));
+                setEditError(undefined);
+              }}
+              style={({ pressed }) => [styles.inlineDebtEditorSuggestion, { backgroundColor: c.primary + "16", borderColor: c.primary + "38", opacity: !inlineEdit.canEdit || saving ? 0.45 : pressed ? 0.72 : 1 }]}
+            >
+              <Feather name="rotate-ccw" size={13} color={c.primary} />
+              <Text style={[styles.inlineDebtEditorSuggestionText, { color: c.primary }]}>{`Keep $${inlineEdit.originalPlanned.toFixed(2)} scheduled`}</Text>
+            </Pressable>
+          ) : null}
+          {parsedDraft !== undefined && inlineEdit.alreadyPaid > 0.005 ? (
+            <Text style={[styles.inlineDebtEditorTotal, { color: c.foreground }]}>
+              {`Paid + planned total: $${(inlineEdit.alreadyPaid + parsedDraft).toFixed(2)}`}
+            </Text>
+          ) : null}
+          {editError ? <Text style={[styles.inlineDebtEditorError, { color: c.destructive }]}>{editError}</Text> : null}
+          {!inlineEdit.canEdit ? <Text style={[styles.inlineDebtEditorError, { color: c.mutedForeground }]}>Only an owner or editor can change this household plan.</Text> : null}
+          <View style={styles.inlineDebtEditorActions}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Cancel planned payment edit"
+              disabled={saving}
+              onPress={() => {
+                setEditing(false);
+                setEditError(undefined);
+              }}
+              style={({ pressed }) => [styles.inlineDebtEditorButton, { borderColor: c.border, opacity: pressed ? 0.72 : 1 }]}
+            >
+              <Text style={[styles.inlineDebtEditorButtonText, { color: c.foreground }]}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Save remaining planned payment"
+              accessibilityState={{ disabled: !inlineEdit.canEdit || saving || parsedDraft === undefined }}
+              disabled={!inlineEdit.canEdit || saving || parsedDraft === undefined}
+              onPress={() => { void saveRemainingPayment(); }}
+              style={({ pressed }) => [styles.inlineDebtEditorButton, { backgroundColor: c.primary, borderColor: c.primary, opacity: !inlineEdit.canEdit || saving || parsedDraft === undefined ? 0.45 : pressed ? 0.76 : 1 }]}
+            >
+              <Text style={[styles.inlineDebtEditorButtonText, { color: c.primaryForeground }]}>{saving ? "Saving..." : "Save payment"}</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+
+      {onEdit || inlineEdit || onRemove ? (
         <View style={styles.dayBillActions}>
-          {onEdit ? (
+          {onEdit || inlineEdit ? (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Edit ${name} snowball payment`}
-              onPress={onEdit}
+              onPress={beginEdit}
               style={({ pressed }) => [styles.dayBillAction, { backgroundColor: c.primary + "16", borderColor: c.primary + "35", opacity: pressed ? 0.74 : 1 }]}
             >
               <Feather name="edit-2" size={13} color={c.primary} />
@@ -227,7 +345,7 @@ export default function MonthlyScreen() {
     selectedYear, setSelectedYear, dashboardFilter, setDashboardFilter,
     getTransactionsForMonth, addTransaction, updateTransaction, deleteTransaction, addBill, deleteBill, updateIncome,
     getCashFlow, getMonthlyIncome, getDailyBalances, getIncomeOccurrencesInMonth,
-    previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, finalizeBillPayment, getExtraPayment, getRemainingDebtPlanForMonth,
+    previewDebtSnowball, applyDebtSnowballPayment, removeDebtSnowballPayment, finalizeBillPayment, getExtraPayment, getDebtPlanForMonth, getRemainingDebtPlanForMonth, setPlannedDebtAmount, canEditHousehold,
     updateDecision, deleteDecision, updateGoal, deleteGoal, activeHousehold,
   } = useBudget();
 
@@ -575,6 +693,14 @@ export default function MonthlyScreen() {
   const selectedDebtPayments = useMemo(
     () => selectedForecastGroups.find(group => group.key === "debt")?.events ?? [],
     [selectedForecastGroups],
+  );
+  const selectedMonthFullDebtPlan = useMemo(
+    () => getDebtPlanForMonth(month, selectedYear),
+    [getDebtPlanForMonth, month, selectedYear],
+  );
+  const selectedMonthRemainingDebtPlan = useMemo(
+    () => getRemainingDebtPlanForMonth(month, selectedYear),
+    [getRemainingDebtPlanForMonth, month, selectedYear],
   );
   const selectedSnowballTransactions = useMemo(
     () => selectedDate
@@ -2187,6 +2313,24 @@ export default function MonthlyScreen() {
                             ? Math.max(0, amount - requiredMinimum)
                             : snowballPlanTotalThroughDate(snowballPlanEntries, paymentDate);
                           const editorParams = plannedDebtEditorParams(payment.event);
+                          const canInlineEdit = Boolean(editorParams
+                            && payment.event.debtTargetBillId === editorParams.billId
+                            && payment.statusLabel.toLowerCase() !== "payment pending");
+                          const sourceGroupTotal = (allocations: NonNullable<typeof selectedMonthFullDebtPlan>["allocations"] | undefined) =>
+                            (allocations ?? [])
+                              .filter(allocation => allocation.kind !== "extra"
+                                && allocation.sourceBillId === editorParams?.billId
+                                && allocation.date === editorParams?.date)
+                              .reduce((total, allocation) => total + allocation.amount, 0);
+                          const originalPlannedForOccurrence = editorParams
+                            ? sourceGroupTotal(selectedMonthFullDebtPlan?.allocations)
+                            : 0;
+                          const remainingForOccurrence = editorParams
+                            ? sourceGroupTotal(selectedMonthRemainingDebtPlan?.allocations)
+                            : 0;
+                          const settledForOccurrence = editorParams
+                            ? Math.max(0, originalPlannedForOccurrence - remainingForOccurrence)
+                            : 0;
                           return (
                             <CalendarDebtPaymentCard
                               key={`overlay-debt-${payment.event.id}`}
@@ -2202,8 +2346,21 @@ export default function MonthlyScreen() {
                                   pathname: "/snowball-plan",
                                   params: { paymentId: savedPayment.id },
                                 } as never);
-                              } : editorParams ? () => {
+                              } : editorParams && !canInlineEdit ? () => {
                                 openPlannedDebtPaymentEditor(payment.event);
+                              } : undefined}
+                              inlineEdit={editorParams && canInlineEdit ? {
+                                canEdit: canEditHousehold,
+                                alreadyPaid: settledForOccurrence,
+                                originalPlanned: originalPlannedForOccurrence,
+                                onSave: async remainingAmount => {
+                                  await setPlannedDebtAmount(
+                                    editorParams.billId,
+                                    month,
+                                    selectedYear,
+                                    configuredDebtAmountForRemainingPayment(remainingAmount, settledForOccurrence),
+                                  );
+                                },
                               } : undefined}
                               onRemove={savedPayment ? async () => {
                                 await removeDebtSnowballPayment(savedPayment.month, savedPayment.year);
@@ -3094,6 +3251,19 @@ const styles = StyleSheet.create({
   dayDebtPlanText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
   dayDebtPlanTotal: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
   dayDebtPlanNote: { fontSize: 10, fontFamily: "Inter_500Medium" },
+  inlineDebtEditor: { borderWidth: 1, borderRadius: 13, padding: 11, gap: 7 },
+  inlineDebtEditorLabel: { fontSize: 10, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.6 },
+  inlineDebtEditorInputWrap: { minHeight: 48, borderWidth: 1.5, borderRadius: 12, flexDirection: "row", alignItems: "center" },
+  inlineDebtEditorDollar: { fontSize: 18, fontFamily: "Inter_700Bold", paddingLeft: 12 },
+  inlineDebtEditorInput: { flex: 1, minWidth: 0, minHeight: 46, paddingHorizontal: 7, fontSize: 18, fontFamily: "Inter_800ExtraBold", outlineStyle: "none" as never },
+  inlineDebtEditorCopy: { fontSize: 11, fontFamily: "Inter_500Medium", lineHeight: 16 },
+  inlineDebtEditorSuggestion: { minHeight: 44, alignSelf: "flex-start", borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 6 },
+  inlineDebtEditorSuggestionText: { fontSize: 11, fontFamily: "Inter_800ExtraBold" },
+  inlineDebtEditorTotal: { fontSize: 11, fontFamily: "Inter_700Bold" },
+  inlineDebtEditorError: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  inlineDebtEditorActions: { flexDirection: "row", gap: 8, marginTop: 2 },
+  inlineDebtEditorButton: { flex: 1, minHeight: 44, borderWidth: 1, borderRadius: 12, alignItems: "center", justifyContent: "center", paddingHorizontal: 10 },
+  inlineDebtEditorButtonText: { fontSize: 12, fontFamily: "Inter_800ExtraBold" },
   dayTransactionBadge: { paddingHorizontal: 7, paddingVertical: 4, borderRadius: 6 },
   dayTransactionBadgeText: { fontSize: 9, fontFamily: "Inter_700Bold", letterSpacing: 0.45 },
   dayBillPaidTile: { borderWidth: 1 },

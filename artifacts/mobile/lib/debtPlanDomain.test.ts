@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   applyDebtSourceCommitments,
   advanceDebtProjectionWithCommitments,
+  configuredDebtAmountForRemainingPayment,
   configuredDebtMonthObligation,
   effectiveDebtOccurrenceAmount,
   isValidExtraPaymentPlan,
@@ -95,6 +96,12 @@ test("planned debt input and route dates are parsed strictly", () => {
   assert.equal(parsePlannedDebtOccurrenceDate("2026-02-31"), undefined);
   assert.equal(isPlannedDebtOccurrenceDate("2026-08-11", [11, 18, 25]), true);
   assert.equal(isPlannedDebtOccurrenceDate("2026-08-12", [11, 18, 25]), false);
+});
+
+test("editing a remaining payment preserves money already paid", () => {
+  assert.equal(configuredDebtAmountForRemainingPayment(113, 57), 170);
+  assert.equal(configuredDebtAmountForRemainingPayment(56, 57), 113);
+  assert.equal(configuredDebtAmountForRemainingPayment(113.337, -5), 113.34);
 });
 
 test("a pending source commitment replaces the source group and drops uncommitted rollover", () => {

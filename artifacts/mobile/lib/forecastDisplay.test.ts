@@ -127,6 +127,10 @@ test("Forecast closes the selected-day modal before opening a planned debt edito
   const monthly = readFileSync(path.resolve(process.cwd(), "app/(tabs)/monthly.tsx"), "utf8");
   assert.match(monthly, /const openPlannedDebtPaymentEditor[\s\S]*setSelectedDate\(null\)[\s\S]*pathname: "\/planned-debt-payment"/);
   assert.equal(monthly.match(/pathname: "\/planned-debt-payment"/g)?.length, 1);
+  assert.match(monthly, /PAYMENT STILL PLANNED/);
+  assert.match(monthly, /configuredDebtAmountForRemainingPayment\(remainingAmount, settledForOccurrence\)/);
+  assert.match(monthly, /payment already made stays recorded/);
+  assert.match(monthly, /Keep \$\$\{inlineEdit\.originalPlanned\.toFixed\(2\)\} scheduled/);
 });
 
 test("labels debt payments scheduled until the selected date arrives", () => {
