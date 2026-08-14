@@ -401,3 +401,4 @@ Do not release publicly until every item marked **BLOCKER** is complete, a signe
 ## Completed reliability fixes
 
 - [x] Keep household activity concise, collapse duplicate item saves, and never attribute background database updates to the record creator
+- [x] Keep recurring bill payments occurrence-specific so a paid or matched week never marks future weekly, biweekly, monthly, or quarterly dates as paid

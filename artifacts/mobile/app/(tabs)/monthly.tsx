@@ -40,6 +40,7 @@ import type { FinancialEvent } from "@/lib/forecast";
 import { summarizeMonthlyBills } from "@/lib/monthlySummary";
 import { buildOverdueBillOccurrences } from "@/lib/overdueBills";
 import { pendingMatchStatusLabel, pendingOccurrenceKeySet, pendingPlanMatchForOccurrence } from "@/lib/pendingPlanMatches";
+import { resolveBillOccurrencePayment } from "@/lib/billOccurrencePayment";
 import type { SnowballProjectionResult } from "@/lib/snowball";
 import { isValidDateInMonth } from "@/lib/schedule";
 import type { ConfirmActionOptions } from "@/lib/confirmAction";
@@ -55,7 +56,7 @@ import { replaceBillSurplusFundingSource } from "@/lib/snowballFunding";
 import { readInterfacePreferences, updateInterfacePreferences } from "@/lib/interfacePreferences";
 
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly" };
+const FREQ_LABELS: Record<string, string> = { monthly: "Monthly", biweekly: "Biweekly", weekly: "Weekly", quarterly: "Quarterly" };
 
 type TabView = "bills" | "calendar";
 type DueDayPickerState = { bill: Bill; fromDate: string };
@@ -102,18 +103,21 @@ function PayStatus({
   paid,
   partial,
   overdue = false,
+  scheduled = false,
   pendingLabel,
 }: {
   paid: boolean;
   partial: boolean;
   overdue?: boolean;
+  scheduled?: boolean;
   pendingLabel?: string;
 }) {
   const c = useColors();
-  if (paid) return <View style={[ps.badge, { backgroundColor: c.success + "25" }]}><Text style={[ps.text, { color: c.success }]}>PAID</Text></View>;
   if (pendingLabel) return <View style={[ps.badge, { backgroundColor: "#3b82f625" }]}><Text style={[ps.text, { color: "#60a5fa" }]}>{pendingLabel}</Text></View>;
+  if (paid) return <View style={[ps.badge, { backgroundColor: c.success + "25" }]}><Text style={[ps.text, { color: c.success }]}>PAID</Text></View>;
   if (overdue) return <View style={[ps.badge, { backgroundColor: c.destructive + "25" }]}><Text style={[ps.text, { color: c.destructive }]}>OVERDUE</Text></View>;
   if (partial) return <View style={[ps.badge, { backgroundColor: c.warning + "25" }]}><Text style={[ps.text, { color: c.warning }]}>PARTIAL</Text></View>;
+  if (scheduled) return <View style={[ps.badge, { backgroundColor: c.primary + "20" }]}><Text style={[ps.text, { color: c.primary }]}>SCHEDULED</Text></View>;
   return <View style={[ps.badge, { backgroundColor: c.destructive + "20" }]}><Text style={[ps.text, { color: c.destructive }]}>UNPAID</Text></View>;
 }
 const ps = StyleSheet.create({
@@ -2139,17 +2143,26 @@ export default function MonthlyScreen() {
                           );
                           const overdueOccurrence = overdueBillOccurrenceMap.get(occurrenceKey(bill.id, occurrenceDate));
                           const amount = getAmount(bill, month, selectedYear);
-                          const paid = getPaidAmount(bill.id, month, selectedYear);
-                          const effectivePaid = getEffectivePaidAmount(bill, month, selectedYear);
-                          const isPaid = amount > 0 && effectivePaid >= amount - 0.005;
-                          const isPartial = effectivePaid > 0 && !isPaid;
-                          const remaining = Math.max(0, amount - effectivePaid);
+                          const exactMatch = billOccurrenceMatches.get(occurrenceKey(bill.id, occurrenceDate));
+                          const monthlyOverride = overrides.find(item => item.bill_id === bill.id && item.month === month && item.year === selectedYear);
+                          const occurrencePayment = resolveBillOccurrencePayment({
+                            occurrenceDate,
+                            scheduledAmount: amount,
+                            frequency: bill.frequency,
+                            match: exactMatch,
+                            monthlyPaidAmount: getPaidAmount(bill.id, month, selectedYear),
+                            monthlyPaidDate: monthlyOverride?.paid_date,
+                          });
+                          const paid = occurrencePayment.paidAmount;
+                          const isPaid = occurrencePayment.isPaid;
+                          const isPartial = occurrencePayment.isPartial;
+                          const remaining = occurrencePayment.remainingAmount;
                           const movedIn = movedInByBillId.get(bill.id);
                           const canReschedule = bill.frequency === "monthly" || bill.frequency === "quarterly";
-                          const amtKey = `${bill.id}-overlay-amount`;
+                          const amtKey = `${bill.id}-${occurrenceDate}-overlay-amount`;
                           const showAmt = editingAmounts[amtKey] !== undefined ? editingAmounts[amtKey] : amount.toFixed(2);
                           const amountEditing = editingAmounts[amtKey] !== undefined;
-                          const paidKey = `${bill.id}-overlay-paid`;
+                          const paidKey = `${bill.id}-${occurrenceDate}-overlay-paid`;
                           const showPaid = editingPaid[paidKey] !== undefined ? editingPaid[paidKey] : paid > 0 ? paid.toFixed(2) : "";
                           const paidEditing = editingPaid[paidKey] !== undefined;
                           return (
@@ -2169,13 +2182,14 @@ export default function MonthlyScreen() {
                                 <View style={{ flex: 1 }}>
                                   <Text numberOfLines={1} style={[styles.dayBillName, { color: c.foreground }]}>{bill.name}</Text>
                                   <Text style={[styles.dayBillMeta, { color: c.mutedForeground }]}>
-                                    {bill.category}{bill.is_debt ? " · debt" : ""}{movedIn ? ` · moved from ${formatShortDate(movedIn.from_date)}` : ""}
+                                    {bill.category}{bill.is_debt ? " · debt" : ""} · {FREQ_LABELS[bill.frequency] ?? bill.frequency}{movedIn ? ` · moved from ${formatShortDate(movedIn.from_date)}` : ""}
                                   </Text>
                                 </View>
                                 <PayStatus
                                   paid={isPaid}
                                   partial={isPartial}
                                   overdue={Boolean(overdueOccurrence)}
+                                  scheduled={occurrenceDate > todayIsoDate()}
                                   pendingLabel={pendingMatch ? pendingMatchStatusLabel(pendingMatch) : undefined}
                                 />
                               </View>

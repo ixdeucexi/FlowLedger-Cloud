@@ -167,5 +167,7 @@
     ,"lib/hapticsPreference.test.ts"
     ,"lib/householdActivity.ts"
     ,"lib/householdActivity.test.ts"
+    ,"lib/billOccurrencePayment.ts"
+    ,"lib/billOccurrencePayment.test.ts"
   ]
 }
