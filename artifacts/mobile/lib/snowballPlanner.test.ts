@@ -212,3 +212,13 @@ test("the extra payment money field removes the browser's internal focus outline
   assert.match(source, /paddingLeft: 3, paddingRight: 14/);
   assert.match(source, /outlineStyle: "none" as never/);
 });
+
+test("the extra payment editor keeps only a compact payoff date below its fields", () => {
+  const source = readFileSync("app/snowball-plan.tsx", "utf8");
+  assert.match(source, /style=\{styles\.payoffDateLine\}/);
+  assert.match(source, />PROJECTED PAYOFF</);
+  assert.doesNotMatch(source, />PAYOFF IMPACT</);
+  assert.doesNotMatch(source, />Scheduled Forecast</);
+  assert.doesNotMatch(source, />Safe extra plan</);
+  assert.doesNotMatch(source, />Total debt planned</);
+});

@@ -25,7 +25,6 @@ import { matchedOccurrenceAllocations } from "@/lib/reviewCenter";
 import {
   buildSnowballPlannerRows,
   buildSnowballTimeline,
-  payoffMonthsSooner,
   snowballPlanHistoryStatus,
 } from "@/lib/snowballPlanner";
 
@@ -163,16 +162,6 @@ function SnowballPlanScreen() {
     paymentDate,
     existingPayment?.id,
   ), [existingPayment?.id, paymentDate, planDate.month, planDate.year, previewDebtSnowball, requestedExtra]);
-  const baselinePaymentDate = existingPayment?.payment_date ?? paymentDate;
-  const baselinePlanDate = dateParts(baselinePaymentDate);
-  const baselinePreview = useMemo(() => previewDebtSnowball(
-    baselinePlanDate.month,
-    baselinePlanDate.year,
-    existingPayment?.amount ?? 0,
-    0,
-    baselinePaymentDate,
-    existingPayment?.id,
-  ), [baselinePaymentDate, baselinePlanDate.month, baselinePlanDate.year, existingPayment?.amount, existingPayment?.id, previewDebtSnowball]);
   const monthDebts = getMonthlyBills(planDate.month, planDate.year).filter(debt => debt.is_debt);
   const fullDatedPlan = getDebtPlanForMonth(planDate.month, planDate.year);
   const remainingDatedPlan = getRemainingDebtPlanForMonth(planDate.month, planDate.year);
@@ -216,7 +205,6 @@ function SnowballPlanScreen() {
   const monthLabel = `${MONTH_NAMES[planDate.month]} ${planDate.year}`;
   const strategyName = settings.paymentMethod === "snowball" ? "Snowball" : "Avalanche";
   const totalDebt = plannerRows.reduce((sum, row) => sum + row.balance, 0);
-  const monthsSooner = payoffMonthsSooner(baselinePreview.debtFreeDate, preview.debtFreeDate);
   const snowballMatches = useMemo(
     () => matchedOccurrenceAllocations(transactions, "extra_principal", "snowball"),
     [transactions],
@@ -612,51 +600,9 @@ function SnowballPlanScreen() {
                   maxDate={maximumPlanDate(today, settings.forecast_horizon_months)}
                 />
 
-                <View style={[styles.impactCard, { backgroundColor: c.background, borderColor: c.border }]}>
-                  <Text style={[styles.cardLabel, { color: c.mutedForeground }]}>PAYOFF IMPACT</Text>
-                  {editTransaction ? (
-                    <Text style={[styles.impactSummary, { color: c.mutedForeground }]}>This adjusts an already applied payment. Payoff-date comparisons are available for saved Forecast plans.</Text>
-                  ) : (
-                    <>
-                      <View style={styles.impactDates}>
-                        <View style={styles.flexOne}>
-                          <Text style={[styles.impactLabel, { color: c.mutedForeground }]}>CURRENT PLAN</Text>
-                          <Text style={[styles.impactValue, { color: c.foreground }]}>{readableMonth(baselinePreview.debtFreeDate)}</Text>
-                        </View>
-                        <Feather name="arrow-right" size={18} color={c.primary} />
-                        <View style={[styles.flexOne, styles.impactRight]}>
-                          <Text style={[styles.impactLabel, { color: c.mutedForeground }]}>WITH THIS PLAN</Text>
-                          <Text style={[styles.impactValue, { color: monthsSooner !== null && monthsSooner < 0 ? c.destructive : requestedExtra > 0 ? c.success : c.foreground }]}>{readableMonth(preview.debtFreeDate)}</Text>
-                        </View>
-                      </View>
-                      <Text style={[styles.impactSummary, { color: monthsSooner !== null && monthsSooner > 0 ? c.success : monthsSooner !== null && monthsSooner < 0 ? c.destructive : c.mutedForeground }]}>
-                        {requestedExtra <= 0
-                          ? "Enter an amount to see the payoff impact."
-                          : monthsSooner === null
-                            ? "A payoff month is not projected for both plans yet."
-                            : monthsSooner > 0
-                              ? `${monthsSooner} ${monthsSooner === 1 ? "month" : "months"} sooner than the saved current plan.`
-                              : monthsSooner < 0
-                                ? `${Math.abs(monthsSooner)} ${Math.abs(monthsSooner) === 1 ? "month" : "months"} later than the saved current plan.`
-                                : "The projected payoff month stays the same."}
-                      </Text>
-                    </>
-                  )}
-                </View>
-
-                <View style={[styles.equationCard, { backgroundColor: c.background, borderColor: c.border }]}>
-                  <View style={styles.equationRow}>
-                    <Text style={[styles.equationLabel, { color: c.mutedForeground }]}>Scheduled Forecast</Text>
-                    <Text style={[styles.equationValue, { color: c.foreground }]}>{money(scheduledForecast)}</Text>
-                  </View>
-                  <View style={styles.equationRow}>
-                    <Text style={[styles.equationLabel, { color: c.mutedForeground }]}>Safe extra plan</Text>
-                    <Text style={[styles.equationValue, { color: c.primary }]}>+{money(draftExtra)}</Text>
-                  </View>
-                  <View style={[styles.totalRow, { borderTopColor: c.border }]}>
-                    <Text style={[styles.totalLabel, { color: c.foreground }]}>Total debt planned</Text>
-                    <Text style={[styles.totalValue, { color: c.success }]}>{money(totalPlanned)}</Text>
-                  </View>
+                <View style={styles.payoffDateLine}>
+                  <Text style={[styles.payoffDateLabel, { color: c.mutedForeground }]}>PROJECTED PAYOFF</Text>
+                  <Text style={[styles.payoffDateValue, { color: c.primary }]}>{readableMonth(preview.debtFreeDate)}</Text>
                 </View>
 
                 {displayedAllocations.length > 0 ? (
@@ -849,19 +795,9 @@ const styles = StyleSheet.create({
   error: { fontSize: 11, lineHeight: 16, marginTop: 6 },
   safeLink: { alignSelf: "flex-start", paddingVertical: 9 },
   safeLinkText: { fontSize: 12, fontFamily: "Inter_700Bold" },
-  impactCard: { borderWidth: 1, borderRadius: 16, padding: 13, marginTop: 16 },
-  impactDates: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 11 },
-  impactRight: { alignItems: "flex-end" },
-  impactLabel: { fontSize: 8, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.6 },
-  impactValue: { fontSize: 14, fontFamily: "Inter_800ExtraBold", marginTop: 3 },
-  impactSummary: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_600SemiBold", marginTop: 12 },
-  equationCard: { borderWidth: 1, borderRadius: 16, padding: 13, marginTop: 13, gap: 9 },
-  equationRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 },
-  equationLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
-  equationValue: { fontSize: 13, fontFamily: "Inter_700Bold" },
-  totalRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12, borderTopWidth: 1, paddingTop: 10 },
-  totalLabel: { fontSize: 13, fontFamily: "Inter_800ExtraBold" },
-  totalValue: { fontSize: 17, fontFamily: "Inter_800ExtraBold" },
+  payoffDateLine: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 16 },
+  payoffDateLabel: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.7 },
+  payoffDateValue: { fontSize: 14, fontFamily: "Inter_800ExtraBold" },
   allocations: { marginTop: 1 },
   previewAllocation: { flexDirection: "row", alignItems: "center", gap: 8, borderTopWidth: 1, paddingVertical: 10 },
   previewAllocationName: { flex: 1, fontSize: 12, fontFamily: "Inter_600SemiBold" },

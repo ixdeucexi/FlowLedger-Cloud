@@ -31,6 +31,7 @@ Release FlowLedger as a signed iOS and Android app while keeping the existing PW
 - [x] Plan Simulator uses the shared app calendar and can test paying off a selected open debt without changing live data
 - [x] Debt Payoff Planner extra-payment field stays within its card on phone layouts
 - [x] Debt Payoff Planner removes the browser's internal money-field focus outline while keeping the normal editing cursor and dollar sign aligned
+- [x] Debt Payoff Planner shows the projected payoff date as a compact line while removing the comparison and scheduled/extra/total cards
 - [x] PWA resume restores the locally selected household without blocking plan load on a temporary preference-sync failure
 - [x] Forecast closes its selected-day modal before opening the planned debt-payment editor
 - [x] Forecast debt cards edit the remaining scheduled payment inline while preserving any payment already made
