@@ -121,7 +121,6 @@ function SnowballPlanScreen() {
   const hasResolvedTransactionEdit = Boolean(editTransaction && editDraft);
   const [paymentDate, setPaymentDate] = useState(today);
   const [extraAmount, setExtraAmount] = useState("");
-  const [extraAmountSelection, setExtraAmountSelection] = useState<{ start: number; end: number } | undefined>();
   const [editingPaymentId, setEditingPaymentId] = useState<string | undefined>(paymentId);
   const [saving, setSaving] = useState(false);
   const hydratedTransactionRef = useRef<string | null>(null);
@@ -590,12 +589,7 @@ function SnowballPlanScreen() {
                     accessibilityLabel="Extra debt payment"
                     value={extraAmount}
                     onChangeText={setExtraAmount}
-                    onFocus={() => {
-                      const end = extraAmount.length;
-                      setExtraAmountSelection({ start: end, end });
-                      requestAnimationFrame(() => setExtraAmountSelection(undefined));
-                    }}
-                    selection={extraAmountSelection}
+                    caretHidden
                     keyboardType="decimal-pad"
                     placeholder="0.00"
                     placeholderTextColor={c.mutedForeground}

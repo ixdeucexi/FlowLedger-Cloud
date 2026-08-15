@@ -206,10 +206,9 @@ test("saved-plan history status follows pending and matched allocation state", (
   assert.equal(snowballPlanHistoryStatus({ ...saved, sources: undefined }, new Map(), "2026-08-10"), "Scheduled");
 });
 
-test("the extra payment money field opens with the caret after its amount", () => {
+test("the extra payment money field keeps its editing caret hidden", () => {
   const source = readFileSync("app/snowball-plan.tsx", "utf8");
-  assert.match(source, /const end = extraAmount\.length;/);
-  assert.match(source, /setExtraAmountSelection\(\{ start: end, end \}\)/);
-  assert.match(source, /selection=\{extraAmountSelection\}/);
+  assert.match(source, /accessibilityLabel="Extra debt payment"[\s\S]*?caretHidden/);
+  assert.doesNotMatch(source, /extraAmountSelection/);
   assert.match(source, /paddingLeft: 3, paddingRight: 14/);
 });
