@@ -206,9 +206,9 @@ test("saved-plan history status follows pending and matched allocation state", (
   assert.equal(snowballPlanHistoryStatus({ ...saved, sources: undefined }, new Map(), "2026-08-10"), "Scheduled");
 });
 
-test("the extra payment money field keeps its editing caret hidden", () => {
+test("the extra payment money field removes the browser's internal focus outline", () => {
   const source = readFileSync("app/snowball-plan.tsx", "utf8");
-  assert.match(source, /accessibilityLabel="Extra debt payment"[\s\S]*?caretHidden/);
-  assert.doesNotMatch(source, /extraAmountSelection/);
+  assert.doesNotMatch(source, /caretHidden/);
   assert.match(source, /paddingLeft: 3, paddingRight: 14/);
+  assert.match(source, /outlineStyle: "none" as never/);
 });
