@@ -600,7 +600,7 @@ const styles = StyleSheet.create({
   monthSelectorText: { color: palette.textSecondary, fontSize: 13, fontFamily: "Inter_600SemiBold" },
   addButton: { minHeight: 38, borderRadius: 7, backgroundColor: palette.purple, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
   addButtonText: { color: "#ffffff", fontSize: 13, fontFamily: "Inter_700Bold" },
-  simulatorButton: { minHeight: 44, borderRadius: 7, borderWidth: 1, borderColor: palette.purple + "55", backgroundColor: palette.purpleSoft, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
+  simulatorButton: { minHeight: 44, borderRadius: 7, borderWidth: 1, borderColor: palette.purple, backgroundColor: palette.purpleSoft, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
   simulatorButtonText: { color: palette.purple, fontSize: 12, fontFamily: "Inter_700Bold" },
   pressed: { opacity: 0.72 },
   metrics: { flexDirection: "row", gap: 12, marginBottom: 14 },

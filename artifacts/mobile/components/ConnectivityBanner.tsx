@@ -12,7 +12,7 @@ export function ConnectivityBanner({ desktop }: { desktop: boolean }) {
   const { width } = useWindowDimensions();
   const { online, reconnected } = useNetworkStatus();
 
-  if (online && !reconnected) return null;
+  if (online === null || (online && !reconnected)) return null;
 
   const compact = width < 700;
   const positive = online && reconnected;

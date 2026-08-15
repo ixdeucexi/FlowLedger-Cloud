@@ -10,6 +10,7 @@ import { useColors } from "@/hooks/useColors";
 import { flowmentumPreviewStorageKey } from "@/lib/flowmentumHandoff";
 import { PLAN_CATALOG, PLAN_TIERS, type PlanTier } from "@/lib/membership";
 import { desktopPalette as palette } from "@/components/desktop/DesktopUI";
+import { apiFetch } from "@/lib/api";
 
 export function AdminMembershipTools({ appearance = "theme" }: { appearance?: "theme" | "desktop" | "settings" }) {
   const themeColors = useColors();
@@ -39,7 +40,7 @@ export function AdminMembershipTools({ appearance = "theme" }: { appearance?: "t
     setTesterBusy(true);
     setTesterMessage("");
     try {
-      const response = await fetch("/api/admin/tester-plan", {
+      const response = await apiFetch("/api/admin/tester-plan", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${session.access_token}`,

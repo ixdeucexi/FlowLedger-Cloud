@@ -3,7 +3,9 @@ const test = require("node:test");
 
 const {
   acquirePlaidSyncLock,
+  conflictingPlaidAccountHousehold,
   creditCardDebtValues,
+  debtPlanMonthBounds,
   duplicatePlaidAccountIds,
   editablePlaidFields,
   plaidAccountIdentity,
@@ -227,7 +229,7 @@ test("overlapping Plaid webhook inserts are idempotent", async () => {
       };
     },
   };
-  const canonicalRow = { id: "plaid:user-1:transaction-1", user_id: "user-1" };
+  const canonicalRow = { id: "plaid:user-1:transaction-1", user_id: "user-1", household_id: "house-1" };
 
   await persistCanonicalPlaidTransaction({ db, existing: null, canonicalRow, userId: "user-1" });
 
@@ -259,6 +261,7 @@ test("a Plaid unique-key race refreshes the row that won the insert", async () =
   const canonicalRow = {
     id: "plaid:user-1:transaction-1",
     user_id: "user-1",
+    household_id: "house-1",
     plaid_transaction_id: "transaction-1",
     amount: -12,
   };
@@ -267,6 +270,7 @@ test("a Plaid unique-key race refreshes the row that won the insert", async () =
 
   assert.deepEqual(updates, [{
     user_id: "user-1",
+    household_id: "house-1",
     plaid_transaction_id: "transaction-1",
     amount: -12,
   }]);
@@ -276,6 +280,52 @@ test("Plaid account identity falls back to institution, mask, type, and name", (
   const account = { id: "account-1", mask: "1234", account_type: "depository", account_subtype: "checking", name: "Checking" };
   assert.equal(plaidAccountIdentity(account, "ins_1"), "fallback:ins_1:1234:depository:checking:checking");
   assert.notEqual(plaidAccountIdentity(account, "ins_1"), plaidAccountIdentity(account, "ins_2"));
+});
+
+test("Plaid debt rollover uses the household calendar month at a UTC boundary", () => {
+  const instant = new Date("2026-09-01T01:30:00.000Z");
+  assert.deepEqual(debtPlanMonthBounds("America/Chicago", instant), {
+    monthStart: "2026-08-01",
+    monthEnd: "2026-08-31",
+  });
+  assert.deepEqual(debtPlanMonthBounds("Asia/Tokyo", instant), {
+    monthStart: "2026-09-01",
+    monthEnd: "2026-09-30",
+  });
+});
+
+test("a bank account cannot be moved into another household by a later Plaid connection", () => {
+  const existing = [{
+    household_id: "house-1",
+    plaid_account_id: "account-old",
+    persistent_account_id: "persistent-card",
+  }];
+
+  assert.equal(conflictingPlaidAccountHousehold(existing, [{
+    account_id: "account-new",
+    persistent_account_id: "persistent-card",
+  }], "house-2"), existing[0]);
+  assert.equal(conflictingPlaidAccountHousehold(existing, [{
+    account_id: "account-old",
+    persistent_account_id: null,
+  }], "house-2"), existing[0]);
+  assert.equal(conflictingPlaidAccountHousehold(existing, [{
+    account_id: "account-old",
+    persistent_account_id: "persistent-card",
+  }], "house-1"), null);
+  const crossUser = {
+    ...existing[0],
+    user_id: "another-user",
+  };
+  assert.equal(conflictingPlaidAccountHousehold([crossUser], [{
+    account_id: "account-old",
+  }], "house-2"), crossUser);
+  assert.ok(conflictingPlaidAccountHousehold([{
+    household_id: null,
+    plaid_account_id: "account-old",
+  }], [{
+    account_id: "account-old",
+  }], "house-2"));
 });
 
 test("duplicate bank links keep the existing Plaid item account", () => {

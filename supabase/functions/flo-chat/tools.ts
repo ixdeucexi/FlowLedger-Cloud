@@ -179,7 +179,7 @@ function centsTotal(values: unknown[]) {
 export function createFloTools(runtime: FloToolRuntime) {
   return {
     getFlowLedgerHelp: tool({
-      description: "Read allowlisted FlowLedger feature and navigation help. Use for questions about how the app works, where a feature lives, or what Flo can do.",
+      description: "Read allowlisted FlowLedger feature and navigation help. Use only for how-to or where-is navigation questions. Never use it for questions about what is in the user's account, Forecast, balances, bills, debt, income, or activity.",
       inputSchema: z.object({ topic: z.enum(["flo", "accounts", "transactions", "bills_debt", "forecast", "simulator", "settings", "households"]) }),
       execute: async ({ topic }) => tracked(runtime, "getFlowLedgerHelp", { topic }, async () => {
         const facts: Record<string, Record<string, unknown>> = {
@@ -454,6 +454,24 @@ export function createFloTools(runtime: FloToolRuntime) {
       },
     }),
   };
+}
+
+export async function executeFloReadTools(
+  runtime: FloToolRuntime,
+  requests: Array<{ name: string; input: Record<string, unknown> }>,
+): Promise<FloToolEnvelope[]> {
+  const tools = createFloTools(runtime) as unknown as Record<string, { execute?: (input: Record<string, unknown>, options: Record<string, unknown>) => unknown }>;
+  return await Promise.all(requests.map(async request => {
+    const selected = tools[request.name];
+    if (!selected?.execute) throw new Error("deterministic_tool_unavailable");
+    const result = await selected.execute(request.input, {
+      toolCallId: `deterministic:${request.name}`,
+      messages: [],
+      context: undefined,
+    });
+    if (!result || typeof result !== "object" || Symbol.asyncIterator in result) throw new Error("deterministic_tool_invalid");
+    return result as FloToolEnvelope;
+  }));
 }
 
 export function summarizeToolPayload(payload: FloToolEnvelope) {

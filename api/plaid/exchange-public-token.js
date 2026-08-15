@@ -68,6 +68,12 @@ module.exports = async function exchangePublicToken(req, res) {
       return res.status(error.status).json({ error: error.code, message: error.message });
     }
     const code = error && error.response && error.response.data && error.response.data.error_code || error.code || "PUBLIC_TOKEN_EXCHANGE_FAILED";
+    if (code === "PLAID_ACCOUNT_ALREADY_CONNECTED_TO_ANOTHER_HOUSEHOLD") {
+      return res.status(409).json({
+        error: code,
+        message: "This bank account is already connected to another household. Switch to that household to manage it.",
+      });
+    }
     const status = code === "PLAID_LINK_SESSION_INVALID" ? 400 : 500;
     return res.status(status).json({ error: code, message: publicError(error, "Could not finish connecting this bank.") });
   }

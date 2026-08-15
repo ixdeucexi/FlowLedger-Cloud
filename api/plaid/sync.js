@@ -162,6 +162,12 @@ module.exports = async function plaidSync(req, res) {
         message: "A connected-account sync is already in progress.",
       });
     }
+    if (code === "PLAID_ACCOUNT_ALREADY_CONNECTED_TO_ANOTHER_HOUSEHOLD") {
+      return res.status(409).json({
+        error: code,
+        message: "This bank account is already connected to another household. Switch to that household to manage it.",
+      });
+    }
     return res
       .status(500)
       .json({

@@ -61,9 +61,15 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
+    "@react-native-community/netinfo": "11.4.1",
     "@supabase/supabase-js": "^2.108.0",
+    "expo-apple-authentication": "~8.0.8",
+    "expo-auth-session": "~7.0.11",
+    "expo-crypto": "~15.0.9",
     "expo-document-picker": "~14.0.8",
     "expo-file-system": "~19.0.23",
+    "expo-local-authentication": "~17.0.8",
+    "expo-secure-store": "~15.0.8",
     "expo-sharing": "~14.0.8",
     "expo-speech": "~14.0.8",
     "plaid": "^43.0.0",

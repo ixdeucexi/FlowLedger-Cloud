@@ -58,6 +58,7 @@ test("desktop Forecast and Flo consume only calendar-visible event sources", () 
 
   assert.match(desktop, /calendarVisibleForecastEvents\(balance\?\.events\)/);
   assert.match(desktop, /calendarVisibleForecastEvents\(selectedDay\?\.events\)/);
+  assert.doesNotMatch(desktop, /palette\.purple\s*\+\s*["']55["']/);
   assert.match(flo, /groupForecastEvents\(calendarVisibleForecastEvents\(todayForecastDay\?\.events\)\)/);
 });
 

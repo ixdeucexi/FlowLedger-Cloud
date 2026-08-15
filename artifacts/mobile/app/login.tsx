@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import * as AppleAuthentication from "expo-apple-authentication";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -30,10 +31,11 @@ function GoogleMark() {
 }
 
 export default function LoginScreen() {
-  const { signIn, signUp, signInWithGoogle } = useAuth();
+  const { signIn, signUp, signInWithGoogle, signInWithApple, requestPasswordReset } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colors = useColors();
+  const appleAuthEnabled = process.env.EXPO_PUBLIC_APPLE_AUTH_ENABLED === "true";
 
   const [mode,     setMode]     = useState<"signin" | "signup">("signin");
   const [email,    setEmail]    = useState("");
@@ -44,6 +46,7 @@ export default function LoginScreen() {
   const [showPass, setShowPass] = useState(false);
   const [legalAccepted, setLegalAccepted] = useState(false);
   const [legalDoc, setLegalDoc] = useState<LegalDocumentId | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (Platform.OS !== "web" || typeof window === "undefined") return;
@@ -57,6 +60,7 @@ export default function LoginScreen() {
 
   const handleSubmit = async () => {
     setError(null);
+    setNotice(null);
     if (!email.trim() || !password.trim()) {
       setError("Please enter your email and password.");
       return;
@@ -95,6 +99,7 @@ export default function LoginScreen() {
 
   const handleGoogle = async () => {
     setError(null);
+    setNotice(null);
     if (mode === "signup" && !legalAccepted) {
       setError("Please agree to the Terms of Service and acknowledge the Privacy Policy.");
       return;
@@ -103,6 +108,30 @@ export default function LoginScreen() {
     const err = await signInWithGoogle(true);
     setLoading(false);
     if (err) setError(err);
+  };
+
+  const handleApple = async () => {
+    if (loading) return;
+    setError(null);
+    setNotice(null);
+    if (mode === "signup" && !legalAccepted) {
+      setError("Please agree to the Terms of Service and acknowledge the Privacy Policy.");
+      return;
+    }
+    setLoading(true);
+    const err = await signInWithApple(true);
+    setLoading(false);
+    if (err) setError(err);
+  };
+
+  const handleForgotPassword = async () => {
+    setError(null);
+    setNotice(null);
+    setLoading(true);
+    const err = await requestPasswordReset(email);
+    setLoading(false);
+    if (err) setError(err);
+    else setNotice("Password reset sent. Open the email on this device to choose a new password.");
   };
 
   return (
@@ -162,6 +191,17 @@ export default function LoginScreen() {
                   autoCorrect={false}
                 />
               </View>
+              {mode === "signin" ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Reset password"
+                  disabled={loading}
+                  onPress={handleForgotPassword}
+                  style={styles.forgotPassword}
+                >
+                  <Text style={[styles.forgotPasswordText, { color: colors.primary }]}>Forgot password?</Text>
+                </Pressable>
+              ) : null}
             </View>
 
             {/* Password */}
@@ -236,6 +276,12 @@ export default function LoginScreen() {
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             )}
+            {notice ? (
+              <View style={styles.noticeBox}>
+                <Feather name="check-circle" size={14} color="#34d399" />
+                <Text style={styles.noticeText}>{notice}</Text>
+              </View>
+            ) : null}
 
             {/* Submit */}
             <Pressable
@@ -258,9 +304,19 @@ export default function LoginScreen() {
               <Text style={[styles.googleBtnText, { color: colors.foreground }]}>Continue with Google</Text>
             </Pressable>
 
+            {Platform.OS === "ios" && appleAuthEnabled ? (
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                buttonStyle={colors.isDark ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                cornerRadius={12}
+                style={styles.appleButton}
+                onPress={() => void handleApple()}
+              />
+            ) : null}
+
             {mode === "signin" ? (
               <View style={styles.googleLegalNotice}>
-                <Text style={[styles.googleLegalText, { color: colors.mutedForeground }]}>By continuing with Google, you agree to the </Text>
+                <Text style={[styles.googleLegalText, { color: colors.mutedForeground }]}>By continuing with a sign-in provider, you agree to the </Text>
                 <Pressable accessibilityRole="link" onPress={() => setLegalDoc("terms")}><Text style={[styles.legalLink, { color: colors.primary }]}>Terms</Text></Pressable>
                 <Text style={[styles.googleLegalText, { color: colors.mutedForeground }]}> and acknowledge the </Text>
                 <Pressable accessibilityRole="link" onPress={() => setLegalDoc("privacy")}><Text style={[styles.legalLink, { color: colors.primary }]}>Privacy Policy</Text></Pressable>
@@ -288,6 +344,10 @@ const styles = StyleSheet.create({
   tab:           { flex: 1, paddingVertical: 9, borderRadius: 8, alignItems: "center" },
   tabText:       { fontSize: 14, fontFamily: "Inter_500Medium", color: "#64748b" },
   fieldWrap:     { marginBottom: 16 },
+  forgotPassword: { minHeight: 44, alignSelf: "flex-end", justifyContent: "center", paddingHorizontal: 2 },
+  forgotPasswordText: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  noticeBox: { flexDirection: "row", alignItems: "flex-start", gap: 8, borderRadius: 12, borderWidth: 1, borderColor: "rgba(52,211,153,0.35)", backgroundColor: "rgba(16,185,129,0.10)", padding: 12, marginBottom: 14 },
+  noticeText: { flex: 1, color: "#a7f3d0", fontSize: 13, lineHeight: 18, fontFamily: "Inter_500Medium" },
   label:         { fontSize: 12, fontFamily: "Inter_500Medium", color: "#94a3b8", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 },
   inputRow:      { flexDirection: "row", alignItems: "center", backgroundColor: "#0f172a", borderRadius: 10, borderWidth: 1, borderColor: "#1e293b", paddingHorizontal: 12 },
   inputIcon:     { marginRight: 8 },
@@ -298,6 +358,7 @@ const styles = StyleSheet.create({
   btn:           { backgroundColor: "#2563eb", borderRadius: 12, paddingVertical: 14, alignItems: "center", marginTop: 4 },
   btnText:       { fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#fff" },
   googleBtn:     { marginTop: 12, borderRadius: 12, paddingVertical: 13, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, backgroundColor: "#0f172a", borderWidth: 1, borderColor: "#334155" },
+  appleButton:   { width: "100%", height: 50, marginTop: 12 },
   googleMark:    { width: 22, height: 22, borderRadius: 11, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
   googleBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#f8fafc" },
   legalAgreement: { flexDirection: "row", alignItems: "center", gap: 9, marginTop: 16 },

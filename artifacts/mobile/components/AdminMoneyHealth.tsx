@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { desktopPalette as palette } from "@/components/desktop/DesktopUI";
+import { apiFetch } from "@/lib/api";
 
 interface MoneyHealthIssue {
   code: string;
@@ -56,7 +57,7 @@ export function AdminMoneyHealth({ householdId, appearance = "theme" }: { househ
 
   const request = async (method: "GET" | "POST") => {
     if (!session?.access_token) throw new Error("Please sign in again.");
-    const response = await fetch("/api/admin/money-health", {
+    const response = await apiFetch("/api/admin/money-health", {
       method,
       headers: {
         Authorization: `Bearer ${session.access_token}`,

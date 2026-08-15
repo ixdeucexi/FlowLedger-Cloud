@@ -70,6 +70,7 @@ import { householdActivityHeadline } from "@/lib/householdActivity";
 import { parseStatementCsv } from "@/lib/accounts";
 import { orderActiveDebtsForStrategy } from "@/lib/debtOrder";
 import { resetFloHouseholdMemory } from "@/lib/floChat";
+import { floAiConsentStorageKey } from "@/lib/floAiConsent";
 import { DEFAULT_FLO_PREFERENCES, saveFloPreferences } from "@/lib/floPreferences";
 import {
   getLatestIncomeChange,
@@ -1939,6 +1940,20 @@ export default function MoreScreen({
         await resetFloHouseholdMemory(activeHousehold.householdId, user.id);
         await saveFloPreferences(user.id, activeHousehold.householdId, DEFAULT_FLO_PREFERENCES);
         Alert.alert("Flo Memory Reset", "Flo's saved memory was removed.");
+      },
+    });
+  };
+
+  const handleWithdrawFloAiConsent = () => {
+    if (!user?.id) return;
+    confirmAction({
+      title: "Turn Off Flo AI Access?",
+      message: "Flo will stop sending new questions and relevant household records to OpenAI. The rest of FlowLedger will keep working.",
+      confirmText: "Turn Off",
+      destructive: true,
+      onConfirm: async () => {
+        await AsyncStorage.removeItem(floAiConsentStorageKey(user.id));
+        Alert.alert("Flo AI Access Off", "Flo will ask for permission again before sending any new account question.");
       },
     });
   };
@@ -4316,6 +4331,20 @@ export default function MoreScreen({
                   onPress: handleResetFlo,
                   color: "#3b82f6",
                 },
+                {
+                  icon: "shield" as const,
+                  label: "Turn Off Flo AI Access",
+                  desc: "Require permission again before Flo sends account data to OpenAI",
+                  onPress: handleWithdrawFloAiConsent,
+                  color: "#f59e0b",
+                },
+                {
+                  icon: "trash-2" as const,
+                  label: "Request Account Deletion",
+                  desc: "Start a verified request and review shared-household effects",
+                  onPress: () => router.push("/delete-account" as never),
+                  color: c.destructive,
+                },
               ].map((item, i) => (
                 <Pressable
                   key={item.label}
@@ -4482,6 +4511,29 @@ export default function MoreScreen({
                     </Text>
                   </View>
                   <Feather name="external-link" size={18} color={c.primary} />
+                </Pressable>
+                <Pressable
+                  accessibilityRole="link"
+                  accessibilityLabel="Open FlowLedger support"
+                  onPress={() => router.push("/support" as any)}
+                  style={({ pressed }) => [
+                    styles.card,
+                    styles.dataRow,
+                    {
+                      backgroundColor: c.card,
+                      borderRadius: colors.radius,
+                      opacity: pressed ? 0.76 : 1,
+                    },
+                  ]}
+                >
+                  <View style={[styles.dataIcon, { backgroundColor: c.success + "18" }]}>
+                    <Feather name="help-circle" size={18} color={c.success} />
+                  </View>
+                  <View style={styles.dataBody}>
+                    <Text style={[styles.dataLabel, { color: c.foreground }]}>Support & troubleshooting</Text>
+                    <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>Contact FlowLedger or follow safe recovery steps.</Text>
+                  </View>
+                  <Feather name="chevron-right" size={18} color={c.primary} />
                 </Pressable>
                 <SLabel c={c} text="Tester Feedback" />
                 <View

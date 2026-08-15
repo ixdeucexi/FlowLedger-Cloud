@@ -6,6 +6,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-nati
 import { usePlaidLink } from "react-plaid-link";
 
 import { supabase } from "@/lib/supabase";
+import { apiFetch } from "@/lib/api";
 import { useBudget } from "@/context/BudgetContext";
 import {
   clearPlaidOAuthSession,
@@ -82,7 +83,7 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
     const session = await getFreshSession();
     if (!session) return;
     try {
-      const response = await fetch("/api/plaid/status", {
+      const response = await apiFetch("/api/plaid/status", {
         credentials: "include",
         headers: { Authorization: `Bearer ${session.access_token}`, "X-FlowLedger-Household-Id": householdId },
       });
@@ -106,7 +107,7 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
     try {
       const session = await getFreshSession();
       if (!session) return finish("Please sign in again before finishing the connection.");
-      const response = await fetch("/api/plaid/exchange-public-token", {
+      const response = await apiFetch("/api/plaid/exchange-public-token", {
         method: "POST",
         credentials: "include",
         headers: {
@@ -167,7 +168,7 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
       return;
     }
     try {
-      const response = await fetch("/api/plaid/create-link-token", {
+      const response = await apiFetch("/api/plaid/create-link-token", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}`, "X-FlowLedger-Household-Id": householdId },
@@ -205,7 +206,7 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
     try {
       const session = await getFreshSession();
       if (!session) throw new Error("Please sign in again before attaching this card.");
-      const response = await fetch("/api/plaid/attach-credit-card", {
+      const response = await apiFetch("/api/plaid/attach-credit-card", {
         method: "POST",
         credentials: "include",
         headers: {
@@ -234,7 +235,7 @@ export function PlaidLinkButton({ colors, onConnected }: Props) {
     try {
       const session = await getFreshSession();
       if (!session) throw new Error("Please sign in again before syncing your bank.");
-      const response = await fetch("/api/plaid/sync", { method: "POST", credentials: "include", headers: { Authorization: `Bearer ${session.access_token}`, "X-FlowLedger-Household-Id": householdId } });
+      const response = await apiFetch("/api/plaid/sync", { method: "POST", credentials: "include", headers: { Authorization: `Bearer ${session.access_token}`, "X-FlowLedger-Household-Id": householdId } });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.message || "Could not sync bank activity.");
       setMessage("Bank activity is up to date.");

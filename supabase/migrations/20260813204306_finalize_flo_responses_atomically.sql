@@ -199,7 +199,6 @@ begin
 
   for v_row in
     select message.id, message.conversation_id, message.request_id, message.model,
-           coalesce(message.processing_started_at, message.created_at) as started_at,
            conversation.is_ephemeral
     from public.flo_messages as message
     join public.flo_conversations as conversation on conversation.id = message.conversation_id
@@ -225,7 +224,7 @@ begin
       operation, tool_names, duration_ms, model, status, error_code
     ) values (
       v_request_id, v_row.id, p_user_id, p_household_id, v_row.conversation_id,
-      'account_chat_v3', '{}'::text[], greatest(0, floor(extract(epoch from (now() - v_row.started_at)) * 1000)::integer),
+      'account_chat_v3', '{}'::text[], 0,
       v_row.model, 'error', 'response_interrupted'
     ) on conflict (request_id) where request_id is not null do nothing;
 
@@ -235,7 +234,7 @@ begin
     ) values (
       v_request_id, p_user_id, p_household_id, v_row.conversation_id, v_row.id,
       'failure', jsonb_build_object('reconciled', true), v_row.model,
-      'flo-v3.0.0', greatest(0, floor(extract(epoch from (now() - v_row.started_at)) * 1000)::integer),
+      'flo-v3.0.0', 0,
       'error', 'response_interrupted'
     ) on conflict (request_id) where event_type in ('answer', 'failure') do nothing;
 

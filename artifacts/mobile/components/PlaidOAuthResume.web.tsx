@@ -6,6 +6,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { usePlaidLink } from "react-plaid-link";
 
 import { useAuth } from "@/context/AuthContext";
+import { apiFetch } from "@/lib/api";
 import {
   clearPlaidOAuthSession,
   type PlaidOAuthSession,
@@ -98,7 +99,7 @@ export function PlaidOAuthResume() {
       return;
     }
     try {
-      const response = await fetch("/api/plaid/exchange-public-token", {
+      const response = await apiFetch("/api/plaid/exchange-public-token", {
         method: "POST",
         credentials: "include",
         headers: {
@@ -134,7 +135,7 @@ export function PlaidOAuthResume() {
     const complete = async () => {
       try {
         for (let attempt = 0; attempt < 20 && !controller.signal.aborted; attempt += 1) {
-          const response = await fetch("/api/plaid/exchange-public-token", {
+          const response = await apiFetch("/api/plaid/exchange-public-token", {
             method: "POST",
             credentials: "include",
             signal: controller.signal,

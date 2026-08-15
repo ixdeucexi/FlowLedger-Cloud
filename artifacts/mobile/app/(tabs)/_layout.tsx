@@ -662,7 +662,7 @@ function TabContent() {
           <View style={styles.tabsFrame}>
           <Tabs
             backBehavior="history"
-            detachInactiveScreens={false}
+            detachInactiveScreens
             screenListeners={{
               tabPress: () => {
                 void Haptics.selectionAsync();

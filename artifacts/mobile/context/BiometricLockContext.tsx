@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as LocalAuthentication from "expo-local-authentication";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Platform } from "react-native";
 
@@ -36,6 +37,7 @@ const BiometricLockContext = createContext<BiometricLockContextValue | null>(nul
 
 let sharedUnlockAttempt: { credentialId: string; promise: Promise<boolean> } | null = null;
 let recentSuccessfulUnlock: { credentialId: string; completedAt: number } | null = null;
+const NATIVE_DEVICE_CREDENTIAL_ID = "native-device-authentication";
 
 function readRecentBrowserUnlock(userId: string, credentialId: string): boolean {
   if (Platform.OS !== "web" || typeof window === "undefined") return false;
@@ -77,19 +79,29 @@ async function withCrossDocumentBiometricLock<T>(credentialId: string, task: () 
 }
 
 async function canUsePlatformPasskeys(): Promise<boolean> {
-  if (
-    Platform.OS !== "web"
-    || typeof window === "undefined"
-    || typeof window.PublicKeyCredential === "undefined"
-    || !navigator.credentials
-  ) {
-    return false;
+  if (Platform.OS !== "web") {
+    const [hasHardware, isEnrolled] = await Promise.all([
+      LocalAuthentication.hasHardwareAsync(),
+      LocalAuthentication.isEnrolledAsync(),
+    ]);
+    return hasHardware && isEnrolled;
   }
+  if (typeof window === "undefined" || typeof window.PublicKeyCredential === "undefined" || !navigator.credentials) return false;
   try {
     return await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
   } catch {
     return false;
   }
+}
+
+async function verifyNativeDeviceCredential(promptMessage: string): Promise<void> {
+  const result = await LocalAuthentication.authenticateAsync({
+    promptMessage,
+    promptSubtitle: "Protect your FlowLedger plan",
+    cancelLabel: "Cancel",
+    disableDeviceFallback: false,
+  });
+  if (!result.success) throw new Error(result.error || "Device unlock was cancelled");
 }
 
 function randomChallenge(): ArrayBuffer {
@@ -259,9 +271,14 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
     setBusy(true);
     setError(null);
     try {
-      let credentialId = storedLock?.credentialId;
-      if (credentialId) await verifyDeviceCredential(credentialId);
-      else credentialId = await registerDeviceCredential(userId, userLabel);
+      let credentialId: string;
+      if (Platform.OS === "web") {
+        credentialId = storedLock?.credentialId ?? await registerDeviceCredential(userId, userLabel);
+        if (storedLock?.credentialId) await verifyDeviceCredential(credentialId);
+      } else {
+        await verifyNativeDeviceCredential("Turn on device lock");
+        credentialId = NATIVE_DEVICE_CREDENTIAL_ID;
+      }
       await saveLock({ version: 2, enabled: true, userId, credentialId });
       const completedAt = Date.now();
       recentSuccessfulUnlock = { credentialId, completedAt };
@@ -328,7 +345,8 @@ export function BiometricLockProvider({ children }: { children: React.ReactNode 
       try {
         await withCrossDocumentBiometricLock(credentialId, async () => {
           if (userId && readRecentBrowserUnlock(userId, credentialId)) return;
-          await verifyDeviceCredential(credentialId);
+          if (Platform.OS === "web") await verifyDeviceCredential(credentialId);
+          else await verifyNativeDeviceCredential("Unlock FlowLedger");
           const completedAt = Date.now();
           recentSuccessfulUnlock = { credentialId, completedAt };
           if (userId) rememberRecentBrowserUnlock(userId, credentialId, completedAt);

@@ -9,7 +9,7 @@ import { useFonts } from "expo-font";
 import { Stack, useGlobalSearchParams, usePathname, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, BackHandler, Easing, Platform, StyleSheet, StyleProp, View, ViewStyle } from "react-native";
+import { Animated, AppState, BackHandler, Easing, Image, Platform, StyleSheet, StyleProp, View, ViewStyle } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -63,7 +63,11 @@ function AuthObserver() {
     if (loading || (session && budgetLoading)) return;
     const firstSegment = segments[0] as string | undefined;
     const inAuth = firstSegment === "login";
+    const isAuthCallback = firstSegment === "auth";
+    const isPasswordReset = isAuthCallback && String(segments[1] ?? "") === "reset-password";
     const isPublicLegal = firstSegment === "legal";
+    const isPublicSupport = firstSegment === "support";
+    const isPublicDeletionRequest = firstSegment === "delete-account";
     const atRoot = !firstSegment || firstSegment === "index";
 
     const replaceRoute = (destination: string) => {
@@ -72,9 +76,9 @@ function AuthObserver() {
 
     const householdId = activeHousehold?.householdId ?? `personal-${session?.user.id ?? "signed-out"}`;
 
-    if (!session && !inAuth && !isPublicLegal) {
+    if (!session && !inAuth && !isPublicLegal && !isPublicSupport && !isPublicDeletionRequest && !isAuthCallback) {
       replaceRoute("/login");
-    } else if (session && (inAuth || atRoot)) {
+    } else if (session && (inAuth || (isAuthCallback && !isPasswordReset) || atRoot)) {
       let requestedSetup = false;
       if (Platform.OS === "web" && typeof window !== "undefined") {
         try {
@@ -98,7 +102,7 @@ function AuthObserver() {
       return;
     }
 
-    if (session && !inAuth && !atRoot && !isPublicLegal) {
+    if (session && !inAuth && !isAuthCallback && !atRoot && !isPublicLegal && !isPublicSupport && !isPublicDeletionRequest) {
       restoreAttemptRef.current = null;
       void rememberAppRoute(session.user.id, householdId, currentRoute);
     }
@@ -182,6 +186,7 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
   const [appReady, setAppReady] = useState(false);
   const [showStartupOverlay, setShowStartupOverlay] = useState(true);
   const [webExitStarted, setWebExitStarted] = useState(false);
+  const [privacyShielded, setPrivacyShielded] = useState(Platform.OS !== "web" && AppState.currentState !== "active");
   const brandEntranceStartedRef = useRef(false);
   const brandEntranceOpacity = useRef(new Animated.Value(0)).current;
   const startupOpacity = useRef(new Animated.Value(1)).current;
@@ -189,6 +194,23 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
   const coreReady = fontsReady && !authLoading && biometricLockReady && themeReady;
   const planReady = !session || !budgetLoading;
   const initialAppReady = coreReady && planReady && minimumStartupReady && brandEntranceReady;
+
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    let revealTimer: ReturnType<typeof setTimeout> | null = null;
+    const subscription = AppState.addEventListener("change", state => {
+      if (revealTimer) clearTimeout(revealTimer);
+      if (state === "active") {
+        revealTimer = setTimeout(() => setPrivacyShielded(false), 120);
+      } else {
+        setPrivacyShielded(true);
+      }
+    });
+    return () => {
+      if (revealTimer) clearTimeout(revealTimer);
+      subscription.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (initialAppReady) setAppReady(true);
@@ -343,7 +365,11 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
               <Stack screenOptions={{ headerShown: false }}>
                 <Stack.Screen name="index" />
                 <Stack.Screen name="login" />
+                <Stack.Screen name="auth/callback" />
+                <Stack.Screen name="auth/reset-password" />
                 <Stack.Screen name="legal" />
+                <Stack.Screen name="support" />
+                <Stack.Screen name="delete-account" />
                 <Stack.Screen name="setup" />
                 <Stack.Screen
                   name="snowball-plan"
@@ -398,6 +424,15 @@ function RootNavigator({ fontsReady, hideSplash }: { fontsReady: boolean; hideSp
         />
       ) : null}
       {coreReady ? <BiometricLockGate /> : null}
+      {privacyShielded ? (
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={[styles.privacyShield, { backgroundColor: colors.background }]}
+        >
+          <Image source={require("../assets/images/startup_f_transparent.png")} resizeMode="contain" style={styles.privacyShieldLogo} />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -477,5 +512,15 @@ const styles = StyleSheet.create({
   startupBrand: {
     alignItems: "center",
     flexShrink: 0,
+  },
+  privacyShield: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 10000,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  privacyShieldLogo: {
+    width: 160,
+    height: 160,
   },
 });

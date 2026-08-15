@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { tabBarDisplayLabel, tabBarLabelSize } from "./mobileLayout";
@@ -22,4 +23,11 @@ test("long tab labels use readable compact names under zoom pressure", () => {
   assert.equal(tabBarDisplayLabel("Forecast", 330), "Forecast");
   assert.equal(tabBarDisplayLabel("Dashboard", 340), "Dashboard");
   assert.equal(tabBarDisplayLabel("Dashboard", 360), "Dashboard");
+});
+
+test("inactive routes detach so covered screens leave the web tab order", () => {
+  const tabLayout = readFileSync("app/(tabs)/_layout.tsx", "utf8");
+
+  assert.match(tabLayout, /<Tabs[\s\S]*?detachInactiveScreens(?:=\{true\})?/);
+  assert.doesNotMatch(tabLayout, /detachInactiveScreens=\{false\}/);
 });

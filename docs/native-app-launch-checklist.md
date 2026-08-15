@@ -4,6 +4,8 @@ Last audited: August 15, 2026
 
 Maintenance rule: Update this checklist automatically whenever related work is completed or verified. Check an item only when evidence confirms it is done, keep incomplete or unverified work unchecked, and update the audit date with each material checklist change. This maintenance is part of the related task and does not require a separate request from the owner.
 
+Current verified progress: **93 of 249 items complete**. The remaining production gate is a temporary Supabase staging branch for the prepared household/Plaid security migrations and authenticated regression tests. Native-store enrollment, signing, physical-device testing, store declarations, push delivery, billing policy, crash reporting, and the safe server-side account-deletion workflow still require owner accounts, external configuration, or product decisions.
+
 ## Goal
 
 Release FlowLedger as a signed iOS and Android app while keeping the existing PWA and shared Expo/React Native codebase. FlowLedger does not need to be rebuilt as a separate native product; the remaining work is native configuration, native service parity, store compliance, device testing, and release operations.
@@ -58,15 +60,16 @@ Release FlowLedger as a signed iOS and Android app while keeping the existing PW
 
 ### BETA — configuration
 
-- [ ] Add a permanent iOS bundle identifier, recommended: `com.flowledger.app`
-- [ ] Confirm the Android package name will remain `com.flowledger.app` permanently
-- [ ] Replace the generic `mobile` URL scheme with `flowledger`
-- [ ] Replace the Expo Router origin `https://replit.com/` with `https://flowledger-algo.com/`
-- [ ] Add iOS Associated Domains for `flowledger-algo.com`
-- [ ] Add Android intent filters/App Links for `flowledger-algo.com`
+- [x] Add a permanent iOS bundle identifier: `com.flowledger.app`
+- [x] Keep the Android package name permanently at `com.flowledger.app`
+- [x] Replace the generic `mobile` URL scheme with `flowledger`
+- [x] Replace the Expo Router origin with `https://flowledger-algo.com/`
+- [x] Add iOS Associated Domains for `flowledger-algo.com`
+- [x] Add Android intent filters/App Links for `flowledger-algo.com`
 - [ ] Host and verify Apple `apple-app-site-association`
 - [ ] Host and verify Android `assetlinks.json`
-- [ ] Add native routes for sign-in callbacks, password recovery, email verification, Plaid return, notification taps, and record deep links
+- [x] Add native routes for sign-in, password recovery, and email-verification callbacks
+- [ ] Add and physically test Plaid return, notification-tap, and record deep links
 - [ ] Add every native callback URL to the Supabase Auth redirect allowlist
 - [ ] Test cold-start and warm-start deep links on physical iOS and Android devices
 
@@ -78,12 +81,13 @@ Official reference: [Expo iOS submission requirements](https://docs.expo.dev/sub
 
 ### BETA — login and recovery
 
-- [ ] Implement a native Google OAuth flow with `expo-web-browser` and a native redirect URI
-- [ ] Exchange the OAuth callback for a Supabase session on native
-- [ ] Implement native password-reset callback handling
-- [ ] Implement native email-confirmation callback handling
-- [ ] Preserve legal acceptance through native OAuth completion
-- [ ] Add Sign in with Apple for iOS, or remove Google login from iOS and use only FlowLedger email/password authentication
+- [x] Implement a native Google OAuth flow with `expo-web-browser` and a native redirect URI
+- [x] Exchange the OAuth callback for a Supabase session on native
+- [x] Implement native password-reset callback handling
+- [x] Implement native email-confirmation callback handling
+- [x] Preserve legal acceptance through native OAuth completion
+- [x] Implement the native Sign in with Apple code path, capability, and App Store-compliant system button
+- [ ] Enable/configure the Apple provider in Supabase and the Apple Developer account, then set `EXPO_PUBLIC_APPLE_AUTH_ENABLED=true` in EAS
 - [ ] Test login cancellation, expired links, duplicate callbacks, background return, sign-out, and account switching
 - [ ] Provide a dedicated App Review account with realistic fictional data
 
@@ -95,15 +99,15 @@ Official reference: [Apple Login Services guideline](https://developer.apple.com
 
 ### BETA — application connectivity
 
-- [ ] Create one shared API URL helper
-- [ ] Use `https://flowledger-algo.com` as the production API origin in native builds
-- [ ] Replace native-reachable relative requests such as `/api/feedback`, `/api/plaid/sync`, and `/api/plaid/account-nickname`
-- [ ] Keep browser requests same-origin where appropriate
+- [x] Create one shared API URL helper
+- [x] Use `https://flowledger-algo.com` as the production API origin in native builds
+- [x] Replace native-reachable relative requests such as `/api/feedback`, `/api/plaid/sync`, and `/api/plaid/account-nickname`
+- [x] Keep browser requests same-origin where appropriate
 - [ ] Configure `EXPO_PUBLIC_SUPABASE_URL` in the EAS production environment
 - [ ] Configure `EXPO_PUBLIC_SUPABASE_ANON_KEY` in the EAS production environment
 - [ ] Configure an explicit production API origin in EAS
-- [ ] Remove development/Replit fallbacks from release builds
-- [ ] Add a release-time validation that rejects missing or development environment values
+- [x] Remove development/Replit fallbacks from release builds
+- [x] Add a release-time validation that rejects missing or development environment values
 - [ ] Verify Flo Edge Function secrets and allowed production origins
 - [ ] Test all API calls on an installed build, not only Expo Web or Expo Go
 
@@ -130,7 +134,7 @@ Current code evidence:
 - [ ] Configure a Google Play service account for automated submission
 - [ ] Add App Store Connect app ID to `eas.json`
 - [ ] Add Google Play track/submission settings to `eas.json`
-- [ ] Pin a tested EAS CLI version rather than using an open-ended minimum
+- [x] Pin the tested EAS CLI version (`20.0.0`) rather than using an open-ended minimum
 - [ ] Produce an iOS preview build
 - [ ] Produce an Android preview APK
 - [ ] Produce a production iOS IPA
@@ -159,7 +163,7 @@ Official references:
 - [ ] Clear simulations, preferences, exports, and device-local storage
 - [ ] Delete the Supabase Auth user only after application cleanup succeeds
 - [ ] Make retries idempotent and create an auditable deletion receipt
-- [ ] Add a public unauthenticated account-deletion request page on `flowledger-algo.com`
+- [x] Add a public unauthenticated account-deletion request page on `flowledger-algo.com`
 - [ ] Add the public deletion URL to the Google Play Data Safety form
 - [ ] Add an account-deletion support procedure for failed or disputed requests
 - [ ] Test owner, manager, editor, viewer, single-user, and multi-member households
@@ -173,13 +177,13 @@ Official references:
 
 ### BLOCKER — store declarations
 
-- [ ] Publish a stable public Privacy Policy URL
-- [ ] Publish a stable public Terms of Service URL
-- [ ] Publish a stable public Support URL with working contact information
-- [ ] Verify legal pages work without signing in
-- [ ] Ensure the policy lists Supabase, Vercel, Plaid, OpenAI/Flo, Apple/Google notification services, and any crash/analytics provider
-- [ ] Explain collection, use, sharing, protection, retention, deletion, and consent withdrawal
-- [ ] Add explicit Flo/third-party AI disclosure and consent before financial data is sent for AI processing
+- [x] Publish a stable public Privacy Policy URL (`https://flowledger-algo.com/legal?doc=privacy`, verified HTTP 200 on 2026-08-15)
+- [x] Publish a stable public Terms of Service URL (`https://flowledger-algo.com/legal?doc=terms`, verified HTTP 200 on 2026-08-15)
+- [x] Add a stable public `/support` route with working contact information and safe recovery guidance
+- [x] Keep support, Terms, and Privacy routes available without signing in
+- [x] Ensure the policy lists Supabase, Vercel, Plaid, OpenAI/Flo, Apple/Google notification services, and any crash/analytics provider that is actually enabled
+- [x] Explain collection, use, sharing, protection, retention, deletion, and consent withdrawal
+- [x] Add explicit Flo/third-party AI disclosure and consent before financial data is sent for AI processing, with a Settings control that withdraws access and requires consent again
 - [ ] Complete Apple App Privacy answers for email, user ID, financial information, user content, diagnostics, and other collected data
 - [ ] Generate and inspect the iOS Privacy Manifest in the final archive
 - [ ] Declare every required-reason API used by the app or included SDKs
@@ -230,7 +234,7 @@ Official reference: [Apple In-App Purchase guideline](https://developer.apple.co
 - [ ] Test checking, savings, credit-card, reconnect, update mode, institution OAuth, cancellation, and failure
 - [ ] Keep credit-card purchase imports excluded from cash Forecast as currently designed
 - [ ] Test linked-on-web accounts inside the native app
-- [ ] Add a safe native pathway to disconnect a financial institution
+- [x] Add a safe native handoff to the secure web bank-connection settings for connect, reconnect, rename, and disconnect
 
 Current code evidence: `artifacts/mobile/components/PlaidLinkButton.tsx`
 
@@ -256,36 +260,37 @@ Current implementation is browser Service Worker/Web Push only: `artifacts/mobil
 
 ### Native parity and security
 
-- [ ] Install and configure `expo-local-authentication`
-- [ ] Implement Face ID/Touch ID on iOS
-- [ ] Implement Android biometric/device-credential authentication
-- [ ] Add the required Face ID usage description
-- [ ] Preserve a passcode/password fallback
-- [ ] Keep biometric settings device-specific
+- [x] Install and configure `expo-local-authentication`
+- [x] Implement Face ID/Touch ID on iOS
+- [x] Implement Android biometric/device-credential authentication
+- [x] Add the required Face ID usage description
+- [x] Preserve a passcode/password fallback
+- [x] Keep biometric settings device-specific
 - [ ] Test lock on background, timeout, process restart, biometric change, and failed attempts
-- [ ] Move sensitive session storage from plain AsyncStorage to an encrypted SecureStore-backed adapter
-- [ ] Clear secure credentials on sign-out and account deletion
-- [ ] Add an app-switcher privacy screen that obscures financial balances while backgrounded
-- [ ] Verify no service keys, Plaid tokens, access tokens, or raw financial exports are bundled into the application
+- [x] Move native sessions from plain AsyncStorage to an encrypted, large-session-safe SecureStore adapter
+- [x] Clear encrypted credentials on sign-out
+- [ ] Clear encrypted credentials after the account-deletion flow is implemented
+- [x] Add an app-switcher privacy screen that obscures financial balances while backgrounded
+- [x] Verify no service keys, Plaid tokens, access tokens, or raw financial exports are bundled into the application
 
-Current biometric implementation uses browser passkeys only: `artifacts/mobile/context/BiometricLockContext.tsx`.
+Current implementation uses browser passkeys on the PWA and native device authentication on iOS/Android: `artifacts/mobile/context/BiometricLockContext.tsx`.
 
 ## 11. Offline, synchronization, and recovery behavior
 
 ### BETA — reliability
 
-- [ ] Add native connectivity detection using a React Native network-information library
-- [ ] Stop reporting native devices as online unconditionally
+- [x] Add native connectivity detection using `@react-native-community/netinfo`
+- [x] Keep native connectivity unknown until NetInfo reports instead of assuming the device is online
 - [ ] Define which data is safe to show from a last-known cache
 - [ ] Show the exact data/sync timestamp when displaying cached financial information
 - [ ] Block or clearly queue mutations while offline
 - [ ] Never display an unconfirmed offline mutation as saved
-- [ ] Refresh safely when the app returns to the foreground
+- [x] Refresh auth and household data safely when the app returns to the foreground
 - [ ] Test airplane mode, captive portal, weak connection, API timeout, Supabase outage, Plaid outage, and interrupted saves
 - [ ] Ensure all failed writes have a visible retry or recovery route
 - [ ] Verify duplicated retries remain idempotent
 
-Current native network-status hook assumes the device is online: `artifacts/mobile/hooks/useNetworkStatus.ts`.
+Current native network-status hook uses NetInfo and exposes offline/reconnected UI: `artifacts/mobile/hooks/useNetworkStatus.ts`.
 
 ## 12. App icon, launch assets, and store listing
 
@@ -293,17 +298,17 @@ Current native network-status hook assumes the device is online: `artifacts/mobi
 
 - [x] 1024×1024 source icon exists
 - [x] Splash artwork exists
-- [ ] Verify the iOS icon contains no unsupported transparency and remains legible at small sizes
+- [x] Verify the 1024×1024 iOS source icon has no unsupported transparency
 - [ ] Create a dedicated Android adaptive foreground asset with safe padding
 - [ ] Add an Android monochrome/themed icon
 - [ ] Verify splash behavior on light/dark system settings and slower devices
 - [ ] Capture App Store screenshots using fictional data only
 - [ ] Capture Play Store phone screenshots using fictional data only
 - [ ] Create required feature graphic and promotional artwork
-- [ ] Write app name, subtitle/short description, long description, keywords, category, and release notes
+- [x] Draft app name, subtitle/short description, long description, keywords, Finance category positioning, and version 1 release notes
 - [ ] Add public support email, support URL, privacy URL, deletion URL, and marketing URL
 - [ ] Ensure screenshots represent the current app and identify Pro-only features accurately
-- [ ] Prepare review notes explaining Flo, Forecast calculations, Plaid, Pro gating, simulator, and demo/reviewer access
+- [x] Prepare review notes explaining Flo, Forecast calculations, Plaid, Pro gating, simulator, and demo/reviewer access
 
 ## 13. Physical-device quality assurance
 
@@ -332,17 +337,19 @@ Current native network-status hook assumes the device is online: `artifacts/mobi
 ### BETA — operations
 
 - [ ] Add privacy-conscious native crash reporting
-- [ ] Add release/build identifiers to support diagnostics
+- [x] Show app version and native build identifier on the public support screen
 - [ ] Avoid sending raw balances, account names, transaction notes, or Flo content to crash/analytics systems
 - [ ] Add backend and Edge Function alerting for authentication, Plaid, Flo, notification, and financial-write failures
-- [ ] Decide whether to enable EAS Update
-- [ ] If enabling EAS Update, configure an explicit runtime-version policy
+- [x] Keep EAS Update disabled for version 1 so every native dependency/configuration change uses a reviewed store build
+- [x] Record that a runtime-version policy is required before EAS Update can be enabled later
 - [ ] Separate preview and production update channels
-- [ ] Remember that native dependency/configuration changes require a new store build
-- [ ] Create staged rollout and rollback procedures for both stores
-- [ ] Retain the prior production build for emergency rollback
-- [ ] Create a release checklist that records commit, migration version, environment, build number, tests, reviewer credentials, and approval
-- [ ] Define customer-support handling for sync discrepancies and incorrect financial calculations
+- [x] Record that native dependency/configuration changes require a new store build
+- [x] Create staged rollout and rollback procedures for both stores
+- [x] Require retaining the prior production build for emergency rollback
+- [x] Create a release record for commit, migration, environment, build, tests, reviewer credentials, and approval
+- [x] Define customer-support handling for sync discrepancies and incorrect financial calculations
+
+Release evidence: `docs/native-release-runbook.md`
 
 Official reference: [EAS Update and runtime compatibility](https://docs.expo.dev/eas-update/introduction/)
 

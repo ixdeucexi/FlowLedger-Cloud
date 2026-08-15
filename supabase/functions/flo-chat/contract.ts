@@ -78,6 +78,31 @@ export type FloVerifiedFallback = {
   followups: string[];
 };
 
+export type FloDeterministicIntent = "forecast_overview" | "account_overview" | "bill_overview" | "debt_overview" | "debt_plan_history" | "income_overview" | "activity_overview" | "budget_goal_overview" | "connection_health";
+
+export type FloDeterministicToolName =
+  | "getAccountOverview"
+  | "getBillsAndDebt"
+  | "getIncomeSchedule"
+  | "searchTransactions"
+  | "getBudgetsAndGoals"
+  | "getDebtPlanHistory"
+  | "getConnectionHealth"
+  | "getHouseholdAndSettings";
+
+export type FloDeterministicRoute = {
+  intent: FloDeterministicIntent;
+  requests: Array<{ name: FloDeterministicToolName; input: Record<string, unknown> }>;
+};
+
+export type FloDeterministicAnswer = {
+  answer: FloGroundedAnswer;
+  sources: FloSourceRef[];
+  dataAsOf: string | null;
+  coverage: ReturnType<typeof aggregateCoverage>["coverage"];
+  partial: boolean;
+};
+
 const helpSource = (id: string, label: string, route: string): FloSourceRef => ({
   id: `help:${id}`,
   type: "help",
@@ -108,6 +133,309 @@ export function floCapabilityGuidance(question: string): FloCapabilityGuidance |
     };
   }
   return null;
+}
+
+export function deterministicFloRoute(question: string, currentDate?: string): FloDeterministicRoute | null {
+  const normalized = question.trim().toLowerCase();
+  const recommendation = /\b(?:safe|safely|afford|should i (?:pay|spend|buy)|can i (?:pay|spend|buy)|extra payment|move money)\b/.test(normalized);
+  if (recommendation) return null;
+
+  const forecastExplanation = /\b(?:why|what caused|what changed|explain how|how (?:did|was|is))\b/.test(normalized)
+    || /\b(?:on|for) \d{4}-\d{2}-\d{2}\b/.test(normalized);
+  const simpleForecast = /\b(?:what should i know about|show(?: me)?|review|summarize|tell me about|what does|what(?:'s| is) in) (?:my |the )?forecast\b/.test(normalized)
+    || /\bforecast (?:overview|summary|snapshot)\b/.test(normalized)
+    || /^(?:my |the )?forecast\??$/.test(normalized);
+  if ((!forecastExplanation && (simpleForecast || /\bprojected (?:balance|close|cash flow)\b/.test(normalized))) || /\b(?:bills?|payments?) (?:are )?due next\b|\bwhat(?:'s| is) coming up\b/.test(normalized)) {
+    return {
+      intent: "forecast_overview",
+      requests: [
+        { name: "getAccountOverview", input: { includeArchived: false } },
+        { name: "getBillsAndDebt", input: { debtOnly: false, includeClosed: false, query: null } },
+        { name: "getIncomeSchedule", input: { query: null } },
+      ],
+    };
+  }
+  if (/\b(?:debt|snowball|avalanche|extra payment)\b/.test(normalized) && /\b(?:history|saved plans?|past plans?|previous plans?|allocations?)\b/.test(normalized)) {
+    return { intent: "debt_plan_history", requests: [{ name: "getDebtPlanHistory", input: { year: null, month: null } }] };
+  }
+  if (/\b(?:debt|debts|snowball|avalanche)\b/.test(normalized) && /\b(?:balance|balances|total|owe|owing|overview|snapshot|list|which|how much)\b/.test(normalized)) {
+    return { intent: "debt_overview", requests: [{ name: "getBillsAndDebt", input: { debtOnly: true, includeClosed: false, query: null } }] };
+  }
+  if (/\bbills?\b/.test(normalized) && /\b(?:overview|snapshot|list|show|what|which|have|how many|how much)\b/.test(normalized)) {
+    return { intent: "bill_overview", requests: [{ name: "getBillsAndDebt", input: { debtOnly: false, includeClosed: false, query: null } }] };
+  }
+  if (/\b(?:account|accounts|checking|savings)\b/.test(normalized) && /\b(?:balance|balances|total|overview|snapshot|list|which|how much)\b/.test(normalized)) {
+    return { intent: "account_overview", requests: [{ name: "getAccountOverview", input: { includeArchived: false } }] };
+  }
+  if (/\b(?:income|paycheck|paychecks|payday)\b/.test(normalized) && /\b(?:next|when|amount|schedule|overview|snapshot|list|which|how much)\b/.test(normalized)) {
+    return { intent: "income_overview", requests: [{ name: "getIncomeSchedule", input: { query: null } }] };
+  }
+  if (/\b(?:activity|transactions?|spending|spend|spent|purchases?)\b/.test(normalized) && /\b(?:recent|latest|overview|snapshot|list|show|what|how much|this month)\b/.test(normalized)) {
+    const monthStart = isDateOnly(currentDate) ? `${currentDate.slice(0, 7)}-01` : null;
+    const thisMonth = /\bthis month\b/.test(normalized) && monthStart;
+    return { intent: "activity_overview", requests: [{ name: "searchTransactions", input: { startDate: thisMonth ? monthStart : null, endDate: thisMonth ? currentDate : null, query: null, category: null, pending: null, reviewStatus: null, includeDeleted: false, limit: 20 } }] };
+  }
+  if (/\b(?:budget|budgets|goal|goals|savings goal)\b/.test(normalized) && /\b(?:overview|snapshot|list|show|what|how much|progress|current|status|doing)\b/.test(normalized)) {
+    const exactDate = isDateOnly(currentDate) ? currentDate : null;
+    return { intent: "budget_goal_overview", requests: [{ name: "getBudgetsAndGoals", input: { year: exactDate ? Number(exactDate.slice(0, 4)) : null, month: exactDate ? Number(exactDate.slice(5, 7)) - 1 : null, includeClosed: false } }] };
+  }
+  if (/\b(?:plaid|bank|account)\b/.test(normalized) && /\b(?:connect|connection|sync|linked|refresh|status|health)\b/.test(normalized)) {
+    return { intent: "connection_health", requests: [{ name: "getConnectionHealth", input: {} }] };
+  }
+  return null;
+}
+
+function directCurrency(value: unknown): string | null {
+  const parsed = money(value);
+  return parsed === null ? null : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(parsed);
+}
+
+function directPayload(toolNames: string[], payloads: FloToolEnvelope[], name: FloDeterministicToolName): FloToolEnvelope | null {
+  const index = toolNames.indexOf(name);
+  return index >= 0 ? payloads[index] ?? null : null;
+}
+
+function sourceForRecord(payload: FloToolEnvelope | null, recordId: unknown): FloSourceRef | null {
+  if (!payload || recordId == null) return null;
+  return payload.evidence.find(source => source.recordId === String(recordId)) ?? null;
+}
+
+export function deterministicAnswerFromTools(
+  intent: FloDeterministicIntent,
+  toolNames: string[],
+  payloads: FloToolEnvelope[],
+): FloDeterministicAnswer | null {
+  if (!payloads.length || payloads.length !== toolNames.length) return null;
+  const aggregate = aggregateCoverage(payloads);
+  const claims: FloGroundedAnswer["claims"] = [];
+  const sentences: string[] = [];
+  const usedSources = new Map<string, FloSourceRef>();
+  const useSource = (source: FloSourceRef | null) => {
+    if (source) usedSources.set(source.id, source);
+    return source;
+  };
+  const addClaim = (kind: FloGroundedAnswer["claims"][number]["kind"], label: string, field: string, value: string, source: FloSourceRef | null) => {
+    if (!source) return false;
+    useSource(source);
+    claims.push({ kind, label, field, value, evidenceIds: [source.id] });
+    return true;
+  };
+
+  const accounts = directPayload(toolNames, payloads, "getAccountOverview");
+  const bills = directPayload(toolNames, payloads, "getBillsAndDebt");
+  const income = directPayload(toolNames, payloads, "getIncomeSchedule");
+  const activity = directPayload(toolNames, payloads, "searchTransactions");
+  const budgetsAndGoals = directPayload(toolNames, payloads, "getBudgetsAndGoals");
+  const debtPlanHistory = directPayload(toolNames, payloads, "getDebtPlanHistory");
+  const settings = directPayload(toolNames, payloads, "getHouseholdAndSettings");
+  const connections = directPayload(toolNames, payloads, "getConnectionHealth");
+
+  if (intent === "forecast_overview") {
+    sentences.push("I checked the current records feeding your Forecast.");
+    const accountSummary = accounts?.summary as Record<string, unknown> | undefined;
+    const accountSource = useSource(sourceForRecord(accounts, "summary"));
+    const checking = directCurrency(accountSummary?.checkingBalance);
+    if (checking && addClaim("amount", "Checking balance", "checkingBalance", checking, accountSource)) sentences.push(`Your verified checking balance is ${checking}.`);
+
+    const billSummary = bills?.summary as Record<string, unknown> | undefined;
+    const billSummarySource = useSource(sourceForRecord(bills, "summary"));
+    const billCount = money(billSummary?.billRecordCount);
+    const debtCount = money(billSummary?.activeDebtCount);
+    const countParts: string[] = [];
+    if (billCount !== null && addClaim("count", "Bill and debt records", "billRecordCount", String(billCount), billSummarySource)) countParts.push(`${billCount} bill and debt record${billCount === 1 ? "" : "s"}`);
+    if (debtCount !== null && addClaim("count", "Active debts", "activeDebtCount", String(debtCount), billSummarySource)) countParts.push(`${debtCount} active debt${debtCount === 1 ? "" : "s"}`);
+    if (countParts.length) sentences.push(`The plan currently includes ${countParts.join(" and ")}.`);
+
+    const settingsRow = (settings?.records as Array<Record<string, unknown>> | undefined)?.find(record => record.id === "settings");
+    const settingsSource = useSource(sourceForRecord(settings, "settings"));
+    const safetyFloor = directCurrency(settingsRow?.safety_floor);
+    if (safetyFloor && addClaim("amount", "Safety floor", "safety_floor", safetyFloor, settingsSource)) sentences.push(`Your safety floor is ${safetyFloor}.`);
+
+    const upcoming: Array<Record<string, unknown> & { recordType: string; date: unknown }> = [
+      ...((income?.records as Array<Record<string, unknown>> | undefined) ?? []).map(record => ({ ...record, recordType: "income", date: record.next_payment_date })),
+      ...((bills?.records as Array<Record<string, unknown>> | undefined) ?? []).filter(record => record.id !== "summary").map(record => ({ ...record, recordType: "bill", date: record.next_payment_date })),
+    ].filter(record => isDateOnly(record.date)).sort((left, right) => String(left.date).localeCompare(String(right.date))).slice(0, 2);
+    const upcomingText: string[] = [];
+    for (const record of upcoming) {
+      const payload = record.recordType === "income" ? income : bills;
+      const source = useSource(sourceForRecord(payload, record.id));
+      const name = String(record.name ?? record.recordType).trim().slice(0, 100);
+      const amount = directCurrency(record.amount);
+      const date = String(record.date);
+      if (!source || !amount) continue;
+      addClaim("entity", "Scheduled item", "name", name, source);
+      addClaim("amount", "Scheduled amount", "amount", amount, source);
+      addClaim("date", "Scheduled date", "next_payment_date", date, source);
+      upcomingText.push(`${name} ${amount} on ${date}`);
+    }
+    if (upcomingText.length) sentences.push(`Next on the schedule: ${upcomingText.join("; ")}.`);
+    sentences.push("Open Forecast to review the exact daily projected closes and every calendar item.");
+  } else if (intent === "account_overview") {
+    const rows = ((accounts?.records as Array<Record<string, unknown>> | undefined) ?? []).filter(record => record.record_kind !== "canonical_account_summary").slice(0, 5);
+    const items: string[] = [];
+    for (const record of rows) {
+      const source = useSource(sourceForRecord(accounts, record.id));
+      const name = String(record.display_name ?? record.name ?? record.official_name ?? "Account").trim().slice(0, 100);
+      const balance = directCurrency(record.current_balance);
+      if (!source || !balance) continue;
+      addClaim("entity", "Account", record.display_name ? "display_name" : record.name ? "name" : "official_name", name, source);
+      addClaim("amount", "Current balance", "current_balance", balance, source);
+      items.push(`${name}: ${balance}`);
+    }
+    sentences.push(items.length ? `Your verified active account balances are ${items.join("; ")}.` : "I checked your active accounts, but no current balance was available to list.");
+  } else if (intent === "bill_overview") {
+    const rows = ((bills?.records as Array<Record<string, unknown>> | undefined) ?? [])
+      .filter(record => record.id !== "summary" && record.is_debt !== true)
+      .slice(0, 4);
+    const items: string[] = [];
+    for (const record of rows) {
+      const source = useSource(sourceForRecord(bills, record.id));
+      const name = String(record.name ?? "Bill").trim().slice(0, 100);
+      const amount = directCurrency(record.amount);
+      const frequency = typeof record.frequency === "string" && record.frequency.trim()
+        ? record.frequency.trim().slice(0, 40)
+        : null;
+      if (!source || !amount) continue;
+      addClaim("entity", "Bill", "name", name, source);
+      addClaim("amount", "Configured amount", "amount", amount, source);
+      if (frequency) addClaim("status", "Frequency", "frequency", frequency, source);
+      items.push(`${name}: ${amount}${frequency ? ` ${frequency}` : ""}`);
+    }
+    sentences.push(items.length ? `Your verified configured bills include ${items.join("; ")}.` : "I checked your configured bills, but no active bill record was available to list.");
+  } else if (intent === "debt_overview") {
+    const summary = bills?.summary as Record<string, unknown> | undefined;
+    const summarySource = useSource(sourceForRecord(bills, "summary"));
+    const total = directCurrency(summary?.debtBalance);
+    const count = money(summary?.activeDebtCount);
+    if (total && count !== null) {
+      addClaim("amount", "Debt balance", "debtBalance", total, summarySource);
+      addClaim("count", "Active debt count", "activeDebtCount", String(count), summarySource);
+      sentences.push(`Your verified active debt balance is ${total} across ${count} debt${count === 1 ? "" : "s"}.`);
+    } else sentences.push("I checked your active debts, but a complete debt total was not available.");
+    const rows = ((bills?.records as Array<Record<string, unknown>> | undefined) ?? []).filter(record => record.id !== "summary" && record.is_debt === true).slice(0, 3);
+    const items: string[] = [];
+    for (const record of rows) {
+      const source = useSource(sourceForRecord(bills, record.id));
+      const name = String(record.name ?? "Debt").trim().slice(0, 100);
+      const balance = directCurrency(record.balance);
+      if (!source || !balance) continue;
+      addClaim("entity", "Debt", "name", name, source);
+      addClaim("amount", "Debt balance", "balance", balance, source);
+      items.push(`${name}: ${balance}`);
+    }
+    if (items.length) sentences.push(`Current balances: ${items.join("; ")}.`);
+  } else if (intent === "debt_plan_history") {
+    const rows = ((debtPlanHistory?.records as Array<Record<string, unknown>> | undefined) ?? []).slice(0, 4);
+    const items: string[] = [];
+    for (const record of rows) {
+      const source = useSource(sourceForRecord(debtPlanHistory, record.id));
+      const amount = directCurrency(record.amount);
+      const date = isDateOnly(record.payment_date) ? String(record.payment_date) : null;
+      if (!source || !amount) continue;
+      addClaim("amount", "Planned extra payment", "amount", amount, source);
+      if (date) addClaim("date", "Payment date", "payment_date", date, source);
+      const period = date ?? "saved plan";
+      items.push(`${amount} for ${period}`);
+    }
+    sentences.push(items.length ? `Your most recent verified saved debt plans are ${items.join("; ")}.` : "I checked your saved debt plans, but no plan history was available to list.");
+    sentences.push("Open the Debt Payoff Planner to review every allocation.");
+  } else if (intent === "income_overview") {
+    const rows = ((income?.records as Array<Record<string, unknown>> | undefined) ?? []).filter(record => isDateOnly(record.next_payment_date)).sort((left, right) => String(left.next_payment_date).localeCompare(String(right.next_payment_date))).slice(0, 3);
+    const items: string[] = [];
+    for (const record of rows) {
+      const source = useSource(sourceForRecord(income, record.id));
+      const name = String(record.name ?? "Income").trim().slice(0, 100);
+      const amount = directCurrency(record.amount);
+      const date = String(record.next_payment_date);
+      if (!source || !amount) continue;
+      addClaim("entity", "Income", "name", name, source);
+      addClaim("amount", "Income amount", "amount", amount, source);
+      addClaim("date", "Next payment date", "next_payment_date", date, source);
+      items.push(`${name}: ${amount} on ${date}`);
+    }
+    sentences.push(items.length ? `Your next verified income dates are ${items.join("; ")}.` : "I checked your income schedule, but no next payment date was available.");
+  } else if (intent === "activity_overview") {
+    const summary = activity?.summary as Record<string, unknown> | undefined;
+    const summarySource = useSource(sourceForRecord(activity, "summary"));
+    const outflows = directCurrency(summary?.outflows);
+    const transactionCount = money(summary?.transactionCount);
+    if (outflows && transactionCount !== null) {
+      addClaim("amount", "Outflows", "outflows", outflows, summarySource);
+      addClaim("count", "Transaction count", "transactionCount", String(transactionCount), summarySource);
+      sentences.push(`The verified Activity range includes ${transactionCount} cash transaction${transactionCount === 1 ? "" : "s"} and ${outflows} in outflows.`);
+    }
+    const rows = ((activity?.records as Array<Record<string, unknown>> | undefined) ?? []).filter(record => record.id !== "summary").slice(0, 3);
+    const items: string[] = [];
+    for (const record of rows) {
+      const source = useSource(sourceForRecord(activity, record.id));
+      const name = String(record.merchant_name ?? record.note ?? record.category ?? "Activity").trim().slice(0, 100);
+      const amount = directCurrency(record.amount);
+      const date = String(record.date ?? "");
+      if (!source || !amount || !isDateOnly(date)) continue;
+      const nameField = record.merchant_name ? "merchant_name" : record.note ? "note" : "category";
+      addClaim("entity", "Activity", nameField, name, source);
+      addClaim("amount", "Activity amount", "amount", amount, source);
+      addClaim("date", "Activity date", "date", date, source);
+      items.push(`${name}: ${amount} on ${date}`);
+      if (claims.length >= 12) break;
+    }
+    if (items.length) sentences.push(`Recent records: ${items.join("; ")}.`);
+    if (!sentences.length) sentences.push("I checked Activity, but no matching cash transactions were available to list.");
+  } else if (intent === "budget_goal_overview") {
+    const rows = (budgetsAndGoals?.records as Array<Record<string, unknown>> | undefined) ?? [];
+    const budgetItems: string[] = [];
+    for (const record of rows.filter(record => record.record_kind === "budget").slice(0, 2)) {
+      const source = useSource(sourceForRecord(budgetsAndGoals, record.id));
+      const category = String(record.category ?? "Budget").trim().slice(0, 100);
+      const amount = directCurrency(record.amount);
+      if (!source || !amount) continue;
+      addClaim("entity", "Budget category", "category", category, source);
+      addClaim("amount", "Budget amount", "amount", amount, source);
+      budgetItems.push(`${category}: ${amount}`);
+    }
+    if (budgetItems.length) sentences.push(`Current verified budgets include ${budgetItems.join("; ")}.`);
+    const goalItems: string[] = [];
+    for (const record of rows.filter(record => record.record_kind === "goal").slice(0, 2)) {
+      const source = useSource(sourceForRecord(budgetsAndGoals, record.id));
+      const name = String(record.name ?? "Goal").trim().slice(0, 100);
+      const current = directCurrency(record.current_amount);
+      const target = directCurrency(record.target_amount);
+      if (!source || !current || !target) continue;
+      addClaim("entity", "Goal", "name", name, source);
+      addClaim("amount", "Goal current amount", "current_amount", current, source);
+      addClaim("amount", "Goal target", "target_amount", target, source);
+      goalItems.push(`${name}: ${current} toward ${target}`);
+    }
+    if (goalItems.length) sentences.push(`Open goals: ${goalItems.join("; ")}.`);
+    if (!sentences.length) sentences.push("I checked budgets and goals, but no open records were available to list.");
+  } else {
+    const rows = ((connections?.records as Array<Record<string, unknown>> | undefined) ?? []).filter(record => record.record_kind === "connection").slice(0, 4);
+    const items: string[] = [];
+    for (const record of rows) {
+      const source = useSource(sourceForRecord(connections, record.id));
+      const name = String(record.institution_name ?? "Bank connection").trim().slice(0, 100);
+      const status = String(record.status ?? "unknown").trim().slice(0, 40);
+      if (!source) continue;
+      addClaim("entity", "Institution", "institution_name", name, source);
+      addClaim("status", "Connection status", "status", status, source);
+      items.push(`${name}: ${status}`);
+    }
+    sentences.push(items.length ? `Your verified bank connection status is ${items.join("; ")}.` : "I checked your connected accounts, but no bank connection status was available.");
+  }
+
+  if (!usedSources.size) payloads.flatMap(payload => payload.evidence).slice(0, 8).forEach(useSource);
+  const sources = [...usedSources.values()];
+  if (!sources.length) return null;
+  const caveat = aggregate.partial
+    ? "Some requested records were unavailable, incomplete, or missing a reliable freshness timestamp."
+    : null;
+  return {
+    answer: { answer: sentences.join(" "), claims, caveat, evidenceIds: sources.map(source => source.id), followups: [] },
+    sources,
+    dataAsOf: aggregate.dataAsOf,
+    coverage: aggregate.coverage,
+    partial: aggregate.partial,
+  };
 }
 
 export function verifiedFallbackForTool(

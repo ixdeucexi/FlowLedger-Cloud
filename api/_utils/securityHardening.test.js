@@ -62,3 +62,49 @@ test("production build is gated by API and mobile tests", () => {
   assert.match(pkg.scripts["typecheck:libs"], /tsc --build --force/);
   assert.match(pkg.scripts.verify, /pnpm audit --prod --audit-level high/);
 });
+
+test("Plaid household scope is mandatory and removed members lose Data API access", () => {
+  const workspaceRoot = path.resolve(__dirname, "../..");
+  const migration = readFileSync(path.resolve(
+    workspaceRoot,
+    "supabase/migrations/20260815094708_backfill_and_lock_plaid_households.sql",
+  ), "utf8");
+
+  assert.match(migration, /alter table public\.plaid_transactions[\s\S]*alter column household_id set not null/);
+  assert.match(migration, /plaid_transaction\.plaid_account_id = plaid_account\.id[\s\S]*plaid_transaction\.user_id = plaid_account\.user_id/);
+  assert.match(migration, /plaid_transaction_household_scope_immutable/);
+  for (const table of ["items", "accounts", "transactions"]) {
+    const policy = migration.match(new RegExp(`create policy "plaid ${table}: members read"[\\s\\S]*?using \\(([^;]+)\\);`));
+    assert.ok(policy, `missing Plaid ${table} read policy`);
+    assert.match(policy[1], /is_household_member\(household_id\)/);
+    assert.doesNotMatch(policy[1], /user_id|auth\.uid/);
+  }
+});
+
+test("removed household members lose Data API access to the shared financial plan", () => {
+  const workspaceRoot = path.resolve(__dirname, "../..");
+  const migration = readFileSync(path.resolve(
+    workspaceRoot,
+    "supabase/migrations/20260815100346_remove_creator_read_after_household_exit.sql",
+  ), "utf8");
+
+  for (const table of [
+    "account_balances",
+    "accounts",
+    "bill_date_moves",
+    "bills",
+    "categories",
+    "category_budgets",
+    "decisions",
+    "extra_payments",
+    "goals",
+    "incomes",
+    "monthly_overrides",
+    "transactions",
+  ]) {
+    assert.match(migration, new RegExp(`\\('${table}',\\s*'${table}: authenticated read'\\)`));
+  }
+  assert.match(migration, /household_id is null and user_id = \(select auth\.uid\(\)\)/i);
+  assert.match(migration, /household_id is not null and \(select private\.is_household_member\(household_id\)\)/i);
+  assert.doesNotMatch(migration, /using \(\s*user_id = \(select auth\.uid\(\)\)/i);
+});

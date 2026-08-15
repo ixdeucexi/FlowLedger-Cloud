@@ -36,3 +36,13 @@ test("startup brand uses one root-owned opacity entrance without resizing", () =
   assert.match(index, /<StartupPlanBrand \/>/);
   assert.doesNotMatch(index, /Animated|timing|opacity/);
 });
+
+test("startup plan loading fails closed instead of hanging on household discovery", () => {
+  const budgetContext = readFileSync("context/BudgetContext.tsx", "utf8");
+
+  assert.match(
+    budgetContext,
+    /withLoadTimeout\(\s*resolveHouseholds\(uid\),\s*8000,\s*"Load households"/,
+  );
+  assert.match(budgetContext, /finally \{[\s\S]*?setLoading\(false\)/);
+});

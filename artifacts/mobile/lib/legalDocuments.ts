@@ -12,8 +12,8 @@ export interface LegalDocument {
   sections: readonly LegalSection[];
 }
 
-export const LEGAL_VERSION = "2026-07-21";
-export const LEGAL_EFFECTIVE_DATE = "July 21, 2026";
+export const LEGAL_VERSION = "2026-08-15";
+export const LEGAL_EFFECTIVE_DATE = "August 15, 2026";
 export const LEGAL_OPERATOR = "FlowLedger-Algo LLC";
 export const LEGAL_EMAIL = "Flowledger-algo@gmail.com";
 export const LEGAL_MAILING_ADDRESS = "P.O. Box 1234, Madison County, Alabama";
@@ -155,7 +155,7 @@ const privacySections: readonly LegalSection[] = [
     title: "1. Scope and controller",
     paragraphs: [
       `${LEGAL_OPERATOR} (\"FlowLedger,\" \"we,\" \"us,\" or \"our\") provides this Privacy Policy to explain how we collect, use, disclose, retain, and protect personal information through FlowLedger Algo and related services. FlowLedger-Algo LLC is responsible for the practices described here.`,
-      "This Policy covers FlowLedger’s handling of information. Third parties such as Plaid, financial institutions, OpenAI, Supabase, Vercel, device platforms, and browsers may process information under their own terms and privacy policies.",
+      "This Policy covers FlowLedger’s handling of information. Third parties such as Plaid, financial institutions, OpenAI, Supabase, Vercel, Apple and Google device services, and browsers may process information under their own terms and privacy policies.",
     ],
   },
   {
@@ -193,14 +193,15 @@ const privacySections: readonly LegalSection[] = [
   {
     title: "6. Flo and AI processing",
     paragraphs: [
-      "When you ask Flo a question, FlowLedger may send your message, recent private chat context, calculated account snapshot, and relevant read-only household records to OpenAI to generate a response. Relevant records can include balances, transactions, bills, debts, income, budgets, goals, planned decisions, household roles, and bank-connection status. We limit the context and instruct the service not to expose credentials, private prompts, other households, or administrative data.",
+      "Before Flo sends account information to OpenAI, FlowLedger asks for your explicit permission. When you agree and ask Flo a question, FlowLedger sends your message and only the relevant read-only household records or server-calculated summaries needed to answer it. Relevant information can include balances, transactions, bills, debts, income, budgets, goals, planned decisions, household roles, and bank-connection status. We limit the context and instruct the service not to expose credentials, private prompts, other households, or administrative data.",
       "Flo conversations and generated responses may be stored in your private conversation history. Do not enter Social Security numbers, full account numbers, bank credentials, medical information, or other information that is unnecessary for your budgeting question.",
+      "You can withdraw Flo AI permission at any time in Settings under Data & privacy. Flo will then require permission again before sending another question or relevant household information to OpenAI. Withdrawing permission does not automatically delete earlier Flo conversations; use Flo history controls to delete them.",
     ],
   },
   {
     title: "7. How we disclose information",
     paragraphs: [
-      "Service providers: we disclose information as needed to providers that supply authentication, database, hosting, security, bank connectivity, AI processing, notifications, and technical support. Current core providers include Supabase, Vercel, Plaid, OpenAI, and web-push or device-platform services.",
+      "Service providers: we disclose information as needed to providers that supply authentication, database, hosting, security, bank connectivity, AI processing, notifications, and technical support. Current core providers include Supabase, Vercel, Plaid, OpenAI, web-push services, and Apple or Google device notification services when those features are enabled.",
       "Household members: information assigned to a shared household is available to authorized members according to their role. Private Flo conversations remain limited to their creator unless a feature clearly states otherwise.",
       "Legal and safety reasons: we may disclose information when reasonably necessary to comply with law or valid legal process, enforce agreements, investigate fraud or misuse, protect security and rights, or respond to an emergency involving risk of harm.",
       "Business changes: information may be transferred in a financing, merger, acquisition, reorganization, bankruptcy, or sale of assets, subject to appropriate confidentiality and applicable law.",

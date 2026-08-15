@@ -169,5 +169,13 @@
     ,"lib/householdActivity.test.ts"
     ,"lib/billOccurrencePayment.ts"
     ,"lib/billOccurrencePayment.test.ts"
+    ,"lib/apiOrigin.ts"
+    ,"lib/apiOrigin.test.ts"
+    ,"lib/networkStatus.ts"
+    ,"lib/networkStatus.test.ts"
+    ,"lib/secureAuthStorageCodec.ts"
+    ,"lib/secureAuthStorageCodec.test.ts"
+    ,"lib/floAiConsent.ts"
+    ,"lib/floAiConsent.test.ts"
   ]
 }

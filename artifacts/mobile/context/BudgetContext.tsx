@@ -3,6 +3,7 @@ import { AppState, Platform } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { supabase } from "@/lib/supabase";
+import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import {
   allocateSnowballExtra,
@@ -1344,7 +1345,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const loadStarted = Date.now();
       try {
         const uid = user.id;
-        const scope = await resolveHouseholds(uid);
+        const scope = await withLoadTimeout(
+          resolveHouseholds(uid),
+          8000,
+          "Load households",
+        );
         if (requestId !== loadRequestRef.current) return;
         if (scope?.role !== "viewer") {
           try {
@@ -1628,7 +1633,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         if (!accessToken) return;
         const scope = householdScopeRef.current ?? await resolveHouseholds(user.id);
         const householdId = scope?.householdId;
-        const response = await fetch("/api/plaid/sync", {
+        const response = await apiFetch("/api/plaid/sync", {
           method: "POST",
           credentials: "include",
           headers: {
@@ -4517,7 +4522,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const accessToken = data.session?.access_token;
       if (!accessToken) throw new Error("Sign in again before renaming this account.");
       if (!activeHouseholdId) throw new Error("Choose a household before renaming this account.");
-      const response = await fetch("/api/plaid/account-nickname", {
+      const response = await apiFetch("/api/plaid/account-nickname", {
         method: "PATCH",
         credentials: "include",
         headers: {

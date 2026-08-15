@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import type { AppFeedbackRow, FeedbackManagementAction, FeedbackType } from "@/lib/feedback";
+import { apiFetch } from "@/lib/api";
 
 export interface FeedbackSubmission {
   feedback_type: FeedbackType;
@@ -21,7 +22,7 @@ export async function submitFeedback(submission: FeedbackSubmission) {
   const accessToken = data.session?.access_token;
   if (!accessToken) throw new Error("Sign in before sending feedback.");
 
-  const response = await fetch("/api/feedback", {
+  const response = await apiFetch("/api/feedback", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -37,7 +38,7 @@ export async function manageFeedback(feedbackId: string, action: FeedbackManagem
   const accessToken = data.session?.access_token;
   if (!accessToken) throw new Error("Sign in before managing feedback.");
 
-  const response = await fetch("/api/feedback", {
+  const response = await apiFetch("/api/feedback", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,

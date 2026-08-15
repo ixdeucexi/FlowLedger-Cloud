@@ -3,6 +3,7 @@ const { randomUUID } = require("node:crypto");
 const { plaid } = require("./plaid");
 const { serviceSupabase, safeError } = require("./supabase");
 const { decryptAccessToken } = require("./crypto");
+const { localDateInZone } = require("./moneyHealth");
 const {
   displayNameForSyncedPlaidAccount,
   indexedPlaidAccountDisplayNames,
@@ -273,12 +274,25 @@ function duplicatePlaidAccountIds(accounts, itemsById) {
   return duplicateIds;
 }
 
-async function findEquivalentPlaidTransaction({ db, userId, accountRow, transactionDate, amount, transaction }) {
+function conflictingPlaidAccountHousehold(existingAccounts, incomingAccounts, householdId) {
+  const incomingAccountIds = new Set((incomingAccounts || []).map(account => account && account.account_id).filter(Boolean));
+  const incomingPersistentIds = new Set((incomingAccounts || []).map(account => account && account.persistent_account_id).filter(Boolean));
+  return (existingAccounts || []).find(account =>
+    account.household_id !== householdId
+    && (
+      incomingAccountIds.has(account.plaid_account_id)
+      || (account.persistent_account_id && incomingPersistentIds.has(account.persistent_account_id))
+    )
+  ) || null;
+}
+
+async function findEquivalentPlaidTransaction({ db, userId, householdId, accountRow, transactionDate, amount, transaction }) {
   if (!accountRow) return null;
   const { data: candidates, error: candidateError } = await db
     .from("plaid_transactions")
     .select("plaid_transaction_id,plaid_account_id,flowledger_transaction_id,raw")
     .eq("user_id", userId)
+    .eq("household_id", householdId)
     .eq("transaction_date", transactionDate)
     .eq("amount", amount)
     .eq("pending", false)
@@ -293,6 +307,7 @@ async function findEquivalentPlaidTransaction({ db, userId, accountRow, transact
   const { data: candidateAccounts, error: accountError } = await db
     .from("plaid_accounts")
     .select("id,persistent_account_id,name,official_name,mask,type,subtype,account_type,account_subtype")
+    .eq("household_id", householdId)
     .in("id", candidateAccountIds);
   if (accountError) throw accountError;
   const accountsById = new Map((candidateAccounts || []).map(account => [account.id, account]));
@@ -304,15 +319,18 @@ async function findEquivalentPlaidTransaction({ db, userId, accountRow, transact
     .sort((left, right) => Number(Boolean(right.flowledger_transaction_id)) - Number(Boolean(left.flowledger_transaction_id)))[0] || null;
 }
 
-async function canonicalizePlaidAccounts({ userId }) {
+async function canonicalizePlaidAccounts({ userId, householdId }) {
+  if (!householdId) throw new Error("PLAID_HOUSEHOLD_REQUIRED");
   const db = serviceSupabase();
   const [{ data: accounts, error: accountsError }, { data: items, error: itemsError }] = await Promise.all([
     db.from("plaid_accounts")
       .select("id,user_id,plaid_item_id,plaid_item_record_id,persistent_account_id,name,official_name,mask,type,subtype,account_type,account_subtype,is_active,created_at")
-      .eq("user_id", userId),
+      .eq("user_id", userId)
+      .eq("household_id", householdId),
     db.from("plaid_items")
       .select("id,institution_id,status,created_at")
-      .eq("user_id", userId),
+      .eq("user_id", userId)
+      .eq("household_id", householdId),
   ]);
   if (accountsError) throw accountsError;
   if (itemsError) throw itemsError;
@@ -360,13 +378,41 @@ async function canonicalizePlaidAccounts({ userId }) {
 }
 
 async function syncAccounts({ client, userId, item, accessToken }) {
+  const householdId = item && item.household_id;
+  if (!householdId) throw new Error("PLAID_HOUSEHOLD_REQUIRED");
   const response = await client.accountsGet({ access_token: accessToken });
   const accounts = response.data.accounts || [];
   const db = serviceSupabase();
+  const accountIds = [...new Set(accounts.map(account => account.account_id).filter(Boolean))];
+  const persistentIds = [...new Set(accounts.map(account => account.persistent_account_id).filter(Boolean))];
+  const [exactOwnership, persistentOwnership] = await Promise.all([
+    accountIds.length
+      ? db.from("plaid_accounts")
+          .select("id,household_id,plaid_account_id,persistent_account_id")
+          .in("plaid_account_id", accountIds)
+      : Promise.resolve({ data: [], error: null }),
+    persistentIds.length
+      ? db.from("plaid_accounts")
+          .select("id,household_id,plaid_account_id,persistent_account_id")
+          .in("persistent_account_id", persistentIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (exactOwnership.error) throw exactOwnership.error;
+  if (persistentOwnership.error) throw persistentOwnership.error;
+  const ownership = [...new Map(
+    [...(exactOwnership.data || []), ...(persistentOwnership.data || [])]
+      .map(account => [account.id, account])
+  ).values()];
+  if (conflictingPlaidAccountHousehold(ownership, accounts, householdId)) {
+    const error = new Error("This bank account is already connected to another FlowLedger household.");
+    error.code = "PLAID_ACCOUNT_ALREADY_CONNECTED_TO_ANOTHER_HOUSEHOLD";
+    throw error;
+  }
   const namedAccounts = await db
     .from("plaid_accounts")
     .select("plaid_account_id,persistent_account_id,display_name,updated_at")
     .eq("user_id", userId)
+    .eq("household_id", householdId)
     .not("display_name", "is", null);
   if (namedAccounts.error) throw namedAccounts.error;
   const displayNameIndex = indexedPlaidAccountDisplayNames(namedAccounts.data || []);
@@ -374,7 +420,7 @@ async function syncAccounts({ client, userId, item, accessToken }) {
     const displayName = displayNameForSyncedPlaidAccount(account, displayNameIndex);
     return {
       user_id: userId,
-      household_id: item.household_id || null,
+      household_id: householdId,
       plaid_item_id: item.id,
       plaid_item_record_id: item.id,
       plaid_account_id: account.account_id,
@@ -410,7 +456,7 @@ async function syncAccounts({ client, userId, item, accessToken }) {
     });
     if (error) throw error;
   }
-  const canonical = await canonicalizePlaidAccounts({ userId });
+  const canonical = await canonicalizePlaidAccounts({ userId, householdId });
   return { accounts, duplicateItemIds: canonical.duplicateItemIds };
 }
 
@@ -457,13 +503,24 @@ function debtIsCurrentThisMonth(bill, monthStart, monthEnd) {
   return (!start || start <= monthEnd) && (!end || end >= monthStart);
 }
 
+function debtPlanMonthBounds(timeZone, now = new Date()) {
+  const localDate = localDateInZone(timeZone || "UTC", now);
+  const year = Number(localDate.slice(0, 4));
+  const month = Number(localDate.slice(5, 7));
+  const monthEndDate = new Date(Date.UTC(year, month, 0));
+  return {
+    monthStart: `${localDate.slice(0, 7)}-01`,
+    monthEnd: monthEndDate.toISOString().slice(0, 10),
+  };
+}
+
 async function recalculateSnowballMinimums({ db, userId, householdId }) {
   const [billResult, householdSettings, userSettings] = await Promise.all([
     db.from("bills")
       .select("id,amount,balance,interest_rate,include_in_snowball,start_date,end_date")
       .eq("household_id", householdId)
       .eq("is_debt", true),
-    db.from("household_settings").select("payment_method").eq("household_id", householdId).maybeSingle(),
+    db.from("household_settings").select("payment_method,time_zone").eq("household_id", householdId).maybeSingle(),
     db.from("settings").select("payment_method").eq("user_id", userId).maybeSingle(),
   ]);
   if (billResult.error) throw billResult.error;
@@ -471,10 +528,7 @@ async function recalculateSnowballMinimums({ db, userId, householdId }) {
   if (userSettings.error) throw userSettings.error;
 
   const debts = billResult.data || [];
-  const now = new Date();
-  const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
-  const monthEndDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
-  const monthEnd = monthEndDate.toISOString().slice(0, 10);
+  const { monthStart, monthEnd } = debtPlanMonthBounds(householdSettings.data?.time_zone);
   const eligible = debts.filter(debt =>
     debt.include_in_snowball !== false && debtIsCurrentThisMonth(debt, monthStart, monthEnd)
   );
@@ -508,6 +562,7 @@ async function syncConnectedCardDebt({ db, userId, item, account, liability, lia
     .from("plaid_accounts")
     .select("id,plaid_account_id,persistent_account_id,name,official_name,mask,current_balance")
     .eq("user_id", userId)
+    .eq("household_id", item.household_id)
     .eq("plaid_item_record_id", item.id)
     .eq("plaid_account_id", account.account_id)
     .eq("is_active", true)
@@ -536,7 +591,9 @@ async function syncConnectedCardDebt({ db, userId, item, account, liability, lia
       liability_last_synced_at: syncedAt,
     });
   }
-  const accountUpdateResult = await db.from("plaid_accounts").update(accountUpdate).eq("id", accountRow.id);
+  const accountUpdateResult = await db.from("plaid_accounts").update(accountUpdate)
+    .eq("id", accountRow.id)
+    .eq("household_id", item.household_id);
   if (accountUpdateResult.error) throw accountUpdateResult.error;
 
   const sharedBillFields = {
@@ -623,6 +680,7 @@ async function syncLiabilities({ client, userId, item, accessToken, accounts }) 
 }
 
 async function upsertPlaidTransaction({ userId, householdId, accountRow, transaction, removedAt }) {
+  if (!householdId) throw new Error("PLAID_HOUSEHOLD_REQUIRED");
   const db = serviceSupabase();
   const plaidTransactionId = transaction.transaction_id;
   if (!plaidTransactionId) return { flowledgerId: null, plaidTransactionId: null, isNewPosted: false, isNewPending: false };
@@ -647,6 +705,7 @@ async function upsertPlaidTransaction({ userId, householdId, accountRow, transac
     .from("transactions")
     .select("id,source,date,category,note,match_reason,review_status,user_edited_at,removed_at")
     .eq("user_id", userId)
+    .eq("household_id", householdId)
     .eq("plaid_transaction_id", plaidTransactionId)
     .maybeSingle();
   if (existingError) throw existingError;
@@ -655,6 +714,7 @@ async function upsertPlaidTransaction({ userId, householdId, accountRow, transac
     .from("plaid_transactions")
     .select("id,removed_at")
     .eq("user_id", userId)
+    .eq("household_id", householdId)
     .eq("plaid_transaction_id", plaidTransactionId)
     .maybeSingle();
   if (existingPlaidError) throw existingPlaidError;
@@ -662,11 +722,11 @@ async function upsertPlaidTransaction({ userId, householdId, accountRow, transac
   const importPolicy = plaidTransactionImportPolicy(accountRow, transaction);
   const shouldImport = importPolicy.importCanonical;
   if (shouldImport && accountRow && accountRow.has_duplicate_history && (!existing || existing.removed_at)) {
-    const equivalent = await findEquivalentPlaidTransaction({ db, userId, accountRow, transactionDate, amount, transaction });
+    const equivalent = await findEquivalentPlaidTransaction({ db, userId, householdId, accountRow, transactionDate, amount, transaction });
     if (equivalent) {
       const duplicateLedgerRow = {
         user_id: userId,
-        household_id: householdId || null,
+        household_id: householdId,
         plaid_account_id: accountRow.id,
         flowledger_transaction_id: equivalent.flowledger_transaction_id || null,
         plaid_transaction_id: plaidTransactionId,
@@ -707,7 +767,8 @@ async function upsertPlaidTransaction({ userId, householdId, accountRow, transac
       .from("transactions")
       .update({ pending: true, removed_at: removedAt || now })
       .eq("id", existing.id)
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .eq("household_id", householdId);
     if (error) throw error;
   }
 
@@ -722,7 +783,7 @@ async function upsertPlaidTransaction({ userId, householdId, accountRow, transac
     const canonicalRow = {
       id: flowledgerId || canonicalId,
       user_id: userId,
-      household_id: householdId || null,
+      household_id: householdId,
       ...editableFields,
       amount,
       source: "plaid",
@@ -741,13 +802,13 @@ async function upsertPlaidTransaction({ userId, householdId, accountRow, transac
         ? existing.review_status
         : autoTransfer ? "transfer" : "needs_review",
     };
-    await persistCanonicalPlaidTransaction({ db, existing, canonicalRow, userId });
+    await persistCanonicalPlaidTransaction({ db, existing, canonicalRow, userId, householdId });
     flowledgerId = canonicalRow.id;
   }
 
   const plaidRow = {
     user_id: userId,
-    household_id: householdId || null,
+    household_id: householdId,
     plaid_account_id: accountRow ? accountRow.id : null,
     flowledger_transaction_id: shouldImport ? flowledgerId || null : null,
     plaid_transaction_id: plaidTransactionId,
@@ -779,6 +840,7 @@ async function upsertPlaidTransaction({ userId, householdId, accountRow, transac
       .from("plaid_transactions")
       .update({ removed_at: now, updated_at: now })
       .eq("user_id", userId)
+      .eq("household_id", householdId)
       .eq("plaid_transaction_id", pendingTransactionId)
       .eq("pending", true);
     if (retirePendingError) throw retirePendingError;
@@ -819,13 +881,15 @@ async function upsertPlaidTransaction({ userId, householdId, accountRow, transac
   };
 }
 
-async function persistCanonicalPlaidTransaction({ db, existing, canonicalRow, userId }) {
+async function persistCanonicalPlaidTransaction({ db, existing, canonicalRow, userId, householdId = canonicalRow.household_id }) {
+  if (!householdId) throw new Error("PLAID_HOUSEHOLD_REQUIRED");
   if (existing) {
     const { error } = await db
       .from("transactions")
       .update(canonicalRow)
       .eq("id", existing.id)
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .eq("household_id", householdId);
     if (error) throw error;
     return;
   }
@@ -841,21 +905,28 @@ async function persistCanonicalPlaidTransaction({ db, existing, canonicalRow, us
     .from("transactions")
     .select("id")
     .eq("user_id", userId)
+    .eq("household_id", householdId)
     .eq("plaid_transaction_id", canonicalRow.plaid_transaction_id)
     .maybeSingle();
   if (lookupError) throw lookupError;
-  if (!conflicting?.id) return;
+  if (!conflicting?.id) {
+    const conflictError = new Error("A Plaid transaction with this identity belongs to another household.");
+    conflictError.code = "PLAID_TRANSACTION_HOUSEHOLD_CONFLICT";
+    throw conflictError;
+  }
 
   const { id: _incomingId, ...canonicalFields } = canonicalRow;
   const { error: updateError } = await db
     .from("transactions")
     .update(canonicalFields)
     .eq("id", conflicting.id)
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .eq("household_id", householdId);
   if (updateError) throw updateError;
 }
 
 async function syncTransactions({ client, userId, item, accessToken }) {
+  if (!item || !item.household_id) throw new Error("PLAID_HOUSEHOLD_REQUIRED");
   const originalCursor = item.transactions_cursor || item.cursor || null;
   let cursor = originalCursor;
   let restarted = false;
@@ -896,6 +967,7 @@ async function syncTransactions({ client, userId, item, accessToken }) {
         .from("plaid_accounts")
         .select("id,plaid_account_id,persistent_account_id,name,official_name,mask,type,subtype,account_type,account_subtype")
         .eq("user_id", userId)
+        .eq("household_id", item.household_id)
         .eq("is_active", true)
         .in("plaid_account_id", [...new Set(accountIds)]);
       if (error) throw error;
@@ -903,6 +975,7 @@ async function syncTransactions({ client, userId, item, accessToken }) {
         .from("plaid_accounts")
         .select("persistent_account_id,name,official_name,mask,type,subtype,account_type,account_subtype")
         .eq("user_id", userId)
+        .eq("household_id", item.household_id)
         .eq("is_active", false);
       if (inactiveError) throw inactiveError;
       const inactiveIdentities = new Set((inactiveAccounts || []).map(account => plaidAccountIdentity(account, "same-institution")).filter(Boolean));
@@ -936,12 +1009,14 @@ async function syncTransactions({ client, userId, item, accessToken }) {
         .from("plaid_transactions")
         .update({ removed_at: now, updated_at: now })
         .eq("user_id", userId)
+        .eq("household_id", item.household_id)
         .eq("plaid_transaction_id", transaction.transaction_id);
       if (plaidError) throw plaidError;
       const { error: transactionError } = await serviceSupabase()
         .from("transactions")
         .update({ removed_at: now })
         .eq("user_id", userId)
+        .eq("household_id", item.household_id)
         .eq("plaid_transaction_id", transaction.transaction_id);
       if (transactionError) throw transactionError;
       let pendingPlanUpdate = db
@@ -989,7 +1064,8 @@ async function syncItemUnlocked({ userId, item, accessToken, client, db }) {
       updated_at: attempted,
     })
     .eq("id", item.id)
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .eq("household_id", item.household_id);
 
   try {
     const accountSync = await syncAccounts({ client, userId, item, accessToken });
@@ -1019,7 +1095,8 @@ async function syncItemUnlocked({ userId, item, accessToken, client, db }) {
           updated_at: pendingAt,
         })
         .eq("id", item.id)
-        .eq("user_id", userId);
+        .eq("user_id", userId)
+        .eq("household_id", item.household_id);
       return {
         accounts: accounts.length,
         liabilities,
@@ -1042,7 +1119,8 @@ async function syncItemUnlocked({ userId, item, accessToken, client, db }) {
         updated_at: completed,
       })
       .eq("id", item.id)
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .eq("household_id", item.household_id);
     if (error) throw error;
     return { accounts: accounts.length, liabilities, transactions, transactions_pending: false };
   } catch (error) {
@@ -1055,7 +1133,8 @@ async function syncItemUnlocked({ userId, item, accessToken, client, db }) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", item.id)
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .eq("household_id", item.household_id);
     throw error;
   }
 }
@@ -1096,5 +1175,7 @@ module.exports = {
   withPlaidSyncLock,
   transferPendingPlaidBillMatch,
   editablePlaidFields,
+  debtPlanMonthBounds,
+  conflictingPlaidAccountHousehold,
   persistCanonicalPlaidTransaction,
 };

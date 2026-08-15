@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
@@ -28,6 +29,7 @@ import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { isCashFlowTransaction } from "@/lib/billMatching";
 import { type FloFacts } from "@/lib/flo";
+import { createFloAiConsent, floAiConsentStorageKey, parseFloAiConsent } from "@/lib/floAiConsent";
 import { humanizeFloText } from "@/lib/floLanguage";
 import { exportFloHistoryText, floConversationForRequest, floProposalMatchesAuthoritative, isFloRequestGenerationCurrent, nextFloRequestGeneration, type FloReviewProposal } from "@/lib/floExperience";
 import { DEFAULT_FLO_PREFERENCES, readFloPreferences, saveFloPreferences, type FloPreferences } from "@/lib/floPreferences";
@@ -118,6 +120,9 @@ export default function FloScreen() {
   const [proposalReceipt, setProposalReceipt] = useState<{ previousAmount: number; newAmount: number; confirmedAt: string } | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
   const [lastPrompt, setLastPrompt] = useState("");
+  const [aiConsentAccepted, setAiConsentAccepted] = useState(false);
+  const [aiConsentReady, setAiConsentReady] = useState(false);
+  const [aiConsentPrompt, setAiConsentPrompt] = useState<string | null>(null);
   const [sampleIndex, setSampleIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   const handledPromptRef = useRef<string | null>(null);
@@ -127,6 +132,26 @@ export default function FloScreen() {
   const requestGenerationRef = useRef(0);
   const now = useMemo(() => new Date(), []);
   const today = localDateString(now);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAiConsentReady(false);
+    setAiConsentAccepted(false);
+    setAiConsentPrompt(null);
+    if (!user?.id) {
+      setAiConsentReady(true);
+      return () => { cancelled = true; };
+    }
+    void AsyncStorage.getItem(floAiConsentStorageKey(user.id))
+      .then(value => {
+        if (!cancelled) setAiConsentAccepted(parseFloAiConsent(value, user.id));
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setAiConsentReady(true);
+      });
+    return () => { cancelled = true; };
+  }, [user?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -787,9 +812,14 @@ export default function FloScreen() {
     setChatError("Response stopped. You can retry the last question.");
   };
 
-  const send = async (text = input, retry = false) => {
+  const send = async (text = input, retry = false, consentOverride = false) => {
     const clean = text.trim();
     if (!clean || chat.sending || floProLocked || !user?.id || !activeHousehold?.householdId) return;
+    if (!aiConsentReady) return;
+    if (!aiConsentAccepted && !consentOverride) {
+      setAiConsentPrompt(clean);
+      return;
+    }
     const requestGeneration = requestGenerationRef.current;
     const requestUserId = user.id;
     const requestHouseholdId = activeHousehold.householdId;
@@ -924,15 +954,28 @@ export default function FloScreen() {
     if (!floPreferences.historyEnabled) retryRequestRef.current = { text: clean, userMessageId, assistantMessageId, conversationId: null };
   };
 
+  const acceptAiConsent = async () => {
+    if (!user?.id || !aiConsentPrompt) return;
+    const prompt = aiConsentPrompt;
+    try {
+      await AsyncStorage.setItem(floAiConsentStorageKey(user.id), createFloAiConsent(user.id));
+      setAiConsentAccepted(true);
+      setAiConsentPrompt(null);
+      await send(prompt, false, true);
+    } catch {
+      setChatError("Flo consent could not be saved. No account information was sent.");
+    }
+  };
+
   useEffect(() => {
     const prompt = Array.isArray(params.prompt) ? params.prompt[0] : params.prompt;
     const promptId = Array.isArray(params.promptId) ? params.promptId[0] : params.promptId;
     const cleanPrompt = typeof prompt === "string" ? prompt.trim() : "";
     const promptKey = `${promptId || "manual"}:${cleanPrompt}`;
-    if (!cleanPrompt || handledPromptRef.current === promptKey || chat.sending) return;
+    if (!aiConsentReady || !cleanPrompt || handledPromptRef.current === promptKey || chat.sending) return;
     handledPromptRef.current = promptKey;
     void send(cleanPrompt);
-  }, [params.prompt, params.promptId, chat.sending]);
+  }, [aiConsentReady, params.prompt, params.promptId, chat.sending]);
 
   const composerBottom = Platform.OS === "web" ? 88 : Math.max(insets.bottom, 8) + 54;
 
@@ -1014,6 +1057,24 @@ export default function FloScreen() {
             <View style={styles.followActions}>
               <Pressable accessibilityRole="button" disabled={proposalConfirmState === "confirming"} onPress={() => setReviewProposal(null)} style={[styles.followButton, { backgroundColor: colors.muted, opacity: proposalConfirmState === "confirming" ? 0.5 : 1 }]}><Text style={[styles.followButtonText, { color: colors.foreground }]}>{proposalReceipt ? "Done" : "Cancel"}</Text></Pressable>
               {!proposalReceipt ? <Pressable accessibilityRole="button" disabled={proposalConfirmState === "confirming"} onPress={() => void confirmProposal()} style={[styles.followButton, { backgroundColor: colors.primary, opacity: proposalConfirmState === "confirming" ? 0.6 : 1 }]}><Text style={styles.followPrimaryText}>{proposalConfirmState === "confirming" ? "Confirming..." : "Confirm change"}</Text></Pressable> : null}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={Boolean(aiConsentPrompt)} transparent animationType="fade" onRequestClose={() => setAiConsentPrompt(null)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setAiConsentPrompt(null)}>
+          <Pressable accessibilityViewIsModal style={[styles.aiConsentCard, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => undefined}>
+            <View style={[styles.reviewProposalIcon, { backgroundColor: colors.primary + "18" }]}><Feather name="shield" size={21} color={colors.primary} /></View>
+            <Text style={[styles.followTitle, { color: colors.foreground }]}>Use Flo with your account data?</Text>
+            <Text style={[styles.aiConsentBody, { color: colors.mutedForeground }]}>Flo sends your question and only the relevant household records needed to answer it to OpenAI. FlowLedger does not send bank passwords or full account numbers. Chats are saved only when history is on.</Text>
+            <Pressable accessibilityRole="link" onPress={() => { setAiConsentPrompt(null); router.push("/legal?doc=privacy" as never); }} style={styles.aiConsentPrivacyLink}>
+              <Text style={[styles.aiConsentPrivacyText, { color: colors.primary }]}>Read the Privacy Policy</Text>
+            </Pressable>
+            <Text style={[styles.reviewSafety, { color: colors.mutedForeground }]}>You can cancel and keep using FlowLedger without Flo.</Text>
+            <View style={styles.followActions}>
+              <Pressable accessibilityRole="button" onPress={() => setAiConsentPrompt(null)} style={[styles.followButton, { backgroundColor: colors.muted }]}><Text style={[styles.followButtonText, { color: colors.foreground }]}>Not now</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={() => void acceptAiConsent()} style={[styles.followButton, { backgroundColor: colors.primary }]}><Text style={styles.followPrimaryText}>Agree & ask Flo</Text></Pressable>
             </View>
           </Pressable>
         </Pressable>
@@ -1146,6 +1207,10 @@ const styles = StyleSheet.create({
   loadOlderButton: { alignSelf: "center", minHeight: 36, borderRadius: 999, justifyContent: "center", paddingHorizontal: 14 },
   loadOlderText: { fontSize: 11, fontFamily: "Inter_700Bold" },
   modalOverlay: { flex: 1, backgroundColor: "rgba(2,6,23,0.68)", justifyContent: "flex-end" },
+  aiConsentCard: { borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, padding: 20, gap: 12 },
+  aiConsentBody: { fontSize: 13, lineHeight: 20, fontFamily: "Inter_400Regular", textAlign: "center" },
+  aiConsentPrivacyLink: { minHeight: 44, alignSelf: "center", justifyContent: "center", paddingHorizontal: 12 },
+  aiConsentPrivacyText: { fontSize: 13, fontFamily: "Inter_700Bold" },
   followSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, padding: 18, gap: 12 },
   sheetHandle: { alignSelf: "center", width: 48, height: 4, borderRadius: 999, opacity: 0.5, marginBottom: 4 },
   followTitle: { fontSize: 20, fontFamily: "Inter_700Bold", textAlign: "center" },

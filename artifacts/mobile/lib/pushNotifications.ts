@@ -1,5 +1,7 @@
 import { Platform } from "react-native";
 
+import { apiFetch } from "@/lib/api";
+
 import {
   LEGACY_PUSH_PREFERENCE_KEY,
   parseNotificationJson,
@@ -109,7 +111,7 @@ export async function getPushNotificationStatus(userId: string): Promise<PushNot
 
 export async function enablePushNotifications(accessToken: string, userId: string) {
   if (!supported()) throw new Error("This browser or installed app does not support phone notifications.");
-  const configResponse = await fetch("/api/notifications/config");
+  const configResponse = await apiFetch("/api/notifications/config");
   if (!configResponse.ok) throw new Error(await apiMessage(configResponse, "Notifications are not configured yet."));
   const { publicKey } = await parseNotificationJson<{ publicKey: string }>(
     configResponse,
@@ -126,7 +128,7 @@ export async function enablePushNotifications(accessToken: string, userId: strin
     applicationServerKey: applicationServerKey(publicKey),
   });
   const json = subscription.toJSON();
-  const response = await fetch("/api/notifications/subscription", {
+  const response = await apiFetch("/api/notifications/subscription", {
     method: "POST",
     headers: authorization(accessToken),
     body: JSON.stringify({ endpoint: subscription.endpoint, keys: json.keys }),
@@ -146,7 +148,7 @@ export async function disablePushNotifications(accessToken: string, userId: stri
     savePreference(userId, false);
     return;
   }
-  const response = await fetch("/api/notifications/subscription", {
+  const response = await apiFetch("/api/notifications/subscription", {
     method: "DELETE",
     headers: authorization(accessToken),
     body: JSON.stringify({ endpoint: subscription.endpoint }),
@@ -161,7 +163,7 @@ export async function detachPushNotifications(accessToken: string) {
   const registered = await navigator.serviceWorker.getRegistration("/");
   const subscription = await registered?.pushManager.getSubscription();
   if (!subscription) return;
-  const response = await fetch("/api/notifications/subscription", {
+  const response = await apiFetch("/api/notifications/subscription", {
     method: "DELETE",
     headers: authorization(accessToken),
     body: JSON.stringify({ endpoint: subscription.endpoint }),
@@ -178,7 +180,7 @@ export async function restorePushNotifications(accessToken: string, userId: stri
 }
 
 export async function sendTestPushNotification(accessToken: string, type: NotificationPreferenceKey) {
-  const response = await fetch("/api/notifications/test", {
+  const response = await apiFetch("/api/notifications/test", {
     method: "POST",
     headers: authorization(accessToken),
     body: JSON.stringify({ type }),
@@ -187,7 +189,7 @@ export async function sendTestPushNotification(accessToken: string, type: Notifi
 }
 
 export async function getNotificationPreferences(accessToken: string) {
-  const response = await fetch("/api/notifications/preferences", {
+  const response = await apiFetch("/api/notifications/preferences", {
     headers: authorization(accessToken),
   });
   if (!response.ok) throw new Error(await apiMessage(response, "Could not load notification choices."));
@@ -202,7 +204,7 @@ export async function updateNotificationPreference(
   key: NotificationPreferenceKey,
   enabled: boolean,
 ) {
-  const response = await fetch("/api/notifications/preferences", {
+  const response = await apiFetch("/api/notifications/preferences", {
     method: "PATCH",
     headers: authorization(accessToken),
     body: JSON.stringify({ [key]: enabled }),
