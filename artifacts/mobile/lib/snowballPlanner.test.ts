@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 
 import { buildSnowballPlannerRows, buildSnowballTimeline, payoffMonthsSooner, snowballPlanHistoryStatus } from "./snowballPlanner";
 import { projectDatedSnowballMonth, remainingDatedDebtAllocations, type DatedSnowballMonthPlanResult } from "./snowball";
@@ -203,4 +204,12 @@ test("saved-plan history status follows pending and matched allocation state", (
   assert.equal(snowballPlanHistoryStatus(saved, new Map([["concert:2026-08-15", { amount: 20 }]]), "2026-08-10"), "Applied");
   assert.equal(snowballPlanHistoryStatus({ ...saved, payment_date: "2026-08-09", sources: [{ pendingBalanceApply: false }] }, new Map(), "2026-08-10"), "Applied");
   assert.equal(snowballPlanHistoryStatus({ ...saved, sources: undefined }, new Map(), "2026-08-10"), "Scheduled");
+});
+
+test("the extra payment money field opens with the caret after its amount", () => {
+  const source = readFileSync("app/snowball-plan.tsx", "utf8");
+  assert.match(source, /const end = extraAmount\.length;/);
+  assert.match(source, /setExtraAmountSelection\(\{ start: end, end \}\)/);
+  assert.match(source, /selection=\{extraAmountSelection\}/);
+  assert.match(source, /paddingLeft: 3, paddingRight: 14/);
 });

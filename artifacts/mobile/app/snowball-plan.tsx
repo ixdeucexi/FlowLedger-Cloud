@@ -121,6 +121,7 @@ function SnowballPlanScreen() {
   const hasResolvedTransactionEdit = Boolean(editTransaction && editDraft);
   const [paymentDate, setPaymentDate] = useState(today);
   const [extraAmount, setExtraAmount] = useState("");
+  const [extraAmountSelection, setExtraAmountSelection] = useState<{ start: number; end: number } | undefined>();
   const [editingPaymentId, setEditingPaymentId] = useState<string | undefined>(paymentId);
   const [saving, setSaving] = useState(false);
   const hydratedTransactionRef = useRef<string | null>(null);
@@ -589,6 +590,12 @@ function SnowballPlanScreen() {
                     accessibilityLabel="Extra debt payment"
                     value={extraAmount}
                     onChangeText={setExtraAmount}
+                    onFocus={() => {
+                      const end = extraAmount.length;
+                      setExtraAmountSelection({ start: end, end });
+                      requestAnimationFrame(() => setExtraAmountSelection(undefined));
+                    }}
+                    selection={extraAmountSelection}
                     keyboardType="decimal-pad"
                     placeholder="0.00"
                     placeholderTextColor={c.mutedForeground}
@@ -845,7 +852,7 @@ const styles = StyleSheet.create({
   fieldLabel: { fontSize: 9, fontFamily: "Inter_800ExtraBold", letterSpacing: 0.8, marginTop: 16, marginBottom: 7 },
   inputWrap: { width: "100%", maxWidth: "100%", alignSelf: "stretch", overflow: "hidden", flexDirection: "row", alignItems: "center", borderRadius: 14, borderWidth: 1.5 },
   dollar: { flexShrink: 0, fontSize: 21, paddingLeft: 14 },
-  input: { flex: 1, flexBasis: 0, flexShrink: 1, minWidth: 0, height: 54, paddingHorizontal: 8, fontSize: 21, fontFamily: "Inter_700Bold" },
+  input: { flex: 1, flexBasis: 0, flexShrink: 1, minWidth: 0, height: 54, paddingLeft: 3, paddingRight: 14, fontSize: 21, fontFamily: "Inter_700Bold" },
   error: { fontSize: 11, lineHeight: 16, marginTop: 6 },
   safeLink: { alignSelf: "flex-start", paddingVertical: 9 },
   safeLinkText: { fontSize: 12, fontFamily: "Inter_700Bold" },
