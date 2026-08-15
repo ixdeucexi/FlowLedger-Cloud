@@ -52,6 +52,9 @@ test("both dashboards use the shared guide route contract", () => {
     confidence: "High",
     flowScore: 82,
     flowScoreLabel: "Strong",
+    flowScorePlanCoverage: 40,
+    flowScoreMustPay: 30,
+    flowScoreBackup: 12,
   };
   const params = buildFlowGuideRouteParams(input);
 
@@ -73,12 +76,15 @@ test("both dashboards use the shared guide route contract", () => {
     confidence: "High",
     flowScore: "82",
     flowScoreLabel: "Strong",
+    flowScorePlanCoverage: "40",
+    flowScoreMustPay: "30",
+    flowScoreBackup: "12",
   });
 
   for (const path of ["app/(tabs)/index.tsx", "components/desktop/DesktopDashboard.tsx"]) {
     const source = readFileSync(path, "utf8");
     assert.match(source, /buildFlowGuideRouteParams\(\{/);
-    assert.match(source, /section: "overview"/);
+    assert.match(source, /section: sectionId/);
   }
 });
 

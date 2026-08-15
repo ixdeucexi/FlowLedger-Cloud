@@ -64,6 +64,9 @@ export default function HowFlowLedgerWorksScreen() {
     confidence?: string;
     flowScore?: string;
     flowScoreLabel?: string;
+    flowScorePlanCoverage?: string;
+    flowScoreMustPay?: string;
+    flowScoreBackup?: string;
   }>();
   const routeSection = param(params.section, "overview");
   const [sectionIndex, setSectionIndex] = useState(() => flowGuideSectionIndex(routeSection));
@@ -109,7 +112,10 @@ export default function HowFlowLedgerWorksScreen() {
     params.backupTarget,
     params.confidence,
     params.flowScore,
+    params.flowScoreBackup,
     params.flowScoreLabel,
+    params.flowScoreMustPay,
+    params.flowScorePlanCoverage,
     params.lowestBalance,
     params.nextAction,
     params.nextMilestone,
@@ -251,6 +257,9 @@ type GuideFacts = {
   confidence: string;
   flowScore: number;
   flowScoreLabel: string;
+  flowScorePlanCoverage: number | null;
+  flowScoreMustPay: number | null;
+  flowScoreBackup: number | null;
 };
 
 function readGuideFacts(params: Record<string, string | string[] | undefined>): GuideFacts | null {
@@ -269,6 +278,9 @@ function readGuideFacts(params: Record<string, string | string[] | undefined>): 
   const lowestBalance = amount(params.lowestBalance);
   const safetyFloor = amount(params.safetyFloor);
   const flowScore = amount(params.flowScore);
+  const flowScorePlanCoverage = amount(params.flowScorePlanCoverage);
+  const flowScoreMustPay = amount(params.flowScoreMustPay);
+  const flowScoreBackup = amount(params.flowScoreBackup);
   const validStage = stage && STABILITY_PATH_GUIDE.some(step => step.id === stage);
 
   if (
@@ -295,6 +307,9 @@ function readGuideFacts(params: Record<string, string | string[] | undefined>): 
     confidence,
     flowScore,
     flowScoreLabel,
+    flowScorePlanCoverage,
+    flowScoreMustPay,
+    flowScoreBackup,
   };
 }
 
@@ -309,8 +324,10 @@ function GuideSection({ id, c, facts, currentStageIndex }: { id: (typeof FLOW_GU
 
   if (id === "flow-score") return <>
     <View style={[styles.scoreHero, { backgroundColor: c.primary + "14", borderColor: c.primary + "40" }]}><View><AppText tone="label" style={[styles.cardEyebrow, { color: c.primary }]}>YOUR FLOW SCORE</AppText><AppText tone="number" style={[styles.scoreValue, { color: c.foreground }]}>{facts ? `${facts.flowScore}/${FLOW_SCORE_MAX_POINTS}` : "Add your plan"}</AppText></View><AppText tone="title" style={[styles.scoreStatus, { color: c.primary }]}>{facts?.flowScoreLabel ?? "Not calculated"}</AppText></View>
-    <SectionTitle c={c} title="What shapes your score" description="Six signals summarize cushion, bill readiness, forecast risk, spending pressure, and confidence." />
+    {facts && facts.flowScorePlanCoverage !== null && facts.flowScoreMustPay !== null && facts.flowScoreBackup !== null ? <View style={styles.metricGrid}><Metric c={c} label="Plan to next payday" value={`${facts.flowScorePlanCoverage}/40`} /><Metric c={c} label="Must Pay current" value={`${facts.flowScoreMustPay}/30`} /><Metric c={c} label="Backup progress" value={`${facts.flowScoreBackup}/30`} /></View> : null}
+    <SectionTitle c={c} title="What shapes your score" description="Three clear parts add to 100. Forecast confidence is shown separately and never changes the number." />
     <InfoCard c={c}>{FLOW_SCORE_GUIDE.map(item => <View key={item.id} style={[styles.listRow, { borderBottomColor: c.border }]}><View style={styles.listCopy}><AppText style={[styles.listTitle, { color: c.foreground }]}>{item.label}</AppText><AppText style={[styles.listDescription, { color: c.mutedForeground }]}>{item.description}</AppText></View><AppText tone="label" style={[styles.points, { color: c.primary }]}>up to {item.points}</AppText></View>)}</InfoCard>
+    {facts ? <InfoCard c={c} eyebrow="FORECAST CONFIDENCE" title={`${facts.confidence} - not scored`} icon="shield"><AppText style={[styles.bodyText, { color: c.mutedForeground }]}>Confidence tells you how current and complete the plan inputs are. It never adds or removes Flow Score points.</AppText></InfoCard> : null}
   </>;
 
   if (id === "protected-days") return <>

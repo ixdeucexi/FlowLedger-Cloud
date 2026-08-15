@@ -1,5 +1,5 @@
 export const ALGORITHM_CATALOG = [
-  { id: "flowScore", name: "Flow Score", icon: "activity", desc: "A 0–100 view of protected days, required bills, reserve progress, and forecast confidence." },
+  { id: "flowScore", name: "Flow Score", icon: "activity", desc: "A 0–100 view of your plan through payday, Must Pay money due, and Protected Days." },
   { id: "safeCushion", name: "Breathing Room", icon: "shield", desc: "Money left after your upcoming plan and safety floor stay protected." },
   { id: "purchaseDecision", name: "Purchase Check", icon: "shopping-bag", desc: "Tests an amount and date before you commit to spending." },
   { id: "billPriority", name: "Next Bill", icon: "file-text", desc: "Shows which required bill to handle first and why." },

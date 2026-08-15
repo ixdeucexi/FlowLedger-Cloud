@@ -56,8 +56,9 @@ test("builds Flow Score, Safe Cushion, and practical algorithm outputs", () => {
   assert.ok(suite.flowScore.score > 70);
   assert.ok(suite.flowScore.topReason.length > 0);
   assert.ok(suite.flowScore.topAction.length > 0);
-  assert.ok(suite.flowScore.breakdownItems.length >= 4);
-  assert.ok(suite.flowScore.positiveFactors.some(factor => /upcoming bill/i.test(factor)));
+  assert.equal(suite.flowScore.breakdownItems.length, 3);
+  assert.deepEqual(suite.flowScore.components.map(component => component.maximum), [40, 30, 30]);
+  assert.ok(suite.flowScore.positiveFactors.some(factor => /forecast day|must pay/i.test(factor)));
   assert.ok(suite.flowScore.negativeFactors.every(factor => !/still need attention/i.test(factor)));
   assert.equal(suite.safeCushion.amount, 1200);
   assert.equal(suite.safeCushion.status, "safe");
@@ -244,7 +245,7 @@ test("cash-flow gap wording handles a one-day tight cash-flow point", () => {
   assert.equal(suite.algorithmDetails.cashFlowGap.sourceNumbers.find(item => item.label === "Main pressure")?.value, "Phone");
 });
 
-test("Flow Score treats future bills as planned, not negative", () => {
+test("Flow Score keeps future Must Pay items inside Forecast without lowering today's payment points", () => {
   const suite = buildAlgorithmSuite(baseInput({
     todayDay: 1,
     bills: [
@@ -253,12 +254,12 @@ test("Flow Score treats future bills as planned, not negative", () => {
     ],
   }));
 
-  assert.equal(suite.flowScore.breakdownItems.find(item => item.label === "Due Bills")?.value, "On track");
-  assert.ok(suite.flowScore.positiveFactors.some(factor => /upcoming bills are planned/i.test(factor)));
-  assert.ok(suite.flowScore.negativeFactors.every(factor => !/bill/i.test(factor)));
+  assert.equal(suite.flowScore.requiredAmountDue, 0);
+  assert.equal(suite.flowScore.breakdownItems.find(item => item.label === "Must Pay current")?.value, "30/30");
+  assert.ok(suite.flowScore.positiveFactors.some(factor => /must pay money due through today is current/i.test(factor)));
 });
 
-test("Flow Score only flags bills when due or overdue", () => {
+test("Flow Score uses the required dollar amount due through today", () => {
   const suite = buildAlgorithmSuite(baseInput({
     todayDay: 12,
     bills: [
@@ -267,8 +268,43 @@ test("Flow Score only flags bills when due or overdue", () => {
     ],
   }));
 
-  assert.equal(suite.flowScore.breakdownItems.find(item => item.label === "Due Bills")?.value, "0/1");
-  assert.ok(suite.flowScore.negativeFactors.some(factor => /overdue bill/i.test(factor)));
+  assert.equal(suite.flowScore.requiredAmountDue, 100);
+  assert.equal(suite.flowScore.requiredAmountCovered, 0);
+  assert.equal(suite.flowScore.breakdownItems.find(item => item.label === "Must Pay current")?.value, "0/30");
+  assert.ok(suite.flowScore.negativeFactors.some(factor => /\$0\.00 of \$100\.00/i.test(factor)));
+});
+
+test("Flow Score counts partial and matched pending Must Pay money by occurrence", () => {
+  const partial = buildAlgorithmSuite(baseInput({
+    todayDay: 12,
+    bills: [{ id: "debt", name: "Debt", amount: 113, category: "Debt", due_day: 12, occurrenceDays: [12], is_debt: true, is_recurring: true, paidAmount: 57 }],
+  }));
+  assert.equal(partial.flowScore.requiredAmountDue, 113);
+  assert.equal(partial.flowScore.requiredAmountCovered, 57);
+  assert.equal(partial.flowScore.breakdownItems.find(item => item.label === "Must Pay current")?.value, "15/30");
+
+  const pending = buildAlgorithmSuite(baseInput({
+    todayDay: 12,
+    bills: [{ id: "bill", name: "Bill", amount: 150, category: "Other", due_day: 12, occurrenceDays: [12], pendingDays: [12], is_debt: false, is_recurring: true, paidAmount: 0 }],
+  }));
+  assert.equal(pending.flowScore.requiredAmountCovered, 150);
+  assert.equal(pending.flowScore.breakdownItems.find(item => item.label === "Must Pay current")?.value, "30/30");
+});
+
+test("forecast confidence and optional category budgeting stay outside the Flow Score", () => {
+  const high = buildAlgorithmSuite(baseInput());
+  const low = buildAlgorithmSuite(baseInput({
+    forecastConfidence: { level: "low", label: "Needs refresh", reasons: ["Refresh accounts"] },
+  }));
+  const overOptionalBudget = buildAlgorithmSuite(baseInput({
+    categoryPlan: [
+      { category: "Food", budgeted: 400, spent: 200, remaining: 200, status: "available" },
+      { category: "Entertainment", budgeted: 100, spent: 500, remaining: -400, status: "over" },
+    ],
+  }));
+  assert.equal(low.flowScore.score, high.flowScore.score);
+  assert.equal(overOptionalBudget.flowScore.score, high.flowScore.score);
+  assert.match(low.flowScore.factors.at(-1) ?? "", /not scored/i);
 });
 
 test("Stability Path names the exact overdue bill and remaining amount", () => {

@@ -47,7 +47,7 @@ const references = {
   ],
   debtMethod: "snowball" as const,
 };
-const metrics = { flowScore: 72, protectedDays: 18, requiredMonthlyOutflow: 1000, forecastConfidence: "high" as const, currentDebtFreeDate: "2026-11" };
+const metrics = { flowScore: 85, flowScoreRequiredAmountDue: 500, flowScoreRequiredAmountCovered: 500, protectedDays: 18, requiredMonthlyOutflow: 1000, forecastConfidence: "high" as const, currentDebtFreeDate: "2026-11" };
 
 test("strictly decodes every supported version-one change and rejects loose or duplicate definitions", () => {
   const changes: PlanSimulationChange[] = [
@@ -89,7 +89,7 @@ test("zero-change baseline exactly preserves canonical Forecast totals, event da
   });
   const result = projectPlanSimulation({ baseline: { ...baseline, endDate: "2026-08-16" }, changes: [], references, metrics, safetyFloor: 200 });
   assert.deepEqual(result.days.map(day => ({ date: day.date, net: day.net, balance: day.balance })), source.map(day => ({ date: day.date, net: day.net, balance: day.balance })));
-  assert.equal(result.flowScore, 72);
+  assert.equal(result.flowScore, metrics.flowScore);
   assert.equal(result.protectedDays, 18);
   assert.equal(result.endingBalance, 2320);
 });

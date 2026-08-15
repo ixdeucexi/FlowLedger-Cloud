@@ -1,5 +1,5 @@
 import type { FinancialEvent } from "./forecast";
-import { FLOW_SCORE_WEIGHTS } from "./flowScorePolicy";
+import { calculateFlowScore } from "./flowScorePolicy";
 import { allocateSnowballExtra, projectSnowballMonth, type DebtMethod, type SnowballDebtInput } from "./snowball";
 import { getBillOccurrenceDays, isBillActiveForMonth } from "./schedule";
 import { buildStabilityProgress } from "./stability";
@@ -95,6 +95,8 @@ export interface PlanSimulationReferences {
 
 export interface PlanSimulationMetricsBaseline {
   flowScore: number;
+  flowScoreRequiredAmountDue: number;
+  flowScoreRequiredAmountCovered: number;
   protectedDays: number;
   requiredMonthlyOutflow: number;
   forecastConfidence: "high" | "medium" | "low";
@@ -481,24 +483,14 @@ function comparablePayoffDate(input: {
   return null;
 }
 
-function dynamicFlowPoints(days: CanonicalPlanSimulationDay[], todayDay: number, safetyFloor: number, requiredMonthlyOutflow: number): number {
-  if (!days.length) return 0;
-  const balances = days.map(day => ({ day: Number(day.date.slice(8, 10)), balance: day.balance, income: day.inflow }));
-  const stability = buildStabilityProgress({
-    balances,
-    todayDay,
-    safetyFloor,
-    monthlyRequiredOutflow: requiredMonthlyOutflow,
-    overdueBills: 0,
-    forecastConfidence: "high",
-  });
-  const riskDays = days.filter(day => day.balance < safetyFloor).length;
-  const safety = riskDays === 0 ? FLOW_SCORE_WEIGHTS.balanceSafety : 0;
-  const backup = requiredMonthlyOutflow > 0
-    ? (stability.reserveProgress * 0.5 + stability.backupProgress * 0.5) * FLOW_SCORE_WEIGHTS.backupProgress
-    : 0;
-  const safeDays = (stability.safeForecastDays / days.length) * FLOW_SCORE_WEIGHTS.safeForecastDays;
-  return safety + backup + safeDays;
+function simulationFlowCoverage(days: CanonicalPlanSimulationDay[], startDate: string, safetyFloor: number) {
+  const future = days.filter(day => day.date >= startDate).sort((left, right) => left.date.localeCompare(right.date));
+  const nextPaycheck = future.find(day => day.date > startDate && day.inflow > 0.005);
+  const window = nextPaycheck ? future.filter(day => day.date <= nextPaycheck.date) : future.slice(0, 30);
+  return {
+    days: window.length,
+    safeDays: window.filter(day => day.balance >= safetyFloor).length,
+  };
 }
 
 export function projectPlanSimulation(input: {
@@ -732,9 +724,6 @@ export function projectPlanSimulation(input: {
   const currentBaselineDays = baselineDays.filter(day => day.date.startsWith(currentMonthPrefix));
   const currentProjectedDays = projectedDays.filter(day => day.date.startsWith(currentMonthPrefix));
   const todayDay = Number(input.baseline.startDate.slice(8, 10));
-  const baselineDynamic = dynamicFlowPoints(currentBaselineDays, todayDay, input.safetyFloor, input.metrics.requiredMonthlyOutflow);
-  const scenarioDynamic = dynamicFlowPoints(currentProjectedDays, todayDay, input.safetyFloor, requiredMonthlyOutflow);
-  const flowScore = Math.max(0, Math.min(100, Math.round(input.metrics.flowScore - baselineDynamic + scenarioDynamic)));
   const baselineStability = buildStabilityProgress({
     balances: currentBaselineDays.map(day => ({ day: Number(day.date.slice(8, 10)), balance: day.balance, income: day.inflow })),
     todayDay,
@@ -754,6 +743,14 @@ export function projectPlanSimulation(input: {
   const protectedDays = Math.max(0, Math.min(180,
     input.metrics.protectedDays - baselineStability.protectedDays + scenarioStability.protectedDays,
   ));
+  const scenarioCoverage = simulationFlowCoverage(projectedDays, input.baseline.startDate, input.safetyFloor);
+  const flowScore = calculateFlowScore({
+    safeForecastDays: scenarioCoverage.safeDays,
+    forecastDays: scenarioCoverage.days,
+    requiredAmountDue: input.metrics.flowScoreRequiredAmountDue,
+    requiredAmountCovered: input.metrics.flowScoreRequiredAmountCovered,
+    protectedDays,
+  }).score;
   const potentialDebtFreeDate = comparablePayoffDate({
     baseline: input.baseline,
     references: input.references,

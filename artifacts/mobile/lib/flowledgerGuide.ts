@@ -53,6 +53,9 @@ export interface FlowGuideRouteFacts {
   confidence: string;
   flowScore: number;
   flowScoreLabel: string;
+  flowScorePlanCoverage: number;
+  flowScoreMustPay: number;
+  flowScoreBackup: number;
 }
 
 /** Keeps both dashboard launchers on the same primitive-only route contract. */
@@ -75,6 +78,9 @@ export function buildFlowGuideRouteParams(facts: FlowGuideRouteFacts): Record<st
     confidence: facts.confidence,
     flowScore: String(facts.flowScore),
     flowScoreLabel: facts.flowScoreLabel,
+    flowScorePlanCoverage: String(facts.flowScorePlanCoverage),
+    flowScoreMustPay: String(facts.flowScoreMustPay),
+    flowScoreBackup: String(facts.flowScoreBackup),
   };
 }
 
@@ -126,7 +132,7 @@ export const STABILITY_PATH_GUIDE: readonly StabilityPathGuideStep[] = [
 export const ALGORITHM_GUIDE: readonly AlgorithmGuideItem[] = [
   { id: "forecast", title: "Daily Forecast", description: "Projects checking money day by day from posted activity, planned income, bills, and spending." },
   { id: "stability", title: "Stability Path", description: "Checks safety through payday, then turns backup money into 7, 30, 60, 90, and 180 days of Must Pay protection." },
-  { id: "flow-score", title: "Flow Score", description: "Summarizes cushion, bill readiness, forecast risk, spending pressure, and data confidence." },
+  { id: "flow-score", title: "Flow Score", description: "Combines plan coverage through payday, Must Pay money due through today, and Protected Days." },
   { id: "breathing-room", title: "Breathing Room", description: "Shows money remaining above the safety floor at the tightest point in the forecast." },
   { id: "bill-priority", title: "Bill Priority", description: "Ranks required bills by due date, payment status, and their effect on the tightest cash-flow days." },
   { id: "spending-pace", title: "Spending Pace", description: "Estimates a safe daily and weekly pace only after bills and the safety floor remain protected." },

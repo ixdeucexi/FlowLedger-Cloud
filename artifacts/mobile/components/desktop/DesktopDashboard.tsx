@@ -848,10 +848,10 @@ export function DesktopDashboard() {
 
   const go = (pathname: string, params?: Record<string, string>) =>
     router.push({ pathname: pathname as never, params } as never);
-  const openStabilityGuide = () => go(
+  const openStabilityGuide = (sectionId: "overview" | "flow-score" = "overview") => go(
     "/(tabs)/how-flowledger-works",
     buildFlowGuideRouteParams({
-      section: "overview",
+      section: sectionId,
       stage: progress.stage,
       stageLabel: progress.stageLabel,
       protectedDays: progress.protectedDays,
@@ -868,6 +868,9 @@ export function DesktopDashboard() {
       confidence: forecastConfidence.label,
       flowScore: algorithmSuite.flowScore.score,
       flowScoreLabel: algorithmSuite.flowScore.label,
+      flowScorePlanCoverage: algorithmSuite.flowScore.components.find(component => component.id === "planCoverage")?.earned ?? 0,
+      flowScoreMustPay: algorithmSuite.flowScore.components.find(component => component.id === "requiredPayments")?.earned ?? 0,
+      flowScoreBackup: algorithmSuite.flowScore.components.find(component => component.id === "backupProgress")?.earned ?? 0,
     }),
   );
   const openBills = (filter: "bills" | "debt" = "bills") => {
@@ -1114,7 +1117,7 @@ export function DesktopDashboard() {
                   nativeID="guided-tour-index"
                   accessibilityRole="button"
                   accessibilityLabel={`Flow Score ${algorithmSuite.flowScore.score}. ${algorithmSuite.flowScore.label}.`}
-                  onPress={() => askFlo(`Why is my Flow Score ${algorithmSuite.flowScore.score}?`)}
+                  onPress={() => openStabilityGuide("flow-score")}
                   style={({ pressed }) => [styles.scoreSummary, { opacity: pressed ? 0.76 : 1 }]}
                 >
                   <FlowScoreRing score={algorithmSuite.flowScore.score} />
@@ -1298,7 +1301,7 @@ export function DesktopDashboard() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="See how your Stability Path works"
-                onPress={openStabilityGuide}
+                onPress={() => openStabilityGuide()}
                 style={({ pressed }) => [styles.howItWorks, { opacity: pressed ? 0.7 : 1 }]}
               >
                 <Feather name="map" size={16} color="#bfd2f2" />

@@ -3,10 +3,8 @@ import { buildStabilityProgress, STABILITY_POLICY, type StabilityProgress } from
 import { isRequiredBill, normalizeBillImportance, type BillImportance } from "./billImportance";
 import { isBillEligibleForUpcomingPlan } from "./billEligibility";
 import {
-  FLOW_SCORE_CONFIDENCE_POINTS,
-  FLOW_SCORE_OVERDUE_BILL_PENALTY,
-  FLOW_SCORE_SPENDING_POINTS,
-  FLOW_SCORE_WEIGHTS,
+  calculateFlowScore,
+  type FlowScoreComponent,
 } from "./flowScorePolicy";
 
 export interface AlgorithmDailyBalance {
@@ -16,6 +14,12 @@ export interface AlgorithmDailyBalance {
   expense: number;
   net: number;
   balance: number;
+}
+
+export interface AlgorithmForecastBalance {
+  date: string;
+  balance: number;
+  income: number;
 }
 
 export interface AlgorithmBill {
@@ -83,6 +87,8 @@ export interface AlgorithmSuiteInput {
     goalAllocations: number;
   };
   dailyBalances: AlgorithmDailyBalance[];
+  todayDate?: string;
+  forecastBalances?: AlgorithmForecastBalance[];
   nextPaycheckForecast?: { label: string; lowestBalance: number } | null;
   bills: AlgorithmBill[];
   transactions: AlgorithmTransaction[];
@@ -133,6 +139,12 @@ export interface AlgorithmSuiteResult {
     positiveFactors: string[];
     negativeFactors: string[];
     breakdownItems: { label: string; value: string; tone: "safe" | "watch" | "risk" | "info" }[];
+    components: FlowScoreComponent[];
+    coverageWindowLabel: string;
+    safeCoverageDays: number;
+    coverageDays: number;
+    requiredAmountDue: number;
+    requiredAmountCovered: number;
     confidence: "high" | "medium" | "low";
     factors: string[];
   };
@@ -229,15 +241,13 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
   const lowestBalance = lowest?.balance ?? 0;
   const lowestDay = lowest?.day ?? null;
   const safeCushionAmount = roundCurrency(Math.max(0, lowestBalance - input.safetyFloor));
-  const paidBills = input.bills.filter(bill => (bill.paidAmount ?? 0) >= Math.max(0.01, bill.amount)).length;
   const billSchedule = input.bills.map(bill => ({ bill, ...buildBillScheduleStatus(bill, input.todayDay) }));
   const requiredBillSchedule = billSchedule.filter(({ bill }) => isRequiredBill(bill.importance, bill.is_debt));
-  const dueBills = requiredBillSchedule.filter(status => status.dueAmount > 0.005);
-  const paidDueBills = dueBills.filter(status => (status.bill.paidAmount ?? 0) + 0.005 >= status.dueAmount).length;
   const overdueBills = requiredBillSchedule
     .filter(status => status.overdueAmount > 0.005)
     .sort((left, right) => (left.firstOverdueDay ?? 99) - (right.firstOverdueDay ?? 99) || right.overdueAmount - left.overdueAmount);
-  const billReadiness = dueBills.length ? paidDueBills / dueBills.length : 1;
+  const requiredAmountDue = roundCurrency(requiredBillSchedule.reduce((sum, status) => sum + status.requiredThroughToday, 0));
+  const requiredAmountCovered = roundCurrency(requiredBillSchedule.reduce((sum, status) => sum + status.coveredThroughToday, 0));
   const incomeStability = scoreIncomeStability(input.incomes, input.transactions);
   const confidenceScore = input.forecastConfidence.level === "high" ? 92 : input.forecastConfidence.level === "medium" ? 68 : 42;
   const debtTotal = input.bills.filter(bill => bill.is_debt).reduce((sum, bill) => sum + Math.max(0, bill.balance ?? bill.amount), 0);
@@ -247,10 +257,6 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
   const monthlyDebtMinimums = input.bills
     .filter(bill => bill.is_debt && (bill.balance ?? bill.amount) > 0)
     .reduce((sum, bill) => sum + Math.max(0, bill.amount), 0);
-  const debtPressure = input.cashFlow.monthlyIncome > 0
-    ? Math.min(25, (monthlyDebtMinimums / input.cashFlow.monthlyIncome) * 75)
-    : monthlyDebtMinimums > 0 ? 18 : 0;
-  const categoryPressure = (input.categoryPlan ?? []).filter(row => row.status !== "available");
   const monthlyRequiredOutflow = estimateMonthlyRequiredOutflow(input);
   const nextPaycheck = balances.find(day => day.day > input.todayDay && day.income > 0.005) ?? null;
   const stability = buildStabilityProgress({
@@ -281,27 +287,17 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     },
     { safe: 0, watch: 0, risk: 0 },
   );
-  const safetyPoints = riskDayCounts.risk === 0 ? FLOW_SCORE_WEIGHTS.balanceSafety : 0;
-  const billStandingPoints = overdueBills.length > 0
-    ? Math.max(0, FLOW_SCORE_WEIGHTS.requiredBills - overdueBills.length * FLOW_SCORE_OVERDUE_BILL_PENALTY)
-    : Math.round(billReadiness * FLOW_SCORE_WEIGHTS.requiredBills);
-  const reservePoints = stability.reserveTarget > 0
-    ? (stability.reserveProgress * 0.5 + stability.backupProgress * 0.5) * FLOW_SCORE_WEIGHTS.backupProgress
-    : 0;
-  const forecastCoveragePoints = remainingBalances.length
-    ? Math.min(FLOW_SCORE_WEIGHTS.safeForecastDays, (stability.safeForecastDays / remainingBalances.length) * FLOW_SCORE_WEIGHTS.safeForecastDays)
-    : 0;
-  const confidencePoints = FLOW_SCORE_CONFIDENCE_POINTS[input.forecastConfidence.level];
-  const spendingPoints = categoryPressure.some(row => row.status === "over")
-    ? FLOW_SCORE_SPENDING_POINTS.over
-    : categoryPressure.length
-      ? FLOW_SCORE_SPENDING_POINTS.pressure
-      : FLOW_SCORE_SPENDING_POINTS.clear;
-  const flowScore = clamp(Math.round(
-    safetyPoints + billStandingPoints + reservePoints + forecastCoveragePoints + confidencePoints + spendingPoints
-  ), 0, 100);
+  const coverage = buildFlowScoreCoverageWindow(input, remainingBalances);
+  const flowCalculation = calculateFlowScore({
+    safeForecastDays: coverage.safeDays,
+    forecastDays: coverage.days.length,
+    requiredAmountDue,
+    requiredAmountCovered,
+    protectedDays: stability.protectedDays,
+  });
+  const flowScore = flowCalculation.score;
   const flowGrade = scoreGrade(flowScore);
-  const flowLabel = scoreLabel(flowScore);
+  const flowLabel = flowCalculation.label;
   const lowBalanceWarning = buildLowBalanceWarning(lowestBalance, lowestDay, input.safetyFloor, input);
   const billPriority = prioritizeBills(input.bills, input.todayDay, input.safetyFloor, lowestDay, input);
   const activeDebts = input.bills.filter(bill => bill.is_debt && bill.includeInSnowball !== false && (bill.balance ?? 0) > 0.009);
@@ -356,24 +352,15 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     lowBalanceWarning,
   });
   const flowScoreDetails = buildFlowScoreDetails(input, {
-    flowScore,
-    flowLabel,
-    lowestBalance,
-    lowestDay,
-    safeCushionAmount,
-    billReadiness,
-    paidBills,
-    dueBillsCount: dueBills.length,
-    paidDueBills,
     overdueBillsCount: overdueBills.length,
-    debtPressure,
-    monthlyDebtMinimums,
     lowBalanceWarning,
-    categoryPressure,
-    confidenceScore,
     stability,
-    riskDays: riskDayCounts.risk,
-    remainingDays: remainingBalances.length,
+    components: flowCalculation.components,
+    coverageWindowLabel: coverage.label,
+    safeCoverageDays: coverage.safeDays,
+    coverageDays: coverage.days.length,
+    requiredAmountDue,
+    requiredAmountCovered,
   });
   const insights = buildInsights({
     flowScore,
@@ -408,6 +395,7 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     flowScore,
     flowLabel,
     flowScoreDetails,
+    flowScoreComponents: flowCalculation.components,
     safeCushionAmount,
     safeCushionDetails,
     purchaseDecision,
@@ -439,11 +427,20 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
       positiveFactors: flowScoreDetails.positiveFactors,
       negativeFactors: flowScoreDetails.negativeFactors,
       breakdownItems: flowScoreDetails.breakdownItems,
+      components: flowCalculation.components,
+      coverageWindowLabel: coverage.label,
+      safeCoverageDays: coverage.safeDays,
+      coverageDays: coverage.days.length,
+      requiredAmountDue,
+      requiredAmountCovered,
       confidence: input.forecastConfidence.level,
       factors: [
-      `Forecast confidence: ${input.forecastConfidence.label}`,
-      `Tightest forecast point: $${lowestBalance.toFixed(0)}${lowestDay ? ` on ${formatMonthDay(input, lowestDay)}` : ""}`,
-      dueBills.length ? `${paidDueBills}/${dueBills.length} due bills cleared` : "No bills are due yet",
+        coverage.days.length
+          ? `${coverage.safeDays}/${coverage.days.length} forecast days protected ${coverage.label}`
+          : "Plan-to-payday coverage needs Forecast days",
+        requiredAmountDue > 0.005 ? `$${requiredAmountCovered.toFixed(2)} of $${requiredAmountDue.toFixed(2)} Must Pay money covered` : "Must Pay money is current",
+        `${stability.protectedDays} Protected Days`,
+        `Forecast confidence: ${input.forecastConfidence.label} (not scored)`,
       ],
     },
     safeCushion: {
@@ -465,7 +462,7 @@ export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteR
     extraMoneyRouter,
     riskDay: riskDayCounts,
     smartReminder: { reminders },
-    monthlyHealth: { score: flowScore, grade: flowGrade, summary: `${flowLabel} plan based on cushion, bills, forecast confidence, and days to strengthen.` },
+    monthlyHealth: { score: flowScore, grade: flowGrade, summary: `${flowLabel} plan based on payday coverage, Must Pay money, and Protected Days.` },
     spendingLimit: spendingLimits,
     planDelay: { day: planDelayDay, detail: planDelayDay ? `The next safer purchase window appears around ${formatMonthDay(input, planDelayDay)}.` : "No safer date appears inside this month yet." },
     insights: insights.slice(0, 4),
@@ -523,6 +520,8 @@ interface BillScheduleStatus {
   dueAmount: number;
   overdueAmount: number;
   remainingAmount: number;
+  requiredThroughToday: number;
+  coveredThroughToday: number;
   nextOccurrenceAmount: number;
   nextDueDay: number | null;
   firstOverdueDay: number | null;
@@ -538,7 +537,7 @@ function buildBillScheduleStatus(bill: AlgorithmBill, todayDay: number): BillSch
   const paidAmount = Math.max(0, Number(bill.paidAmount) || 0);
   const remainingAmount = roundCurrency(Math.max(0, totalAmount - paidAmount));
   if (occurrences.length === 0 || totalAmount <= 0.005) {
-    return { dueAmount: 0, overdueAmount: 0, remainingAmount, nextOccurrenceAmount: 0, nextDueDay: null, firstOverdueDay: null, overdueOccurrenceCount: 0 };
+    return { dueAmount: 0, overdueAmount: 0, remainingAmount, requiredThroughToday: 0, coveredThroughToday: 0, nextOccurrenceAmount: 0, nextDueDay: null, firstOverdueDay: null, overdueOccurrenceCount: 0 };
   }
 
   const occurrenceAmount = totalAmount / occurrences.length;
@@ -549,10 +548,17 @@ function buildBillScheduleStatus(bill: AlgorithmBill, todayDay: number): BillSch
     paidRemaining = Math.max(0, paidRemaining - paidForOccurrence);
     return {
       day,
+      paid: paidForOccurrence,
       remaining: Math.max(0, occurrenceAmount - paidForOccurrence),
       pending: pendingDays.has(day),
     };
   });
+  const throughToday = occurrenceStatus.filter(occurrence => occurrence.day <= todayDay);
+  const requiredThroughToday = roundCurrency(throughToday.length * occurrenceAmount);
+  const coveredThroughToday = roundCurrency(throughToday.reduce(
+    (sum, occurrence) => sum + (occurrence.pending ? occurrenceAmount : occurrence.paid),
+    0,
+  ));
   const dueAmount = roundCurrency(occurrenceStatus
     .filter(occurrence => occurrence.day <= todayDay && !occurrence.pending)
     .reduce((sum, occurrence) => sum + occurrence.remaining, 0));
@@ -565,11 +571,44 @@ function buildBillScheduleStatus(bill: AlgorithmBill, todayDay: number): BillSch
     dueAmount,
     overdueAmount,
     remainingAmount,
+    requiredThroughToday,
+    coveredThroughToday,
     nextOccurrenceAmount: roundCurrency(nextDue?.remaining ?? 0),
     nextDueDay: nextDue?.day ?? null,
     firstOverdueDay: overdue[0]?.day ?? null,
     overdueOccurrenceCount: overdue.length,
   };
+}
+
+function buildFlowScoreCoverageWindow(input: AlgorithmSuiteInput, fallbackDays: AlgorithmDailyBalance[]) {
+  const todayDate = input.todayDate
+    ?? `${input.year}-${String(input.month + 1).padStart(2, "0")}-${String(input.todayDay).padStart(2, "0")}`;
+  const supplied = (input.forecastBalances ?? [])
+    .filter(day => /^\d{4}-\d{2}-\d{2}$/.test(day.date))
+    .map(day => ({ date: day.date, balance: day.balance, income: day.income }));
+  const fallback = fallbackDays.map(day => ({
+    date: `${input.year}-${String(input.month + 1).padStart(2, "0")}-${String(day.day).padStart(2, "0")}`,
+    balance: day.balance,
+    income: day.income,
+  }));
+  const future = (supplied.length ? supplied : fallback)
+    .filter(day => day.date >= todayDate)
+    .sort((left, right) => left.date.localeCompare(right.date));
+  const nextPaycheck = future.find(day => day.date > todayDate && day.income > 0.005);
+  const days = nextPaycheck
+    ? future.filter(day => day.date <= nextPaycheck.date)
+    : future.slice(0, 30);
+  return {
+    days,
+    safeDays: days.filter(day => day.balance >= input.safetyFloor).length,
+    label: nextPaycheck ? `through ${shortIsoDate(nextPaycheck.date)}` : "across the next 30 forecast days",
+  };
+}
+
+function shortIsoDate(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return value;
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function buildLowBalanceWarning(lowestBalance: number, lowestDay: number | null, safetyFloor: number, input: AlgorithmSuiteInput): AlgorithmSuiteResult["lowBalanceWarning"] {
@@ -896,6 +935,7 @@ function buildAlgorithmDecisionDetails(
     flowScore: number;
     flowLabel: string;
     flowScoreDetails: Pick<AlgorithmSuiteResult["flowScore"], "topReason" | "topAction" | "breakdownItems">;
+    flowScoreComponents: FlowScoreComponent[];
     safeCushionAmount: number;
     safeCushionDetails: Omit<AlgorithmSuiteResult["safeCushion"], "amount">;
     purchaseDecision: AlgorithmSuiteResult["purchaseDecision"];
@@ -945,13 +985,16 @@ function buildAlgorithmDecisionDetails(
       status: flowStatus,
       headline: `${facts.flowScore} - ${facts.flowLabel}`,
       whatIFound: facts.flowScoreDetails.topReason,
-      whyItMatters: "This is your money weather report. I check cushion, bills, debt, confidence, and days to strengthen so you always have a useful next step.",
+      whyItMatters: "This score uses only three things: your plan through payday, Must Pay money due through today, and Protected Days. Forecast confidence is shown separately and does not change the number.",
       nextAction: facts.flowScoreDetails.topAction,
       floPrompt: `Why is my Flow Score ${facts.flowScore}?`,
       sourceNumbers: [
         { label: "Flow Score", value: `${facts.flowScore}`, tone: flowStatus },
-        { label: "Breathing room", value: money(facts.safeCushionAmount), tone: facts.safeCushionDetails.status },
-        { label: "Days to strengthen", value: `${facts.riskDayCounts.risk}`, tone: facts.riskDayCounts.risk ? "watch" : "safe" },
+        ...facts.flowScoreComponents.map(component => ({
+          label: component.label,
+          value: `${component.earned}/${component.maximum}`,
+          tone: component.earned === component.maximum ? "safe" as const : component.earned / component.maximum >= 0.6 ? "watch" as const : "risk" as const,
+        })),
         { label: "Forecast confidence", value: input.forecastConfidence.label, tone: input.forecastConfidence.level === "high" ? "safe" : input.forecastConfidence.level === "medium" ? "watch" : "risk" },
       ],
     },
@@ -1339,96 +1382,64 @@ function buildSafeCushionDetails(
 function buildFlowScoreDetails(
   input: AlgorithmSuiteInput,
   facts: {
-    flowScore: number;
-    flowLabel: string;
-    lowestBalance: number;
-    lowestDay: number | null;
-    safeCushionAmount: number;
-    billReadiness: number;
-    paidBills: number;
-    dueBillsCount: number;
-    paidDueBills: number;
     overdueBillsCount: number;
-    debtPressure: number;
-    monthlyDebtMinimums: number;
     lowBalanceWarning: AlgorithmSuiteResult["lowBalanceWarning"];
-    categoryPressure: AlgorithmCategoryRow[];
-    confidenceScore: number;
     stability: StabilityProgress;
-    riskDays: number;
-    remainingDays: number;
+    components: FlowScoreComponent[];
+    coverageWindowLabel: string;
+    safeCoverageDays: number;
+    coverageDays: number;
+    requiredAmountDue: number;
+    requiredAmountCovered: number;
   },
 ) {
   const positiveFactors: string[] = [];
   const negativeFactors: string[] = [];
   const breakdownItems: AlgorithmSuiteResult["flowScore"]["breakdownItems"] = [];
 
-  if (facts.safeCushionAmount >= STABILITY_POLICY.watchCushion) positiveFactors.push(`You have $${facts.safeCushionAmount.toFixed(0)} of breathing room above your floor.`);
-  else if (facts.safeCushionAmount > 0) negativeFactors.push(`You have $${facts.safeCushionAmount.toFixed(0)} above your floor; the next win is growing that breathing room.`);
-  else negativeFactors.push("Your next step is creating breathing room above your safety floor.");
+  const coverageComponent = facts.components.find(component => component.id === "planCoverage")!;
+  const mustPayComponent = facts.components.find(component => component.id === "requiredPayments")!;
+  const backupComponent = facts.components.find(component => component.id === "backupProgress")!;
 
-  if (facts.lowBalanceWarning.status === "safe") positiveFactors.push("Your safety floor stays protected throughout this month.");
-  else negativeFactors.push(facts.lowBalanceWarning.message);
-
-  if (facts.overdueBillsCount > 0) {
-    negativeFactors.push(`${facts.overdueBillsCount} overdue bill${facts.overdueBillsCount === 1 ? " is" : "s are"} next to bring current.`);
-  } else if (facts.dueBillsCount > 0 && facts.billReadiness < 1) {
-    negativeFactors.push(`${facts.dueBillsCount - facts.paidDueBills} bill${facts.dueBillsCount - facts.paidDueBills === 1 ? " remains" : "s remain"} to clear.`);
-  } else if (facts.dueBillsCount > 0) {
-    positiveFactors.push(`${facts.paidDueBills}/${facts.dueBillsCount} due bills are cleared.`);
-  } else if (input.bills.length > 0) {
-    positiveFactors.push(`${input.bills.length} upcoming bill${input.bills.length === 1 ? " is" : "s are"} planned in the forecast.`);
+  if (facts.coverageDays === 0) {
+    negativeFactors.push("Add planned income and bills so FlowLedger can measure the plan through payday.");
+  } else if (coverageComponent.earned === coverageComponent.maximum) {
+    positiveFactors.push(`Every forecast day is protected ${facts.coverageWindowLabel}.`);
+  } else {
+    negativeFactors.push(`${facts.safeCoverageDays}/${facts.coverageDays} forecast days protect your safety floor ${facts.coverageWindowLabel}; each additional protected day raises this part of the score.`);
   }
-
-  if (facts.stability.reserveTarget > 0 && facts.stability.protectedDays >= STABILITY_POLICY.freedomGoalDays) {
+  if (facts.requiredAmountDue <= 0.005) {
+    positiveFactors.push("Must Pay money due through today is current.");
+  } else if (facts.requiredAmountCovered + 0.005 >= facts.requiredAmountDue) {
+    positiveFactors.push(`All $${facts.requiredAmountDue.toFixed(2)} of Must Pay money due through today is covered.`);
+  } else {
+    negativeFactors.push(`$${facts.requiredAmountCovered.toFixed(2)} of $${facts.requiredAmountDue.toFixed(2)} in Must Pay money due through today is covered.`);
+  }
+  if (facts.stability.protectedDays >= STABILITY_POLICY.freedomGoalDays) {
     positiveFactors.push("A 180-day Must Pay backup is protected.");
-  } else if (facts.stability.reserveTarget > 0 && facts.stability.protectedDays >= 30) {
-    positiveFactors.push(`${facts.stability.protectedDays} days of Must Pay expenses are protected.`);
-  } else if (facts.stability.reserveTarget > 0) {
-    negativeFactors.push(`${facts.stability.protectedDays} backup days are protected; the next milestone is ${facts.stability.nextMilestone}.`);
+  } else {
+    negativeFactors.push(`${facts.stability.protectedDays} Protected Days are in place; the next milestone is ${facts.stability.nextMilestone}.`);
   }
 
-  if (input.forecastConfidence.level === "high") positiveFactors.push("Forecast confidence is high.");
-  else negativeFactors.push(`Confirm current balances and dates to grow forecast confidence from ${input.forecastConfidence.label.toLowerCase()}.`);
-
-  if (facts.debtPressure > 15) negativeFactors.push(`Each debt payoff will free part of the $${facts.monthlyDebtMinimums.toFixed(0)} currently going to monthly minimums.`);
-  else if (input.bills.some(bill => bill.is_debt)) positiveFactors.push("Debt pressure is manageable in this plan.");
-
-  if (facts.categoryPressure.length) {
-    const top = facts.categoryPressure.slice().sort((a, b) => a.remaining - b.remaining)[0];
-    negativeFactors.push(top.remaining < 0 ? `${top.category} can return to plan with $${Math.abs(top.remaining).toFixed(0)} more room.` : `${top.category} is the next category to keep steady.`);
-  }
-
-  breakdownItems.push({
-    label: "Safe Forecast Days",
-    value: `${Math.min(facts.remainingDays, facts.stability.safeForecastDays)}/${facts.remainingDays}`,
-    tone: facts.riskDays > 0 ? "risk" : "safe",
-  });
-  breakdownItems.push({
-    label: "Due Bills",
-    value: facts.dueBillsCount ? `${facts.paidDueBills}/${facts.dueBillsCount}` : "On track",
-    tone: facts.overdueBillsCount > 0 ? "risk" : facts.dueBillsCount && facts.billReadiness < 1 ? "watch" : "safe",
-  });
-  breakdownItems.push({
-    label: "Forecast Confidence",
-    value: input.forecastConfidence.label,
-    tone: input.forecastConfidence.level === "high" ? "safe" : input.forecastConfidence.level === "medium" ? "watch" : "risk",
-  });
-  breakdownItems.push({
-    label: "Backup Coverage",
-    value: facts.stability.reserveTarget > 0 ? `${facts.stability.protectedDays}/${STABILITY_POLICY.freedomGoalDays} days` : "Needs Must Pay bills",
-    tone: facts.stability.protectedDays >= STABILITY_POLICY.freedomGoalDays ? "safe" : facts.stability.protectedDays > 0 ? "watch" : "risk",
-  });
-  if (facts.categoryPressure.length) {
-    breakdownItems.push({
-      label: "Spending Pressure",
-      value: `${facts.categoryPressure.length} categor${facts.categoryPressure.length === 1 ? "y" : "ies"}`,
-      tone: facts.categoryPressure.some(row => row.status === "over") ? "risk" : "watch",
-    });
-  }
+  facts.components.forEach(component => breakdownItems.push({
+    label: component.label,
+    value: `${component.earned}/${component.maximum}`,
+    tone: component.earned === component.maximum
+      ? "safe"
+      : component.earned / component.maximum >= 0.6
+        ? "watch"
+        : "risk",
+  }));
 
   const topReason = negativeFactors[0] ?? positiveFactors[0] ?? "Your plan has enough information for a basic Flow Score.";
-  const topAction = flowScoreAction(facts, input);
+  const topAction = flowScoreAction({
+    coverageComplete: coverageComponent.earned === coverageComponent.maximum,
+    mustPayComplete: mustPayComponent.earned === mustPayComponent.maximum,
+    backupComplete: backupComponent.earned === backupComponent.maximum,
+    lowBalanceWarning: facts.lowBalanceWarning,
+    overdueBillsCount: facts.overdueBillsCount,
+    backupAction: facts.stability.nextAction,
+  }, input);
 
   return {
     topReason,
@@ -1441,20 +1452,21 @@ function buildFlowScoreDetails(
 
 function flowScoreAction(
   facts: {
-    safeCushionAmount: number;
+    coverageComplete: boolean;
+    mustPayComplete: boolean;
+    backupComplete: boolean;
     lowBalanceWarning: AlgorithmSuiteResult["lowBalanceWarning"];
-    billReadiness: number;
-    categoryPressure: AlgorithmCategoryRow[];
     overdueBillsCount: number;
+    backupAction: string;
   },
   input: AlgorithmSuiteInput,
 ) {
-  if (facts.lowBalanceWarning.status !== "safe" && facts.lowBalanceWarning.day) return `Open ${formatMonthDay(input, facts.lowBalanceWarning.day)} to see how you can build more breathing room.`;
-  if (facts.safeCushionAmount <= 0) return "Protect your safety floor before adding new spending.";
+  if (!facts.coverageComplete && facts.lowBalanceWarning.day) return `Open ${formatMonthDay(input, facts.lowBalanceWarning.day)} to see how you can protect another forecast day.`;
+  if (!facts.coverageComplete) return "Open Forecast to protect the next day that needs more breathing room.";
   const priorityBill = prioritizeBills(input.bills, input.todayDay, input.safetyFloor, facts.lowBalanceWarning.day, input).bills[0];
-  if (priorityBill && facts.overdueBillsCount > 0) return `Review ${priorityBill.name} first.`;
-  if (facts.categoryPressure.length) return `Review ${facts.categoryPressure[0].category} spending.`;
-  if (facts.safeCushionAmount > STABILITY_POLICY.watchCushion) return "Review what the next safe dollar should do.";
+  if (!facts.mustPayComplete && priorityBill) return `Review ${priorityBill.name} first.`;
+  if (!facts.mustPayComplete || facts.overdueBillsCount > 0) return "Review the next Must Pay item first.";
+  if (!facts.backupComplete) return facts.backupAction;
   return "No action needed right now.";
 }
 
@@ -1478,8 +1490,8 @@ function buildInsights(
       id: "flowScore",
       algorithm: "Flow Score",
       title: `${facts.flowScore} · ${facts.flowLabel}`,
-      detail: `Plan health uses cushion, bills, days to strengthen, and forecast confidence.`,
-      tone: facts.flowScore >= 75 ? "safe" : facts.flowScore >= 55 ? "watch" : "risk",
+      detail: "Plan health uses payday coverage, Must Pay money, and Protected Days.",
+      tone: facts.flowScore >= 75 ? "safe" : facts.flowScore >= 40 ? "watch" : "risk",
     },
     {
       id: "safeCushion",
@@ -1555,18 +1567,10 @@ function buildInsights(
 
 function scoreGrade(score: number) {
   if (score >= 90) return "A";
-  if (score >= 80) return "B";
-  if (score >= 70) return "C";
-  if (score >= 60) return "D";
+  if (score >= 75) return "B";
+  if (score >= 60) return "C";
+  if (score >= 40) return "D";
   return "F";
-}
-
-function scoreLabel(score: number) {
-  if (score >= 90) return "Excellent";
-  if (score >= 80) return "Strong";
-  if (score >= 65) return "Stable";
-  if (score >= 45) return "Building";
-  return "Getting started";
 }
 
 function minBy<T>(items: T[], selector: (item: T) => number): T | null {
@@ -1588,8 +1592,8 @@ function money(value: number) {
 }
 
 function statusFromScore(score: number): AlgorithmStatus {
-  if (score >= 70) return "safe";
-  if (score >= 45) return "watch";
+  if (score >= 75) return "safe";
+  if (score >= 40) return "watch";
   return "risk";
 }
 

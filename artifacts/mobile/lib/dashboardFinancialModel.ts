@@ -349,6 +349,12 @@ export function buildDashboardFinancialModel(input: DashboardFinancialModelInput
       net: day.net,
       balance: day.balance,
     })),
+    todayDate: todayIso,
+    forecastBalances: futureForecastDays.map(day => ({
+      date: day.date,
+      balance: day.balance,
+      income: day.income,
+    })),
     nextPaycheckForecast,
     bills: monthlyBills.map((bill) => ({
       id: bill.id,

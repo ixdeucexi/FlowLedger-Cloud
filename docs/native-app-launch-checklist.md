@@ -45,6 +45,7 @@ Release FlowLedger as a signed iOS and Android app while keeping the existing PW
 - [x] Settings uses one responsive mobile/PWA structure organized by Money & household, App preferences, Data & privacy, and Account & support; full app tools stay in their primary screens instead of duplicating the Settings hub
 - [x] In-app Terms of Service and Privacy Policy screens
 - [x] Financial calculation and regression test coverage
+- [x] Flow Score uses three understandable measures: plan coverage through payday, Must Pay dollars due through today, and Protected Days; Forecast confidence is shown separately
 - [x] Expo Doctor passes all 18 checks
 - [x] Expo SDK 54 / React Native 0.81 targets Android 16, API level 36
 - [ ] Verify an actual signed `.ipa` build exists in EAS

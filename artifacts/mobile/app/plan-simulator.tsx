@@ -545,11 +545,13 @@ function PlanSimulatorWorkspace() {
   }), [baseline.days, bills, currentMonth, currentYear, getBillEffectiveMonthlyTotal, getBillMonthlyTotal, getBillOccurrencesInMonth, incomes, livePayoffPreview?.months, settings.paymentMethod]);
   const metrics = useMemo(() => ({
     flowScore: dashboardModel.algorithmSuite.flowScore.score,
+    flowScoreRequiredAmountDue: dashboardModel.algorithmSuite.flowScore.requiredAmountDue,
+    flowScoreRequiredAmountCovered: dashboardModel.algorithmSuite.flowScore.requiredAmountCovered,
     protectedDays: dashboardModel.algorithmSuite.stability.protectedDays,
     requiredMonthlyOutflow: dashboardModel.algorithmSuite.stability.reserveTarget,
     forecastConfidence: forecastConfidence.level,
     currentDebtFreeDate: livePayoffPreview?.debtFreeDate ?? null,
-  }), [dashboardModel.algorithmSuite.flowScore.score, dashboardModel.algorithmSuite.stability.protectedDays, dashboardModel.algorithmSuite.stability.reserveTarget, forecastConfidence.level, livePayoffPreview?.debtFreeDate]);
+  }), [dashboardModel.algorithmSuite.flowScore.requiredAmountCovered, dashboardModel.algorithmSuite.flowScore.requiredAmountDue, dashboardModel.algorithmSuite.flowScore.score, dashboardModel.algorithmSuite.stability.protectedDays, dashboardModel.algorithmSuite.stability.reserveTarget, forecastConfidence.level, livePayoffPreview?.debtFreeDate]);
   const baselineResult = useMemo(() => projectPlanSimulation({ baseline, changes: [], references, metrics, safetyFloor: settings.safety_floor }), [baseline, metrics, references, settings.safety_floor]);
   const scenarioResult = useMemo(() => projectPlanSimulation({
     baseline,

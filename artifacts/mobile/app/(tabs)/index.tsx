@@ -801,11 +801,11 @@ function MobileDashboardScreen() {
     selectedCategory,
     unplannedCheckingPending,
   ]);
-  const openStabilityGuide = useCallback(() => {
+  const openStabilityGuide = useCallback((sectionId: "overview" | "flow-score" = "overview") => {
     router.push({
       pathname: "/(tabs)/how-flowledger-works",
       params: buildFlowGuideRouteParams({
-        section: "overview",
+        section: sectionId,
         stage: algorithmSuite.stability.stage,
         stageLabel: algorithmSuite.stability.stageLabel,
         protectedDays: algorithmSuite.stability.protectedDays,
@@ -822,9 +822,12 @@ function MobileDashboardScreen() {
         confidence: forecastConfidence.label,
         flowScore: algorithmSuite.flowScore.score,
         flowScoreLabel: algorithmSuite.flowScore.label,
+        flowScorePlanCoverage: algorithmSuite.flowScore.components.find(component => component.id === "planCoverage")?.earned ?? 0,
+        flowScoreMustPay: algorithmSuite.flowScore.components.find(component => component.id === "requiredPayments")?.earned ?? 0,
+        flowScoreBackup: algorithmSuite.flowScore.components.find(component => component.id === "backupProgress")?.earned ?? 0,
       }),
     } as any);
-  }, [algorithmSuite.flowScore.label, algorithmSuite.flowScore.score, algorithmSuite.safeCushion.lowestBalance, algorithmSuite.stability, forecastConfidence.label, router, settings.safety_floor]);
+  }, [algorithmSuite.flowScore.components, algorithmSuite.flowScore.label, algorithmSuite.flowScore.score, algorithmSuite.safeCushion.lowestBalance, algorithmSuite.stability, forecastConfidence.label, router, settings.safety_floor]);
   const reviewCenterCount = useMemo(
     () => buildReviewQueue(transactions, localDateString()).length,
     [transactions],
@@ -1309,7 +1312,7 @@ function MobileDashboardScreen() {
 
       <StabilityPathCard
         progress={algorithmSuite.stability}
-        onViewGuide={openStabilityGuide}
+        onViewGuide={() => openStabilityGuide()}
       />
 
       <DashboardCustomizer
@@ -1435,15 +1438,22 @@ function MobileDashboardScreen() {
               ))}
             </View>
 
+            <View style={[styles.flowScoreNextMove, { backgroundColor: c.muted, borderColor: c.border }]}>
+              <Text style={[styles.flowScoreColumnTitle, { color: c.foreground }]}>Forecast confidence - not scored</Text>
+              <Text style={[styles.flowScoreFactor, { color: c.mutedForeground }]}>{forecastConfidence.label}. Confidence reflects how current the plan inputs are and never changes the score.</Text>
+            </View>
+
             <Pressable
               onPress={() => {
                 setFlowScoreVisible(false);
-                openFloWithPrompt(`Why is my Flow Score ${algorithmSuite.flowScore.score}?`);
+                openStabilityGuide("flow-score");
               }}
+              accessibilityRole="button"
+              accessibilityLabel="See how the Flow Score works"
               style={({ pressed }) => [styles.flowScoreFloButton, { backgroundColor: c.primary, opacity: pressed ? 0.82 : 1 }]}
             >
-              <Feather name="message-circle" size={16} color={c.primaryForeground} />
-              <Text style={[styles.flowScoreFloText, { color: c.primaryForeground }]}>Ask Flo about this</Text>
+              <Feather name="info" size={16} color={c.primaryForeground} />
+              <Text style={[styles.flowScoreFloText, { color: c.primaryForeground }]}>See how the score works</Text>
             </Pressable>
           </Pressable>
         </Pressable>
