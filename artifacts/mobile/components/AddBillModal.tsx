@@ -466,10 +466,10 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
                       <Text style={[styles.toggleLabel, { color: c.foreground }]}>Include in payoff plan</Text>
                       <Pressable
                         hitSlop={10}
-                        accessibilityLabel="Explain Snowball and Avalanche payoff plans"
+                        accessibilityLabel="Explain the Snowball payoff plan"
                         onPress={() => Alert.alert(
                           "How payoff plans work",
-                          "Snowball sends extra money to the smallest balance first for quicker wins. Avalanche sends it to the highest APR first to reduce interest. Minimum payments stay protected either way.",
+                          "Snowball sends extra money to the smallest balance first for quicker wins. Minimum payments stay protected.",
                         )}
                       >
                         <Feather name="info" size={16} color={c.primary} />
@@ -483,9 +483,7 @@ export function AddBillModal({ visible, onClose, onSave, onDelete, onStopFuture,
                 {settings.debtPayoffEnabled && <View style={[styles.infoBox, { backgroundColor: c.primary + "15" }]}>
                   <Feather name="info" size={13} color={c.primary} />
                   <Text style={[styles.infoText, { color: c.primary }]}>
-                    {settings.paymentMethod === "avalanche"
-                      ? "Avalanche priority: highest APR = #1."
-                      : "Snowball priority: smallest debt balance = #1."}
+                    Snowball priority: smallest debt balance = #1.
                   </Text>
                 </View>}
               </>

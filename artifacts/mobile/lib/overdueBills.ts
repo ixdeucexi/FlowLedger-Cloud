@@ -1,6 +1,7 @@
 export interface OverdueBillInput {
   billId: string;
   name: string;
+  closed: boolean;
   occurrenceDays: number[];
   plannedTotal: number;
   paidTotal: number;
@@ -31,6 +32,7 @@ export function buildOverdueBillOccurrences(
   const today = new Date(year, month, todayDay, 12);
 
   return bills.flatMap(bill => {
+    if (bill.closed) return [];
     const occurrences = Array.from(new Set(
       bill.occurrenceDays.filter(day => Number.isInteger(day) && day > 0),
     )).sort((left, right) => left - right);

@@ -785,11 +785,9 @@ export function DesktopDashboard() {
   const payoffBalance = payoffDebts.reduce((sum, bill) => sum + bill.balance, 0);
   const payoffTarget = useMemo(
     () => payoffDebts.slice().sort((left, right) => (
-      settings.paymentMethod === "avalanche"
-        ? right.interest_rate - left.interest_rate || left.balance - right.balance
-        : left.balance - right.balance || left.priority - right.priority
+      left.balance - right.balance || left.priority - right.priority
     ))[0] ?? null,
-    [payoffDebts, settings.paymentMethod],
+    [payoffDebts],
   );
   const nearlyCompleteGoal = useMemo(
     () => activeGoals

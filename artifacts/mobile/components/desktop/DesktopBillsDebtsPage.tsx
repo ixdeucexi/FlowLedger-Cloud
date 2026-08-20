@@ -121,8 +121,6 @@ export function DesktopBillsDebtsPage() {
     stopFutureBill,
     deleteBill,
     deleteBillMistake,
-    settings,
-    updateSettings,
     getMonthlyBills,
     getBillOccurrencesInMonth,
     getBillMonthlyTotal,
@@ -333,12 +331,6 @@ export function DesktopBillsDebtsPage() {
             onSearch={setSearch}
             sort={debtSort}
             onSort={setDebtSort}
-            snowball={settings.paymentMethod === "snowball"}
-            onSnowball={(value) =>
-              void updateSettings({
-                paymentMethod: value ? "snowball" : "avalanche",
-              })
-            }
             onAdd={() => openBill(null)}
             onOpen={openBill}
             onPlan={() => router.push("/snowball-plan" as never)}
@@ -746,7 +738,6 @@ function BillsTable({
         <Text style={[table.headerText, styles.colAmount]}>Amount</Text>
         <Text style={[table.headerText, styles.colFrequency]}>Frequency</Text>
         <Text style={[table.headerText, styles.colStatus]}>Status</Text>
-        <Text style={[table.headerText, styles.colActions]}>Actions</Text>
       </View>
       {rows.length ? (
         rows.map((row) => {
@@ -780,10 +771,6 @@ function BillsTable({
                   tone={paid ? "green" : overdue ? "red" : "purple"}
                 />
               </View>
-              <View style={[styles.colActions, styles.actionIcons]}>
-                <Feather name="edit-2" size={14} color={palette.muted} />
-                <Feather name="more-vertical" size={15} color={palette.muted} />
-              </View>
             </Pressable>
           );
         })
@@ -803,8 +790,6 @@ function DebtsDesktop({
   onSearch,
   sort,
   onSort,
-  snowball,
-  onSnowball,
   onAdd,
   onOpen,
   onPlan,
@@ -817,8 +802,6 @@ function DebtsDesktop({
   onSearch: (value: string) => void;
   sort: "snowball" | "balance" | "interest";
   onSort: (value: "snowball" | "balance" | "interest") => void;
-  snowball: boolean;
-  onSnowball: (value: boolean) => void;
   onAdd: () => void;
   onOpen: (bill: Bill) => void;
   onPlan: () => void;
@@ -827,8 +810,7 @@ function DebtsDesktop({
   now: Date;
 }) {
   const active = bills.filter((bill) => bill.balance > 0.005);
-  const strategy = snowball ? "snowball" : "avalanche";
-  const ordered = orderActiveDebtsForStrategy(active, strategy);
+  const ordered = orderActiveDebtsForStrategy(active, "snowball");
   const rank = new Map(ordered.map((bill, index) => [bill.id, index + 1]));
   const total = active.reduce((sum, bill) => sum + bill.balance, 0);
   const forecastPaymentByDebtId = new Map(
@@ -885,9 +867,7 @@ function DebtsDesktop({
           <View style={styles.progressBody}>
             <View style={styles.progressCopy}>
               <Text style={styles.progressTitle}>
-                {snowball
-                  ? "Pay off your smallest debt first."
-                  : "Pay off your highest-rate debt first."}
+                Pay off your smallest debt first.
               </Text>
               <Text style={styles.progressPercent}>{progress}% complete</Text>
             </View>
@@ -962,12 +942,6 @@ function DebtsDesktop({
             }
             active={sort !== "snowball"}
           />
-          <View style={styles.toolbarSpacer} />
-          <Toggle
-            label="Snowball Order"
-            value={snowball}
-            onChange={onSnowball}
-          />
         </View>
         <View style={table.header}>
           <Text style={[table.headerText, styles.debtColName]}>Debt</Text>
@@ -985,7 +959,6 @@ function DebtsDesktop({
           <Text style={[table.headerText, styles.debtColStatus]}>
             Snowball Status
           </Text>
-          <Text style={[table.headerText, styles.colActions]}>Actions</Text>
         </View>
         {filtered.length ? (
           filtered.map((bill) => {
@@ -1049,13 +1022,6 @@ function DebtsDesktop({
                           : "Excluded"
                     }
                     tone={position === 1 ? "green" : "purple"}
-                  />
-                </View>
-                <View style={[styles.colActions, styles.actionIcons]}>
-                  <Feather
-                    name="more-vertical"
-                    size={15}
-                    color={palette.muted}
                   />
                 </View>
               </Pressable>
@@ -1231,20 +1197,12 @@ const styles = StyleSheet.create({
     gap: 9,
     padding: 10,
   },
-  toolbarSpacer: { flex: 1 },
   colBill: { flex: 1.55, minWidth: 100 },
   colCategory: { flex: 1, minWidth: 80 },
   colDate: { flex: 1, minWidth: 80 },
   colAmount: { flex: 0.8, minWidth: 70 },
   colFrequency: { flex: 0.9, minWidth: 70 },
   colStatus: { flex: 0.8, minWidth: 70 },
-  colActions: { width: 65 },
-  actionIcons: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 13,
-  },
   debtOverviewRow: { flexDirection: "row", gap: 12, marginBottom: 14 },
   debtOverviewCard: { flex: 1, minWidth: 0 },
   progressBody: { padding: 16 },

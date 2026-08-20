@@ -3238,7 +3238,7 @@ export default function MoreScreen({
                   c={c}
                   icon="trending-down"
                   label="Debt Payoff Plan"
-                  description="Show Snowball or Avalanche recommendations and safe extra payments."
+                  description="Show Snowball recommendations and safe extra payments."
                   enabled={settings.debtPayoffEnabled}
                   disabled={!canEditHousehold}
                   onPress={() =>
@@ -3602,58 +3602,11 @@ export default function MoreScreen({
                     { backgroundColor: c.card, borderRadius: colors.radius },
                   ]}
                 >
-                  <View
-                    style={[
-                      styles.methodRow,
-                      { backgroundColor: c.muted, borderRadius: 10 },
-                    ]}
-                  >
-                    {(["snowball", "avalanche"] as const).map((m) => (
-                      <Pressable
-                        key={m}
-                        onPress={() => updateSettings({ paymentMethod: m })}
-                        style={[
-                          styles.methodBtn,
-                          {
-                            backgroundColor:
-                              settings.paymentMethod === m
-                                ? c.primary
-                                : "transparent",
-                            borderRadius: 8,
-                          },
-                        ]}
-                      >
-                        <Feather
-                          name={m === "snowball" ? "trending-down" : "percent"}
-                          size={13}
-                          color={
-                            settings.paymentMethod === m
-                              ? c.primaryForeground
-                              : c.mutedForeground
-                          }
-                        />
-                        <Text
-                          style={[
-                            styles.methodText,
-                            {
-                              color:
-                                settings.paymentMethod === m
-                                  ? c.primaryForeground
-                                  : c.mutedForeground,
-                            },
-                          ]}
-                        >
-                          {m === "snowball" ? "Snowball" : "Avalanche"}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
                   <Text
                     style={[styles.methodDesc, { color: c.mutedForeground }]}
                   >
-                    {settings.paymentMethod === "snowball"
-                      ? "Pay smallest balances first. Freed-up minimums roll into the next debt (cascade effect)."
-                      : "Pay highest-interest debts first to minimize total interest paid."}
+                    Snowball pays the smallest balances first. Freed-up minimums
+                    roll into the next debt (cascade effect).
                   </Text>
                   <View
                     style={[
@@ -6146,15 +6099,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  methodRow: { flexDirection: "row", padding: 4, gap: 4 },
-  methodBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
-  },
   themeRow: { flexDirection: "row", padding: 4, gap: 4 },
   themeRowCompact: { flexDirection: "column" },
   themeBtn: {
@@ -6173,12 +6117,10 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   themeBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
-  methodText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   methodDesc: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
     lineHeight: 19,
-    marginTop: 10,
   },
   priorityNote: {
     flexDirection: "row",

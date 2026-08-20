@@ -71,7 +71,7 @@ export function LegalAcceptanceGate() {
             <View style={[styles.checkbox, { borderColor: checked ? colors.primary : colors.border, backgroundColor: checked ? colors.primary : "transparent" }]}>
               {checked ? <Feather name="check" size={15} color={colors.primaryForeground} /> : null}
             </View>
-            <Text style={[styles.agreementText, { color: colors.foreground }]}>I am at least 18, agree to the Terms of Service, and acknowledge the Privacy Policy.</Text>
+            <Text style={[styles.agreementText, { color: colors.foreground }]}>I agree to the Terms of Service and acknowledge the Privacy Policy.</Text>
           </Pressable>
 
           {error ? <Text accessibilityRole="alert" style={[styles.error, { color: colors.destructive }]}>{error}</Text> : null}

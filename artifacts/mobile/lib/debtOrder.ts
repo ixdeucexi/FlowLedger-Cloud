@@ -9,6 +9,10 @@ export interface DebtStrategyItem extends DebtBalanceItem {
   include_in_snowball?: boolean;
 }
 
+export function canonicalDebtPaymentMethod(_method: unknown): "snowball" {
+  return "snowball";
+}
+
 export function sortDebtsLeastToGreatest<T extends DebtBalanceItem>(debts: readonly T[]): T[] {
   return debts.slice().sort((left, right) =>
     left.balance - right.balance || left.name.localeCompare(right.name),

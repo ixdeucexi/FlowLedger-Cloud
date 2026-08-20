@@ -4160,7 +4160,7 @@ export function ActivityScreen() {
       />
       <SnowballPreviewModal
         visible={!!editExtraPayment}
-        method={settings.paymentMethod}
+        method="snowball"
         preview={editExtraPreview}
         amount={editExtraAmount}
         existingPayment

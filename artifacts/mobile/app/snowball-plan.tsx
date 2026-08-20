@@ -176,7 +176,7 @@ function SnowballPlanScreen() {
       dueDay: debt.due_day,
       included: debt.include_in_snowball !== false,
     })),
-    settings.paymentMethod,
+    "snowball",
     remainingDatedPlan,
     fullDatedPlan,
     debtMonthSettlements,
@@ -203,7 +203,7 @@ function SnowballPlanScreen() {
     && !destinationConflict
     && (editTransaction ? Boolean(target) : preview.allocations.length > 0);
   const monthLabel = `${MONTH_NAMES[planDate.month]} ${planDate.year}`;
-  const strategyName = settings.paymentMethod === "snowball" ? "Snowball" : "Avalanche";
+  const strategyName = "Snowball";
   const totalDebt = plannerRows.reduce((sum, row) => sum + row.balance, 0);
   const snowballMatches = useMemo(
     () => matchedOccurrenceAllocations(transactions, "extra_principal", "snowball"),
@@ -352,7 +352,7 @@ function SnowballPlanScreen() {
                 <Text style={[styles.heroCopy, { color: c.mutedForeground }]}>Your required payments stay intact. When one debt closes, unused money moves to the next debt on the same date.</Text>
               </View>
               <View style={[styles.strategyPill, { backgroundColor: c.primary + "18" }]}>
-                <Feather name={settings.paymentMethod === "snowball" ? "trending-down" : "percent"} size={14} color={c.primary} />
+                <Feather name="trending-down" size={14} color={c.primary} />
                 <Text style={[styles.strategyPillText, { color: c.primary }]}>{strategyName}</Text>
               </View>
             </View>

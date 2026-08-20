@@ -255,7 +255,7 @@ export default function LoginScreen() {
                   <View style={[styles.checkbox, { borderColor: legalAccepted ? colors.primary : colors.border, backgroundColor: legalAccepted ? colors.primary : "transparent" }]}>
                     {legalAccepted ? <Feather name="check" size={14} color={colors.primaryForeground} /> : null}
                   </View>
-                  <Text style={[styles.legalAgreementText, { color: colors.mutedForeground }]}>I am at least 18 and agree to the Terms of Service and acknowledge the Privacy Policy.</Text>
+                  <Text style={[styles.legalAgreementText, { color: colors.mutedForeground }]}>I agree to the Terms of Service and acknowledge the Privacy Policy.</Text>
                 </Pressable>
                 <View style={styles.legalLinks}>
                   <Pressable accessibilityRole="link" onPress={() => setLegalDoc("terms")}>

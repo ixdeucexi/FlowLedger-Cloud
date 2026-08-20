@@ -61,6 +61,7 @@ import { canEditHouseholdPlan, canManageHouseholdMembers } from "@/lib/household
 import { isActiveTransaction, isConfirmedBillMatch, isDeletedTransaction, plaidTransactionAccountKind } from "@/lib/billMatching";
 import { matchedOccurrenceAllocations, occurrenceKey, reviewedBillMonthSettlements } from "@/lib/reviewCenter";
 import { normalizePlanningTools } from "@/lib/planningMode";
+import { canonicalDebtPaymentMethod } from "@/lib/debtOrder";
 import { localDateString } from "@/lib/dateLabels";
 import { spendingBucketSummary } from "@/lib/spendingBuckets";
 import { canonicalConnectedAccounts, pendingPlaidActivityWithBalanceHolds } from "@/lib/plaidActivity";
@@ -1318,7 +1319,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       setTransactionAccountIdentities([]);
       transactionAccountIdentitiesRef.current = [];
       setDecisions(demo.decisions);
-      setSettings(demo.settings);
+      setSettings({
+        ...demo.settings,
+        paymentMethod: canonicalDebtPaymentMethod(demo.settings.paymentMethod),
+      });
       loaded.current = true;
       setLoading(false);
       return;
@@ -1485,7 +1489,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           const nextStartingBalanceDate = sData.starting_balance_date ?? undefined;
           setSettings({
             ...normalizePlanningTools(sData),
-            paymentMethod:        sData.payment_method as Settings["paymentMethod"],
+            paymentMethod:        canonicalDebtPaymentMethod(sData.payment_method),
             starting_balance:     nextStartingBalance,
             starting_balance_date: nextStartingBalanceDate,
             calendar_start_date: sData.calendar_start_date ?? (nextStartingBalanceDate ? `${nextStartingBalanceDate.slice(0, 7)}-01` : undefined),
@@ -1602,7 +1606,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         setSettings(prev => ({
           ...prev,
           ...normalizePlanningTools(sData),
-        paymentMethod:        sData.payment_method as Settings["paymentMethod"],
+        paymentMethod:        canonicalDebtPaymentMethod(sData.payment_method),
         starting_balance:     nextStartingBalance,
         starting_balance_date: nextStartingBalanceDate,
         calendar_start_date: sData.calendar_start_date ?? (nextStartingBalanceDate ? `${nextStartingBalanceDate.slice(0, 7)}-01` : undefined),
@@ -4383,7 +4387,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const updateSettings = useCallback(async (s: Partial<Settings>) => {
     if (!user) return;
     assertCanEditHousehold("update household settings");
-    const next = { ...settings, ...s };
+    const updatedKeys = Object.keys(s) as (keyof Settings)[];
+    const next = {
+      ...settings,
+      ...s,
+      paymentMethod: canonicalDebtPaymentMethod(s.paymentMethod ?? settings.paymentMethod),
+    };
     setSettings(next);
     if (demoMode) return;
     const saveStarted = Date.now();
@@ -4392,7 +4401,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     try {
       await saveSettingsRecord(next);
       settingsSaved = true;
-      if (s.paymentMethod && s.paymentMethod !== settings.paymentMethod) {
+      if (next.paymentMethod !== settings.paymentMethod) {
         await recalculateAndRefreshDebtMinimums();
       }
       markSaveCompleted();
@@ -4402,7 +4411,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       }).catch(() => undefined);
     } catch (error) {
       if (!settingsSaved) {
-        setSettings(current => Object.entries(s).every(([key, value]) => current[key as keyof Settings] === value) ? settings : current);
+        setSettings(current => updatedKeys.every(key => current[key] === next[key])
+          ? { ...settings, paymentMethod: canonicalDebtPaymentMethod(settings.paymentMethod) }
+          : current);
       }
       markSaveFailed(error, () => updateSettings(s));
       throw error;

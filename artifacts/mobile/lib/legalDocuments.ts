@@ -12,8 +12,8 @@ export interface LegalDocument {
   sections: readonly LegalSection[];
 }
 
-export const LEGAL_VERSION = "2026-08-15";
-export const LEGAL_EFFECTIVE_DATE = "August 15, 2026";
+export const LEGAL_VERSION = "2026-08-20";
+export const LEGAL_EFFECTIVE_DATE = "August 20, 2026";
 export const LEGAL_OPERATOR = "FlowLedger-Algo LLC";
 export const LEGAL_EMAIL = "Flowledger-algo@gmail.com";
 export const LEGAL_MAILING_ADDRESS = "P.O. Box 1234, Madison County, Alabama";
@@ -23,7 +23,7 @@ const termsSections: readonly LegalSection[] = [
     title: "1. Agreement and eligibility",
     paragraphs: [
       `These Terms of Service (\"Terms\") are a binding agreement between you and ${LEGAL_OPERATOR} (\"FlowLedger,\" \"we,\" \"us,\" or \"our\") governing your access to FlowLedger Algo and related websites, software, features, content, and services (collectively, the \"Service\"). By creating an account, clicking to accept, or using the Service, you agree to these Terms and the Privacy Policy.`,
-      "You must be at least 18 years old and legally capable of entering a contract. The Service is intended for personal and household use in the United States. If you use it for another person or organization, you represent that you have authority to do so.",
+      "People who have not reached the age of legal majority may use the Service with permission and supervision from a parent or legal guardian. When required by law, the parent or legal guardian must accept these Terms on the user’s behalf. The Service is intended for personal and household use in the United States. If you use it for another person or organization, you represent that you have authority to do so.",
     ],
   },
   {
@@ -67,7 +67,7 @@ const termsSections: readonly LegalSection[] = [
     paragraphs: [
       "You must provide accurate information, protect your credentials and devices, and promptly report suspected unauthorized access. You are responsible for activity performed through your account unless applicable law provides otherwise.",
       "Household owners control invitations and roles. Information in a shared household may be viewed or changed by members according to their permissions. Only invite people you trust. You are responsible for having authority to add shared financial information and for removing access when it is no longer appropriate.",
-      "Child profiles are parent- or guardian-managed planning records. Children may not create accounts or independently use the Service. An adult who creates a child profile represents that they are the child’s parent or legal guardian, or otherwise have lawful authority to provide and manage that information.",
+      "Child profiles are parent- or guardian-managed planning records. A parent or guardian who creates a child profile represents that they have lawful authority to provide and manage that information.",
     ],
   },
   {
@@ -241,8 +241,8 @@ const privacySections: readonly LegalSection[] = [
   {
     title: "12. Children’s privacy",
     paragraphs: [
-      "The Service is for adults and is not directed to children under 13 or designed for independent use by anyone under 18. We do not knowingly allow a child to create an account or knowingly collect personal information directly from a child.",
-      `A parent or guardian may create a limited child profile for household money teaching. The adult controls the profile and may review, edit, or delete it. Do not enter a child’s full legal name or other unnecessary identifying information. If you believe information was collected directly from a child without appropriate authorization, email ${LEGAL_EMAIL} so we can investigate and delete it as required.`,
+      "The Service is not directed to children under 13. We do not knowingly collect personal information directly from a child under 13 without appropriate permission from a parent or legal guardian.",
+      `People who have not reached the age of legal majority may use the Service with permission and supervision from a parent or legal guardian. A parent or guardian may also create a limited child profile for household money teaching. The parent or guardian controls the profile and may review, edit, or delete it. Do not enter a child’s full legal name or other unnecessary identifying information. If you believe information was collected directly from a child without appropriate authorization, email ${LEGAL_EMAIL} so we can investigate and delete it as required.`,
     ],
   },
   {

@@ -453,7 +453,7 @@ function SettingsPage({ onOpenPlanner, onOpenMoneySettings }: { onOpenPlanner: (
   const confidenceLabel = forecastConfidence.label;
   const settingRows = [
     { icon: "pie-chart" as const, label: "Zero-based budgeting", detail: "Plan every available dollar", value: settings.zeroBasedBudgetEnabled ? "On" : "Off" },
-    { icon: "trending-down" as const, label: "Debt payoff", detail: `${settings.paymentMethod === "avalanche" ? "Avalanche" : "Snowball"} strategy`, value: settings.debtPayoffEnabled ? "On" : "Off" },
+    { icon: "trending-down" as const, label: "Debt payoff", detail: "Snowball strategy", value: settings.debtPayoffEnabled ? "On" : "Off" },
     { icon: "shield" as const, label: "Safety floor", detail: "Protected minimum balance", value: currency(settings.safety_floor) },
     { icon: "calendar" as const, label: "Forecast horizon", detail: "Forward-looking plan", value: `${settings.forecast_horizon_months} months` },
   ];

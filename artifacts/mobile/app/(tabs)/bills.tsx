@@ -111,7 +111,6 @@ export default function BillsScreen() {
     dashboardFilter,
     setDashboardFilter,
     settings,
-    updateSettings,
     previewDebtSnowball,
     getExtraPayment,
     getMonthlyBills,
@@ -306,6 +305,7 @@ export default function BillsScreen() {
           getMonthlyBills(currentMonth, currentYear).map((bill) => ({
             billId: bill.id,
             name: bill.name,
+            closed: bill.is_debt && bill.balance <= 0.009,
             occurrenceDays: getBillOccurrencesInMonth(
               bill,
               currentMonth,
@@ -435,9 +435,7 @@ export default function BillsScreen() {
     (debt) => debt.include_in_snowball !== false,
   );
   const snowballOrder = orderActiveDebtsForStrategy(activeDebts, "snowball");
-  const avalancheOrder = orderActiveDebtsForStrategy(activeDebts, "avalanche");
-  const strategyOrder =
-    settings.paymentMethod === "avalanche" ? avalancheOrder : snowballOrder;
+  const strategyOrder = snowballOrder;
   const strategyRankById = new Map(
     strategyOrder.map((debt, index) => [debt.id, index + 1]),
   );
@@ -482,11 +480,7 @@ export default function BillsScreen() {
       )
     : cashFlowSafeSnowballAmount;
   const snowballTarget = snowballOrder[0] ?? null;
-  const avalancheTarget = avalancheOrder[0] ?? null;
-  const activeDebtTarget =
-    settings.paymentMethod === "avalanche"
-      ? (avalancheTarget ?? snowballTarget)
-      : snowballTarget;
+  const activeDebtTarget = snowballTarget;
   const activeDebtMinimum = activeDebtTarget
     ? debtMonthlyMinimum(activeDebtTarget)
     : 0;
@@ -1168,9 +1162,7 @@ export default function BillsScreen() {
                               { color: c.primary },
                             ]}
                           >
-                            {settings.paymentMethod === "avalanche"
-                              ? "Avalanche Plan"
-                              : "Snowball Plan"}
+                            Snowball Plan
                           </Text>
                           <Text
                             style={[
@@ -1183,7 +1175,7 @@ export default function BillsScreen() {
                         </View>
                         <Pressable
                           accessibilityRole="button"
-                          accessibilityLabel={`How the ${settings.paymentMethod} plan works`}
+                          accessibilityLabel="How the snowball plan works"
                           onPress={() => setDebtInfoVisible(true)}
                           style={({ pressed }) => [
                             styles.debtInfoButton,
@@ -1327,61 +1319,6 @@ export default function BillsScreen() {
                         { marginHorizontal: 0, marginTop: 10 },
                       ]}
                     >
-                      <View
-                        style={[
-                          styles.methodToggle,
-                          { backgroundColor: c.muted, borderRadius: 10 },
-                        ]}
-                      >
-                        {(["snowball", "avalanche"] as const).map((m) => (
-                          <Pressable
-                            key={m}
-                            onPress={() => {
-                              Haptics.impactAsync(
-                                Haptics.ImpactFeedbackStyle.Light,
-                              );
-                              setSortMode("priority");
-                              updateSettings({ paymentMethod: m });
-                            }}
-                            style={[
-                              styles.methodBtn,
-                              {
-                                backgroundColor:
-                                  settings.paymentMethod === m
-                                    ? c.primary
-                                    : "transparent",
-                                borderRadius: 8,
-                              },
-                            ]}
-                          >
-                            <Feather
-                              name={
-                                m === "snowball" ? "trending-down" : "percent"
-                              }
-                              size={12}
-                              color={
-                                settings.paymentMethod === m
-                                  ? c.primaryForeground
-                                  : c.mutedForeground
-                              }
-                            />
-                            <Text
-                              style={[
-                                styles.methodBtnText,
-                                {
-                                  color:
-                                    settings.paymentMethod === m
-                                      ? c.primaryForeground
-                                      : c.mutedForeground,
-                                },
-                              ]}
-                            >
-                              {m === "snowball" ? "Snowball" : "Avalanche"}
-                            </Text>
-                          </Pressable>
-                        ))}
-                      </View>
-
                       <View
                         style={[
                           styles.sortToggle,
@@ -1628,67 +1565,34 @@ export default function BillsScreen() {
                           </View>
                         ) : null}
 
-                        {settings.paymentMethod === "snowball" && (
-                          <View
+                        <View
+                          style={[
+                            styles.strategyNote,
+                            { backgroundColor: priorityColor + "12" },
+                          ]}
+                        >
+                          <Feather
+                            name="zap"
+                            size={11}
+                            color={priorityColor}
+                          />
+                          <Text
                             style={[
-                              styles.strategyNote,
-                              { backgroundColor: priorityColor + "12" },
+                              styles.strategyText,
+                              { color: c.mutedForeground },
                             ]}
                           >
-                            <Feather
-                              name="zap"
-                              size={11}
-                              color={priorityColor}
-                            />
-                            <Text
-                              style={[
-                                styles.strategyText,
-                                { color: c.mutedForeground },
-                              ]}
-                            >
-                              {isPaidOff
-                                ? "Paid off — no longer in the active order"
-                                : isExcluded
-                                  ? "Not included in your payoff plan"
-                                  : isUnranked
-                                    ? `Not active in the ${MONTH_FULL[debtPlanMonth]} payoff order`
-                                    : strategyRank === 1
-                                      ? "Target first — put all extra here"
-                                      : `Pay off #${(strategyRank ?? 1) - 1} first, then cascade here`}
-                            </Text>
-                          </View>
-                        )}
-                        {settings.paymentMethod === "avalanche" &&
-                          item.interest_rate > 0 && (
-                            <View
-                              style={[
-                                styles.strategyNote,
-                                { backgroundColor: c.primary + "12" },
-                              ]}
-                            >
-                              <Feather
-                                name="trending-up"
-                                size={11}
-                                color={c.primary}
-                              />
-                              <Text
-                                style={[
-                                  styles.strategyText,
-                                  { color: c.mutedForeground },
-                                ]}
-                              >
-                                {isPaidOff
-                                  ? "Paid off — no longer in the active order"
-                                  : isExcluded
-                                    ? "Not included in your payoff plan"
-                                    : isUnranked
-                                      ? `Not active in the ${MONTH_FULL[debtPlanMonth]} payoff order`
-                                      : strategyRank === 1
-                                        ? "Highest interest — target this first"
-                                        : `Pay off #${(strategyRank ?? 1) - 1} first, then cascade here`}
-                              </Text>
-                            </View>
-                          )}
+                            {isPaidOff
+                              ? "Paid off — no longer in the active order"
+                              : isExcluded
+                                ? "Not included in your payoff plan"
+                                : isUnranked
+                                  ? `Not active in the ${MONTH_FULL[debtPlanMonth]} payoff order`
+                                  : strategyRank === 1
+                                    ? "Target first — put all extra here"
+                                    : `Pay off #${(strategyRank ?? 1) - 1} first, then cascade here`}
+                          </Text>
+                        </View>
                       </View>
 
                       <View style={styles.editHint}>
@@ -1737,11 +1641,7 @@ export default function BillsScreen() {
                 <Feather name="info" size={20} color={c.primary} />
               </View>
               <Text style={[styles.debtInfoTitle, { color: c.foreground }]}>
-                How{" "}
-                {settings.paymentMethod === "avalanche"
-                  ? "Avalanche"
-                  : "Snowball"}{" "}
-                works
+                How Snowball works
               </Text>
               <Pressable
                 accessibilityRole="button"
@@ -1771,11 +1671,8 @@ export default function BillsScreen() {
                   style={[styles.debtInfoTargetCopy, { color: c.foreground }]}
                 >
                   Put safe extra money toward {activeDebtTarget.name} first. It
-                  has your{" "}
-                  {settings.paymentMethod === "avalanche"
-                    ? "highest interest rate"
-                    : "smallest active balance"}
-                  . Using extra will reduce your backup days.
+                  has your smallest active balance. Using extra will reduce your
+                  backup days.
                 </Text>
               </View>
             ) : null}
@@ -1784,11 +1681,7 @@ export default function BillsScreen() {
                 1. Pay every minimum.
               </Text>
               <Text style={[styles.debtInfoStep, { color: c.foreground }]}>
-                2. Send extra to the{" "}
-                {settings.paymentMethod === "avalanche"
-                  ? "highest-interest debt"
-                  : "smallest balance"}
-                .
+                2. Send extra to the smallest balance.
               </Text>
               <Text style={[styles.debtInfoStep, { color: c.foreground }]}>
                 3. Roll that payment to the next debt.
@@ -2233,16 +2126,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 6,
   },
-  methodToggle: { flex: 1, flexDirection: "row", padding: 4, gap: 4 },
-  methodBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    paddingVertical: 9,
-  },
-  methodBtnText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   sortToggle: { flexDirection: "row", padding: 4, gap: 2 },
   sortBtn: { paddingHorizontal: 12, paddingVertical: 9 },
   sortBtnText: { fontSize: 13, fontFamily: "Inter_700Bold" },

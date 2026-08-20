@@ -680,6 +680,7 @@ export default function MonthlyScreen() {
       monthBills.map(bill => ({
         billId: bill.id,
         name: bill.name,
+        closed: bill.is_debt && bill.balance <= 0.009,
         occurrenceDays: getBillOccurrencesInMonth(bill, month, selectedYear),
         plannedTotal: getBillMonthlyTotal(bill, month, selectedYear),
         paidTotal: getEffectivePaidAmount(bill, month, selectedYear),
@@ -1828,7 +1829,7 @@ export default function MonthlyScreen() {
                   <View style={styles.extraHeader}>
                     <Feather name="zap" size={14} color={c.primary} />
                     <Text style={[styles.extraTitle, { color: c.foreground }]}>
-                      Extra Debt Payment ({settings.paymentMethod === "snowball" ? "Snowball" : "Avalanche"})
+                      Extra Debt Payment (Snowball)
                     </Text>
                   </View>
                   <View style={styles.extraRow}>
@@ -3129,7 +3130,7 @@ export default function MonthlyScreen() {
       </Modal>
       <SnowballPreviewModal
         visible={settings.debtPayoffEnabled && snowballModalVisible}
-        method={settings.paymentMethod}
+        method="snowball"
         preview={snowballPreview}
         amount={extraPayment}
         existingPayment={!!getExtraPayment(month, selectedYear)}

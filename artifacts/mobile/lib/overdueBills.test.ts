@@ -8,6 +8,7 @@ describe("overdue bill alerts", () => {
     const alerts = buildOverdueBillOccurrences([{
       billId: "rent",
       name: "Rent",
+      closed: false,
       occurrenceDays: [21],
       plannedTotal: 1_000,
       paidTotal: 0,
@@ -20,6 +21,7 @@ describe("overdue bill alerts", () => {
     const alerts = buildOverdueBillOccurrences([{
       billId: "weekly",
       name: "After school",
+      closed: false,
       occurrenceDays: [1, 8, 15, 22, 29],
       plannedTotal: 450,
       paidTotal: 180,
@@ -38,6 +40,7 @@ describe("overdue bill alerts", () => {
     const alerts = buildOverdueBillOccurrences([{
       billId: "insurance",
       name: "Insurance",
+      closed: false,
       occurrenceDays: [20],
       plannedTotal: 300,
       paidTotal: 287.52,
@@ -51,6 +54,7 @@ describe("overdue bill alerts", () => {
     const alerts = buildOverdueBillOccurrences([{
       billId: "insurance",
       name: "Insurance",
+      closed: false,
       occurrenceDays: [20],
       plannedTotal: 287.52,
       paidTotal: 287.52,
@@ -59,10 +63,40 @@ describe("overdue bill alerts", () => {
     assert.deepEqual(alerts, []);
   });
 
+  it("does not flag the closed Tia Khols debt while preserving ordinary bill alerts", () => {
+    const alerts = buildOverdueBillOccurrences([
+      {
+        billId: "tia-khols",
+        name: "Tia Khols",
+        closed: true,
+        occurrenceDays: [15],
+        plannedTotal: 29,
+        paidTotal: 0,
+      },
+      {
+        billId: "apple",
+        name: "Apple",
+        closed: false,
+        occurrenceDays: [17],
+        plannedTotal: 15,
+        paidTotal: 0,
+      },
+    ], 7, 2026, 20);
+
+    assert.deepEqual(alerts, [{
+      billId: "apple",
+      name: "Apple",
+      occurrenceDate: "2026-08-17",
+      remainingAmount: 15,
+      daysPastDue: 3,
+    }]);
+  });
+
   it("groups multiple missed occurrences into one bill alert", () => {
     const grouped = groupOverdueBills(buildOverdueBillOccurrences([{
       billId: "weekly",
       name: "Weekly bill",
+      closed: false,
       occurrenceDays: [1, 8, 15, 22, 29],
       plannedTotal: 500,
       paidTotal: 100,

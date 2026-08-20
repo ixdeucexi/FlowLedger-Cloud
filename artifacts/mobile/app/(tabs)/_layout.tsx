@@ -609,6 +609,7 @@ function TabContent() {
       getMonthlyBills(month, year).map((bill) => ({
         billId: bill.id,
         name: bill.name,
+        closed: bill.is_debt && bill.balance <= 0.009,
         occurrenceDays: getBillOccurrencesInMonth(bill, month, year),
         plannedTotal: getBillEffectiveMonthlyTotal(bill, month, year),
         paidTotal: getPaidAmount(bill.id, month, year),

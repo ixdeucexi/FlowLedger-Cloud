@@ -1,7 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { orderActiveDebtsForStrategy, sortDebtsLeastToGreatest, sortDebtsWithPaidLast } from "./debtOrder";
+import {
+  canonicalDebtPaymentMethod,
+  orderActiveDebtsForStrategy,
+  sortDebtsLeastToGreatest,
+  sortDebtsWithPaidLast,
+} from "./debtOrder";
+
+test("normalizes every historical or requested payoff method to snowball", () => {
+  for (const method of ["snowball", "avalanche", null, undefined, "unknown"]) {
+    assert.equal(canonicalDebtPaymentMethod(method), "snowball");
+  }
+});
 
 test("sorts debts from least to greatest balance", () => {
   const result = sortDebtsLeastToGreatest([
