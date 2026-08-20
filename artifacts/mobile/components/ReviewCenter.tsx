@@ -16,7 +16,8 @@ import { nextPlannedDebtPayment } from "@/lib/billSurplusRouting";
 import { confirmAction } from "@/lib/confirmAction";
 import { applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupReviewTargets, incomeReviewTargets, matchedOccurrenceAllocations, occurrenceKey, prioritizeReviewTransaction, rankReviewTargets, reviewQueueAfterSkips, scheduledSnowballReviewTargets, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
 import { prioritizePendingPlanTarget } from "@/lib/pendingPlanMatches";
-import { isOpenSpendingBucket, spendingBucketSummary } from "@/lib/spendingBuckets";
+import { bucketEffectiveRouteDate, isEligibleSpendingBucketMatch, spendingBucketSummary } from "@/lib/spendingBuckets";
+import { removeBucketRemainderFundingSource, replaceBucketRemainderFundingSource } from "@/lib/snowballFunding";
 
 function todayIso() {
   const now = new Date();
@@ -69,14 +70,20 @@ function isValidDateInMonth(value: string, month: number, year: number) {
 type ReviewCenterProps = {
   focusTransactionId?: string;
   initialFilter?: "all" | "expense" | "income";
+  onManageBuckets?: () => void;
 };
 
-export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: ReviewCenterProps = {}) {
+type BucketClosePrompt = {
+  goal: Goal;
+  fromReview?: boolean;
+};
+
+export function ReviewCenter({ focusTransactionId, initialFilter = "all", onManageBuckets }: ReviewCenterProps = {}) {
   const c = useColors();
   const {
     transactions, incomes, goals, decisions, extraPayments, categories, canEditHousehold, settings, pendingPlanMatches,
     getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal,
-    addBill, addGoal, updateGoal, deleteGoal, closeSpendingBucket, reopenSpendingBucket,
+    addBill, createSpendingBucketForTransaction, updateGoal, deleteGoal, closeSpendingBucket, closeSpendingBucketAndRouteRemainder, reopenSpendingBucket,
     archiveSpendingBucket, restoreArchivedSpendingBucket,
     deleteBillMistake, reconcileTransaction, undoTransactionReconciliation, refreshBankData,
     getExtraPayment, getRemainingDebtPlanForMonth, previewDebtSnowball, applyDebtSnowballPayment, removeReviewSurplusFunding,
@@ -107,6 +114,11 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
   const [surplusPrompt, setSurplusPrompt] = useState<ReviewSurplusPrompt | null>(null);
   const [surplusPaymentDate, setSurplusPaymentDate] = useState(todayIso());
   const [surplusRouteMode, setSurplusRouteMode] = useState<"next" | "date">("next");
+  const [bucketClosePrompt, setBucketClosePrompt] = useState<BucketClosePrompt | null>(null);
+  const [bucketPaymentDate, setBucketPaymentDate] = useState(todayIso());
+  const [bucketRouteMode, setBucketRouteMode] = useState<"next" | "date">("next");
+  const bucketCloseInFlightRef = useRef(false);
+  const reviewInFlightRef = useRef(false);
   const [completedThisVisit, setCompletedThisVisit] = useState(0);
   const availableQueue = useMemo(() => reviewQueueAfterSkips(queue, skippedIds), [queue, skippedIds]);
   const current = availableQueue[0] ?? null;
@@ -184,7 +196,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
           occurrenceDate: target.occurrenceDates[0],
           isDebt: Boolean(transactions.find(transaction => transaction.id === target.billId)?.debt_applied_bill_id),
         }));
-      goals.filter(goal => goal.goal_type === "planned_expense" && isOpenSpendingBucket(goal) && goal.target_date?.startsWith(`${year}-${String(month + 1).padStart(2, "0")}`))
+      goals.filter(isEligibleSpendingBucketMatch)
         .forEach(goal => candidates.push({
           type: "goal", id: goal.id, name: goal.name, category: "Planned spending",
           plannedAmount: Math.max(0, goal.target_amount - Math.max(0, goal.current_amount)), occurrenceDate: goal.target_date.slice(0, 10),
@@ -211,6 +223,11 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
   const archivedBuckets = useMemo(() => goals
     .filter(goal => goal.goal_type === "planned_expense" && Boolean(goal.archived_at))
     .sort((left, right) => (right.archived_at ?? "").localeCompare(left.archived_at ?? "")), [goals]);
+  const routedBucketIds = useMemo(() => new Set(extraPayments.flatMap(payment =>
+    (payment.sources ?? [])
+      .filter(source => source.type === "bucket_remainder" && Boolean(source.bucketId))
+      .map(source => source.bucketId as string)
+  )), [extraPayments]);
 
   const surplusSnowballOffer = useMemo(() => {
     if (!surplusPrompt || !settings.debtPayoffEnabled) return null;
@@ -243,27 +260,127 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
     };
   }, [getExtraPayment, getRemainingDebtPlanForMonth, previewDebtSnowball, settings.debtPayoffEnabled, surplusPaymentDate, surplusPrompt, surplusRouteMode]);
 
-  const closeBucket = (goal: Goal) => {
+  const bucketSnowballOffer = useMemo(() => {
+    if (!bucketClosePrompt || !settings.debtPayoffEnabled) return null;
+    const summary = spendingBucketSummary(bucketClosePrompt.goal);
+    const remainder = summary.closed ? summary.released : summary.remaining;
+    if (remainder <= 0.005) return null;
+    const effectiveDate = bucketEffectiveRouteDate(todayIso(), bucketClosePrompt.goal.target_date);
+    const [year, monthNumber] = effectiveDate.split("-").map(Number);
+    const month = monthNumber - 1;
+    const existing = getExtraPayment(month, year);
+    const sources = replaceBucketRemainderFundingSource(existing?.sources, existing?.amount ?? 0, {
+      type: "bucket_remainder",
+      amount: remainder,
+      bucketId: bucketClosePrompt.goal.id,
+      bucketName: bucketClosePrompt.goal.name,
+      availableDate: effectiveDate,
+    });
+    const total = Math.round(sources.reduce((sum, source) => sum + Math.max(0, source.amount), 0) * 100) / 100;
+    const targetPreview = previewDebtSnowball(month, year, total, remainder, effectiveDate, existing?.id);
+    const targetDebtId = targetPreview.allocations[0]?.billId;
+    const nextPayment = nextPlannedDebtPayment(
+      getRemainingDebtPlanForMonth(month, year)?.allocations ?? [],
+      targetDebtId,
+      effectiveDate,
+    );
+    const selectedPaymentDate = bucketRouteMode === "next" ? nextPayment?.date ?? "" : bucketPaymentDate;
+    const dateValid = isValidDateInMonth(selectedPaymentDate, month, year) && selectedPaymentDate >= effectiveDate;
+    const preview = previewDebtSnowball(month, year, total, remainder, dateValid ? selectedPaymentDate : undefined, existing?.id);
+    return {
+      month,
+      year,
+      remainder,
+      effectiveDate,
+      existingPaymentId: existing?.id,
+      sources,
+      preview,
+      targetDebt: preview.months[0]?.targetName ?? preview.allocations[0]?.billName,
+      dateValid,
+      nextPayment,
+      paymentDate: selectedPaymentDate,
+      safe: dateValid && preview.selectedExtra + 0.005 >= total,
+    };
+  }, [bucketClosePrompt, bucketPaymentDate, bucketRouteMode, getExtraPayment, getRemainingDebtPlanForMonth, previewDebtSnowball, settings.debtPayoffEnabled]);
+
+  const closeBucketKeepAvailable = async (prompt: BucketClosePrompt) => {
+    if (saving || bucketCloseInFlightRef.current) return;
+    bucketCloseInFlightRef.current = true;
+    setSaving(true);
+    setBucketMessage(null);
+    try {
+      const result = await closeSpendingBucket(prompt.goal.id);
+      setBucketClosePrompt(null);
+      if (prompt.fromReview) {
+        setLastCompleted(null);
+        setRedoAction(null);
+      }
+      setBucketMessage(`${prompt.goal.name} closed · ${money(result.released)} kept available`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      Alert.alert("Couldn’t close bucket", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      bucketCloseInFlightRef.current = false;
+      setSaving(false);
+    }
+  };
+
+  const openBucketCloseChoices = (goal: Goal, fromReview = false) => {
+    if (saving) return;
     const { spent } = spendingBucketSummary(goal);
     const released = Math.max(0, Number(goal.target_amount) - spent);
+    if (released > 0.005) {
+      const effectiveDate = bucketEffectiveRouteDate(todayIso(), goal.target_date);
+      const [year, monthNumber] = effectiveDate.split("-").map(Number);
+      const month = monthNumber - 1;
+      const existing = getExtraPayment(month, year);
+      const targetPreview = previewDebtSnowball(month, year, (existing?.amount ?? 0) + released, released, effectiveDate, existing?.id);
+      const nextPayment = nextPlannedDebtPayment(
+        getRemainingDebtPlanForMonth(month, year)?.allocations ?? [],
+        targetPreview.allocations[0]?.billId,
+        effectiveDate,
+      );
+      setBucketPaymentDate(effectiveDate);
+      setBucketRouteMode(nextPayment ? "next" : "date");
+      setBucketClosePrompt({ goal, fromReview });
+      return;
+    }
     confirmAction({
       title: `Close ${goal.name}?`,
-      message: `${money(spent)} was matched from ${money(goal.target_amount)} planned. ${released > 0.005 ? `${money(released)} will become available again.` : "There is no money left to release."}`,
+      message: `${money(spent)} was matched from ${money(goal.target_amount)} planned. There is no money left to release.`,
       confirmText: "Close bucket",
-      onConfirm: async () => {
-        setSaving(true);
-        setBucketMessage(null);
-        try {
-          const result = await closeSpendingBucket(goal.id);
-          setBucketMessage(`${goal.name} closed · ${money(result.released)} released`);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        } catch (error) {
-          Alert.alert("Couldn’t close bucket", error instanceof Error ? error.message : "Please try again.");
-        } finally {
-          setSaving(false);
-        }
-      },
+      onConfirm: () => void closeBucketKeepAvailable({ goal, fromReview }),
     });
+  };
+
+  const routeBucketRemainderToPayoff = async () => {
+    if (!bucketClosePrompt || !bucketSnowballOffer?.safe || !bucketSnowballOffer.preview.allocations.length || saving || bucketCloseInFlightRef.current) return;
+    bucketCloseInFlightRef.current = true;
+    setSaving(true);
+    setBucketMessage(null);
+    try {
+      const summary = spendingBucketSummary(bucketClosePrompt.goal);
+      await closeSpendingBucketAndRouteRemainder({
+        bucketId: bucketClosePrompt.goal.id,
+        expectedSpent: summary.spent,
+        expectedRemainder: bucketSnowballOffer.remainder,
+        preview: bucketSnowballOffer.preview,
+        sources: bucketSnowballOffer.sources,
+        existingPaymentId: bucketSnowballOffer.existingPaymentId,
+      });
+      if (bucketClosePrompt.fromReview) {
+        setLastCompleted(null);
+        setRedoAction(null);
+      }
+      setBucketMessage(`${bucketClosePrompt.goal.name} closed · ${money(bucketSnowballOffer.remainder)} sent to ${bucketSnowballOffer.targetDebt}`);
+      setBucketClosePrompt(null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      Alert.alert("Couldn’t route bucket remainder", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      bucketCloseInFlightRef.current = false;
+      setSaving(false);
+    }
   };
 
   const reopenBucket = async (goal: Goal) => {
@@ -271,7 +388,16 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
     setSaving(true);
     setBucketMessage(null);
     try {
-      await reopenSpendingBucket(goal.id);
+      const routedPayment = extraPayments.find(payment => payment.sources?.some(source => source.type === "bucket_remainder" && source.bucketId === goal.id));
+      const remainingSources = removeBucketRemainderFundingSource(routedPayment?.sources, goal.id);
+      const remainingAmount = Math.round(remainingSources.reduce((sum, source) => sum + Math.max(0, source.amount), 0) * 100) / 100;
+      const remainingPreview = routedPayment && remainingAmount > 0
+        ? previewDebtSnowball(routedPayment.month, routedPayment.year, remainingAmount, 0, routedPayment.payment_date, routedPayment.id)
+        : null;
+      if (remainingAmount > 0 && (!remainingPreview?.allocations.length || remainingPreview.selectedExtra + 0.005 < remainingAmount)) {
+        throw new Error("The remaining Snowball plan could not be recalculated safely. Keep this bucket closed for now.");
+      }
+      await reopenSpendingBucket(goal.id, remainingPreview?.allocations);
       setBucketMessage(`${goal.name} reopened`);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (error) {
@@ -342,7 +468,8 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
   };
 
   const completeReview = async (input: ReconcileTransactionInput, notice?: string) => {
-    if (!current || saving) throw new Error("This transaction is no longer available for review.");
+    if (!current || saving || reviewInFlightRef.current) throw new Error("This transaction is no longer available for review.");
+    reviewInFlightRef.current = true;
     const reviewed = current;
     setSaving(true);
     try {
@@ -359,6 +486,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       return action;
     } finally {
+      reviewInFlightRef.current = false;
       setSaving(false);
     }
   };
@@ -371,6 +499,34 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
       Alert.alert("Couldn’t finish this review", error instanceof Error ? error.message : "Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return false;
+    }
+  };
+
+  const createBucketAndAddTransaction = async (data: Omit<Goal, "id" | "created_at">) => {
+    if (!current || saving || reviewInFlightRef.current) throw new Error("This transaction is no longer available for review.");
+    reviewInFlightRef.current = true;
+    const reviewed = current;
+    setSaving(true);
+    try {
+      const result = await createSpendingBucketForTransaction({
+        transactionId: reviewed.id,
+        name: data.name,
+        targetAmount: data.target_amount,
+        targetDate: data.target_date,
+      });
+      setLastCompleted(null);
+      setRedoAction(null);
+      setCompletedThisVisit(value => value + 1);
+      setVariance(null);
+      setSplitCategory(null);
+      setSpendingBucketVisible(false);
+      setBucketMessage(result.remainingAmount > 0.005
+        ? `${data.name} created · ${money(result.remainingAmount)} left for future purchases`
+        : `${data.name} created and transaction added`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } finally {
+      reviewInFlightRef.current = false;
+      setSaving(false);
     }
   };
 
@@ -425,6 +581,23 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
       settlement,
       extraCategory,
     }, notice);
+  };
+
+  const closeBucketAfterPartialMatch = async () => {
+    if (!variance || variance.direction !== "lower" || variance.target.type !== "goal" || saving) return;
+    const choice = variance;
+    const goal = goals.find(item => item.id === choice.target.id);
+    if (!goal) {
+      Alert.alert("Couldn’t close bucket", "This spending bucket is no longer available.");
+      return;
+    }
+    const completed = await resolveTarget(choice.target, "partial");
+    if (!completed) return;
+    const settledGoal: Goal = {
+      ...goal,
+      current_amount: Math.min(goal.target_amount, Math.max(0, goal.current_amount) + Math.abs(choice.transaction.amount)),
+    };
+    openBucketCloseChoices(settledGoal, true);
   };
 
   const chooseTarget = (target: RankedReviewTarget) => {
@@ -579,6 +752,10 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
   const surplusYear = surplusSnowballOffer?.year ?? new Date().getFullYear();
   const surplusMonthText = String(surplusMonth + 1).padStart(2, "0");
   const surplusMonthLastDay = String(new Date(surplusYear, surplusMonth + 1, 0).getDate()).padStart(2, "0");
+  const bucketMonth = bucketSnowballOffer?.month ?? new Date().getMonth();
+  const bucketYear = bucketSnowballOffer?.year ?? new Date().getFullYear();
+  const bucketMonthText = String(bucketMonth + 1).padStart(2, "0");
+  const bucketMonthLastDay = String(new Date(bucketYear, bucketMonth + 1, 0).getDate()).padStart(2, "0");
 
   return (
     <>
@@ -638,6 +815,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
           {bucketMessage ? <Text style={[styles.bucketMessage, { color: c.success, backgroundColor: c.success + "12" }]}>{bucketMessage}</Text> : null}
           {spendingBuckets.map((goal, index) => {
             const summary = spendingBucketSummary(goal);
+            const routed = routedBucketIds.has(goal.id);
             return (
               <View key={goal.id} style={[styles.bucketRow, index > 0 && { borderTopWidth: 1, borderTopColor: c.border }]}>
                 <View style={styles.optionCopy}>
@@ -648,27 +826,29 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
                   <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Planned {money(summary.planned)} · Spent {money(summary.spent)} · {summary.closed ? `Released ${money(summary.released)}` : `${money(summary.remaining)} left`}</Text>
                 </View>
                 <View style={styles.bucketActions}>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Edit ${goal.name} bucket`}
-                    disabled={saving}
-                    onPress={() => setEditingBucket(goal)}
-                    style={({ pressed }) => [styles.bucketActionButton, { borderColor: c.border, opacity: saving ? 0.5 : pressed ? 0.72 : 1 }]}
-                  >
-                    <Feather name="edit-3" size={13} color={c.primary} />
-                    <Text style={[styles.bucketActionText, { color: c.primary }]}>Edit</Text>
-                  </Pressable>
+                  {!routed ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit ${goal.name} bucket`}
+                      disabled={saving}
+                      onPress={() => setEditingBucket(goal)}
+                      style={({ pressed }) => [styles.bucketActionButton, { borderColor: c.border, opacity: saving ? 0.5 : pressed ? 0.72 : 1 }]}
+                    >
+                      <Feather name="edit-3" size={13} color={c.primary} />
+                      <Text style={[styles.bucketActionText, { color: c.primary }]}>Edit</Text>
+                    </Pressable>
+                  ) : null}
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`${goal.closed_at ? "Reopen" : "Close"} ${goal.name} bucket`}
                     disabled={saving}
-                    onPress={() => goal.closed_at ? void reopenBucket(goal) : closeBucket(goal)}
+                    onPress={() => goal.closed_at ? void reopenBucket(goal) : openBucketCloseChoices(goal)}
                     style={({ pressed }) => [styles.bucketActionButton, { borderColor: goal.closed_at ? c.success + "66" : c.warning + "66", opacity: saving ? 0.5 : pressed ? 0.72 : 1 }]}
                   >
                     <Feather name={goal.closed_at ? "rotate-ccw" : "check-circle"} size={13} color={goal.closed_at ? c.success : c.warning} />
                     <Text style={[styles.bucketActionText, { color: goal.closed_at ? c.success : c.warning }]}>{goal.closed_at ? "Reopen" : "Close"}</Text>
                   </Pressable>
-                  {goal.closed_at ? (
+                  {goal.closed_at && !routed ? (
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Archive ${goal.name} bucket`}
@@ -680,16 +860,18 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
                       <Text style={[styles.bucketActionText, { color: c.mutedForeground }]}>Archive</Text>
                     </Pressable>
                   ) : null}
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Delete ${goal.name} bucket`}
-                    disabled={saving}
-                    onPress={() => deleteBucket(goal)}
-                    style={({ pressed }) => [styles.bucketActionButton, { borderColor: c.destructive + "66", opacity: saving ? 0.5 : pressed ? 0.72 : 1 }]}
-                  >
-                    <Feather name="trash-2" size={13} color={c.destructive} />
-                    <Text style={[styles.bucketActionText, { color: c.destructive }]}>Delete</Text>
-                  </Pressable>
+                  {!routed ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete ${goal.name} bucket`}
+                      disabled={saving}
+                      onPress={() => deleteBucket(goal)}
+                      style={({ pressed }) => [styles.bucketActionButton, { borderColor: c.destructive + "66", opacity: saving ? 0.5 : pressed ? 0.72 : 1 }]}
+                    >
+                      <Feather name="trash-2" size={13} color={c.destructive} />
+                      <Text style={[styles.bucketActionText, { color: c.destructive }]}>Delete</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               </View>
             );
@@ -823,16 +1005,27 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
             {groupedTargets.income.map(renderTarget)}
           </> : <>
             <Text style={[styles.sectionTitle, { color: c.foreground }]}>Money you set aside</Text>
-            <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>{groupedTargets.setAside.length ? "Use the bucket you planned for this purchase. The bank charge replaces that planned amount, so it is counted once." : "No spending bucket was found for this month. Create one from + → Set Aside Money before the purchase posts."}</Text>
+            <Text style={[styles.sectionCopy, { color: c.mutedForeground }]}>{groupedTargets.setAside.length ? "Choose any open spending bucket. The bank charge replaces that planned amount, so it is counted once." : "No open spending bucket is available. Create one and add this posted transaction now."}</Text>
             {groupedTargets.setAside.map(renderTarget)}
-            <Pressable accessibilityRole="button" accessibilityLabel="Create a spending bucket for this transaction" disabled={saving} onPress={() => setSpendingBucketVisible(true)} style={({ pressed }) => [styles.bucketButton, { borderColor: c.primary + "66", backgroundColor: c.primary + "10", opacity: saving ? 0.55 : pressed ? 0.76 : 1 }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Create bucket and add transaction" disabled={saving} onPress={() => setSpendingBucketVisible(true)} style={({ pressed }) => [styles.bucketButton, { borderColor: c.primary + "66", backgroundColor: c.primary + "10", opacity: saving ? 0.55 : pressed ? 0.76 : 1 }]}>
               <Feather name="plus-circle" size={18} color={c.primary} />
               <View style={styles.optionCopy}>
-                <Text style={[styles.optionTitle, { color: c.foreground }]}>Create a spending bucket</Text>
-                <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Set aside money for several purchases.</Text>
+                <Text style={[styles.optionTitle, { color: c.foreground }]}>Create bucket and add transaction</Text>
+                <Text style={[styles.optionDescription, { color: c.mutedForeground }]}>Use the purchase amount, or enter more for future purchases.</Text>
               </View>
               <Feather name="chevron-right" size={17} color={c.primary} />
             </Pressable>
+            {onManageBuckets && (spendingBuckets.length > 0 || archivedBuckets.length > 0) ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Manage spending buckets"
+                onPress={onManageBuckets}
+                style={({ pressed }) => [styles.manageBucketsButton, { opacity: pressed ? 0.7 : 1 }]}
+              >
+                <Feather name="settings" size={14} color={c.primary} />
+                <Text style={[styles.manageBucketsText, { color: c.primary }]}>Manage buckets</Text>
+              </Pressable>
+            ) : null}
 
             {groupedTargets.bills.length ? <>
               <Text style={[styles.subsectionTitle, { color: c.foreground }]}>Bills and debt</Text>
@@ -912,7 +1105,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
         onClose={() => { setSpendingBucketVisible(false); setEditingBucket(null); }}
         onSave={async data => {
           if ("id" in data) await updateGoal(data as Goal);
-          else await addGoal(data as Omit<Goal, "id" | "created_at">);
+          else await createBucketAndAddTransaction(data as Omit<Goal, "id" | "created_at">);
           setSpendingBucketVisible(false);
           setEditingBucket(null);
         }}
@@ -922,6 +1115,13 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
         initialName={current ? `${transactionName(current)} spending` : ""}
         initialTargetAmount={current ? Math.abs(current.amount) : undefined}
         initialTargetDate={current?.date}
+        title={editingBucket ? undefined : "Create bucket and add transaction"}
+        saveLabel={editingBucket ? undefined : "Create bucket and add transaction"}
+        lockedMode={editingBucket ? undefined : "budget"}
+        minimumTargetAmount={editingBucket || !current ? undefined : Math.abs(current.amount)}
+        minimumTargetDate={editingBucket ? undefined : current?.date}
+        hint={editingBucket ? undefined : "This purchase has already posted. It will be added to the new bucket now; any amount left stays available for future purchases."}
+        skipAffordabilityCheck={!editingBucket}
       />
 
       <BillSurplusModal
@@ -950,6 +1150,32 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
         onClose={keepSurplusAvailable}
       />
 
+      <BillSurplusModal
+        visible={Boolean(bucketClosePrompt)}
+        billName={bucketClosePrompt?.goal.name ?? "this bucket"}
+        itemType="bucket"
+        budgeted={bucketClosePrompt?.goal.target_amount ?? 0}
+        actual={bucketClosePrompt ? spendingBucketSummary(bucketClosePrompt.goal).spent : 0}
+        targetDebt={bucketSnowballOffer?.targetDebt}
+        snowballSafe={Boolean(bucketSnowballOffer?.safe)}
+        snowballEnabled={settings.debtPayoffEnabled}
+        safetyFloor={settings.safety_floor}
+        forecastHorizonMonths={settings.forecast_horizon_months}
+        paymentDate={bucketPaymentDate}
+        paymentDateValid={Boolean(bucketSnowballOffer?.dateValid)}
+        paymentDateMin={bucketSnowballOffer?.effectiveDate ?? `${bucketYear}-${bucketMonthText}-01`}
+        paymentDateMax={`${bucketYear}-${bucketMonthText}-${bucketMonthLastDay}`}
+        routeMode={bucketRouteMode}
+        nextPaymentDate={bucketSnowballOffer?.nextPayment?.date}
+        nextPaymentAmount={bucketSnowballOffer?.nextPayment?.amount}
+        saving={saving}
+        onRouteModeChange={setBucketRouteMode}
+        onPaymentDateChange={setBucketPaymentDate}
+        onKeep={() => bucketClosePrompt ? void closeBucketKeepAvailable(bucketClosePrompt) : undefined}
+        onSnowball={() => void routeBucketRemainderToPayoff()}
+        onClose={() => setBucketClosePrompt(null)}
+      />
+
       <Modal visible={!!variance} transparent animationType="fade" onRequestClose={() => { setVariance(null); setSplitCategory(null); }}>
         <Pressable style={styles.overlay} onPress={() => { setVariance(null); setSplitCategory(null); }}>
           <Pressable style={[styles.modalCard, { backgroundColor: c.card, borderColor: c.border }]} onPress={() => {}}>
@@ -974,7 +1200,7 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all" }: Revi
 
               {variance.direction === "lower" ? variance.target.type === "goal" || variance.target.type === "decision" ? <>
                 <Pressable disabled={saving} onPress={() => void resolveTarget(variance.target, "partial")} style={[styles.primaryButton, { backgroundColor: c.primary }]}><Text style={[styles.primaryButtonText, { color: c.primaryForeground }]}>Add {money(variance.transaction.amount)} to bucket</Text></Pressable>
-                <Pressable disabled={saving} onPress={() => void resolveTarget(variance.target, "full")} style={[styles.secondaryButton, { borderColor: c.border }]}><Text style={[styles.secondaryButtonText, { color: c.foreground }]}>Close bucket · release {money(variance.target.plannedAmount - Math.abs(variance.transaction.amount))}</Text></Pressable>
+                <Pressable disabled={saving} onPress={() => variance.target.type === "goal" ? void closeBucketAfterPartialMatch() : void resolveTarget(variance.target, "full")} style={[styles.secondaryButton, { borderColor: c.border }]}><Text style={[styles.secondaryButtonText, { color: c.foreground }]}>Close bucket · release {money(variance.target.plannedAmount - Math.abs(variance.transaction.amount))}</Text></Pressable>
               </> : <>
                 <Pressable disabled={saving} onPress={() => variance.target.type === "bill" ? void confirmLowerFullPayment() : void resolveTarget(variance.target, "full")} style={[styles.primaryButton, { backgroundColor: c.primary }]}><Text style={[styles.primaryButtonText, { color: c.primaryForeground }]}>Yes, this was the full amount</Text></Pressable>
                 <Pressable disabled={saving} onPress={() => void resolveTarget(variance.target, "partial")} style={[styles.secondaryButton, { borderColor: c.border }]}><Text style={[styles.secondaryButtonText, { color: c.foreground }]}>No, keep the rest open</Text></Pressable>
@@ -1053,6 +1279,8 @@ const styles = StyleSheet.create({
   divider: { borderTopWidth: 1, marginVertical: 12 }, categoryRow: { gap: 8, paddingVertical: 4 },
   optionButton: { minHeight: 58, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 9, flexDirection: "row", alignItems: "center", gap: 10 },
   bucketButton: { minHeight: 64, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 },
+  manageBucketsButton: { alignSelf: "flex-start", minHeight: 38, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 4, marginBottom: 4 },
+  manageBucketsText: { fontSize: 13, fontFamily: "Inter_700Bold" },
   optionCopy: { flex: 1 }, optionTitle: { fontSize: 14, fontFamily: "Inter_800ExtraBold" }, optionDescription: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular", marginTop: 2 },
   categoryPill: { minHeight: 36, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   categoryText: { fontSize: 12, fontFamily: "Inter_700Bold" },

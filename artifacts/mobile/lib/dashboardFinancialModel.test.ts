@@ -301,6 +301,18 @@ test("the dashboard flip keeps Flow Score on the animated checking face", () => 
   assert.match(mobileDashboard, /heroBackCardHeight/);
 });
 
+test("the dashboard and review center link to the existing spending bucket manager", () => {
+  const mobileDashboard = readFileSync("app/(tabs)/index.tsx", "utf8");
+  const more = readFileSync("app/(tabs)/more.tsx", "utf8");
+  const reviewCenter = readFileSync("components/ReviewCenter.tsx", "utf8");
+
+  assert.match(mobileDashboard, /label: "Spending Buckets"/);
+  assert.match(mobileDashboard, /section: "review"/);
+  assert.match(more, /onManageBuckets=\{scrollToBucketManager\}/);
+  assert.match(more, /scrollTo\(\{ y: 0, animated: true \}\)/);
+  assert.match(reviewCenter, /accessibilityLabel="Manage spending buckets"/);
+});
+
 test("uses one Plaid connection action and keeps syncing separate", () => {
   const plaidConnections = readFileSync("components/PlaidLinkButton.web.tsx", "utf8");
   const plaidOAuthResume = readFileSync("components/PlaidOAuthResume.web.tsx", "utf8");

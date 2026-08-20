@@ -53,7 +53,7 @@ import {
   snowballPaymentName,
   snowballPlanTotalThroughDate,
 } from "@/lib/debtPaymentPlan";
-import { replaceBillSurplusFundingSource } from "@/lib/snowballFunding";
+import { hasBucketRemainderFunding, latestBucketRemainderAvailableDate, replaceBillSurplusFundingSource } from "@/lib/snowballFunding";
 import { readInterfacePreferences, updateInterfacePreferences } from "@/lib/interfacePreferences";
 
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -1257,7 +1257,8 @@ export default function MonthlyScreen() {
     const debtCount = bills.filter(b => b.is_debt && b.balance > 0).length;
     if (debtCount === 0) { Alert.alert("No Debts", "You have no active debts to apply extra payments to."); return; }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const preview = previewDebtSnowball(month, selectedYear, amt);
+    const existing = getExtraPayment(month, selectedYear);
+    const preview = previewDebtSnowball(month, selectedYear, amt, 0, existing?.payment_date, existing?.id);
     setSnowballPreview(preview);
     setSnowballModalVisible(true);
     Keyboard.dismiss();
@@ -1266,16 +1267,35 @@ export default function MonthlyScreen() {
   const updateSnowballAmount = (value: string) => {
     setExtraPayment(value);
     const amount = Number.parseFloat(value) || 0;
-    setSnowballPreview(previewDebtSnowball(month, selectedYear, amount));
+    const existing = getExtraPayment(month, selectedYear);
+    setSnowballPreview(previewDebtSnowball(month, selectedYear, amount, 0, existing?.payment_date, existing?.id));
   };
 
   const confirmSnowballPayment = async () => {
     if (!snowballPreview) return;
-    await applyDebtSnowballPayment(snowballPreview);
-    setSnowballResults(snowballPreview.allocations.map(r => ({ name: r.billName, payment: r.payment, paidOff: r.paidOff })));
-    setShowSnowballResults(true);
-    setSnowballModalVisible(false);
-    setExtraPayment("");
+    try {
+      await applyDebtSnowballPayment(snowballPreview);
+      setSnowballResults(snowballPreview.allocations.map(r => ({ name: r.billName, payment: r.payment, paidOff: r.paidOff })));
+      setShowSnowballResults(true);
+      setSnowballModalVisible(false);
+      setExtraPayment("");
+    } catch (error) {
+      Alert.alert("Couldn’t update payment", error instanceof Error ? error.message : "Please try again.");
+    }
+  };
+
+  const removeSavedSnowballPayment = async () => {
+    const saved = getExtraPayment(month, selectedYear);
+    if (hasBucketRemainderFunding(saved?.sources)) {
+      Alert.alert("Reopen bucket first", "Reopen the routed spending bucket before removing this Snowball payment.");
+      return;
+    }
+    try {
+      await removeDebtSnowballPayment(month, selectedYear);
+      setSnowballModalVisible(false);
+    } catch (error) {
+      Alert.alert("Couldn’t remove payment", error instanceof Error ? error.message : "Please try again.");
+    }
   };
 
   const handleDeleteTx = (id: string) => {
@@ -2421,7 +2441,7 @@ export default function MonthlyScreen() {
                                 },
                               } : undefined}
                               retainedPayment={retainedPayment}
-                              onRemove={savedPayment ? async () => {
+                              onRemove={savedPayment && !hasBucketRemainderFunding(savedPayment.sources) ? async () => {
                                 await removeDebtSnowballPayment(savedPayment.month, savedPayment.year);
                                 setSelectedDate(null);
                               } : undefined}
@@ -3134,12 +3154,15 @@ export default function MonthlyScreen() {
         preview={snowballPreview}
         amount={extraPayment}
         existingPayment={!!getExtraPayment(month, selectedYear)}
+        paymentDateMinimumReason={latestBucketRemainderAvailableDate(getExtraPayment(month, selectedYear)?.sources)
+          ? `Includes bucket money available ${latestBucketRemainderAvailableDate(getExtraPayment(month, selectedYear)?.sources)}. Reopen the bucket before removing that source.`
+          : undefined}
         safetyFloor={settings.safety_floor}
         forecastHorizonMonths={settings.forecast_horizon_months}
         onAmountChange={updateSnowballAmount}
         onClose={() => setSnowballModalVisible(false)}
         onConfirm={confirmSnowballPayment}
-        onRemove={() => removeDebtSnowballPayment(month, selectedYear).then(() => setSnowballModalVisible(false))}
+        onRemove={() => void removeSavedSnowballPayment()}
       />
       <FullPaymentPromptModal
         visible={!!fullPaymentPrompt}

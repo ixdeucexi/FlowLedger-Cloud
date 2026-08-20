@@ -10,7 +10,7 @@ import { useBackDismiss } from "@/hooks/useBackDismiss";
 interface Props {
   visible: boolean;
   billName: string;
-  itemType?: "bill" | "debt";
+  itemType?: "bill" | "debt" | "bucket";
   budgeted: number;
   actual: number;
   targetDebt?: string;
@@ -42,12 +42,18 @@ function shortDate(value?: string) {
 
 export function BillSurplusModal({ visible, billName, itemType = "bill", budgeted, actual, targetDebt, snowballSafe, snowballEnabled = true, safetyFloor = 200, forecastHorizonMonths = 6, paymentDate, paymentDateValid, paymentDateMin, paymentDateMax, routeMode, nextPaymentDate, nextPaymentAmount, saving = false, onRouteModeChange, onPaymentDateChange, onKeep, onSnowball, onClose }: Props) {
   const c = useColors();
-  useBackDismiss(visible, onClose);
+  const requestClose = () => {
+    if (!saving) onClose();
+  };
+  useBackDismiss(visible, requestClose);
   const difference = Math.max(0, budgeted - actual);
-  const itemLabel = itemType === "debt" ? "debt payment" : "bill";
+  const itemLabel = itemType === "debt" ? "debt payment" : itemType === "bucket" ? "spending bucket" : "bill";
+  const message = itemType === "bucket"
+    ? `${billName} has $${difference.toFixed(2)} left. Close the bucket and choose where that remainder goes.`
+    : `Hey, I see ${billName} was paid under the planned ${itemLabel}. You have $${difference.toFixed(2)} available.`;
   return (
-    <Modal visible={visible} transparent animationType="fade" presentationStyle="overFullScreen" statusBarTranslucent onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose}>
+    <Modal visible={visible} transparent animationType="fade" presentationStyle="overFullScreen" statusBarTranslucent onRequestClose={requestClose}>
+      <Pressable style={styles.overlay} onPress={requestClose}>
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <Pressable style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]} onPress={(event) => event.stopPropagation()}>
           <View style={styles.floWrap}>
@@ -55,7 +61,7 @@ export function BillSurplusModal({ visible, billName, itemType = "bill", budgete
           </View>
           <Text style={[styles.eyebrow, { color: c.primary }]}>Flo can help</Text>
           <Text style={[styles.message, { color: c.foreground }]}>
-            Hey, I see {billName} was paid under the planned {itemLabel}. You have ${difference.toFixed(2)} available.
+            {message}
           </Text>
           <Text style={[styles.sub, { color: c.mutedForeground }]}>
             {snowballEnabled ? `I can add it to ${targetDebt ?? "your snowball"} for you, or you can keep it available.` : "Your current planning mode keeps this difference available in your cash flow."}
@@ -115,7 +121,7 @@ export function BillSurplusModal({ visible, billName, itemType = "bill", budgete
           </Text>}
           {snowballEnabled && !targetDebt && <Text style={[styles.note, { color: c.mutedForeground }]}>No snowball debt selected.</Text>}
           {snowballEnabled && routeMode === "next" && targetDebt && !nextPaymentDate && <Text style={[styles.note, { color: c.warning }]}>No later planned payment was found. Pick a date instead.</Text>}
-          {snowballEnabled && routeMode === "date" && targetDebt && !paymentDateValid && <Text style={[styles.note, { color: c.warning }]}>Choose a valid date in this bill&apos;s month.</Text>}
+          {snowballEnabled && routeMode === "date" && targetDebt && !paymentDateValid && <Text style={[styles.note, { color: c.warning }]}>Choose a valid date in this {itemType === "bucket" ? "Snowball" : "bill"} month.</Text>}
           {snowballEnabled && targetDebt && paymentDateValid && !snowballSafe && <Text style={[styles.note, { color: c.warning }]}>Keep this money available to preserve your ${safetyFloor.toFixed(0)} floor across {forecastHorizonMonths} months.</Text>}
           {snowballEnabled && <Pressable disabled={saving || !targetDebt || !snowballSafe} onPress={onSnowball} style={[styles.primary, { backgroundColor: targetDebt && snowballSafe ? c.primary : c.muted, opacity: saving ? 0.55 : 1 }]}>
             <Feather name="zap" size={16} color={targetDebt && snowballSafe ? c.primaryForeground : c.mutedForeground} />
@@ -125,7 +131,7 @@ export function BillSurplusModal({ visible, billName, itemType = "bill", budgete
                 : `Add $${difference.toFixed(2)} to ${targetDebt ?? "Snowball"}`}
             </Text>
           </Pressable>}
-          <Pressable disabled={saving} onPress={onKeep} style={[styles.secondary, { borderColor: c.border, opacity: saving ? 0.55 : 1 }]}><Text style={[styles.secondaryText, { color: c.foreground }]}>No, keep ${difference.toFixed(2)} available</Text></Pressable>
+          <Pressable disabled={saving} onPress={onKeep} style={[styles.secondary, { borderColor: c.border, opacity: saving ? 0.55 : 1 }]}><Text style={[styles.secondaryText, { color: c.foreground }]}>{itemType === "bucket" ? `Close bucket · keep $${difference.toFixed(2)} available` : `No, keep $${difference.toFixed(2)} available`}</Text></Pressable>
         </Pressable>
         </ScrollView>
       </Pressable>

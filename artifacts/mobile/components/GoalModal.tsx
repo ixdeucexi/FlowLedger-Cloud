@@ -33,9 +33,19 @@ interface Props {
   initialName?: string;
   initialTargetAmount?: number;
   initialTargetDate?: string;
+  title?: string;
+  saveLabel?: string;
+  lockedMode?: "savings" | "budget";
+  minimumTargetAmount?: number;
+  minimumTargetDate?: string;
+  hint?: string;
+  skipAffordabilityCheck?: boolean;
 }
 
-export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initialMode = "savings", initialName = "", initialTargetAmount, initialTargetDate }: Props) {
+export function GoalModal({
+  visible, onClose, onSave, onDelete, editGoal, initialMode = "savings", initialName = "", initialTargetAmount,
+  initialTargetDate, title, saveLabel, lockedMode, minimumTargetAmount, minimumTargetDate, hint, skipAffordabilityCheck = false,
+}: Props) {
   const c = useColors();
   const isDesktop = useDesktopExperience();
   const { checkGoalAffordability, settings } = useBudget();
@@ -68,19 +78,26 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
       setTargetDate(editGoal.target_date.split("T")[0]);
     } else {
       setName(initialName);
-      setTarget(initialTargetAmount ? initialTargetAmount.toFixed(2) : "");
+      setTarget(initialTargetAmount !== undefined ? initialTargetAmount.toFixed(2) : "");
       setCurrent("");
-      setGoalMode(initialMode);
+      setGoalMode(lockedMode ?? initialMode);
       const d = new Date();
       d.setFullYear(d.getFullYear() + 1);
       setTargetDate(initialTargetDate || dateToYMD(d));
     }
-  }, [editGoal, initialMode, initialName, initialTargetAmount, initialTargetDate, visible]);
+  }, [editGoal, initialMode, initialName, initialTargetAmount, initialTargetDate, lockedMode, visible]);
 
   const handleSave = async () => {
     if (saving) return;
     const t = parseFloat(target);
     if (!name.trim() || isNaN(t) || t <= 0 || !targetDate) return;
+    if (minimumTargetAmount !== undefined && t + 0.005 < minimumTargetAmount) {
+      Alert.alert(
+        "Bucket amount is too small",
+        `Enter at least $${minimumTargetAmount.toFixed(2)} to include this posted transaction. You can enter more to leave money for future purchases.`,
+      );
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const data: Omit<Goal, "id" | "created_at"> = {
       name: name.trim(),
@@ -94,7 +111,7 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
       closed_by: goalMode === "budget" ? editGoal?.closed_by : undefined,
     };
     const targetParts = targetDate.split("-").map(Number);
-    const affordability = !editGoal && goalMode === "budget" && targetParts.length === 3
+    const affordability = !skipAffordabilityCheck && !editGoal && goalMode === "budget" && targetParts.length === 3
       ? checkGoalAffordability(
           {
             ...data,
@@ -145,6 +162,9 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
   const input = [styles.input, { backgroundColor: c.muted, color: c.foreground }];
   const lbl   = [styles.label, { color: c.mutedForeground }];
   const itemLabel = goalMode === "budget" ? "Bucket" : "Goal";
+  const requestClose = () => {
+    if (!saving) onClose();
+  };
 
   return (
     <>
@@ -152,17 +172,17 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
         visible={visible}
         animationType={isDesktop ? "fade" : "slide"}
         transparent
-        onRequestClose={() => confirmation ? setConfirmation(null) : onClose()}
+        onRequestClose={() => confirmation ? setConfirmation(null) : requestClose()}
       >
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.overlay, isDesktop && DESKTOP_MODAL_OVERLAY]}>
-        <Pressable accessibilityLabel="Close goal editor" onPress={onClose} style={StyleSheet.absoluteFillObject} />
+        <Pressable accessibilityLabel="Close goal editor" disabled={saving} onPress={requestClose} style={StyleSheet.absoluteFillObject} />
         <View style={[styles.container, { backgroundColor: c.background }, isDesktop && DESKTOP_MODAL_COMPACT]}>
           <View style={[styles.handle, isDesktop && DESKTOP_MODAL_HANDLE]} />
           <View style={styles.header}>
             <Text style={[styles.title, { color: c.foreground }]}>
-              {editGoal ? "Edit Goal or Bucket" : "Set Aside Money"}
+              {title ?? (editGoal ? "Edit Goal or Bucket" : "Set Aside Money")}
             </Text>
-            <Pressable onPress={onClose} hitSlop={8}>
+            <Pressable disabled={saving} onPress={requestClose} hitSlop={8}>
               <Feather name="x" size={22} color={c.mutedForeground} />
             </Pressable>
           </View>
@@ -170,8 +190,9 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
           <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={isDesktop}>
 
             {/* ── Goal type ── */}
-            <Text style={lbl}>Goal Type</Text>
-            <View style={styles.modeRow}>
+            {!lockedMode ? <>
+              <Text style={lbl}>Goal Type</Text>
+              <View style={styles.modeRow}>
               {([
                 { id: "savings" as const, label: "Savings Goal", icon: "trending-up" as const },
                 { id: "budget" as const, label: "Spending Bucket", icon: "calendar" as const },
@@ -188,12 +209,13 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
                   </Pressable>
                 );
               })}
-            </View>
-            <Text style={[styles.modeHint, { color: c.mutedForeground }]}>
-              {goalMode === "budget"
-                ? "Set aside money for something you expect to buy. Match the bank charge to this bucket when it posts."
-                : "Track money you are actively setting aside toward a target."}
-            </Text>
+              </View>
+              <Text style={[styles.modeHint, { color: c.mutedForeground }]}>
+                {goalMode === "budget"
+                  ? "Set aside money for something you expect to buy. Match the bank charge to this bucket when it posts."
+                  : "Track money you are actively setting aside toward a target."}
+              </Text>
+            </> : null}
 
             {/* ── Name ── */}
             <Text style={lbl}>{goalMode === "budget" ? "What are you planning?" : "Goal Name"}</Text>
@@ -237,16 +259,16 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
               value={targetDate}
               onChange={setTargetDate}
               placeholder="Pick a date…"
-              minDate={todayYMD}
+              minDate={minimumTargetDate ?? todayYMD}
             />
 
             {/* ── Info hint ── */}
             <View style={[styles.hint, { backgroundColor: c.primary + "15", borderRadius: 8 }]}>
               <Feather name="info" size={13} color={c.primary} />
               <Text style={[styles.hintText, { color: c.mutedForeground }]}>
-                {goalMode === "budget"
+                {hint ?? (goalMode === "budget"
                   ? "This amount is protected in your calendar until you match the real bank transaction. It will only count once."
-                  : "Add contributions over time and compare your saved amount with the target."}
+                  : "Add contributions over time and compare your saved amount with the target.")}
               </Text>
             </View>
 
@@ -260,7 +282,7 @@ export function GoalModal({ visible, onClose, onSave, onDelete, editGoal, initia
               ]}
             >
               <Text style={[styles.saveBtnText, { color: c.primaryForeground }]}>
-                {saving ? "Saving…" : `${editGoal ? "Update" : "Create"} ${itemLabel}`}
+                {saving ? "Saving…" : saveLabel ?? `${editGoal ? "Update" : "Create"} ${itemLabel}`}
               </Text>
             </Pressable>
 

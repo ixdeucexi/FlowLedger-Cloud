@@ -22,6 +22,7 @@ import {
 import { isValidExtraPaymentPlan } from "@/lib/debtPlanDomain";
 import { localDateString, MONTH_NAMES } from "@/lib/dateLabels";
 import { matchedOccurrenceAllocations } from "@/lib/reviewCenter";
+import { hasBucketRemainderFunding, latestBucketRemainderAvailableDate, resizeSnowballFundingSources } from "@/lib/snowballFunding";
 import {
   buildSnowballPlannerRows,
   buildSnowballTimeline,
@@ -148,6 +149,9 @@ function SnowballPlanScreen() {
   const planDate = dateParts(paymentDate);
   const targetMonthPayment = hasResolvedTransactionEdit ? undefined : getExtraPayment(planDate.month, planDate.year);
   const existingPayment = hasResolvedTransactionEdit ? undefined : editingPayment ?? targetMonthPayment;
+  const bucketAvailableDate = latestBucketRemainderAvailableDate(existingPayment?.sources);
+  const bucketFundingSource = existingPayment?.sources?.find(source => source.type === "bucket_remainder");
+  const paymentDateMinimum = bucketAvailableDate && bucketAvailableDate > today ? bucketAvailableDate : today;
   const destinationConflict = Boolean(
     editingPayment
     && targetMonthPayment
@@ -200,6 +204,7 @@ function SnowballPlanScreen() {
     && requestedExtra > 0.005
     && requestedExtra <= safeMaximum + 0.005
     && requestedExtra <= editTargetCapacity + 0.005
+    && paymentDate >= paymentDateMinimum
     && !destinationConflict
     && (editTransaction ? Boolean(target) : preview.allocations.length > 0);
   const monthLabel = `${MONTH_NAMES[planDate.month]} ${planDate.year}`;
@@ -266,7 +271,10 @@ function SnowballPlanScreen() {
           debt_applied_amount: editTransaction.debt_applied_amount,
         });
       } else {
-        await applyDebtSnowballPayment(preview, undefined, existingPayment?.id);
+        const sources = existingPayment
+          ? resizeSnowballFundingSources(existingPayment.sources, preview.selectedExtra)
+          : undefined;
+        await applyDebtSnowballPayment(preview, sources, existingPayment?.id);
       }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.dismissTo({
@@ -282,6 +290,10 @@ function SnowballPlanScreen() {
 
   const removePlan = () => {
     if ((!existingPayment && !editTransaction) || saving || !canEditHousehold) return;
+    if (hasBucketRemainderFunding(existingPayment?.sources)) {
+      Alert.alert("Reopen bucket first", `Reopen ${bucketFundingSource?.bucketName ?? "the routed spending bucket"} before removing this Snowball payment.`);
+      return;
+    }
     confirmAction({
       title: "Remove saved extra payment?",
       message: "This removes the saved extra payment and updates any amount previously applied to debt balances. Required debt payments stay unchanged.",
@@ -596,9 +608,10 @@ function SnowballPlanScreen() {
                   label="PAYMENT DATE"
                   value={paymentDate}
                   onChange={setPaymentDate}
-                  minDate={today}
+                  minDate={paymentDateMinimum}
                   maxDate={maximumPlanDate(today, settings.forecast_horizon_months)}
                 />
+                {bucketAvailableDate ? <Text style={[styles.error, { color: c.warning }]}>Includes {bucketFundingSource?.bucketName ?? "spending bucket"} money available {readableDate(bucketAvailableDate)}. Reopen the bucket before removing this source.</Text> : null}
 
                 <View style={styles.payoffDateLine}>
                   <Text style={[styles.payoffDateLabel, { color: c.mutedForeground }]}>PROJECTED PAYOFF</Text>

@@ -476,6 +476,9 @@ export default function MoreScreen({
       ? requestedReviewFilterParam
       : "all";
   const settingsScrollRef = useRef<ScrollView>(null);
+  const scrollToBucketManager = useCallback(() => {
+    settingsScrollRef.current?.scrollTo({ y: 0, animated: true });
+  }, []);
   const openSettingsSection = useCallback((sectionId: SettingsSectionId) => {
     setActiveSettingsSection(sectionId);
     router.setParams({ section: sectionId === "overview" ? "" : sectionId });
@@ -3751,6 +3754,7 @@ export default function MoreScreen({
                 key={`${activeHousehold?.householdId ?? activeHousehold?.budgetId ?? "personal"}:${requestedReviewFilter}:${requestedReviewTransactionId ?? "queue"}`}
                 focusTransactionId={requestedReviewTransactionId}
                 initialFilter={requestedReviewFilter}
+                onManageBuckets={scrollToBucketManager}
               />
             </PlanFeatureGate>
           </>

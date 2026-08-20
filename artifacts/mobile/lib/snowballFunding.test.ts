@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { replaceBillSurplusFundingSource, resizeSnowballFundingSources } from "./snowballFunding";
+import {
+  hasBucketRemainderFunding,
+  latestBucketRemainderAvailableDate,
+  removeBucketRemainderFundingSource,
+  replaceBillSurplusFundingSource,
+  replaceBucketRemainderFundingSource,
+  resizeSnowballFundingSources,
+} from "./snowballFunding";
 
 test("a debt underpayment becomes snowball funding instead of an ordinary transaction", () => {
   const sources = replaceBillSurplusFundingSource(
@@ -61,4 +68,49 @@ test("funding amounts always equal the edited payment to the cent", () => {
   ], 8.01);
 
   assert.equal(resized.reduce((sum, source) => sum + source.amount, 0), 8.01);
+});
+
+test("a bucket remainder routes only once and keeps its own funding identity", () => {
+  const routed = replaceBucketRemainderFundingSource([
+    { type: "manual", amount: 10 },
+    { type: "bucket_remainder", amount: 4, bucketId: "tia", bucketName: "Old Tia", availableDate: "2026-08-20" },
+    { type: "bucket_remainder", amount: 1, bucketId: "tia", bucketName: "Duplicate", availableDate: "2026-08-20" },
+  ], 15, {
+    type: "bucket_remainder",
+    amount: 5,
+    bucketId: "tia",
+    bucketName: "Tia",
+    availableDate: "2026-08-20",
+  });
+  assert.deepEqual(routed, [
+    { type: "manual", amount: 10 },
+    { type: "bucket_remainder", amount: 5, bucketId: "tia", bucketName: "Tia", availableDate: "2026-08-20" },
+  ]);
+  assert.deepEqual(removeBucketRemainderFundingSource(routed, "tia"), [
+    { type: "manual", amount: 10 },
+  ]);
+});
+
+test("payment resizing preserves routed bucket money until the bucket is reopened", () => {
+  const sources = [
+    { type: "manual" as const, amount: 10 },
+    { type: "bucket_remainder" as const, amount: 5, bucketId: "tia", bucketName: "Tia", availableDate: "2026-08-20" },
+  ];
+  assert.deepEqual(resizeSnowballFundingSources(sources, 12), [
+    { type: "bucket_remainder", amount: 5, bucketId: "tia", bucketName: "Tia", availableDate: "2026-08-20" },
+    { type: "manual", amount: 7 },
+  ]);
+  assert.throws(() => resizeSnowballFundingSources(sources, 4), /Reopen a routed spending bucket/);
+  assert.throws(() => resizeSnowballFundingSources(sources, 0), /Reopen a routed spending bucket/);
+});
+
+test("bucket funding exposes its latest immutable availability date", () => {
+  const sources = [
+    { type: "bucket_remainder" as const, amount: 5, bucketId: "tia", availableDate: "2026-08-20" },
+    { type: "manual" as const, amount: 2 },
+    { type: "bucket_remainder" as const, amount: 3, bucketId: "school", availableDate: "2026-09-03" },
+  ];
+  assert.equal(hasBucketRemainderFunding(sources), true);
+  assert.equal(latestBucketRemainderAvailableDate(sources), "2026-09-03");
+  assert.equal(hasBucketRemainderFunding([{ type: "manual", amount: 2 }]), false);
 });

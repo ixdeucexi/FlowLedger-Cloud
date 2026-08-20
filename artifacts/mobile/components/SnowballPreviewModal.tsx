@@ -21,6 +21,7 @@ interface Props {
   paymentDate?: string;
   paymentDateMin?: string;
   paymentDateMax?: string;
+  paymentDateMinimumReason?: string;
   safetyFloor?: number;
   forecastHorizonMonths?: number;
   onAmountChange: (value: string) => void;
@@ -30,7 +31,7 @@ interface Props {
   onRemove?: () => void;
 }
 
-export function SnowballPreviewModal({ visible, method, preview, amount, existingPayment, paymentDate, paymentDateMin, paymentDateMax, safetyFloor = 200, forecastHorizonMonths = 6, onAmountChange, onPaymentDateChange, onClose, onConfirm, onRemove }: Props) {
+export function SnowballPreviewModal({ visible, method, preview, amount, existingPayment, paymentDate, paymentDateMin, paymentDateMax, paymentDateMinimumReason, safetyFloor = 200, forecastHorizonMonths = 6, onAmountChange, onPaymentDateChange, onClose, onConfirm, onRemove }: Props) {
   const c = useColors();
   const isDesktop = useDesktopExperience();
   const [confirmation, setConfirmation] = useState<ConfirmActionOptions | null>(null);
@@ -91,6 +92,7 @@ export function SnowballPreviewModal({ visible, method, preview, amount, existin
                   maxDate={paymentDateMax}
                 />
               ) : null}
+              {paymentDateMinimumReason ? <Text style={[styles.error, { color: c.warning }]}>{paymentDateMinimumReason}</Text> : null}
 
               <Text style={[styles.label, { color: c.mutedForeground }]}>THIS PAYMENT</Text>
               <View style={[styles.card, { backgroundColor: c.card }]}>

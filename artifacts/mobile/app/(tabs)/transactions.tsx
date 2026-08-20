@@ -80,9 +80,9 @@ import {
 } from "@/lib/monthlySummary";
 import { isValidDateInMonth } from "@/lib/schedule";
 import type { SnowballProjectionResult } from "@/lib/snowball";
-import { resizeSnowballFundingSources } from "@/lib/snowballFunding";
+import { hasBucketRemainderFunding, latestBucketRemainderAvailableDate, resizeSnowballFundingSources } from "@/lib/snowballFunding";
 import {
-  isOpenSpendingBucket,
+  isEligibleSpendingBucketMatch,
   spendingBucketMatch,
   spendingBucketSummary,
 } from "@/lib/spendingBuckets";
@@ -355,6 +355,7 @@ export function ActivityScreen() {
     previewDebtSnowball,
     applyDebtSnowballPayment,
     removeDebtSnowballPayment,
+    createSpendingBucketForTransaction,
     addGoal,
     addBill,
     deleteBillMistake,
@@ -478,6 +479,7 @@ export function ActivityScreen() {
     useState<SnowballProjectionResult | null>(null);
   const [savingExtraPayment, setSavingExtraPayment] = useState(false);
   const [pendingBucketDraft, setPendingBucketDraft] = useState<{
+    transactionId?: string;
     name: string;
     amount: number;
     date: string;
@@ -799,6 +801,8 @@ export function ActivityScreen() {
         .map((source) =>
           source.type === "bill_surplus"
             ? `${source.billName ?? "bill"} surplus`
+            : source.type === "bucket_remainder"
+              ? `${source.bucketName ?? "Spending"} bucket remainder`
             : "manual safe extra",
         )
         .join(", ");
@@ -1382,12 +1386,7 @@ export function ActivityScreen() {
   const bucketMatchOptions = useMemo(() => {
     if (!matchTx || matchTx.amount >= 0) return [];
     const candidates = goals
-      .filter(
-        (goal) =>
-          goal.goal_type === "planned_expense" &&
-          !goal.archived_at &&
-          isOpenSpendingBucket(goal),
-      )
+      .filter(isEligibleSpendingBucketMatch)
       .map((goal) => ({
         billId: goal.id,
         name: goal.name,
@@ -1921,7 +1920,8 @@ export function ActivityScreen() {
     if (!editExtraPayment) return { min: undefined, max: undefined };
     const monthStart = `${editExtraPayment.year}-${String(editExtraPayment.month + 1).padStart(2, "0")}-01`;
     const monthEnd = `${editExtraPayment.year}-${String(editExtraPayment.month + 1).padStart(2, "0")}-${String(new Date(editExtraPayment.year, editExtraPayment.month + 1, 0).getDate()).padStart(2, "0")}`;
-    return { min: monthStart, max: monthEnd };
+    const bucketAvailableDate = latestBucketRemainderAvailableDate(editExtraPayment.sources);
+    return { min: bucketAvailableDate && bucketAvailableDate > monthStart ? bucketAvailableDate : monthStart, max: monthEnd, bucketAvailableDate };
   }, [editExtraPayment]);
 
   const updateExtraPaymentAmount = useCallback(
@@ -1974,7 +1974,9 @@ export function ActivityScreen() {
     ) {
       Alert.alert(
         "Choose a valid payment date",
-        "Choose any day within this Snowball payment’s month.",
+        editExtraDateLimits.bucketAvailableDate
+          ? `This payment includes bucket money that is not available until ${editExtraDateLimits.bucketAvailableDate}.`
+          : "Choose any day within this Snowball payment’s month.",
       );
       return;
     }
@@ -2019,6 +2021,10 @@ export function ActivityScreen() {
 
   const removeEditedExtraPayment = useCallback(async () => {
     if (!editExtraPayment || savingExtraPayment) return;
+    if (hasBucketRemainderFunding(editExtraPayment.sources)) {
+      Alert.alert("Reopen bucket first", "Reopen the routed spending bucket before removing this Snowball payment.");
+      return;
+    }
     setSavingExtraPayment(true);
     try {
       await removeDebtSnowballPayment(
@@ -3629,6 +3635,42 @@ export function ActivityScreen() {
               </>
             )}
 
+            {matchingBankActivity && !matchedTargetName && matchTx?.amount < 0 && matchTx.review_status === "needs_review" ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Create bucket and add transaction"
+                disabled={savingMatch}
+                onPress={() => {
+                  const transaction = matchTx;
+                  if (!transaction) return;
+                  setMatchTx(null);
+                  setTimeout(() => setPendingBucketDraft({
+                    transactionId: transaction.id,
+                    name: transaction.merchant_name?.trim() || transaction.note?.trim() || transaction.category || "Spending",
+                    amount: Math.abs(transaction.amount),
+                    date: transaction.date,
+                  }), MODAL_HANDOFF_DELAY_MS);
+                }}
+                style={({ pressed }) => [
+                  styles.oneTimeButton,
+                  {
+                    backgroundColor: c.primary + "12",
+                    borderColor: c.primary + "55",
+                    opacity: savingMatch ? 0.55 : pressed ? 0.78 : 1,
+                  },
+                ]}
+              >
+                <View style={[styles.matchIcon, { backgroundColor: c.primary + "18" }]}>
+                  <Feather name="archive" size={17} color={c.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.matchRowTitle, { color: c.foreground }]}>Create bucket and add transaction</Text>
+                  <Text style={[styles.matchRowMeta, { color: c.mutedForeground }]}>Start with this purchase and optionally leave money for more.</Text>
+                </View>
+                <Feather name="chevron-right" size={17} color={c.primary} />
+              </Pressable>
+            ) : null}
+
             {matchingBankActivity && !matchedTargetName ? (
               <Pressable
                 accessibilityRole="button"
@@ -4167,6 +4209,7 @@ export function ActivityScreen() {
         paymentDate={editExtraDate}
         paymentDateMin={editExtraDateLimits.min}
         paymentDateMax={editExtraDateLimits.max}
+        paymentDateMinimumReason={editExtraDateLimits.bucketAvailableDate ? `Includes bucket money available ${editExtraDateLimits.bucketAvailableDate}. Reopen the bucket before removing that source.` : undefined}
         safetyFloor={settings.safety_floor}
         forecastHorizonMonths={settings.forecast_horizon_months}
         onAmountChange={updateExtraPaymentAmount}
@@ -4185,16 +4228,40 @@ export function ActivityScreen() {
         onClose={() => setPendingBucketDraft(null)}
         onSave={async (goal) => {
           if ("id" in goal) return;
-          await addGoal(goal);
-          Alert.alert(
-            "Money set aside",
-            `Your ${goal.name} bucket is ready. Match the charge to it after the bank posts it.`,
-          );
+          if (pendingBucketDraft?.transactionId) {
+            const result = await createSpendingBucketForTransaction({
+              transactionId: pendingBucketDraft.transactionId,
+              name: goal.name,
+              targetAmount: goal.target_amount,
+              targetDate: goal.target_date,
+            });
+            Alert.alert(
+              "Bucket created and transaction added",
+              result.remainingAmount > 0.005
+                ? `$${result.remainingAmount.toFixed(2)} remains in ${goal.name} for future purchases.`
+                : `${goal.name} now includes this posted transaction.`,
+            );
+          } else {
+            await addGoal(goal);
+            Alert.alert(
+              "Money set aside",
+              `Your ${goal.name} bucket is ready. Match the charge to it after the bank posts it.`,
+            );
+          }
         }}
         initialMode="budget"
         initialName={pendingBucketDraft?.name ?? ""}
         initialTargetAmount={pendingBucketDraft?.amount}
         initialTargetDate={pendingBucketDraft?.date}
+        title={pendingBucketDraft?.transactionId ? "Create bucket and add transaction" : undefined}
+        saveLabel={pendingBucketDraft?.transactionId ? "Create bucket and add transaction" : undefined}
+        lockedMode="budget"
+        minimumTargetAmount={pendingBucketDraft?.transactionId ? pendingBucketDraft.amount : undefined}
+        minimumTargetDate={pendingBucketDraft?.transactionId ? pendingBucketDraft.date : undefined}
+        hint={pendingBucketDraft?.transactionId
+          ? "This purchase has already posted. It will be added to the new bucket now; any amount left stays available for future purchases."
+          : undefined}
+        skipAffordabilityCheck={Boolean(pendingBucketDraft?.transactionId)}
       />
 
       {/* ── Detail sheet (auto-generated entries) ── */}

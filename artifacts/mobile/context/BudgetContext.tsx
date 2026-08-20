@@ -63,7 +63,8 @@ import { matchedOccurrenceAllocations, occurrenceKey, reviewedBillMonthSettlemen
 import { normalizePlanningTools } from "@/lib/planningMode";
 import { canonicalDebtPaymentMethod } from "@/lib/debtOrder";
 import { localDateString } from "@/lib/dateLabels";
-import { spendingBucketSummary } from "@/lib/spendingBuckets";
+import { spendingBucketSummary, validateCreateSpendingBucketMatch } from "@/lib/spendingBuckets";
+import { hasBucketRemainderFunding, latestBucketRemainderAvailableDate, removeBucketRemainderFundingSource, resizeSnowballFundingSources } from "@/lib/snowballFunding";
 import { canonicalConnectedAccounts, pendingPlaidActivityWithBalanceHolds } from "@/lib/plaidActivity";
 import { normalizeBillImportance, type BillImportance } from "@/lib/billImportance";
 import { buildTransactionLedger, remainingPlannedAmount, selectFlowLedgerTransactions } from "@/lib/ledgerEngine";
@@ -198,6 +199,20 @@ export interface ReconcileTransactionInput {
   extraCategory?: string;
 }
 
+export interface CreateSpendingBucketForTransactionInput {
+  transactionId: string;
+  name: string;
+  targetAmount: number;
+  targetDate: string;
+}
+
+export interface CreateSpendingBucketForTransactionResult {
+  goalId: string;
+  settlement: "exact" | "partial";
+  appliedAmount: number;
+  remainingAmount: number;
+}
+
 export interface Account {
   id: string;
   name: string;
@@ -287,12 +302,30 @@ export interface SnowballAllocation {
 }
 
 export interface SnowballFundingSource {
-  type: "manual" | "bill_surplus";
+  type: "manual" | "bill_surplus" | "bucket_remainder";
   amount: number;
   billId?: string;
   billName?: string;
   reviewTransactionId?: string;
+  bucketId?: string;
+  bucketName?: string;
+  availableDate?: string;
   pendingBalanceApply?: boolean;
+}
+
+export interface CloseSpendingBucketRouteInput {
+  bucketId: string;
+  expectedSpent: number;
+  expectedRemainder: number;
+  preview: SnowballProjectionResult;
+  sources: SnowballFundingSource[];
+  existingPaymentId?: string;
+}
+
+export interface CloseSpendingBucketRouteResult {
+  spent: number;
+  routed: number;
+  paymentId: string;
 }
 
 export interface ExtraPayment {
@@ -445,6 +478,7 @@ interface BudgetContextType {
   matchPendingTransactionToManual: (pendingPlaidTransactionId: string, manualTransactionId: string) => Promise<void>;
   removePendingPlanMatch: (matchId: string) => Promise<void>;
   reconcileTransaction: (input: ReconcileTransactionInput) => Promise<void>;
+  createSpendingBucketForTransaction: (input: CreateSpendingBucketForTransactionInput) => Promise<CreateSpendingBucketForTransactionResult>;
   undoTransactionReconciliation: (transactionId: string) => Promise<void>;
   removeReviewSurplusFunding: (transactionId: string) => Promise<void>;
   getTransactionsForMonth: (month: number, year: number) => Transaction[];
@@ -458,7 +492,8 @@ interface BudgetContextType {
   addGoal: (goal: Omit<Goal, "id" | "created_at">) => Promise<string>;
   updateGoal: (goal: Goal) => Promise<void>;
   closeSpendingBucket: (id: string) => Promise<{ spent: number; released: number }>;
-  reopenSpendingBucket: (id: string) => Promise<void>;
+  closeSpendingBucketAndRouteRemainder: (input: CloseSpendingBucketRouteInput) => Promise<CloseSpendingBucketRouteResult>;
+  reopenSpendingBucket: (id: string, remainingAllocations?: SnowballAllocation[]) => Promise<void>;
   archiveSpendingBucket: (id: string) => Promise<void>;
   restoreArchivedSpendingBucket: (id: string) => Promise<void>;
   deleteGoal: (id: string) => Promise<void>;
@@ -764,6 +799,25 @@ const remainingSnowballAllocationAmount = (
   if (match.settlement !== "partial") return 0;
   return Math.max(0, Number(match.plannedAmount ?? plannedAmount) - Number(match.amount || 0));
 };
+
+function normalizeGoalRow(goal: any): Goal {
+  return {
+    ...goal,
+    target_amount: Number(goal.target_amount),
+    current_amount: Number(goal.current_amount),
+    goal_type: goal.goal_type ?? (Number(goal.current_amount) < 0 ? "planned_expense" : "savings"),
+  };
+}
+
+function normalizeExtraPaymentRow(payment: any): ExtraPayment {
+  return {
+    ...payment,
+    amount: Number(payment.amount),
+    allocations: payment.allocations ?? [],
+    payment_date: payment.payment_date ?? undefined,
+    sources: payment.sources ?? [{ type: "manual", amount: Number(payment.amount) }],
+  };
+}
 
 function normalizeBillRow(bill: any): Bill {
   return {
@@ -2327,14 +2381,21 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     [bills, settings.paymentMethod, settings.debtPayoffEnabled, getBillMonthlyTotal]
   );
 
-  const saveExtraPayment = useCallback(async (month: number, year: number, amount: number, allocations: SnowballAllocation[], paymentDate?: string, sources: SnowballFundingSource[] = [{ type: "manual", amount }]) => {
+  const saveExtraPayment = useCallback(async (month: number, year: number, amount: number, allocations: SnowballAllocation[], paymentDate?: string, sources?: SnowballFundingSource[]) => {
     if (!isValidExtraPaymentPlan({ amount, allocations })) {
       throw new Error("Extra payment plans require a positive amount with matching debt allocations.");
     }
     if (!user) return;
     assertCanEditHousehold("save an extra debt payment");
     const existing = extraPayments.find(ep => ep.month === month && ep.year === year);
-    const payload = { amount, allocations, payment_date: paymentDate, sources };
+    const payloadSources = sources ?? (existing
+      ? resizeSnowballFundingSources(existing.sources, amount) as SnowballFundingSource[]
+      : [{ type: "manual" as const, amount }]);
+    const availableDate = latestBucketRemainderAvailableDate(payloadSources);
+    if (availableDate && (!paymentDate || paymentDate < availableDate)) {
+      throw new Error(`This payment includes bucket money that is not available until ${availableDate}.`);
+    }
+    const payload = { amount, allocations, payment_date: paymentDate, sources: payloadSources };
     if (demoMode) {
       if (existing) {
         setExtraPayments(prev => prev.map(ep => ep.id === existing.id ? { ...ep, ...payload } : ep));
@@ -2486,17 +2547,21 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const deleteExtraPayment = useCallback(async (id: string) => {
     if (!user) return;
     assertCanEditHousehold("delete an extra debt payment");
+    const payment = extraPayments.find(item => item.id === id);
+    if (hasBucketRemainderFunding(payment?.sources)) {
+      throw new Error("Reopen the routed spending bucket before removing this Snowball payment.");
+    }
     if (demoMode) {
       setExtraPayments(prev => prev.filter(ep => ep.id !== id));
       return;
     }
     await ensureSaved(supabase.from("extra_payments").delete().eq("id", id), "Delete extra payment");
     setExtraPayments(prev => prev.filter(ep => ep.id !== id));
-  }, [user, demoMode, assertCanEditHousehold]);
+  }, [user, extraPayments, demoMode, assertCanEditHousehold]);
 
   const applyDebtSnowballPayment = useCallback(async (
     preview: SnowballProjectionResult,
-    sources: SnowballFundingSource[] = [{ type: "manual", amount: preview.selectedExtra }],
+    sources?: SnowballFundingSource[],
     existingPaymentId?: string,
   ) => {
     if (!isValidExtraPaymentPlan({ amount: preview.selectedExtra, allocations: preview.allocations })) {
@@ -2511,7 +2576,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       ? extraPayments.find(ep => ep.id === existingPaymentId)
       : extraPayments.find(ep => ep.month === month && ep.year === year);
     const paymentId = existing?.id ?? genId();
-    const payloadSources = markSnowballSourcesPending(sources);
+    const resizedSources = sources ?? (existing
+      ? resizeSnowballFundingSources(existing.sources, preview.selectedExtra) as SnowballFundingSource[]
+      : [{ type: "manual" as const, amount: preview.selectedExtra }]);
+    const availableDate = latestBucketRemainderAvailableDate(resizedSources);
+    if (availableDate && preview.paymentDate < availableDate) {
+      throw new Error(`This payment includes bucket money that is not available until ${availableDate}.`);
+    }
+    const payloadSources = markSnowballSourcesPending(resizedSources);
 
     if (demoMode) {
       const nextPayment: ExtraPayment = {
@@ -2567,6 +2639,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     const existing = extraPayments.find(ep => ep.month === month && ep.year === year);
     if (!existing || !user) return;
     assertCanEditHousehold("remove a debt snowball payment");
+    if (hasBucketRemainderFunding(existing.sources)) {
+      throw new Error("Reopen the routed spending bucket before removing this Snowball payment.");
+    }
     if (demoMode) {
       setExtraPayments(prev => prev.filter(ep => ep.id !== existing.id));
       return;
@@ -3206,6 +3281,174 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, assertCanEditHousehold, transactions, incomes, bills, extraPayments, demoMode, refreshBillMatchData, refreshDebtRows, syncDebtTransactionsAndRefresh, markSaveStarted, markSaveCompleted, markSaveFailed]);
 
+  const createSpendingBucketForTransaction = useCallback(async (
+    input: CreateSpendingBucketForTransactionInput,
+  ): Promise<CreateSpendingBucketForTransactionResult> => {
+    if (!user) throw new Error("Sign in to create a spending bucket");
+    assertCanEditHousehold("create a spending bucket");
+    const transaction = transactions.find(item => item.id === input.transactionId);
+    if (!transaction
+      || transaction.source !== "plaid"
+      || transaction.pending
+      || transaction.removed_at
+      || transaction.deleted_at) {
+      throw new Error("Posted bank transaction was not found.");
+    }
+    if (transaction.amount >= 0) throw new Error("Only money-out transactions can create a spending bucket.");
+    const retryingMatchedGoal = transaction.review_status === "matched"
+      && transaction.review_resolution === "goal"
+      && transaction.linked_plan_type === "goal"
+      && Boolean(transaction.linked_plan_id);
+    if (transaction.review_status !== "needs_review" && !retryingMatchedGoal) {
+      throw new Error("This transaction has already been reviewed.");
+    }
+
+    const valid = validateCreateSpendingBucketMatch({
+      name: input.name,
+      targetAmount: input.targetAmount,
+      targetDate: input.targetDate,
+      transactionAmount: transaction.amount,
+    });
+    if (demoMode && retryingMatchedGoal) {
+      const existingGoal = goals.find(item => item.id === transaction.linked_plan_id);
+      const existingAllocation = transaction.review_allocations?.find(allocation =>
+        allocation.type === "planned_expense" && allocation.targetId === existingGoal?.id
+      );
+      if (existingGoal
+        && existingGoal.goal_type === "planned_expense"
+        && existingGoal.name.trim() === valid.name
+        && Math.abs(existingGoal.target_amount - valid.targetAmount) < 0.005
+        && existingGoal.target_date === valid.targetDate
+        && existingAllocation
+        && Math.abs(existingAllocation.amount - valid.transactionAmount) < 0.005
+        && existingAllocation.settlement === valid.settlement) {
+        return {
+          goalId: existingGoal.id,
+          settlement: valid.settlement,
+          appliedAmount: valid.transactionAmount,
+          remainingAmount: Math.max(0, existingGoal.target_amount - existingGoal.current_amount),
+        };
+      }
+      throw new Error("This transaction has already been reviewed with different details.");
+    }
+    const goalId = genId();
+    const now = new Date().toISOString();
+    const goal: Goal = {
+      id: goalId,
+      name: valid.name,
+      target_amount: valid.targetAmount,
+      target_date: valid.targetDate,
+      current_amount: valid.transactionAmount,
+      created_at: now,
+      goal_type: "planned_expense",
+    };
+    const allocation: ReviewAllocation = {
+      type: "planned_expense",
+      source: "goal",
+      targetId: goalId,
+      name: valid.name,
+      amount: valid.transactionAmount,
+      plannedAmount: valid.targetAmount,
+      occurrenceDate: valid.targetDate,
+      settlement: valid.settlement,
+    };
+    const matchedTransaction: Transaction = {
+      ...transaction,
+      linked_bill_id: undefined,
+      linked_income_id: undefined,
+      linked_plan_id: goalId,
+      linked_plan_type: "goal",
+      matched_occurrence_date: valid.targetDate,
+      match_confidence: 1,
+      match_reason: "confirmed_plan_match",
+      review_status: "matched",
+      review_resolution: "goal",
+      review_allocations: [allocation],
+      reviewed_at: now,
+      reviewed_by: user.id,
+    };
+    const result: CreateSpendingBucketForTransactionResult = {
+      goalId,
+      settlement: valid.settlement,
+      appliedAmount: valid.transactionAmount,
+      remainingAmount: Math.max(0, valid.targetAmount - valid.transactionAmount),
+    };
+
+    if (demoMode) {
+      // Both state changes are derived and validated before either is applied,
+      // mirroring the all-or-nothing database RPC without an orphan bucket.
+      setGoals(previous => [...previous, goal]);
+      setTransactions(previous => previous.map(item => item.id === transaction.id ? matchedTransaction : item));
+      setPendingPlanMatches(previous => previous.filter(match => match.posted_transaction_id !== transaction.id));
+      return result;
+    }
+
+    markSaveStarted();
+    try {
+      const rpcResult = await supabase.rpc("create_spending_bucket_for_transaction", {
+        p_transaction_id: transaction.id,
+        p_goal_id: goalId,
+        p_name: valid.name,
+        p_target_amount: valid.targetAmount,
+        p_target_date: valid.targetDate,
+      });
+      if (rpcResult.error) throw new Error(`Create spending bucket: ${rpcResult.error.message}`);
+      const rpcPayload = rpcResult.data && typeof rpcResult.data === "object"
+        ? rpcResult.data as { goal_id?: unknown; goal?: Record<string, unknown> }
+        : undefined;
+      const serverGoalId = typeof rpcPayload?.goal_id === "string" && rpcPayload.goal_id
+        ? rpcPayload.goal_id
+        : undefined;
+      if (!serverGoalId) throw new Error("Create spending bucket: the saved bucket id was not returned");
+      const returnedGoal = rpcPayload?.goal;
+      const authoritativeGoal: Goal = returnedGoal ? {
+        ...goal,
+        ...returnedGoal,
+        id: serverGoalId,
+        name: String(returnedGoal.name ?? goal.name),
+        target_amount: Number(returnedGoal.target_amount ?? goal.target_amount),
+        target_date: String(returnedGoal.target_date ?? goal.target_date),
+        current_amount: Number(returnedGoal.current_amount ?? goal.current_amount),
+        created_at: String(returnedGoal.created_at ?? goal.created_at),
+        goal_type: "planned_expense",
+      } : { ...goal, id: serverGoalId };
+      const authoritativeAllocation = { ...allocation, targetId: serverGoalId };
+      const authoritativeMatchedTransaction = {
+        ...matchedTransaction,
+        linked_plan_id: serverGoalId,
+        review_allocations: [authoritativeAllocation],
+      };
+      const authoritativeResult: CreateSpendingBucketForTransactionResult = {
+        ...result,
+        goalId: serverGoalId,
+        remainingAmount: Math.max(0, authoritativeGoal.target_amount - authoritativeGoal.current_amount),
+      };
+
+      try {
+        await refreshBillMatchData();
+      } catch (refreshError) {
+        // The atomic RPC has already committed. Keep the successful action
+        // visible locally instead of inviting a duplicate retry.
+        setGoals(previous => [
+          ...previous.filter(item => item.id !== goalId && item.id !== serverGoalId),
+          authoritativeGoal,
+        ]);
+        setTransactions(previous => previous.map(item => item.id === transaction.id ? authoritativeMatchedTransaction : item));
+        console.warn("Spending bucket saved; plan refresh will retry", diagnosticErrorCode(refreshError));
+        void recordDiagnostic(user.id, {
+          eventType: "save_failure", operation: "reconciliation", platform: diagnosticPlatform(),
+          errorCode: diagnosticErrorCode(refreshError),
+        }).catch(() => undefined);
+      }
+      setPendingPlanMatches(previous => previous.filter(match => match.posted_transaction_id !== transaction.id));
+      markSaveCompleted();
+      return authoritativeResult;
+    } catch (error) {
+      markSaveFailed(error, () => createSpendingBucketForTransaction(input).then(() => undefined));
+      throw error;
+    }
+  }, [user, assertCanEditHousehold, transactions, goals, demoMode, markSaveStarted, refreshBillMatchData, markSaveCompleted, markSaveFailed]);
+
   const undoTransactionReconciliation = useCallback(async (transactionId: string) => {
     if (!user) throw new Error("Sign in to undo this review");
     assertCanEditHousehold("undo a transaction review");
@@ -3515,6 +3758,18 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, goals, demoMode, markSaveStarted, markSaveCompleted, markSaveFailed, assertCanEditHousehold]);
 
+  const refreshBucketRoutingData = useCallback(async () => {
+    if (!user || demoMode) return;
+    const [goalRows, paymentRows] = await Promise.all([
+      applyHouseholdSelect(supabase.from("goals").select("*"), user.id),
+      applyHouseholdSelect(supabase.from("extra_payments").select("*"), user.id),
+    ]);
+    if (goalRows.error) throw new Error(`Refresh spending buckets: ${goalRows.error.message}`);
+    if (paymentRows.error) throw new Error(`Refresh Snowball funding: ${paymentRows.error.message}`);
+    setGoals((goalRows.data ?? []).map(normalizeGoalRow));
+    setExtraPayments((paymentRows.data ?? []).map(normalizeExtraPaymentRow).filter(isValidExtraPaymentPlan));
+  }, [user, demoMode, applyHouseholdSelect]);
+
   const closeSpendingBucket = useCallback(async (id: string) => {
     if (!user) throw new Error("Sign in to close a spending bucket");
     assertCanEditHousehold("close a spending bucket");
@@ -3526,38 +3781,169 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (goal.closed_at) return { spent, released };
     const closedAt = new Date().toISOString();
     const closedGoal = { ...goal, closed_at: closedAt, closed_by: user.id };
-    setGoals(prev => prev.map(item => item.id === id ? closedGoal : item));
-    if (demoMode) return { spent, released };
+    if (demoMode) {
+      setGoals(prev => prev.map(item => item.id === id ? closedGoal : item));
+      return { spent, released };
+    }
     try {
-      await ensureSaved(
-        supabase.from("goals").update({ closed_at: closedAt, closed_by: user.id }).eq("id", id),
-        "Close spending bucket",
-      );
+      const { error } = await supabase.rpc("close_spending_bucket_keep_available", {
+        p_bucket_id: id,
+        p_expected_spent: spent,
+        p_expected_remainder: released,
+      });
+      if (error) throw new Error(`Close spending bucket: ${error.message}`);
+      try {
+        await refreshBucketRoutingData();
+      } catch {
+        setGoals(prev => prev.map(item => item.id === id ? closedGoal : item));
+      }
       return { spent, released };
     } catch (error) {
-      setGoals(prev => prev.map(item => item.id === id ? goal : item));
       throw error;
     }
-  }, [user, goals, demoMode, assertCanEditHousehold]);
+  }, [user, goals, demoMode, assertCanEditHousehold, refreshBucketRoutingData]);
 
-  const reopenSpendingBucket = useCallback(async (id: string) => {
+  const closeSpendingBucketAndRouteRemainder = useCallback(async (input: CloseSpendingBucketRouteInput) => {
+    if (!user) throw new Error("Sign in to route a spending bucket remainder");
+    assertCanEditHousehold("route a spending bucket remainder");
+    if (!settings.debtPayoffEnabled) throw new Error("Turn on Debt Payoff Plan before routing this remainder.");
+    const goal = goals.find(item => item.id === input.bucketId);
+    if (!goal || goal.goal_type !== "planned_expense") throw new Error("Spending bucket not found");
+    const summary = spendingBucketSummary(goal);
+    const expectedSpent = Math.round(input.expectedSpent * 100) / 100;
+    const expectedRemainder = Math.round(input.expectedRemainder * 100) / 100;
+    if (Math.abs(summary.spent - expectedSpent) >= 0.005 || Math.abs(summary.remaining - expectedRemainder) >= 0.005) {
+      throw new Error("This spending bucket changed. Refresh and try again.");
+    }
+    if (expectedRemainder <= 0 || !isValidExtraPaymentPlan({ amount: input.preview.selectedExtra, allocations: input.preview.allocations })) {
+      throw new Error("A positive bucket remainder and valid Snowball preview are required.");
+    }
+    const bucketSources = input.sources.filter(source => source.type === "bucket_remainder" && source.bucketId === input.bucketId);
+    if (bucketSources.length !== 1 || Math.abs(bucketSources[0].amount - expectedRemainder) >= 0.005) {
+      throw new Error("Snowball funding must include this bucket remainder exactly once.");
+    }
+    const [year, monthNumber] = input.preview.paymentDate.split("-").map(Number);
+    const month = monthNumber - 1;
+    const paymentId = input.existingPaymentId ?? genId();
+    const payloadSources = markSnowballSourcesPending(input.sources);
+    const closedAt = new Date().toISOString();
+    const closedGoal = { ...goal, closed_at: closedAt, closed_by: user.id };
+
+    if (demoMode) {
+      if (extraPayments.some(payment => payment.sources?.some(source => source.type === "bucket_remainder" && source.bucketId === input.bucketId))) {
+        throw new Error("This bucket remainder is already routed to Snowball.");
+      }
+      const nextPayment: ExtraPayment = {
+        id: paymentId,
+        month,
+        year,
+        amount: input.preview.selectedExtra,
+        allocations: input.preview.allocations,
+        payment_date: input.preview.paymentDate,
+        sources: payloadSources,
+      };
+      setGoals(previous => previous.map(item => item.id === input.bucketId ? closedGoal : item));
+      setExtraPayments(previous => upsertSnowballPlanById(previous, nextPayment));
+      return { spent: expectedSpent, routed: expectedRemainder, paymentId };
+    }
+
+    const { data, error } = await supabase.rpc("close_spending_bucket_and_route_remainder", {
+      p_bucket_id: input.bucketId,
+      p_expected_spent: expectedSpent,
+      p_expected_remainder: expectedRemainder,
+      p_payment_id: paymentId,
+      p_month: month,
+      p_year: year,
+      p_payment_date: input.preview.paymentDate,
+      p_plan_amount: input.preview.selectedExtra,
+      p_allocations: input.preview.allocations,
+    });
+    if (error) throw new Error(`Route spending bucket remainder: ${error.message}`);
+    const rpcPayload = data && typeof data === "object"
+      ? data as { payment_id?: unknown; payment?: Record<string, unknown> }
+      : undefined;
+    const serverPaymentId = typeof rpcPayload?.payment_id === "string" && rpcPayload.payment_id
+      ? rpcPayload.payment_id
+      : undefined;
+    if (!serverPaymentId) throw new Error("Route spending bucket remainder: the saved Snowball payment id was not returned");
+    const serverPayment = rpcPayload?.payment
+      ? normalizeExtraPaymentRow({ ...rpcPayload.payment, id: serverPaymentId })
+      : undefined;
+    try {
+      await refreshBucketRoutingData();
+    } catch {
+      setGoals(previous => previous.map(item => item.id === input.bucketId ? closedGoal : item));
+      setExtraPayments(previous => upsertSnowballPlanById(previous, serverPayment ?? {
+        id: serverPaymentId, month, year, amount: input.preview.selectedExtra,
+        allocations: input.preview.allocations, payment_date: input.preview.paymentDate, sources: payloadSources,
+      }));
+    }
+    return { spent: expectedSpent, routed: expectedRemainder, paymentId: serverPaymentId };
+  }, [user, goals, settings.debtPayoffEnabled, demoMode, extraPayments, assertCanEditHousehold, refreshBucketRoutingData]);
+
+  const reopenSpendingBucket = useCallback(async (id: string, remainingAllocations?: SnowballAllocation[]) => {
     if (!user) throw new Error("Sign in to reopen a spending bucket");
     assertCanEditHousehold("reopen a spending bucket");
     const goal = goals.find(item => item.id === id);
     if (!goal || goal.goal_type !== "planned_expense") throw new Error("Spending bucket not found");
+    const expectedRemainder = spendingBucketSummary(goal).released;
+    const routedPayment = extraPayments.find(payment => payment.sources?.some(source => source.type === "bucket_remainder" && source.bucketId === id));
+    const routedPaymentWasReconciled = routedPayment ? transactions.some(transaction =>
+      transaction.review_status === "matched"
+      && transaction.review_resolution === "snowball"
+      && transaction.linked_plan_id === routedPayment.id
+      && transaction.matched_occurrence_date === routedPayment.payment_date
+      && (transaction.review_allocations ?? []).some(allocation => allocation.type === "extra_principal" && allocation.amount > 0.005)
+    ) : false;
+    if (routedPaymentWasReconciled) {
+      throw new Error("This bucket remainder has already been paid through Snowball and cannot be reopened.");
+    }
+    const remainingSources = removeBucketRemainderFundingSource(routedPayment?.sources, id) as SnowballFundingSource[];
+    const remainingAmount = Math.round(remainingSources.reduce((sum, source) => sum + Math.max(0, Number(source.amount) || 0), 0) * 100) / 100;
+    if (routedPayment && remainingAmount > 0) {
+      const allocationAmount = Math.round((remainingAllocations ?? []).reduce((sum, allocation) => sum + Math.max(0, Number(allocation.payment) || 0), 0) * 100) / 100;
+      if (Math.abs(allocationAmount - remainingAmount) >= 0.005) {
+        throw new Error("Updated Snowball allocations are required before reopening this bucket.");
+      }
+    }
     const reopenedGoal = { ...goal, closed_at: undefined, closed_by: undefined };
-    setGoals(prev => prev.map(item => item.id === id ? reopenedGoal : item));
-    if (demoMode) return;
+    if (demoMode) {
+      setGoals(prev => prev.map(item => item.id === id ? reopenedGoal : item));
+      if (routedPayment) {
+        setExtraPayments(previous => remainingAmount <= 0
+          ? previous.filter(payment => payment.id !== routedPayment.id)
+          : previous.map(payment => payment.id === routedPayment.id ? {
+            ...payment,
+            amount: remainingAmount,
+            allocations: remainingAllocations ?? [],
+            sources: remainingSources,
+          } : payment));
+      }
+      return;
+    }
     try {
-      await ensureSaved(
-        supabase.from("goals").update({ closed_at: null, closed_by: null }).eq("id", id),
-        "Reopen spending bucket",
-      );
+      const { error } = await supabase.rpc("reopen_spending_bucket_and_unroute_remainder", {
+        p_bucket_id: id,
+        p_expected_remainder: expectedRemainder,
+        p_allocations: remainingAmount > 0 ? remainingAllocations : null,
+      });
+      if (error) throw new Error(`Reopen spending bucket: ${error.message}`);
+      try {
+        await refreshBucketRoutingData();
+      } catch {
+        setGoals(prev => prev.map(item => item.id === id ? reopenedGoal : item));
+        if (routedPayment) {
+          setExtraPayments(previous => remainingAmount <= 0
+            ? previous.filter(payment => payment.id !== routedPayment.id)
+            : previous.map(payment => payment.id === routedPayment.id ? {
+              ...payment, amount: remainingAmount, allocations: remainingAllocations ?? [], sources: remainingSources,
+            } : payment));
+        }
+      }
     } catch (error) {
-      setGoals(prev => prev.map(item => item.id === id ? goal : item));
       throw error;
     }
-  }, [user, goals, demoMode, assertCanEditHousehold]);
+  }, [user, goals, extraPayments, transactions, demoMode, assertCanEditHousehold, refreshBucketRoutingData]);
 
   const archiveSpendingBucket = useCallback(async (id: string) => {
     if (!user) throw new Error("Sign in to archive a spending bucket");
@@ -4703,9 +5089,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       moveBillOccurrence, removeBillOccurrenceMove, getBillDateMoveForOccurrence, getBillDateMovesForMonth,
       getMonthlyBills, getBillOccurrencesInMonth, getBillMonthlyTotal, getBillEffectiveMonthlyTotal, getDebtMonthSettlements, getDebtSourceCommitment, getDebtPlanForMonth, getRemainingDebtPlanForMonth,
       runSnowball, previewDebtSnowball, applyDebtSnowballPayment, saveExtraPayment, getExtraPayment, deleteExtraPayment, removeDebtSnowballPayment, finalizeBillPayment,
-      addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, matchPendingTransactionToBill, matchPendingTransactionToManual, removePendingPlanMatch, reconcileTransaction, undoTransactionReconciliation, removeReviewSurplusFunding, getTransactionsForMonth,
+      addTransaction, updateTransaction, deleteTransaction, restoreDeletedTransaction, deleteTransfer, matchTransactionToBill, unmatchTransactionFromBill, matchPendingTransactionToBill, matchPendingTransactionToManual, removePendingPlanMatch, reconcileTransaction, createSpendingBucketForTransaction, undoTransactionReconciliation, removeReviewSurplusFunding, getTransactionsForMonth,
       addIncome, updateIncome, deleteIncome, getMonthlyIncome, getIncomeOccurrencesInMonth,
-      addGoal, updateGoal, closeSpendingBucket, reopenSpendingBucket, archiveSpendingBucket, restoreArchivedSpendingBucket, deleteGoal, checkGoalAffordability,
+      addGoal, updateGoal, closeSpendingBucket, closeSpendingBucketAndRouteRemainder, reopenSpendingBucket, archiveSpendingBucket, restoreArchivedSpendingBucket, deleteGoal, checkGoalAffordability,
       getCashFlow, getDailyBalances, getPlanSimulationBaseline,
       addCategory, updateCategory, deleteCategory,
       updateSettings, importBills,

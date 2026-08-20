@@ -670,6 +670,7 @@ function MobileDashboardScreen() {
       else if (action === "expense")  router.push("/(tabs)/monthly" as any);
       else if (action === "snowball") router.push("/snowball-plan" as any);
       else if (action === "goal")     { setEditGoal(null); setGoalModalVisible(true); }
+      else if (action === "buckets")  router.push({ pathname: "/(tabs)/more", params: { section: "review" } } as any);
       else if (action === "afford") {} // handled inline
     }, 250);
   };
@@ -1546,6 +1547,7 @@ function MobileDashboardScreen() {
               { id: "income",  icon: "trending-up" as const, label: "Add Income",        sub: "Log a salary, freelance, or other",    col: c.success     },
               { id: "expense", icon: "shopping-bag"as const, label: "Add a Transaction", sub: "Record a one-time expense or income",  col: c.warning     },
               { id: "goal",    icon: "target"      as const, label: "Set Aside Money",   sub: "Create a savings goal or spending bucket", col: "#8b5cf6" },
+              { id: "buckets", icon: "archive"     as const, label: "Spending Buckets",  sub: "Open, close, or manage your buckets", col: "#06b6d4" },
               { id: "snowball", icon: "trending-down" as const, label: "Debt Payoff Planner", sub: "See the payoff ladder or plan safe extra money", col: c.destructive },
             ].map(item => (
               <Pressable
