@@ -1235,7 +1235,7 @@ export default function MoreScreen({
     [growthTransactions, subscriptionDecisions, transactions],
   );
   const subscriptionBillMatches = useMemo(() => {
-    const result = new Map<string, { transactionId: string; transactionName: string; target: RankedReviewTarget }>();
+    const result = new Map<string, { transactionId: string; transactionName: string; target?: RankedReviewTarget }>();
     const billMatches = matchedOccurrenceAllocations(transactions, "bill");
     subscriptions.forEach(subscription => {
       const transaction = transactions
@@ -1268,8 +1268,8 @@ export default function MoreScreen({
             });
           });
         });
-      const target = applyMatchMemory(transaction, rankReviewTargets(transaction, targets), transactions)[0];
-      if (!target || target.score < 48) return;
+      const rankedTarget = applyMatchMemory(transaction, rankReviewTargets(transaction, targets), transactions)[0];
+      const target = rankedTarget?.score >= 48 ? rankedTarget : undefined;
       result.set(subscriptionKey(subscription), {
         transactionId: transaction.id,
         transactionName: transaction.merchant_name?.trim() || transaction.note?.trim() || subscription.merchant,
@@ -1585,10 +1585,14 @@ export default function MoreScreen({
 
   const handleMatchSubscriptionBill = async (
     subscription: SubscriptionCandidate,
-    match: { transactionId: string; transactionName: string; target: RankedReviewTarget },
+    match: { transactionId: string; transactionName: string; target?: RankedReviewTarget },
   ) => {
     const transaction = transactions.find(item => item.id === match.transactionId);
     if (!transaction || subscriptionMatchBusy) return;
+    if (!match.target) {
+      openSubscriptionInReview(match.transactionId);
+      return;
+    }
     const actual = Math.abs(transaction.amount);
     if (Math.abs(actual - match.target.plannedAmount) >= 0.005) {
       openSubscriptionInReview(match.transactionId);
@@ -3989,8 +3993,10 @@ export default function MoreScreen({
                         {subscription.priceIncrease
                           ? "Possible price increase. "
                           : ""}
-                        {match
+                        {match?.target
                           ? `Likely bill: ${match.target.name}. ${match.target.reasons.slice(0, 2).join(" · ")}`
+                          : match
+                            ? "No confident match yet. Choose the correct bill manually."
                           : subscription.duplicateRisk
                             ? "A similar recurring charge exists. Review it before creating another bill."
                             : "No confident bill match yet. You can create one or classify this charge."}
@@ -3999,7 +4005,7 @@ export default function MoreScreen({
                         {match ? (
                           <Pressable
                             accessibilityRole="button"
-                            accessibilityLabel={`Match ${match.transactionName} to ${match.target.name}`}
+                            accessibilityLabel={match.target ? `Match ${match.transactionName} to ${match.target.name}` : `Choose a bill for ${match.transactionName}`}
                             disabled={matching}
                             onPress={() => void handleMatchSubscriptionBill(subscription, match)}
                             style={({ pressed }) => [
@@ -4012,7 +4018,13 @@ export default function MoreScreen({
                             ]}
                           >
                             <Text style={[styles.growthPillButtonText, { color: c.success }]}>
-                              {matching ? "Matching…" : Math.abs(Math.abs(transactions.find(item => item.id === match.transactionId)?.amount ?? 0) - match.target.plannedAmount) < 0.005 ? "Match bill" : "Review match"}
+                              {matching
+                                ? "Matching…"
+                                : !match.target
+                                  ? "Choose bill"
+                                  : Math.abs(Math.abs(transactions.find(item => item.id === match.transactionId)?.amount ?? 0) - match.target.plannedAmount) < 0.005
+                                    ? "Match bill"
+                                    : "Review match"}
                             </Text>
                           </Pressable>
                         ) : null}
