@@ -1,6 +1,7 @@
 import { connectedCheckingBalance, type ForecastConfidence } from "./accounts";
 import { buildAlgorithmSuite } from "./algorithmSuite";
 import type { BillImportance } from "./billImportance";
+import { isBillEligibleForUpcomingPlan } from "./billEligibility";
 import { isCashFlowTransaction, isCheckingBalanceTransaction } from "./billMatching";
 import { buildCategoryPlan } from "./categoryPlanning";
 import { dateOnlyToLocalDate } from "./dateLabels";
@@ -241,7 +242,7 @@ export function buildDashboardFinancialModel(input: DashboardFinancialModelInput
   const currentMonth = now.getMonth();
   const today = now.getDate();
   const todayIso = `${now.getFullYear()}-${String(currentMonth + 1).padStart(2, "0")}-${String(today).padStart(2, "0")}`;
-  const monthlyBills = getMonthlyBills(currentMonth, selectedYear);
+  const monthlyBills = getMonthlyBills(currentMonth, selectedYear).filter(isBillEligibleForUpcomingPlan);
   const monthTransactions = getTransactionsForMonth(currentMonth, selectedYear);
 
   const categoryPlan = settings.zeroBasedBudgetEnabled

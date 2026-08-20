@@ -28,6 +28,7 @@ import { PremiumBackdrop } from "@/components/PremiumBackdrop";
 import { useColors } from "@/hooks/useColors";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { isCashFlowTransaction } from "@/lib/billMatching";
+import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
 import { type FloFacts } from "@/lib/flo";
 import { createFloAiConsent, floAiConsentStorageKey, parseFloAiConsent } from "@/lib/floAiConsent";
 import { humanizeFloText } from "@/lib/floLanguage";
@@ -291,6 +292,7 @@ export default function FloScreen() {
     const month = now.getMonth();
     const year = now.getFullYear();
     const monthBills = getMonthlyBills(month, year)
+      .filter(isBillEligibleForUpcomingPlan)
       .map(bill => ({
         category: bill.is_debt ? "Debt" : bill.category || "Other",
         amount: getBillMonthlyTotal(bill, month, year),
@@ -355,7 +357,7 @@ export default function FloScreen() {
         }));
       });
 
-      getMonthlyBills(month, year).forEach(bill => {
+      getMonthlyBills(month, year).filter(isBillEligibleForUpcomingPlan).forEach(bill => {
         const occurrences = getBillOccurrencesInMonth(bill, month, year);
         if (!occurrences.length) return;
         const monthlyTotal = getBillMonthlyTotal(bill, month, year);
@@ -392,7 +394,7 @@ export default function FloScreen() {
     const previousMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const previousCashFlow = getCashFlow(previousMonthDate.getMonth(), previousMonthDate.getFullYear());
     const billSummary = summarizeMonthlyBills(
-      getMonthlyBills(now.getMonth(), now.getFullYear()),
+      getMonthlyBills(now.getMonth(), now.getFullYear()).filter(isBillEligibleForUpcomingPlan),
       bill => getBillMonthlyTotal(bill, now.getMonth(), now.getFullYear()),
       bill => getPaidAmount(bill.id, now.getMonth(), now.getFullYear()),
     );

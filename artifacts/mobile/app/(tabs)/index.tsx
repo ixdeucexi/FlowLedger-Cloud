@@ -36,6 +36,7 @@ import { applyCategoryBudgetMove, buildZeroBudgetSummary } from "@/lib/categoryP
 import { categoryBudgetStorageKey, loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets as saveCategoryBudgetsRemote, subscribeCategoryBudgets } from "@/lib/categoryBudgetStore";
 import { buildDashboardFinancialModel, type DashboardSavingsAccount } from "@/lib/dashboardFinancialModel";
 import { isCheckingBalanceTransaction } from "@/lib/billMatching";
+import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
 import { dateOnlyToLocalDate, localDateString } from "@/lib/dateLabels";
 import {
   FLOWMENTUM_URL,
@@ -477,6 +478,7 @@ function MobileDashboardScreen() {
     if (!row) return null;
 
     const categoryBills = getMonthlyBills(currentMonth, selectedYear)
+      .filter(isBillEligibleForUpcomingPlan)
       .filter(bill => (bill.is_debt ? "Debt" : bill.category || "Other") === selectedCategory)
       .map(bill => ({
         id: bill.id,

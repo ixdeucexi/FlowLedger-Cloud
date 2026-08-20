@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { useBudget } from "@/context/BudgetContext";
 import { isActiveTransaction } from "@/lib/billMatching";
+import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
 import { desktopPlannerDestination } from "@/lib/desktopActions";
 
 type FeatherName = React.ComponentProps<typeof Feather>["name"];
@@ -304,7 +305,7 @@ function CalendarPage({ onOpenPlanner }: { onOpenPlanner: () => void }) {
   const balances = getDailyBalances(month, selectedYear);
   const visibleDays = balances.filter((day) => day.day >= today).slice(0, 16);
   const monthlyIncome = getMonthlyIncome(month, selectedYear);
-  const bills = getMonthlyBills(month, selectedYear);
+  const bills = getMonthlyBills(month, selectedYear).filter(isBillEligibleForUpcomingPlan);
   const plannedBills = bills.reduce((sum, bill) => sum + getBillMonthlyTotal(bill, month, selectedYear), 0);
   const lowest = balances.reduce((value, day) => Math.min(value, day.balance), balances[0]?.balance ?? 0);
 
@@ -417,7 +418,7 @@ function ReportsPage({ onOpenPlanner }: { onOpenPlanner: () => void }) {
   const month = new Date().getMonth();
   const cashFlow = getCashFlow(month, selectedYear);
   const income = getMonthlyIncome(month, selectedYear);
-  const bills = getMonthlyBills(month, selectedYear);
+  const bills = getMonthlyBills(month, selectedYear).filter(isBillEligibleForUpcomingPlan);
   const planned = bills.reduce((sum, bill) => sum + getBillMonthlyTotal(bill, month, selectedYear), 0);
   const billShare = income > 0 ? Math.min(100, (planned / income) * 100) : 0;
   const remainingShare = income > 0 ? Math.max(0, Math.min(100, (cashFlow.remaining / income) * 100)) : 0;

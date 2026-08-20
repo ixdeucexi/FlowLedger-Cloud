@@ -11,6 +11,7 @@ import { useBudget } from "@/context/BudgetContext";
 import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { isCashFlowTransaction } from "@/lib/billMatching";
+import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
 import { applyCategoryBudgetMove, buildCategoryPlan, buildZeroBudgetSummary, type CategoryPlanRow } from "@/lib/categoryPlanning";
 import { loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets } from "@/lib/categoryBudgetStore";
 import { buildReviewQueue } from "@/lib/reviewCenter";
@@ -83,7 +84,9 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
   const categoryPlan = useMemo(() => {
     return buildCategoryPlan(
       editableCategories,
-      getMonthlyBills(month, year).map(bill => ({ category: bill.is_debt ? "Debt" : bill.category || "Other", amount: getBillMonthlyTotal(bill, month, year) })),
+      getMonthlyBills(month, year)
+        .filter(isBillEligibleForUpcomingPlan)
+        .map(bill => ({ category: bill.is_debt ? "Debt" : bill.category || "Other", amount: getBillMonthlyTotal(bill, month, year) })),
       getTransactionsForMonth(month, year).filter(tx => isCashFlowTransaction(tx) && tx.category !== "Income").map(tx => ({ category: tx.category || "Other", amount: tx.amount })),
       Object.entries(categoryBudgets).map(([category, amount]) => ({ category, amount })),
     ).sort((left, right) => statusRank(left.status) - statusRank(right.status) || left.remaining - right.remaining);

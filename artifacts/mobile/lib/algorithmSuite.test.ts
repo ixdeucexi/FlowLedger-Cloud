@@ -277,7 +277,7 @@ test("Flow Score uses the required dollar amount due through today", () => {
 test("Flow Score counts partial and matched pending Must Pay money by occurrence", () => {
   const partial = buildAlgorithmSuite(baseInput({
     todayDay: 12,
-    bills: [{ id: "debt", name: "Debt", amount: 113, category: "Debt", due_day: 12, occurrenceDays: [12], is_debt: true, is_recurring: true, paidAmount: 57 }],
+    bills: [{ id: "debt", name: "Debt", amount: 113, balance: 113, category: "Debt", due_day: 12, occurrenceDays: [12], is_debt: true, is_recurring: true, paidAmount: 57 }],
   }));
   assert.equal(partial.flowScore.requiredAmountDue, 113);
   assert.equal(partial.flowScore.requiredAmountCovered, 57);
@@ -319,6 +319,33 @@ test("Stability Path names the exact overdue bill and remaining amount", () => {
   assert.match(suite.stability.headline, /\$75\.00/);
   assert.match(suite.stability.explanation, /July 9, 2026/);
   assert.equal(suite.stability.nextAction, "Review Past Bill first.");
+});
+
+test("closed debts never create Stability, Flow Score, or next-bill warnings", () => {
+  const suite = buildAlgorithmSuite(baseInput({
+    todayDay: 12,
+    bills: [
+      {
+        id: "closed-debt",
+        name: "Tia Kohls",
+        amount: 29,
+        balance: 0,
+        category: "Debt",
+        due_day: 9,
+        occurrenceDays: [9],
+        is_debt: true,
+        is_recurring: true,
+        paidAmount: 0,
+      },
+    ],
+  }));
+
+  assert.doesNotMatch(suite.stability.headline, /Tia Kohls/i);
+  assert.doesNotMatch(suite.stability.nextAction, /Tia Kohls/i);
+  assert.equal(suite.flowScore.requiredAmountDue, 0);
+  assert.equal(suite.flowScore.requiredAmountCovered, 0);
+  assert.equal(suite.billPriority.nextBill, null);
+  assert.equal(suite.debtPayoff.nextDebtName, null);
 });
 
 test("future recurring occurrences do not make a current bill overdue", () => {

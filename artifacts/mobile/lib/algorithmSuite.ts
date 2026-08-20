@@ -235,6 +235,13 @@ export interface AlgorithmSuiteResult {
 }
 
 export function buildAlgorithmSuite(input: AlgorithmSuiteInput): AlgorithmSuiteResult {
+  return buildAlgorithmSuiteForEligibleBills({
+    ...input,
+    bills: input.bills.filter(isBillEligibleForUpcomingPlan),
+  });
+}
+
+function buildAlgorithmSuiteForEligibleBills(input: AlgorithmSuiteInput): AlgorithmSuiteResult {
   const balances = input.dailyBalances.slice().sort((a, b) => a.day - b.day);
   const remainingBalances = balances.filter(day => day.day >= input.todayDay);
   const lowest = minBy(remainingBalances.length ? remainingBalances : balances, day => day.balance);

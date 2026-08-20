@@ -41,6 +41,16 @@ const bill: Bill = {
   created_at: "2026-01-01T00:00:00.000Z",
 };
 
+const closedDebt: Bill = {
+  ...bill,
+  id: "closed-debt",
+  name: "Tia Kohls",
+  amount: 29,
+  category: "Debt",
+  is_debt: true,
+  balance: 0,
+};
+
 const activeGoal: Goal = {
   id: "emergency",
   name: "Emergency fund",
@@ -167,7 +177,7 @@ test("builds the one financial model consumed by desktop and mobile dashboards",
       remaining: 1_875,
     },
     currentMonthBalances: balances,
-    getMonthlyBills: (month) => month === 6 ? [bill] : [],
+    getMonthlyBills: (month) => month === 6 ? [bill, closedDebt] : [],
     getMonthlyIncome: (month) => month === 6 ? 3_000 : 0,
     getTransactionsForMonth: (month) => month === 6 ? transactions : [],
     getDailyBalances: (month) => month === 6 ? balances : [],
@@ -191,6 +201,7 @@ test("builds the one financial model consumed by desktop and mobile dashboards",
   assert.equal(model.monthlyIncome, 3_000);
   assert.equal(model.unpaidTotal, 1_000);
   assert.equal(model.unpaidCount, 1);
+  assert.deepEqual(model.monthlyBills.map((item) => item.id), ["rent"]);
   assert.deepEqual(model.currentGoals.map((goal) => goal.id), ["emergency"]);
   assert.deepEqual(model.goalTotals, { current: 500, target: 2_000 });
   assert.equal(model.goalPercent, 25);

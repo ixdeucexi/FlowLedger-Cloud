@@ -55,6 +55,7 @@ import { useColors } from "@/hooks/useColors";
 import { useBackDismiss } from "@/hooks/useBackDismiss";
 import { useDesktopExperience } from "@/hooks/useDesktopExperience";
 import { nextPlannedDebtPayment } from "@/lib/billSurplusRouting";
+import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
 import {
   DESKTOP_MODAL_HANDLE,
   DESKTOP_MODAL_MATCH,
@@ -986,6 +987,7 @@ export function ActivityScreen() {
     const monthIndex = monthNumber - 1;
     const debtPlan = getRemainingDebtPlanForMonth(monthIndex, year);
     const plannedBillEntries = getMonthlyBills(monthIndex, year)
+      .filter(isBillEligibleForUpcomingPlan)
       .filter(bill => !bill.is_debt || !debtPlan)
       .flatMap((bill) => {
         const occurrenceDays = getBillOccurrencesInMonth(

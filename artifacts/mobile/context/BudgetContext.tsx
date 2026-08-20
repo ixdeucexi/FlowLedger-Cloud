@@ -67,6 +67,7 @@ import { spendingBucketSummary, validateCreateSpendingBucketMatch } from "@/lib/
 import { hasBucketRemainderFunding, latestBucketRemainderAvailableDate, removeBucketRemainderFundingSource, resizeSnowballFundingSources } from "@/lib/snowballFunding";
 import { canonicalConnectedAccounts, pendingPlaidActivityWithBalanceHolds } from "@/lib/plaidActivity";
 import { normalizeBillImportance, type BillImportance } from "@/lib/billImportance";
+import { isBillEligibleForUpcomingPlan } from "@/lib/billEligibility";
 import { buildTransactionLedger, remainingPlannedAmount, selectFlowLedgerTransactions } from "@/lib/ledgerEngine";
 import { debtSourceCommitmentsForDebts, type PendingPlanMatch } from "@/lib/pendingPlanMatches";
 import { chooseRestoredHousehold, shouldRefreshPlanOnResume } from "@/lib/resumePolicy";
@@ -4001,7 +4002,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       const monthNet = (m: number, y: number): number => {
         const inc = incomes.reduce((s, i) => s + getIncomeOccurrenceDays(i, m, y).length * getEffectiveIncomeAmount(i, m, y), 0);
         const debtPlan = getRemainingDebtPlanForMonth(m, y);
-        const bil = bills.filter(b => b.is_recurring || b.is_debt).reduce((s, b) => {
+        const bil = bills.filter(b => (b.is_recurring || b.is_debt) && isBillEligibleForUpcomingPlan(b)).reduce((s, b) => {
           if (b.is_debt && debtPlan) return s;
           const occ = getBillOccurrencesInMonth(b, m, y);
           if (occ.length === 0) return s;
@@ -4084,7 +4085,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
           return occurrenceSum + remaining;
         }, 0);
       }, 0);
-    const activeBills = getMonthlyBills(month, year);
+    const activeBills = getMonthlyBills(month, year).filter(isBillEligibleForUpcomingPlan);
     const debtPlan = getRemainingDebtPlanForMonth(month, year);
     const totalBillsDue = activeBills.reduce((sum, bill) => {
       if (bill.is_debt && debtPlan) return sum;
@@ -4172,7 +4173,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }, 0);
       }, 0);
       const debtPlan = getRemainingDebtPlanForMonth(m, y);
-      const bil = bills.filter(b => b.is_recurring || b.is_debt).reduce((s, b) => {
+      const bil = bills.filter(b => (b.is_recurring || b.is_debt) && isBillEligibleForUpcomingPlan(b)).reduce((s, b) => {
         const occ = getBillOccurrencesInMonth(b, m, y);
         if (occ.length === 0) return s;
         const hasReviewedOccurrence = Array.from(billMatches.keys()).some(key => key.startsWith(`${b.id}:${monthPrefix}`));
@@ -4303,7 +4304,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     });
     const billsByDay: Record<number, number> = {};
     const debtPlan = getRemainingDebtPlanForMonth(month, year);
-    bills.filter(b => b.is_recurring || b.is_debt).forEach(b => {
+    bills.filter(b => (b.is_recurring || b.is_debt) && isBillEligibleForUpcomingPlan(b)).forEach(b => {
       let occ = getBillOccurrencesInMonth(b, month, year);
       if (occ.length === 0) return;
       const o = overrides.find(o => o.bill_id === b.id && o.month === month && o.year === year);
@@ -5045,9 +5046,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   }, [user, demoMode, assertCanEditHousehold]);
 
   const forecastConfidence = useMemo(() => {
-    const base = evaluateForecastConfidence(accounts.map(toAccountSnapshot), incomes.length > 0, bills.some(bill => bill.is_recurring || bill.is_debt));
+    const planningBills = bills.filter(bill => (bill.is_recurring || bill.is_debt) && isBillEligibleForUpcomingPlan(bill));
+    const base = evaluateForecastConfidence(accounts.map(toAccountSnapshot), incomes.length > 0, planningBills.length > 0);
     const cutoff = Date.now() - 60 * 86_400_000;
-    const staleRecurring = [...bills.filter(bill => bill.is_recurring || bill.is_debt), ...incomes]
+    const staleRecurring = [...planningBills, ...incomes]
       .some(item => !item.last_reviewed_at || new Date(item.last_reviewed_at).getTime() < cutoff);
     if (!staleRecurring) return base;
     const reasons = [...base.reasons.filter(reason => reason !== "Accounts and recurring cash flow are current"), "Review recurring income and bills older than 60 days"];
