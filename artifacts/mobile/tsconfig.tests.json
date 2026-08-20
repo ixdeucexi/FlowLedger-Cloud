@@ -30,6 +30,8 @@
     ,"lib/dateLabels.test.ts"
     ,"lib/categoryPlanning.ts"
     ,"lib/categoryPlanning.test.ts"
+    ,"lib/competitiveGrowth.ts"
+    ,"lib/competitiveGrowth.test.ts"
     ,"lib/decisionPersistence.ts"
     ,"lib/decisionPersistence.test.ts"
     ,"lib/monthlySummary.ts"

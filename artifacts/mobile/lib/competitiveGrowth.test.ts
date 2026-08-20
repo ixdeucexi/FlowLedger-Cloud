@@ -9,6 +9,7 @@ import {
   buildReviewQueue,
   buildSmartReminders,
   detectSubscriptions,
+  subscriptionNeedsCleanup,
   evaluateForecastReadiness,
   type GrowthTransaction,
   type TransactionRule,
@@ -54,6 +55,20 @@ test("detects recurring subscriptions and price increases", () => {
   assert.equal(netflix.cadence, "monthly");
   assert.equal(netflix.priceIncrease, true);
   assert.ok(netflix.yearlyEquivalent > 200);
+});
+
+test("tracked bill subscriptions stay out of cleanup until a new charge needs review", () => {
+  const candidate = { transactionIds: ["old", "new"] };
+  assert.equal(subscriptionNeedsCleanup(candidate, [
+    { id: "old", amount: -15, source: "plaid", review_status: "matched", linked_bill_id: "bill" },
+  ]), false);
+  assert.equal(subscriptionNeedsCleanup(candidate, [
+    { id: "old", amount: -15, source: "plaid", review_status: "matched", linked_bill_id: "bill" },
+    { id: "new", amount: -15, source: "plaid", review_status: "needs_review" },
+  ]), true);
+  assert.equal(subscriptionNeedsCleanup(candidate, [
+    { id: "old", amount: -15, source: "plaid", review_status: "categorized" },
+  ]), true);
 });
 
 test("scores forecast readiness with clear next step", () => {

@@ -109,7 +109,15 @@ import {
   type SettingsStatus,
 } from "@/lib/settingsHub";
 import { supabase } from "@/lib/supabase";
-import { transactionCategoryParts } from "@/lib/reviewCenter";
+import {
+  applyMatchMemory,
+  matchedOccurrenceAllocations,
+  occurrenceKey,
+  rankReviewTargets,
+  transactionCategoryParts,
+  type RankedReviewTarget,
+  type ReviewTarget,
+} from "@/lib/reviewCenter";
 import { flowLedgerUserGuideTarget } from "@/lib/userGuide";
 import {
   type AppFeedbackRow,
@@ -131,6 +139,7 @@ import {
   detectSubscriptions,
   evaluateForecastReadiness,
   normalizeMerchant,
+  subscriptionNeedsCleanup,
   type SubscriptionCandidate,
 } from "@/lib/competitiveGrowth";
 import { buildCategoryPlan } from "@/lib/categoryPlanning";
@@ -434,6 +443,10 @@ export default function MoreScreen({
     removeHouseholdMember,
     leaveActiveHousehold,
     refreshBankData,
+    getMonthlyBills,
+    getBillOccurrencesInMonth,
+    getBillMonthlyTotal,
+    reconcileTransaction,
   } = useBudget();
   const { readiness: setupReadiness } = useSetupReadiness();
 
@@ -538,6 +551,7 @@ export default function MoreScreen({
   const [subscriptionDecisions, setSubscriptionDecisions] = useState<
     Record<string, SubscriptionDecision>
   >({});
+  const [subscriptionMatchBusy, setSubscriptionMatchBusy] = useState<string | null>(null);
   const [backupExported, setBackupExported] = useState(() => {
     try {
       return (
@@ -1213,11 +1227,57 @@ export default function MoreScreen({
   const subscriptions = useMemo(
     () =>
       detectSubscriptions(growthTransactions).filter(
-        (item) =>
-          subscriptionDecisions[subscriptionKey(item)] !== "not_subscription",
+        (item) => {
+          if (subscriptionDecisions[subscriptionKey(item)] === "not_subscription") return false;
+          return subscriptionNeedsCleanup(item, transactions);
+        },
       ),
-    [growthTransactions, subscriptionDecisions],
+    [growthTransactions, subscriptionDecisions, transactions],
   );
+  const subscriptionBillMatches = useMemo(() => {
+    const result = new Map<string, { transactionId: string; transactionName: string; target: RankedReviewTarget }>();
+    const billMatches = matchedOccurrenceAllocations(transactions, "bill");
+    subscriptions.forEach(subscription => {
+      const transaction = transactions
+        .filter(item => subscription.transactionIds.includes(item.id))
+        .filter(item => item.source === "plaid" && item.review_status === "needs_review" && item.amount < 0 && !item.pending && !item.removed_at)
+        .sort((left, right) => right.date.localeCompare(left.date) || right.id.localeCompare(left.id))[0];
+      if (!transaction) return;
+      const [year, monthNumber] = transaction.date.split("-").map(Number);
+      const month = monthNumber - 1;
+      if (!Number.isInteger(year) || !Number.isInteger(month) || month < 0 || month > 11) return;
+      const targets: ReviewTarget[] = [];
+      getMonthlyBills(month, year)
+        .filter(bill => !bill.is_debt)
+        .forEach(bill => {
+          const days = getBillOccurrencesInMonth(bill, month, year);
+          const monthlyTotal = getBillMonthlyTotal(bill, month, year);
+          const plannedAmount = days.length ? monthlyTotal / days.length : bill.amount;
+          days.forEach(day => {
+            const occurrenceDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+            const previous = billMatches.get(occurrenceKey(bill.id, occurrenceDate));
+            const remaining = Math.max(0, plannedAmount - Number(previous?.amount || 0));
+            if (remaining <= 0.005) return;
+            targets.push({
+              type: "bill",
+              id: bill.id,
+              name: bill.name,
+              category: bill.category || "Other",
+              plannedAmount: remaining,
+              occurrenceDate,
+            });
+          });
+        });
+      const target = applyMatchMemory(transaction, rankReviewTargets(transaction, targets), transactions)[0];
+      if (!target || target.score < 48) return;
+      result.set(subscriptionKey(subscription), {
+        transactionId: transaction.id,
+        transactionName: transaction.merchant_name?.trim() || transaction.note?.trim() || subscription.merchant,
+        target,
+      });
+    });
+    return result;
+  }, [getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, subscriptions, transactions]);
   const recurringPlanCandidates = useMemo(() => {
     const billNames = bills.map((bill) => normalizeMerchant(bill.name));
     return subscriptions.filter(
@@ -1516,6 +1576,42 @@ export default function MoreScreen({
         }
       },
     });
+  };
+
+  const openSubscriptionInReview = (transactionId: string) => {
+    setActiveSettingsSection("review");
+    router.setParams({ section: "review", reviewFilter: "expense", reviewTransactionId: transactionId });
+  };
+
+  const handleMatchSubscriptionBill = async (
+    subscription: SubscriptionCandidate,
+    match: { transactionId: string; transactionName: string; target: RankedReviewTarget },
+  ) => {
+    const transaction = transactions.find(item => item.id === match.transactionId);
+    if (!transaction || subscriptionMatchBusy) return;
+    const actual = Math.abs(transaction.amount);
+    if (Math.abs(actual - match.target.plannedAmount) >= 0.005) {
+      openSubscriptionInReview(match.transactionId);
+      return;
+    }
+    const key = subscriptionKey(subscription);
+    setSubscriptionMatchBusy(key);
+    try {
+      await reconcileTransaction({
+        transactionId: match.transactionId,
+        resolution: "bill",
+        targetId: match.target.id,
+        occurrenceDate: match.target.occurrenceDate,
+        plannedAmount: match.target.plannedAmount,
+        settlement: "exact",
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      Alert.alert("Couldn’t match bill", error instanceof Error ? error.message : "Please try again.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setSubscriptionMatchBusy(null);
+    }
   };
 
   const handleMarkSubscription = (
@@ -3788,10 +3884,9 @@ export default function MoreScreen({
                       { color: c.mutedForeground },
                     ]}
                   >
-                    I use this screen for recurring charges that need cleanup.
-                    Detected Activity patterns show first; subscription-style
-                    bills already in your Bills tab are shown below so you know
-                    they are being tracked.
+                    Recurring bank charges are compared with your existing bills
+                    first. Exact matches can be confirmed here; amount differences
+                    open Review Center so you can decide where the remainder goes.
                   </Text>
                 </View>
                 <View
@@ -3842,17 +3937,20 @@ export default function MoreScreen({
                     </Text>
                   </View>
                 </View>
-                {subscriptions.slice(0, 10).map((subscription, index) => (
-                  <View
-                    key={subscription.merchant}
-                    style={[
-                      styles.growthListRow,
-                      {
-                        borderTopWidth: index ? 1 : 0,
-                        borderTopColor: c.border,
-                      },
-                    ]}
-                  >
+                {subscriptions.slice(0, 10).map((subscription, index) => {
+                  const match = subscriptionBillMatches.get(subscriptionKey(subscription));
+                  const matching = subscriptionMatchBusy === subscriptionKey(subscription);
+                  return (
+                    <View
+                      key={subscription.merchant}
+                      style={[
+                        styles.growthListRow,
+                        {
+                          borderTopWidth: index ? 1 : 0,
+                          borderTopColor: c.border,
+                        },
+                      ]}
+                    >
                     <View
                       style={[
                         styles.dataIcon,
@@ -3891,12 +3989,33 @@ export default function MoreScreen({
                         {subscription.priceIncrease
                           ? "Possible price increase. "
                           : ""}
-                        {subscription.duplicateRisk
-                          ? "Similar service found. "
-                          : ""}
-                        Review before creating or stopping bills.
+                        {match
+                          ? `Likely bill: ${match.target.name}. ${match.target.reasons.slice(0, 2).join(" · ")}`
+                          : subscription.duplicateRisk
+                            ? "A similar recurring charge exists. Review it before creating another bill."
+                            : "No confident bill match yet. You can create one or classify this charge."}
                       </Text>
                       <View style={styles.subscriptionActionRow}>
+                        {match ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`Match ${match.transactionName} to ${match.target.name}`}
+                            disabled={matching}
+                            onPress={() => void handleMatchSubscriptionBill(subscription, match)}
+                            style={({ pressed }) => [
+                              styles.growthPillButton,
+                              {
+                                backgroundColor: c.success + "18",
+                                borderColor: c.success + "55",
+                                opacity: matching ? 0.5 : pressed ? 0.72 : 1,
+                              },
+                            ]}
+                          >
+                            <Text style={[styles.growthPillButtonText, { color: c.success }]}>
+                              {matching ? "Matching…" : Math.abs(Math.abs(transactions.find(item => item.id === match.transactionId)?.amount ?? 0) - match.target.plannedAmount) < 0.005 ? "Match bill" : "Review match"}
+                            </Text>
+                          </Pressable>
+                        ) : null}
                         <Pressable
                           onPress={() =>
                             handleMarkSubscription(subscription, "keep")
@@ -3990,8 +4109,9 @@ export default function MoreScreen({
                         </Pressable>
                       </View>
                     </View>
-                  </View>
-                ))}
+                    </View>
+                  );
+                })}
                 {subscriptionBillHints.length ? (
                   <View style={{ marginTop: subscriptions.length ? 14 : 4 }}>
                     <Text

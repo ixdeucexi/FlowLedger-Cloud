@@ -97,6 +97,30 @@ export interface SubscriptionCandidate {
   confidence: "low" | "medium" | "high";
 }
 
+export interface SubscriptionReviewTransaction {
+  id: string;
+  amount: number;
+  source?: string | null;
+  review_status?: string | null;
+  linked_bill_id?: string | null;
+  debt_applied_bill_id?: string | null;
+}
+
+/** Keep a detected pattern actionable until every new bank charge is reviewed. */
+export function subscriptionNeedsCleanup(
+  candidate: Pick<SubscriptionCandidate, "transactionIds">,
+  transactions: SubscriptionReviewTransaction[],
+) {
+  const sourceTransactions = transactions.filter(transaction => candidate.transactionIds.includes(transaction.id));
+  const hasUnreviewedCharge = sourceTransactions.some(transaction =>
+    transaction.source === "plaid" && transaction.review_status === "needs_review" && transaction.amount < 0,
+  );
+  const alreadyTrackedAsBill = sourceTransactions.some(transaction =>
+    Boolean(transaction.linked_bill_id || transaction.debt_applied_bill_id),
+  );
+  return hasUnreviewedCharge || !alreadyTrackedAsBill;
+}
+
 export interface ForecastReadinessInput {
   accounts: number;
   hasCurrentBalance: boolean;
