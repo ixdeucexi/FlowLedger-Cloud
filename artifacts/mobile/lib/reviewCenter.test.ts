@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { allocationLabel, allocationTotal, applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupPlannedExpenseAllocations, groupReviewTargets, incomeReviewTargets, matchedOccurrenceAllocations, occurrenceKey, prioritizeReviewTransaction, rankReviewTargets, reviewAllocationsAreBalanced, reviewedBillMonthSettlement, reviewQueueAfterSkips, reviewSettlementSummary, scheduledSnowballReviewTargets, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
+import { allocationLabel, allocationTotal, applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupPlannedExpenseAllocations, groupReviewTargets, incomeReviewTargets, matchedOccurrenceAllocations, occurrenceKey, prioritizeReviewTransaction, prioritizeSavedBillTarget, rankReviewTargets, reviewAllocationsAreBalanced, reviewedBillMonthSettlement, reviewQueueAfterSkips, reviewSettlementSummary, scheduledSnowballReviewTargets, transactionCategoryParts, transactionDisplayName } from "./reviewCenter";
 
 test("queues active current-month and month-end rollover Plaid transactions oldest first", () => {
   const queue = buildReviewQueue([
@@ -227,6 +227,19 @@ test("Snowball plans appear with bills and debt in Review Center", () => {
 
   assert.deepEqual(grouped.bills.map(target => target.id), ["camera", "streaming"]);
   assert.equal(grouped.bills[0]?.type, "snowball");
+});
+
+test("an explicit subscription bill link outranks inferred matches", () => {
+  const ranked = rankReviewTargets(
+    { amount: -102, date: "2026-08-12", note: "Electronic Withdrawal Google", category: "Other" },
+    [
+      { type: "bill", id: "closer", name: "Other bill", category: "Other", plannedAmount: 102, occurrenceDate: "2026-08-12" },
+      { type: "bill", id: "google", name: "Google", category: "Subscriptions", plannedAmount: 100, occurrenceDate: "2026-08-13" },
+    ],
+  );
+  const linked = prioritizeSavedBillTarget(ranked, "google");
+  assert.equal(linked[0]?.id, "google");
+  assert.equal(linked[0]?.reasons[0], "Linked from Subscriptions");
 });
 
 test("manual Activity matches have their own Review Center group", () => {

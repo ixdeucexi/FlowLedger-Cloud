@@ -110,12 +110,13 @@ export interface SubscriptionReviewTransaction {
 export function subscriptionNeedsCleanup(
   candidate: Pick<SubscriptionCandidate, "transactionIds">,
   transactions: SubscriptionReviewTransaction[],
+  savedBillId?: string | null,
 ) {
   const sourceTransactions = transactions.filter(transaction => candidate.transactionIds.includes(transaction.id));
   const hasUnreviewedCharge = sourceTransactions.some(transaction =>
     transaction.source === "plaid" && transaction.review_status === "needs_review" && transaction.amount < 0,
   );
-  const alreadyTrackedAsBill = sourceTransactions.some(transaction =>
+  const alreadyTrackedAsBill = Boolean(savedBillId) || sourceTransactions.some(transaction =>
     Boolean(transaction.linked_bill_id || transaction.debt_applied_bill_id),
   );
   return hasUnreviewedCharge || !alreadyTrackedAsBill;
@@ -213,6 +214,16 @@ export function normalizeMerchant(value: string) {
     .replace(/\b(pos|debit|card|purchase|payment|inc|llc|co)\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+export function subscriptionLinkKeys(transaction: {
+  merchant_name?: string | null;
+  note?: string | null;
+  category?: string | null;
+}) {
+  return [transaction.merchant_name, transaction.note, transaction.category]
+    .map(value => normalizeMerchant(value || ""))
+    .filter((value, index, values) => Boolean(value) && values.indexOf(value) === index);
 }
 
 export function applyTransactionRules(

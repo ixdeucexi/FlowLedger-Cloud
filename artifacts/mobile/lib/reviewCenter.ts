@@ -269,6 +269,25 @@ export function applyMatchMemory(
   }).sort((left, right) => right.score - left.score || left.daysApart - right.daysApart || left.amountDifference - right.amountDifference);
 }
 
+/** Put a household's explicit subscription-to-bill choice ahead of guesses. */
+export function prioritizeSavedBillTarget(
+  rankedTargets: RankedReviewTarget[],
+  billId?: string | null,
+): RankedReviewTarget[] {
+  if (!billId) return rankedTargets;
+  const preferred = rankedTargets.filter(target => target.type === "bill" && target.id === billId);
+  if (!preferred.length) return rankedTargets;
+  const other = rankedTargets.filter(target => target.type !== "bill" || target.id !== billId);
+  return [
+    ...preferred.map(target => ({
+      ...target,
+      score: Math.max(target.score, 1_000),
+      reasons: ["Linked from Subscriptions", ...target.reasons.filter(reason => reason !== "Linked from Subscriptions")],
+    })),
+    ...other,
+  ];
+}
+
 export function allocationTotal(allocations: ReviewAllocationLike[] | undefined): number {
   return Math.round((allocations ?? []).reduce((sum, allocation) => sum + Math.max(0, Number(allocation.amount) || 0), 0) * 100) / 100;
 }

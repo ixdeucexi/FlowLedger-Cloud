@@ -113,6 +113,7 @@ import {
   applyMatchMemory,
   matchedOccurrenceAllocations,
   occurrenceKey,
+  prioritizeSavedBillTarget,
   rankReviewTargets,
   transactionCategoryParts,
   type RankedReviewTarget,
@@ -213,6 +214,11 @@ type SubscriptionDecisionRow = {
     | "cancel_manually"
     | "convert_to_bill"
     | "not_subscription";
+};
+
+type SubscriptionBillLinkRow = {
+  merchant_key: string;
+  bill_id: string;
 };
 
 function normalizeStorageMap<T extends string>(
@@ -552,6 +558,8 @@ export default function MoreScreen({
     Record<string, SubscriptionDecision>
   >({});
   const [subscriptionMatchBusy, setSubscriptionMatchBusy] = useState<string | null>(null);
+  const [subscriptionBillLinks, setSubscriptionBillLinks] = useState<Record<string, string>>({});
+  const [subscriptionLinkCandidate, setSubscriptionLinkCandidate] = useState<SubscriptionCandidate | null>(null);
   const [backupExported, setBackupExported] = useState(() => {
     try {
       return (
@@ -729,6 +737,31 @@ export default function MoreScreen({
       cancelled = true;
     };
   }, [activeHousehold?.householdId, subscriptionDecisionStorageKey, user?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user?.id || !activeHousehold?.householdId) {
+      setSubscriptionBillLinks({});
+      return () => { cancelled = true; };
+    }
+    void supabase
+      .from("subscription_bill_links")
+      .select("merchant_key,bill_id")
+      .eq("household_id", activeHousehold.householdId)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          setSubscriptionBillLinks({});
+          return;
+        }
+        setSubscriptionBillLinks((data ?? []).reduce<Record<string, string>>((acc, row) => {
+          const link = row as SubscriptionBillLinkRow;
+          if (link.merchant_key && link.bill_id) acc[link.merchant_key] = link.bill_id;
+          return acc;
+        }, {}));
+      });
+    return () => { cancelled = true; };
+  }, [activeHousehold?.householdId, user?.id]);
 
   useEffect(() => {
     if (inviteRoles.length > 0 && !inviteRoles.includes(householdInviteRole)) {
@@ -1229,10 +1262,10 @@ export default function MoreScreen({
       detectSubscriptions(growthTransactions).filter(
         (item) => {
           if (subscriptionDecisions[subscriptionKey(item)] === "not_subscription") return false;
-          return subscriptionNeedsCleanup(item, transactions);
+          return subscriptionNeedsCleanup(item, transactions, subscriptionBillLinks[subscriptionKey(item)]);
         },
       ),
-    [growthTransactions, subscriptionDecisions, transactions],
+    [growthTransactions, subscriptionBillLinks, subscriptionDecisions, transactions],
   );
   const subscriptionBillMatches = useMemo(() => {
     const result = new Map<string, { transactionId: string; transactionName: string; target?: RankedReviewTarget }>();
@@ -1268,7 +1301,8 @@ export default function MoreScreen({
             });
           });
         });
-      const rankedTarget = applyMatchMemory(transaction, rankReviewTargets(transaction, targets), transactions)[0];
+      const remembered = applyMatchMemory(transaction, rankReviewTargets(transaction, targets), transactions);
+      const rankedTarget = prioritizeSavedBillTarget(remembered, subscriptionBillLinks[subscriptionKey(subscription)])[0];
       const target = rankedTarget?.score >= 48 ? rankedTarget : undefined;
       result.set(subscriptionKey(subscription), {
         transactionId: transaction.id,
@@ -1277,7 +1311,13 @@ export default function MoreScreen({
       });
     });
     return result;
-  }, [getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, subscriptions, transactions]);
+  }, [getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, subscriptionBillLinks, subscriptions, transactions]);
+  const linkableSubscriptionBills = useMemo(
+    () => bills
+      .filter(bill => !bill.is_debt && !(bill.end_date && bill.end_date < todayIso))
+      .sort((left, right) => left.name.localeCompare(right.name)),
+    [bills, todayIso],
+  );
   const recurringPlanCandidates = useMemo(() => {
     const billNames = bills.map((bill) => normalizeMerchant(bill.name));
     return subscriptions.filter(
@@ -1612,6 +1652,44 @@ export default function MoreScreen({
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       Alert.alert("Couldn’t match bill", error instanceof Error ? error.message : "Please try again.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setSubscriptionMatchBusy(null);
+    }
+  };
+
+  const handleLinkSubscriptionBill = async (billId: string) => {
+    const subscription = subscriptionLinkCandidate;
+    const householdId = activeHousehold?.householdId;
+    if (!subscription || !user?.id || !householdId || subscriptionMatchBusy) return;
+    if (!canEditHousehold) {
+      Alert.alert("View only", "You need household edit access to link a subscription to a bill.");
+      return;
+    }
+    const key = subscriptionKey(subscription);
+    setSubscriptionMatchBusy(key);
+    try {
+      const { error } = await supabase.from("subscription_bill_links").upsert({
+        user_id: user.id,
+        household_id: householdId,
+        merchant_key: key,
+        merchant_label: subscription.merchant,
+        bill_id: billId,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "household_id,merchant_key" });
+      if (error) throw error;
+      setSubscriptionBillLinks(current => ({ ...current, [key]: billId }));
+      setSubscriptionLinkCandidate(null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const pendingMatch = subscriptionBillMatches.get(key);
+      if (pendingMatch) {
+        openSubscriptionInReview(pendingMatch.transactionId);
+      } else {
+        const billName = bills.find(bill => bill.id === billId)?.name ?? "that bill";
+        Alert.alert("Bill linked", `Future ${subscription.merchant} charges will suggest ${billName} first.`);
+      }
+    } catch (error) {
+      Alert.alert("Couldn’t link bill", error instanceof Error ? error.message : "Please try again.");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setSubscriptionMatchBusy(null);
@@ -3855,6 +3933,7 @@ export default function MoreScreen({
                 focusTransactionId={requestedReviewTransactionId}
                 initialFilter={requestedReviewFilter}
                 onManageBuckets={scrollToBucketManager}
+                subscriptionBillLinks={subscriptionBillLinks}
               />
             </PlanFeatureGate>
           </>
@@ -3942,8 +4021,11 @@ export default function MoreScreen({
                   </View>
                 </View>
                 {subscriptions.slice(0, 10).map((subscription, index) => {
-                  const match = subscriptionBillMatches.get(subscriptionKey(subscription));
-                  const matching = subscriptionMatchBusy === subscriptionKey(subscription);
+                  const key = subscriptionKey(subscription);
+                  const match = subscriptionBillMatches.get(key);
+                  const linkedBillId = subscriptionBillLinks[key];
+                  const linkedBill = linkedBillId ? bills.find(bill => bill.id === linkedBillId) : undefined;
+                  const matching = subscriptionMatchBusy === key;
                   return (
                     <View
                       key={subscription.merchant}
@@ -3993,7 +4075,9 @@ export default function MoreScreen({
                         {subscription.priceIncrease
                           ? "Possible price increase. "
                           : ""}
-                        {match?.target
+                        {linkedBill
+                          ? `Linked to ${linkedBill.name}. Future charges will suggest this bill first.`
+                          : match?.target
                           ? `Likely bill: ${match.target.name}. ${match.target.reasons.slice(0, 2).join(" · ")}`
                           : match
                             ? "No confident match yet. Choose the correct bill manually."
@@ -4002,10 +4086,10 @@ export default function MoreScreen({
                             : "No confident bill match yet. You can create one or classify this charge."}
                       </Text>
                       <View style={styles.subscriptionActionRow}>
-                        {match ? (
+                        {match?.target ? (
                           <Pressable
                             accessibilityRole="button"
-                            accessibilityLabel={match.target ? `Match ${match.transactionName} to ${match.target.name}` : `Choose a bill for ${match.transactionName}`}
+                            accessibilityLabel={`Match ${match.transactionName} to ${match.target.name}`}
                             disabled={matching}
                             onPress={() => void handleMatchSubscriptionBill(subscription, match)}
                             style={({ pressed }) => [
@@ -4020,14 +4104,30 @@ export default function MoreScreen({
                             <Text style={[styles.growthPillButtonText, { color: c.success }]}>
                               {matching
                                 ? "Matching…"
-                                : !match.target
-                                  ? "Choose bill"
-                                  : Math.abs(Math.abs(transactions.find(item => item.id === match.transactionId)?.amount ?? 0) - match.target.plannedAmount) < 0.005
+                                : Math.abs(Math.abs(transactions.find(item => item.id === match.transactionId)?.amount ?? 0) - match.target.plannedAmount) < 0.005
                                     ? "Match bill"
                                     : "Review match"}
                             </Text>
                           </Pressable>
                         ) : null}
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`${linkedBill ? "Change" : "Link"} bill for ${subscription.merchant}`}
+                          disabled={matching || !canEditHousehold}
+                          onPress={() => setSubscriptionLinkCandidate(subscription)}
+                          style={({ pressed }) => [
+                            styles.growthPillButton,
+                            {
+                              backgroundColor: c.primary + "18",
+                              borderColor: c.primary + "55",
+                              opacity: matching || !canEditHousehold ? 0.5 : pressed ? 0.72 : 1,
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.growthPillButtonText, { color: c.primary }]}>
+                            {linkedBill ? "Change bill" : "Link to bill"}
+                          </Text>
+                        </Pressable>
                         <Pressable
                           onPress={() =>
                             handleMarkSubscription(subscription, "keep")
@@ -5456,6 +5556,83 @@ export default function MoreScreen({
         )}
 
         <Modal
+          visible={Boolean(subscriptionLinkCandidate)}
+          transparent
+          animationType="slide"
+          onRequestClose={() => !subscriptionMatchBusy && setSubscriptionLinkCandidate(null)}
+        >
+          <Pressable
+            style={styles.infoOverlay}
+            onPress={() => !subscriptionMatchBusy && setSubscriptionLinkCandidate(null)}
+          >
+            <Pressable
+              style={[
+                styles.infoSheet,
+                styles.subscriptionLinkSheet,
+                { backgroundColor: c.card, borderColor: c.border },
+              ]}
+              onPress={() => undefined}
+            >
+              <View style={styles.infoSheetHeader}>
+                <View style={[styles.infoSheetIcon, { backgroundColor: c.primary + "18" }]}>
+                  <Feather name="link" size={20} color={c.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.infoSheetEyebrow, { color: c.primary }]}>Remember this match</Text>
+                  <Text style={[styles.infoSheetTitle, { color: c.foreground }]}>Choose the existing bill</Text>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Close bill chooser"
+                  disabled={Boolean(subscriptionMatchBusy)}
+                  onPress={() => setSubscriptionLinkCandidate(null)}
+                >
+                  <Feather name="x" size={22} color={c.mutedForeground} />
+                </Pressable>
+              </View>
+              <Text style={[styles.infoSheetDesc, { color: c.mutedForeground }]}>
+                FlowLedger will suggest this bill first for future {subscriptionLinkCandidate?.merchant} charges. If a charge still needs review, you’ll confirm it next.
+              </Text>
+              <ScrollView style={styles.subscriptionBillList} contentContainerStyle={{ paddingBottom: 4 }}>
+                {linkableSubscriptionBills.map((bill, index) => {
+                  const selected = subscriptionLinkCandidate
+                    ? subscriptionBillLinks[subscriptionKey(subscriptionLinkCandidate)] === bill.id
+                    : false;
+                  return (
+                    <Pressable
+                      key={bill.id}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected, disabled: Boolean(subscriptionMatchBusy) }}
+                      disabled={Boolean(subscriptionMatchBusy)}
+                      onPress={() => void handleLinkSubscriptionBill(bill.id)}
+                      style={({ pressed }) => [
+                        styles.dataRow,
+                        {
+                          borderTopWidth: index ? 1 : 0,
+                          borderTopColor: c.border,
+                          opacity: subscriptionMatchBusy ? 0.5 : pressed ? 0.72 : 1,
+                        },
+                      ]}
+                    >
+                      <View style={[styles.dataIcon, { backgroundColor: selected ? c.success + "18" : c.muted }]}>
+                        <Feather name={selected ? "check-circle" : "calendar"} size={17} color={selected ? c.success : c.primary} />
+                      </View>
+                      <View style={styles.dataBody}>
+                        <Text style={[styles.dataLabel, { color: c.foreground }]}>{bill.name}</Text>
+                        <Text style={[styles.dataDesc, { color: c.mutedForeground }]}>${bill.amount.toFixed(2)} · due day {bill.due_day}</Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+                {!linkableSubscriptionBills.length ? (
+                  <Text style={[styles.infoSheetDesc, { color: c.mutedForeground }]}>No active bills are available yet. Create the bill first, then return here to link it.</Text>
+                ) : null}
+              </ScrollView>
+            </Pressable>
+          </Pressable>
+        </Modal>
+
+        <Modal
           visible={zeroBudgetIntroVisible}
           transparent
           animationType="slide"
@@ -6344,6 +6521,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.22,
     shadowRadius: 24,
     elevation: 12,
+  },
+  subscriptionLinkSheet: {
+    maxHeight: "82%",
+  },
+  subscriptionBillList: {
+    maxHeight: 420,
+    marginTop: 10,
   },
   infoSheetHeader: {
     flexDirection: "row",

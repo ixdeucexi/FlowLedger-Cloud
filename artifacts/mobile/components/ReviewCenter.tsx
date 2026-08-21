@@ -14,7 +14,8 @@ import { useColors } from "@/hooks/useColors";
 import { manualActivityMatchCandidates } from "@/lib/billMatching";
 import { nextPlannedDebtPayment } from "@/lib/billSurplusRouting";
 import { confirmAction } from "@/lib/confirmAction";
-import { applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupReviewTargets, incomeReviewTargets, matchedOccurrenceAllocations, occurrenceKey, prioritizeReviewTransaction, rankReviewTargets, reviewQueueAfterSkips, scheduledSnowballReviewTargets, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
+import { applyMatchMemory, buildForgottenBillDefaults, buildReviewQueue, forgottenBillSettlement, groupReviewTargets, incomeReviewTargets, matchedOccurrenceAllocations, occurrenceKey, prioritizeReviewTransaction, prioritizeSavedBillTarget, rankReviewTargets, reviewQueueAfterSkips, scheduledSnowballReviewTargets, type RankedReviewTarget, type ReviewTarget } from "@/lib/reviewCenter";
+import { subscriptionLinkKeys } from "@/lib/competitiveGrowth";
 import { prioritizePendingPlanTarget } from "@/lib/pendingPlanMatches";
 import { bucketEffectiveRouteDate, isEligibleSpendingBucketMatch, spendingBucketSummary } from "@/lib/spendingBuckets";
 import { removeBucketRemainderFundingSource, replaceBucketRemainderFundingSource } from "@/lib/snowballFunding";
@@ -71,14 +72,17 @@ type ReviewCenterProps = {
   focusTransactionId?: string;
   initialFilter?: "all" | "expense" | "income";
   onManageBuckets?: () => void;
+  subscriptionBillLinks?: Record<string, string>;
 };
+
+const EMPTY_SUBSCRIPTION_BILL_LINKS: Record<string, string> = {};
 
 type BucketClosePrompt = {
   goal: Goal;
   fromReview?: boolean;
 };
 
-export function ReviewCenter({ focusTransactionId, initialFilter = "all", onManageBuckets }: ReviewCenterProps = {}) {
+export function ReviewCenter({ focusTransactionId, initialFilter = "all", onManageBuckets, subscriptionBillLinks = EMPTY_SUBSCRIPTION_BILL_LINKS }: ReviewCenterProps = {}) {
   const c = useColors();
   const {
     transactions, incomes, goals, decisions, extraPayments, categories, canEditHousehold, settings, pendingPlanMatches,
@@ -212,8 +216,12 @@ export function ReviewCenter({ focusTransactionId, initialFilter = "all", onMana
       candidates.push(...incomeReviewTargets(incomes, current.date, incomeMatches));
     }
     const learnedRanking = applyMatchMemory(current, rankReviewTargets(current, candidates), transactions);
-    return prioritizePendingPlanTarget(learnedRanking, current.id, pendingPlanMatches);
-  }, [current, decisions, extraPayments, getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, goals, incomes, pendingPlanMatches, transactions]);
+    const savedBillId = subscriptionLinkKeys(current)
+      .map(key => subscriptionBillLinks[key])
+      .find(Boolean);
+    const linkedRanking = prioritizeSavedBillTarget(learnedRanking, savedBillId);
+    return prioritizePendingPlanTarget(linkedRanking, current.id, pendingPlanMatches);
+  }, [current, decisions, extraPayments, getBillMonthlyTotal, getBillOccurrencesInMonth, getMonthlyBills, goals, incomes, pendingPlanMatches, subscriptionBillLinks, transactions]);
   const groupedTargets = useMemo(() => groupReviewTargets(targets), [targets]);
   const spendingBuckets = useMemo(() => goals
     .filter(goal => goal.goal_type === "planned_expense" && !goal.archived_at)

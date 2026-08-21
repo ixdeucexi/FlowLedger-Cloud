@@ -10,6 +10,7 @@ import {
   buildSmartReminders,
   detectSubscriptions,
   subscriptionNeedsCleanup,
+  subscriptionLinkKeys,
   evaluateForecastReadiness,
   type GrowthTransaction,
   type TransactionRule,
@@ -69,6 +70,21 @@ test("tracked bill subscriptions stay out of cleanup until a new charge needs re
   assert.equal(subscriptionNeedsCleanup(candidate, [
     { id: "old", amount: -15, source: "plaid", review_status: "categorized" },
   ]), true);
+  assert.equal(subscriptionNeedsCleanup(candidate, [
+    { id: "old", amount: -15, source: "plaid", review_status: "categorized" },
+  ], "saved-bill"), false);
+  assert.equal(subscriptionNeedsCleanup(candidate, [
+    { id: "old", amount: -15, source: "plaid", review_status: "categorized" },
+    { id: "new", amount: -15, source: "plaid", review_status: "needs_review" },
+  ], "saved-bill"), true);
+});
+
+test("subscription links can be found from both Plaid merchant and raw bank text", () => {
+  assert.deepEqual(subscriptionLinkKeys({
+    merchant_name: "Google",
+    note: "Electronic Withdrawal Google 014923619",
+    category: "Subscriptions",
+  }), ["google", "electronic withdrawal google 014923619", "subscriptions"]);
 });
 
 test("scores forecast readiness with clear next step", () => {
