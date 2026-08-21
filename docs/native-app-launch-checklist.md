@@ -1,10 +1,10 @@
 # FlowLedger Native App Launch Checklist
 
-Last audited: August 15, 2026
+Last audited: August 21, 2026
 
 Maintenance rule: Update this checklist automatically whenever related work is completed or verified. Check an item only when evidence confirms it is done, keep incomplete or unverified work unchecked, and update the audit date with each material checklist change. This maintenance is part of the related task and does not require a separate request from the owner.
 
-Current verified progress: **93 of 249 items complete**. The remaining production gate is a temporary Supabase staging branch for the prepared household/Plaid security migrations and authenticated regression tests. Native-store enrollment, signing, physical-device testing, store declarations, push delivery, billing policy, crash reporting, and the safe server-side account-deletion workflow still require owner accounts, external configuration, or product decisions.
+Current verified progress: **111 of 249 items complete**. The remaining production gate is a temporary Supabase staging branch for the prepared security migrations and authenticated regression tests. Native-store enrollment, signing, physical-device testing, store declarations, native push delivery, billing policy, and crash reporting still require owner accounts, external configuration, or product decisions.
 
 ## Goal
 
@@ -152,26 +152,28 @@ Official references:
 
 ### BLOCKER — required by both stores
 
-- [ ] Add `Delete my account` under Data & Privacy
-- [ ] Require recent authentication before destructive deletion
-- [ ] Explain what is deleted, what may be legally retained, and what happens to shared household data
-- [ ] Handle household owner transfer or household deletion explicitly
-- [ ] Delete or anonymize user-owned financial records as promised
-- [ ] Delete Flo conversations and household memory in scope
-- [ ] Remove push-notification subscriptions
-- [ ] Revoke/disconnect Plaid Items and remove retained Plaid access tokens
-- [ ] Clear simulations, preferences, exports, and device-local storage
-- [ ] Delete the Supabase Auth user only after application cleanup succeeds
-- [ ] Make retries idempotent and create an auditable deletion receipt
+- [x] Add `Delete my account` under Data & Privacy
+- [x] Require recent authentication before destructive deletion
+- [x] Explain what is deleted, what may be legally retained, and what happens to shared household data
+- [x] Handle household owner transfer or household deletion explicitly
+- [x] Delete or anonymize user-owned financial records as promised
+- [x] Delete Flo conversations and household memory in scope
+- [x] Remove push-notification subscriptions
+- [x] Revoke/disconnect Plaid Items and remove retained Plaid access tokens
+- [x] Clear simulations, preferences, exports, and device-local storage
+- [x] Delete the Supabase Auth user only after application cleanup succeeds
+- [x] Make retries idempotent and create an auditable deletion receipt
 - [x] Add a public unauthenticated account-deletion request page on `flowledger-algo.com`
 - [ ] Add the public deletion URL to the Google Play Data Safety form
-- [ ] Add an account-deletion support procedure for failed or disputed requests
+- [x] Add an account-deletion support procedure for failed or disputed requests
 - [ ] Test owner, manager, editor, viewer, single-user, and multi-member households
 
 Official references:
 
 - [Apple account-deletion requirement](https://developer.apple.com/app-store/review/guidelines/#data-collection-and-storage)
 - [Google account-deletion requirement](https://support.google.com/googleplay/android-developer/answer/13327111?hl=en)
+
+Current implementation evidence: `artifacts/mobile/app/delete-account.tsx`, `api/account/delete.js`, `api/_utils/accountDeletion.js`, `supabase/migrations/20260821123517_account_deletion_and_flo_rpc_hardening.sql`, and `docs/native-release-runbook.md`. End-to-end persona/device testing remains separately unchecked below.
 
 ## 6. Privacy, financial, and AI disclosures
 
@@ -269,7 +271,7 @@ Current implementation is browser Service Worker/Web Push only: `artifacts/mobil
 - [ ] Test lock on background, timeout, process restart, biometric change, and failed attempts
 - [x] Move native sessions from plain AsyncStorage to an encrypted, large-session-safe SecureStore adapter
 - [x] Clear encrypted credentials on sign-out
-- [ ] Clear encrypted credentials after the account-deletion flow is implemented
+- [x] Clear encrypted credentials after the account-deletion flow is implemented
 - [x] Add an app-switcher privacy screen that obscures financial balances while backgrounded
 - [x] Verify no service keys, Plaid tokens, access tokens, or raw financial exports are bundled into the application
 
@@ -283,8 +285,8 @@ Current implementation uses browser passkeys on the PWA and native device authen
 - [x] Keep native connectivity unknown until NetInfo reports instead of assuming the device is online
 - [ ] Define which data is safe to show from a last-known cache
 - [ ] Show the exact data/sync timestamp when displaying cached financial information
-- [ ] Block or clearly queue mutations while offline
-- [ ] Never display an unconfirmed offline mutation as saved
+- [x] Block or clearly queue mutations while offline
+- [x] Never display an unconfirmed offline mutation as saved
 - [x] Refresh auth and household data safely when the app returns to the foreground
 - [ ] Test airplane mode, captive portal, weak connection, API timeout, Supabase outage, Plaid outage, and interrupted saves
 - [ ] Ensure all failed writes have a visible retry or recovery route
@@ -299,8 +301,8 @@ Current native network-status hook uses NetInfo and exposes offline/reconnected 
 - [x] 1024×1024 source icon exists
 - [x] Splash artwork exists
 - [x] Verify the 1024×1024 iOS source icon has no unsupported transparency
-- [ ] Create a dedicated Android adaptive foreground asset with safe padding
-- [ ] Add an Android monochrome/themed icon
+- [x] Create a dedicated Android adaptive foreground asset with safe padding
+- [x] Add an Android monochrome/themed icon
 - [ ] Verify splash behavior on light/dark system settings and slower devices
 - [ ] Capture App Store screenshots using fictional data only
 - [ ] Capture Play Store phone screenshots using fictional data only
@@ -399,7 +401,7 @@ Official references:
 ### Phase 3 — full native parity and growth
 
 - [ ] Native push notifications
-- [ ] Native biometric lock
+- [x] Native biometric lock
 - [ ] Improved offline/read-only cache
 - [ ] EAS Update with controlled release channels
 - [ ] Optional widgets, shortcuts, and platform-specific conveniences after the core financial experience is stable

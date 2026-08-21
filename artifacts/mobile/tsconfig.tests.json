@@ -175,11 +175,14 @@
     ,"lib/apiOrigin.test.ts"
     ,"lib/networkStatus.ts"
     ,"lib/networkStatus.test.ts"
+    ,"lib/offlineMutationGuard.test.ts"
     ,"lib/overdueBills.ts"
     ,"lib/overdueBills.test.ts"
     ,"lib/secureAuthStorageCodec.ts"
     ,"lib/secureAuthStorageCodec.test.ts"
     ,"lib/floAiConsent.ts"
     ,"lib/floAiConsent.test.ts"
+    ,"lib/accountDeletionPolicy.ts"
+    ,"lib/accountDeletion.test.ts"
   ]
 }

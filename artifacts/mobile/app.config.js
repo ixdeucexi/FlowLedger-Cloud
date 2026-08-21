@@ -51,7 +51,8 @@ module.exports = {
         },
       ],
       adaptiveIcon: {
-        foregroundImage: "./assets/images/icon.png",
+        foregroundImage: "./assets/images/android-adaptive-foreground.png",
+        monochromeImage: "./assets/images/android-monochrome.png",
         backgroundColor: "#050816",
       },
     },

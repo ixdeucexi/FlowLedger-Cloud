@@ -51,8 +51,8 @@ export function ConnectivityBanner({ desktop }: { desktop: boolean }) {
           numberOfLines={compact ? 2 : 1}
         >
           {positive
-            ? "Refreshing the current household without changing your page."
-            : "You can view loaded information, but changes are not confirmed until the connection returns."}
+            ? "Connection restored. You can try the change again."
+            : "You can view loaded information. Changes are blocked until the connection returns."}
         </Text>
       </View>
     </View>

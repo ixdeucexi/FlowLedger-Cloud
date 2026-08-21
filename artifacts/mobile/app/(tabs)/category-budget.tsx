@@ -16,6 +16,7 @@ import { applyCategoryBudgetMove, buildCategoryPlan, buildZeroBudgetSummary, typ
 import { loadCategoryBudgets, readCategoryBudgetCache, saveCategoryBudgets } from "@/lib/categoryBudgetStore";
 import { buildReviewQueue } from "@/lib/reviewCenter";
 import { unmatchedPendingTransactions } from "@/lib/pendingPlanMatches";
+import { assertFinancialMutationOnline } from "@/lib/networkStatus";
 
 const MONTH_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const CAT_COLORS: Record<string, string> = {
@@ -109,8 +110,9 @@ export function CategoryBudgetScreen({ embedded = false }: CategoryBudgetScreenP
 
   const persistBudgets = async (next: Record<string, number>) => {
     if (!canEditHousehold) return;
-    setCategoryBudgets(next);
     try {
+      if (budgetScope.userId) assertFinancialMutationOnline();
+      setCategoryBudgets(next);
       await saveCategoryBudgets(budgetScope, month, year, next);
     } catch (error) {
       Alert.alert("Category budget", error instanceof Error ? error.message : "Could not save these assignments.");

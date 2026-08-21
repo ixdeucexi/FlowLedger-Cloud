@@ -32,6 +32,7 @@ import {
 } from "@/lib/debtPlanDomain";
 import { anchorForecastToBankBalance, forecastBalances, suppressDebtBillPlanDuplicates, type FinancialEvent } from "@/lib/forecast";
 import { diagnosticErrorCode } from "@/lib/diagnosticPolicy";
+import { assertFinancialMutationOnline } from "@/lib/networkStatus";
 import { decisionDbPayload } from "@/lib/decisionPersistence";
 import { recordDiagnostic } from "@/lib/diagnostics";
 import { isDevDemoMode } from "@/lib/demoMode";
@@ -1095,7 +1096,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     if (!canEditHousehold) {
       throw new Error(`View-only household access cannot ${action}.`);
     }
-  }, [canEditHousehold]);
+    if (!demoMode) assertFinancialMutationOnline();
+  }, [canEditHousehold, demoMode]);
 
   const scopedPayload = useCallback(<T extends Record<string, unknown>>(payload: T): T & { household_id?: string; budget_id?: string | null } => {
     const scope = householdScopeRef.current;
@@ -1879,7 +1881,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     markSaveCompleted();
     } catch (error) {
       setBills(prev => reorderDebtPriorities(prev.map(item => {
-        const stillFailedEdit = item.id === existing.id && Object.entries(bill).every(([key, value]) => item[key as keyof Bill] === value);
+        const stillFailedEdit = item.id === existing.id && Object.entries(reviewedBill).every(([key, value]) => item[key as keyof Bill] === value);
         return stillFailedEdit ? existing : item;
       })));
       overridesRef.current = previousOverrides;

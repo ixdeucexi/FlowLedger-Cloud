@@ -109,6 +109,7 @@ import {
   type SettingsStatus,
 } from "@/lib/settingsHub";
 import { supabase } from "@/lib/supabase";
+import { assertFinancialMutationOnline } from "@/lib/networkStatus";
 import {
   applyMatchMemory,
   matchedOccurrenceAllocations,
@@ -1543,29 +1544,32 @@ export default function MoreScreen({
     subscription: SubscriptionCandidate,
     decision: SubscriptionDecision,
   ) => {
-    await saveSubscriptionDecisions({
+    const nextDecisions = {
       ...subscriptionDecisions,
       [subscriptionKey(subscription)]: decision,
-    });
-    if (!user?.id || !activeHousehold?.householdId || !canEditHousehold) return;
-    const { error } = await supabase.from("subscription_candidates").upsert({
-      id: stableUuidFromString(
-        `subscription:${activeHousehold.householdId}:${subscriptionKey(subscription)}`,
-      ),
-      user_id: user.id,
-      household_id: activeHousehold.householdId,
-      merchant: subscription.merchant,
-      cadence: subscription.cadence,
-      average_amount: subscription.averageAmount,
-      monthly_equivalent: subscription.monthlyEquivalent,
-      yearly_equivalent: subscription.yearlyEquivalent,
-      confidence: subscription.confidence,
-      status: subscriptionDecisionToStatus(decision),
-      source_transaction_ids: subscription.transactionIds.filter(isUuid),
-      last_reviewed_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    });
-    if (error) return;
+    };
+    if (user?.id && activeHousehold?.householdId && canEditHousehold) {
+      assertFinancialMutationOnline();
+      const { error } = await supabase.from("subscription_candidates").upsert({
+        id: stableUuidFromString(
+          `subscription:${activeHousehold.householdId}:${subscriptionKey(subscription)}`,
+        ),
+        user_id: user.id,
+        household_id: activeHousehold.householdId,
+        merchant: subscription.merchant,
+        cadence: subscription.cadence,
+        average_amount: subscription.averageAmount,
+        monthly_equivalent: subscription.monthlyEquivalent,
+        yearly_equivalent: subscription.yearlyEquivalent,
+        confidence: subscription.confidence,
+        status: subscriptionDecisionToStatus(decision),
+        source_transaction_ids: subscription.transactionIds.filter(isUuid),
+        last_reviewed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw new Error(`Save subscription decision: ${error.message}`);
+    }
+    await saveSubscriptionDecisions(nextDecisions);
   };
 
   const handleCreateBillFromSubscription = async (
@@ -1700,8 +1704,9 @@ export default function MoreScreen({
     subscription: SubscriptionCandidate,
     decision: SubscriptionDecision,
   ) => {
-    void markSubscriptionDecision(subscription, decision);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    void markSubscriptionDecision(subscription, decision)
+      .then(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light))
+      .catch(error => Alert.alert("Couldn’t save subscription", error instanceof Error ? error.message : "Please try again."));
   };
 
   const handleAddSafeGoalContribution = (goalId: string) => {

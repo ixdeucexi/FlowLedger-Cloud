@@ -6,6 +6,7 @@ import {
   FLOWLEDGER_PRODUCTION_ORIGIN,
   joinApiUrl,
 } from "./apiOrigin";
+import { assertMutationOnline } from "./networkStatus";
 
 export { FLOWLEDGER_PRODUCTION_ORIGIN, isReleaseApiOriginSafe } from "./apiOrigin";
 
@@ -23,5 +24,6 @@ export function apiUrl(path: string): string {
 }
 
 export function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  assertMutationOnline(path, init);
   return fetch(apiUrl(path), init);
 }

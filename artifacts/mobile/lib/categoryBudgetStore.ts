@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import { supabase } from "@/lib/supabase";
+import { assertFinancialMutationOnline } from "@/lib/networkStatus";
 
 export const CATEGORY_BUDGETS_EVENT = "flowledger-category-budgets-updated";
 const categoryBudgetListeners = new Set<() => void>();
@@ -68,6 +69,7 @@ export async function loadCategoryBudgets(scope: CategoryBudgetScope, month: num
 }
 
 export async function saveCategoryBudgets(scope: CategoryBudgetScope, month: number, year: number, budgets: Record<string, number>): Promise<void> {
+  if (scope.userId) assertFinancialMutationOnline();
   const clean = normalizeBudgetMap(budgets);
   writeCategoryBudgetCache(month, year, clean, scope, false);
   if (!scope.userId) {

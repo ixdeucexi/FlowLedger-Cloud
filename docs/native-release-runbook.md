@@ -17,6 +17,7 @@ Use this record for every preview, TestFlight, Play internal, and production rel
 
 ## Required preflight
 
+- Run native commands from `artifacts/mobile`; its `app.config.js` and `eas.json` are the only Expo/EAS configuration sources. Run `pnpm run check:mobile-config` from the repository root before Expo Doctor or EAS.
 - Confirm the repository and live Supabase migration histories match exactly.
 - Run the full unit suite, workspace typecheck, Expo Doctor, production web/native bundle, dependency audit, and `git diff --check` against the release commit.
 - Confirm production EAS variables, public API origin, Supabase public key, OAuth providers, callback allowlist, and Flo secrets without copying their values into this record.
@@ -57,6 +58,16 @@ Use this record for every preview, TestFlight, Play internal, and production rel
 4. If money truth is uncertain, tell the customer the answer is being verified and stop automated mutations for that case.
 5. Document the finding, correction, affected records, test added, and whether customer reconciliation is required.
 6. Escalate security, cross-household, duplicated-payment, or destructive-data concerns immediately and retain evidence according to policy.
+
+## Support procedure for account deletion
+
+1. Ask only for the deletion receipt ID, approximate request time, and account email. Never request a password, bank credential, access token, Social Security number, or full account number.
+2. Look up the receipt in `private.account_deletion_receipts` using the service role. Do not expose the stored user hash or database access to support clients.
+3. A `completed` receipt confirms application cleanup and Auth deletion. A `data_deleted` receipt means application data was removed but Auth deletion or receipt finalization must be verified and, if needed, completed by an authorized operator.
+4. If no receipt exists, confirm whether the user was blocked as the owner of a multi-member household or by a Plaid disconnect failure. The app intentionally makes no financial-data deletion in either case.
+5. For an owner block, help the customer transfer ownership or remove members, then have them restart in-app deletion. Never delete another member's shared household plan as a shortcut.
+6. For a Plaid failure, verify provider status and retry the same deletion path; do not clear retained ciphertext without a successful or already-removed provider response.
+7. Record the receipt ID, final status, remediation, operator, and completion time. Escalate disputed, security-sensitive, or cross-household cases immediately.
 
 ## Final approval
 

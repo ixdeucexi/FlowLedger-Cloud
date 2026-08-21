@@ -2,7 +2,7 @@ import NetInfo from "@react-native-community/netinfo";
 import { useEffect, useState } from "react";
 import { Platform } from "react-native";
 
-import { reachableNetworkState } from "@/lib/networkStatus";
+import { publishNetworkStatus, reachableNetworkState } from "@/lib/networkStatus";
 
 function browserOnlineState() {
   if (
@@ -26,6 +26,7 @@ export function useNetworkStatus() {
       const unsubscribe = NetInfo.addEventListener(state => {
         const next = reachableNetworkState(state);
         setOnline(next);
+        publishNetworkStatus(next);
         if (previous === false && next) {
           setReconnected(true);
           if (reconnectTimer) clearTimeout(reconnectTimer);
@@ -48,9 +49,11 @@ export function useNetworkStatus() {
       if (reconnectTimer) clearTimeout(reconnectTimer);
       setReconnected(false);
       setOnline(false);
+      publishNetworkStatus(false);
     };
     const handleOnline = () => {
       setOnline(true);
+      publishNetworkStatus(true);
       setReconnected(true);
       if (reconnectTimer) clearTimeout(reconnectTimer);
       reconnectTimer = setTimeout(() => setReconnected(false), 2600);
@@ -58,7 +61,9 @@ export function useNetworkStatus() {
 
     window.addEventListener("offline", handleOffline);
     window.addEventListener("online", handleOnline);
-    setOnline(browserOnlineState());
+    const initial = browserOnlineState();
+    setOnline(initial);
+    publishNetworkStatus(initial);
     return () => {
       if (reconnectTimer) clearTimeout(reconnectTimer);
       window.removeEventListener("offline", handleOffline);
