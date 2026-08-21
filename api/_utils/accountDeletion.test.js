@@ -1,4 +1,6 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const test = require("node:test");
 
 const {
@@ -19,6 +21,16 @@ function response() {
     json(body) { this.body = body; return this; },
   };
 }
+
+test("account deletion reuses the feedback function on the free Vercel plan", () => {
+  const root = path.resolve(__dirname, "..", "..");
+  const vercel = JSON.parse(fs.readFileSync(path.join(root, "vercel.json"), "utf8"));
+  assert.ok(vercel.rewrites.some(route => route.source === "/api/account/delete"
+    && route.destination === "/api/feedback?accountAction=delete"));
+  const feedback = fs.readFileSync(path.join(root, "api", "feedback.js"), "utf8");
+  assert.match(feedback, /accountAction === "delete"/);
+  assert.equal(fs.existsSync(path.join(root, "api", "account", "delete.js")), false);
+});
 
 test("recent-login guard fails closed for missing, old, and future-issued tokens", () => {
   assert.equal(hasRecentVerifiedLogin(token(1_000), 1_300), true);

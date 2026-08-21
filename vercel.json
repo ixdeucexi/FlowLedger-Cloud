@@ -124,6 +124,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/account/delete",
+      "destination": "/api/feedback?accountAction=delete"
+    },
+    {
       "source": "/api/plaid/attach-credit-card",
       "destination": "/api/plaid/sync?plaidAction=attach-credit-card"
     },
